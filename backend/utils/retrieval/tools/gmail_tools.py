@@ -115,32 +115,43 @@ def parse_gmail_message(message: Dict[str, Any], clock: Optional[DisplayClock] =
     Returns:
         Parsed message dict with subject, from, to, date, snippet, body
     """
-    payload = message.get('payload', {})
-    headers = payload.get('headers', [])
+    if not isinstance(message, dict):
+        message = {}
+    raw_payload = message.get('payload')
+    payload = raw_payload if isinstance(raw_payload, dict) else {}
+    raw_headers = payload.get('headers')
+    headers = raw_headers if isinstance(raw_headers, list) else []
 
-    # Extract headers
-    header_dict = {h['name'].lower(): h['value'] for h in headers}
+    # Extract headers defensively
+    header_dict: Dict[str, str] = {}
+    for h in headers:
+        if isinstance(h, dict) and h.get('name') is not None and h.get('value') is not None:
+            header_dict[str(h['name']).lower()] = str(h['value'])
 
-    # Extract body
+    # Extract body defensively
     body_text = ''
-    if 'parts' in payload:
+    raw_parts = payload.get('parts')
+    if isinstance(raw_parts, list):
         # Multipart message
-        for part in payload['parts']:
-            if part.get('mimeType') == 'text/plain':
-                data = part.get('body', {}).get('data', '')
-                if data:
-                    body_text = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
-                    break
-            elif part.get('mimeType') == 'text/html':
-                # Fallback to HTML if plain text not available
-                data = part.get('body', {}).get('data', '')
-                if data:
-                    body_text = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
-                    break
+        for part in raw_parts:
+            if not isinstance(part, dict):
+                continue
+            mime = part.get('mimeType')
+            raw_body = part.get('body')
+            body_dict = raw_body if isinstance(raw_body, dict) else {}
+            data = body_dict.get('data', '')
+            if mime == 'text/plain' and data:
+                body_text = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
+                break
+            elif mime == 'text/html' and data and not body_text:
+                body_text = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
+                break
     else:
         # Single part message
         if payload.get('mimeType') == 'text/plain':
-            data = payload.get('body', {}).get('data', '')
+            raw_body = payload.get('body')
+            body_dict = raw_body if isinstance(raw_body, dict) else {}
+            data = body_dict.get('data', '')
             if data:
                 body_text = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
     date_str: str = header_dict.get('date', '')
@@ -293,22 +304,31 @@ async def get_gmail_messages_tool(
                 'Please reconnect Gmail from settings and approve email access.'
             )
 
+        # Safe max_results coercion and bounds
+        try:
+            max_results = int(max_results)
+        except (ValueError, TypeError):
+            max_results = 10
+        if max_results < 1:
+            max_results = 1
+
         max_results = ensure_capped(max_results, 50, "⚠️ get_gmail_messages_tool - max_results capped from {} to {}")
 
-        # Build label_ids if label is provided
+        # Build label_ids defensively if label is provided
         # Note: "UNREAD" is a search operator, not a label, so handle it in query
         label_ids = None
-        if label:
-            label_upper = label.upper()
-            # If label is UNREAD, add it to query instead
-            if label_upper == 'UNREAD':
-                if query:
-                    query = f"{query} is:unread"
+        if label is not None:
+            if isinstance(label, str) and label.strip():
+                label_upper = label.strip().upper()
+                # If label is UNREAD, add it to query instead
+                if label_upper == 'UNREAD':
+                    if query and isinstance(query, str) and query.strip():
+                        query = f"{query.strip()} is:unread"
+                    else:
+                        query = "is:unread"
                 else:
-                    query = "is:unread"
-            else:
-                # Valid labels: INBOX, SENT, DRAFT, TRASH, SPAM, etc.
-                label_ids = [label_upper]
+                    # Valid labels: INBOX, SENT, DRAFT, TRASH, SPAM, etc.
+                    label_ids = [label_upper]
 
         # Fetch messages
         messages, err = await retry_on_auth_async(
