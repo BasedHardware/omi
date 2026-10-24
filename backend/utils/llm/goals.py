@@ -109,6 +109,16 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
     }
 
 
+def _safe_float_field(value: Any, default: float) -> float:
+    """Coerce an individual suggestion numeric field to float, falling back per-field."""
+    if value is None or isinstance(value, bool):
+        return float(default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 def suggest_goal(uid: str) -> Dict[str, Any]:
     """Generate an AI-suggested goal based on user's memories and conversations."""
     try:
@@ -162,13 +172,10 @@ Make the goal specific, measurable, and relevant to their interests."""
         json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
         if json_match:
             suggestion = json.loads(json_match.group())
-            raw_target = suggestion.get('suggested_target')
-            suggestion['suggested_target'] = float(raw_target) if raw_target is not None else 10
-            raw_min = suggestion.get('suggested_min')
-            suggestion['suggested_min'] = float(raw_min) if raw_min is not None else 0
-            raw_max = suggestion.get('suggested_max')
-            suggestion['suggested_max'] = (
-                float(raw_max) if raw_max is not None else suggestion['suggested_target']
+            suggestion['suggested_target'] = _safe_float_field(suggestion.get('suggested_target'), 10.0)
+            suggestion['suggested_min'] = _safe_float_field(suggestion.get('suggested_min'), 0.0)
+            suggestion['suggested_max'] = _safe_float_field(
+                suggestion.get('suggested_max'), suggestion['suggested_target']
             )
             if not suggestion.get('suggested_title'):
                 suggestion['suggested_title'] = 'Track your daily progress'

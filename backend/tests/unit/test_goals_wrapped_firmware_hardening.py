@@ -176,6 +176,30 @@ class TestGoalsSuggestionAndNullHardening:
         assert suggestion["suggested_max"] == 10.0
         assert suggestion["reasoning"] != ""
 
+    def test_suggest_goal_preserves_valid_fields_when_one_numeric_field_is_non_numeric_string(
+        self, modules, monkeypatch
+    ):
+        goals_llm = modules.goals_llm
+        unlocked_mem = MagicMock()
+        unlocked_mem.dict.return_value = {"content": "I want to exercise regularly", "is_locked": False}
+        mock_service = MagicMock()
+        mock_service.read.return_value = [unlocked_mem]
+        monkeypatch.setattr(goals_llm, "MemoryService", lambda db_client=None: mock_service)
+
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(
+            content='{"suggested_title": "Exercise 5 times a week", "suggested_type": "numeric", "suggested_target": "five", "suggested_min": 1, "suggested_max": 7, "reasoning": "Consistent workouts build habits"}'
+        )
+        monkeypatch.setattr(goals_llm, "get_llm", lambda *args, **kwargs: mock_llm)
+
+        suggestion = goals_llm.suggest_goal("uid-non-numeric")
+        assert suggestion["suggested_title"] == "Exercise 5 times a week"
+        assert suggestion["suggested_type"] == "numeric"
+        assert suggestion["suggested_target"] == 10.0
+        assert suggestion["suggested_min"] == 1.0
+        assert suggestion["suggested_max"] == 7.0
+        assert suggestion["reasoning"] == "Consistent workouts build habits"
+
 
 class TestWrapped2025Hardening:
     def test_compute_conversation_duration_ignores_none_segment_end(self, modules):
