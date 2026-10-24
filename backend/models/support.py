@@ -1,9 +1,10 @@
+from __future__ import annotations
 """Private support response allowlists. Never serialize a customer document directly."""
 
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from models.conversation_enums import PostProcessingStatus
 
@@ -16,9 +17,9 @@ class SupportLookupResponse(BaseModel):
     plan: str
     last_active_at: datetime | None = None
     last_active_platform: str | None = None
-    transcription_seconds_used: float
-    transcription_seconds_limit: int | None = None
-    transcription_seconds_remaining: float | None = None
+    transcription_seconds_used: float = Field(ge=0)
+    transcription_seconds_limit: int | None = Field(default=None, ge=0)
+    transcription_seconds_remaining: float | None = Field(default=None, ge=0)
     fair_use_stage: str
 
 
@@ -27,7 +28,7 @@ class SupportTraceRow(BaseModel):
 
     conversation_id: str
     started_at: datetime
-    duration_seconds: float | None = None
+    duration_seconds: float | None = Field(default=None, ge=0)
     status: str
     postprocessing_status: PostProcessingStatus | None = None
     captured: bool
@@ -51,3 +52,9 @@ class SupportTraceResponse(BaseModel):
     window_to: datetime = Field(validation_alias='to', serialization_alias='to')
     truncated: bool
     rows: list[SupportTraceRow]
+
+    @model_validator(mode='after')
+    def validate_window(self):
+        if self.window_to < self.window_from:
+            raise ValueError('window_to must not precede window_from')
+        return self
