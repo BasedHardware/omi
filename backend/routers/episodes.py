@@ -54,7 +54,9 @@ def get_live_episode(
         'enabled': True,
         'episode': service.to_wire(episode),
     }
-    closed = service.last_closed_episode(uid)
+    # Without a live episode this response is the recovery-navigation answer, so the
+    # recap is read fresh; alongside a live episode it comes from the poll cache.
+    closed = service.last_closed_episode(uid, fresh=episode is None)
     if closed is not None:
         response['last_closed_episode'] = service.to_wire(closed)
     return response
