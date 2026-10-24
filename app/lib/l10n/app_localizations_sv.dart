@@ -4425,6 +4425,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get continueText => 'Fortsätt';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Du har redan en prenumeration. Hantera din nuvarande prenumeration i stället för att starta en ny.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Prenumerera igen först för att byta plan.';
 
   @override

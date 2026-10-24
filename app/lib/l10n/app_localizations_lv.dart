@@ -4431,6 +4431,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get continueText => 'Turpināt';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Jums jau ir abonements. Pārvaldiet pašreizējo abonementu, nevis sāciet jaunu.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Lai mainītu plānu, vispirms abonējiet vēlreiz.';
 
   @override

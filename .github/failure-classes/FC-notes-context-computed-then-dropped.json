@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-notes-context-computed-then-dropped",
+  "violated_contract": "Context the notes pipeline computes to ground a conversation's summary must reach every arm of the notes call. No intermediate budget cap, fallback arm, or per-row rendering variant may silently discard evidence upstream already had. The 2026-10 audit (conversation 79e8e434, the Nik/David Zoom sync) found three arms of the same drop on origin/main: the screen-volume tier gate counted attached images, capped at MAX_NOTES_FRAME_IMAGES=4, while its threshold required >=5 frames, so escalation could never fire; the one-shot evidence JSON omitted the meeting background pack and owner-confirmed corrections that only the agentic writer consumed; and Zoom's speaking-indicator glyph OCR variants ('IllNik Shevchenko', 'wIllNik Shevchenko') split the call-tile persistence count, so tile-name extraction returned nothing although every row showed the name. In each, upstream held the evidence and the notes consumer never saw it.",
+  "canonical_prevention": "Gate on the volume of evidence available, never on a bounded attachment of it: the wiring reports the approved-frame count (screen_frame_count) and the tier gate takes max(count, attached images). Give every notes arm the same context block: the one-shot evidence JSON carries meeting_context exactly as the agentic packet carries background, corrections included. Normalize per-row OCR glyph prefixes before identity-shape checks (strip_leading_tile_glyphs in meeting_context._clean_line, shared with screen_frame_evidence._clean_name) so variants of one tile name count as one persistence candidate. Pin each arm with a focused unit test, including one that proves the gate fires at the production image budget.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_notes_tier_escalation.py",
+    "backend/tests/unit/test_one_shot_notes_meeting_context.py",
+    "backend/tests/unit/test_call_tile_identity.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/llm/conversation_processing.py",
+    "backend/utils/conversations/meeting_notes_wiring.py",
+    "backend/utils/conversations/meeting_context.py",
+    "backend/utils/conversations/screen_frame_evidence.py"
+  ],
+  "status": "open"
+}

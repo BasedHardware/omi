@@ -102,7 +102,7 @@ int? transcriptStartOnDevice(Iterable<(String, double)> segmentEnds, Map<String,
   return estimates.isEmpty ? null : estimates[estimates.length ~/ 2];
 }
 
-const _kDefinitiveUploadRefusalStatusCodes = {400, 403, 413};
+const _kDefinitiveUploadRefusalStatusCodes = {400, 413};
 
 @visibleForTesting
 bool isDefinitiveUploadRefusal(Object error) =>
