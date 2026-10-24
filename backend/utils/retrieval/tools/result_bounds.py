@@ -15,6 +15,7 @@ try:
 except ModuleNotFoundError:
     import importlib.util as _importlib_util
     from pathlib import Path as _Path
+    import sys as _sys
 
     _mt_spec = _importlib_util.spec_from_file_location(
         "utils.model_text",
@@ -22,6 +23,9 @@ except ModuleNotFoundError:
     )
     assert _mt_spec is not None and _mt_spec.loader is not None
     _mt_mod = _importlib_util.module_from_spec(_mt_spec)
+    # Register before exec: model_text's dataclasses resolve their string
+    # annotations through sys.modules[cls.__module__], which is None otherwise.
+    _sys.modules[_mt_spec.name] = _mt_mod
     _mt_spec.loader.exec_module(_mt_mod)
     truncation_note = _mt_mod.truncation_note
 

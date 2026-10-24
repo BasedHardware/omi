@@ -14,6 +14,7 @@ try:
 except ModuleNotFoundError:
     import importlib.util as _importlib_util
     from pathlib import Path as _Path
+    import sys as _sys
 
     _rb_spec = _importlib_util.spec_from_file_location(
         "utils.retrieval.tools.result_bounds",
@@ -21,6 +22,10 @@ except ModuleNotFoundError:
     )
     assert _rb_spec is not None and _rb_spec.loader is not None
     _rb_mod = _importlib_util.module_from_spec(_rb_spec)
+    # Register before exec: the fallback-loaded module (and model_text, which
+    # its own fallback loads the same way) defines dataclasses that resolve
+    # their string annotations through sys.modules[cls.__module__].
+    _sys.modules[_rb_spec.name] = _rb_mod
     _rb_spec.loader.exec_module(_rb_mod)
     bounded_result = _rb_mod.bounded_result
     cap_items_for_llm = _rb_mod.cap_items_for_llm
