@@ -1060,8 +1060,12 @@ def delete_goal(uid: str, goal_id: str, *, firestore_client: Any = None) -> bool
     """Released DELETE compatibility: soft-abandon and retain relationships."""
 
     ref = _goal_ref(uid, goal_id, firestore_client=firestore_client)
-    if not ref.get().exists:
+    snapshot = ref.get()
+    if not snapshot.exists:
         return False
+    data = snapshot.to_dict() or {}
+    if data.get('status') == GoalStatus.abandoned.value and not data.get('is_active', True):
+        return True
     now = datetime.now(timezone.utc)
     ref.update(
         {
@@ -1073,6 +1077,7 @@ def delete_goal(uid: str, goal_id: str, *, firestore_client: Any = None) -> bool
             'ended_at': now,
         }
     )
+    bump_action_items_list_version(uid)
     return True
 
 
