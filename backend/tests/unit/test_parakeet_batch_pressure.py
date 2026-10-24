@@ -11,10 +11,17 @@ import pytest_asyncio
 import yaml
 
 from utils.stt import batch_pressure as pressure_module
-from utils.stt.live_metrics import WINDOW_PRESSURE_REFRESH, WINDOW_PRESSURE_REFUSAL, WINDOW_PRESSURE_REPLICAS
+from utils.stt.live_metrics import (
+    WINDOW_PRESSURE_FETCH_FAILURE,
+    WINDOW_PRESSURE_PROGRESS_TIME,
+    WINDOW_PRESSURE_REFRESH,
+    WINDOW_PRESSURE_REFUSAL,
+    WINDOW_PRESSURE_REPLICAS,
+)
 
 
 def seed(pressure, now, busy=False):
+    pressure._discovery_available = True
     pressure._ready = ('10.0.0.1', '10.0.0.2')
     pressure._samples = {ip: pressure_module.ReplicaPressure(4 if busy else 0, 0.0, now) for ip in pressure._ready}
     pressure._observed_at = now
@@ -26,6 +33,9 @@ def settings(monkeypatch):
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2')
     monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_POOL_HOST', 'tdt-headless.invalid')
+    # Existing boundary tests also exercise the opt-out to strict behavior.
+    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS', '15')
+    monkeypatch.delenv('PARAKEET_BATCH_PRESSURE_RESET_AFTER_FAILURES', raising=False)
     for name in ('MAX_LIVE_PENDING_PER_REPLICA', 'MAX_LIVE_OLDEST_SECONDS', 'BUSY_REPLICA_SHARE'):
         monkeypatch.delenv('PARAKEET_BATCH_PRESSURE_' + name, raising=False)
 
@@ -183,7 +193,7 @@ async def test_batch_pressure_reuses_bounded_client_until_shutdown(monkeypatch):
         await asyncio.wait_for(refreshed_twice.wait(), 1)
         assert len(created) == 1
         assert used[:2] == [created[0], created[0]]
-        assert created[0].options['timeout'] == 1.0
+        assert created[0].options['timeout'] == 3.0
         assert created[0].options['trust_env'] is False
         limits = created[0].options['limits']
         assert limits.max_connections == pressure.MAX_REPLICAS
@@ -521,3 +531,160 @@ async def test_prod_admission_retains_conservative_boundaries_and_quorum(fleet, 
         fleet.clock[0] += 16
         await fleet.pressure._refresh(host, minimum, client)
         assert not fleet.pressure.allows(host, minimum)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('dns_failure', [False, True])
+async def test_default_grace_is_bounded_by_sample_age_not_failed_sweeps(fleet, monkeypatch, dns_failure):
+    monkeypatch.delenv('PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS')
+    fallback = []
+    monkeypatch.setattr(pressure_module, 'record_fallback', lambda **kw: fallback.append(kw))
+    async with httpx.AsyncClient(transport=fleet.transport) as client:
+        assert await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        fleet.failed.update(fleet.ips)
+        if dns_failure:
+            fleet.lookup.side_effect = OSError('synthetic DNS fault')
+        for age in (16, 30, 60, 60.001, 3600):
+            fleet.clock[0] = 100 + age
+            assert not await fleet.pressure._refresh('synthetic.invalid', 2, client)
+            assert fleet.pressure.allows('synthetic.invalid', 2) is (age <= 60)
+            assert WINDOW_PRESSURE_REPLICAS.labels(state='fresh')._value.get() == 0
+            assert all(sample.observed_at == 100 for sample in fleet.pressure._samples.values())
+    assert len(fallback) == 3
+    assert all(call['outcome'] == 'degraded' for call in fallback)
+
+
+@pytest.mark.asyncio
+async def test_grace_obeys_current_pressure_quorum_and_membership(fleet, monkeypatch):
+    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS', '60')
+    async with httpx.AsyncClient(transport=fleet.transport) as client:
+        await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        fleet.clock[0] = 116
+        fleet.failed.update(fleet.ips[2:])
+        for ip in fleet.ips[:2]:
+            fleet.payloads[ip] = {'live_pending_requests': 4, 'live_oldest_pending_seconds': 0}
+        await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        assert fleet.pressure.allows('synthetic.invalid', 2)  # 2 busy + 4 cached healthy.
+        fleet.failed.remove(fleet.ips[2])
+        fleet.payloads[fleet.ips[2]] = {'live_pending_requests': 4, 'live_oldest_pending_seconds': 0}
+        await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        assert not fleet.pressure.allows('synthetic.invalid', 2)  # New pressure defeats old healthy cache.
+        fleet.payloads.clear()
+        fleet.failed.update(fleet.ips)
+        fleet.ips[:] = ['10.1.0.1', '10.1.0.2', '10.1.0.3']
+        fleet.failed.update(fleet.ips)
+        await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        assert not fleet.pressure.allows('synthetic.invalid', 2)  # Departed samples give no headroom.
+        assert not fleet.pressure._samples
+
+
+@pytest.mark.parametrize('ready', [1, 2, 3, 6, 11, 16, 64])
+@pytest.mark.parametrize('minimum', [2, 3, 7])
+def test_quorum_math_counts_busy_and_unknown_conservatively(ready, minimum):
+    pressure = pressure_module.BatchPressure()
+    pressure._ready = tuple(str(n) for n in range(ready))
+    pressure._discovery_available = True
+    pressure._observed_at = 100
+    for fresh in range(ready + 1):
+        for busy in range(fresh + 1):
+            pressure._samples = {
+                ip: pressure_module.ReplicaPressure(4 if n < busy else 0, 0, 100)
+                for n, ip in enumerate(pressure._ready[:fresh])
+            }
+            expected = fresh >= max(minimum, ready // 2 + 1) and (busy + ready - fresh) / ready < 0.5
+            assert (pressure._reason(minimum, 100) is None) is expected
+
+
+@pytest.mark.asyncio
+async def test_failed_sweeps_replace_client_and_rediscover_before_cache_expires(fleet, monkeypatch):
+    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS', '60')
+    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_RESET_AFTER_FAILURES', '2')
+    fleet.pressure.REFRESH_SECONDS = 0.01
+    real_client = httpx.AsyncClient
+    clients = []
+    recovered = asyncio.Event()
+    attempts = []
+
+    def make_client(**kwargs):
+        broken = not clients
+
+        async def handle(request):
+            attempts.append((len(clients), request.url.host))
+            if broken:
+                raise httpx.PoolTimeout('synthetic stuck pool')
+            recovered.set()
+            return httpx.Response(200, json={'live_pending_requests': 0, 'live_oldest_pending_seconds': 0})
+
+        client = real_client(transport=httpx.MockTransport(handle), **kwargs)
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(pressure_module.httpx, 'AsyncClient', make_client)
+    fleet.pressure.start('synthetic.invalid', 2)
+    try:
+        await asyncio.wait_for(recovered.wait(), 2)
+        # Let the successful sweep publish, rather than merely its first fetch.
+        for _ in range(10):
+            if fleet.pressure.allows('synthetic.invalid', 2):
+                break
+            await asyncio.sleep(0)
+        assert fleet.pressure.allows('synthetic.invalid', 2)
+        assert len(clients) == 2
+        assert clients[0].is_closed
+        assert fleet.lookup.call_count == 3
+        assert sum(number == 1 for number, _ in attempts) == 2 * len(fleet.ips)
+    finally:
+        await fleet.pressure.stop()
+    assert all(client.is_closed for client in clients)
+
+
+@pytest.mark.asyncio
+async def test_cold_http_setup_longer_than_old_one_second_budget_can_complete(fleet):
+    async def cold_response(_request):
+        await asyncio.sleep(1.05)
+        return httpx.Response(200, json={'live_pending_requests': 0, 'live_oldest_pending_seconds': 0})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(cold_response)) as client:
+        fleet.pressure.REQUEST_TIMEOUT_SECONDS = 1
+        with pytest.raises(TimeoutError):
+            await fleet.pressure._fetch(fleet.ips[0], client)
+        fleet.pressure.REQUEST_TIMEOUT_SECONDS = 3
+        assert (await fleet.pressure._fetch(fleet.ips[0], client)).pending == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'name,value',
+    [
+        ('MAX_SNAPSHOT_AGE_SECONDS', 'nan'),
+        ('MAX_SNAPSHOT_AGE_SECONDS', '14'),
+        ('RESET_AFTER_FAILURES', '0'),
+        ('RESET_AFTER_FAILURES', '1.5'),
+    ],
+)
+async def test_invalid_recovery_configuration_fails_closed(fleet, monkeypatch, name, value):
+    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_' + name, value)
+    async with httpx.AsyncClient(transport=fleet.transport) as client:
+        assert not await fleet.pressure._refresh('synthetic.invalid', 2, client)
+    assert not fleet.pressure.allows('synthetic.invalid', 2)
+    assert not fleet.calls
+
+
+@pytest.mark.asyncio
+async def test_sampler_progress_and_failure_causes_do_not_depend_on_admissions(fleet, monkeypatch):
+    wall = [1000.0]
+    monkeypatch.setattr(pressure_module, 'wall_time', lambda: wall[0])
+    async with httpx.AsyncClient(transport=fleet.transport) as client:
+        await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        assert WINDOW_PRESSURE_PROGRESS_TIME._value.get() == 1000
+        before = WINDOW_PRESSURE_FETCH_FAILURE.labels(cause='read_timeout')._value.get()
+        wall[0] += 400
+        fleet.clock[0] += 400
+        fleet.failed.update(fleet.ips)
+        await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        assert WINDOW_PRESSURE_PROGRESS_TIME._value.get() == 1000
+        assert WINDOW_PRESSURE_FETCH_FAILURE.labels(cause='read_timeout')._value.get() == before + len(fleet.ips)
+        assert WINDOW_PRESSURE_REPLICAS.labels(state='fresh')._value.get() == 0
+        fleet.failed.clear()
+        await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        assert WINDOW_PRESSURE_PROGRESS_TIME._value.get() == 1400
