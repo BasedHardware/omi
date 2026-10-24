@@ -2689,6 +2689,22 @@ def get_goal(
     return _serialize_goal_datetimes(goal)
 
 
+def _raise_goal_store_error(exc: Exception) -> None:
+    """Map a typed goal-store failure to the released HTTP status.
+
+    ``GoalValidationError`` is request input (a released alias patch that
+    contradicts the stored metric), not a server fault: answer 422, matching
+    ``routers.goals._raise_goal_store_error`` for ``PATCH /v1/goals/{goal_id}``.
+    """
+    if isinstance(exc, goals_db.GoalNotFoundError):
+        raise HTTPException(status_code=404, detail='Goal not found') from exc
+    if isinstance(exc, goals_db.GoalValidationError):
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if isinstance(exc, goals_db.GoalConflictError):
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    raise exc
+
+
 @router.post("/v1/dev/user/goals", tags=["Goals"], response_model=GoalResponse, operation_id="createGoal")
 def create_goal(
     request: CreateGoalRequest,
@@ -2754,7 +2770,16 @@ def update_goal(
     if 'title' in update_data and update_data['title']:
         update_data['title'] = update_data['title'].strip()
 
-    updated_goal = goals_db.update_goal(uid, goal_id, update_data)
+    # A released alias patch (min_value/max_value/...) is validated in isolation
+    # by ``UpdateGoalRequest``; the contradiction with the stored metric only
+    # surfaces when the store merges the two and raises ``GoalValidationError``.
+    # Map the typed store errors here too, or the developer endpoint answers 500
+    # for the same request the canonical ``/v1/goals/{goal_id}`` route answers 422.
+    try:
+        updated_goal = goals_db.update_goal(uid, goal_id, update_data)
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
 
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
