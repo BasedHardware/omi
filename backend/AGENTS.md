@@ -1,6 +1,6 @@
 # Backend (Python) — Developer Guide
 
-Inherits `../AGENTS.md`; adds backend guidance.
+Speaker text: `utils.speakers.display.display_participants` + `DiarizationLabel`; raw ids are storage keys.
 
 ## Setup
 
@@ -238,7 +238,7 @@ Live suites record `NOT_RUN` when credentials/backend are unavailable — never 
 
 ## Self-Testing a Change (run the real path)
 
-A passing unit test is not the same as exercising the endpoint. Before putting a change in a PR:
+Before a PR, exercise the endpoint:
 
 1. **Serve locally**: `./scripts/dev-serve.sh` (per-worktree port) or `uvicorn main:app --port 8080`. No GCP credentials? Use the offline harness — `PROVIDER_MODE=offline make dev-up` from the repo root (fake providers, no external services).
 2. **Authenticate without a client**: set `ADMIN_KEY` in `.env`, then call endpoints as any uid with `Authorization: Bearer <ADMIN_KEY><uid>` (the key concatenated with the uid).

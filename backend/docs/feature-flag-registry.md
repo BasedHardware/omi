@@ -473,6 +473,7 @@ and an explicit empty literal renders as `''`.
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | keep | — | dazheng |
 | `SONIOX_IDLE_CLOSE_SECONDS` | Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 60 s with no client frames; 0 or off is the kill switch | backend | env | open | — | — | — | — | keep | keep | — | backend |
+| `SPEAKER_IDENTITY_REPAIR_ENABLED` | Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `STALE_IN_PROGRESS_RECOVERY_ENABLED` | Incident stop for reconnect stale in-progress recovery; default on | backend | env | open | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | — | keep | keep | — | backend listen |
 | `STT_CAP_FINALIZE_FORWARD_ENABLED` | Default on; preserve provider-specific finalize arguments through the funded STT cap proxy | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `STT_CAP_OFFLINE_ENFORCEMENT` | Default on; enforce existing finite transcription allowance before sync/batch cloud spend independently of legacy live scope | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -895,6 +896,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SPEAKER_EVIDENCE_MODE_SERVE_UID_SHA256S` — Default empty; SHA256 digests for the explicit speaker evidence serve cohort (fail: closed)
 - `SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT` — Speaker evidence database writes sampled in shadow; default 5 percent, serve cohort always writes (fail: closed)
 - `SPEAKER_GROUPING_CROSS_SCOPE_THRESHOLD` — G2 cross-scope cosine-distance threshold; default 0.60; invalid configuration uses 0.60 (fail: closed)
+- `SPEAKER_IDENTITY_REPAIR_ENABLED` — Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names (fail: open)
 - `STOREFRONT_LADDER_V1_ENABLED` — Default-off versioned unified plans presentation; exact true admits v2 only; installed-client endpoints unchanged (fail: closed)
 - `STT_CAP_FINALIZE_FORWARD_ENABLED` — Default on; preserve provider-specific finalize arguments through the funded STT cap proxy (fail: open)
 - `STT_CAP_OFFLINE_ENFORCEMENT` — Default on; enforce existing finite transcription allowance before sync/batch cloud spend independently of legacy live scope (fail: open)

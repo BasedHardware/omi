@@ -4,6 +4,16 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: speaker-identity-interpolation-ratchet
+    command: ["python3", ".github/scripts/check_speaker_label_interpolation.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["backend/**/*.py", "app/lib/**/*.dart", ".github/scripts/*speaker_label_interpolation.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#23379 and Speaker 379 live notes: raw diarization interpolation must not re-enter display or prompts"
+  - id: speaker-label-interpolation-tests
+    command: ["python3", ".github/scripts/test_check_speaker_label_interpolation.py"]
+    triggers: [".github/scripts/*speaker_label_interpolation.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Fingerprint ratchet rejects f-strings, format, percent and Dart raw speaker interpolation without trading away old leaks"
   - id: nightly-main-contract-tests
     command: ["python3", "scripts/ci/test_nightly_main.py"]
     triggers: [".github/workflows/**", "scripts/ci/nightly_main_report.py", "scripts/ci/test_nightly_main*.py", ".github/checks-manifest.yaml"]
@@ -1868,7 +1878,7 @@ checks:
     command: ["python3", ".github/scripts/check_speaker_label_interpolation.py"]
     triggers: ["backend/**/*.py", ".github/scripts/check_speaker_label_interpolation.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "#23381: an interpolated 'Speaker {speaker_id}' prompt label is a raw per-conversation diarization counter that summarizers copy verbatim into user-visible notes; unnamed voices must be labeled through utils.speaker_display.SpeakerLabeler dense labels"
+    reason: "#23381: an interpolated 'Speaker {speaker_id}' prompt label is a raw per-conversation diarization counter that summarizers copy verbatim into user-visible notes; unnamed voices must use the identity-aware utils.speakers.display authority"
   - id: speaker-label-interpolation-selftest
     command: ["python3", ".github/scripts/check_speaker_label_interpolation.py", "--self-test"]
     triggers: [".github/scripts/check_speaker_label_interpolation.py", ".github/checks-manifest.yaml"]

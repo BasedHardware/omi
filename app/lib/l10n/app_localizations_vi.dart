@@ -14569,4 +14569,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Xong. Giảm $percent% trong $months tháng tới.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Những người khác';
 }

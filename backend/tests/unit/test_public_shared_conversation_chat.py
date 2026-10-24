@@ -399,7 +399,7 @@ def test_transcript_prompt_is_deterministic_bounded_and_keeps_segment_boundaries
     dense: dict[int, str] = {}
     for segment in segments:
         if segment['is_user']:
-            rendered = f"Owner: {segment['text']}"
+            rendered = f"You: {segment['text']}"
         else:
             label = dense.setdefault(segment['speaker_id'], chr(ord('A') + len(dense)))
             rendered = f"Speaker {label}: {segment['text']}"
@@ -452,7 +452,7 @@ def test_transcript_builder_does_not_copy_an_oversized_segment():
     finally:
         tracemalloc.stop()
 
-    assert transcript == ('Owner: head\n' '[... transcript truncated at segment boundaries ...]\n' 'Speaker B: tail')
+    assert transcript == ('You: head\n' '[... transcript truncated at segment boundaries ...]\n' 'Speaker B: tail')
     assert peak_bytes < 500_000
 
 
