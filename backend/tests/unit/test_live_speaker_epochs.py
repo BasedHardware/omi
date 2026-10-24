@@ -64,11 +64,14 @@ def test_short_display_evidence_is_unique_placed_time_and_does_not_spend_ordinal
 
 
 @pytest.mark.asyncio
-async def test_idle_reopen_listen_reconnect_short_turns_and_owner_evidence(monkeypatch):
+@pytest.mark.parametrize('enrolled_guest', [False, True])
+async def test_idle_reopen_listen_reconnect_short_turns_and_owner_evidence(monkeypatch, enrolled_guest):
     owner = np.array([[1.0, 0.0]], dtype=np.float32)
     guest = np.array([[0.0, 1.0]], dtype=np.float32)
     matcher, host, _ = _live_matcher(monkeypatch, [owner] * 4 + [guest] * 2)
-    matcher.person_embeddings.pop('p1')  # Unenrolled guest must never be forced to owner.
+    if not enrolled_guest:
+        matcher.person_embeddings.pop('p1')  # Unenrolled guest must never be forced to owner.
+    names = {'p1': 'Sarah'} if enrolled_guest else {}
     socket, idle, _, peers, seen, tick = build(monkeypatch)
     allocator, epoch = ConversationSpeakerIdAllocator(), SpeakerProviderEpoch('listen-1')
     rows = []
@@ -100,7 +103,7 @@ async def test_idle_reopen_listen_reconnect_short_turns_and_owner_evidence(monke
         processor.host = host
         host.speakers = matcher
         processor._apply_speaker_identity_statuses(rows)
-        return display_participants(rows, defer_short_voices=True)
+        return display_participants(rows, names=names, defer_short_voices=True)
 
     try:
         assert socket.send(b'\x01\x00' * 1600, wall_time=100, start_sample=0)
@@ -122,18 +125,24 @@ async def test_idle_reopen_listen_reconnect_short_turns_and_owner_evidence(monke
         groups = matcher._provider_epoch_voice_groups()
         assert groups[rows[0].speaker_id] == groups[rows[2].speaker_id]
         assert (await turn(2)).label(rows[-1]) == 'Unknown speaker'
-        assert (await turn(2)).label(rows[-1]) == 'Speaker A'
+        assert (await turn(2)).label(rows[-1]) == ('Sarah' if enrolled_guest else 'Speaker A')
         assert not rows[-1].is_user
 
         # A new listen replica hydrates identity reservations, not acoustic proof.
         allocator, epoch = ConversationSpeakerIdAllocator(), SpeakerProviderEpoch('listen-2')
-        allocator.hydrate(rows)
-        matcher, host, _ = _live_matcher(monkeypatch, [owner] * 2)
-        matcher.person_embeddings.pop('p1')
+        allocator.hydrate([r.model_dump() for r in rows])
+        matcher, host, _ = _live_matcher(monkeypatch, [guest] * 2 + [owner] * 2)
+        if not enrolled_guest:
+            matcher.person_embeddings.pop('p1')
+        # Reused provider label 1 now belongs to the guest. Reconnect must not
+        # inherit the old owner's label or acoustic proof from that number.
         assert (await turn()).label(rows[-1]) == 'Unknown speaker'
-        assert (await turn()).label(rows[-1]) == 'You'
+        assert (await turn()).label(rows[-1]) == ('Sarah' if enrolled_guest else 'Speaker B')
+        assert not any(r.is_user for r in rows[-2:])
+        assert (await turn(2)).label(rows[-1]) == 'Unknown speaker'
+        assert (await turn(2)).label(rows[-1]) == 'You'
         assert all(r.is_user for r in rows[:4] + rows[-2:])
-        assert not any(r.is_user for r in rows[4:6])
+        assert not any(r.is_user for r in rows[4:8])
     finally:
         await idle.drain_and_close()
 
