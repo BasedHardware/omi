@@ -271,6 +271,11 @@ class ProjectionStore:
             held = False
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
+                result = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
+                if (result.get('projection') or {}).get('state') == 'quarantined':
+                    if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
+                        raise ProjectionBlocked('quarantined sibling binding mismatch')
+                    held = True
                 if job.get('state') == 'quarantined':
                     if (
                         not job.get('projection_binding')
