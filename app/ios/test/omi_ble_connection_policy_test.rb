@@ -14,7 +14,7 @@ class OmiBleConnectionPolicyTest < Minitest::Test
       'private func issueConnect(', 'private func reconcileSavedReconnect(',
       'private func runSavedScanWindow(', 'private func endSavedScan(',
       'private func updateReconnectScan(', 'private func reportDiscoveryFailure(',
-      'private func recoverCaptureConnection(',
+      'private func recoverCaptureConnection(', 'func disconnectPeripheral(',
       'func centralManager(_ central: CBCentralManager, didDiscover ',
       'func centralManager(_ central: CBCentralManager, didFailToConnect ',
       'func centralManager(_ central: CBCentralManager, didDisconnectPeripheral ',

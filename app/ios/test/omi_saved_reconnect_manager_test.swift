@@ -106,6 +106,7 @@ final class ManagerHarness {
     var manuallyDisconnected: Set<String> = []
     var everConnected: Set<String> = []
     var pairingRecoveryInFlight: Set<String> = []
+    var pairingLostBlocked: Set<String> = []
     var captureReconnects: [String: OmiCaptureReconnect] = [:]
     var captureSessions: [String: TestCaptureSession] = [:]
     let captureStorageProgress = TestStorageProgress()
@@ -129,9 +130,12 @@ final class ManagerHarness {
     var discoveryRetries: [String: Int] = [:]
     var discoveryStartedAt: [String: TimeInterval] = [:]
     var isScanning = false
+    let defaultsSuite = "manager-reconnect-" + UUID().uuidString
     init() {
-        reconnectIntent = OmiSavedReconnectIntent(defaults: UserDefaults(suiteName: "manager-reconnect-" + UUID().uuidString)!)
+        reconnectIntent = OmiSavedReconnectIntent(defaults: UserDefaults(suiteName: defaultsSuite)!)
     }
+    deinit { UserDefaults.standard.removePersistentDomain(forName: defaultsSuite) }
+    func setCaptureAuthorized(uuid: String, authorized: Bool) {}
     func shouldAutoReconnect(uuid: String, pairingLost: Bool) -> Bool { !manuallyDisconnected.contains(uuid) && !pairingLost }
     func logBle(uuid: String, event: String, detail: String) {}
     func reportSavedReconnect(_ uuid: String, result: String) {}
@@ -217,7 +221,9 @@ final class ManagerHarness {
                 manager.reportDiscoveryFailure(uuid: uuid, reason: "timeout")
                 let delay = OmiBleConnectionPolicy.savedRetryDelay(attempt: failure)
                 let count = manager.centralManager.connects
-                peripheral.state = .disconnected
+                manager.disconnectPeripheral(uuid: uuid) // Non-user Dart release after terminal GATT failure.
+                precondition(manager.savedReconnect.contains(uuid))
+                precondition(manager.centralManager.connects == count)
                 manager.centralManager(manager.centralManager, didDisconnectPeripheral: peripheral, error: nil)
                 precondition(manager.centralManager.connects == count + 1, "OS must own delayed setup retry")
                 precondition(manager.centralManager.startDelays.last == delay)
