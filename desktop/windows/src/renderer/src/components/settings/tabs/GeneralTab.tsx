@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import type { MeetingMode, RewindSettings } from '../../../../../shared/types'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../../lib/preferences'
+import { useAuth } from '../../../hooks/useAuth'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import { FontSizeCard } from '../FontSizeCard'
@@ -190,6 +191,7 @@ function AudioRecordingRow(): React.JSX.Element {
 // scoped assistant bridge the tray and the Notifications tab use, and subscribes to
 // the broadcast so it and the tray checkbox can never disagree.
 export function ScreenAnalysisRow(): React.JSX.Element {
+  const { user } = useAuth()
   const [on, setOn] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -199,7 +201,7 @@ export function ScreenAnalysisRow(): React.JSX.Element {
 
   const change = (next: boolean): void => {
     setOn(next) // optimistic; the coordinator re-syncs off the settings write
-    void window.omi?.assistantsSetSettings?.({ screenAnalysisEnabled: next })
+    void window.omi?.assistantsSetSettings?.({ screenAnalysisEnabled: next }, user?.uid)
   }
 
   return (

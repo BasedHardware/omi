@@ -8,10 +8,16 @@ class SettingsSyncManager {
   private init() {}
 
   /// Pull settings from server and apply non-nil values to local singletons.
+  /// Fenced by the active runtime owner so an in-flight pull from Account A
+  /// cannot overwrite Account B's local assistant settings across a reauth switch.
   func syncFromServer() async {
-    guard AuthService.shared.isSignedIn else { return }
+    guard AuthService.shared.isSignedIn, let originOwner = Self.currentOwnerID else { return }
     do {
       let remote = try await APIClient.shared.getAssistantSettings()
+      guard AuthService.shared.isSignedIn, Self.currentOwnerID == originOwner else {
+        log("SettingsSyncManager: dropped stale remote assistant settings after owner change")
+        return
+      }
       applyRemoteSettings(remote)
       await AssistantVoiceStore.shared.refresh()
       log("SettingsSyncManager: synced from server")
@@ -20,9 +26,11 @@ class SettingsSyncManager {
     }
   }
 
-  /// Push all current local settings to the server.
+  /// Push all current local settings to the server for the active runtime owner.
   func syncToServer() async {
+    guard AuthService.shared.isSignedIn, let originOwner = Self.currentOwnerID else { return }
     let settings = buildFromLocal()
+    guard AuthService.shared.isSignedIn, Self.currentOwnerID == originOwner else { return }
     do {
       let _ = try await APIClient.shared.updateAssistantSettings(settings)
       log("SettingsSyncManager: synced to server")
@@ -31,9 +39,17 @@ class SettingsSyncManager {
     }
   }
 
-  /// Fire-and-forget partial update to server.
+  /// Fire-and-forget partial update to server, fenced to the owner active when queued.
   func pushPartialUpdate(_ settings: AssistantSettingsResponse) {
+    let originOwner = Self.currentOwnerID
     Task {
+      guard AuthService.shared.isSignedIn,
+        let originOwner,
+        Self.currentOwnerID == originOwner
+      else {
+        log("SettingsSyncManager: dropped partial update after owner change")
+        return
+      }
       do {
         let _ = try await APIClient.shared.updateAssistantSettings(settings)
       } catch {

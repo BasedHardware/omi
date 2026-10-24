@@ -4,9 +4,8 @@ import { renderHook, act, cleanup } from '@testing-library/react'
 
 // C9: the backend binds PATCH /v3/memories/{id} and /v3/memories/{id}/visibility
 // `value` as a QUERY param (a plain `value: str` function arg — see edit_memory /
-// update_memory_visibility in backend/routers/memories.py), not a JSON body. Mac
-// sends `{value}` as a body and may 422 in production; these tests pin the
-// query-param form so a future edit can't silently regress to Mac's shape.
+// update_memory_visibility in backend/routers/memories.py). A JSON body may
+// accompany it, but must never replace the required query parameter.
 const omiApiGet = vi.fn()
 const omiApiPost = vi.fn()
 const omiApiPatch = vi.fn()
@@ -56,12 +55,8 @@ function fakeBackend(total: number, deviceScopeHeader?: string, lifecycleHeader?
     return {
       data,
       headers: {
-        ...(deviceScopeHeader
-          ? { 'x-omi-memory-device-scope-supported': deviceScopeHeader }
-          : {}),
-        ...(lifecycleHeader
-          ? { 'x-omi-memory-canonical-lifecycle-exposed': lifecycleHeader }
-          : {})
+        ...(deviceScopeHeader ? { 'x-omi-memory-device-scope-supported': deviceScopeHeader } : {}),
+        ...(lifecycleHeader ? { 'x-omi-memory-canonical-lifecycle-exposed': lifecycleHeader } : {})
       }
     }
   }
@@ -88,7 +83,7 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
     })
   })
 
-  it('editMemory sends the new content as a query param, not a JSON body', async () => {
+  it('editMemory preserves the required query param alongside the JSON body', async () => {
     const { result } = renderHook(() => useMemories())
     await act(async () => {
       await result.current.refresh()
@@ -101,7 +96,7 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
     expect(omiApiPatch).toHaveBeenCalledTimes(1)
     const [path, body, config] = omiApiPatch.mock.calls[0]
     expect(path).toBe('/v3/memories/m1')
-    expect(body).toBeNull() // never a {value} JSON body — that's Mac's 422-prone shape
+    expect(body).toEqual({ value: 'Updated content' })
     expect(config).toEqual({ params: { value: 'Updated content' } })
   })
 
@@ -118,8 +113,26 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
     expect(omiApiPatch).toHaveBeenCalledTimes(1)
     const [path, body, config] = omiApiPatch.mock.calls[0]
     expect(path).toBe('/v3/memories/m1/visibility')
-    expect(body).toBeNull()
+    expect(body).toEqual({ value: 'public' })
     expect(config).toEqual({ params: { value: 'public' } })
+  })
+
+  it('publishes the canonical replacement returned by a successful edit', async () => {
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+    omiApiPatch.mockResolvedValueOnce({
+      data: { memory: memory('canonical-id', 'Canonical content', 'private') }
+    })
+    await act(async () => {
+      const replacement = await result.current.editMemory('m1', 'Updated content')
+      expect(replacement?.id).toBe('canonical-id')
+    })
+    expect(result.current.memories.find((m) => m.id === 'm1')).toBeUndefined()
+    expect(result.current.memories.find((m) => m.id === 'canonical-id')?.content).toBe(
+      'Canonical content'
+    )
   })
 
   it('reverts the local cache and rethrows when the edit request fails', async () => {
@@ -204,7 +217,14 @@ describe('useMemories — pagination and delete', () => {
     expect(result.current.memories[0]).not.toHaveProperty('kind')
     expect(result.current.memories[1]).toMatchObject({ kind: 'fact', status: 'active' })
     expect(result.current.memories[1]).toMatchObject({ slot: 'home_city' })
-    for (const field of ['currency', 'currency_band', 'as_of', 'belief_class', 'half_life_days', 'belief_computed_at']) {
+    for (const field of [
+      'currency',
+      'currency_band',
+      'as_of',
+      'belief_class',
+      'half_life_days',
+      'belief_computed_at'
+    ]) {
       expect(result.current.memories[1]).not.toHaveProperty(field)
     }
     expect(result.current.memories[1].evidence).toEqual([
@@ -312,5 +332,4 @@ describe('useMemories — pagination and delete', () => {
     // The failed delete is walked back — the row is still present.
     expect(result.current.memories.some((m) => m.id === 'm0')).toBe(true)
   })
-
 })
