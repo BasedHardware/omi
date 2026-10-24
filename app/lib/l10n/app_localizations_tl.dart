@@ -11214,13 +11214,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get captureStorageAlmostFull => 'Halos puno na ang storage';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Kusang kokonekta muli ang Omi';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name at iba pa';
   }

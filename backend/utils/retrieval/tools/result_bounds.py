@@ -14,6 +14,7 @@ try:
     from utils.model_text import truncation_note
 except ModuleNotFoundError:
     import importlib.util as _importlib_util
+    import sys as _sys
     from pathlib import Path as _Path
 
     _mt_spec = _importlib_util.spec_from_file_location(
@@ -22,6 +23,9 @@ except ModuleNotFoundError:
     )
     assert _mt_spec is not None and _mt_spec.loader is not None
     _mt_mod = _importlib_util.module_from_spec(_mt_spec)
+    # Register before exec (the load_module_fresh recipe): a dataclass in the
+    # loaded module resolves its annotations through sys.modules[cls.__module__].
+    _sys.modules["utils.model_text"] = _mt_mod
     _mt_spec.loader.exec_module(_mt_mod)
     truncation_note = _mt_mod.truncation_note
 
@@ -37,7 +41,7 @@ def cap_items_for_llm(items: List[T], max_items: int) -> Tuple[List[T], int, boo
     Returns ``(capped_list, total_found, truncated)`` where ``truncated`` is True when some rows
     were dropped.
     """
-    if items is None:
+    if items is None:  # type: ignore[reportUnnecessaryComparison]  # defensive runtime guard for untyped callers (#23410)
         return [], 0, False
     items_list = list(items)
     total_found = len(items_list)
@@ -62,9 +66,9 @@ def bounded_result(
     The note deliberately does not state a total count: callers may pass an already-paginated
     page whose length is not the true total, so claiming a total would mislead (cubic on #8527).
     """
-    if result is None:
+    if result is None:  # type: ignore[reportUnnecessaryComparison]  # defensive runtime guard for untyped callers (#23410)
         result = ""
-    elif not isinstance(result, str):
+    elif not isinstance(result, str):  # type: ignore[reportUnnecessaryIsInstance]  # defensive runtime guard for untyped callers (#23410)
         result = str(result)
 
     if len(result) > MAX_RESULT_CHARS:

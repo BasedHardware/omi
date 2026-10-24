@@ -11121,13 +11121,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get captureStorageAlmostFull => 'Lagringen er nesten full';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Anhenget mistet forbindelsen til denne telefonen. Omi kobler til igjen av seg selv når anhenget er på og i nærheten. Alt som ble tatt opp før dette, er trygt.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi kobler til igjen av seg selv';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name og andre';
   }
