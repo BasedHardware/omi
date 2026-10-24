@@ -51,6 +51,10 @@ class ConversationPromptPrefix:
     account_owner_name: Optional[str] = None
     # Account vocabulary is volatile context, outside the shared cache boundary.
     known_spellings: str = ''
+    # Server-owned identity inputs, outside the rendered/cacheable prompt bytes.
+    speaker_names: tuple[tuple[str, Optional[str]], ...] = ()
+    meeting_names: tuple[str, ...] = ()
+    transcript_body: str = ''
 
     @property
     def cache_key(self) -> str:
@@ -355,4 +359,11 @@ def build_conversation_prompt_prefix(
         owner_names=owner_names,
         account_owner_name=account_owner_name or None,
         known_spellings=known_spellings,
+        speaker_names=tuple(source_speaker_names.items()),
+        meeting_names=(
+            tuple(participant.name for participant in calendar_context.participants if participant.name)
+            if calendar_context
+            else ()
+        ),
+        transcript_body=transcript,
     )

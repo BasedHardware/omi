@@ -21,6 +21,7 @@ from utils.llm.notes_refactor_metrics import shadow
 from utils.observability.fallback import record_fallback
 from utils.llm.output_language import resolve_output_language
 from utils.llm.speaker_evidence_prompt import render_speaker_evidence, SPEAKER_RULES
+from utils.llm import known_spellings
 
 PACKET_VERSION = 2
 FLAG = 'NOTES_PACKET_V2_MODE'
@@ -36,6 +37,26 @@ only. Calendar invitees and screen listings do not establish attendance or ident
     + '\n\n'
     + SPEAKER_RULES
 )
+
+
+def notes_people(uid: str | None, inputs: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Reuse the spelling run's bounded People read for deterministic output enforcement too."""
+    if 'people' in inputs:
+        return list(inputs.get('people') or ())
+    if not uid:
+        return []
+    try:
+        return known_spellings.conversation_people_names(uid)
+    except Exception:
+        shadow('contact_spellings', 'error')
+        record_fallback(
+            component='conversation_notes',
+            from_mode='contact_spellings',
+            to_mode='available_context',
+            reason='dependency_unavailable',
+            outcome='degraded',
+        )
+        return []
 
 
 def _local_started_at_iso(started_at: datetime, tz: str | None) -> str:
@@ -158,23 +179,7 @@ def _select_packet(
         # Shadow uses already supplied language data and never adds a preference read.
         inputs['output_language_code'] = legacy.get('response_language') or inputs.get('language_code') or 'en'
     if 'people' not in inputs:
-        try:
-            if uid and serving_for(FLAG, uid):
-                from utils.llm.known_spellings import conversation_people_names
-
-                inputs['people'] = conversation_people_names(uid)
-            else:
-                inputs['people'] = []
-        except Exception:
-            inputs['people'] = []
-            shadow('contact_spellings', 'error')
-            record_fallback(
-                component='conversation_notes',
-                from_mode='contact_spellings',
-                to_mode='available_context',
-                reason='dependency_unavailable',
-                outcome='degraded',
-            )
+        inputs['people'] = notes_people(uid, inputs) if serving_for(FLAG, uid) else []
     packet = build_notes_packet(
         prefix=prefix,
         uid=uid,
