@@ -533,3 +533,9 @@ tests/unit/test_task_sync_cloud_export_dedup.py::test_batch_cloud_sync_isolates_
 # drop/install machinery in the call phase. Assertions passed; same boundary shape as
 # the entries above.
 tests/unit/test_memory_import_isolation_order_independence.py::test_drop_then_install_stubs_a_module_that_was_imported_first
+# Feeds 50k unplaced segments through the real record_moment/receipts path (25 moments
+# plus a whole-transcript finalization tail): the volume is the contract under test
+# (receipt documents must shard; no document may approach the 1 MiB Firestore limit).
+# Hermetic; the CPU sits in the id volume itself (~0.6-0.7s), close enough to the 1.00s
+# fail limit that a saturated runner would flake without this entry.
+tests/unit/test_episodes_service.py::test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_reprocess
