@@ -34,9 +34,12 @@ def generate(source):
             raise ValueError(f'Production shell boundary changed: expected exactly one {old}')
         shell = shell.replace(old, new)
     imports = '\n'.join(re.findall(r'^import .*?;', source, re.M))
-    digest = hashlib.sha256(source.encode()).hexdigest()
+    # Fingerprint only the mirrored content (imports, telemetry field, builder
+    # chain) so unrelated main.dart edits do not rotate the digest; wrapper
+    # changes inside the extracted shell still fail --check.
+    digest = hashlib.sha256(f'{imports}\n\n{telemetry}\n\n{shell}\n'.encode()).hexdigest()
     return f'''// Derived by python3 tool/perf_shell.py from main.dart. Do not hand edit.
-// Source shell SHA256: {digest}
+// Extracted shell SHA256 (imports, telemetry field, builder chain): {digest}
 // ignore_for_file: unused_import, unnecessary_import
 {imports}
 import 'package:omi/main.dart' show MyApp, CustomErrorWidget;
@@ -74,18 +77,23 @@ class _PerfProductionShellState extends State<PerfProductionShell> {{
 '''
 
 
+def mirrors(source, committed):
+    # Dart format may change indentation, but cannot change tokens.
+    expected = re.sub(r'\s+', '', generate(source))
+    return committed is not None and re.sub(r'\s+', '', committed) == expected
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
-    expected = generate((APP / 'lib/main.dart').read_text())
+    source = (APP / 'lib/main.dart').read_text()
     if args.check:
-        # Dart format may change indentation, but cannot change tokens.
-        if not OUTPUT.exists() or re.sub(r'\s+', '', OUTPUT.read_text()) != re.sub(r'\s+', '', expected):
+        if not mirrors(source, OUTPUT.read_text() if OUTPUT.exists() else None):
             raise SystemExit('PERF RED: production shell drifted. Run python3 app/tool/perf_shell.py, review all new wrappers, then rerun the gate.')
         print('Production shell fidelity: PASS (source checked, iOS analytics enabled)')
     else:
-        OUTPUT.write_text(expected)
+        OUTPUT.write_text(generate(source))
 
 
 if __name__ == '__main__':

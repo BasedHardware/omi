@@ -36,10 +36,12 @@ is the inert fixture entry route; real production pages are then pushed by the
 existing scenarios. Provider/native/backend bootstrap stays at the journey's
 hermetic seams. This is shell fidelity, not full startup/onboarding coverage.
 
-`perf_shell.py --check` rejects stale output. It fingerprints all of main.dart
-and refuses unknown root wrapper shapes, so adding a wrapper outside the
-extracted builder cannot silently evade the test. Regenerate after a deliberate
-main change, review the new wrappers, and rerun the gate. The preferred future
+`perf_shell.py --check` rejects stale output. It fingerprints only the
+extracted shell — the copied imports, the telemetry field, and the builder
+chain — and refuses unknown root wrapper shapes, so a wrapper added anywhere
+around the builder cannot silently evade the test while unrelated main.dart
+edits stay green. Regenerate after a deliberate shell change, review the new
+wrappers, and rerun the gate. The preferred future
 seam is a shared production shell function called directly by main and tests;
 this adapter avoids editing main while the parallel lag-fix lane owns it.
 
