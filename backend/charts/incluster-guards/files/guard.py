@@ -26,6 +26,9 @@ LATENCY = {
 WINDOW = 900
 BLIND_LIMIT = 3
 REFUSAL_GATE_VERSION = 'same-hour-of-week-12-pod-v2'
+FIRST_P95_FLOOR = 30
+FIRST_P95_BASELINE_FACTOR = 1.2
+FIRST_P95_MIN_SLOW_TEXTS = 4
 FAST_SCALE_UP = {
     'stabilizationWindowSeconds': 0,
     'selectPolicy': 'Max',
@@ -105,6 +108,18 @@ def refusal_limit(values):
     return max(0.02, values['refusal_baseline_fraction'] * 1.25 + 0.005)
 
 
+def first_p95_limit(values):
+    """The 30s floor, or 1.2x the same rolling UTC hour a week ago when that baseline is finite.
+
+    An unavailable baseline is the documented fallback (floor plus the slow-text
+    gate below), never blindness: a missing weekly series must not itself roll the floor back.
+    """
+    baseline = values.get('first_p95_baseline')
+    if finite(baseline):
+        return max(FIRST_P95_FLOOR, FIRST_P95_BASELINE_FACTOR * baseline)
+    return FIRST_P95_FLOOR
+
+
 def queries(namespace):
     # Ported from P77 guard_fast.py, including its job and exported_endpoint selectors.
     sel = '{job="backend-listen-metrics"}'
@@ -121,6 +136,11 @@ def queries(namespace):
     return {
         **refusal_baseline_queries(namespace),
         'first_p95': f'histogram_quantile(0.95,sum by(le)(rate(omi_stt_window_first_text_seconds_bucket{sel}[15m])))',
+        # Same rolling UTC hour a week ago: a 15-minute window carries only ~40
+        # first texts, so two slow sessions alone can push its p95 past 60s.
+        'first_p95_baseline': (
+            'histogram_quantile(0.95,sum by(le)(rate(omi_stt_window_first_text_seconds_bucket' f'{sel}[1h] offset 7d)))'
+        ),
         'first_count': inc('omi_stt_window_first_text_seconds_count'),
         'first_over30': inc('omi_stt_window_first_text_seconds_count')
         + ' - '
@@ -202,10 +222,13 @@ def evaluate(values):
     # distinguish that expected lack of samples from a missing series/query error
     # (None). It remains LOW_SAMPLE, never CLEAN, without rolling back quiet hours.
     idle_nan = {'first_p95', 'post_p95', 'v2_p95', 'refusal_fraction'} if low and fresh else set()
+    # first_p95_baseline is optional evidence (retention, metric age): its absence
+    # selects the fallback threshold instead of blinding the whole reading.
     blind = [
         f'missing_or_nonfinite_{k}'
         for k in queries('unused')
-        if not finite(values.get(k))
+        if k != 'first_p95_baseline'
+        and not finite(values.get(k))
         and not (k in idle_nan and isinstance(values.get(k), float) and math.isnan(values[k]))
     ]
     blind += [k for k in stale_keys if finite(values.get(k)) and (values[k] > 120 or values[k] < 0)]
@@ -216,11 +239,18 @@ def evaluate(values):
     if refusal_threshold is None:
         blind.append('unqualified_refusal_baseline')
     if not low:
-        trips += [
-            k
-            for k, limit in [('first_p95', 30), ('post_p95', 3), ('v2_p95', 3)]
-            if finite(values.get(k)) and values[k] >= limit
-        ]
+        trips += [k for k, limit in [('post_p95', 3), ('v2_p95', 3)] if finite(values.get(k)) and values[k] >= limit]
+        # A 15-minute p95 over ~35-45 first texts is small-sample noise: one or
+        # two slow sessions drove floor-10 rollbacks at 04:08Z/06:19Z while the
+        # floor-10 fleet beat floor 12. Trip only with several slow texts AND a
+        # p95 worse than both the floor and the same UTC hour a week ago.
+        if (
+            finite(values.get('first_p95'))
+            and finite(values.get('first_over30'))
+            and values['first_over30'] >= FIRST_P95_MIN_SLOW_TEXTS
+            and values['first_p95'] >= first_p95_limit(values)
+        ):
+            trips.append('first_p95')
         if (
             refusal_threshold is not None
             and finite(values.get('refusal_fraction'))
@@ -232,7 +262,13 @@ def evaluate(values):
         for k, limit in [('first_over30', 12), ('no_text_deadline', 36)]
         if finite(values.get(k)) and values[k] > limit
     ]
-    return {'trips': trips, 'blind': blind, 'low_sample': low, 'refusal_threshold': refusal_threshold}
+    return {
+        'trips': trips,
+        'blind': blind,
+        'low_sample': low,
+        'refusal_threshold': refusal_threshold,
+        'first_p95_threshold': first_p95_limit(values),
+    }
 
 
 def scheduling_failures(events, name, now):
