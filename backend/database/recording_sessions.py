@@ -15,6 +15,7 @@ from typing import Any, Literal, Mapping, TypedDict
 from google.cloud import firestore
 
 from database import conversations as conversations_db
+from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client
 from database.people_stats_cache import invalidate_people_stats_cache
 
@@ -344,6 +345,7 @@ def tombstone_and_delete_empty_conversation(
 
     deleted = _delete_empty(transaction)
     if deleted:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
         invalidate_people_stats_cache(uid)
     return deleted
 

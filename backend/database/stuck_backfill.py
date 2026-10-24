@@ -12,6 +12,7 @@ from typing import Any
 
 from google.cloud import firestore
 
+from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client
 from database import conversation_finalization_jobs as jobs
 from utils.conversations.recovery import TERMINAL_NO_DERIVED_EFFECTS_FIELD
@@ -145,6 +146,7 @@ def close_noise(
         run_id,
         datetime.now(timezone.utc),
     )
+    stop_quiet_check_for_conversation(uid, cid, firestore_client=client)
     # Bind restore to our commit, never a later read that might observe someone else's write.
     committed_revision = revision(transaction.write_results[0])
     if committed_revision is None:

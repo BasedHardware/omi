@@ -6,14 +6,122 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
+from contextlib import ExitStack
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault('ENCRYPTION_SECRET', 'quiet_replay_emulator_only_secret_32_bytes')
 
 from google.cloud import firestore
+from database import conversations, recording_sessions, proactivity, quiet_check_retirement
+from config import stt_cap_dispatch
+from models.conversation_enums import ConversationStatus
 from database import conversation_finalization_jobs as jobs
 from database import conversation_quiet_checks as checks
 from services import conversation_finalization as service
+
+
+def exercise_lifecycle_retirement(client):
+    """Real commits + SDK field deletion across the public storage adapters."""
+    uid = 'synthetic-retirement'
+    col = client.collection('users').document(uid).collection('conversations')
+    now = datetime.now(timezone.utc)
+
+    def seed(cid, *, empty=False):
+        row = {
+            'id': cid,
+            'source': 'omi',
+            'status': 'in_progress',
+            'created_at': now,
+            'started_at': now,
+            'finished_at': now,
+            'has_content': not empty,
+            'transcript_segments': [] if empty else [{'text': 'synthetic captured speech', 'start': 0, 'end': 1}],
+            'data_protection_level': 'standard',
+        }
+        col.document(cid).set(row)
+        armed = checks.arm_quiet_check(uid, cid, 120, firestore_client=client)
+        assert armed is not None
+        return client.collection('conversation_finalization_jobs').document(armed['job_id'])
+
+    def retired(ref):
+        row = ref.get().to_dict()
+        assert row['status'] == 'quiet_done' and 'reconcile_after_at' not in row, row
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(conversations, 'db', client))
+        for module in (conversations, recording_sessions, jobs):
+            stack.enter_context(patch.object(module, 'invalidate_people_stats_cache'))
+        stack.enter_context(patch.object(conversations, '_sync_conversation_search_index'))
+        stack.enter_context(patch.object(conversations, '_delete_conversation_search_index'))
+        stack.enter_context(patch.object(conversations, 'leave_capture_group'))
+        stack.enter_context(patch.object(proactivity, 'purge_source_items'))
+        stack.enter_context(patch.object(stt_cap_dispatch, 'any_execution_admission_enabled', return_value=False))
+
+        ref = seed('user-delete')
+        conversations.delete_conversation(uid, 'user-delete')
+        assert not col.document('user-delete').get().exists
+        retired(ref)
+
+        ref = seed('empty-delete', empty=True)
+        assert recording_sessions.tombstone_and_delete_empty_conversation(
+            uid, 'empty-delete', None, firestore_client=client
+        )
+        retired(ref)
+
+        ref = seed('capture-end')
+        intent = jobs.create_or_get_finalization_intent(
+            uid,
+            'capture-end',
+            requires_byok=False,
+            finalization_admission=lambda row: {
+                'accepted': True,
+                'terminal': False,
+                'reason': 'accepted',
+                'fanout_key': 'synthetic-fanout',
+            },
+            firestore_client=client,
+        )
+        assert intent['created'] and col.document('capture-end').get().to_dict()['status'] == 'processing'
+        retired(ref)
+
+        for cid, writer in (
+            (
+                'status-complete',
+                lambda cid: conversations.claim_conversation_status(
+                    uid, cid, ConversationStatus.in_progress, ConversationStatus.completed
+                ),
+            ),
+            ('discard', lambda cid: conversations.set_conversation_as_discarded(uid, cid)),
+            ('legacy-transition', lambda cid: conversations.transition_conversation_status(uid, cid, 'failed')),
+            (
+                'processing-persist',
+                lambda cid: conversations.persist_processing_result_with_lifecycle(
+                    uid, {'id': cid, 'status': 'completed', 'data_protection_level': 'standard'}
+                ),
+            ),
+            (
+                'lifecycle-upsert',
+                lambda cid: conversations.upsert_conversation_with_lifecycle(
+                    uid, {'id': cid, 'status': 'completed', 'data_protection_level': 'standard'}
+                ),
+            ),
+        ):
+            ref = seed(cid)
+            writer(cid)
+            retired(ref)
+
+        # Cleanup from an old closure must preserve a reopened successor, while
+        # terminal replay claims must really delete the indexed field in the SDK.
+        ref = seed('reopened')
+        assert not quiet_check_retirement.stop_quiet_check_for_conversation(uid, 'reopened', firestore_client=client)
+        assert ref.get().to_dict()['status'] == 'waiting_quiet'
+        terminal = client.collection('conversation_finalization_jobs').document('terminal-index')
+        terminal.set({'status': 'completed', 'dispatch_generation': 1, 'reconcile_after_at': now})
+        jobs.claim_finalization_replay(terminal.id, stale_after=timedelta(seconds=60), firestore_client=client)
+        assert 'reconcile_after_at' not in terminal.get().to_dict()
+    print(
+        'PASS: user/empty deletion, capture_end, complete/discard/failed, processing persistence/upsert, live reopen, terminal index deletion'
+    )
 
 
 def main():
@@ -21,6 +129,7 @@ def main():
     project = os.environ.get('GOOGLE_CLOUD_PROJECT', 'demo-quiet-replay')
     assert project.startswith('demo-'), 'isolated demo project required'
     client = firestore.Client(project=project)
+    exercise_lifecycle_retirement(client)
     col = client.collection(jobs.FINALIZATION_JOBS_COLLECTION)
     now = datetime.now(timezone.utc)
     # A page full of stuck rows must not hide the valid check behind it, even
