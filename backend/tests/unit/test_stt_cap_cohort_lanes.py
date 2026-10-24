@@ -204,6 +204,7 @@ def test_every_scoped_production_gate_supplies_its_subject(path):
             for name in node.names:
                 if name.name in {
                     'execution_admission_enabled',
+                    'offline_admission_enabled',
                     'recovery_admission_enabled',
                     'enabled_for',
                     'selected',

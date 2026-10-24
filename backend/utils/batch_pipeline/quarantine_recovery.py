@@ -1,5 +1,7 @@
 """Default-off, at-most-once legacy STT dispatch with durable result reconciliation."""
 
+from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
+
 from dataclasses import fields
 import hashlib
 import os
@@ -13,8 +15,9 @@ import wave
 
 from prometheus_client import Counter
 
+from utils.batch_pipeline.admission import admitted_as_byok
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
-from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
+from config.stt_cap_dispatch import offline_admission_enabled as cap_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.observability.fallback import record_fallback
 from config.batch_pipeline import (
@@ -231,12 +234,14 @@ class QuarantineRecovery:
     def _second_eligible(self, job, empty):
         return second_provider_eligible(job, empty)
 
-    def _second_multilingual(self, item, owner_id, audio, empty, policy, *, guarded=False):
+    def _second_multilingual(self, item, owner_id, audio, empty, policy, *, guarded=False, byok=False):
         """At most one Deepgram call inside the running intent; None leaves the unit held."""
         payload, outcome = None, 'refused'
         try:
             # The allowance and consent are rechecked before spending the extra call.
-            if sync_allowed(owner_id, item.duration_seconds, SECOND_PROVIDER, lane='batch'):
+            if byok or sync_allowed(
+                owner_id, item.duration_seconds, SECOND_PROVIDER, lane='batch', path=DispatchPath.QUARANTINE
+            ):
                 outcome = 'error'
                 payload = self.second_stt(item, audio, empty)
                 result_outcome(payload)
@@ -290,8 +295,15 @@ class QuarantineRecovery:
                     if self.protocol.settle(segment_id, token, self.clock(), failure=failure):
                         log_failure(failure)
                 return 'held'
+            byok = admitted_as_byok(job)
+            if byok:
+                record_decision(DispatchPath.QUARANTINE, True, DispatchReason.BYOK)
             disposition = empty_asr_disposition_enabled()
-            if not disposition and not sync_allowed(owner_id, item.duration_seconds, lane='batch'):
+            if (
+                not disposition
+                and not byok
+                and not sync_allowed(owner_id, item.duration_seconds, lane='batch', path=DispatchPath.QUARANTINE)
+            ):
                 return 'held'
             audio = self.artifacts.fetch_audio(item)
             local_payload, inspection_failure = None, None
@@ -308,7 +320,8 @@ class QuarantineRecovery:
             if (
                 local_payload is None
                 and inspection_failure is None
-                and not sync_allowed(owner_id, item.duration_seconds, lane='batch')
+                and not byok
+                and not sync_allowed(owner_id, item.duration_seconds, lane='batch', path=DispatchPath.QUARANTINE)
             ):
                 return 'held'
             # Existing guard-owned custody must drain safely even after the
@@ -373,6 +386,7 @@ class QuarantineRecovery:
                         empty,
                         policy,
                         guarded=(job.get('worker_failure') or {}).get('reason') == 'unsupported_language',
+                        byok=byok,
                     )
                     if payload is not None:
                         failure = None

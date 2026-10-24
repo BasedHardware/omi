@@ -1,9 +1,11 @@
 """Backend-only spend policy RPC. GPU images must not import Redis/provider code."""
 
+from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
+
 import math
 import time
 
-from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from utils.stt_cap_dispatch import sync_allowed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.scheduler import owns_lease
@@ -20,6 +22,12 @@ def admitted_as_byok(job: object) -> bool:
     """
     policy = job.get('policy') if isinstance(job, dict) else None  # pyright: ignore[reportUnknownMemberType]
     return isinstance(policy, dict) and policy.get('provider_reason') == 'byok'
+
+
+def batch_allowed(job: dict, seconds: float, provider: str, *, path: DispatchPath) -> bool:
+    if admitted_as_byok(job):
+        return record_decision(path, True, DispatchReason.BYOK)
+    return sync_allowed(job['owner_id'], seconds, provider, lane='batch', path=path)
 
 
 def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
@@ -47,10 +55,8 @@ def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
                 retries[segment] = 30
                 continue
             job, binding, intake = snapshot
-            if (
-                cap_dispatch_enabled(job['owner_id'], 'batch')
-                and not admitted_as_byok(job)
-                and not sync_allowed(job['owner_id'], float(job.get('duration_seconds', 0)), 'parakeet', lane='batch')
+            if cap_dispatch_enabled(job['owner_id'], 'batch') and not batch_allowed(
+                job, float(job.get('duration_seconds', 0)), 'parakeet', path=DispatchPath.BATCH_GPU
             ):
                 retries[segment] = 60
                 continue
