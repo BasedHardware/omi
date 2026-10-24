@@ -1864,6 +1864,16 @@ checks:
     triggers: ["plugins/omi-pubmed-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "PubMed chat tools must sanitize network errors and unhandled exceptions to prevent internal host/token leakage into tool responses"
+  - id: hive-settings-auth-tests
+    command: ["python3", "plugins/omi-hive-app/test_hive_settings_auth.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Hive settings routes (/settings/api-key, /settings/default-project, /) must require a valid HMAC-signed session cookie to prevent unauthenticated API key overwrite, default project hijacking, and connected account disclosure"
+  - id: linear-settings-auth-tests
+    command: ["python3", "plugins/omi-linear-app/test_linear_settings_auth.py"]
+    triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Linear settings and OAuth routes (/settings/default-team, /auth/linear, /auth/linear/callback, /) must require a valid HMAC-signed session cookie and nonce-bound OAuth state to prevent unauthenticated team mutation, workspace rebinding, and profile disclosure"
   - id: speaker-label-interpolation
     command: ["python3", ".github/scripts/check_speaker_label_interpolation.py"]
     triggers: ["backend/**/*.py", ".github/scripts/check_speaker_label_interpolation.py", ".github/checks-manifest.yaml"]

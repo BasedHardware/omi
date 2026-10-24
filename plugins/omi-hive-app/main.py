@@ -4,6 +4,8 @@ Hive Integration App for Omi
 This app provides Hive project management integration through API key authentication
 and chat tools for managing projects, tasks, actions, and searching.
 """
+import hashlib
+import hmac
 import os
 from typing import Optional, Dict, Any, List, Tuple
 from urllib.parse import quote
@@ -554,6 +556,91 @@ def search_tasks(uid: str, query: str, limit: int = 50) -> List[HiveTask]:
 
 
 # ============================================
+# Setup Session Authentication
+# ============================================
+
+SESSION_COOKIE_NAME = "omi_hive_session"
+SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+
+
+def _configured_session_secret() -> Optional[str]:
+    for env_name in ("SESSION_SECRET", "HIVE_SESSION_SECRET", "OAUTH_STATE_SECRET", "APP_SECRET"):
+        value = os.getenv(env_name)
+        if value and value.strip():
+            return value.strip()
+    return None
+
+
+def _require_session_secret() -> str:
+    secret = _configured_session_secret()
+    if not secret:
+        raise HTTPException(status_code=503, detail="Session authentication is not configured")
+    return secret
+
+
+def _create_session_token(uid: str) -> str:
+    secret = _require_session_secret()
+    return hmac.new(secret.encode("utf-8"), f"hive-session:{uid}".encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _has_valid_session(request: Optional[Request], uid: str) -> bool:
+    if not uid or request is None:
+        return False
+    secret = _configured_session_secret()
+    if not secret:
+        return False
+    cookies = getattr(request, "cookies", None) or {}
+    token = cookies.get(SESSION_COOKIE_NAME)
+    if not token or not isinstance(token, str):
+        return False
+    expected = hmac.new(secret.encode("utf-8"), f"hive-session:{uid}".encode("utf-8"), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(token, expected)
+
+
+def _require_valid_session(request: Optional[Request], uid: str) -> None:
+    _require_session_secret()
+    if not _has_valid_session(request, uid):
+        raise HTTPException(status_code=403, detail="Forbidden: valid settings session required")
+
+
+def _is_same_hive_account(existing: Optional[Dict[str, Any]], user_info: Optional[Dict[str, Any]]) -> bool:
+    """True when a freshly verified API key belongs to the Hive user already stored for uid."""
+    if not existing or not user_info:
+        return False
+    stored_user_id = str(existing.get("hive_user_id") or "").strip()
+    verified_user_id = str(user_info.get("user_id") or "").strip()
+    if not stored_user_id or not verified_user_id:
+        return False
+    return hmac.compare_digest(stored_user_id, verified_user_id)
+
+
+def _is_secure_request(request: Optional[Request]) -> bool:
+    if request is None:
+        return False
+    headers = getattr(request, "headers", None) or {}
+    proto = headers.get("x-forwarded-proto", "")
+    if isinstance(proto, str) and proto.split(",")[0].strip().lower() == "https":
+        return True
+    url = getattr(request, "url", None)
+    return getattr(url, "scheme", "") == "https"
+
+
+def _set_session_cookie(response: Any, uid: str, request: Optional[Request] = None) -> None:
+    token = _create_session_token(uid)
+    set_cookie = getattr(response, "set_cookie", None)
+    if callable(set_cookie):
+        set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=token,
+            httponly=True,
+            samesite="lax",
+            secure=_is_secure_request(request),
+            max_age=SESSION_COOKIE_MAX_AGE,
+            path="/",
+        )
+
+
+# ============================================
 # Setup Endpoints
 # ============================================
 
@@ -568,9 +655,9 @@ async def home(request: Request, uid: Optional[str] = None):
         })
 
     credentials = get_hive_credentials(uid)
-    connected = credentials is not None
+    connected = credentials is not None and _has_valid_session(request, uid)
 
-    # Get user info if connected
+    # Only expose account details and project list when the caller holds a valid session for uid
     user_info = None
     projects = []
     default_project = None
@@ -596,6 +683,7 @@ async def home(request: Request, uid: Optional[str] = None):
 
 @app.post("/settings/api-key")
 async def connect_api_key(
+    request: Request = None,
     uid: str = Query(...),
     api_key: str = Form(...)
 ):
@@ -603,8 +691,14 @@ async def connect_api_key(
     if not uid:
         raise HTTPException(status_code=400, detail="User ID is required")
 
-    if not api_key:
+    if not api_key or not api_key.strip():
         raise HTTPException(status_code=400, detail="API key is required")
+
+    _require_session_secret()
+
+    existing = get_hive_credentials(uid)
+    already_connected = existing is not None or is_connected(uid)
+    has_session = _has_valid_session(request, uid)
 
     # Verify the API key
     user_info = verify_api_key(api_key.strip())
@@ -616,6 +710,12 @@ async def connect_api_key(
             status_code=303
         )
 
+    # An already-connected uid can only be rebound by its session holder. A user who
+    # lost the session cookie can recover it by re-entering a key for the same Hive
+    # account that is already connected; a key for any other Hive account is refused.
+    if already_connected and not has_session and not _is_same_hive_account(existing, user_info):
+        raise HTTPException(status_code=403, detail="Forbidden: valid settings session required")
+
     # Store credentials
     store_hive_credentials(
         uid=uid,
@@ -625,7 +725,9 @@ async def connect_api_key(
         workspace_id=user_info.get("workspace_id"),
     )
 
-    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}", status_code=303)
+    response = RedirectResponse(url=f"/?uid={quote(uid, safe='')}", status_code=303)
+    _set_session_cookie(response, uid, request)
+    return response
 
 
 @app.get("/setup/hive", tags=["setup"])
@@ -636,17 +738,29 @@ async def check_setup(uid: str):
 
 
 @app.post("/settings/default-project")
-async def set_default_project(uid: str, project_id: str, project_name: str):
+async def set_default_project(
+    uid: str,
+    project_id: str,
+    project_name: str,
+    request: Request = None,
+):
     """Set the default project for a user."""
+    _require_valid_session(request, uid)
     store_default_project(uid, project_id, project_name)
     return {"success": True, "message": f"Default project set to: {project_name}"}
 
 
-@app.get("/disconnect")
-async def disconnect_hive(uid: str):
-    """Disconnect Hive account."""
+@app.post("/disconnect")
+async def disconnect_hive(uid: str, request: Request = None):
+    """Disconnect Hive account.
+
+    Requires a valid settings session for uid so a caller who only knows the uid
+    cannot delete stored credentials and then bind a different Hive account. This
+    is a POST so the SameSite=Lax session cookie is not sent on cross-site requests.
+    """
+    _require_valid_session(request, uid)
     delete_hive_credentials(uid)
-    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}", status_code=303)
 
 
 # ============================================
