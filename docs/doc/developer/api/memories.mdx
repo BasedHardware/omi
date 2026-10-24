@@ -136,6 +136,46 @@ must not be treated as a key or scope error.
 
 ---
 
+## Get Memory by ID
+
+<Card title="GET /v1/dev/user/memories/{memory_id}" icon="download" color="#22c55e" horizontal>
+  Retrieve a single memory by ID
+</Card>
+
+Returns the same memory shape as the list endpoint. Returns `404` when the
+memory does not exist (or cannot be represented in the current shape).
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -H "Authorization: Bearer $API_KEY" \
+      "https://api.omi.me/v1/dev/user/memories/mem_789ghi"
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        "https://api.omi.me/v1/dev/user/memories/mem_789ghi",
+        headers={"Authorization": f"Bearer {API_KEY}"},
+    )
+    memory = response.json()
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/memories/mem_789ghi",
+      { headers: { Authorization: `Bearer ${API_KEY}` } }
+    );
+    const memory = await response.json();
+    ```
+  </Tab>
+</Tabs>
+
+---
+
 ## Create Memory
 
 <Card title="POST /v1/dev/user/memories" icon="upload" color="#3b82f6" horizontal>
