@@ -150,8 +150,9 @@ runtime-SA actAs if required, and exact-KSA WIF binding are described in
 [BATCH.md](BATCH.md). David approved that resource-scoped role on 2026-10-24.
 No project-wide operations role is needed: the guard polls service readbacks.
 The lead applies IAM and deploys; developing this chart applies neither.
-Disabling removes only the batch Job/identity resources, not the Parakeet guard.
-Preserve state when recovering an interrupted rollback. Retain P90 until the
+Disabling removes the batch resources including its state ConfigMap, leaving the
+Parakeet guard. Save state before removal; use dry run to stop writes while
+retaining pending rollback intent. Retain P90 until the
 trusted aggregate producer and real alert delivery have been verified.
 
 ## Local verification

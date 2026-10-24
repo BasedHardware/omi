@@ -4,7 +4,8 @@ Production values install a separate five-minute CronJob,
 `prod-omi-incluster-guards-batch`, using a dedicated KSA with annotation
 `iam.gke.io/gcp-service-account: omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com`.
 Development never installs this writer. `batch.cloudRunRollbackEnabled=false`
-removes it; `dryRun=true` retains evidence but suppresses all Cloud Run writes,
+removes the batch resources including its state ConfigMap; save state/audit
+evidence before removing them. `dryRun=true` retains state but suppresses all Cloud Run writes,
 including a previously pending rollback. Check active Jobs when stopping: new
 values do not change a running Job. A batch Job has an 840s deadline and no
 automatic Kubernetes retry; its durable intent allows the next scheduled Job
@@ -141,8 +142,9 @@ also matches the `-batch-` Jobs. Record runtime evidence before retiring P90.
 
 For an access incident, stop batch scheduling and verify active Jobs ended,
 disable (never delete) the dedicated GSA, remove the four per-service grants and
-its SA-level actAs/WIF grants. Existing tokens can outlive disabling; removing
-resource grants and checking propagation matters. Preserve state/audit artifacts.
+its SA-level actAs/WIF grants. Disabling the GSA rejects existing access tokens
+and prevents new ones ([Google IAM disable API](https://docs.cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts/disable)).
+Preserve state/audit artifacts before removing the release resources.
 Removing the guard does not undo an applied percent-zero rollback.
 
 See Google's [env update semantics](https://docs.cloud.google.com/run/docs/configuring/services/environment-variables),

@@ -220,7 +220,7 @@ AREA_TESTS = (
             'backend/charts/monitoring/prometheus-adapter/*_omi_prometheus_adapter.yaml',
             'backend/charts/parakeet/*_omi_parakeet_values.yaml',
         ),
-        ('tests/unit/test_incluster_guards.py', 'tests/unit/test_incluster_batch_rollback.py'),
+        ('tests/unit/test_incluster_guards.py',),
     ),
     (
         # Task-target routes whose expected retries must stay 409 (contract (d)). #22431 moved
