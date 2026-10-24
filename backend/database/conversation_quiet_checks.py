@@ -13,7 +13,11 @@ from typing import Any
 from google.cloud import firestore
 from prometheus_client import Counter
 
-from database.quiet_check_retirement import quiet_check_id, stop_quiet_check, stop_quiet_check_for_conversation
+from database.quiet_check_retirement import (
+    quiet_check_id,
+    stop_quiet_check as stop_quiet_check,
+    stop_quiet_check_for_conversation,
+)
 from database._client import get_firestore_client
 from database import conversation_finalization_jobs as jobs_db
 from models.conversation_continuity import continuation_timeout
