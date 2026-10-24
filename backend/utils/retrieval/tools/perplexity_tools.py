@@ -97,6 +97,11 @@ async def perplexity_web_search_tool(
         query="What are the latest developments in AI in 2025?"
         Returns web search results with citations about recent AI developments
     """
+    if not query or not isinstance(query, str) or not query.strip():
+        logger.warning("⚠️ perplexity_web_search_tool called with empty or invalid query")
+        return "Error: Search query cannot be empty. Please provide a valid query."
+
+    query = query.strip()
     logger.info(f"🔍 perplexity_web_search_tool called - query: {query}")
 
     return await _perplexity_gateway_search(query)
@@ -169,15 +174,31 @@ def _looks_like_thin_miss(text: str) -> bool:
 
 def _model_text(result: dict[str, Any]) -> str:
     try:
-        content: Any = result['choices'][0]['message']['content']
-    except (KeyError, IndexError, TypeError):
+        if not isinstance(result, dict):
+            return ''
+        choices = result.get('choices')
+        if isinstance(choices, list) and len(choices) > 0:
+            first = choices[0]
+            if isinstance(first, dict):
+                msg = first.get('message')
+                if isinstance(msg, dict):
+                    content = msg.get('content')
+                    return content if isinstance(content, str) else ''
+    except (KeyError, IndexError, TypeError, AttributeError):
         return ''
-    return content if isinstance(content, str) else ''
+    return ''
 
 
 def _format_perplexity_response(result: dict[str, Any]) -> str:
-    if 'choices' in result and len(result['choices']) > 0:
-        content: Any = result['choices'][0]['message']['content']
+    if isinstance(result, dict) and isinstance(result.get('choices'), list) and len(result['choices']) > 0:
+        first_choice = result['choices'][0]
+        if isinstance(first_choice, dict) and isinstance(first_choice.get('message'), dict):
+            content: Any = first_choice['message'].get('content', '')
+        elif isinstance(first_choice, dict):
+            content = str(first_choice.get('message') or '')
+        else:
+            content = str(first_choice or '')
+
         answer = untrusted_block('Perplexity answer', generated('Web search answer', str(content)))
         formatted_result = f"Web Search Results:\n\n{answer}\n\n"
 
@@ -222,7 +243,18 @@ def _format_perplexity_response(result: dict[str, Any]) -> str:
 
 
 def _extract_citations(result: dict[str, Any]) -> list[Any]:
+    if not isinstance(result, dict):
+        return []
     citations: Any = result.get('citations') or result.get('search_results')
-    if citations:
+    if citations and isinstance(citations, list):
         return citations
-    return result.get('choices', [{}])[0].get('message', {}).get('citations', [])
+    choices = result.get('choices')
+    if isinstance(choices, list) and len(choices) > 0:
+        first = choices[0]
+        if isinstance(first, dict):
+            msg = first.get('message')
+            if isinstance(msg, dict):
+                msg_citations = msg.get('citations')
+                if isinstance(msg_citations, list):
+                    return msg_citations
+    return []

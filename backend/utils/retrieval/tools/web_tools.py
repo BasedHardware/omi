@@ -294,6 +294,11 @@ async def fetch_url_tool(url: str) -> str:
     Returns:
         The readable text content of the page (up to 8000 characters)
     """
+    if not url or not isinstance(url, str) or not url.strip():
+        logger.warning("fetch_url_tool called with empty or invalid URL")
+        return 'Error: URL cannot be empty. Please provide a valid http:// or https:// URL.'
+
+    url = url.strip()
     logger.info(f"fetch_url_tool called - url: {sanitize(url)}")
 
     if not url.startswith(('http://', 'https://')):
