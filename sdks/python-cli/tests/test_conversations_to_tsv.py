@@ -127,6 +127,19 @@ class TestConversationsToTsv(unittest.TestCase):
         lines = tsv.strip().split("\n")
         self.assertIn("Speaker 0: Welcome to Omi. Speaker 1: Thank you.", lines[1])
 
+    def test_transcript_segments_and_numeric_speaker_zero_extraction(self):
+        conv_api_export = {
+            "id": "c4",
+            "transcript_segments": [
+                {"speaker": 0, "text": "First speaker zero."},
+                {"speaker": 1, "text": "Second speaker one."},
+            ],
+        }
+        tsv = c2tsv.conversations_to_tsv_string([conv_api_export])
+        lines = tsv.strip().split("\n")
+        fields = lines[1].split("\t")
+        self.assertEqual(fields[6], "Speaker 0: First speaker zero. Speaker 1: Second speaker one.")
+
     def test_path_traversal_refused(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             in_file = Path(tmp_dir) / "input.json"
