@@ -409,6 +409,10 @@ def cta_label(*, action: str, tier_plan: str, current_plan: str, locale: str | N
         return labels['get_pro'] if current_plan == 'basic' else labels['upgrade_pro']
     if tier_plan == 'architect':
         return labels['get_architect'] if current_plan == 'basic' else labels['upgrade_architect']
+    # Omi Pro: the new-buyer single-plan offer sheet (build_single_plan_storefront)
+    # only ever shows this tier to a basic caller.
+    if tier_plan == 'unlimited_v2' and current_plan == 'basic':
+        return labels['get_unlimited']
     return None
 
 

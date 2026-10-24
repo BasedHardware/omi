@@ -6,6 +6,20 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+Production listen uses the chart's `prod-omi-backend-listen` Kubernetes service
+account with Workload Identity as
+`backend-listen-runtime@based-hardware.iam.gserviceaccount.com`. Its values omit
+`SERVICE_ACCOUNT_JSON` and `GOOGLE_APPLICATION_CREDENTIALS`, so a Helm rollout
+preserves ADC instead of restoring a revoked JSON key. Keep
+`workloadIdentityOnly: true` in prod values: Helm rejects either key credential
+name in `env` or protected `privateEnv` overrides before rendering a deployment.
+Dev retains its existing credential behavior. Keep
+`OMI_CUSTOMER_DATA_PROJECT=based-hardware` for Firestore, GCS and Firebase Admin.
+GCS signed URLs use `iam_signing_kwargs` with a cloud-platform-scoped token and
+IAM signing; the runtime GSA needs `iam.serviceAccounts.signBlob` on itself.
+The chart render regression is `tests/unit/test_listen_workload_identity_chart.py`;
+the ADC/signing unit contract is `tests/unit/test_keyless_runtime_identity.py`.
+
 Sync redirect hydration reuses the survivor's raw snapshot and update-time
 within one owner read. A bridge with no donor lineage reuses metadata before
 any external effect; donor reads, transfer, retraction, audio copying and receipt writes retain
@@ -143,6 +157,32 @@ With ladder flags off, shadow totals and #21866 dispatch behavior remain unchang
 No switch or deployment binding is activated.
 
 ## Windowed live transcription deadlines
+
+Live windows use default-on per-GPU replica recovery when the configured internal
+HTTP family endpoint has fresh DNS and pressure samples. Each listener keeps a
+bounded replica quarantine: a failed POST opens only that GPU for 120 seconds,
+then 240/300 seconds after failed single half-open probes. Missing or stale
+pressure samples cannot erase a DNS-ready GPU's quarantine. Real outages still
+fall through to the existing vendor recovery path after bounded attempts.
+
+An error or empty answer gets at most one retry on a distinct eligible GPU,
+inside the original POST and first-text deadlines. Empty retries are bounded to
+one per empty episode and preserve PCM, replay anchors and emission order;
+silence is not outage evidence. The first attempt reserves retry time only when
+another GPU is eligible. Pre-POST semaphore expiry, local pool pressure and
+signalled GPU queue pressure do not quarantine or retry. Auth, quota, rate and
+bad-input rejections retain their existing hard refusal behavior.
+
+An already scoped socket may use one initial service-VIP POST during the
+admission owner's bounded pressure grace, only before any direct attempt and
+while its family circuit remains closed. It cannot use the VIP on later windows
+to bypass known quarantines. `PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED=false`
+restores service-VIP/no-retry/family-breaker behavior for new sockets; existing
+sockets retain their original mode. Attempt outcomes, including owned-deadline
+timeouts and external cancellations after POST start, are visible in
+`omi_stt_window_replica_attempts_total{outcome}` without IP metric labels.
+The [window operations contract](operational/windowed-live-stt.md) owns recovery
+telemetry and rollout acceptance. No Modulate credentials or quota are changed.
 
 Parakeet packing is independently gated by `PARAKEET_PACKING_ENABLED=false`
 on the GPU service. When enabled, `/v1` and `/v2` historical uploads enter the
@@ -375,7 +415,12 @@ This signal does not change diarization, thresholds, provider choice or labeling
 
 Conversation responses project the internal receipt's `capture_evidence.coverage`
 into optional `capture_coverage` (`mapped` / `incomplete` / `unknown`). Internal
-source-position receipts remain excluded from the wire. Mobile conversation
+source-position receipts remain excluded from the wire. A committed-proof
+`incomplete` whose lifetime is complete with zero conflicts states a ledger
+bound (evicted proof runs, transcript-note overflow), never observed loss —
+observed loss fails the snapshot before an envelope exists — so the projection
+serves `mapped` there and `unknown` for the overflow stub; only observed loss
+serves `incomplete`. Mobile conversation
 detail shows the localized “Partial recording” chip only for `incomplete`; legacy,
 unknown and mapped rows stay quiet. No conversation-list placeholder is added.
 
@@ -5394,6 +5439,9 @@ unmarked historical rows or change record-projection completion semantics.
 
 [Batch pipeline worker](batch-pipeline-worker.md) defines a separate default-off
 pull queue with 64 owner-hash scheduler shards and per-owner ordered result log.
+Its [stage profiler](batch-pipeline-worker.md#stage-profiling-metrics-only) exposes
+content-free worker/IO/model and lease wall times, enabled by default in dev;
+profiling changes no admission, ordering, model precision or result semantics.
 The sync route selects it only with `BATCH_PIPELINE_ENABLED` plus owner
 allowlist/percentage; an atomic content-ledger protocol seal prevents a legacy
 twin. Admission rollback leaves accepted work draining with 20s heartbeats.
@@ -6397,6 +6445,62 @@ no scan or redrive; applying any private plan requires separate authorization.
 
 ## Durable mono pendant/phone quiet checks
 
+### Episode lifecycle and overdue quiet recovery
+
+Retained live speech advances episode `last_activity_at` (coalesced to at most
+one activity write per minute per process/conversation, plus moment/session-end flushes) independently of the
+moment word budget, rate limit and notes provider. Running notes consume unplaced
+segment IDs after a successful compare-and-swap (`audio_alignment=unplaced`,
+`start=end=-1`). Persistence keeps these IDs separate: sentinel timestamps do not
+prove adjacency and must not merge a new segment into an already-consumed ID.
+Retries and later audio placement of a consumed unplaced ID
+do not feed it again. Failures leave IDs unapplied for retry/finalization. Legacy
+offset-only episodes retain their placed-segment cursor; it never excludes
+unplaced IDs. Placed segments may still extend their text/end under the same ID.
+No audio coordinate is synthesized for unplaced moments.
+
+Consumed unplaced IDs are receipts of the conversation, not episode content: a
+conversation spans episode boundaries and its finalization tail replays the
+whole stored transcript, so the receipts must outlive any one episode while no
+document grows with them. They live in
+`users/{uid}/episode_segment_receipts/{conversation_id}` — the base document
+holds the most recent 2,000 IDs, older IDs roll into immutable `s/{index}`
+archive documents of 2,000 each, and episode documents never carry them. The
+receipt write joins the episode compare-and-swap transaction, so a receipt
+exists exactly when the state that consumed the segment was stored. Live
+moments dedupe against the base document alone (their batches are recent); the
+finalization tail reads every archive. Episodes written before the receipts
+collection kept IDs in an `applied_segment_ids` document field: the first
+post-change write adopts that list into the receipts and retires the
+in-document field, so a tail landing across the deploy still dedupes.
+
+Closing the current episode atomically records `episode_links/last_closed` while
+clearing `episode_links/current`. `GET /v1/episodes/live` can return the additive
+`last_closed_episode` field, including alongside a newer live episode; its
+existing `episode` field remains live-only. The recap changes only when an
+episode closes, so while a live episode is on screen the poll serves it from a
+short per-process cache (`LAST_CLOSED_CACHE_SECONDS`); when no live episode is
+on screen — the recovery-navigation answer — it is read fresh. Every wire field
+of `episode` and `last_closed_episode` is always sent; the route's
+`response_model_exclude_unset` omits only the recap itself when there is none.
+`GET /v1/episodes/{episode_id}` reads
+the retained recap within the authenticated account and existing episode channel
+gate. Conversation links and closed notes survive while member finalization is
+pending. Clients must use this closed recap field for recovery navigation; a
+capture timer alone is not evidence of healthy running notes. Older closed
+episodes remain reachable by their conversation/episode IDs; no historical
+pointer backfill is performed.
+
+Quiet member-conversation recovery uses the shared outbox replay authority:
+its persisted rotating cursor and bounded concurrency prevent an overdue prefix
+from monopolizing replay. Retirement, successor repair, per-row backoff, outcome
+counters and arm counters remain owned by that path. There is no independent
+quiet due query or additional Firestore index. Processing admission still
+requires configured durable dispatch, an expired recording lease, account
+permission and the normal lifecycle fences. Missing dispatch reserves a future
+successor without admitting processing; restoring dispatch lets replay recover
+the member exactly once, including after its episode has closed.
+
 `LISTEN_QUIET_FINALIZATION_ENABLED=true` is the default. Mono `omi` and `phone`
 recordings arm one opaque `quiet-*` check in `conversation_finalization_jobs`
 on session setup and every socket exit (including drain/network failure).
@@ -6518,6 +6622,73 @@ counter increases for new volatile-custody failures, rather than infer health
 from whether this gauge changes.
 The existing publication counters and fleet staging/redrive snapshot remain
 available. No user/session/object identities are metric labels.
+
+### Retirement, replay controls and drain runbook
+
+Sync assignment (`assign_sync_conversation`), smart-merge absorption, user deletion,
+empty-generation deletion, discard, processing admission and terminal persistence
+retire the owner's quiet check immediately after their lifecycle commit. Durable
+dead-letter/BYOK abandonment, meeting receipt binding and merge rollback also
+converge quiet debt attached to older jobs. Cleanup
+re-reads the latest conversation and job in one transaction before calling the
+shared retirement write: a concurrently reopened live conversation keeps its
+successor check. Missing checks are never created. Worker deliveries still use a
+generation fence; stale deliveries cannot stop a newer check. Refused arms also
+retire an existing check when its owner is gone, merged, hidden or non-live.
+Post-commit cleanup failures log `quiet_check_retirement outcome=deferred` and
+leave indexed debt for replay. They cannot invalidate a committed processing
+admission, terminal transition or deletion. Delivered replay workers still
+surface their own storage errors for retry.
+Deferred cleanup also emits shared fallback telemetry (`conversation_finalization`,
+`inline` to `durable_queued`, `unavailable`, `degraded`). A successful synchronous
+processing rollback restores an existing quiet obligation in the same transaction
+as `in_progress`, with a new generation and immediate due index. No new obligation
+is invented, and pre-admission deliveries cannot cancel the restored wake.
+
+Reconnects reuse the deterministic conversation key and an earlier/equal waiting
+deadline. `listen_quiet_check_arm_total{outcome="created|rearmed|reused|refused"}`
+counts committed arm outcomes once per caller, outside SDK retries. For one new
+eligible conversation with four reconnect/teardown calls, expect one `created`,
+four `reused`, and one waiting row, unless a nearer deadline requires `rearmed`.
+A terminal/donor arm must be `refused`, with zero waiting rows. Compare
+`created + rearmed` to actual conversation/session lifecycle counts over the same
+window; total arm attempts include reuse and cannot be called new-row inflow.
+These counters measure arms; replay `retired` counts include historical debt.
+Atomic rollback restoration preserves the existing row and is not a live-arm API call.
+
+| Control | Default and bounds | Operational effect |
+| --- | --- | --- |
+| `LISTEN_FINALIZATION_RECONCILE_LIMIT` | Adaptive: 100; 500 when oldest overdue age is at least 300 s. Explicit values clamp to 1–2000. Invalid values use the adaptive default. | Total page size, shared with ordinary finalization jobs. |
+| `LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS` | 60 s with quiet checks enabled; otherwise 300 s. | Delay between passes, in addition to work time; also affects serial recovery sweeps and singleton lease cadence. |
+| `LISTEN_QUIET_REPLAY_CONCURRENCY` | 16, clamped to 1–16; invalid values use 16. | Outstanding quiet leaves per pass. 1 executes serially. |
+
+The registry owns `quiet_replay_executor` (16 workers, 16 queued maximum), its
+shutdown, active/queued task gauges and executor-health metrics. The coordinator
+runs separately on `db_executor`; it joins every submitted leaf before releasing
+its FSR admission. Each pass keeps at most the configured concurrency outstanding.
+Terminal ordinary jobs and blocked BYOK rows lose `reconcile_after_at`, rather
+than receiving another no-op claim and 60-second backoff indefinitely.
+
+Drain procedure (configuration/deployment requires operator authorization):
+
+1. Verify the receiving revision's release SHA and effective controls. Sample at
+   least two complete passes: selected rows, duration, outcomes, oldest overdue
+   age (aggregate replicas with `max`, never `sum`), due arrivals/departures,
+   Firestore latency/errors, deferred-retirement logs and downstream
+   Cloud Tasks/processing/vendor pressure.
+2. Start with the adaptive default. If debt is not shrinking and pressure is
+   clean, consider limit 500 / interval 30 / concurrency 16. After a full
+   observation window, consider 1000 / 15 only if net departure rate improves
+   without downstream pressure. Interval alone cannot fix a work-bound pass.
+3. Estimate drain time from backlog divided by measured **net** departures,
+   including pass duration and arrivals; a 500-row page is not 500/minute.
+   Record arm outcomes separately to distinguish source inflow from recurring
+   live wakes and the historical donor backlog.
+4. Remove temporary limit/interval overrides after recovery. The adaptive page
+   returns to 100 when age falls below five minutes. Throughput rollback is
+   limit 100 / concurrency 1, acknowledging slower drain. Keep admission, BYOK,
+   account and lease fences enabled; do not disable quiet checks to drain debt.
+
 
 ## Capture/speaker/notes refactor integration
 

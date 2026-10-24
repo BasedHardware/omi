@@ -394,6 +394,21 @@ def test_unplaced_marker_survives_serialization_without_changing_v1_segments():
     assert [segment.text for segment in combined.segments] == ['before', 'after']
 
 
+def test_unplaced_ids_are_not_absorbed_by_negative_timestamp_adjacency():
+    before = TranscriptSegment(
+        id='first', text='still speaking', is_user=False, start=-1, end=-1, audio_alignment='unplaced'
+    )
+    after = TranscriptSegment(
+        id='second', text='more retained speech', is_user=False, start=-1, end=-1, audio_alignment='unplaced'
+    )
+    combined = TranscriptSegment.combine_segments([before], [after])
+    assert [(s.id, s.text, s.start, s.end) for s in combined.segments] == [
+        ('first', 'still speaking', -1, -1),
+        ('second', 'more retained speech', -1, -1),
+    ]
+    assert combined.absorbed_into == {} and combined.removed_ids == []
+
+
 def test_capture_run_survives_persistence_and_blocks_cross_gap_merge():
     before = TranscriptSegment(text='first', is_user=False, start=0, end=1, audio_capture_run=0)
     after = TranscriptSegment(text='second', is_user=False, start=1.5, end=2.5, audio_capture_run=5 * RATE)

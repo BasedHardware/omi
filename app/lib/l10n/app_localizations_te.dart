@@ -14472,6 +14472,25 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'ప్రస్తుత గమనికలు నవీకరించబడటం లేదు. ప్రస్తుతానికి లిప్యంతరీకరణను చూడండి.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'రికార్డింగ్ · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'మునుపటి ఎపిసోడ్';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'పెండింగ్‌లో ఉన్న భాగాలు: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'మునుపటి ఎపిసోడ్‌ను తెరవండి';
+
+  @override
   String get episodeNotesSoon => 'మాటల మొదటి కొన్ని నిమిషాల తర్వాత నోట్స్ కనిపిస్తాయి.';
 
   @override

@@ -105,6 +105,7 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.relevance import sync_intake_decision
+from utils.episodes.finalize import schedule_after_finalization
 from utils.executors import (
     db_executor,
     postprocess_executor,
@@ -1159,6 +1160,11 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         and not processed_conversation.discarded
     ):
         submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
+
+    # Episodes: the WAL row joins the live episode covering it, so Home folds it under the
+    # live row instead of a second capture's fragment. Off this lane, fail-open; a later
+    # WAL append re-runs it and is a no-op once joined.
+    schedule_after_finalization(uid, conversation_id, ProcessingTrigger.SYNC_UPDATE)
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
     return processed_conversation
