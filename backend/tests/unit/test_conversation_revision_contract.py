@@ -361,6 +361,8 @@ def _segment_snapshot(segments, *, is_locked=False, exists=True):
 
 
 def test_segment_text_edit_reads_and_writes_inside_a_transaction(monkeypatch):
+    # Regression for #9392: the read-modify-write must be atomic so concurrent
+    # edits to different segments can't lose-update each other.
     segments = [{'id': 's1', 'text': 'old'}, {'id': 's2', 'text': 'keep'}]
     database = install_store(monkeypatch, 'user-1', 'conv-1', {'transcript_segments': segments})
     original = deepcopy(database.rows[('users', 'user-1', 'conversations', 'conv-1')]['transcript_segments'])
