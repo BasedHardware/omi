@@ -194,15 +194,6 @@ class NotesToolbox:
 
     async def search_people(self, query: str = ''):
         people = await run_blocking(db_executor, load_people_documents, self.uid)
-        if self.identity is not None:
-            self.identity.contact_names = tuple(
-                dict.fromkeys(
-                    (
-                        *self.identity.contact_names,
-                        *(str(person.get('name')) for person in people or [] if person.get('name')),
-                    )
-                )
-            )
         wanted = [word.casefold() for word in str(query or '').split() if word]
         found = []
         for person in people or []:

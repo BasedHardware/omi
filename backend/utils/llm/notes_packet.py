@@ -39,7 +39,7 @@ only. Calendar invitees and screen listings do not establish attendance or ident
 
 
 def notes_people(uid: str | None, inputs: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Reuse the spelling run's bounded People read for deterministic output enforcement too."""
+    """Load People spellings only for the packet serving cohort."""
     if 'people' in inputs:
         return list(inputs.get('people') or ())
     if not uid:

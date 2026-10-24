@@ -6,6 +6,10 @@ import re
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from config.refactor_modes import default_on
+
+IDENTITY_REPAIR_ENV = 'NOTES_IDENTITY_REPAIR_ENABLED'
+
 
 def _pattern(name: str) -> re.Pattern[str]:
     return re.compile(r'(?<!\w)' + re.escape(name) + r'(?!\w)', re.IGNORECASE)
@@ -28,11 +32,16 @@ class NotesIdentity:
     # These are copied from the speaker authority before any roster/name inference.
     speaker_names: tuple[tuple[str, str | None], ...] = ()
     meeting_names: tuple[str, ...] = ()
-    contact_names: tuple[str, ...] = ()
+    owner_names: tuple[str, ...] = ()
     transcript: str = ''
     corrections: tuple[str, ...] = ()
 
     def supported(self, name: str, speaker: str | None = None) -> bool:
+        # The owner is allowed even without an is_user voice in this conversation.
+        owners = {value.casefold() for value in self.owner_names if value}
+        owners.update(token for value in tuple(owners) for token in value.split())
+        if name.casefold() in owners:
+            return True
         named = {key: value.casefold() for key, value in self.speaker_names if value}
         # An explicit resolved binding cannot be overwritten by a calendar lead.
         if speaker is not None and speaker in named:
@@ -62,12 +71,12 @@ def notes_identity(prefix: Any, inputs: Mapping[str, Any], packet: Mapping[str, 
         for row in packet.get('people_on_screen') or ()
         if row.get('call_seen_during_conversation') and row.get('name')
     )
-    contacts: list[str] = list(packet.get('contact_name_spellings') or ())
-    contacts.extend(str(row.get('name') or '') for row in inputs.get('people') or ())
     return NotesIdentity(
         speaker_names=getattr(prefix, 'speaker_names', ()),
         meeting_names=tuple(dict.fromkeys(meeting)),
-        contact_names=tuple(name for name in dict.fromkeys(contacts) if name),
+        owner_names=tuple(
+            name for name in (getattr(prefix, 'account_owner_name', None), *getattr(prefix, 'owner_names', ())) if name
+        ),
         transcript=getattr(prefix, 'transcript_body', ''),
         corrections=tuple(
             str(row.get('note') or '') for row in inputs.get('user_corrections') or () if isinstance(row, Mapping)
@@ -97,11 +106,13 @@ _TEXT_FIELDS = frozenset(
 
 
 def repair_identity(submission: Mapping[str, Any], identity: NotesIdentity) -> tuple[dict[str, Any], list[str]]:
-    """Reject unsupported participant bindings and scrub their names from every visible surface.
+    """Reject unsupported participant bindings, never catalog-only prose mentions.
 
     A heard name can survive as a hedged rendering, never as a verified participant
     or a title lead. No probabilities or speaker labels are invented here.
     """
+    if not default_on(IDENTITY_REPAIR_ENV):
+        return dict(submission), []
     people = [person for person in submission.get('participants') or () if isinstance(person, Mapping)]
     participant_names = {
         str(person.get('name') or '').strip()
@@ -109,14 +120,16 @@ def repair_identity(submission: Mapping[str, Any], identity: NotesIdentity) -> t
         if not person.get('is_ai_agent')
         and not identity.supported(str(person.get('name') or '').strip(), person.get('speaker') or None)
     }
-    blocked = participant_names | {name for name in identity.contact_names if not identity.supported(name)}
+    blocked = participant_names
     blocked.discard('')
     blocked = {name for name in blocked if not re.fullmatch(r'(?i)(?:a speaker|speaker [A-Z])', name)}
     if not blocked:
         return dict(submission), []
     # A model may switch from a full catalog name to its first name mid-note.
     # Do not erase a first name shared by a supported identity.
-    supported = [name for _, name in identity.speaker_names if name] + list(identity.meeting_names)
+    supported = (
+        [name for _, name in identity.speaker_names if name] + list(identity.meeting_names) + list(identity.owner_names)
+    )
     aliases = set(blocked)
     for name in blocked:
         tokens = name.split()

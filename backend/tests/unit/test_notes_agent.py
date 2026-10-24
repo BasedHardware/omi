@@ -740,7 +740,9 @@ def test_v2_retains_one_shot_fallback_when_no_usable_submission_exists():
 
 
 @pytest.mark.parametrize('contract_v2', [False, True])
-def test_people_only_speaker_binding_is_rejected_then_sanitized_at_budget_exhaustion(contract_v2, monkeypatch):
+@pytest.mark.parametrize('enabled', [False, True])
+def test_people_only_speaker_binding_is_rejected_then_sanitized_at_budget_exhaustion(contract_v2, enabled, monkeypatch):
+    monkeypatch.setenv('NOTES_IDENTITY_REPAIR_ENABLED', 'on' if enabled else 'off')
     repairs = []
     monkeypatch.setattr(agent, 'record_identity_repair', lambda: repairs.append(True))
     bad = submission(
@@ -760,8 +762,15 @@ def test_people_only_speaker_binding_is_rejected_then_sanitized_at_budget_exhaus
         policy.NotesAgentBudget(max_turns=2, min_tool_calls=0, max_tool_calls=2),
         words=20,
         contract_v2=contract_v2,
-        identity=NotesIdentity(speaker_names=(('c1', None),), contact_names=('Michael Liebmann',)),
+        identity=NotesIdentity(speaker_names=(('c1', None),)),
     )
+    if not enabled:
+        assert result.submission is not None
+        assert result.submission['participants'][0]['name'] == 'Michael Liebmann'
+        assert result.submission['overview'] == bad['overview']
+        assert result.rejections == []
+        assert repairs == []
+        return
     assert any('Unsupported speaker identity' in rejection for rejection in result.rejections)
     assert result.submission is not None
     assert result.submission['participants'] == []
@@ -795,7 +804,7 @@ def test_people_only_binding_cannot_escape_through_salvaged_submission():
         policy.NotesAgentBudget(max_turns=2, min_tool_calls=0, max_tool_calls=2),
         words=20,
         contract_v2=True,
-        identity=NotesIdentity(contact_names=('Michael Liebmann',)),
+        identity=NotesIdentity(),
     )
     assert 'salvaged_submission' in result.repairs
     assert 'Michael' not in str(result.submission)
@@ -804,8 +813,9 @@ def test_people_only_binding_cannot_escape_through_salvaged_submission():
 def test_people_lookup_never_authorizes_identity_but_overlapping_calendar_does(toolbox, monkeypatch):
     box, _ = toolbox
     box.identity = NotesIdentity()
-    run(box.call('search_people', {'query': 'Maya'}))
-    assert 'Maya Okafor' in box.identity.contact_names
+    found = run(box.call('search_people', {'query': 'Maya'}))
+    assert json.loads(found.content)['people'][0]['name'] == 'Maya Okafor'
+    assert box.identity == NotesIdentity()
     assert not box.identity.supported('Maya Okafor')
     meetings = [
         {
