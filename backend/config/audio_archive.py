@@ -56,11 +56,15 @@ def _phase_enabled(phase: str) -> bool:
 
 
 def _cohort_percent(phase: str) -> float | None:
-    # STOP_PCM ramps against its own percent: AUDIO_ARCHIVE_PERCENT is pinned
-    # at 100 fleet-wide for COALESCE, so a shared knob could not hold STOP_PCM
-    # back without breaking merge coalescing.
+    # STOP_PCM and REGIONAL_CACHE ramp against their own percent:
+    # AUDIO_ARCHIVE_PERCENT is pinned at 100 fleet-wide for COALESCE, so a
+    # shared knob could not hold either phase back without breaking merge
+    # coalescing — and for REGIONAL_CACHE it would make the enable flag an
+    # instant 100% cutover with no ramp.
     if phase == 'STOP_PCM':
         raw = os.getenv('AUDIO_ARCHIVE_STOP_PCM_PERCENT', '0')
+    elif phase == 'REGIONAL_CACHE':
+        raw = os.getenv('AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT', '0')
     else:
         raw = os.getenv('AUDIO_ARCHIVE_PERCENT', '0')
     try:
