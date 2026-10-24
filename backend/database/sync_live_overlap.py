@@ -11,13 +11,15 @@ from utils.observability.fallback import record_fallback
 logger = logging.getLogger(__name__)
 
 
-def find_sync_live_overlap_candidates(user_ref, incoming: dict) -> tuple[str, ...]:
+def find_sync_live_overlap_candidates(user_ref, incoming: dict, *, diagnostics: dict | None = None) -> tuple[str, ...]:
     """Bounded metadata discovery using the existing temporal lookup index.
 
     No plaintext is read here. The assignment transaction rechecks the full row.
     Discovery failure restores normal visible sync intake immediately; it never
     creates a hidden row or waits for another upload to publish captured speech.
     """
+    if diagnostics is not None:
+        diagnostics['lookup_complete'] = False
     fields = [
         'id',
         'started_at',
@@ -43,6 +45,10 @@ def find_sync_live_overlap_candidates(user_ref, incoming: dict) -> tuple[str, ..
             .limit(128)
         )
         rows = [dict(doc.to_dict(), id=doc.id) for doc in query.stream(timeout=10)]
+        if diagnostics is not None:
+            # A full page may omit further rows. Missing-device discovery only
+            # admits explicit capture keys, not the whole unknown-device partition.
+            diagnostics['lookup_complete'] = len(rows) < 128 and bool(incoming.get('client_device_id'))
         # Keep every same-partition overlapping live hint — including a stub
         # whose first transcript write has not landed yet — so the assignment
         # transaction reads that document and Firestore commit contention can
@@ -50,6 +56,8 @@ def find_sync_live_overlap_candidates(user_ref, incoming: dict) -> tuple[str, ..
         # revalidation stays authoritative; a still-empty stub is not adopted.
         return tuple(row['id'] for row in rows if discoverable_live_overlap(row, incoming))
     except Exception:
+        if diagnostics is not None:
+            diagnostics['lookup_complete'] = False
         logger.warning('event=sync_live_overlap outcome=lookup_failed')
         record_fallback(
             component='sync_dispatch',

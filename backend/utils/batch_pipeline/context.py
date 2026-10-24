@@ -15,6 +15,7 @@ class ResolvedContext:
     target_id: str | None
     binding_reason: str | None = None
     geolocation: Geolocation | None = None
+    lineage_eligible: bool = False
 
 
 def resolve_context(
@@ -117,4 +118,4 @@ def resolve_context(
             end,
             firestore_client=client,
         )
-    return ResolvedContext(target, reason, geo)
+    return ResolvedContext(target, reason, geo, lineage_eligible=requested)

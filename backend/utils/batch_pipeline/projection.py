@@ -756,6 +756,8 @@ class Projector:
                         incoming['_batch_require_live_target'] = True
                     if context.binding_reason is not None and context.target_id:
                         incoming['_sync_lineage_binding'] = context.binding_reason
+                    if context.lineage_eligible:
+                        incoming['_sync_lineage_eligible'] = True
                     from utils.capture.batch_coverage import admit_projection, record_projection
 
                     admit_projection(binding.owner_id, incoming, manifest, capture_at=item.capture_at)
@@ -792,6 +794,7 @@ class Projector:
                             )
                         finally:
                             self._mirror_assignment(session)
+                        incoming.pop('_sync_lineage_eligible', None)
                         record_projection(
                             binding.owner_id,
                             incoming,
