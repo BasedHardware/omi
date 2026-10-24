@@ -16,7 +16,6 @@ from guard import Client, finite, log
 PROJECT = 'based-hardware'
 REGION = 'us-central1'
 SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
-GSA = 'omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com'
 ROOT = f'projects/{PROJECT}/locations/{REGION}/services/'
 KEY = 'BATCH_PIPELINE_PERCENT'
 WINDOW = 1800
@@ -142,10 +141,18 @@ def snapshot(cloud):
     return result
 
 
-def decision(sample, identity, since, now):
+def decision(sample, identity, since, now, first_write_since=None):
     """P90 fast-mode safety only. Unknown is BLIND; quality remains WATCH."""
-    if sample.get('schema_version') != 1 or sample.get('identity') != identity or sample.get('since') != since:
+    if sample.get('schema_version') != 1 or sample.get('identity') != identity or sample.get('arm_since') != since:
         return 'BLIND', ['aggregate_identity_or_epoch_mismatch']
+    first_write = sample.get('since')
+    if (
+        not finite(first_write)
+        or isinstance(first_write, bool)
+        or not 0 <= first_write <= since
+        or (first_write_since is not None and first_write != first_write_since)
+    ):
+        return 'BLIND', ['first_write_epoch_missing_or_changed']
     observed, completed = sample.get('observed_at'), sample.get('read_completed_at')
     if not all(finite(t) and not isinstance(t, bool) for t in (observed, completed)):
         return 'BLIND', ['aggregate_time_missing']
@@ -182,13 +189,6 @@ class Cloud:
     """GKE metadata token only. Poll services, avoiding project-wide operations IAM."""
 
     def request(self, path, body=None, mask=None):
-        email_request = urllib.request.Request(
-            'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email',
-            headers={'Metadata-Flavor': 'Google'},
-        )
-        with urllib.request.urlopen(email_request, timeout=10) as response:
-            if response.read().decode().strip() != GSA:
-                raise ValueError('dedicated_gsa_required')
         token_request = urllib.request.Request(
             'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
             headers={'Metadata-Flavor': 'Google'},
@@ -315,7 +315,9 @@ def run(kube, cloud, sample_path, dry_run=False, now=None):
             state = {'identity': identity, 'since': now}
         try:
             sample = json.loads(Path(sample_path).read_text())
-            verdict, reasons = decision(sample, identity, state['since'], now)
+            verdict, reasons = decision(sample, identity, state['since'], now, state.get('first_write_since'))
+            if verdict in {'WARMUP', 'CLEAN', 'TRIP'} or reasons == ['safety_measurement_unknown_no_advance']:
+                state['first_write_since'] = sample['since']
         except (OSError, ValueError, TypeError, KeyError):
             verdict, reasons = 'BLIND', ['aggregate_unavailable']
         if verdict == 'TRIP' and not dry_run:

@@ -19,7 +19,9 @@ The lead creates the GSA, binds that role to each service, binds
 `based-hardware.svc.id.goog[prod-omi-backend/prod-omi-incluster-guards-batch]`,
 and grants runtime-SA actAs only if required. No project-wide Cloud Run role,
 operations role, service-account key, Firestore, GCS or secret payload access.
-The reader uses GKE metadata tokens and direct Cloud Run v2 REST.
+The reader uses GKE metadata tokens and direct Cloud Run v2 REST. A required
+`iam.gke.io/gke-metadata-server-enabled=true` node selector prevents node-SA
+fallback on Standard node pools; no metadata email-format assumption is made.
 
 The Parakeet KSA has no cloud annotation. Batch Kubernetes RBAC only permits
 get/patch on `prod-omi-incluster-guards-batch-state`. The aggregate input is a
@@ -78,7 +80,12 @@ Missing or stale input is BLIND, never CLEAN or an invented hard trip.
 Publish numeric aggregates in ConfigMap `prod-omi-batch-ramp-safety`, data key
 `snapshot.json` (override `batch.safetyConfigMap` only to an approved producer).
 The producer reads guard state (`identity`, `since`) from the batch-state
-ConfigMap and scopes measurements to that exact epoch and serving fleet. It
+ConfigMap. `arm_since` must equal that state `since`, the all-serving observation
+clock. The snapshot `since` is the lead's actual **first ramp-write** clock,
+which can precede all-serving confirmation; it is bound on the first valid input
+and cannot move within the identity. Measurements include partial-apply admissions,
+and custody covers retained obligations from prior steps as in P90. The producer
+scopes measurements to those clocks and the exact serving fleet. It
 must invalidate data on serving drift. No env, account/job/object identifiers,
 transcript or media content belongs in either ConfigMap or logs. The identity
 is an opaque SHA256; the algorithm lives in `snapshot()` and `digest()`.
@@ -90,6 +97,7 @@ Schema `incluster_batch_safety_snapshot_v1`:
   "schema_version": 1,
   "identity": "<identity from batch-state>",
   "since": 0,
+  "arm_since": 0,
   "observed_at": 1800,
   "read_completed_at": 1800,
   "custody": {"missing": 0, "unknown": 0},
@@ -107,8 +115,8 @@ Schema `incluster_batch_safety_snapshot_v1`:
 The timestamps are Unix seconds, not the RFC3339 strings emitted by the scratch
 P90 sampler; its producer adapter must convert them and attach the verified
 identity/epoch. Example numbers above are illustrative, not a deployable sample.
-Require `since <= observed_at <= read_completed_at <= now` and observation age
-<=600s. Wrong epoch/identity, missing, negative, nonfinite, boolean, denied or
+Require `0 <= since <= arm_since <= observed_at <= read_completed_at <= now` and observation age
+<=600s. Missing/changed first-write clocks, wrong arming epoch/identity, negative, nonfinite, boolean, denied or
 stale safety values remain BLIND. Before the full new-state 30m window, valid
 input is WARMUP. After it, positive pinned-custody missing, per-unit proven
 terminal/failed-held VAD speech, new projection obligations older15m, or new

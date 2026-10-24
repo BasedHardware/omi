@@ -235,6 +235,8 @@ spec:
             app.kubernetes.io/name: incluster-batch-guard
         spec:
           serviceAccountName: {{ .Release.Name }}-batch
+          nodeSelector:
+            iam.gke.io/gke-metadata-server-enabled: "true"
           restartPolicy: Never
           tolerations: []
           affinity:

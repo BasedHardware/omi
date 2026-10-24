@@ -108,6 +108,7 @@ def sample(identity='id', since=0, now=1800):
         'schema_version': 1,
         'identity': identity,
         'since': since,
+        'arm_since': since,
         'observed_at': now,
         'read_completed_at': now,
         'custody': {'missing': 0, 'unknown': 0},
@@ -159,19 +160,24 @@ def test_template_tag_resolves_to_frozen_serving_digest(tmp_path, monkeypatch):
             assert body['template']['containers'][0]['image'] == 'image@sha256:' + 'a' * 64
 
 
-def test_metadata_refuses_node_or_other_gsa_before_token_or_cloud_call(monkeypatch):
+def test_cloud_uses_gke_metadata_token_and_etag_mask(monkeypatch):
     import io
 
     calls = []
 
     def opened(request, **kwargs):
-        calls.append(request.full_url)
-        return io.BytesIO(b'node-sa@example.invalid')
+        calls.append(request)
+        if request.full_url.endswith('/token'):
+            return io.BytesIO(b'{"access_token":"fake-gke-token"}')
+        return io.BytesIO(b'{"name":"operation"}')
 
     monkeypatch.setattr(batch.urllib.request, 'urlopen', opened)
-    with pytest.raises(ValueError, match='dedicated_gsa'):
-        batch.Cloud().get(batch.ROOT + 'backend')
-    assert len(calls) == 1 and calls[0].endswith('/email')
+    batch.Cloud().patch({'name': batch.ROOT + 'backend', 'etag': 'expected'}, {'traffic': []}, 'traffic')
+    assert calls[0].full_url.endswith('/default/token')
+    assert calls[0].get_header('Metadata-flavor') == 'Google'
+    assert calls[1].get_header('Authorization') == 'Bearer fake-gke-token'
+    assert calls[1].full_url.endswith('/services/backend?updateMask=traffic')
+    assert json.loads(calls[1].data)['etag'] == 'expected'
 
 
 def test_registered_logging_entrypoint_dispatches_batch(monkeypatch):
@@ -246,6 +252,18 @@ def test_fallback_unknown_stale_mismatch_and_quality_watch():
     assert batch.decision(data, 'id', 1, 1800)[0] == 'BLIND'
     data['since_t0_failed_held_vad_fallback_units'] = 1
     assert batch.decision(data, 'id', 0, 1800)[0] == 'BLIND'
+
+
+def test_first_write_scope_precedes_all_serving_arming_and_cannot_move():
+    data = sample(since=600, now=2399)
+    data['since'] = 100  # Obligations during partial apply remain in scope.
+    data['custody']['missing'] = 1
+    assert batch.decision(data, 'id', 600, 2399, 100)[0] == 'WARMUP'
+    assert batch.decision(data, 'id', 600, 2400, 100)[0] == 'TRIP'
+    data['since'] = 101
+    assert batch.decision(data, 'id', 600, 2400, 100)[0] == 'BLIND'
+    data['since'] = 601
+    assert batch.decision(data, 'id', 600, 2400)[0] == 'BLIND'
 
 
 @pytest.mark.parametrize('drift', ['split', 'tag', 'template', 'latest', 'reconciling'])
@@ -394,6 +412,7 @@ def test_helm_dedicated_identity_state_only_rbac_and_cpu_placement():
     assert job['backoffLimit'] == 0 and job['activeDeadlineSeconds'] == 840
     pod = job['template']['spec']
     assert pod['serviceAccountName'] == 'prod-omi-incluster-guards-batch'
+    assert pod['nodeSelector'] == {'iam.gke.io/gke-metadata-server-enabled': 'true'}
     assert pod['tolerations'] == [] and pod['affinity']
     assert pod['volumes'][1]['configMap']['optional'] is True
     assert pod['containers'][0]['command'] == ['python3', '/guard/guard.py', '--batch']
