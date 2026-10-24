@@ -42,6 +42,11 @@ def archive(tmp_path):
         'settings': settings,
         'provider_config': {'words': 'parakeet'},
         'provider_config_evidence': 'reconstructed-original-launch',
+        'worker_switches': {
+            'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED': True,
+            'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED': False,
+        },
+        'worker_switches_evidence': 'reconstructed-original-launch',
         'audio_sha256': file_digest(audio),
         'crop': [0, 1],
         'crop_pcm_sha256': pcm_digest(wav),
@@ -66,7 +71,11 @@ def archive(tmp_path):
         'corpus_sha256': 'frozen-corpus',
         'recording': {'id': 'synthetic', 'audio': str(audio), 't0': 0, 'dur': 1},
         'wav': wav,
-        'current_settings': {**settings, 'provider_config': receipt['provider_config']},
+        'current_settings': {
+            **settings,
+            'provider_config': receipt['provider_config'],
+            'worker_switches': receipt['worker_switches'],
+        },
     }
     return path, document, args
 
@@ -81,7 +90,10 @@ def test_archive_verifies_original_key_and_retains_reconstructed_configuration_l
     assert load_inference(path, **{**args, 'recording': {**args['recording'], 'id': 'not-archived'}}) is None
 
 
-@pytest.mark.parametrize('mutation', ['source', 'crop', 'payload', 'key', 'provider', 'corpus'])
+@pytest.mark.parametrize(
+    'mutation',
+    ['source', 'crop', 'payload', 'key', 'provider', 'corpus', 'switch', 'missing_switch', 'switch_evidence'],
+)
 def test_archive_rejects_changed_evidence(tmp_path, mutation):
     path, document, args = archive(tmp_path)
     receipt = document['recordings']['synthetic']
@@ -95,6 +107,12 @@ def test_archive_rejects_changed_evidence(tmp_path, mutation):
         receipt['cache_key'] = 'changed'
     elif mutation == 'provider':
         receipt['provider_config'] = {'words': 'different'}
+    elif mutation == 'switch':
+        receipt['worker_switches'] = {**receipt['worker_switches'], 'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED': True}
+    elif mutation == 'missing_switch':
+        del receipt['worker_switches']
+    elif mutation == 'switch_evidence':
+        del receipt['worker_switches_evidence']
     else:
         document['corpus_sha256'] = 'changed'
     private_json(path, document)

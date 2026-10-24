@@ -1,27 +1,14 @@
 """Synthetic privacy, clock, and blinding contracts for local review tools."""
 
-import importlib.util
 import json
 from pathlib import Path
-import sys
 from types import SimpleNamespace
 
 import pytest
 
-TOOLS = Path(__file__).resolve().parents[2] / 'scripts' / 'diarization_eval'
-
-
-def module(name):
-    spec = importlib.util.spec_from_file_location(name, TOOLS / f'{name}.py')
-    result = importlib.util.module_from_spec(spec)
-    sys.modules[name] = result
-    spec.loader.exec_module(result)
-    return result
-
-
-prep = module('prep_speaker_task')
-viewer = module('build_viewer')
-cluster_tool = module('cluster_speaker_task')
+from scripts.diarization_eval import prep_speaker_task as prep
+from scripts.diarization_eval import build_viewer as viewer
+from scripts.diarization_eval import cluster_speaker_task as cluster_tool
 
 
 def fixture(tmp_path):

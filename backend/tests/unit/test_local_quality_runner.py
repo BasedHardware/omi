@@ -127,6 +127,8 @@ def test_runner_success_uses_persisted_projection_and_hides_model_logs(
     from diarizer import batch_pipeline_startup
     from scripts.diarization_eval import run_local
 
+    monkeypatch.setenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED', 'true')
     profile, people, manifest = tmp_path / 'profile.json', tmp_path / 'people.json', tmp_path / 'corpus.json'
     audio = tmp_path / 'synthetic-audio'
     audio.write_bytes(b'synthetic-only')
@@ -220,6 +222,16 @@ def test_runner_success_uses_persisted_projection_and_hides_model_logs(
     assert run_local.main() == 0
     capsys.readouterr()
     assert calls == ['crop', 'inference', 'crop', 'inference']
+    for name, value in (
+        ('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'true'),
+        ('BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED', 'false'),
+    ):
+        previous = len(calls)
+        monkeypatch.setenv(name, value)
+        assert run_local.main() == 0
+        capsys.readouterr()
+        assert len(calls) == previous + 2
+        assert calls[-2:] == ['crop', 'inference']
 
 
 def test_declared_language_is_carried_in_existing_staging_envelope(tmp_path, monkeypatch):

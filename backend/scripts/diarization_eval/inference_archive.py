@@ -13,12 +13,21 @@ import subprocess
 import wave
 
 from scripts.diarization_eval.local_artifacts import file_digest
+from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
 
 # The primitive is backportable to the scorecard before production enrichment.
 COMMUNITY_MODEL_REVISION = '3533c8cf8e369892e6b79ff1bf80f7b0286a54ee'
 EMBEDDING_REVISION = '837717ddb9ff5507820346191109dc79c958d614'
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def effective_worker_switches():
+    """Capture effective values through the same accessors the worker uses."""
+    return {
+        'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED': diarize_speech_only_enabled(),
+        'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED': short_speech_single_enabled(),
+    }
 
 
 def pcm_digest(path):
@@ -53,9 +62,16 @@ def load_inference(path, *, corpus_sha256, recording, wav, current_settings):
         return None
     receipt = deepcopy(receipt)
     settings = receipt['settings']
+    # Older archives can supply separately reconstructed launch evidence, but
+    # must preserve their original settings and cache key rather than rekeying.
+    switches = settings.get('worker_switches', receipt.get('worker_switches'))
     if (
         receipt.get('provider_config_evidence') not in ('captured', 'reconstructed-original-launch')
         or receipt.get('provider_config') != current_settings['provider_config']
+        or switches is None
+        or switches != current_settings.get('worker_switches')
+        or receipt.get('worker_switches_evidence') not in ('captured', 'reconstructed-original-launch')
+        or ('worker_switches' in settings and receipt.get('worker_switches', switches) != switches)
         or any(settings.get(key) != current_settings[key] for key in ('device', 'dtype', 'model_batch_size'))
         or settings.get('model_revisions', {}).get('community_1') != COMMUNITY_MODEL_REVISION
         or settings.get('model_revisions', {}).get('parakeet') != current_settings['model_revisions']['parakeet']
