@@ -14482,6 +14482,22 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Notițele live nu se actualizează. Consultați transcrierea deocamdată.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Înregistrare · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episodul anterior';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending fragmente în așteptare';
+  }
+
+  @override
   String get episodeNotesSoon => 'Notițele apar după primele minute de conversație.';
 
   @override

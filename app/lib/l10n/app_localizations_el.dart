@@ -14514,6 +14514,23 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable =>
+      'Οι τρέχουσες σημειώσεις δεν ενημερώνονται. Δείτε προς το παρόν την απομαγνητοφώνηση.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Εγγραφή · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Προηγούμενο επεισόδιο';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending τμήματα σε εκκρεμότητα';
+  }
+
+  @override
   String get episodeNotesSoon => 'Οι σημειώσεις εμφανίζονται μετά τα πρώτα λεπτά συζήτησης.';
 
   @override

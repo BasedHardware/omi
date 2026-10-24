@@ -17557,6 +17557,24 @@
             }
         }
     },
+    "episodeNotesUnavailable": "Running notes aren’t updating. View the transcript for now.",
+    "episodeCaptureFor": "Capturing · {duration}",
+    "@episodeCaptureFor": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "episodePrevious": "Previous episode",
+    "captureChunksPending": "Chunks pending: {pending}",
+    "@captureChunksPending": {
+        "placeholders": {
+            "pending": {
+                "type": "int"
+            }
+        }
+    },
     "episodeNotesSoon": "Running notes appear after the first few minutes of talk.",
     "@episodeNotesSoon": {
         "description": "Shown in the running notes card before the first notes exist."

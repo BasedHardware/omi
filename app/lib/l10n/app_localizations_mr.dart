@@ -14431,6 +14431,22 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'चालू टिपा अपडेट होत नाहीत. सध्या प्रतिलेख पहा.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'रेकॉर्डिंग · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'मागील भाग';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending भाग प्रलंबित';
+  }
+
+  @override
   String get episodeNotesSoon => 'बोलण्याच्या पहिल्या काही मिनिटांनंतर नोट्स दिसतील.';
 
   @override

@@ -14339,6 +14339,22 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'الملاحظات المباشرة لا تتحدث. اعرض النص في الوقت الحالي.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'جارٍ التسجيل · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'الحلقة السابقة';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending مقاطع قيد الانتظار';
+  }
+
+  @override
   String get episodeNotesSoon => 'تظهر الملاحظات بعد الدقائق الأولى من الحديث.';
 
   @override

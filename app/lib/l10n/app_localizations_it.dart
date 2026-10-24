@@ -14496,6 +14496,22 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Le note in tempo reale non si aggiornano. Per ora consulta la trascrizione.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Registrazione · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episodio precedente';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending frammenti in attesa';
+  }
+
+  @override
   String get episodeNotesSoon => 'Le note compaiono dopo i primi minuti di conversazione.';
 
   @override

@@ -14433,6 +14433,22 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'جاری نوٹس اپ ڈیٹ نہیں ہو رہے۔ فی الحال متن دیکھیں۔';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'ریکارڈنگ · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'پچھلی قسط';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending حصے زیرِ التوا';
+  }
+
+  @override
   String get episodeNotesSoon => 'گفتگو کے پہلے چند منٹ بعد نوٹس ظاہر ہوں گے۔';
 
   @override

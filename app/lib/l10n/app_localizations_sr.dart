@@ -14427,6 +14427,22 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Текуће белешке се не ажурирају. За сада погледајте транскрипт.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Снимање · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Претходна епизода';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending делова на чекању';
+  }
+
+  @override
   String get episodeNotesSoon => 'Белешке се појављују после првих минута разговора.';
 
   @override

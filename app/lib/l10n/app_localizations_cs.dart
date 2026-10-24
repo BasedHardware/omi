@@ -14419,6 +14419,22 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Průběžné poznámky se neaktualizují. Zatím si zobrazte přepis.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Nahrávání · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Předchozí epizoda';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Čekající části: $pending';
+  }
+
+  @override
   String get episodeNotesSoon => 'Poznámky se objeví po prvních minutách hovoru.';
 
   @override

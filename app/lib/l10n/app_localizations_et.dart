@@ -14413,6 +14413,22 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Jooksvad märkmed ei uuene. Vaata praegu transkriptsiooni.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Salvestamine · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Eelmine episood';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending lõiku ootel';
+  }
+
+  @override
   String get episodeNotesSoon => 'Märkmed ilmuvad pärast esimesi vestlusminuteid.';
 
   @override

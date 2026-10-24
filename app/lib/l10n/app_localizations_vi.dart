@@ -14420,6 +14420,22 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Ghi chú trực tiếp chưa cập nhật. Tạm thời hãy xem bản chép lời.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Đang ghi âm · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Phiên trước';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending đoạn đang chờ';
+  }
+
+  @override
   String get episodeNotesSoon => 'Ghi chú xuất hiện sau vài phút đầu trò chuyện.';
 
   @override

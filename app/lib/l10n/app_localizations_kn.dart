@@ -14467,6 +14467,22 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'ಚಾಲ್ತಿಯಲ್ಲಿರುವ ಟಿಪ್ಪಣಿಗಳು ನವೀಕರಿಸುತ್ತಿಲ್ಲ. ಸದ್ಯಕ್ಕೆ ಪ್ರತಿಲೇಖನವನ್ನು ನೋಡಿ.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'ರೆಕಾರ್ಡಿಂಗ್ · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'ಹಿಂದಿನ ಸಂಚಿಕೆ';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending ತುಣುಕುಗಳು ಬಾಕಿ';
+  }
+
+  @override
   String get episodeNotesSoon => 'ಮಾತಿನ ಮೊದಲ ಕೆಲವು ನಿಮಿಷಗಳ ನಂತರ ಟಿಪ್ಪಣಿಗಳು ಕಾಣಿಸುತ್ತವೆ.';
 
   @override

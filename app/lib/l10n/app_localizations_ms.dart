@@ -14456,6 +14456,22 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Nota langsung tidak dikemas kini. Lihat transkrip buat masa ini.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Merakam · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episod sebelumnya';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending cebisan tertunda';
+  }
+
+  @override
   String get episodeNotesSoon => 'Nota muncul selepas beberapa minit pertama perbualan.';
 
   @override

@@ -92,7 +92,9 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     final topics = named.isEmpty ? EpisodePresentation.topics(episode) : '';
     final peopleNamed = _peopleCount(capture);
     // Paused (or waiting) shows no clock: a time that keeps counting while nothing listens misleads.
-    final status = listening ? l10n.episodeLiveFor(elapsed) : captureStateLabel(l10n, state);
+    final status = listening
+        ? (episode == null ? l10n.episodeCaptureFor : l10n.episodeLiveFor)(elapsed)
+        : captureStateLabel(l10n, state);
     final rest = [
       status,
       if (peopleNamed >= 2) l10n.peopleCount(peopleNamed),
@@ -122,7 +124,10 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
           // Outlined, not filled: the one row still happening reads as distinct from finished
           // ones without a colored tile.
           color: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: OmiRadius.xlAll, side: BorderSide(color: OmiColors.border)),
+          shape: RoundedRectangleBorder(
+            borderRadius: OmiRadius.xlAll,
+            side: BorderSide(color: OmiColors.border),
+          ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: open,

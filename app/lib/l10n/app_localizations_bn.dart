@@ -14416,6 +14416,22 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'চলমান নোট আপডেট হচ্ছে না। আপাতত প্রতিলিপি দেখুন।';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'রেকর্ড হচ্ছে · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'আগের পর্ব';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pendingটি খণ্ড অপেক্ষায়';
+  }
+
+  @override
   String get episodeNotesSoon => 'কথার প্রথম কয়েক মিনিট পরে নোট দেখা যাবে।';
 
   @override

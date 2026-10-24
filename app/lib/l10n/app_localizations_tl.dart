@@ -14534,6 +14534,22 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Hindi nag-a-update ang mga live na tala. Tingnan muna ang transcript.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Nagre-record · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Nakaraang episode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending chunk na nakabinbin';
+  }
+
+  @override
   String get episodeNotesSoon => 'Lalabas ang mga tala pagkatapos ng unang ilang minuto ng usapan.';
 
   @override

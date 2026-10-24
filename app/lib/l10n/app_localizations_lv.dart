@@ -14452,6 +14452,22 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Pašreizējās piezīmes netiek atjauninātas. Pagaidām skatiet transkripciju.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Ierakstīšana · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Iepriekšējā epizode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Gaida $pending fragmenti';
+  }
+
+  @override
   String get episodeNotesSoon => 'Piezīmes parādās pēc pirmajām sarunas minūtēm.';
 
   @override

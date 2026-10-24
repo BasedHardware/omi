@@ -14195,6 +14195,22 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => '实时笔记未在更新。请暂时查看转录文本。';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return '录音中 · $duration';
+  }
+
+  @override
+  String get episodePrevious => '上一段记录';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending 个音频块待处理';
+  }
+
+  @override
   String get episodeNotesSoon => '交谈几分钟后会显示笔记。';
 
   @override

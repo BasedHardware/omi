@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/episodes.dart' as api;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/live_start_anchor.dart';
 
 typedef EpisodeLiveFetcher = Future<ApiResult<EpisodeRead>> Function();
@@ -54,7 +55,107 @@ class EpisodeProvider extends ChangeNotifier {
   bool get enabled => _enabled;
 
   Episode? _live;
-  Episode? get live => _live;
+  Episode? get live => _ownerUid == SharedPreferencesUtil().uid ? _live : null;
+
+  // A live endpoint returning null does not delete the episode or its members. Keep the
+  // last snapshot reachable while its authoritative conversation lookup catches up.
+  Episode? _previous;
+  Episode? get previous => _ownerUid == SharedPreferencesUtil().uid ? _previous : null;
+  String _ownerUid = SharedPreferencesUtil().uid;
+
+  void _ensureOwner() {
+    final uid = SharedPreferencesUtil().uid;
+    if (_ownerUid == uid) return;
+    _ownerUid = uid;
+    _generation++;
+    _enabled = false;
+    _pendingSince = null;
+    _live = null;
+    _previous = null;
+    _lastLiveRead = null;
+    _waitingSince = _clock();
+    _byConversation.clear();
+    _lookups.clear();
+    _ended.clear();
+    liveAnchor.clear();
+  }
+
+  DateTime? _lastLiveRead;
+  late DateTime _waitingSince = _clock();
+  static const notesWaitLimit = Duration(minutes: 3);
+  static const notesStaleLimit = Duration(minutes: 5);
+
+  bool notesUnavailable({DateTime? captureStart}) {
+    final time = now();
+    final episode = _live;
+    if (episode == null) {
+      final since = captureStart != null && captureStart.isBefore(_waitingSince) ? captureStart : _waitingSince;
+      return _previous != null || time.difference(since) >= notesWaitLimit;
+    }
+    final firstSeen = episode.startedAt.isBefore(_waitingSince) ? episode.startedAt : _waitingSince;
+    if (episode.bullets.isEmpty && time.difference(firstSeen) >= notesWaitLimit) return true;
+    return (_lastLiveRead != null && time.difference(_lastLiveRead!) >= notesWaitLimit) ||
+        time.difference(episode.stateUpdatedAt ?? episode.startedAt) >= notesStaleLimit;
+  }
+
+  void _remember(Episode episode) {
+    if (_ownerUid != SharedPreferencesUtil().uid ||
+        (_previous != null && episode.startedAt.isBefore(_previous!.startedAt))) return;
+    _previous = episode;
+    _savePointer('previousEpisodeConversation', episode);
+  }
+
+  void _savePointer(String name, Episode episode) {
+    final uid = SharedPreferencesUtil().uid;
+    if (uid.isNotEmpty && episode.conversationIds.isNotEmpty) {
+      unawaited(SharedPreferencesUtil().saveString('$name:$uid', episode.conversationIds.last));
+    }
+  }
+
+  // Bypass the detail cache: that cache may still describe the member's live episode.
+  Future<void> recoverPrevious([String? conversationId]) async {
+    _ensureOwner();
+    final uid = SharedPreferencesUtil().uid;
+    final id =
+        conversationId ?? (uid.isEmpty ? '' : SharedPreferencesUtil().getString('previousEpisodeConversation:$uid'));
+    if (id.isEmpty || _recovering.contains(id)) return;
+    _recovering.add(id);
+    try {
+      final result = await _lookup(id);
+      if (_disposed || uid != SharedPreferencesUtil().uid) return;
+      if (result case ApiSuccess(:final data)) {
+        final episode = data.episode;
+        if (episode != null &&
+            !episode.live &&
+            episode.id != _live?.id &&
+            (_previous == null || !episode.startedAt.isBefore(_previous!.startedAt))) {
+          _remember(episode);
+          for (final member in episode.conversationIds) {
+            _byConversation[member] = episode;
+          }
+          notifyListeners();
+        }
+      }
+    } finally {
+      _recovering.remove(id);
+    }
+  }
+
+  final Set<String> _recovering = {};
+
+  void _acceptLive(Episode? episode) {
+    final old = _live;
+    final next = episode != null && episode.live && !_ended.contains(episode.id) ? episode : null;
+    if (old != null && old.id != next?.id) {
+      _remember(old);
+      if (old.conversationIds.isNotEmpty) unawaited(recoverPrevious(old.conversationIds.last));
+    }
+    if (episode != null && !episode.live) _remember(episode);
+    if (next != null && old?.id != next.id) _waitingSince = _clock();
+    _live = next;
+    if (next != null) _savePointer('lastLiveEpisodeConversation', next);
+    _lastLiveRead = _clock();
+  }
 
   final Map<String, Episode?> _byConversation = {};
   final Map<String, Future<Episode?>> _lookups = {};
@@ -72,14 +173,23 @@ class EpisodeProvider extends ChangeNotifier {
 
   /// Re-reads the live episode. A failed read keeps what was shown; a 404 means no episodes here.
   Future<void> refreshLive() async {
+    _ensureOwner();
+    final uid = _ownerUid;
     final generation = ++_generation;
     final result = await _fetchLive();
-    if (generation != _generation || _disposed) return;
+    if (generation != _generation || _disposed || uid != SharedPreferencesUtil().uid) return;
     switch (result) {
       case ApiSuccess(:final data):
         _enabled = data.enabled;
         final episode = data.episode;
-        _live = episode != null && _ended.contains(episode.id) ? null : episode;
+        _acceptLive(episode);
+        if (_previous == null) unawaited(recoverPrevious());
+        if (_live == null) {
+          final uid = SharedPreferencesUtil().uid;
+          if (uid.isNotEmpty) {
+            unawaited(recoverPrevious(SharedPreferencesUtil().getString('lastLiveEpisodeConversation:$uid')));
+          }
+        }
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         _enabled = false;
         _live = null;
@@ -112,12 +222,15 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   /// The conversations a live episode stands for on Home; they reappear as rows once it closes.
-  Set<String> get liveConversationIds => _enabled && _live != null ? _live!.conversationIds.toSet() : const {};
+  Set<String> get liveConversationIds => _enabled && live != null ? live!.conversationIds.toSet() : const {};
 
   /// The episode [conversationId] belongs to, read once per conversation and cached.
   Future<Episode?> episodeFor(String conversationId) {
+    _ensureOwner();
+    final uid = _ownerUid;
     if (_byConversation.containsKey(conversationId)) return Future.value(_byConversation[conversationId]);
     return _lookups[conversationId] ??= _lookup(conversationId).then((result) {
+      if (_disposed || uid != SharedPreferencesUtil().uid) return null;
       _lookups.remove(conversationId);
       switch (result) {
         case ApiSuccess(:final data):
@@ -131,7 +244,8 @@ class EpisodeProvider extends ChangeNotifier {
     });
   }
 
-  Episode? cachedEpisodeFor(String conversationId) => _byConversation[conversationId];
+  Episode? cachedEpisodeFor(String conversationId) =>
+      _ownerUid == SharedPreferencesUtil().uid ? _byConversation[conversationId] : null;
 
   /// Starts polling while at least one live surface is on screen.
   void watch() {
@@ -156,13 +270,17 @@ class EpisodeProvider extends ChangeNotifier {
   /// "Wrap up now": closes the live episode once [conversationId] (the capture being finished) has
   /// its notes. The row leaves Home right away.
   Future<bool> wrapUp({String? conversationId}) async {
+    _ensureOwner();
+    final uid = _ownerUid;
     final episode = _live;
     if (episode == null || _wrappingUp) return false;
     _wrappingUp = true;
     notifyListeners();
     try {
       final result = await _wrapUp(episode.id, conversationId: conversationId);
+      if (_disposed || uid != SharedPreferencesUtil().uid) return false;
       if (result case ApiSuccess(:final data)) {
+        _remember(data);
         _live = data.live && conversationId == null ? data : null;
         return true;
       }
@@ -177,15 +295,18 @@ class EpisodeProvider extends ChangeNotifier {
   /// episode closes at once and the next one counts from now. The ended conversation shows as a
   /// processing row; its notes and items still reach the closed episode on the server.
   void onLiveFinalized() {
+    _ensureOwner();
     final now = _clock();
     liveAnchor.restart(now);
     final episode = _live;
     if (episode != null) {
+      _remember(episode);
       _ended.add(episode.id);
       _live = null;
       // Without a conversation id the server closes the episode immediately; a repeat is a no-op.
       unawaited(_wrapUp(episode.id));
     }
+    _waitingSince = now;
     _pendingSince = null;
     _reschedule();
     notifyListeners();
@@ -195,9 +316,11 @@ class EpisodeProvider extends ChangeNotifier {
   Future<bool> dismissItem(String itemId) async {
     final episode = _live;
     if (episode == null) return false;
-    _live = episode.copyWith(items: [
-      for (final item in episode.items) item.id == itemId ? item.withStatus(EpisodeItemStatus.dismissed) : item,
-    ]);
+    _live = episode.copyWith(
+      items: [
+        for (final item in episode.items) item.id == itemId ? item.withStatus(EpisodeItemStatus.dismissed) : item,
+      ],
+    );
     notifyListeners();
     final result = await _dismiss(episode.id, itemId);
     if (result is ApiSuccess<Episode>) {
@@ -214,7 +337,7 @@ class EpisodeProvider extends ChangeNotifier {
   @visibleForTesting
   void debugSetLive(Episode? episode, {bool enabled = true, Map<String, Episode?> byConversation = const {}}) {
     _enabled = enabled;
-    _live = episode;
+    _acceptLive(episode);
     _byConversation.addAll(byConversation);
     notifyListeners();
   }

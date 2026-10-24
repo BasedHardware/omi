@@ -14459,6 +14459,22 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'De live notities worden niet bijgewerkt. Bekijk voorlopig het transcript.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Opnemen · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Vorige aflevering';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending fragmenten in wachtrij';
+  }
+
+  @override
   String get episodeNotesSoon => 'Notities verschijnen na de eerste minuten van het gesprek.';
 
   @override

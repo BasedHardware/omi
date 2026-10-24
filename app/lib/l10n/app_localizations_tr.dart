@@ -14433,6 +14433,22 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Canlı notlar güncellenmiyor. Şimdilik dökümü görüntüleyin.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Kaydediliyor · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Önceki bölüm';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending parça bekliyor';
+  }
+
+  @override
   String get episodeNotesSoon => 'Notlar konuşmanın ilk birkaç dakikasından sonra görünür.';
 
   @override

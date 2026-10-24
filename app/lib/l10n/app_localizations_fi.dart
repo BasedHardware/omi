@@ -14425,6 +14425,22 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Jatkuvat muistiinpanot eivät päivity. Katso toistaiseksi litterointi.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Tallennetaan · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Edellinen jakso';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending osaa odottaa';
+  }
+
+  @override
   String get episodeNotesSoon => 'Muistiinpanot näkyvät ensimmäisten puheminuuttien jälkeen.';
 
   @override

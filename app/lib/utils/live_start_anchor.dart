@@ -10,6 +10,12 @@ class LiveStartAnchor {
   /// once the next episode opens at its first words a little later.
   DateTime? _restartedAt;
 
+  void clear() {
+    _start = null;
+    _episodeId = null;
+    _restartedAt = null;
+  }
+
   /// The person ended the live conversation: the running length starts again at 0 from [now].
   void restart(DateTime now) {
     _restartedAt = now;
@@ -49,8 +55,9 @@ class LiveStartAnchor {
       return _start;
     }
     if (_episodeId != null) {
-      // The episode closed (idle, wrap-up). The next stretch counts from a fresh capture start when
-      // one is known; with the lease lapsed during the quiet that closed it, keep the old start
+      // The server episode disappeared. This is now capture duration, not a new episode.
+      // Count from the known capture start; with the lease lapsed during the quiet that
+      // closed it, keep the old start
       // rather than reading 0s.
       _episodeId = null;
       if (captureStart != null && !captureStart.isAfter(now)) {

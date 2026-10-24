@@ -14415,6 +14415,22 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'یادداشت‌های زنده به‌روز نمی‌شوند. فعلاً متن پیاده‌شده را ببینید.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'در حال ضبط · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'قسمت قبلی';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending قطعه در انتظار';
+  }
+
+  @override
   String get episodeNotesSoon => 'یادداشت‌ها پس از چند دقیقهٔ اول گفت‌وگو نمایش داده می‌شوند.';
 
   @override

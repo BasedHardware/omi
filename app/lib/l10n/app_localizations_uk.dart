@@ -14451,6 +14451,22 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Поточні нотатки не оновлюються. Поки перегляньте розшифровку.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Запис · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Попередній епізод';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Очікують фрагменти: $pending';
+  }
+
+  @override
   String get episodeNotesSoon => 'Нотатки з’являться після перших хвилин розмови.';
 
   @override

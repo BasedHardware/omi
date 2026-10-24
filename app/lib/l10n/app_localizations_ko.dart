@@ -14221,6 +14221,22 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => '실시간 메모가 업데이트되지 않고 있습니다. 우선 대화록을 확인하세요.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return '녹음 중 · $duration';
+  }
+
+  @override
+  String get episodePrevious => '이전 에피소드';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '$pending개 청크 대기 중';
+  }
+
+  @override
   String get episodeNotesSoon => '대화가 몇 분 지나면 노트가 나타납니다.';
 
   @override

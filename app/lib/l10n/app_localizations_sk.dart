@@ -14415,6 +14415,22 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Priebežné poznámky sa neaktualizujú. Zatiaľ si pozrite prepis.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Nahrávanie · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Predchádzajúca epizóda';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Čakajúce časti: $pending';
+  }
+
+  @override
   String get episodeNotesSoon => 'Poznámky sa zobrazia po prvých minútach rozhovoru.';
 
   @override

@@ -14455,6 +14455,22 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Бягучыя нататкі не абнаўляюцца. Пакуль праглядзіце расшыфроўку.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Запіс · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Папярэдні эпізод';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Чакаюць фрагменты: $pending';
+  }
+
+  @override
   String get episodeNotesSoon => 'Нататкі з’явяцца пасля першых хвілін размовы.';
 
   @override

@@ -14348,6 +14348,22 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'บันทึกสดไม่ได้อัปเดต โปรดดูข้อความถอดเสียงไปก่อน';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'กำลังบันทึก · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'ตอนก่อนหน้า';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'รอดำเนินการ $pending ช่วงเสียง';
+  }
+
+  @override
   String get episodeNotesSoon => 'บันทึกจะแสดงหลังจากพูดคุยไปสองสามนาทีแรก';
 
   @override

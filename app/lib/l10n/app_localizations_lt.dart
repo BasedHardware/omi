@@ -14444,6 +14444,22 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Einamosios pastabos neatnaujinamos. Kol kas peržiūrėkite transkripciją.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Įrašoma · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Ankstesnis epizodas';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Laukia dalių: $pending';
+  }
+
+  @override
   String get episodeNotesSoon => 'Užrašai atsiranda po pirmųjų pokalbio minučių.';
 
   @override

@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/backend/preferences.dart';
 
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/episode.dart';
@@ -19,6 +21,37 @@ Episode _episode({String id = 'ep1', bool live = true, List<EpisodeItem> items =
 EpisodeItem _item(String id) => EpisodeItem(id: id, text: 'Book the table', createdAt: _t0);
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+  });
+
+  test('cold launch recovers an idle-closed episode from the account-scoped live pointer', () async {
+    SharedPreferencesUtil().uid = 'account-a';
+    final first = EpisodeProvider(fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: _episode())));
+    await first.refreshLive();
+    first.dispose();
+    final ids = <String>[];
+    final restored = EpisodeProvider(
+      fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+      lookup: (id) async {
+        ids.add(id);
+        return ApiSuccess(EpisodeRead(enabled: true, episode: _episode(live: false)));
+      },
+    );
+    addTearDown(restored.dispose);
+    await restored.refreshLive();
+    await Future<void>.delayed(Duration.zero);
+    expect(ids, ['c2']);
+    expect(restored.previous?.id, 'ep1');
+    SharedPreferencesUtil().uid = 'account-b';
+    expect(restored.previous, isNull);
+    await restored.refreshLive();
+    expect(restored.previous, isNull);
+    expect(ids, ['c2'], reason: 'another account never reads the saved member pointer');
+  });
+
   test('a 404 means this server has no episodes and keeps today\'s UI', () async {
     final provider = EpisodeProvider(fetchLive: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
     addTearDown(provider.dispose);
@@ -29,8 +62,9 @@ void main() {
   });
 
   test('a live read shows the episode and the conversations it stands for', () async {
-    final provider =
-        EpisodeProvider(fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: _episode())));
+    final provider = EpisodeProvider(
+      fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: _episode())),
+    );
     addTearDown(provider.dispose);
     await provider.refreshLive();
     expect(provider.enabled, isTrue);
@@ -39,8 +73,9 @@ void main() {
   });
 
   test('a disabled answer hides the live episode even if one is sent', () async {
-    final provider =
-        EpisodeProvider(fetchLive: () async => ApiSuccess(EpisodeRead(enabled: false, episode: _episode())));
+    final provider = EpisodeProvider(
+      fetchLive: () async => ApiSuccess(EpisodeRead(enabled: false, episode: _episode())),
+    );
     addTearDown(provider.dispose);
     await provider.refreshLive();
     expect(provider.enabled, isFalse);
@@ -122,6 +157,62 @@ void main() {
     expect(await provider.episodeFor('c1'), isNotNull);
     expect(calls, 1);
     expect(provider.cachedEpisodeFor('c1')?.live, isFalse);
+  });
+
+  test('a null live response retains the snapshot and refreshes closure through its member', () async {
+    Episode? live = _episode();
+    final provider = EpisodeProvider(
+      fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: live)),
+      lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: _episode(live: false))),
+    );
+    addTearDown(provider.dispose);
+    await provider.refreshLive();
+    live = null;
+    await provider.refreshLive();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.live, isNull);
+    expect(provider.previous?.id, 'ep1');
+    expect(provider.previous?.live, isFalse);
+    expect(provider.liveConversationIds, isEmpty);
+    expect(provider.cachedEpisodeFor('c2')?.live, isFalse);
+  });
+
+  test('failed closure lookup keeps the prior title and member reachable', () async {
+    final provider = EpisodeProvider(
+      fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+      lookup: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+      clock: () => _t0,
+    )..debugSetLive(_episode());
+    addTearDown(provider.dispose);
+    await provider.refreshLive();
+    expect(provider.previous?.title, 'Lunch plans');
+    expect(provider.previous?.conversationIds, ['c1', 'c2']);
+    expect(provider.notesUnavailable(), isTrue);
+  });
+
+  test('repeated successful reads cannot hide stale server notes', () async {
+    var time = _t0;
+    final provider = EpisodeProvider(
+      clock: () => time,
+      fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: _episode())),
+    );
+    addTearDown(provider.dispose);
+    await provider.refreshLive();
+    expect(provider.notesUnavailable(), isFalse);
+    time = time.add(EpisodeProvider.notesStaleLimit);
+    await provider.refreshLive();
+    expect(provider.notesUnavailable(), isTrue);
+  });
+
+  test('a slow old closure lookup cannot replace a newer previous episode', () async {
+    final provider = EpisodeProvider(
+      lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: _episode(live: false))),
+    );
+    addTearDown(provider.dispose);
+    final newer = Episode(id: 'newer', live: false, startedAt: _t0.add(const Duration(hours: 1)), lastActivityAt: _t0);
+    provider.debugSetLive(newer);
+    await provider.recoverPrevious('c1');
+    expect(provider.previous?.id, 'newer');
   });
 
   test('item status parsing hides dropped and dismissed items', () {

@@ -1,0 +1,127 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
+
+/// Kept outside the history query: an idle-closed episode's member may still be in_progress.
+class PreviousEpisodeLink extends StatefulWidget {
+  const PreviousEpisodeLink({super.key, this.onOpenConversation});
+
+  final ValueChanged<String>? onOpenConversation;
+
+  @override
+  State<PreviousEpisodeLink> createState() => _PreviousEpisodeLinkState();
+}
+
+class _PreviousEpisodeLinkState extends State<PreviousEpisodeLink> {
+  EpisodeProvider? _episodes;
+  String? _conversationId;
+
+  @override
+  void initState() {
+    super.initState();
+    _episodes = context.read<EpisodeProvider?>();
+    _episodes?.watch();
+  }
+
+  @override
+  void dispose() {
+    _episodes?.unwatch();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final id = context.select<CaptureProvider, String?>((c) => c.topConversationId);
+    if (id != _conversationId) {
+      _conversationId = id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && id != null) unawaited(_episodes?.recoverPrevious(id));
+      });
+    }
+    final episode = context.watch<EpisodeProvider?>()?.previous;
+    if (episode == null) return const SizedBox.shrink();
+    return Padding(
+      key: const Key('previous_episode_link'),
+      padding: const EdgeInsets.all(OmiSpacing.md),
+      child: OmiButton.tertiary(
+        label:
+            '${context.l10n.episodePrevious}: ${episode.title.trim().isEmpty ? context.l10n.conversationTab : episode.title}',
+        onPressed: () =>
+            routeToPage(context, PreviousEpisodePage(episode: episode, onOpenConversation: widget.onOpenConversation)),
+      ),
+    );
+  }
+}
+
+/// The retained server snapshot stays readable even while the member is absent from Home history.
+class PreviousEpisodePage extends StatelessWidget {
+  const PreviousEpisodePage({super.key, required this.episode, this.onOpenConversation});
+
+  final Episode episode;
+  final ValueChanged<String>? onOpenConversation;
+
+  Future<void> _open(BuildContext context, String id) async {
+    if (onOpenConversation != null) {
+      onOpenConversation!(id);
+      return;
+    }
+    final conversation = await getConversationById(id);
+    if (!context.mounted) return;
+    if (conversation == null) {
+      OmiFeedback.info(context, context.l10n.somethingWentWrongTryAgain);
+      return;
+    }
+    routeToPage(context, ConversationDetailPage(conversation: conversation));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dates = OmiDateFormat.of(context);
+    final ids = {...episode.conversationIds, ...episode.moments.map((m) => m.conversationId)};
+    return Scaffold(
+      key: const Key('previous_episode_page'),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: const Center(child: OmiBackButton()),
+        title: Text(context.l10n.episodePrevious),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(OmiSpacing.md),
+        children: [
+          Text(episode.title, style: OmiType.title1),
+          Text('${dates.dayHeader(episode.startedAt)} · ${dates.time(episode.startedAt)}', style: OmiType.subhead),
+          const SizedBox(height: OmiSpacing.md),
+          for (final bullet in episode.bullets)
+            Padding(
+              padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
+              child: Text(bullet, style: OmiType.body),
+            ),
+          if (episode.moments.isNotEmpty) ...[
+            Text(context.l10n.episodeMoments, style: OmiType.headline),
+            for (final moment in episode.moments)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
+                child: Text('${dates.time(moment.startedAt)} · ${moment.heading}', style: OmiType.callout),
+              ),
+          ],
+          for (final id in ids)
+            OmiButton.tertiary(
+              key: ValueKey('previous_episode_conversation_$id'),
+              label: context.l10n.openConversation,
+              onPressed: () => _open(context, id),
+            ),
+        ],
+      ),
+    );
+  }
+}
