@@ -377,13 +377,13 @@ class Projector:
         store: FirestoreStore,
         load_result: Callable[[WorkItem, str], dict],
         *,
+        projection_store=None,
+        assign_conversation: Callable | None = None,
+        loaded_naming_snapshot: Callable | None = None,
         publish: Callable = publish_client_completion,
         playback: Callable | None = None,
         fetch_audio: Callable[[WorkItem], bytes] | None = None,
         clock: Callable[[], float] = time.time,
-        projection_store=None,
-        assign_conversation: Callable | None = None,
-        loaded_naming_snapshot: Callable | None = None,
     ):
         self.store = projection_store if projection_store is not None else ProjectionStore(store)
         self.assign_conversation = assign_conversation
@@ -753,11 +753,11 @@ class Projector:
                     manifest = prefetched.manifest
                 else:
                     manifest = read_context(self.fetch_audio(item))
+        receipts = entry.get('projection_parts') or {}
         speaker_ids = {
             voice: index
             for index, voice in enumerate(sorted({t['speaker'] for t in payload['diarization']['turns']}, key=str))
         }
-        receipts = entry.get('projection_parts') or {}
         for index, (part, part_payload) in enumerate(parts):
             if index and hint is not None and hint.deadline is not None and time.monotonic() >= hint.deadline:
                 raise StepDeadline()

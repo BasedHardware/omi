@@ -196,8 +196,8 @@ def assign_in_transaction(
     if absorbed is not None:
         absorbed.clear()
     incoming = deepcopy(incoming)
-    voice_evidence = incoming.pop('_batch_voice_evidence', None)
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
+    voice_evidence = incoming.pop('_batch_voice_evidence', None)
     require_live_target = incoming.pop('_batch_require_live_target', False)
     record_span = incoming.pop('_batch_replace_live', None)
     collection = user_ref.collection('conversations')

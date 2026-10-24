@@ -6518,72 +6518,6 @@ L2 roster priors and L3 rendering/language authorities; notes cache identities
 include effective packet selection and version. Cloud Run metric export includes
 the refactor families while retaining the prerecorded-language gate allowlist.
 
-### Wave 2 evidence and consumers
-
-Speaker refinement uses the same evidence record: count hints cannot merge
-confident distinct identities, and desktop-channel/near-field anchors remain
-explicit candidates. Live text-only introductions cannot create or link people
-in the speaker serve cohort. Unknown acoustic evidence preserves the existing
-identity/status; count consolidation does not require an identity claim.
-
-`MEDIA_NOISE_MODE` classifies before paid notes, using current speaker evidence
-and bounded foreground screen observations. Its serving minima persist
-`content_kind=media|noise` and the existing terminal-no-derived-effects marker.
-Memory/task entrypoints and daily/simple/comprehensive recaps use the same
-eligibility helper. Restoring a recording protects it, reclassification clears
-its exclusion, and successful reprocessing clears the terminal marker. Shadow
-preserves transcripts, labels and derived output; it never writes media edges.
-
-Cross-device reconciliation runs at completed-conversation finalization. Wall
-time proposes candidates; ordered shared speech must confirm every group pair.
-Grouping preserves original transcripts and audio, and a secondary with any
-unique speech remains visible. Exact secondary capture keys acquire only
-already-committed frame aliases to the elected primary. Coverage queries
-transactionally revalidate fingerprints, privacy state, membership and primary;
-edits, separation or primary replacement invalidate old aliases. No wall-time
-position is converted into a source-frame receipt.
-
-`coverage.committed_events` can construct confirmed alias receipts, but live
-secondary-socket dispatch and streaming partial-window suppression remain
-unwired. Closed clients query coverage. Server SNR/confidence is optional and
-not consistently persisted; absent measurements retain source/duration ranking.
-This branch does not repair historical derived effects or release audio based
-on inferred alignment.
-
-Database-writing shadow paths use `refactor_modes.shadow_sampled`: capture
-coverage, speaker evidence and boundary evidence each declare
-`<FLAG>_SHADOW_PERCENT`, default 5. Serve cohorts always write; zero disables
-shadow writes. No serve percentage or digest cohort is configured in source.
-
-
-Wave 2 call projection preserves optional `meeting_link`,
-`call_controls_detected` and `call_platform` through the boundary payload.
-Phone transports, matching calendar meeting links and explicit joined controls
-can establish call metadata; media playback and an open chat window cannot.
-Conversation locations remain owner locations, with remote participants explicit.
-
-V4's boundary publication is serve-only under `CALLS_RECAP_MODE`; shadow
-projects phone/calendar evidence locally and never adds it to the wave-1
-boundary authority for non-cohort users. Soniox initial, reconnect and managed
-legs pass the authenticated request uid explicitly to vocabulary admission;
-no ambient BYOK identity is consulted. Social tasks with a named counterpart
-and a specific place/time survive the owner-alias guard.
-
-Scheduled recaps retain the completed-day grace period. An explicit on-demand
-request bypasses that grace to summarize the partial day, while keeping locks,
-compute admission, content guards and durable state handling.
-
-V4's completed-local-day recap producer shares `status` and `generated_at` with
-M's read adapter. Pending, failed, empty and not-generated rows keep a null
-`generated_at`; only a legacy successful row without that field uses creation
-time as a compatibility fallback. Stored media/noise-only days are not-generated,
-not empty capture days. Rollback resumes unfinished stubs under the same ID.
-Both one-shot and agentic notes mounts receive cohort-gated owner-involved task
-rules, authenticated identity and matching cache identity. Exact-reference stale
-capture policy still lacks its producer binding/CAS lifecycle adapter; no fuzzy
-or historical task cancellation is performed.
-
-
 ### Batch local quality naming and faithful turns
 
 `BATCH_PIPELINE_LOCAL_QUALITY_ENABLED` defaults on. CPU projection builds turns
@@ -6663,3 +6597,69 @@ speaker IDs continue to replay unchanged. The environment is checked at the
 reversible projection boundary, so a historical pinned stage policy cannot
 prevent an incident rollback. This does not enable batch admission or change
 its rollout percentage.
+
+
+### Wave 2 evidence and consumers
+
+Speaker refinement uses the same evidence record: count hints cannot merge
+confident distinct identities, and desktop-channel/near-field anchors remain
+explicit candidates. Live text-only introductions cannot create or link people
+in the speaker serve cohort. Unknown acoustic evidence preserves the existing
+identity/status; count consolidation does not require an identity claim.
+
+`MEDIA_NOISE_MODE` classifies before paid notes, using current speaker evidence
+and bounded foreground screen observations. Its serving minima persist
+`content_kind=media|noise` and the existing terminal-no-derived-effects marker.
+Memory/task entrypoints and daily/simple/comprehensive recaps use the same
+eligibility helper. Restoring a recording protects it, reclassification clears
+its exclusion, and successful reprocessing clears the terminal marker. Shadow
+preserves transcripts, labels and derived output; it never writes media edges.
+
+Cross-device reconciliation runs at completed-conversation finalization. Wall
+time proposes candidates; ordered shared speech must confirm every group pair.
+Grouping preserves original transcripts and audio, and a secondary with any
+unique speech remains visible. Exact secondary capture keys acquire only
+already-committed frame aliases to the elected primary. Coverage queries
+transactionally revalidate fingerprints, privacy state, membership and primary;
+edits, separation or primary replacement invalidate old aliases. No wall-time
+position is converted into a source-frame receipt.
+
+`coverage.committed_events` can construct confirmed alias receipts, but live
+secondary-socket dispatch and streaming partial-window suppression remain
+unwired. Closed clients query coverage. Server SNR/confidence is optional and
+not consistently persisted; absent measurements retain source/duration ranking.
+This branch does not repair historical derived effects or release audio based
+on inferred alignment.
+
+Database-writing shadow paths use `refactor_modes.shadow_sampled`: capture
+coverage, speaker evidence and boundary evidence each declare
+`<FLAG>_SHADOW_PERCENT`, default 5. Serve cohorts always write; zero disables
+shadow writes. No serve percentage or digest cohort is configured in source.
+
+
+Wave 2 call projection preserves optional `meeting_link`,
+`call_controls_detected` and `call_platform` through the boundary payload.
+Phone transports, matching calendar meeting links and explicit joined controls
+can establish call metadata; media playback and an open chat window cannot.
+Conversation locations remain owner locations, with remote participants explicit.
+
+V4's boundary publication is serve-only under `CALLS_RECAP_MODE`; shadow
+projects phone/calendar evidence locally and never adds it to the wave-1
+boundary authority for non-cohort users. Soniox initial, reconnect and managed
+legs pass the authenticated request uid explicitly to vocabulary admission;
+no ambient BYOK identity is consulted. Social tasks with a named counterpart
+and a specific place/time survive the owner-alias guard.
+
+Scheduled recaps retain the completed-day grace period. An explicit on-demand
+request bypasses that grace to summarize the partial day, while keeping locks,
+compute admission, content guards and durable state handling.
+
+V4's completed-local-day recap producer shares `status` and `generated_at` with
+M's read adapter. Pending, failed, empty and not-generated rows keep a null
+`generated_at`; only a legacy successful row without that field uses creation
+time as a compatibility fallback. Stored media/noise-only days are not-generated,
+not empty capture days. Rollback resumes unfinished stubs under the same ID.
+Both one-shot and agentic notes mounts receive cohort-gated owner-involved task
+rules, authenticated identity and matching cache identity. Exact-reference stale
+capture policy still lacks its producer binding/CAS lifecycle adapter; no fuzzy
+or historical task cancellation is performed.
