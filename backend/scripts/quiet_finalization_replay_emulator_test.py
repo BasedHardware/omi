@@ -12,6 +12,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'quiet_replay_emulator_only_secret_32
 
 from google.cloud import firestore
 from database import conversation_finalization_jobs as jobs
+from database import conversation_quiet_checks as checks
 from services import conversation_finalization as service
 
 
@@ -71,7 +72,31 @@ def main():
     assert jobs.get_finalization_replay_oldest_overdue_age_seconds(firestore_client=client) >= 3600
     # Exhaustion wraps, and the elevated cap actually reaches beyond 100.
     assert len(jobs.get_finalization_replay_candidates(limit=1000, firestore_client=client)) == 100
-    print('PASS: 101-row starvation, deleted boundary, wrap, increased limit, oldest overdue age')
+    # Exercise the real evaluate transaction and SDK field deletion, rather
+    # than relying on the narrow unit fixture's DELETE_FIELD sentinel.
+    missing = col.document('quiet-missing-conversation')
+    missing.set(
+        {
+            'kind': 'listen_quiet_check',
+            'status': 'waiting_quiet',
+            'dispatch_generation': 1,
+            'uid': 'synthetic-emulator',
+            'conversation_id': 'absent',
+            'quiet_timeout_seconds': 120,
+            'due_at': now - timedelta(hours=1),
+            'reconcile_after_at': now - timedelta(hours=1),
+        }
+    )
+    assert checks.quiet_deadline({}) is None
+    assert jobs.recovery_admission_refusal('synthetic-emulator', {}, now) == 'status'
+    result = checks.evaluate_quiet_check(missing.id, 1, firestore_client=client)
+    retired = missing.get().to_dict()
+    assert result == {'status': 'done', 'reason': 'missing_conversation'}
+    assert retired['status'] == 'quiet_done' and 'reconcile_after_at' not in retired
+    assert retired['updated_at'] >= now
+    print(
+        'PASS: 101-row starvation, deleted boundary, wrap, increased limit, oldest age, missing-conversation retirement'
+    )
 
 
 if __name__ == '__main__':
