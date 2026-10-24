@@ -1742,6 +1742,17 @@ FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('status'), _asc('created_at'), _asc('__name__')),
 )
 
+QUIET_CHECKS_DUE_QUERY = FirestoreQuerySpec(
+    identifier='conversation_finalization_quiet_checks_due',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('due_at', '<=', 'due_at'),
+    ),
+    index_fields=(_asc('status'), _asc('due_at'), _asc('__name__')),
+)
+
 CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY = FirestoreQuerySpec(
     identifier='conversation_keyframe_jobs_device_state',
     collection_group='conversation_keyframe_jobs',
@@ -1982,6 +1993,7 @@ QUERY_SPECS = (
     *MCP_CONVERSATION_CARD_QUERY_SPECS.values(),
     SYNC_RECORDING_LINEAGE_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
+    QUIET_CHECKS_DUE_QUERY,
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
     FRAME_VISION_OUTPUT_EXPIRY_QUERY,

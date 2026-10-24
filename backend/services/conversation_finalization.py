@@ -18,6 +18,7 @@ from typing import Any
 from google.api_core.exceptions import InvalidArgument
 
 from database import conversation_finalization_jobs as jobs_db
+from database import conversation_quiet_checks as quiet_checks_db
 from database._client import is_document_size_limit_error
 from services.conversation_selfheal import STALE_AFTER, run_selfheal_tick
 from utils.conversations import quiet_finalization
@@ -117,6 +118,33 @@ def reconcile_stale_in_progress_conversations(*, firestore_client: Any = None) -
 def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int | float]:
     """Replay stale queued/leased platform-key jobs and publish backlog signals."""
     result: dict[str, int | float] = {'requeued': 0, 'skipped': 0, 'enqueue_failed': 0}
+    # Quiet checks have their own bounded due page. A failing queued/leased job
+    # cannot monopolize the shared replay page and starve speech finalization.
+    # Run even without dispatch: evaluation renews the durable obligation and
+    # exposes unavailable dispatch without mutating the conversation.
+    quiet_seen: set[str] = set()
+    try:
+        overdue = quiet_checks_db.get_overdue_quiet_checks(limit=limit, firestore_client=firestore_client)
+        for check in overdue:
+            job_id = check['job_id']
+            quiet_seen.add(job_id)
+            try:
+                outcome = quiet_finalization.run(
+                    job_id, int(check['dispatch_generation']), firestore_client=firestore_client
+                )
+                result['enqueue_failed' if outcome == 'dispatch_unavailable' else 'requeued'] += 1
+                logger.info(
+                    'event=quiet_finalization_reconcile outcome=%s job_id=%s generation=%s',
+                    outcome,
+                    job_id,
+                    check['dispatch_generation'],
+                )
+            except Exception:
+                logger.exception('overdue quiet finalization reconciliation failed job_id=%s', job_id)
+                result['enqueue_failed'] += 1
+    except Exception:
+        logger.exception('overdue quiet finalization query failed')
+        result['enqueue_failed'] += 1
     try:
         recovery = jobs_db.recover_stranded_byok_jobs(firestore_client=firestore_client)
         if recovery['blocked']:
@@ -153,6 +181,8 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
                 result['enqueue_failed'] += 1
             continue
         if candidate.get('kind') == 'listen_quiet_check':
+            if job_id in quiet_seen:
+                continue
             try:
                 quiet_finalization.run(job_id, int(candidate['dispatch_generation']), firestore_client=firestore_client)
                 result['requeued'] += 1

@@ -1,6 +1,7 @@
 """Episode orchestration over the strict Firestore fake: moments, boundaries, reconciliation, wrap-up."""
 
 import json
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -69,6 +70,182 @@ def _segments(text, *, start=0.0, step=5.0, person=None):
 
 
 LONG = 'okay so 12:30 works for lunch near the office. perfect now the git thing where each agent gets its own worktree. and the server owns the diff so agents can just apply it cleanly. remind me to book the lunch table for twelve thirty'
+
+
+def _unplaced(sid, *, minutes=0, text=LONG, trigger='interval'):
+    return MomentInput(
+        conversation_id='c1',
+        source='omi',
+        segments=[{'id': sid, 'text': text, 'start': -1.0, 'end': -1.0, 'audio_alignment': 'unplaced'}],
+        started_at=T0 + timedelta(minutes=minutes),
+        ended_at=T0 + timedelta(minutes=minutes + 1),
+        trigger=trigger,
+    )
+
+
+def test_unplaced_only_notes_consume_each_segment_id_once_without_audio_offsets():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Unplaced speech', 'bullets': ['Still retained']}, {'bullets': ['More speech']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    first = _unplaced('s1')
+    assert service.record_moment(UID, first, c) == 'applied'
+    # A duplicate id in the same batch and a replay/finalization tail both cost no call.
+    assert (
+        service.record_moment(UID, replace(first, segments=first.segments * 2, trigger='finalize'), c)
+        == 'skipped_applied'
+    )
+    second = _unplaced('s2', minutes=3)
+    assert service.record_moment(UID, replace(second, segments=second.segments * 2), c) == 'applied'
+    assert len(model.calls) == 2
+    assert model.calls[1][1][1].count(LONG) == 1
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['applied_segment_ids']['c1'] == ['s1', 's2']
+    assert episode['applied']['c1'] == -1
+    assert all(m['start_offset'] == m['end_offset'] == -1 for m in episode['moments'])
+    assert first.segments[0]['start'] == first.segments[0]['end'] == -1
+    # Placement repaired later is the same speech, not another notes input.
+    placed = replace(first, segments=[{**first.segments[0], 'start': 0, 'end': 5, 'audio_alignment': None}])
+    assert service.record_moment(UID, placed, c) == 'skipped_applied'
+
+
+def test_placed_cursor_still_consumes_text_extended_under_an_existing_id():
+    store = StrictFirestore()
+    model = FakeModel()
+    c = _collaborators(model, now=T0 + timedelta(minutes=5), store=store)
+    first = replace(_moment(trigger='interval'), segments=[{'id': 'placed-1', 'text': LONG, 'start': 30, 'end': 40}])
+    assert service.record_moment(UID, first, c) == 'applied'
+    late = replace(first, segments=[{'id': 'placed-1', 'text': LONG + ' later words', 'start': 30, 'end': 50}])
+    assert service.record_moment(UID, late, c) == 'applied'
+    assert service.record_moment(UID, first, c) == 'skipped_applied'
+    assert len(model.calls) == 2
+
+
+def test_unplaced_migrates_from_rca_offset_cursor_and_failed_notes_remain_retryable():
+    store = StrictFirestore()
+    model = FakeModel(
+        {'title': 'Call', 'bullets': ['Earlier notes']}, RuntimeError('provider down'), {'bullets': ['Recovered']}
+    )
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    assert service.record_moment(UID, _moment(), c) == 'applied'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    raw = store.rows[('users', UID, 'episodes', episode['id'])]
+    raw.pop('applied_segment_ids')
+    raw['applied'] = {'c1': 280.404102}
+    fresh = _unplaced('new-after-280', minutes=10)
+    c.now = lambda: T0 + timedelta(minutes=11)
+    assert service.record_moment(UID, fresh, c) == 'llm_error'
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['last_activity_at'] == fresh.ended_at
+    assert after['bullets'] == ['Earlier notes']
+    assert 'new-after-280' not in (after.get('applied_segment_ids') or {}).get('c1', [])
+    assert service.record_moment(UID, fresh, c) == 'applied'
+    assert service.record_moment(UID, replace(fresh, trigger='finalize'), c) == 'skipped_applied'
+    assert len(model.calls) == 3
+
+
+def test_short_retained_speech_keeps_episode_live_through_notes_outage():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Call'}, RuntimeError('provider down'))
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    service.record_moment(UID, _moment(), c)
+    for minute in range(5, 66, 5):
+        c.now = lambda minute=minute: T0 + timedelta(minutes=minute)
+        service.attach_conversation(UID, 'c1', 'omi', started_at=c.now(), collaborators=c)
+        assert service.live_episode(UID, collaborators=c)['status'] == 'live'
+    c.now = lambda: T0 + timedelta(minutes=66)
+    assert service.record_moment(UID, _unplaced('outage', minutes=65), c) == 'llm_error'
+    assert service.record_moment(UID, _unplaced('short', minutes=66, text='still talking'), c) == 'skipped_short'
+    episode = service.live_episode(UID, collaborators=c)
+    assert episode['last_activity_at'] == T0 + timedelta(minutes=67)
+    assert episode['usage']['calls'] == 1
+
+
+def test_rca_idle_close_preserves_a_discoverable_recap_with_in_progress_member():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Retained call', 'bullets': ['Call notes']})
+    # RCA: activity stopped at 05:47:41; member stayed in_progress past 06:17:41.
+    activity = datetime(2026, 10, 24, 5, 47, 41, 909750, tzinfo=timezone.utc)
+    moment = replace(_unplaced('rca'), started_at=activity - timedelta(minutes=5), ended_at=activity)
+    c = _collaborators(model, now=activity, store=store)
+    assert service.record_moment(UID, moment, c) == 'applied'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    store.rows[('users', UID, 'conversations', 'c1')] = {'status': 'in_progress'}
+    c.now = lambda: datetime(2026, 10, 24, 7, 42, tzinfo=timezone.utc)
+    assert service.live_episode(UID, collaborators=c) is None
+    recap = service.last_closed_episode(UID, collaborators=c)
+    assert recap['id'] == episode['id'] and recap['status'] == 'closed'
+    assert recap['closed_at'] == activity + timedelta(minutes=30)
+    assert recap['bullets'] == ['Call notes']
+    assert service.episode_by_id(UID, recap['id'], collaborators=c)['title'] == 'Retained call'
+    assert service.episode_by_id('another-account', recap['id'], collaborators=c) is None
+    assert service.last_closed_episode('another-account', collaborators=c) is None
+    assert service.episode_for_conversation(UID, 'c1', collaborators=c)['id'] == recap['id']
+    assert store.rows[('users', UID, 'conversations', 'c1')]['status'] == 'in_progress'
+
+
+def test_speech_during_model_call_does_not_invalidate_notes_or_regress_activity():
+    store = StrictFirestore()
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=1), store=store)
+    service.attach_conversation(UID, 'c1', 'omi', started_at=T0, collaborators=c)
+    original = episodes_db.get_current_episode(UID, firestore_client=store)
+    calls = []
+
+    def invoke(uid, messages):
+        calls.append(messages)
+        assert episodes_db.record_activity(UID, original['id'], 'c1', T0 + timedelta(minutes=2), firestore_client=store)
+        return SimpleNamespace(content='{"title":"Call","bullets":["Notes arrived"]}', usage_metadata={})
+
+    c.invoke = invoke
+    assert service.record_moment(UID, _unplaced('during-call'), c) == 'applied'
+    assert len(calls) == 1
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['last_activity_at'] == T0 + timedelta(minutes=2)
+    assert after['state_version'] == original['state_version'] + 1
+    assert after['bullets'] == ['Notes arrived']
+
+
+def test_retained_speech_wins_race_with_stale_idle_reader(monkeypatch):
+    store = StrictFirestore()
+    c = _collaborators(FakeModel(), now=T0, store=store)
+    service.attach_conversation(UID, 'c1', 'omi', started_at=T0, collaborators=c)
+    stale = episodes_db.get_current_episode(UID, firestore_client=store)
+    c.now = lambda: T0 + timedelta(minutes=31)
+    episodes_db.record_activity(UID, stale['id'], 'c1', c.now(), firestore_client=store)
+    get_current = episodes_db.get_current_episode
+    reads = []
+
+    def race(uid, **kwargs):
+        reads.append(1)
+        return stale if len(reads) == 1 else get_current(uid, **kwargs)
+
+    monkeypatch.setattr(episodes_db, 'get_current_episode', race)
+    live = service.live_episode(UID, collaborators=c)
+    assert live['id'] == stale['id'] and live['status'] == 'live'
+    assert service.last_closed_episode(UID, collaborators=c) is None
+
+
+def test_unplaced_consumption_survives_episode_boundary_and_failed_open():
+    store = StrictFirestore()
+    model = FakeModel(
+        {'title': 'First recap'}, RuntimeError('provider down'), {'title': 'Next recap'}, {'bullets': ['Tail']}
+    )
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    first = _unplaced('s1', text='original-only-marker ' + LONG)
+    assert service.record_moment(UID, first, c) == 'applied'
+    c.now = lambda: T0 + timedelta(minutes=32)
+    assert service.live_episode(UID, collaborators=c) is None
+    second = _unplaced('s2', minutes=35, text='second-only-marker ' + LONG)
+    c.now = lambda: T0 + timedelta(minutes=36)
+    assert service.record_moment(UID, second, c) == 'llm_error'
+    assert service.record_moment(UID, second, c) == 'applied'
+    third = _unplaced('s3', minutes=37, text='tail-only-marker ' + LONG, trigger='finalize')
+    tail = replace(third, segments=[*first.segments, *second.segments, *third.segments])
+    assert service.record_moment(UID, tail, c) == 'applied'
+    assert 'original-only-marker' not in model.calls[-1][1][1]
+    assert 'second-only-marker' not in model.calls[-1][1][1]
+    assert 'tail-only-marker' in model.calls[-1][1][1]
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['applied_segment_ids']['c1'] == ['s1', 's2', 's3']
 
 
 def _moment(conversation_id='c1', *, minutes=0.0, trigger='pause', text=LONG, start=0.0, source='omi', person=None):

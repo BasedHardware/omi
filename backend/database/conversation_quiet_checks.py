@@ -15,6 +15,7 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from database import conversation_finalization_jobs as jobs_db
+from database.firestore_index_registry import QUIET_CHECKS_DUE_QUERY
 from models.conversation_continuity import continuation_timeout
 from config.refactor_modes import serving_for
 from utils.conversations.lifecycle_clocks import speech_clock
@@ -199,3 +200,14 @@ def stop_quiet_check(
             transaction.update(ref, updates)
 
     stop(client.transaction())
+
+
+def get_overdue_quiet_checks(*, limit: int = 100, firestore_client: Any = None) -> list[dict[str, Any]]:
+    """Independent bounded lane: unrelated failed outbox jobs cannot hide quiet wakes."""
+    client = _client(firestore_client)
+    query = QUIET_CHECKS_DUE_QUERY.build(
+        client.collection(jobs_db.FINALIZATION_JOBS_COLLECTION),
+        {'status': QUIET_CHECK_STATUS, 'due_at': _now()},
+        field_filter_factory=firestore.FieldFilter,
+    ).limit(max(1, min(int(limit), 100)))
+    return [dict(snapshot.to_dict() or {}, job_id=snapshot.id) for snapshot in query.stream()]

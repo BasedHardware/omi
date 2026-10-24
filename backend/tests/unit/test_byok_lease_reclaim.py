@@ -163,6 +163,7 @@ def test_legacy_scan_rotates_and_reclaims_row_without_due_timestamp(monkeypatch)
 
 
 def test_recovery_runs_in_inline_mode_without_task_dispatch(monkeypatch):
+    monkeypatch.setattr(service.quiet_checks_db, 'get_overdue_quiet_checks', lambda **kw: [])
     recover = Mock(return_value={'blocked': 0, 'errors': 0})
     enqueue = Mock()
     monkeypatch.setattr(service.jobs_db, 'recover_stranded_byok_jobs', recover)

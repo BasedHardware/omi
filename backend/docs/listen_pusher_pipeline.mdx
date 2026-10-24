@@ -6384,6 +6384,54 @@ no scan or redrive; applying any private plan requires separate authorization.
 
 ## Durable mono pendant/phone quiet checks
 
+### Episode lifecycle and overdue quiet recovery
+
+Retained live speech advances episode `last_activity_at` (coalesced to at most
+one activity write per minute per process/conversation, plus moment/session-end flushes) independently of the
+moment word budget, rate limit and notes provider. Running notes consume unplaced
+segment IDs after a successful compare-and-swap (`audio_alignment=unplaced`,
+`start=end=-1`). Persistence keeps these IDs separate: sentinel timestamps do not
+prove adjacency and must not merge a new segment into an already-consumed ID.
+Retries and later audio placement of a consumed unplaced ID
+do not feed it again. Failures leave IDs unapplied for retry/finalization. Legacy
+offset-only episodes retain their placed-segment cursor; it never excludes
+unplaced IDs. Placed segments may still extend their text/end under the same ID.
+No audio coordinate is synthesized for unplaced moments.
+
+Closing the current episode atomically records `episode_links/last_closed` while
+clearing `episode_links/current`. `GET /v1/episodes/live` can return the additive
+`last_closed_episode` field, including alongside a newer live episode; its
+existing `episode` field remains live-only. `GET /v1/episodes/{episode_id}` reads
+the retained recap within the authenticated account and existing episode channel
+gate. Conversation links and closed notes survive while member finalization is
+pending. Clients must use this closed recap field for recovery navigation; a
+capture timer alone is not evidence of healthy running notes. Older closed
+episodes remain reachable by their conversation/episode IDs; no historical
+pointer backfill is performed.
+
+The outbox reconciler first queries a separate bounded page of `waiting_quiet`
+jobs ordered by due time (`status == waiting_quiet`, `due_at <= now`, max 100).
+This prevents unrelated failed outbox rows from exhausting its shared replay
+page. Evaluation and successor reservation happen even if dispatch is unavailable;
+processing admission still requires the configured durable worker, an expired
+recording lease, account permission and the normal lifecycle fences. Unavailable
+dispatch emits `event=quiet_finalization outcome=dispatch_unavailable`; recovery
+emits `event=quiet_finalization_reconcile` with the outcome and generation, never
+transcript content. The independent query uses the declared
+`conversation_finalization_quiet_checks_due` index (status, due_at, __name__);
+it must be READY before deploying the consumer. No queue capacity change is needed.
+
+The October 24 RCA found a generation-1 quiet check unchanged for nearly two
+hours. Code exposes two ways to strand evaluation: the old pre-transaction
+dispatch guard (and reconciler-wide disabled-dispatch return), and a shared due
+page monopolized by failed older work. These are reproduced failure modes, not
+an attribution of that production incident. Whether the original wake was
+undispatched, unserved, blocked by dispatch configuration, starved, or failed
+before its transaction remains open: the permitted RCA metadata does not prove
+which. The lead should correlate the dispatched task, reconciler owner/revision,
+query errors and pre-transaction exception around 05:57:45Z before considering
+capacity/config changes. This fix neither reads nor repairs production data.
+
 `LISTEN_QUIET_FINALIZATION_ENABLED=true` is the default. Mono `omi` and `phone`
 recordings arm one opaque `quiet-*` check in `conversation_finalization_jobs`
 on session setup and every socket exit (including drain/network failure).

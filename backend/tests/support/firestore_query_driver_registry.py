@@ -805,6 +805,7 @@ _add(
         'database.conversation_finalization_jobs.get_finalization_replay_candidates', neutrals={'limit': _LIMIT}
     )
 )
+_add(DriverEntry('database.conversation_quiet_checks.get_overdue_quiet_checks', neutrals={'limit': _LIMIT}))
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.get_meeting_receipt_backfill_candidates',
