@@ -133,7 +133,11 @@ def test_every_transcript_boundary_rejects_high_raw_ids(monkeypatch):
     monkeypatch.setattr(llm, 'serving_for', lambda *_a: False)
     monkeypatch.setattr(incremental, 'shadow_or_serve', lambda *_a: False)
     monkeypatch.setattr(render, 'get_user_name', lambda *_a, **_kw: 'David')
-    monkeypatch.setattr(review.conversations, 'get_conversation', lambda *_a: {'transcript_segments': rows})
+    monkeypatch.setattr(
+        review.conversations,
+        'get_conversation',
+        lambda *_a: {'transcript_segments': rows, 'started_at': datetime(2026, 10, 1, tzinfo=timezone.utc)},
+    )
     monkeypatch.setattr(review.conversations, 'is_visible_conversation', lambda *_a: True)
     prompt = NS(
         conversation_id='conversation',
@@ -149,7 +153,7 @@ def test_every_transcript_boundary_rejects_high_raw_ids(monkeypatch):
     candidate = NS(
         workstream_id=None,
         candidate_id='candidate',
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
         task_change=NS(description='Follow up', due_at=None),
         evidence_refs=[NS(kind=NS(value='conversation'), id='conversation', transcript_segment_ids=['second'])],
     )
@@ -232,7 +236,7 @@ def test_old_live_state_and_model_output_cannot_replay_raw_ids():
     from utils.episodes.state import render_state, parse_update
     from utils.episodes.service import to_wire
 
-    now = datetime.now(timezone.utc)
+    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
     episode = {
         'id': 'episode',
         'started_at': now,
@@ -285,7 +289,7 @@ def test_prompt_prefix_normalizes_legacy_numeric_speaker_maps():
     prefix = build_conversation_prompt_prefix(
         conversation_id='conversation',
         transcript='[first 378] hello\n\n[second 379] there',
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
         timezone_name='UTC',
         language_code='en',
         speaker_map={378: 'Ada', 379: None},

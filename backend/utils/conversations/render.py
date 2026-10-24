@@ -28,7 +28,7 @@ from utils.model_text import (
     untrusted_block,
 )
 
-from utils.speakers.display import display_participants
+from utils.speakers.display import display_participants, developer_speaker_names
 
 logger = logging.getLogger(__name__)
 
@@ -76,13 +76,13 @@ def format_local_date(dt: datetime, display_tz: tzinfo) -> str:
 # ---------------------------------------------------------------------------
 
 
-def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> None:
+def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]], *, preserve_api_values: bool = False) -> None:
     """Add speaker_name to transcript segments based on person_id mappings.
 
     Mutates conversation dicts in-place. Works with both single conversations
     (pass as [conv]) and lists.
     """
-    user_name = get_user_name(uid, use_default=False) or 'You'
+    user_name = get_user_name(uid, use_default=False) or ('User' if preserve_api_values else 'You')
 
     all_person_ids: Set[str] = set()
     for conv in conversations:
@@ -100,6 +100,10 @@ def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> Non
         # Dense labels are assigned per conversation: the same diarization id in another
         # conversation is a different voice, never the same "Speaker A".
         segments = cast(List[Dict[str, Any]], conv.get('transcript_segments') or [])
+        if preserve_api_values:
+            for seg, name in zip(segments, developer_speaker_names(segments, names=people_map, owner_name=user_name)):
+                seg['speaker_name'] = name
+            continue
         display = display_participants(
             segments, names=people_map, owner_name=user_name, resolution=conv.get('speaker_resolution')
         )

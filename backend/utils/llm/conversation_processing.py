@@ -64,7 +64,7 @@ from utils.llm.meeting_notes_validation import (
     validate_structured_source_segment_ids,
 )
 from config.refactor_modes import serving_for
-from utils.llm.notes_packet import PACKET_RULES, select_notes_packet, _local_started_at_iso, notes_people
+from utils.llm.notes_packet import PACKET_RULES, select_notes_packet, _local_started_at_iso
 from utils.llm.notes_output_contract import finish_notes_contract, OUTPUT_RULES
 from utils.llm.notes_identity import notes_identity
 from utils.llm.notes_output import NotesOutput
@@ -436,7 +436,6 @@ def get_conversation_notes(
 def _get_shaped_conversation_notes(
     prefix: ConversationPromptPrefix, *, uid: Optional[str] = None, **kwargs: Any
 ) -> Structured:
-    kwargs['people'] = notes_people(uid, kwargs)
     frames = kwargs.get('screen_frames') or ()
     # Never reuse the old prefix metadata: it may already have bound a roster.
     context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])

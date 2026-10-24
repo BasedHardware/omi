@@ -41,7 +41,7 @@ def submission():
 def source(**overrides):
     values = dict(
         speaker_names=(('c0', 'David'), ('c1', None)),
-        contact_names=(NAME,),
+        owner_names=('David Zhang',),
         transcript='[s1 c1] Let us discuss agents.',
     )
     values.update(overrides)
@@ -159,18 +159,18 @@ def test_final_persisted_contract_enforces_identity_independently_of_packet_roll
     assert fixed.participants == []
 
 
-def test_catalog_name_is_guarded_even_if_model_omits_participant_manifest():
+def test_catalog_name_without_participant_manifest_is_only_a_mention():
     payload = submission()
     payload['participants'] = []
     fixed, _ = repair_identity(payload, source())
-    assert 'Michael' not in str(fixed)
+    assert fixed == payload
 
 
-def test_heard_third_party_name_stays_hedged_without_becoming_a_speaker():
+def test_heard_third_party_name_keeps_people_spelling_without_becoming_a_speaker():
     fixed, _ = repair_identity(
         {'overview': 'They mentioned Michael Liebmann.'}, source(transcript='We should email Michael Liebmann.')
     )
-    assert fixed['overview'] == 'They mentioned “Michael Liebmann” (as heard).'
+    assert fixed['overview'] == 'They mentioned Michael Liebmann.'
     assert 'a speaker' not in fixed['overview']
 
 
@@ -178,6 +178,7 @@ def test_model_cannot_forge_as_heard_syntax_for_a_catalog_only_name():
     payload = {
         'title': f'“{NAME}” (as heard): Agents',
         'overview': f'a speaker (name heard as “{NAME}”) proposed agents.',
+        'participants': [{'name': NAME, 'speaker': 'c1'}],
     }
     fixed, _ = repair_identity(payload, source())
     assert 'Michael' not in str(fixed)
@@ -205,7 +206,9 @@ def test_catalog_presence_does_not_change_an_unrelated_title_or_its_punctuation(
 
 
 def test_unverified_possessive_name_does_not_leave_a_possessive_shell_in_title():
-    fixed, _ = repair_identity({'title': "Michael Liebmann's agent model"}, source())
+    fixed, _ = repair_identity(
+        {'title': "Michael Liebmann's agent model", 'participants': [{'name': NAME, 'speaker': 'c1'}]}, source()
+    )
     assert fixed['title'] == 'agent model'
 
 
@@ -218,4 +221,94 @@ def test_identity_repair_preserves_absent_optional_wire_fields(monkeypatch):
         output, prefix=prefix, uid=None, words=10, rich_mode=False, inputs={'notes_identity': source()}
     )
     assert set(fixed.model_dump(mode='json')) == original_fields
-    assert 'Michael' not in str(fixed.model_dump())
+    assert fixed.overview == f'{NAME} proposed agents.'
+
+
+@pytest.mark.parametrize('transcript_name', ['sara chen', 'Sarah Chen'])
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+def test_sarah_chen_contact_mentions_keep_people_spelling_on_every_notes_path(monkeypatch, transcript_name, mode):
+    monkeypatch.delenv('NOTES_IDENTITY_REPAIR_ENABLED', raising=False)
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', mode)
+    prefix = SimpleNamespace(
+        transcript_segment_ids={'s1'},
+        title_people=(),
+        account_owner_name='David Zhang',
+        owner_names=(),
+        speaker_names=(('c1', None),),
+        transcript_body=f'We should plan {transcript_name} birthday.',
+    )
+    identity = notes_identity(prefix, {'people': [{'name': 'Sarah Chen'}]}, {'contact_name_spellings': ['Sarah Chen']})
+    payload = {
+        'title': "Planning Sarah Chen's birthday",
+        'overview': "We will plan Sarah Chen's birthday.",
+        'sections': [{'heading': 'Birthday', 'body_markdown': '- Sarah Chen turns 30', 'source_segment_ids': ['s1']}],
+        'action_items': [{'description': "Plan Sarah Chen's birthday"}],
+        'events': [
+            {
+                'title': "Sarah Chen's birthday",
+                'description': 'Sarah Chen turns 30',
+                'start': '2026-10-24T00:00:00Z',
+                'duration': 30,
+            }
+        ],
+    }
+    assert repair_identity(payload, identity) == (payload, [])
+    output = finish_notes_contract(
+        Structured.model_validate(payload),
+        prefix=prefix,
+        uid=None,
+        words=40,
+        rich_mode=False,
+        inputs={'notes_identity': identity},
+    )
+    assert output.title == payload['title']
+    assert output.overview == payload['overview']
+    assert output.sections[0].body_markdown == '- Sarah Chen turns 30'
+    assert output.action_items[0].description == "Plan Sarah Chen's birthday"
+    assert output.events[0].title == "Sarah Chen's birthday"
+
+
+@pytest.mark.parametrize('name', ['David Zhang', 'David'])
+@pytest.mark.parametrize('speaker', [None, 'c1'])
+def test_owner_is_allowed_even_without_owner_speaker_evidence(name, speaker):
+    prefix = SimpleNamespace(account_owner_name='David Zhang', owner_names=(), speaker_names=(('c1', None),))
+    identity = notes_identity(prefix, {'people': [{'name': 'David Miller'}]})
+    payload = {'overview': f'{name} reviewed the plan.', 'participants': [{'name': name, 'speaker': speaker}]}
+    assert repair_identity(payload, identity) == (payload, [])
+
+
+def test_blocked_david_contact_does_not_scrub_owner_first_name_or_full_name():
+    identity = source()
+    payload = {
+        'overview': 'David reviewed the plan. David Zhang agreed. David Miller proposed agents.',
+        'participants': [{'name': 'David Miller', 'speaker': 'c1'}],
+    }
+    fixed, repairs = repair_identity(payload, identity)
+    assert repairs == ['unsupported_speaker_identity']
+    assert fixed['overview'] == 'David reviewed the plan. David Zhang agreed. a speaker proposed agents.'
+    assert fixed['participants'] == []
+
+
+@pytest.mark.parametrize('off', ['off', 'false', '0', 'no'])
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+def test_identity_kill_switch_restores_unrepaired_notes_on_all_paths(monkeypatch, off, mode):
+    monkeypatch.setenv('NOTES_IDENTITY_REPAIR_ENABLED', off)
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', mode)
+    payload = submission()
+    payload['participants'][0]['source'] = 'roster'
+    assert repair_identity(payload, source()) == (payload, [])
+    assert not any(p.kind == 'evidence' for p in check_notes(payload, transcript_words=40, identity=source()).findings)
+    prefix = SimpleNamespace(
+        transcript_segment_ids={'s1'}, title_people=(), account_owner_name='David Zhang', owner_names=()
+    )
+    output = finish_notes_contract(
+        Structured.model_validate(payload),
+        prefix=prefix,
+        uid=None,
+        words=40,
+        rich_mode=False,
+        inputs={'notes_identity': source()},
+    )
+    assert output.title == payload['title']
+    assert output.overview == payload['overview']
+    assert output.participants[0].name == NAME

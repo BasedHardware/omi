@@ -323,3 +323,24 @@ def display_participants(
         for row, key, name in zip(rows, keys, row_names)
     ]
     return DisplayParticipants(rows, participants, order)
+
+
+def developer_speaker_names(segments: Sequence[Any], *, names: Mapping[str, str], owner_name: str) -> list[str]:
+    """Preserve released developer API values while UI/MCP use display_participants.
+
+    Named contacts do not consume unknown-label slots in this wire contract.
+    Raw speaker IDs remain transport keys, never interpolated into a name.
+    """
+    labeler = SpeakerLabeler()
+    result = []
+    for segment in segments:
+        person_id = str(field(segment, 'person_id') or '')
+        if field(segment, 'is_user', False):
+            result.append(owner_name)
+        elif person_id in names:
+            result.append(names[person_id])
+        elif field(segment, 'speaker_id') is not None:
+            result.append(labeler.label((field(segment, 'speaker_id_scope'), field(segment, 'speaker_id'))))
+        else:
+            result.append('Unknown speaker')
+    return result
