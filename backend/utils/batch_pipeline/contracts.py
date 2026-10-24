@@ -164,6 +164,12 @@ class BatchWorker(Protocol):
     ) -> Sequence[WorkResult | HeldWork | RecoveryWork | ValidationFailureWork]: ...
 
 
+class PreparedBatch(Protocol):
+    """Pump-owned resource from a worker's optional CPU preparation hook."""
+
+    def close(self) -> None: ...
+
+
 @dataclass(frozen=True)
 class ProjectionBinding:
     """Immutable intake metadata; never inferred from a GPU result body.

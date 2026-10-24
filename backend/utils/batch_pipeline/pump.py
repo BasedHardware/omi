@@ -5,19 +5,21 @@ import contextlib
 import logging
 import time
 from collections import OrderedDict
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Sequence
+from typing import Any, cast
 
 from config.batch_pipeline import MAX_PUBLISH_CONCURRENCY, publish_concurrency as configured_publish_concurrency
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.contracts import (
     BatchWorker,
+    PreparedBatch,
     HEARTBEAT_SECONDS,
     LeasedWork,
     PoolCapacity,
     HeldWork,
     RecoveryWork,
     ValidationFailureWork,
+    WorkItem,
 )
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError
@@ -274,7 +276,7 @@ class Pump:
         done = asyncio.Event()
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
-        prepared = None
+        prepared: PreparedBatch | None = None
         segments = {lease.item.segment_id for lease in leases}
         duplicate_decode = any(segment in self._flight_segments for segment in segments)
         for segment in segments:
@@ -327,7 +329,10 @@ class Pump:
                     return set(receipt.get('allowed') or [])
 
                 dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
-            prepare = getattr(self.worker, 'prepare_batch', None)
+            prepare = cast(
+                Callable[[Sequence[WorkItem]], PreparedBatch | None] | None,
+                getattr(self.worker, 'prepare_batch', None),
+            )
             if callable(prepare) and self._gpu.locked() and not duplicate_decode:
                 # Reserve read-ahead only for a waiting flight. Preparing the
                 # active flight can monopolize the budget before it consumes
