@@ -11,7 +11,7 @@ from utils.executors import run_blocking, storage_executor
 from utils.other.raw_audio import CapturePack
 from utils.other.storage import archive_capture_bytes
 from utils.other.audio_outbox import commit_capture
-from utils.other.audio_outbox_metrics import BACKPRESSURE, CUSTODY_FAILURES, WOULD_DROP
+from utils.other.audio_outbox_metrics import BACKPRESSURE, record_failure, record_would_drop
 from utils.observability.fallback import record_fallback
 
 
@@ -107,8 +107,8 @@ class LiveAudioArchive:
     def _disable(self, reason: str):
         if self.durable:
             self.failed = True
-            WOULD_DROP.labels(stage='raw_pack').inc()
-            CUSTODY_FAILURES.labels(stage='raw_commit').inc()
+            record_would_drop('raw_pack')
+            record_failure('raw_commit')
             return
         if not self.failed:
             self.failed = True
@@ -131,7 +131,7 @@ class LiveAudioArchive:
                 self._disable('capacity_exhausted')
                 return
             BACKPRESSURE.labels(stage='raw_capacity').inc()
-            WOULD_DROP.labels(stage='raw_capacity').inc()
+            record_would_drop('raw_capacity')
             done, _ = await asyncio.wait(tuple(self.inflight), return_when=asyncio.FIRST_COMPLETED)
             for task in done:
                 task.result()  # Refusal propagates before removing the active pack.
@@ -261,7 +261,7 @@ class LiveAudioArchive:
                     for task in done:
                         task.result()
                     if pending:
-                        WOULD_DROP.labels(stage='raw_timeout').inc()
+                        record_would_drop('raw_timeout')
                         raise TimeoutError('audio custody not committed; producer remains unacknowledged')
                 elif pending:
                     self._disable('timeout')

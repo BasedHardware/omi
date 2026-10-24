@@ -60,6 +60,8 @@ prove deployed playback or an installed client's WAL retention.
 `omi_audio_custody_backpressure_total{stage}` counts producer waits;
 `omi_audio_custody_failures_total{stage}` distinguishes commit and projection
 failures; `omi_audio_custody_commits_total` counts complete immutable receipts.
+`omi_audio_custody_last_risk_timestamp_seconds` also exposes a refusal before
+the first scrape, when a counter increase has no observed zero baseline.
 The source Grafana rule `omi-audio-custody-pressure` alerts immediately on any
 would-be drop or failure in five minutes. Provision split/combined alert JSON
 through the existing approved monitoring path and verify Telegram delivery.

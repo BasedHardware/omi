@@ -20498,7 +20498,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(increase(omi_audio_custody_would_drop_total[5m])) or vector(0)) + (sum(increase(omi_audio_custody_failures_total[5m])) or vector(0)) + (sum(increase(pusher_queue_drops_total{queue=~\"private.*|audio.*\"}[5m])) or vector(0)) + (sum(increase(pusher_private_cloud_upload_drops_total[5m])) or vector(0))",
+          "expr": "(sum(increase(omi_audio_custody_would_drop_total[5m])) or vector(0)) + (sum(increase(omi_audio_custody_failures_total[5m])) or vector(0)) + (sum(increase(pusher_queue_drops_total{queue=~\"private.*|audio.*\"}[5m])) or vector(0)) + (sum(increase(pusher_private_cloud_upload_drops_total[5m])) or vector(0)) + ((max(omi_audio_custody_last_risk_timestamp_seconds) > time() - 300) or vector(0))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,

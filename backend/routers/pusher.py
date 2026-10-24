@@ -58,7 +58,7 @@ from utils.webhooks import (
 )
 from utils.other.storage import upload_audio_chunks_batch
 from utils.other.audio_outbox import AudioReceipt, commit_pcm, read_pcm
-from utils.other.audio_outbox_metrics import BACKPRESSURE, CUSTODY_FAILURES, WOULD_DROP
+from utils.other.audio_outbox_metrics import BACKPRESSURE, record_failure, record_would_drop
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind
 from utils.metrics import (
     OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL,
@@ -268,7 +268,7 @@ async def _websocket_util_trigger(
         if conversation_id:
             if durable_queue.full():
                 BACKPRESSURE.labels(stage='pusher_queue').inc()
-                WOULD_DROP.labels(stage='pusher_queue').inc()
+                record_would_drop('pusher_queue')
             await durable_queue.put(receipt)
 
     async def process_durable_private_cloud_queue() -> None:
@@ -329,7 +329,7 @@ async def _websocket_util_trigger(
                 # manifest survive in remote storage and are discoverable
                 # by raw-live playback after restart/reconnect.
                 fail_recording(conv_id)
-                CUSTODY_FAILURES.labels(stage='projection').inc()
+                record_failure('projection')
                 record_fallback(
                     component='pusher',
                     from_mode='private_cloud_sync',
@@ -358,7 +358,7 @@ async def _websocket_util_trigger(
                             await flush_refs(conv_id)
                     elif len(pending_refs) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
                         BACKPRESSURE.labels(stage='pending_refs').inc()
-                        WOULD_DROP.labels(stage='pending_refs').inc()
+                        record_would_drop('pending_refs')
                         await flush_refs(next(iter(pending_refs)))
                     pending_refs.setdefault(conv_id, []).append(ref)
                     queued_at.setdefault(conv_id, time.monotonic())

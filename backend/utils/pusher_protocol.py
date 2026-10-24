@@ -5,7 +5,7 @@ from typing import Any, Deque, Dict, List, NotRequired, Optional, TypedDict, Typ
 from utils.metrics import PUSHER_QUEUE_DROPPED_BYTES, PUSHER_QUEUE_DROPS
 from utils.observability.journeys import JourneyOutcome
 from config.audio_outbox import enabled as audio_outbox_enabled
-from utils.other.audio_outbox_metrics import BACKPRESSURE, WOULD_DROP
+from utils.other.audio_outbox_metrics import BACKPRESSURE, record_would_drop
 
 PRIVATE_CLOUD_QUEUE_MAX_SIZE = 20  # ~18MB/connection max (30 conns × 18MB = 540MB) — prevents OOM with headroom
 MIN_SAMPLE_RATE = 8000
@@ -46,7 +46,7 @@ class AudioBackpressure(RuntimeError):
     def __init__(self, stage: str, pending: Any = None):
         super().__init__('audio custody capacity exhausted; input remains unacknowledged')
         self.pending = pending
-        WOULD_DROP.labels(stage=stage).inc()
+        record_would_drop(stage)
         BACKPRESSURE.labels(stage=stage).inc()
 
 

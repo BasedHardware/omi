@@ -1046,11 +1046,12 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "(sum(increase(omi_audio_custody_would_drop_total[5m])) or vector(0)) + (sum(increase(omi_audio_custody_failures_total[5m])) or vector(0)) + (sum(increase(pusher_queue_drops_total{queue=~\"private.*|audio.*\"}[5m])) or vector(0)) + (sum(increase(pusher_private_cloud_upload_drops_total[5m])) or vector(0))",
+      "expression": "(sum(increase(omi_audio_custody_would_drop_total[5m])) or vector(0)) + (sum(increase(omi_audio_custody_failures_total[5m])) or vector(0)) + (sum(increase(pusher_queue_drops_total{queue=~\"private.*|audio.*\"}[5m])) or vector(0)) + (sum(increase(pusher_private_cloud_upload_drops_total[5m])) or vector(0)) + ((max(omi_audio_custody_last_risk_timestamp_seconds) > time() - 300) or vector(0))",
       "file": "alerts/pusher.json",
       "issues": [],
       "metrics": [
         "omi_audio_custody_failures_total",
+        "omi_audio_custody_last_risk_timestamp_seconds",
         "omi_audio_custody_would_drop_total"
       ],
       "owner_title": "Audio custody - prevented drop or archive failure",

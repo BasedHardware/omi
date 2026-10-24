@@ -13,7 +13,7 @@ from typing import Any
 
 from utils.other import storage
 from utils.other.raw_audio import CapturePack, decode_capture
-from utils.other.audio_outbox_metrics import CUSTODY_COMMITS, CUSTODY_FAILURES
+from utils.other.audio_outbox_metrics import CUSTODY_COMMITS, record_failure
 
 
 @dataclass(frozen=True)
@@ -106,7 +106,7 @@ def commit_capture(
         CUSTODY_COMMITS.inc()
         return receipt
     except Exception:
-        CUSTODY_FAILURES.labels(stage='commit').inc()
+        record_failure('commit')
         raise
 
 

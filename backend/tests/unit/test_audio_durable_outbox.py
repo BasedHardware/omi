@@ -18,6 +18,7 @@ from google.cloud.exceptions import NotFound
 
 from config.audio_outbox import enabled
 from utils.other import storage, live_audio_archive, audio_outbox
+from utils.other import audio_outbox_metrics
 from utils.other.audio_outbox import AudioReceipt, commit_pcm, read_pcm
 from routers.listen.transcripts import TranscriptProcessor
 from utils.other.live_audio_archive import LiveAudioArchive
@@ -112,6 +113,14 @@ def test_default_on_and_only_explicit_emergency_rollback(monkeypatch):
         assert enabled()
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     assert not enabled()
+
+
+def test_first_refusal_before_first_scrape_has_an_alert_timestamp(monkeypatch):
+    monkeypatch.setattr(audio_outbox_metrics, 'time', SimpleNamespace(time=lambda: 1234567))
+    audio_outbox_metrics.record_would_drop('pusher_queue')
+    assert audio_outbox_metrics.LAST_RISK._value.get() == 1234567
+    audio_outbox_metrics.record_failure('commit')
+    assert audio_outbox_metrics.LAST_RISK._value.get() == 1234567
 
 
 def test_full_queue_keeps_old_and_new_unacknowledged():
