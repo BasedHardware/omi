@@ -914,6 +914,49 @@ CANONICAL_CONSOLIDATION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+# Operator scan for the 2026-10 stale-planner archive remediation
+# (scripts/restore_stale_planner_archives.py). Per-user COLLECTION scope:
+# memory_items has no prod collection-group indexes, so the scan iterates one
+# user subcollection at a time under an explicit read budget.
+STALE_PLANNER_ARCHIVE_SCAN_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_stale_planner_archive_scan',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('promotion.processed_at', '>=', 'processed_from'),
+        FirestoreQueryFilter('promotion.processed_at', '<=', 'processed_to'),
+    ),
+    index_fields=(
+        _asc('tier'),
+        _asc('status'),
+        _asc('promotion.processed_at'),
+        _asc('memory_id'),
+        _asc('__name__'),
+    ),
+)
+
+# Reverse path of the same remediation: rows carrying the restore marker are
+# re-archived by tier + marker equality, again per user.
+STALE_PLANNER_RESTORE_REVERT_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_stale_planner_restore_revert',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('promotion.remediation.marker', '==', 'marker'),
+    ),
+    index_fields=(
+        _asc('tier'),
+        _asc('status'),
+        _asc('promotion.remediation.marker'),
+        _asc('memory_id'),
+        _asc('__name__'),
+    ),
+)
+
 RECENT_REJECTED_MEMORY_FEEDBACK_QUERY = FirestoreQuerySpec(
     identifier='memory_items_recent_rejected_feedback',
     collection_group='memory_items',
@@ -1935,6 +1978,8 @@ QUERY_SPECS = (
     REVIEW_QUEUE_BY_STATUS_ID_QUERY,
     REQUIRED_MEMORY_PROCESSING_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
+    STALE_PLANNER_ARCHIVE_SCAN_QUERY,
+    STALE_PLANNER_RESTORE_REVERT_QUERY,
     RECENT_REJECTED_MEMORY_FEEDBACK_QUERY,
     POLICY_EXPIRED_SHORT_TERM_QUERY,
     EXPIRY_URGENT_SHORT_TERM_BY_CAPTURE_QUERY,
