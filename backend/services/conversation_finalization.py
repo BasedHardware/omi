@@ -133,16 +133,14 @@ def _reconcile_quiet_candidate(candidate: dict[str, Any], *, firestore_client: A
         )
         if status == 'stale':
             outcome = 'stale'
-        elif status in {'done', 'disabled', 'account_fenced', 'empty_deleted', quiet_finalization.DOCUMENT_SIZE_LIMIT}:
-            outcome = 'retired'
-        elif status == 'queued':
-            outcome = 'requeued'
         else:
+            # Verify persisted progress rather than trusting a successful
+            # return string: the incident's old counter did exactly that.
             current = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
             if current is None or current.get('status') == 'quiet_done':
                 outcome = 'retired'
             elif current.get('dispatch_generation') != candidate.get('dispatch_generation'):
-                outcome = 'advanced'
+                outcome = 'requeued' if status == 'queued' else 'advanced'
             else:
                 outcome = 'no_progress'
     except Exception:
