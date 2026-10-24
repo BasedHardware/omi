@@ -19,9 +19,11 @@ import math
 import os
 import secrets
 import sys
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 import tomli_w
 
@@ -321,6 +323,80 @@ def _has_non_directory_parent(path: Path) -> bool:
     return False
 
 
+def _ensure_config_parent(path: Path) -> None:
+    parent = path.parent
+    parent_existed = parent.exists()
+    parent.mkdir(parents=True, exist_ok=True)
+    # Do not change permissions on a pre-existing, user-selected directory.
+    if not parent_existed:
+        try:
+            os.chmod(parent, 0o700)
+        except OSError:
+            pass
+
+
+def _acquire_config_lock(fd: int) -> None:
+    if sys.platform == "win32":
+        import msvcrt
+
+        # Lock one byte at a fixed offset, including on a newly empty file.
+        # LK_LOCK stops retrying after ten seconds; keep waiting for this short
+        # local transaction instead, while leaving Ctrl-C interruptible.
+        while True:
+            os.lseek(fd, 0, os.SEEK_SET)
+            try:
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                return
+            except OSError as exc:
+                if exc.errno not in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
+                    raise
+                time.sleep(0.05)
+    else:
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_EX)
+
+
+def _release_config_lock(fd: int) -> None:
+    if sys.platform == "win32":
+        import msvcrt
+
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+@contextmanager
+def locked_config(path: Optional[Path] = None) -> Iterator[Config]:
+    """Load fresh config while holding its cross-process read/modify/write lock.
+
+    Callers explicitly call :func:`save` inside this context when they change
+    the config. Merely entering it never creates or rewrites the TOML file,
+    and load errors retain save()'s existing refusal behavior. Keep prompts
+    and network requests outside this short local transaction.
+
+    The credential-free sibling ``config.toml.lock`` is deliberately retained:
+    deleting it or locking the replaced TOML inode would let waiters acquire
+    different locks. Every in-tree config writer uses this context; save()
+    itself remains the low-level atomic snapshot writer.
+    """
+    p = path or default_config_path()
+    _ensure_config_parent(p)
+    lock_path = p.with_name(p.name + ".lock")
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
+    try:
+        _acquire_config_lock(fd)
+        try:
+            yield load(p)
+        finally:
+            _release_config_lock(fd)
+    finally:
+        os.close(fd)
+
+
 def save(config: Config) -> None:
     """Persist the config to disk with secure (owner-only) permissions.
 
@@ -339,17 +415,7 @@ def save(config: Config) -> None:
         raise ConfigWriteRefused(
             f"refusing to overwrite {config.path}: {config.load_error}. " "Fix or remove the config file and try again."
         )
-    parent = config.path.parent
-    parent_existed = parent.exists()
-    parent.mkdir(parents=True, exist_ok=True)
-    # Owner-only perms on a directory we create ourselves. Leave a
-    # pre-existing (e.g. user-selected via $OMI_CONFIG, possibly shared)
-    # directory's permissions untouched — best-effort, don't fail on it.
-    if not parent_existed:
-        try:
-            os.chmod(parent, 0o700)
-        except OSError:
-            pass
+    _ensure_config_parent(config.path)
 
     payload: dict[str, Any] = {
         **config.extra,
