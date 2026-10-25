@@ -3503,7 +3503,6 @@
     "captureStarting": "Käivitamine…",
     "capturePhoneStorageFull": "Telefoni mälu on täis",
     "captureStorageAlmostFull": "Mälu on peaaegu täis",
-    "capturePendantDisconnectedDetail": "Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.",
     "participantsSummaryUncounted": "{name} ja teised",
     "deviceOnboardingVoiceReplyTitle": "Kuula Omi vastuseid",
     "deviceOnboardingVoiceReplySample": "Selge. Sinu järgmine kohtumine algab kahekümne minuti pärast.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "Heli pole saadaval",
     "playbackAudioLoadFailed": "Heli ei õnnestunud laadida",
     "playbackAudioNetworkFailed": "Kontrollige ühendust",
-    "capturePendantDisconnectedShort": "Omi loob ühenduse ise uuesti",
     "forYou": "Sulle",
     "stopThese": "Peata need",
     "dismiss": "Peida",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "Seni",
     "episodeUpdatedJustNow": "Uuendatud just praegu · täielikud märkmed lõpus",
     "episodeUpdatedMinutesAgo": "Uuendatud {minutes} min tagasi · täielikud märkmed lõpus",
+    "episodeNotesUnavailable": "Jooksvad märkmed ei uuene. Vaata praegu transkriptsiooni.",
+    "episodeCaptureFor": "Salvestamine · {duration}",
+    "episodePrevious": "Eelmine episood",
+    "captureChunksPending": "Ootel lõigud: {pending}",
+    "episodeOpenPrevious": "Ava eelmine episood",
     "episodeNotesSoon": "Märkmed ilmuvad pärast esimesi vestlusminuteid.",
     "episodeOpenAll": "Ava kõik",
     "episodeWrapUpNow": "Lõpeta kohe",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "Taustal",
     "retentionOfferAccept": "Jää {percent}% allahindlusega",
     "retentionOfferBody": "Jää ja maksa {price} kuus järgmised {months} kuud.",
-    "retentionOfferApplied": "Valmis. {percent}% allahindlust järgmised {months} kuud."
+    "retentionOfferApplied": "Valmis. {percent}% allahindlust järgmised {months} kuud.",
+    "othersSpeakerLabel": "Teised"
 }

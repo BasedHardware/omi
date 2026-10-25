@@ -3503,7 +3503,6 @@
     "captureStarting": "กำลังเริ่ม…",
     "capturePhoneStorageFull": "พื้นที่โทรศัพท์เต็ม",
     "captureStorageAlmostFull": "พื้นที่ใกล้เต็ม",
-    "capturePendantDisconnectedDetail": "จี้ของคุณขาดการเชื่อมต่อกับโทรศัพท์เครื่องนี้ Omi จะเชื่อมต่อใหม่เองเมื่อจี้เปิดอยู่และอยู่ใกล้ ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย",
     "participantsSummaryUncounted": "{name} และคนอื่นๆ",
     "deviceOnboardingVoiceReplyTitle": "ฟังคำตอบของ Omi",
     "deviceOnboardingVoiceReplySample": "รับทราบ การประชุมครั้งถัดไปของคุณจะเริ่มในอีกยี่สิบนาที",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "เสียงไม่พร้อมใช้งาน",
     "playbackAudioLoadFailed": "ไม่สามารถโหลดเสียงได้",
     "playbackAudioNetworkFailed": "ตรวจสอบการเชื่อมต่อ",
-    "capturePendantDisconnectedShort": "Omi จะเชื่อมต่อใหม่เอง",
     "forYou": "สำหรับคุณ",
     "stopThese": "หยุดรายการแบบนี้",
     "dismiss": "ปิด",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "จนถึงตอนนี้",
     "episodeUpdatedJustNow": "อัปเดตเมื่อครู่ · บันทึกฉบับเต็มเมื่อจบ",
     "episodeUpdatedMinutesAgo": "อัปเดตเมื่อ {minutes} นาทีที่แล้ว · บันทึกฉบับเต็มเมื่อจบ",
+    "episodeNotesUnavailable": "บันทึกสดไม่ได้อัปเดต โปรดดูข้อความถอดเสียงไปก่อน",
+    "episodeCaptureFor": "กำลังบันทึก · {duration}",
+    "episodePrevious": "ตอนก่อนหน้า",
+    "captureChunksPending": "ช่วงเสียงที่รอดำเนินการ: {pending}",
+    "episodeOpenPrevious": "เปิดตอนก่อนหน้า",
     "episodeNotesSoon": "บันทึกจะแสดงหลังจากพูดคุยไปสองสามนาทีแรก",
     "episodeOpenAll": "เปิดทั้งหมด",
     "episodeWrapUpNow": "สรุปตอนนี้",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "ในเบื้องหลัง",
     "retentionOfferAccept": "อยู่ต่อพร้อมส่วนลด {percent}%",
     "retentionOfferBody": "อยู่ต่อและจ่ายเดือนละ {price} ใน {months} เดือนถัดไป",
-    "retentionOfferApplied": "เรียบร้อย ส่วนลด {percent}% ใน {months} เดือนถัดไป"
+    "retentionOfferApplied": "เรียบร้อย ส่วนลด {percent}% ใน {months} เดือนถัดไป",
+    "othersSpeakerLabel": "คนอื่น ๆ"
 }

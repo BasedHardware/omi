@@ -21,6 +21,7 @@
         "scripts/chat/stream_test.py",
         "scripts/chat_first_materialization_drop_rate.py",
         "scripts/check_module_stub_pollution.py",
+        "scripts/check_sync_staging_lifecycle.py",
         "scripts/check_workflow_contracts.py",
         "scripts/cutover_evidence_readiness.py",
         "scripts/deploy_status_report.py",

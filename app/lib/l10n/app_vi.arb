@@ -3503,7 +3503,6 @@
     "captureStarting": "Đang bắt đầu…",
     "capturePhoneStorageFull": "Bộ nhớ điện thoại đầy",
     "captureStorageAlmostFull": "Bộ nhớ gần đầy",
-    "capturePendantDisconnectedDetail": "Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.",
     "participantsSummaryUncounted": "{name} và những người khác",
     "deviceOnboardingVoiceReplyTitle": "Nghe câu trả lời của Omi",
     "deviceOnboardingVoiceReplySample": "Tôi hiểu rồi. Cuộc họp tiếp theo của bạn bắt đầu sau hai mươi phút nữa.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "Âm thanh không khả dụng",
     "playbackAudioLoadFailed": "Không thể tải âm thanh",
     "playbackAudioNetworkFailed": "Kiểm tra kết nối",
-    "capturePendantDisconnectedShort": "Omi sẽ tự kết nối lại",
     "forYou": "Dành Cho Bạn",
     "stopThese": "Dừng Loại Này",
     "dismiss": "Ẩn",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "Cho đến giờ",
     "episodeUpdatedJustNow": "Vừa cập nhật · ghi chú đầy đủ khi kết thúc",
     "episodeUpdatedMinutesAgo": "Cập nhật {minutes} phút trước · ghi chú đầy đủ khi kết thúc",
+    "episodeNotesUnavailable": "Ghi chú trực tiếp chưa cập nhật. Tạm thời hãy xem bản chép lời.",
+    "episodeCaptureFor": "Đang ghi âm · {duration}",
+    "episodePrevious": "Phiên trước",
+    "captureChunksPending": "Đoạn đang chờ: {pending}",
+    "episodeOpenPrevious": "Mở phiên trước",
     "episodeNotesSoon": "Ghi chú xuất hiện sau vài phút đầu trò chuyện.",
     "episodeOpenAll": "Mở tất cả",
     "episodeWrapUpNow": "Kết thúc ngay",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "Trong nền",
     "retentionOfferAccept": "Ở lại với ưu đãi giảm {percent}%",
     "retentionOfferBody": "Ở lại và chỉ trả {price} mỗi tháng trong {months} tháng tới.",
-    "retentionOfferApplied": "Xong. Giảm {percent}% trong {months} tháng tới."
+    "retentionOfferApplied": "Xong. Giảm {percent}% trong {months} tháng tới.",
+    "othersSpeakerLabel": "Những người khác"
 }

@@ -3538,7 +3538,6 @@
     "captureStarting": "Iniciando…",
     "capturePhoneStorageFull": "Armazenamento do telefone cheio",
     "captureStorageAlmostFull": "Armazenamento quase cheio",
-    "capturePendantDisconnectedDetail": "Seu pendente perdeu a conexão com este telefone. O Omi se reconecta sozinho quando o pendente estiver ligado e por perto. Tudo o que foi gravado antes está seguro.",
     "participantsSummaryUncounted": "{name} e outros",
     "deviceOnboardingVoiceReplyTitle": "Ouça as respostas do Omi",
     "deviceOnboardingVoiceReplySample": "Entendido. Sua próxima reunião começa em vinte minutos.",
@@ -3816,7 +3815,6 @@
     "playbackAudioUnavailable": "Áudio indisponível",
     "playbackAudioLoadFailed": "Não foi possível carregar o áudio",
     "playbackAudioNetworkFailed": "Verifique a ligação",
-    "capturePendantDisconnectedShort": "O Omi se reconecta sozinho",
     "forYou": "Para você",
     "stopThese": "Parar estes",
     "dismiss": "Dispensar",
@@ -4425,6 +4423,11 @@
     "episodeSoFar": "Até agora",
     "episodeUpdatedJustNow": "Atualizado agora · notas completas no final",
     "episodeUpdatedMinutesAgo": "Atualizado há {minutes} min · notas completas no final",
+    "episodeNotesUnavailable": "As notas em direto não estão a atualizar. Consulte a transcrição por agora.",
+    "episodeCaptureFor": "A gravar · {duration}",
+    "episodePrevious": "Episódio anterior",
+    "captureChunksPending": "Fragmentos pendentes: {pending}",
+    "episodeOpenPrevious": "Abrir episódio anterior",
     "episodeNotesSoon": "As notas aparecem após os primeiros minutos de conversa.",
     "episodeOpenAll": "Abrir Tudo",
     "episodeWrapUpNow": "Concluir Agora",
@@ -4460,5 +4463,6 @@
     "recapInTheBackground": "Em segundo plano",
     "retentionOfferAccept": "Fique com {percent}% de desconto",
     "retentionOfferBody": "Fique e pague {price} por mês nos próximos {months} meses.",
-    "retentionOfferApplied": "Pronto. {percent}% de desconto nos próximos {months} meses."
+    "retentionOfferApplied": "Pronto. {percent}% de desconto nos próximos {months} meses.",
+    "othersSpeakerLabel": "Outros"
 }

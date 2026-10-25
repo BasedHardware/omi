@@ -185,7 +185,7 @@ def test_speaker_map_keeps_scoped_hard_identity_evidence(monkeypatch):
     )
 
     # Still the plain cluster -> name mapping every existing caller reads.
-    assert speaker_map == {0: 'David', 1: 'Sarah Chen', 2: 'Lee'}
+    assert speaker_map == {'c0': 'David', 'c1': 'Sarah Chen', 'c2': 'Lee'}
     assert speaker_map.owner_name == 'David'
     assert [
         (cluster.speaker_id, cluster.scope, cluster.owner, cluster.names, cluster.speech_seconds, cluster.words)
@@ -205,8 +205,8 @@ def test_speaker_map_owner_name_is_the_real_profile_name_only(monkeypatch):
         'uid-1', _three_party_conversation(), _people()
     )
 
-    # The rendered map keeps its 'User' label; the owner line needs a real name.
-    assert speaker_map[0] == 'User'
+    # The rendered map keeps its 'You' label; the owner line needs a real name.
+    assert speaker_map['c0'] == 'You'
     assert speaker_map.owner_name is None
 
 
@@ -262,7 +262,7 @@ def test_unresolved_and_owner_only_conversations_have_no_title_people(monkeypatc
 
 def test_reused_speaker_id_bound_to_different_people_names_nobody(monkeypatch):
     # Id 1 is Lee (who only said hi) in source A and Sarah (who carried the talk) in
-    # source B. ``spk 1 Lee`` would credit Sarah's words to Lee, so name nobody.
+    # source B. ``spk c1 Lee`` would credit Sarah's words to Lee, so name nobody.
     merged = SimpleNamespace(
         transcript_segments=[
             _seg('a1', 'hey so where are we on the budget for next quarter', scope='conv-a'),
@@ -274,7 +274,7 @@ def test_reused_speaker_id_bound_to_different_people_names_nobody(monkeypatch):
 
     prefix = _prefix_for(merged, monkeypatch)
 
-    assert 'spk 1 Lee' in prefix.context  # rendered map bytes are unchanged
+    assert 'spk c1 Lee' in prefix.context  # rendered map bytes are unchanged
     assert prefix.title_people == ()
     assert prefix.owner_names == ('David',)
 
@@ -386,7 +386,7 @@ def test_calendar_guessed_owner_cluster_is_never_a_title_person(monkeypatch):
     )
     structured, _ = _notes(prefix, monkeypatch, title='Weekly plan')
 
-    assert 'spk 0 David Miller' in prefix.context
+    assert 'spk c0 David Miller' in prefix.context
     assert prefix.title_people == ('Bob',)
     assert structured.title == 'Bob: Weekly plan'
 
@@ -617,7 +617,7 @@ def test_calendar_guessed_owner_split_cluster_is_never_a_title_person(monkeypatc
         conversation, monkeypatch, people=[_person('p-bob', 'Bob')], calendar_context=_calendar('David Miller', 'Bob')
     )
 
-    assert 'spk 2 David Miller' in prefix.context
+    assert 'spk c2 David Miller' in prefix.context
     assert prefix.title_people == ('Bob',)
     assert prefix.owner_names == ('David',)
 

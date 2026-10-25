@@ -57,10 +57,18 @@ one capture window's evidence.
    `utils/conversations/finalizer.py` calls `service.on_conversation_finalized`
    (bounded, fail-open, after `complete_finalization_fanout`). The synchronous
    `POST /v1/conversations` route runs the same hook off the request path
-   (`finalize.schedule_after_finalization`). The hook:
+   (`finalize.schedule_after_finalization`). The sync lane runs it too, off its
+   own lane, after WAL processing persists the conversation
+   (`ProcessingTrigger.SYNC_UPDATE`). The hook:
    - It applies trailing text the live stream never delivered (dedupe by the
      per-conversation applied offset), to the conversation's own episode even
      when that one has closed.
+   - A sync-finalized conversation that never attached (no realtime stream
+     carried it) joins the live episode covering its span first, as a parallel
+     capture: a member whose text the live stream already fed, so no moment and
+     no reconcile. It never closes the live episode, never opens one, and a
+     closed covering episode stays closed; a discarded conversation never
+     joins.
    - It repoints a smart-merge donor to its survivor.
    - It reconciles the provisional items heard in that conversation against the
      tasks its normal processing saved: each becomes `kept` (with the task id)

@@ -64,6 +64,7 @@ from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.observability.listen_close import CLOSE_FRAME_DRAIN_SECONDS, note_ws_close, record_listen_ws_close
 from utils.observability.listen_loop import ensure_loop_lag_probe
+from utils.observability.live_speaker_ordinals import LiveSpeakerOrdinalTracker, record_live_speaker_ordinals
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
     LiveSTTAttempt,
@@ -223,6 +224,7 @@ class ListenSessionRuntime:
         self.transcripts: Any = None
         self.conversations: Any = None
         self.parity_capture = ListenParityCapture(None)
+        self.speaker_ordinal_tracker = LiveSpeakerOrdinalTracker()
 
     def _build_components(self) -> None:
         channels = build_channel_config(self.request.source or 'phone_call') if self.is_multi_channel else []
@@ -1069,6 +1071,7 @@ class ListenSessionRuntime:
                 get_byok_keys=get_byok_keys,
                 on_conversation_processed=self.conversations.on_conversation_processed,
                 wait_for_event=wait_for_event,
+                ensure_audio_durable=self.receiver.raw_archive.ensure_durable,
             ),
         )
         self.pusher_close = session.close
@@ -1446,6 +1449,9 @@ class ListenSessionRuntime:
             await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
         if not owner_persistence_blocked:
             await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
+        # After the transcript loop drained and before the matcher's maps clear:
+        # the ordinal ledger needs both the final segments and final naming.
+        record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()

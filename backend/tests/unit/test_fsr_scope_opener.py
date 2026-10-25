@@ -119,7 +119,7 @@ async def test_task_attempt_two_scans_read_once_only_in_enabled_scope(monkeypatc
         attempt.effects['_download_staged_files'].assert_called_once_with(['staged/audio'], bounded_backfill=True)
     else:
         attempt.effects['_download_staged_files'].assert_called_once_with(['staged/audio'])
-    attempt.cleanup.assert_awaited_once_with(['staged/audio'])
+    attempt.cleanup.assert_awaited_once_with(['staged/audio'], uid=uid, content_id=None, job_id='job')
     assert attempt.effects['release_backfill_slot'].call_count == (1 if lane == 'backfill' else 0)
     assert memories._historical_scan_memo.get() is None
 

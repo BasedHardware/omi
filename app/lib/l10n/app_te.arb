@@ -10926,7 +10926,6 @@
     "captureStarting": "ప్రారంభమవుతోంది…",
     "capturePhoneStorageFull": "ఫోన్ స్టోరేజ్ నిండింది",
     "captureStorageAlmostFull": "స్టోరేజ్ దాదాపు నిండింది",
-    "capturePendantDisconnectedDetail": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
     "participantsSummaryUncounted": "{name} మరియు ఇతరులు",
     "deviceOnboardingVoiceReplyTitle": "Omi సమాధానాలను వినండి",
     "deviceOnboardingVoiceReplySample": "అర్థమైంది. మీ తదుపరి సమావేశం ఇరవై నిమిషాల్లో ప్రారంభమవుతుంది.",
@@ -11204,7 +11203,6 @@
     "playbackAudioUnavailable": "ఆడియో అందుబాటులో లేదు",
     "playbackAudioLoadFailed": "ఆడియో లోడ్ చేయలేకపోయింది",
     "playbackAudioNetworkFailed": "కనెక్షన్‌ను తనిఖీ చేయండి",
-    "capturePendantDisconnectedShort": "Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది",
     "forYou": "మీ కోసం",
     "stopThese": "వీటిని ఆపండి",
     "dismiss": "దాచు",
@@ -11816,6 +11814,11 @@
     "episodeSoFar": "ఇప్పటివరకు",
     "episodeUpdatedJustNow": "ఇప్పుడే నవీకరించబడింది · ముగిసినప్పుడు పూర్తి నోట్స్",
     "episodeUpdatedMinutesAgo": "{minutes} నిమి. క్రితం నవీకరించబడింది · ముగిసినప్పుడు పూర్తి నోట్స్",
+    "episodeNotesUnavailable": "ప్రస్తుత గమనికలు నవీకరించబడటం లేదు. ప్రస్తుతానికి లిప్యంతరీకరణను చూడండి.",
+    "episodeCaptureFor": "రికార్డింగ్ · {duration}",
+    "episodePrevious": "మునుపటి ఎపిసోడ్",
+    "captureChunksPending": "పెండింగ్‌లో ఉన్న భాగాలు: {pending}",
+    "episodeOpenPrevious": "మునుపటి ఎపిసోడ్‌ను తెరవండి",
     "episodeNotesSoon": "మాటల మొదటి కొన్ని నిమిషాల తర్వాత నోట్స్ కనిపిస్తాయి.",
     "episodeOpenAll": "అన్నీ తెరవండి",
     "episodeWrapUpNow": "ఇప్పుడే ముగించు",
@@ -11851,5 +11854,6 @@
     "recapInTheBackground": "నేపథ్యంలో",
     "retentionOfferAccept": "{percent}% తగ్గింపుతో కొనసాగండి",
     "retentionOfferBody": "కొనసాగండి, నెలకు {price} చెల్లించండి, తదుపరి {months} నెలలు.",
-    "retentionOfferApplied": "పూర్తైంది. {percent}% తగ్గింపు, తదుపరి {months} నెలలు."
+    "retentionOfferApplied": "పూర్తైంది. {percent}% తగ్గింపు, తదుపరి {months} నెలలు.",
+    "othersSpeakerLabel": "ఇతరులు"
 }

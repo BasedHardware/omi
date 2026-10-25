@@ -10926,7 +10926,6 @@
     "captureStarting": "தொடங்குகிறது…",
     "capturePhoneStorageFull": "ஃபோன் சேமிப்பகம் நிரம்பியது",
     "captureStorageAlmostFull": "சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது",
-    "capturePendantDisconnectedDetail": "உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.",
     "participantsSummaryUncounted": "{name} மற்றும் மற்றவர்கள்",
     "deviceOnboardingVoiceReplyTitle": "Omi-யின் பதில்களைக் கேளுங்கள்",
     "deviceOnboardingVoiceReplySample": "புரிந்தது. உங்கள் அடுத்த சந்திப்பு இருபது நிமிடங்களில் தொடங்கும்.",
@@ -11204,7 +11203,6 @@
     "playbackAudioUnavailable": "ஆடியோ கிடைக்கவில்லை",
     "playbackAudioLoadFailed": "ஆடியோவை ஏற்ற முடியவில்லை",
     "playbackAudioNetworkFailed": "இணைப்பைச் சரிபார்க்கவும்",
-    "capturePendantDisconnectedShort": "Omi தானாகவே மீண்டும் இணையும்",
     "forYou": "உங்களுக்காக",
     "stopThese": "இவற்றை நிறுத்து",
     "dismiss": "மறை",
@@ -11816,6 +11814,11 @@
     "episodeSoFar": "இதுவரை",
     "episodeUpdatedJustNow": "இப்போது புதுப்பிக்கப்பட்டது · முடிவில் முழு குறிப்புகள்",
     "episodeUpdatedMinutesAgo": "{minutes} நிமி. முன் புதுப்பிக்கப்பட்டது · முடிவில் முழு குறிப்புகள்",
+    "episodeNotesUnavailable": "நடப்பு குறிப்புகள் புதுப்பிக்கப்படவில்லை. இப்போதைக்கு உரைப்பதிவைப் பார்க்கவும்.",
+    "episodeCaptureFor": "பதிவு செய்கிறது · {duration}",
+    "episodePrevious": "முந்தைய பகுதி",
+    "captureChunksPending": "நிலுவையில் உள்ள துண்டுகள்: {pending}",
+    "episodeOpenPrevious": "முந்தைய பகுதியைத் திறக்கவும்",
     "episodeNotesSoon": "பேச்சின் முதல் சில நிமிடங்களுக்குப் பிறகு குறிப்புகள் தோன்றும்.",
     "episodeOpenAll": "அனைத்தையும் திற",
     "episodeWrapUpNow": "இப்போதே முடி",
@@ -11851,5 +11854,6 @@
     "recapInTheBackground": "பின்னணியில்",
     "retentionOfferAccept": "{percent}% தள்ளுபடியுடன் தொடருங்கள்",
     "retentionOfferBody": "தொடருங்கள், மாதம் {price} செலுத்துங்கள், அடுத்த {months} மாதங்களுக்கு.",
-    "retentionOfferApplied": "முடிந்தது. {percent}% தள்ளுபடி, அடுத்த {months} மாதங்களுக்கு."
+    "retentionOfferApplied": "முடிந்தது. {percent}% தள்ளுபடி, அடுத்த {months} மாதங்களுக்கு.",
+    "othersSpeakerLabel": "மற்றவர்கள்"
 }

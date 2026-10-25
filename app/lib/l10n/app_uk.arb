@@ -3503,7 +3503,6 @@
     "captureStarting": "Запуск…",
     "capturePhoneStorageFull": "Пам’ять телефона заповнена",
     "captureStorageAlmostFull": "Пам’ять майже заповнена",
-    "capturePendantDisconnectedDetail": "Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.",
     "participantsSummaryUncounted": "{name} та інші",
     "deviceOnboardingVoiceReplyTitle": "Слухайте відповіді Omi",
     "deviceOnboardingVoiceReplySample": "Зрозуміло. Ваша наступна зустріч почнеться за двадцять хвилин.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "Аудіо недоступне",
     "playbackAudioLoadFailed": "Не вдалося завантажити аудіо",
     "playbackAudioNetworkFailed": "Перевірте з'єднання",
-    "capturePendantDisconnectedShort": "Omi перепідключиться сам",
     "forYou": "Для вас",
     "stopThese": "Вимкнути такі",
     "dismiss": "Приховати",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "Поки що",
     "episodeUpdatedJustNow": "Оновлено щойно · повні нотатки наприкінці",
     "episodeUpdatedMinutesAgo": "Оновлено {minutes} хв тому · повні нотатки наприкінці",
+    "episodeNotesUnavailable": "Поточні нотатки не оновлюються. Поки перегляньте розшифровку.",
+    "episodeCaptureFor": "Запис · {duration}",
+    "episodePrevious": "Попередній епізод",
+    "captureChunksPending": "Фрагменти в очікуванні: {pending}",
+    "episodeOpenPrevious": "Відкрити попередній епізод",
     "episodeNotesSoon": "Нотатки з’являться після перших хвилин розмови.",
     "episodeOpenAll": "Відкрити все",
     "episodeWrapUpNow": "Завершити зараз",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "У фоні",
     "retentionOfferAccept": "Залишитися зі знижкою {percent}%",
     "retentionOfferBody": "Залишайтеся і платіть {price} на місяць наступні {months} місяці.",
-    "retentionOfferApplied": "Готово. Знижка {percent}% на наступні {months} місяці."
+    "retentionOfferApplied": "Готово. Знижка {percent}% на наступні {months} місяці.",
+    "othersSpeakerLabel": "Інші"
 }

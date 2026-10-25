@@ -3503,7 +3503,6 @@
     "captureStarting": "Έναρξη…",
     "capturePhoneStorageFull": "Ο χώρος του τηλεφώνου γέμισε",
     "captureStorageAlmostFull": "Ο χώρος σχεδόν γέμισε",
-    "capturePendantDisconnectedDetail": "Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.",
     "participantsSummaryUncounted": "{name} και άλλοι",
     "deviceOnboardingVoiceReplyTitle": "Ακούστε τις απαντήσεις του Omi",
     "deviceOnboardingVoiceReplySample": "Έγινε. Η επόμενη συνάντησή σας ξεκινά σε είκοσι λεπτά.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "Ο ήχος δεν είναι διαθέσιμος",
     "playbackAudioLoadFailed": "Δεν ήταν δυνατή η φόρτωση του ήχου",
     "playbackAudioNetworkFailed": "Ελέγξτε τη σύνδεση",
-    "capturePendantDisconnectedShort": "Το Omi θα επανασυνδεθεί μόνο του",
     "forYou": "Για εσάς",
     "stopThese": "Διακοπή αυτών",
     "dismiss": "Απόρριψη",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "Μέχρι τώρα",
     "episodeUpdatedJustNow": "Ενημερώθηκε μόλις τώρα · πλήρεις σημειώσεις στο τέλος",
     "episodeUpdatedMinutesAgo": "Ενημερώθηκε πριν από {minutes} λεπ. · πλήρεις σημειώσεις στο τέλος",
+    "episodeNotesUnavailable": "Οι τρέχουσες σημειώσεις δεν ενημερώνονται. Δείτε προς το παρόν την απομαγνητοφώνηση.",
+    "episodeCaptureFor": "Εγγραφή · {duration}",
+    "episodePrevious": "Προηγούμενο επεισόδιο",
+    "captureChunksPending": "Τμήματα σε εκκρεμότητα: {pending}",
+    "episodeOpenPrevious": "Άνοιγμα προηγούμενου επεισοδίου",
     "episodeNotesSoon": "Οι σημειώσεις εμφανίζονται μετά τα πρώτα λεπτά συζήτησης.",
     "episodeOpenAll": "Άνοιγμα όλων",
     "episodeWrapUpNow": "Ολοκλήρωση τώρα",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "Στο παρασκήνιο",
     "retentionOfferAccept": "Μείνε με {percent}% έκπτωση",
     "retentionOfferBody": "Μείνε και πλήρωνε {price} τον μήνα για τους επόμενους {months} μήνες.",
-    "retentionOfferApplied": "Έγινε. {percent}% έκπτωση για τους επόμενους {months} μήνες."
+    "retentionOfferApplied": "Έγινε. {percent}% έκπτωση για τους επόμενους {months} μήνες.",
+    "othersSpeakerLabel": "Άλλοι"
 }

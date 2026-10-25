@@ -10926,7 +10926,6 @@
     "captureStarting": "ಪ್ರಾರಂಭವಾಗುತ್ತಿದೆ…",
     "capturePhoneStorageFull": "ಫೋನ್ ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ",
     "captureStorageAlmostFull": "ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ತುಂಬಿದೆ",
-    "capturePendantDisconnectedDetail": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ. ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.",
     "participantsSummaryUncounted": "{name} ಮತ್ತು ಇತರರು",
     "deviceOnboardingVoiceReplyTitle": "Omi ಉತ್ತರಗಳನ್ನು ಕೇಳಿ",
     "deviceOnboardingVoiceReplySample": "ಅರ್ಥವಾಯಿತು. ನಿಮ್ಮ ಮುಂದಿನ ಸಭೆ ಇಪ್ಪತ್ತು ನಿಮಿಷಗಳಲ್ಲಿ ಪ್ರಾರಂಭವಾಗುತ್ತದೆ.",
@@ -11204,7 +11203,6 @@
     "playbackAudioUnavailable": "ಆಡಿಯೋ ಲಭ್ಯವಿಲ್ಲ",
     "playbackAudioLoadFailed": "ಆಡಿಯೋ ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ",
     "playbackAudioNetworkFailed": "ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ",
-    "capturePendantDisconnectedShort": "Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ",
     "forYou": "ನಿಮಗಾಗಿ",
     "stopThese": "ಇವುಗಳನ್ನು ನಿಲ್ಲಿಸಿ",
     "dismiss": "ಮರೆಮಾಡಿ",
@@ -11816,6 +11814,11 @@
     "episodeSoFar": "ಇಲ್ಲಿಯವರೆಗೆ",
     "episodeUpdatedJustNow": "ಈಗಷ್ಟೇ ನವೀಕರಿಸಲಾಗಿದೆ · ಮುಗಿದಾಗ ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು",
     "episodeUpdatedMinutesAgo": "{minutes} ನಿಮಿಷ ಹಿಂದೆ ನವೀಕರಿಸಲಾಗಿದೆ · ಮುಗಿದಾಗ ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು",
+    "episodeNotesUnavailable": "ಚಾಲ್ತಿಯಲ್ಲಿರುವ ಟಿಪ್ಪಣಿಗಳು ನವೀಕರಿಸುತ್ತಿಲ್ಲ. ಸದ್ಯಕ್ಕೆ ಪ್ರತಿಲೇಖನವನ್ನು ನೋಡಿ.",
+    "episodeCaptureFor": "ರೆಕಾರ್ಡಿಂಗ್ · {duration}",
+    "episodePrevious": "ಹಿಂದಿನ ಸಂಚಿಕೆ",
+    "captureChunksPending": "ಬಾಕಿ ಇರುವ ತುಣುಕುಗಳು: {pending}",
+    "episodeOpenPrevious": "ಹಿಂದಿನ ಸಂಚಿಕೆಯನ್ನು ತೆರೆಯಿರಿ",
     "episodeNotesSoon": "ಮಾತಿನ ಮೊದಲ ಕೆಲವು ನಿಮಿಷಗಳ ನಂತರ ಟಿಪ್ಪಣಿಗಳು ಕಾಣಿಸುತ್ತವೆ.",
     "episodeOpenAll": "ಎಲ್ಲವನ್ನೂ ತೆರೆಯಿರಿ",
     "episodeWrapUpNow": "ಈಗ ಮುಗಿಸಿ",
@@ -11851,5 +11854,6 @@
     "recapInTheBackground": "ಹಿನ್ನೆಲೆಯಲ್ಲಿ",
     "retentionOfferAccept": "{percent}% ರಿಯಾಯಿತಿಯೊಂದಿಗೆ ಮುಂದುವರಿಸಿ",
     "retentionOfferBody": "ಮುಂದುವರಿಸಿ ಮತ್ತು ತಿಂಗಳಿಗೆ {price} ಪಾವತಿಸಿ, ಮುಂದಿನ {months} ತಿಂಗಳು.",
-    "retentionOfferApplied": "ಆಯಿತು. {percent}% ರಿಯಾಯಿತಿ, ಮುಂದಿನ {months} ತಿಂಗಳು."
+    "retentionOfferApplied": "ಆಯಿತು. {percent}% ರಿಯಾಯಿತಿ, ಮುಂದಿನ {months} ತಿಂಗಳು.",
+    "othersSpeakerLabel": "ಇತರರು"
 }

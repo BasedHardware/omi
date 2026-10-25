@@ -604,6 +604,18 @@ def test_dispatch_unavailable_moves_due_index_forward(store, monkeypatch):
         quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
     assert _job(store)['dispatch_generation'] == 2
     assert _job(store)['reconcile_after_at'] > checks._now()
+    assert store.rows[ROW]['status'] == 'in_progress'
+    assert 'finalization_job_id' not in store.rows[ROW]
+    # The shared replay successor recovers once queue bindings return.
+    monkeypatch.setattr(quiet, 'is_listen_finalization_dispatch_configured', lambda: True)
+    _advance(monkeypatch, 422)
+    job_id = checks.quiet_check_id('synthetic', 'old')
+    assert quiet.run(job_id, 2, firestore_client=store) == 'queued'
+    assert store.rows[ROW]['status'] == 'processing'
+    assert store.rows[ROW]['finalization_revision'] == 1
+    assert quiet.run(job_id, 2, firestore_client=store) == 'stale'
+    assert quiet.run(job_id, 3, firestore_client=store) == 'done'
+    assert store.rows[ROW]['finalization_revision'] == 1
 
 
 def test_stale_delivery_preserves_fresh_successor(store, monkeypatch):

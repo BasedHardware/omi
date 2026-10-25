@@ -3503,7 +3503,6 @@
     "captureStarting": "S'està iniciant…",
     "capturePhoneStorageFull": "Emmagatzematge del telèfon ple",
     "captureStorageAlmostFull": "Emmagatzematge gairebé ple",
-    "capturePendantDisconnectedDetail": "El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s'ha gravat abans és segur.",
     "participantsSummaryUncounted": "{name} i altres",
     "deviceOnboardingVoiceReplyTitle": "Escolta les respostes d'Omi",
     "deviceOnboardingVoiceReplySample": "Entesos. La teva pròxima reunió comença d'aquí a vint minuts.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "Àudio no disponible",
     "playbackAudioLoadFailed": "No s'ha pogut carregar l'àudio",
     "playbackAudioNetworkFailed": "Comprova la connexió",
-    "capturePendantDisconnectedShort": "Omi es tornarà a connectar sol",
     "forYou": "Per a tu",
     "stopThese": "Atura aquests",
     "dismiss": "Descarta",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "Fins ara",
     "episodeUpdatedJustNow": "Actualitzat ara mateix · notes completes en acabar",
     "episodeUpdatedMinutesAgo": "Actualitzat fa {minutes} min · notes completes en acabar",
+    "episodeNotesUnavailable": "Les notes en directe no s’actualitzen. De moment, consulta la transcripció.",
+    "episodeCaptureFor": "Enregistrant · {duration}",
+    "episodePrevious": "Episodi anterior",
+    "captureChunksPending": "Fragments pendents: {pending}",
+    "episodeOpenPrevious": "Obre l’episodi anterior",
     "episodeNotesSoon": "Les notes apareixen després dels primers minuts de conversa.",
     "episodeOpenAll": "Obre-ho tot",
     "episodeWrapUpNow": "Tanca ara",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "En segon pla",
     "retentionOfferAccept": "Queda't amb un {percent}% de descompte",
     "retentionOfferBody": "Queda't i paga {price} al mes durant els propers {months} mesos.",
-    "retentionOfferApplied": "Fet. {percent}% de descompte els propers {months} mesos."
+    "retentionOfferApplied": "Fet. {percent}% de descompte els propers {months} mesos.",
+    "othersSpeakerLabel": "Altres"
 }

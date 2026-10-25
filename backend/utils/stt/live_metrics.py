@@ -85,6 +85,9 @@ WINDOW_PRESSURE_REFUSAL = Counter(
     'omi_stt_window_batch_pressure_refusals_total', 'Window batch pressure refusals', ['reason']
 )
 WINDOW_POSTS = Counter('omi_stt_window_posts_total', 'Window POST outcomes', ['outcome'])
+WINDOW_REPLICA_ATTEMPTS = Counter(
+    'omi_stt_window_replica_attempts_total', 'Direct GPU pod POST attempts with bounded causes', ['outcome']
+)
 WINDOW_LATENCY = Histogram('omi_stt_window_post_seconds', 'Window POST latency', buckets=(0.1, 0.5, 1, 2, 4, 8, 15))
 WINDOW_FIRST_TEXT = Histogram(
     'omi_stt_window_first_text_seconds',

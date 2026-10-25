@@ -3538,7 +3538,6 @@
     "captureStarting": "Запуск…",
     "capturePhoneStorageFull": "Память телефона заполнена",
     "captureStorageAlmostFull": "Память почти заполнена",
-    "capturePendantDisconnectedDetail": "Кулон потерял связь с этим телефоном. Omi переподключится сам, когда кулон будет включён и рядом. Всё, что записано до этого, сохранено.",
     "participantsSummaryUncounted": "{name} и другие",
     "deviceOnboardingVoiceReplyTitle": "Слушайте ответы Omi",
     "deviceOnboardingVoiceReplySample": "Понял. Ваша следующая встреча начнётся через двадцать минут.",
@@ -3816,7 +3815,6 @@
     "playbackAudioUnavailable": "Аудио недоступно",
     "playbackAudioLoadFailed": "Не удалось загрузить аудио",
     "playbackAudioNetworkFailed": "Проверьте соединение",
-    "capturePendantDisconnectedShort": "Omi переподключится сам",
     "forYou": "Для вас",
     "stopThese": "Отключить такие",
     "dismiss": "Скрыть",
@@ -4425,6 +4423,11 @@
     "episodeSoFar": "Пока что",
     "episodeUpdatedJustNow": "Обновлено только что · полные заметки в конце",
     "episodeUpdatedMinutesAgo": "Обновлено {minutes} мин назад · полные заметки в конце",
+    "episodeNotesUnavailable": "Текущие заметки не обновляются. Пока просмотрите расшифровку.",
+    "episodeCaptureFor": "Запись · {duration}",
+    "episodePrevious": "Предыдущий эпизод",
+    "captureChunksPending": "Ожидающие фрагменты: {pending}",
+    "episodeOpenPrevious": "Открыть предыдущий эпизод",
     "episodeNotesSoon": "Заметки появятся после первых минут разговора.",
     "episodeOpenAll": "Открыть всё",
     "episodeWrapUpNow": "Завершить сейчас",
@@ -4460,5 +4463,6 @@
     "recapInTheBackground": "На фоне",
     "retentionOfferAccept": "Остаться со скидкой {percent}%",
     "retentionOfferBody": "Оставайтесь и платите {price} в месяц следующие {months} месяца.",
-    "retentionOfferApplied": "Готово. Скидка {percent}% на следующие {months} месяца."
+    "retentionOfferApplied": "Готово. Скидка {percent}% на следующие {months} месяца.",
+    "othersSpeakerLabel": "Другие"
 }

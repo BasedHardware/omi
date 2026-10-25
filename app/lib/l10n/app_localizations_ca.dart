@@ -11180,13 +11180,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get captureStorageAlmostFull => 'Emmagatzematge gairebé ple';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s\'ha gravat abans és segur.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi es tornarà a connectar sol';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name i altres';
   }
@@ -14494,6 +14487,25 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Les notes en directe no s’actualitzen. De moment, consulta la transcripció.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Enregistrant · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episodi anterior';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Fragments pendents: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Obre l’episodi anterior';
+
+  @override
   String get episodeNotesSoon => 'Les notes apareixen després dels primers minuts de conversa.';
 
   @override
@@ -14631,4 +14643,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Fet. $percent% de descompte els propers $months mesos.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Altres';
 }

@@ -10926,7 +10926,6 @@
     "captureStarting": "Pokretanje…",
     "capturePhoneStorageFull": "Pohrana telefona je puna",
     "captureStorageAlmostFull": "Pohrana je gotovo puna",
-    "capturePendantDisconnectedDetail": "Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovno povezati kad je privjesak uključen i u blizini. Sve dosad snimljeno je sigurno.",
     "participantsSummaryUncounted": "{name} i drugi",
     "deviceOnboardingVoiceReplyTitle": "Poslušajte Omijeve odgovore",
     "deviceOnboardingVoiceReplySample": "U redu. Vaš sljedeći sastanak počinje za dvadeset minuta.",
@@ -11204,7 +11203,6 @@
     "playbackAudioUnavailable": "Zvuk nije dostupan",
     "playbackAudioLoadFailed": "Zvuk nije moguće učitati",
     "playbackAudioNetworkFailed": "Provjerite vezu",
-    "capturePendantDisconnectedShort": "Omi će se sam ponovno povezati",
     "forYou": "Za vas",
     "stopThese": "Zaustavi ovo",
     "dismiss": "Sakrij",
@@ -11816,6 +11814,11 @@
     "episodeSoFar": "Dosad",
     "episodeUpdatedJustNow": "Ažurirano upravo · potpune bilješke na kraju",
     "episodeUpdatedMinutesAgo": "Ažurirano prije {minutes} min · potpune bilješke na kraju",
+    "episodeNotesUnavailable": "Bilješke se ne ažuriraju. Zasad pogledajte transkript.",
+    "episodeCaptureFor": "Snimanje · {duration}",
+    "episodePrevious": "Prethodna epizoda",
+    "captureChunksPending": "Dijelovi na čekanju: {pending}",
+    "episodeOpenPrevious": "Otvori prethodnu epizodu",
     "episodeNotesSoon": "Bilješke se pojavljuju nakon prvih minuta razgovora.",
     "episodeOpenAll": "Otvori sve",
     "episodeWrapUpNow": "Završi sada",
@@ -11851,5 +11854,6 @@
     "recapInTheBackground": "U pozadini",
     "retentionOfferAccept": "Ostani uz {percent}% popusta",
     "retentionOfferBody": "Ostani i plaćaj {price} mjesečno sljedećih {months} mjeseca.",
-    "retentionOfferApplied": "Gotovo. {percent}% popusta sljedećih {months} mjeseca."
+    "retentionOfferApplied": "Gotovo. {percent}% popusta sljedećih {months} mjeseca.",
+    "othersSpeakerLabel": "Ostali"
 }

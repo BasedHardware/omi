@@ -1112,7 +1112,9 @@ export interface CaptureEvidenceMetadata {
   clock_epoch?: string | null;
   conflicts?: number | null;
   coverage?: "unknown" | "incomplete" | "mapped" | null;
+  lifetime?: Record<string, unknown> | null;
   origin?: string | null;
+  proof?: string | null;
   reason?: string | null;
   receipts?: Array<Record<string, unknown>> | null;
   runs?: Array<Record<string, unknown>> | null;
@@ -2487,6 +2489,7 @@ export interface Episode {
 export interface EpisodeLiveResponse {
   enabled: boolean;
   episode?: Episode | null;
+  last_closed_episode?: Episode | null;
 }
 
 export interface EpisodeLookupResponse {
@@ -5019,6 +5022,8 @@ export interface SimpleTranscriptSegment {
   id?: string | null;
   original_text?: string | null;
   speaker_id?: number | null;
+  speaker_key?: string | null;
+  speaker_label?: string | null;
   speaker_name?: string | null;
   start: number;
   text: string;
@@ -6247,6 +6252,8 @@ export interface routers__mcp__TranscriptMatchSnippet {
   end_ms?: number | null;
   segment_id?: string | null;
   speaker_id?: number | null;
+  speaker_key?: string | null;
+  speaker_label?: string | null;
   start?: number | null;
   start_ms?: number | null;
   text: string;
@@ -9052,6 +9059,17 @@ export interface OmiApiPaths {
       responses: {
         "200": EpisodeLiveResponse;
         "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/episodes/{episode_id}": {
+    get: {
+      operationId: "get_episode_v1_episodes__episode_id__get";
+      responses: {
+        "200": Episode;
+        "401": void;
+        "404": void;
         "422": HTTPValidationError;
       };
     };
@@ -16184,6 +16202,26 @@ export async function get_live_episode_v1_episodes_live_get(header: { X_Omi_App_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_episode_v1_episodes__episode_id__get(path: { episode_id: string }, header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Episode> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/episodes/${path.episode_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function dismiss_episode_item_v1_episodes__episode_id__items__item_id__dismiss_post(path: { episode_id: string, item_id: string }, header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Episode> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/episodes/${path.episode_id}/items/${path.item_id}/dismiss`;
@@ -18252,7 +18290,7 @@ export async function get_available_plans_endpoint_v1_payments_available_plans_g
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function create_checkout_session_endpoint_v1_payments_checkout_session_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CreateCheckoutRequest, init?: OmiApiClientInit): Promise<PaymentCheckoutSessionResponse> {
+export async function create_checkout_session_endpoint_v1_payments_checkout_session_post(header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CreateCheckoutRequest, init?: OmiApiClientInit): Promise<PaymentCheckoutSessionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/payments/checkout-session`;
   const _search = "";
@@ -18262,8 +18300,8 @@ export async function create_checkout_session_endpoint_v1_payments_checkout_sess
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
@@ -22834,4 +22872,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 525 client methods generated.
+// Total: 526 client methods generated.

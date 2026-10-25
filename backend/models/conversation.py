@@ -33,6 +33,7 @@ from pydantic import field_serializer
 from models.other import Person
 from models.structured import MeetingType, Structured
 from models.transcript_segment import legacy_conversation_segment_id, TranscriptSegment
+from utils.capture_evidence import ledger_bound_incomplete
 
 # Only locally-defined symbols are exported. Use canonical modules for moved types:
 #   models.conversation_enums, models.structured, models.audio_file, etc.
@@ -194,7 +195,9 @@ class SharedStructured(BaseModel):
 
     title: str = ''
     overview: str = ''
-    emoji: str = '🧠'
+    # NEUTRAL_EMOJI (models.conversation_emoji): a shared row that never carried
+    # an emoji shows the neutral one, not the "unset" brain sentinel.
+    emoji: str = '💬'
     category: CategoryEnum = CategoryEnum.other
     sections: List[SharedSection] = Field(default_factory=list)
     action_items: List[SharedActionItem] = Field(default_factory=list)
@@ -443,6 +446,8 @@ class CaptureEvidenceMetadata(BaseModel):
     runs: Optional[List[Dict[str, Any]]] = None
     receipts: Optional[List[Dict[str, Any]]] = None
     conflicts: Optional[int] = None
+    proof: Optional[str] = None
+    lifetime: Optional[Dict[str, Any]] = None
 
 
 class Conversation(BaseModel):
@@ -517,6 +522,11 @@ class Conversation(BaseModel):
             coverage = (
                 evidence.get('coverage') if isinstance(evidence, Mapping) else getattr(evidence, 'coverage', None)
             )
+            if coverage == 'incomplete' and ledger_bound_incomplete(evidence):
+                # Clients render 'incomplete' as lost audio. A live committed
+                # proof whose only incompleteness is evicted ledger runs
+                # observed no loss, so it must not surface as a partial recording.
+                coverage = 'mapped'
             if coverage in ('unknown', 'incomplete', 'mapped'):
                 return {**data, 'capture_coverage': coverage}
         return data

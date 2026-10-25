@@ -6,9 +6,10 @@ for structured notes without asking for an emoji, so the pydantic default
 ``🧠`` was stored on real conversations. This script finds the affected rows
 for one owner — conversations with ``structured.emoji == '🧠'``, not discarded,
 created at or after a given UTC time — and rewrites only ``structured.emoji``
-with the same category fallback the serving path now applies. A row whose
-category has no mapping keeps ``🧠`` (nothing better is derivable) and is left
-untouched, as is everything else on the document.
+with the same category fallback the serving path now applies. Under that
+mapping every category yields a concrete stand-in — ``other`` maps to ``💬`` —
+so each affected row is rewritten, none keeps ``🧠``, and everything else on
+the document is left untouched.
 
 Dry-run is the default and reads only. ``--apply`` writes through a transaction
 that re-checks the stored emoji, so a concurrent reprocess cannot be clobbered.

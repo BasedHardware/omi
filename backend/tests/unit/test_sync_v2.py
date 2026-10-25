@@ -1348,6 +1348,15 @@ def _install_sync_observability_stubs(saved_modules):
         },
     )
     sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=MagicMock())
+
+    # The pipeline schedules the episodes finalize hook at module scope; the
+    # fire-and-forget hook itself is no sync-coordinator concern, so the whole
+    # package stubs like observability above (MagicMock('utils') is not a package).
+    saved_modules.setdefault('utils.episodes', sys.modules.get('utils.episodes'))
+    episodes_pkg = types.ModuleType('utils.episodes')
+    episodes_pkg.__path__ = []  # type: ignore[attr-defined]
+    sys.modules['utils.episodes'] = episodes_pkg
+    install_package_submodule_stubs('utils.episodes', saved_modules)
     return fallback_mod
 
 
@@ -2508,7 +2517,6 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.get_wav_duration = MagicMock(return_value=5.0)
             pipeline.get_timestamp_from_path = lambda path: float(path.rsplit('_', 1)[1][:-4])
             pipeline.get_syncing_file_temporal_signed_url = lambda path: path
-            pipeline.schedule_syncing_temporal_file_deletion = lambda path: None
             pipeline.compute_sync_segment_id = lambda _uid, path: os.path.basename(path)[:-4]
             pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
             pipeline.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)

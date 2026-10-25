@@ -10951,13 +10951,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get captureStorageAlmostFull => '空き容量わずか';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omiは自動で再接続します';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$nameほか';
   }
@@ -14215,6 +14208,25 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'リアルタイムのメモが更新されていません。今は文字起こしをご確認ください。';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return '録音中 · $duration';
+  }
+
+  @override
+  String get episodePrevious => '前のエピソード';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '保留中の音声チャンク: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => '前のエピソードを開く';
+
+  @override
   String get episodeNotesSoon => '会話が数分続くとメモが表示されます。';
 
   @override
@@ -14351,4 +14363,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return '完了しました。$percent%オフが$monthsか月続きます。';
   }
+
+  @override
+  String get othersSpeakerLabel => 'その他';
 }
