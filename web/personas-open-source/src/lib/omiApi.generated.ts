@@ -6273,6 +6273,8 @@ export interface routers__memories__BatchMemoriesResponse {
 }
 
 export interface routers__payment__PricingOption {
+  billing_total?: string | null;
+  currency?: string;
   description?: string | null;
   eyebrow?: string | null;
   id: string;
@@ -18305,7 +18307,7 @@ export async function get_payment_method_status_v1_payment_methods_status_get(he
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_available_plans_endpoint_v1_payments_available_plans_get(header: { X_App_Platform?: string, X_App_Version?: string, authorization?: string, X_Device_Id_Hash?: string }, init?: OmiApiClientInit): Promise<AvailablePlansResponse> {
+export async function get_available_plans_endpoint_v1_payments_available_plans_get(header: { X_App_Platform?: string, X_App_Version?: string, X_Omi_Billing_Currency?: string | null, authorization?: string, X_Device_Id_Hash?: string }, init?: OmiApiClientInit): Promise<AvailablePlansResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/payments/available-plans`;
   const _search = "";
@@ -18316,6 +18318,7 @@ export async function get_available_plans_endpoint_v1_payments_available_plans_g
       ...init?.headers,
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+      ...(header.X_Omi_Billing_Currency !== undefined ? { "X-Omi-Billing-Currency": String(header.X_Omi_Billing_Currency) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
     },
