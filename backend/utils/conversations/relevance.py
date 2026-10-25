@@ -32,7 +32,6 @@ from utils.conversations.relevance_rules import (
     deterministic_tiebreak,
     transcript_word_count,
 )
-from utils.llm.notes_short_clip import below_short_clip_floor
 
 from utils.observability.fallback import record_fallback
 from utils.metrics import record_relevance_scorer_outcome
@@ -268,6 +267,9 @@ def decide_relevance(
 
     # Speech the floor can measure: an empty transcript is not a short clip but a
     # capture scrap, whose calendar retention (SCA-381 evidence) stands unchanged.
+    # Lazy: notes_short_clip pulls the notes/recovery stack, which this leaf module must not import eagerly.
+    from utils.llm.notes_short_clip import below_short_clip_floor
+
     floor_words = sum(transcript_word_count(text) for text in texts)
     short_clip = (
         floor_words > 0
