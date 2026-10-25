@@ -13,9 +13,11 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
-from utils.retrieval.turn_refs import register_record_ref  # noqa: F401 - real pure module before package stubs
-
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from utils.retrieval.turn_refs import register_record_ref  # noqa: E402, F401 - real pure module before package stubs
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
