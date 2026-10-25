@@ -10926,7 +10926,6 @@
     "captureStarting": "شروع ہو رہا ہے…",
     "capturePhoneStorageFull": "فون اسٹوریج بھر گئی",
     "captureStorageAlmostFull": "اسٹوریج تقریباً بھر گئی",
-    "capturePendantDisconnectedDetail": "آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔ پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔",
     "participantsSummaryUncounted": "{name} اور دیگر",
     "deviceOnboardingVoiceReplyTitle": "Omi کے جوابات سنیں",
     "deviceOnboardingVoiceReplySample": "سمجھ گیا۔ آپ کی اگلی میٹنگ بیس منٹ میں شروع ہوگی۔",
@@ -11204,7 +11203,6 @@
     "playbackAudioUnavailable": "آڈیو دستیاب نہیں",
     "playbackAudioLoadFailed": "آڈیو لوڈ نہیں ہو سکا",
     "playbackAudioNetworkFailed": "کنکشن چیک کریں",
-    "capturePendantDisconnectedShort": "Omi خود دوبارہ جڑ جائے گا",
     "forYou": "آپ کے لیے",
     "stopThese": "یہ روکیں",
     "dismiss": "چھپائیں",
@@ -11816,6 +11814,11 @@
     "episodeSoFar": "اب تک",
     "episodeUpdatedJustNow": "ابھی اپ ڈیٹ ہوا · آخر میں مکمل نوٹس",
     "episodeUpdatedMinutesAgo": "{minutes} منٹ پہلے اپ ڈیٹ ہوا · آخر میں مکمل نوٹس",
+    "episodeNotesUnavailable": "جاری نوٹس اپ ڈیٹ نہیں ہو رہے۔ فی الحال متن دیکھیں۔",
+    "episodeCaptureFor": "ریکارڈنگ · {duration}",
+    "episodePrevious": "پچھلی قسط",
+    "captureChunksPending": "زیرِ التوا حصے: {pending}",
+    "episodeOpenPrevious": "پچھلی قسط کھولیں",
     "episodeNotesSoon": "گفتگو کے پہلے چند منٹ بعد نوٹس ظاہر ہوں گے۔",
     "episodeOpenAll": "سب کھولیں",
     "episodeWrapUpNow": "ابھی ختم کریں",
@@ -11851,5 +11854,6 @@
     "recapInTheBackground": "پس منظر میں",
     "retentionOfferAccept": "{percent}% رعایت کے ساتھ رہیں",
     "retentionOfferBody": "رہیں اور ہر ماہ {price} ادا کریں، اگلے {months} مہینے۔",
-    "retentionOfferApplied": "ہو گیا۔ {percent}% رعایت، اگلے {months} مہینے۔"
+    "retentionOfferApplied": "ہو گیا۔ {percent}% رعایت، اگلے {months} مہینے۔",
+    "othersSpeakerLabel": "دیگر"
 }

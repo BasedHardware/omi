@@ -430,8 +430,32 @@ def test_alert_rules_use_declared_receiver_and_instatus_components():
             assert labels['datasource_uid'] == source
             assert rule['data'][0]['datasourceUid'] == source
             assert component is None
+        elif labels.get('component') == 'mobile-capture':
+            # Device signals come from PostHog fleet telemetry, not a product
+            # service; they never drive a public Instatus component.
+            assert component is None
         else:
             assert component in allowed, f"{rule.get('uid')}: unexpected {label_key}={component!r}"
+
+
+def test_every_alert_rule_declares_tier_owner_and_audience():
+    # Only tier=page reaches the human Telegram channel. Agent-tier rules keep
+    # evaluating (agents read them from the Alertmanager API) but are muted by
+    # the always-on time interval, so a missing label is a page-noise bug.
+    routing = _load_inventory()['routing']
+    silent = routing['agent_tier_mute_timing']
+    for rule in _alert_rules():
+        uid = rule.get('uid')
+        labels = rule.get('labels') or {}
+        settings = rule.get('notification_settings') or {}
+        assert labels.get('owner'), f"{uid}: missing owner label"
+        assert labels.get('tier') in {'page', 'agent'}, f"{uid}: tier must be page or agent"
+        if labels['tier'] == 'page':
+            assert labels.get('audience') == 'human', uid
+            assert silent not in (settings.get('mute_time_intervals') or []), f"{uid}: page rule is muted"
+        else:
+            assert labels.get('audience') == 'agent', uid
+            assert silent in (settings.get('mute_time_intervals') or []), f"{uid}: agent rule would page Telegram"
 
 
 def test_scrape_health_no_data_semantics_match_inventory():

@@ -34,6 +34,7 @@ from config.batch_pipeline_providers import ProviderConfig
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
+from utils.batch_pipeline import leaf_timings
 from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork, RecoveryWork, ValidationFailureWork
 from utils.batch_pipeline.diarization_gate import (
     compact as compact_speech,
@@ -43,9 +44,10 @@ from utils.batch_pipeline.diarization_gate import (
     speech_regions,
     unassigned_word_count,
 )
-from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, record_decision
+from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, record_decision, record_unit_diarization
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.language_metrics import record_route
+from utils.batch_pipeline.stage_timings import StageTimings
 from utils.observability.fallback import record_fallback
 
 SAMPLE_RATE = 16000
@@ -340,6 +342,7 @@ class PipelineWorker:
         flight_models=None,
         stream_of: Callable | None = None,
         language_of: Callable | None = None,
+        timings: StageTimings | None = None,
     ):
         self.config = config or ProviderConfig()
         # Reject unavailable candidates, never silently select another provider.
@@ -354,6 +357,7 @@ class PipelineWorker:
         self.flight: Any = flight_models if self.config.diarizer == 'pyannote' else None
         self._lock = gpu_lock if gpu_lock is not None else _GPU_CHAIN_LOCK
         self._unavailable = False
+        self.timings = timings or StageTimings()
         self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0, 'left_context': 0}
         # Same-owner predecessor tails for units whose speech starts at sample 0.
         # Capture stream of a decoded unit (see batch_pipeline_context.capture_stream).
@@ -383,7 +387,9 @@ class PipelineWorker:
         if self.flight is None or not decoded:
             return [None] * len(decoded)
         try:
-            features = list(self.flight.segment([samples for _, samples in decoded]))
+            features = list(
+                self.timings.call('flight_segment', self.flight.segment, [samples for _, samples in decoded])
+            )
             if len(features) != len(decoded):
                 raise ValueError('flight segmentation cardinality mismatch')
             return features
@@ -399,7 +405,13 @@ class PipelineWorker:
         if self.flight is None or not pending or diarize_speech_only_enabled():
             return {}
         try:
-            outcomes = list(self.flight.diarize_many([(s['samples'], s.get('flight_features')) for s in pending]))
+            outcomes = list(
+                self.timings.call(
+                    'flight_diarize',
+                    self.flight.diarize_many,
+                    [(s['samples'], s.get('flight_features')) for s in pending],
+                )
+            )
             if len(outcomes) != len(pending):
                 raise ValueError('flight diarization cardinality mismatch')
             return {s['item'].segment_id: outcome for s, outcome in zip(pending, outcomes)}
@@ -516,7 +528,7 @@ class PipelineWorker:
             raise ValueError('shared-live pull exceeds 120 audio seconds; yield between pulls')
         if self.config.pool_kind == 'shared_live' and any(i.unit_kind != 'capture_span' for i in items):
             raise ValueError('shared-live requires explicitly admitted capture spans, never conversation units')
-        with self._lock:
+        with self._lock, leaf_timings.active(self.timings):
             if self._unavailable:
                 raise FatalGpuError('GPU chain unavailable; restart required')
             results, group, seconds = [], [], 0
@@ -534,15 +546,22 @@ class PipelineWorker:
         states, windows, failed, results = {}, [], set(), []
         failure_records = []
         held = set()
+        held_reasons = {}
         recovery_records = []
         silence_records = []
         shapes = {item.segment_id: {'samples': -1, 'vad_spans': -1, 'windows': -1, 'asr_words': 0} for item in items}
 
-        def allowed(required):
+        def admission(required):
+            # Bounded hold reason per requested segment: None is an allow, ''
+            # is an unevaluated hold. Missing policy authority is a hold,
+            # never provider permission.
+            if authorize_dispatch is None:
+                return {segment_id: '' for segment_id in required}
             try:
-                return set(authorize_dispatch(required)) if authorize_dispatch is not None else set()
+                decisions = authorize_dispatch(required) or {}
+                return {segment_id: decisions.get(segment_id, '') for segment_id in required}
             except Exception:
-                return set()
+                return {segment_id: '' for segment_id in required}
 
         def accepted(segment_id, seconds):
             record_audio('sync', 'accepted', self.config.words, seconds)
@@ -608,7 +627,13 @@ class PipelineWorker:
                         logger.warning('batch_failure_callback_failed exception_type=%s', type(callback_error).__name__)
 
         prefetch = (
-            _DecodePrefetch(self._io, self.decode, items, self.io_concurrency, PREFETCH_AHEAD_SECONDS)
+            _DecodePrefetch(
+                self._io,
+                lambda item: self.timings.call('fetch_decode', self.decode, item),
+                items,
+                self.io_concurrency,
+                PREFETCH_AHEAD_SECONDS,
+            )
             if self._io is not None
             else None
         )
@@ -627,11 +652,17 @@ class PipelineWorker:
 
         try:
 
+            frozen_languages = {}
+
             def decoded_units():
                 for index, item in enumerate(items):
                     self.counts['items'] += 1
                     try:
-                        samples = prefetch.take(index) if prefetch is not None else self.decode(item)
+                        samples = (
+                            prefetch.take(index)
+                            if prefetch is not None
+                            else self.timings.call('fetch_decode', self.decode, item)
+                        )
                         shapes[item.segment_id]['samples'] = len(samples)
                         duration = len(samples) / SAMPLE_RATE
                         if (
@@ -642,8 +673,13 @@ class PipelineWorker:
                     except Exception as exc:
                         fail(item, exc, 'fetch_decode')
                         continue
+                    try:
+                        frozen_languages[item.segment_id] = self.language_of(item)
+                    except Exception:
+                        frozen_languages[item.segment_id] = None
                     yield item, samples
 
+            flight_excluded = set()
             if self.flight is None:
                 # Serial: VAD each unit as soon as it is decoded (prefetch overlap).
                 units = ((unit, None) for unit in decoded_units())
@@ -651,31 +687,79 @@ class PipelineWorker:
                 # One packed segmentation pass shared by VAD and diarization; a
                 # None feature selects the unchanged serial VAD call for that unit.
                 decoded = list(decoded_units())
-                units = zip(decoded, self._flight_segment(decoded))
+
+                def language_blocked(unit):
+                    if self.config.words != 'parakeet':
+                        return False
+                    return language_class(frozen_languages.get(unit[0].segment_id)) != 'supported'
+
+                eligible = [unit for unit in decoded if not language_blocked(unit)]
+                eligible_ids = {item.segment_id for item, _ in eligible}
+                # A frozen language the word provider cannot serve can only end
+                # at the language barrier; such units never join the packed
+                # segmentation pass. The per-unit loop resolves them with the
+                # independent strict VAD instead of a serial pyannote forward.
+                flight_excluded = {item.segment_id for item, _ in decoded} - eligible_ids
+                flight_features = iter(self._flight_segment(eligible))
+                units = (
+                    (unit, None if unit[0].segment_id not in eligible_ids else next(flight_features))
+                    for unit in decoded
+                )
             for (item, samples), features in units:
                 stage = 'vad_windows'
                 try:
                     duration = len(samples) / SAMPLE_RATE
                     silence = None
-                    try:
-                        spans = list(
-                            self.vad(samples) if features is None else self.flight.vad_spans(samples, features)
-                        )
-                    except BatchValidationError as error:
-                        if error.reason != 'vad_bounds' or not worker_validation_disposition_enabled():
-                            raise
-                        # A frame may start beyond a very short real buffer (20 ms
-                        # in production). Only independent strict VAD can establish
-                        # silence; malformed/unavailable evidence stays held.
+                    spans = None
+                    if item.segment_id in flight_excluded and worker_validation_disposition_enabled():
+                        # Excluded from the packed pass by the frozen language:
+                        # the independent strict VAD decides speech vs silence
+                        # with no pyannote forward at all. Speech raises at the
+                        # language barrier; strict silence is the disposition;
+                        # unavailable evidence falls back to the serial VAD call.
+                        strict_failed = False
                         try:
                             silence = inspect_worker_silence(item, samples)
                         except Exception:
-                            pass
-                        if silence is None:
-                            raise
-                        spans = []
+                            silence = None
+                            strict_failed = True
+                        if not strict_failed and silence is None:
+                            # The early raise skips the barrier below, so the
+                            # route signal must be recorded here.
+                            if not item.shadow:
+                                record_route(
+                                    'worker',
+                                    frozen_languages.get(item.segment_id),
+                                    'blocked',
+                                    segment_id=item.segment_id,
+                                )
+                            raise BatchValidationError(ValidationReason.UNSUPPORTED_LANGUAGE)
+                        if not strict_failed:
+                            spans = []
+                    if spans is None:
+                        try:
+                            spans = list(
+                                self.timings.call('vad', self.vad, samples)
+                                if features is None
+                                else self.timings.call('vad', self.flight.vad_spans, samples, features)
+                            )
+                        except BatchValidationError as error:
+                            if error.reason != 'vad_bounds' or not worker_validation_disposition_enabled():
+                                raise
+                            # A frame may start beyond a very short real buffer (20 ms
+                            # in production). Only independent strict VAD can establish
+                            # silence; malformed/unavailable evidence stays held.
+                            try:
+                                silence = inspect_worker_silence(item, samples)
+                            except Exception:
+                                pass
+                            if silence is None:
+                                raise
+                            spans = []
                     shapes[item.segment_id]['vad_spans'] = len(spans)
-                    clips = list(speech_windows(item, samples, spans, self.config))
+                    clips = self.timings.call(
+                        'windows', lambda: list(speech_windows(item, samples, spans, self.config))
+                    )
                     shapes[item.segment_id]['windows'] = len(clips)
                     speech_spans = vad_speech_spans(spans, len(samples))
                     state = {
@@ -696,10 +780,8 @@ class PipelineWorker:
                         state['stream'] = self.stream_of(item)
                     except Exception:
                         state['stream'] = None  # No stream identity: no left context.
-                    try:
-                        state['stt_language'] = self.language_of(item)
-                    except Exception:
-                        state['stt_language'] = None
+                    # Resolved once at decode; a second language_of() pop reads None.
+                    state['stt_language'] = frozen_languages.get(item.segment_id)
                     if self.config.words == 'parakeet':
                         # A new-admission rollback cannot revoke the quality
                         # boundary for audio already in this worker's custody.
@@ -774,12 +856,17 @@ class PipelineWorker:
                     # Authorization belongs immediately before ASR, after potentially
                     # slow decode/VAD and between successive microbatches. Missing
                     # policy authority is a hold, never provider permission.
-                    held.update(required - allowed(required))
+                    decisions = admission(required)
+                    for segment_id, reason in decisions.items():
+                        if reason is None:
+                            continue
+                        held.add(segment_id)
+                        held_reasons[segment_id] = reason
                     batch = [w for w in batch if w.segment_id not in held]
                 if not batch:
                     continue
                 try:
-                    hypotheses = self.words.transcribe_batch([w.samples for w in batch])
+                    hypotheses = self.timings.call('asr', self.words.transcribe_batch, [w.samples for w in batch])
                     for window in batch:
                         if not states[window.segment_id]['item'].shadow and cap_dispatch_enabled(
                             states[window.segment_id]['item'].owner_id, 'batch'
@@ -812,7 +899,7 @@ class PipelineWorker:
             for state in states.values():
                 item = state['item']
                 if item.segment_id in held:
-                    results.append(HeldWork(item.segment_id))
+                    results.append(HeldWork(item.segment_id, reason=held_reasons.get(item.segment_id, '')))
                     continue
                 if item.segment_id in failed:
                     continue
@@ -849,10 +936,20 @@ class PipelineWorker:
                             )
                         else:
                             if not item.shadow and cap_dispatch_enabled(item.owner_id, 'batch'):
-                                recovered = self.recover_words(
+                                dispatch_hold = []
+
+                                def recheck():
+                                    reason = admission({item.segment_id}).get(item.segment_id)
+                                    dispatch_hold.clear()
+                                    dispatch_hold.append(reason)
+                                    return reason is None
+
+                                recovered = self.timings.call(
+                                    'asr_recovery',
+                                    self.recover_words,
                                     state['samples'],
                                     self.config.max_padded_seconds,
-                                    before_dispatch=lambda: item.segment_id in allowed({item.segment_id}),
+                                    before_dispatch=recheck,
                                     after_dispatch=lambda seconds: accepted(item.segment_id, seconds),
                                 )
                                 if recovered is None and (
@@ -865,10 +962,14 @@ class PipelineWorker:
                                     )
                                 ):
                                     held.add(item.segment_id)
-                                    results.append(HeldWork(item.segment_id))
+                                    hold_reason = dispatch_hold[0] if dispatch_hold and dispatch_hold[0] else ''
+                                    held_reasons[item.segment_id] = hold_reason
+                                    results.append(HeldWork(item.segment_id, reason=hold_reason))
                                     continue
                             else:
-                                recovered = self.recover_words(state['samples'], self.config.max_padded_seconds)
+                                recovered = self.timings.call(
+                                    'asr_recovery', self.recover_words, state['samples'], self.config.max_padded_seconds
+                                )
                             if recovered is None or not fits_retry:
                                 words = []
                                 state['padded_retry'] = 'skipped_oversize'
@@ -966,7 +1067,9 @@ class PipelineWorker:
                         if isinstance(diarization, BaseException):
                             raise diarization
                         if diarization is None:
-                            diarization = self._diarize_unit(state['samples'], evidence, words)
+                            diarization = self.timings.call(
+                                'diarize', self._diarize_unit, state['samples'], evidence, words
+                            )
                     payload = {
                         'words': words,
                         'diarization': diarization,
@@ -978,6 +1081,14 @@ class PipelineWorker:
                     }
                     if silence is not None:
                         payload.update(silence)
+                    # Shadow units are synthetic idle-time traffic; they must not
+                    # skew the production parity distributions.
+                    if not item.shadow:
+                        record_unit_diarization(
+                            'silence' if state['silence'] else 'skipped_single' if (single or short) else 'diarized',
+                            diarization.get('turns') if isinstance(diarization, dict) else None,
+                            flight_batching=self.config.flight_batching,
+                        )
                     if not item.shadow and cap_dispatch_enabled(item.owner_id, 'batch'):
                         payload['cap_dispatch'] = {
                             'omi_funded_accepted_provider_audio_seconds': state.get('cap_provider_audio_seconds', 0),
@@ -992,13 +1103,13 @@ class PipelineWorker:
                             (
                                 len(results) - 1,
                                 item,
-                                self._io.submit(self.persist, item, payload),
+                                self._io.submit(self.timings.call, 'persist', self.persist, item, payload),
                                 state['silence'],
                                 silence is not None,
                             )
                         )
                         continue
-                    uri = self.persist(item, payload)
+                    uri = self.timings.call('persist', self.persist, item, payload)
                     results.append(WorkResult(item.segment_id, uri, 'silence' if state['silence'] else 'success'))
                     if silence is not None:
                         silence_records.append(item.segment_id)

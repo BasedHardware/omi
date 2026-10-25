@@ -337,6 +337,7 @@ async def test_cpu_intake_freezes_detection_proof_instead_of_primary_setting(mon
     assert captured[0]['stt_language'] == frozen
     assert captured[0]['stt_language_evidence'] == 'audio_lid'
     assert captured[0]['stt_language_confidence'] == confidence
+    assert captured[0]['stt_language_probe_seconds'] == 6.0
 
 
 @pytest.mark.asyncio
@@ -409,3 +410,56 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
     assert client.post.called == probed  # the bounded language-ID probe runs only for unknown speech
     assert captured[0]['stt_language'] == frozen
     assert captured[0]['stt_language_evidence'] == evidence
+
+
+def test_worker_accepts_self_lid_evidence_with_its_own_floors():
+    from diarizer.batch_pipeline_models import stt_language
+
+    context = {
+        'stt_language': 'en',
+        'stt_language_evidence': 'self_lid',
+        'stt_language_confidence': 0.95,
+        'stt_language_probe_seconds': 8.0,
+    }
+    assert stt_language(context) == 'en'
+    # Below one second the self gate never proves support on its own.
+    assert stt_language({**context, 'stt_language_probe_seconds': 0.5, 'stt_language_confidence': 0.999}) is None
+    # A short probe needs the higher floor, not the >=6 s one.
+    assert stt_language({**context, 'stt_language_probe_seconds': 3.0}) is None
+    assert stt_language({**context, 'stt_language_probe_seconds': 3.0, 'stt_language_confidence': 0.985}) == 'en'
+
+
+@pytest.mark.parametrize('probe_seconds', [None, '8', True, float('nan'), -1])
+def test_self_lid_evidence_without_a_recorded_probe_length_is_not_proof(probe_seconds):
+    from diarizer.batch_pipeline_models import stt_language
+
+    context = {
+        'stt_language': 'en',
+        'stt_language_evidence': 'self_lid',
+        'stt_language_confidence': 0.99,
+        'stt_language_probe_seconds': probe_seconds,
+    }
+    assert stt_language(context) is None
+
+
+def test_batch_intake_enforces_the_self_gate_on_its_uid_cohort(monkeypatch):
+    client = detector(monkeypatch)
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    monkeypatch.delenv('HOSTED_PARAKEET_API_URL', raising=False)
+    monkeypatch.setattr(
+        lid.language_gate,
+        'self_detect',
+        Mock(return_value=lid.language_gate.SelfVerdict('en', 0.99, 0.99, 8.0)),
+    )
+    decision = lid.resolve_language('multi', wav(), surface='batch', cohort_key='synthetic-owner')
+    assert decision.evidence == 'self_lid' and decision.parakeet_safe
+    client.post.assert_not_called()
+
+
+def test_batch_enforced_gate_failure_falls_back_to_the_vendor_probe(monkeypatch):
+    client = detector(monkeypatch, 'en', 0.99)
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    monkeypatch.setattr(lid.language_gate, 'self_detect', Mock(return_value=None))
+    decision = lid.resolve_language('multi', wav(), surface='batch', cohort_key='synthetic-owner')
+    assert decision.evidence == 'audio_lid' and decision.parakeet_safe
+    client.post.assert_called_once()

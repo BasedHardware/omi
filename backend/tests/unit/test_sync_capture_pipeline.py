@@ -57,7 +57,6 @@ def pipeline():
         module.AudioSegment = AudioSegment
         module.get_timestamp_from_path = lambda path: float(Path(path).stem)
         module.get_syncing_file_temporal_signed_url = lambda path: path
-        module.schedule_syncing_temporal_file_deletion = lambda path: None
         module.get_prerecorded_service = lambda language: ('test', None, 'test')
         module.identify_speakers_for_segments = lambda *a: None
         module.get_closest_conversation_to_timestamps = lambda *a: None
@@ -67,6 +66,9 @@ def pipeline():
         ]
         store = StrictFirestore()
         lifecycle.ingest_sync_conversation = lambda uid, row, **kw: intake(store, row, **kw)
+        # The episodes intake attach is fail-open; the harness stand-in skips like a
+        # user whose app never called the episodes API. The wiring test spies on it.
+        module.schedule_synced_intake_attach = lambda uid, cid, row: None
         yield module, store
 
 
@@ -95,6 +97,33 @@ def test_vad_preserves_speech_origin_and_exports_nothing_for_silence(pipeline, t
     assert row['transcript_segments'][0]['start'] == 0
     assert row['id'] == chunk_identity('u', 'omi', None, False, 1700000020)
     assert outcome['outcome'].value == 'success'
+
+
+def test_provider_failure_after_eight_minutes_never_releases_staging(pipeline, monkeypatch, tmp_path):
+    module, _ = pipeline
+    path = tmp_path / '1700000000.wav'
+    module.AudioSegment.silent(duration=1000).export(path, format='wav')
+    pending = []
+    staging = {'exists': True}
+
+    def schedule(_path):
+        pending.append(lambda: staging.update(exists=False))
+
+    # Fault injection: callbacks scheduled at URL creation would now be due.
+    # Restoring the old call causes this production-path test to lose staging.
+    monkeypatch.setattr(module, 'schedule_syncing_temporal_file_deletion', schedule, raising=False)
+
+    def late_failure(*args, **kwargs):
+        for delete in pending:
+            delete()
+        raise RuntimeError('synthetic provider failure after 481 seconds')
+
+    module.prerecorded = late_failure
+    errors = []
+    response = {'new_memories': set(), 'updated_memories': set()}
+    assert module.process_segment(str(path), 'u', response, threading.Lock(), errors) is False
+    assert errors
+    assert staging['exists'] and pending == []
 
 
 @pytest.mark.parametrize('recovered', [False, True])
@@ -814,3 +843,24 @@ def test_destructive_fence_still_propagates_without_recording_a_provider_failure
     assert caught.value is error
     assert not errors and not outcome and not store.rows
     turnstile.complete.assert_called_once_with('1700000000.wav')
+
+
+def test_process_segment_attaches_the_landed_row_to_the_live_episode(pipeline, monkeypatch):
+    module, _store = pipeline
+    attached = []
+    monkeypatch.setattr(module, 'sync_enabled_for', lambda _: True)
+    monkeypatch.setattr(module, '_download_audio_bytes', lambda _: b'synthetic')
+    monkeypatch.setattr(
+        module.final_pass_test_seam, 'run_sync_final_pass', lambda *a, **kw: (None, {'outcome': 'skipped_budget'})
+    )
+    monkeypatch.setattr(
+        module,
+        'schedule_synced_intake_attach',
+        lambda uid, cid, row: attached.append((uid, cid, dict(row))) or 'joined',
+    )
+    response = {'new_memories': set(), 'updated_memories': set()}
+    assert module.process_segment('1700000000.wav', 'u', response, threading.Lock(), [])
+    # The row the intake persisted is the row handed to the episode join.
+    assert len(attached) == 1
+    uid, conversation_id, row = attached[0]
+    assert uid == 'u' and row['id'] == conversation_id and conversation_id in response['new_memories']

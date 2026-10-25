@@ -11160,13 +11160,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get captureStorageAlmostFull => 'Память почти заполнена';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Кулон потерял связь с этим телефоном. Omi переподключится сам, когда кулон будет включён и рядом. Всё, что записано до этого, сохранено.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi переподключится сам';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name и другие';
   }
@@ -14469,6 +14462,25 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Текущие заметки не обновляются. Пока просмотрите расшифровку.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Запись · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Предыдущий эпизод';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Ожидающие фрагменты: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Открыть предыдущий эпизод';
+
+  @override
   String get episodeNotesSoon => 'Заметки появятся после первых минут разговора.';
 
   @override
@@ -14605,4 +14617,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Готово. Скидка $percent% на следующие $months месяца.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Другие';
 }

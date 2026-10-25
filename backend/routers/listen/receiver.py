@@ -2111,12 +2111,15 @@ class ListenReceiver(ReplayFilterMixin):
                 platform=self._telemetry_platform(),
             )
 
-    async def _handle_multi_channel_audio(self, data: bytes, now: float | None = None) -> int:
+    async def _handle_multi_channel_audio(
+        self, data: bytes, now: float | None = None, source_claim: dict | None = None
+    ) -> int:
         if now is None:
             now = time.time()
         request = self.host.request
         channel_index = self.channel_id_to_index.get(data[0])
         if channel_index is None:
+            await self.raw_archive.append(bytes(data), self.host.state.current_conversation_id, now, 0, -1)
             # A whole call's worth of frames can land here if a client prefixes
             # its channels differently than build_channel_config expects; that
             # used to be indistinguishable from silence, so count and log it.
@@ -2142,12 +2145,20 @@ class ListenReceiver(ReplayFilterMixin):
                 )
             except Exception as error:
                 await self.raw_archive.append(
-                    captured_audio, self.host.state.current_conversation_id, now, 0, channel_index
+                    captured_audio,
+                    self.host.state.current_conversation_id,
+                    now,
+                    0,
+                    channel_index,
+                    source_frame=parse_live_frame(source_claim, len(data)) if source_claim else None,
                 )
                 self._record_decode_failure('opus', error, len(audio), channel=channel_index)
                 return 0
             self.decode_failure_streak = 0
             if not audio:
+                await self.raw_archive.append(
+                    captured_audio, self.host.state.current_conversation_id, now, 0, channel_index
+                )
                 return 0
         await self.raw_archive.append(
             captured_audio,
@@ -2156,6 +2167,7 @@ class ListenReceiver(ReplayFilterMixin):
             len(audio) // 2,
             channel_index,
             decoded=bytes(audio),
+            source_frame=parse_live_frame(source_claim, len(data)) if source_claim else None,
         )
         # Audio activity only counts once the channel prefix resolved and an
         # opus frame decoded; rejected frames above cannot renew the lease.
@@ -2456,7 +2468,7 @@ class ListenReceiver(ReplayFilterMixin):
                         # after the channel prefix is known-good (and an opus
                         # frame decoded), so unknown-prefix frames leave the
                         # session eligible for a no_audio teardown.
-                        decoded_audio_bytes += await self._handle_multi_channel_audio(data, now)
+                        decoded_audio_bytes += await self._handle_multi_channel_audio(data, now, source_claim)
                         continue
                     try:
                         decoded: bytes = data
@@ -2476,6 +2488,7 @@ class ListenReceiver(ReplayFilterMixin):
                         continue
                     self.decode_failure_streak = 0
                     if not decoded:
+                        await self.raw_archive.append(bytes(data), self.host.state.current_conversation_id, now, 0)
                         continue
                     self._note_audio_activity()
                     self._mark_first_audio(now)
@@ -2509,6 +2522,7 @@ class ListenReceiver(ReplayFilterMixin):
                             self.capture_timeline.wall(start_sample),
                             len(decoded) // 2,
                             decoded=decoded,
+                            source_frame=parse_live_frame(source_claim, len(data)) if source_claim else None,
                         )
                         self._note_accepted_frame(start_sample, end_sample)
                         self._write_ring_buffer_frame(decoded, now, start_sample)

@@ -22,6 +22,8 @@ import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
 
+part 'sync_job_fetch.dart';
+
 /// Whether a non-200 response from POST /v1/conversations (process in-progress
 /// conversation) is a benign race rather than a failure worth crash-reporting.
 ///
@@ -1082,16 +1084,6 @@ SyncJobFetchOutcome syncJobFetchOutcomeForStatusCode(int statusCode) {
   if (statusCode == 404 || statusCode == 403) return SyncJobFetchOutcome.notFound;
   if (statusCode != 200) return SyncJobFetchOutcome.transient;
   return SyncJobFetchOutcome.ok;
-}
-
-class SyncJobFetch {
-  final SyncJobFetchOutcome outcome;
-  final SyncJobStatusResponse? status;
-  final SyncRateLimitedException? rateLimit;
-  const SyncJobFetch(this.outcome, [this.status]) : rateLimit = null;
-  const SyncJobFetch.throttled(this.rateLimit)
-      : outcome = SyncJobFetchOutcome.throttled,
-        status = null;
 }
 
 /// Single GET of a sync job's status — no polling loop. The reconciler owns

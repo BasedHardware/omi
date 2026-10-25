@@ -11058,13 +11058,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get captureStorageAlmostFull => 'พื้นที่ใกล้เต็ม';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'จี้ของคุณขาดการเชื่อมต่อกับโทรศัพท์เครื่องนี้ Omi จะเชื่อมต่อใหม่เองเมื่อจี้เปิดอยู่และอยู่ใกล้ ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi จะเชื่อมต่อใหม่เอง';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name และคนอื่นๆ';
   }
@@ -14348,6 +14341,25 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'บันทึกสดไม่ได้อัปเดต โปรดดูข้อความถอดเสียงไปก่อน';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'กำลังบันทึก · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'ตอนก่อนหน้า';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'ช่วงเสียงที่รอดำเนินการ: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'เปิดตอนก่อนหน้า';
+
+  @override
   String get episodeNotesSoon => 'บันทึกจะแสดงหลังจากพูดคุยไปสองสามนาทีแรก';
 
   @override
@@ -14484,4 +14496,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'เรียบร้อย ส่วนลด $percent% ใน $months เดือนถัดไป';
   }
+
+  @override
+  String get othersSpeakerLabel => 'คนอื่น ๆ';
 }

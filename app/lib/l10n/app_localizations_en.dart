@@ -11108,13 +11108,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get captureStorageAlmostFull => 'Storage almost full';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi reconnects on its own';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name + others';
   }
@@ -14405,6 +14398,25 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Running notes aren’t updating. View the transcript for now.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Capturing · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Previous episode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Chunks pending: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Open Previous Episode';
+
+  @override
   String get episodeNotesSoon => 'Running notes appear after the first few minutes of talk.';
 
   @override
@@ -14542,4 +14554,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Done. $percent% off your next $months months.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Others';
 }

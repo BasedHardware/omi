@@ -115,5 +115,13 @@ def minimum_for_processing(uid: str, conversation: Any, *, user_kept: bool = Fal
     if decision is None or decision.content_kind == 'conversation' or not serving_for(FLAG, uid):
         return None
     from models.conversation import Structured
+    from models.conversation_emoji import fallback_emoji
 
-    return Structured(title=decision.title, emoji='', title_provenance='server_minimum')
+    # A blank emoji renders as the client's random fallback, not as blank; the
+    # media minimum carries the deterministic category emoji like every other
+    # no-LLM row.
+    return Structured(
+        title=decision.title,
+        emoji=fallback_emoji('', 'other'),
+        title_provenance='server_minimum',
+    )

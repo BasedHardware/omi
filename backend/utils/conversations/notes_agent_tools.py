@@ -31,6 +31,7 @@ from utils.executors import db_executor, run_blocking
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.llm.notes_agent_prompt import READ_TOOL_NAMES, VIEW_SCREENSHOT
 from utils.llm.shaped_agent import model_json
+from utils.llm.notes_identity import NotesIdentity
 from utils.model_text import ContextWindow, ToolTimeError, parse_tool_time, to_datetime, utc_z
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,7 @@ class NotesToolbox:
     seen_conversations: set[str] = field(default_factory=set)
     calls: Counter = field(default_factory=Counter)
     _search: Any = None
+    identity: NotesIdentity | None = None
     # The conversation window: every time-range tool defaults to it (harness tool rule 1).
     window: ContextWindow = field(init=False)
 
@@ -132,6 +134,16 @@ class NotesToolbox:
         rows: Any = await run_blocking(
             db_executor, screen_activity_db.get_screen_activity, self.uid, start_date=lo, end_date=hi, limit=400
         )
+        if self.identity is not None:
+            leads = screen_people_leads(rows or [], started_at=self.started_at, finished_at=self.finished_at)
+            self.identity.meeting_names = tuple(
+                dict.fromkeys(
+                    (
+                        *self.identity.meeting_names,
+                        *(lead['name'] for lead in leads if lead.get('call_seen_during_conversation')),
+                    )
+                )
+            )
         wanted = {word.casefold() for word in str(query or '').split() if len(word) > 2}
         picked = []
         for row in rows or []:
@@ -164,6 +176,20 @@ class NotesToolbox:
     async def get_calendar(self, start: Any = None, end: Any = None):
         lo, hi = self._window(start, end)
         meetings: Any = await run_blocking(db_executor, calendar_db.get_meetings_in_time_range, self.uid, lo, hi)
+        if self.identity is not None:
+            for meeting in meetings or []:
+                if not isinstance(meeting, Mapping):
+                    continue
+                begin, finish = _as_utc(meeting.get('start_time')), _as_utc(meeting.get('end_time'))
+                if begin and finish and begin <= self.finished_at and finish >= self.started_at:
+                    self.identity.meeting_names = tuple(
+                        dict.fromkeys(
+                            (
+                                *self.identity.meeting_names,
+                                *calendar_row(meeting)['participants'],
+                            )
+                        )
+                    )
         return {'meetings': [calendar_row(meeting) for meeting in meetings or [] if isinstance(meeting, Mapping)]}
 
     async def search_people(self, query: str = ''):

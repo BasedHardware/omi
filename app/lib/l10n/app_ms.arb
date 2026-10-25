@@ -3503,7 +3503,6 @@
     "captureStarting": "Memulakan…",
     "capturePhoneStorageFull": "Storan telefon penuh",
     "captureStorageAlmostFull": "Storan hampir penuh",
-    "capturePendantDisconnectedDetail": "Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.",
     "participantsSummaryUncounted": "{name} dan lain-lain",
     "deviceOnboardingVoiceReplyTitle": "Dengar jawapan Omi",
     "deviceOnboardingVoiceReplySample": "Baik. Mesyuarat anda yang seterusnya bermula dalam masa dua puluh minit.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "Audio Tidak Tersedia",
     "playbackAudioLoadFailed": "Audio Tidak Dapat Dimuatkan",
     "playbackAudioNetworkFailed": "Semak Sambungan",
-    "capturePendantDisconnectedShort": "Omi akan bersambung semula sendiri",
     "forYou": "Untuk Anda",
     "stopThese": "Hentikan Ini",
     "dismiss": "Tutup",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "Setakat ini",
     "episodeUpdatedJustNow": "Baru dikemas kini · nota penuh apabila tamat",
     "episodeUpdatedMinutesAgo": "Dikemas kini {minutes} min lalu · nota penuh apabila tamat",
+    "episodeNotesUnavailable": "Nota langsung tidak dikemas kini. Lihat transkrip buat masa ini.",
+    "episodeCaptureFor": "Merakam · {duration}",
+    "episodePrevious": "Episod sebelumnya",
+    "captureChunksPending": "Cebisan tertunda: {pending}",
+    "episodeOpenPrevious": "Buka Episod Sebelumnya",
     "episodeNotesSoon": "Nota muncul selepas beberapa minit pertama perbualan.",
     "episodeOpenAll": "Buka Semua",
     "episodeWrapUpNow": "Selesaikan Sekarang",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "Di latar belakang",
     "retentionOfferAccept": "Kekal dengan diskaun {percent}%",
     "retentionOfferBody": "Kekal dan bayar {price} sebulan untuk {months} bulan akan datang.",
-    "retentionOfferApplied": "Selesai. Diskaun {percent}% untuk {months} bulan akan datang."
+    "retentionOfferApplied": "Selesai. Diskaun {percent}% untuk {months} bulan akan datang.",
+    "othersSpeakerLabel": "Lain-lain"
 }

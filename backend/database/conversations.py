@@ -46,6 +46,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
+from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
 from database.sync_conversation_snapshot import read_redirected, resolve_snapshot
@@ -1110,6 +1111,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         transaction.set(conversation_ref, write_data)
 
     run_transactional(db, _write_processing_result)
+    stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
     if summary_changed:
         _drop_summary_memo(uid)
 
@@ -1304,6 +1306,7 @@ def persist_processing_result_with_lifecycle(
         return True
 
     persisted = run_transactional(db, _persist)
+    stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
     if summary_changed:
         _drop_summary_memo(uid)
     if persisted:
@@ -2366,6 +2369,7 @@ def delete_conversation(uid, conversation_id):
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
+    stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
     from config.stt_cap_dispatch import any_execution_admission_enabled
 
     if any_execution_admission_enabled(uid):
@@ -2696,6 +2700,8 @@ def transition_conversation_status(uid: str, conversation_id: str, status: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'status': status})
+    if status != 'in_progress':
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
     invalidate_people_stats_cache(uid)
 
 
@@ -2744,11 +2750,15 @@ def claim_conversation_status(
                     uid, current, extra_updates, transcript_corrections=corrections
                 )
             )
+        if expected_status == ConversationStatus.processing and claimed_status == ConversationStatus.in_progress:
+            restore_quiet_check_in_transaction(transaction, db, uid, conversation_id, current | updates)
         transaction.update(conversation_ref, updates)
         return True
 
     claimed = run_transactional(db, _claim)
     if claimed:
+        if claimed_status != ConversationStatus.in_progress:
+            stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
         invalidate_people_stats_cache(uid)
         if serving_for('LIFECYCLE_V2_MODE', uid):
             _sync_conversation_search_index(uid, conversation_id)
@@ -2759,6 +2769,7 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'discarded': True, 'sync_relevance_user_kept': False})
+    stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_id)
 
@@ -2803,6 +2814,8 @@ def rule_discard_outcome(
         return 'discarded'
 
     outcome = run_transactional(db, _discard)
+    if outcome in {'discarded', 'already_discarded'}:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
     if outcome == 'discarded':
         invalidate_people_stats_cache(uid)
         _sync_conversation_search_index(uid, conversation_id)
@@ -4241,7 +4254,14 @@ def assign_sync_conversation(
                 full_ids=full_ids,
                 live_candidate_ids=live_candidate_ids,
                 absorbed=absorbed,
-                **({'live_lookup_complete': live_lookup.get('lookup_complete', False)} if lineage_eligible else {}),
+                **(
+                    {
+                        'live_lookup_complete': live_lookup.get('lookup_complete', False),
+                        'live_lookup_incomplete_reason': live_lookup.get('incomplete_reason'),
+                    }
+                    if lineage_eligible
+                    else {}
+                ),
             )
         # Remember the candidate before the transaction commits.
         attempted['canonical'] = planned[0]['id']
@@ -4265,6 +4285,8 @@ def assign_sync_conversation(
                 lambda: attempted.get('canonical'),
             )
         conversation = result[0]
+        for retired_id in sorted({conversation['id'], *absorbed}):
+            stop_quiet_check_for_conversation(uid, retired_id, firestore_client=client)
         observation = conversation.pop('_sync_lineage_created', None)
         if lineage_eligible and observation is not None:
             log_sync_lineage_created(observation)

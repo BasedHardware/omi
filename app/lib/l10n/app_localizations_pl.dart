@@ -11155,13 +11155,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get captureStorageAlmostFull => 'Pamięć prawie pełna';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi połączy się ponownie samo';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name i inni';
   }
@@ -14463,6 +14456,25 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Bieżące notatki nie są aktualizowane. Na razie zobacz transkrypcję.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Nagrywanie · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Poprzedni odcinek';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Oczekujące fragmenty: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Otwórz poprzedni odcinek';
+
+  @override
   String get episodeNotesSoon => 'Notatki pojawią się po pierwszych minutach rozmowy.';
 
   @override
@@ -14599,4 +14611,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Gotowe. $percent% rabatu przez kolejne $months miesiące.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Inni';
 }

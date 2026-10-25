@@ -3503,7 +3503,6 @@
     "captureStarting": "शुरू हो रहा है…",
     "capturePhoneStorageFull": "फ़ोन स्टोरेज भर गया",
     "captureStorageAlmostFull": "स्टोरेज लगभग भर गया",
-    "capturePendantDisconnectedDetail": "आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया। पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।",
     "participantsSummaryUncounted": "{name} और अन्य",
     "deviceOnboardingVoiceReplyTitle": "Omi के जवाब सुनें",
     "deviceOnboardingVoiceReplySample": "समझ गया। आपकी अगली मीटिंग बीस मिनट में शुरू होगी।",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "ऑडियो उपलब्ध नहीं है",
     "playbackAudioLoadFailed": "ऑडियो लोड नहीं हो सका",
     "playbackAudioNetworkFailed": "कनेक्शन जाँचें",
-    "capturePendantDisconnectedShort": "Omi अपने आप फिर से कनेक्ट हो जाएगा",
     "forYou": "आपके लिए",
     "stopThese": "इन्हें रोकें",
     "dismiss": "हटाएँ",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "अब तक",
     "episodeUpdatedJustNow": "अभी अपडेट हुआ · पूरे नोट्स अंत में",
     "episodeUpdatedMinutesAgo": "{minutes} मिनट पहले अपडेट हुआ · पूरे नोट्स अंत में",
+    "episodeNotesUnavailable": "चल रहे नोट अपडेट नहीं हो रहे हैं। अभी ट्रांसक्रिप्ट देखें।",
+    "episodeCaptureFor": "रिकॉर्डिंग · {duration}",
+    "episodePrevious": "पिछला एपिसोड",
+    "captureChunksPending": "लंबित खंड: {pending}",
+    "episodeOpenPrevious": "पिछला एपिसोड खोलें",
     "episodeNotesSoon": "बातचीत के पहले कुछ मिनटों के बाद नोट्स दिखेंगे।",
     "episodeOpenAll": "सब खोलें",
     "episodeWrapUpNow": "अभी समाप्त करें",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "पृष्ठभूमि में",
     "retentionOfferAccept": "{percent}% छूट के साथ बने रहें",
     "retentionOfferBody": "बने रहें और हर महीने {price} दें, अगले {months} महीनों तक।",
-    "retentionOfferApplied": "हो गया। {percent}% छूट, अगले {months} महीनों तक।"
+    "retentionOfferApplied": "हो गया। {percent}% छूट, अगले {months} महीनों तक।",
+    "othersSpeakerLabel": "अन्य"
 }

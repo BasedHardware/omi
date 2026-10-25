@@ -21,6 +21,7 @@ from google.cloud.storage.retry import DEFAULT_RETRY
 from google.api_core.exceptions import NotFound
 
 from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline import leaf_timings
 from utils.batch_pipeline.source_audio import MAGIC as RECORD_MAGIC, materialize, read_reference
 from utils.batch_pipeline.upload_policy import UPLOAD_CHUNK_BYTES, UPLOAD_TIMEOUT, UPLOAD_RETRY_SECONDS, UploadStream
 
@@ -100,7 +101,8 @@ class ArtifactStore:
         key = self.key_for_owner(item.owner_id)
         if len(key) != 32:
             raise ValueError('batch artifacts require a 256-bit owner key')
-        return MAGIC + nonce + AESGCM(key).encrypt(nonce, body, self._aad(item, kind, context))
+        sealed = leaf_timings.call('encrypt', AESGCM(key).encrypt, nonce, body, self._aad(item, kind, context))
+        return MAGIC + nonce + sealed
 
     def _write(self, item: WorkItem, kind: str, body: bytes, limit: int, *, result_key: str | None = None) -> str:
         if not body or len(body) > limit:
@@ -116,7 +118,9 @@ class ArtifactStore:
         # Reserved random names are create-only and are never reused. The outbox
         # may erase this unique name before the provider returns its generation.
         registered_at = time.monotonic()
-        self.register_artifact(item, f'gs://{self.bucket_name}/{name}', kind, context)
+        leaf_timings.call(
+            'artifact_register', self.register_artifact, item, f'gs://{self.bucket_name}/{name}', kind, context
+        )
         self._unchanged(item, context)
         if time.monotonic() - registered_at > 30:
             raise TimeoutError('artifact registration too old to begin upload')
@@ -124,8 +128,11 @@ class ArtifactStore:
         blob.chunk_size = UPLOAD_CHUNK_BYTES
         # Omitting size forces the SDK's resumable path even for short captures.
         # SDK retries reuse this stream/session and the one registered name.
-        blob.upload_from_file(
-            UploadStream(self._seal(item, kind, context, body)),
+        sealed = self._seal(item, kind, context, body)
+        leaf_timings.call(
+            'upload',
+            blob.upload_from_file,
+            UploadStream(sealed),
             content_type='application/octet-stream',
             if_generation_match=0,
             timeout=UPLOAD_TIMEOUT,
@@ -161,15 +168,21 @@ class ArtifactStore:
             raise ValueError('artifact must be an owner/segment-bound generation-pinned staging reference')
         generation = int(parsed.fragment)
         blob = self.bucket.blob(name, generation=generation)
-        blob.reload(if_generation_match=generation, timeout=30, retry=None)
+        leaf_timings.call('download_metadata', blob.reload, if_generation_match=generation, timeout=30, retry=None)
         if not blob.size or not 0 < blob.size <= limit + len(MAGIC) + 28:
             raise ValueError('stored batch artifact exceeds bounded payload size')
-        sealed = blob.download_as_bytes(if_generation_match=generation, timeout=60, retry=None)
+        sealed = leaf_timings.call(
+            'download', blob.download_as_bytes, if_generation_match=generation, timeout=60, retry=None
+        )
         if len(sealed) > limit + len(MAGIC) + 28 or not sealed.startswith(MAGIC):
             raise ValueError('invalid batch artifact envelope')
         offset = len(MAGIC)
-        body = AESGCM(self.key_for_owner(item.owner_id)).decrypt(
-            sealed[offset : offset + 12], sealed[offset + 12 :], self._aad(item, kind, context)
+        body = leaf_timings.call(
+            'decrypt',
+            AESGCM(self.key_for_owner(item.owner_id)).decrypt,
+            sealed[offset : offset + 12],
+            sealed[offset + 12 :],
+            self._aad(item, kind, context),
         )
         self._unchanged(item, context)
         return body

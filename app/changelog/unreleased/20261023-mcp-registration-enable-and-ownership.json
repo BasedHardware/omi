@@ -1,0 +1,3 @@
+{
+  "change": "Adding an MCP server that does not need sign-in now opens its page so you can enable it. Retrying a sign-in for an MCP server now starts a fresh authorization instead of reopening an expired link, and slow integration status checks no longer cut a connection short"
+}

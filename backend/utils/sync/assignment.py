@@ -179,6 +179,7 @@ def assign_in_transaction(
     live_candidate_ids: tuple[str, ...] = (),
     absorbed: list[str] | None = None,
     live_lookup_complete: bool = False,
+    live_lookup_incomplete_reason: str | None = None,
 ) -> tuple[dict, bool, list[dict]]:
     """Production transaction body; injected codecs preserve encryption in adapters.
 
@@ -823,11 +824,14 @@ def assign_in_transaction(
     if created and lineage_eligible and sync_lineage_resolve_enabled():
         # The adapter emits only the final successful transaction's observation,
         # after commit. Neither this marker nor eligibility enters the write codec.
+        candidates_read = all(cid in read for cid in live_candidate_ids)
         result['_sync_lineage_created'] = created_sync_row_observation(
             [row for row in read.values() if row is not None],
             result,
             incoming,
-            lookup_complete=live_lookup_complete and all(cid in read for cid in live_candidate_ids),
+            lookup_complete=live_lookup_complete and candidates_read,
+            lookup_incomplete_reason=live_lookup_incomplete_reason,
+            candidates_read=candidates_read,
         )
     if live_stats is not None:
         # Transient telemetry only: the encoded plan already committed above.

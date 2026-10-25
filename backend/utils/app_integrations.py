@@ -8,6 +8,7 @@ import os
 import time
 
 import httpx
+from utils.plugin_transport import plugin_transport
 
 from utils.http_client import (
     safe_request_target,
@@ -308,6 +309,12 @@ async def trigger_external_integrations(
         try:
             payload = serialize_datetimes(conversation_dict)
             headers = dict(pin_kwargs['headers'])
+            transport = plugin_transport(app.id)
+            if transport:
+                payload['_omi_backup_audio_token'] = transport.token(
+                    uid, 'audio', ttl=7 * 86400, conversation_id=conversation.id
+                )
+                headers.update(transport.delivery_headers(uid, url, payload))
             if idempotency_key:
                 headers['X-Omi-Idempotency-Key'] = idempotency_key
             async with get_webhook_semaphore():

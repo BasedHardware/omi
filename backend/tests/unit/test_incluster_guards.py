@@ -24,10 +24,10 @@ def values():
     result = dict.fromkeys(guard.queries('prod-omi-backend'), 0.0)
     result.update(
         first_p95=20,
-        first_over30=4,
+        first_over30=6,
         post_p95=0.5,
         v2_p95=1,
-        first_count=30,
+        first_count=150,
         admission_count=100,
         dcgm_nonzero=1,
         refusal_baseline_count=100,
@@ -86,6 +86,7 @@ def test_relative_refusal_boundary(baseline, delta):
     reading = guard.evaluate(v)
     assert not reading['blind']
     assert reading['refusal_threshold'] == threshold
+    assert reading['refusal_mode'] == 'relative'
     assert ('refusal_fraction' in reading['trips']) == (delta >= 0)
 
 
@@ -106,7 +107,7 @@ def test_first_p95_baseline_query_reads_same_metric_same_hour_last_week():
     )
 
 
-@pytest.mark.parametrize('baseline,limit', [(0, 30), (20, 30), (25, 30), (35, 42), (100, 120)])
+@pytest.mark.parametrize('baseline,limit', [(0, 30), (20, 30), (25, 30), (35, 42), (40, 48)])
 @pytest.mark.parametrize('delta', [-1e-8, 0, 1e-8])
 def test_first_p95_is_relative_to_weekly_same_hour_baseline(baseline, limit, delta):
     v = dict(values(), first_p95_baseline=baseline, first_count_baseline=100, first_p95=limit + delta)
@@ -119,7 +120,7 @@ def test_first_p95_is_relative_to_weekly_same_hour_baseline(baseline, limit, del
 def test_sparse_weekly_baseline_falls_back_to_floor():
     # One 60s text last week prices the historical p95 near 59.25s; unqualified,
     # the 1.2x threshold (~71.1s) would mask this week's real regression at 45s.
-    v = dict(values(), first_p95=45, first_over30=4, first_p95_baseline=59.25, first_count_baseline=1)
+    v = dict(values(), first_p95=45, first_over30=5, first_p95_baseline=59.25, first_count_baseline=1)
     reading = guard.evaluate(v)
     assert reading['first_p95_threshold'] == 30
     assert reading['trips'] == ['first_p95']
@@ -146,7 +147,107 @@ def test_one_or_two_slow_sessions_never_trip_first_p95():
     v = dict(values(), first_p95=60, first_over30=3)
     assert guard.evaluate(v)['trips'] == []
     assert guard.evaluate(dict(v, first_p95_baseline=100))['trips'] == []
-    assert 'first_p95' in guard.evaluate(dict(v, first_over30=4))['trips']
+    # A measured p95 below the top bucket with five slow texts and values()' full
+    # 150-text sample does trip; the saturated 60.0 never can, slow texts or not.
+    assert 'first_p95' in guard.evaluate(dict(v, first_p95=59.5, first_over30=5))['trips']
+    assert guard.evaluate(dict(v, first_over30=5))['unmeasured'] == ['first_p95']
+
+
+def test_thin_sample_regression_is_unmeasured_blind_never_rollback():
+    # 2026-10-25 05:40Z trip (floor 8 -> 12): p95 saturated at the 60s top
+    # bucket on 37.6 first texts against a 229-text weekly baseline. The
+    # regression-shaped reading must alert (unmeasured/BLIND, nonzero exit)
+    # without tripping, and it must never reach the three-blind-strike TRIP.
+    trip = dict(
+        values(),
+        first_p95=60.0,
+        first_count=37.62718529232818,
+        first_over30=4.0678081011852925,
+        first_p95_baseline=14.154270990401017,
+        first_count_baseline=228.98860402862007,
+    )
+    reading = guard.evaluate(trip)
+    assert reading['trips'] == [] and reading['unmeasured'] == ['first_p95']
+    # The 228.99 baseline counts a whole hour; its 15-minute equivalent (x .25)
+    # halved is 28.6, so the absolute 100 floor binds for this reading.
+    assert reading['first_p95_sample_floor'] == pytest.approx(100)
+    hpa, dep = objects()
+    verdict, state, reading = guard.decide(hpa, dep, [], trip, {}, 0)
+    assert verdict == 'WARMUP'  # fresh identity arms for the full window first
+    for now in (900, 1200, 1500, 1800, 2400, 3000):
+        verdict, state, reading = guard.decide(hpa, dep, [], trip, state, now)
+        assert verdict == 'BLIND' and 'first_p95' not in reading['trips']
+        assert state['blind'] == 0
+    # A measured regression at the same moment still trips through decide().
+    full = dict(trip, first_p95=45.0, first_count=200, first_over30=8)
+    assert guard.decide(hpa, dep, [], full, state, 3000)[0] == 'TRIP'
+
+
+def test_top_bucket_saturation_is_not_a_measured_p95_even_with_a_full_sample():
+    # histogram_quantile clamps to the last finite boundary (60s) when the
+    # quantile lands beyond it; that value cannot support a rollback.
+    v = dict(values(), first_p95=60.0, first_count=200, first_over30=8)
+    reading = guard.evaluate(v)
+    assert reading['trips'] == [] and reading['unmeasured'] == ['first_p95']
+    assert 'first_p95' in guard.evaluate(dict(v, first_p95=59.999999))['trips']
+
+
+@pytest.mark.parametrize(
+    'baseline,count,trip',
+    [
+        # Baseline is a 1h count; the floor is half its 15-minute equivalent,
+        # so 1000/h -> 125, and the absolute 100 binds below 800/h.
+        (1000, 99.99, False),
+        (1000, 124.999, False),
+        (1000, 125, True),
+        (1000, 250, True),
+        (228.98860402862007, 99.99, False),
+        (228.98860402862007, 100, True),
+        (228.98860402862007, 175.3, True),
+    ],
+)
+def test_first_p95_sample_floor_is_half_the_weekly_window_rate_never_below_100(baseline, count, trip):
+    v = dict(
+        values(),
+        first_p95=45,
+        first_over30=8,
+        first_count=count,
+        first_p95_baseline=14.154270990401017,
+        first_count_baseline=baseline,
+    )
+    reading = guard.evaluate(v)
+    assert ('first_p95' in reading['trips']) == trip
+    assert ('first_p95' in reading['unmeasured']) == (not trip)
+    assert reading['first_p95_sample_floor'] == pytest.approx(max(100, 0.5 * baseline / 4))
+
+
+def test_sample_floor_never_demands_above_the_historical_window_rate():
+    # Review r1 P1: comparing the 15-minute count directly against half the
+    # hourly baseline would demand ~2x the historical per-window rate (a 517/h
+    # evening hour -> floor 259) and a real regression at normal volume (175
+    # texts, 22:35Z shape) could never collect a decisive sample.
+    v = dict(values(), first_p95=45, first_over30=8, first_count=175, first_count_baseline=517.87)
+    reading = guard.evaluate(v)
+    assert reading['first_p95_sample_floor'] == pytest.approx(100)
+    assert 'first_p95' in reading['trips']
+
+
+def test_sample_floor_falls_back_to_100_without_a_weekly_count():
+    v = dict(values(), first_p95=45, first_over30=8, first_count=100, first_count_baseline=None)
+    reading = guard.evaluate(v)
+    assert reading['first_p95_sample_floor'] == 100
+    assert 'first_p95' in reading['trips']
+    thin = guard.evaluate(dict(v, first_count=99.99))
+    assert 'first_p95' not in thin['trips'] and thin['unmeasured'] == ['first_p95']
+
+
+def test_healthy_thin_sample_stays_clean_and_low_sample_stays_low_sample():
+    # Quiet hours with a healthy p95 must not alert; sub-20 counts keep the
+    # existing LOW_SAMPLE verdict rather than the thin-sample BLIND.
+    healthy = guard.evaluate(dict(values(), first_p95=14, first_over30=0.5, first_count=37))
+    assert healthy['trips'] == [] and healthy['unmeasured'] == [] and not healthy['low_sample']
+    low = guard.evaluate(dict(values(), first_p95=60, first_count=15, first_over30=10))
+    assert low['low_sample'] and low['trips'] == [] and low['unmeasured'] == []
 
 
 def test_first_p95_needs_twenty_first_texts():
@@ -171,26 +272,44 @@ def test_first_p95_needs_twenty_first_texts():
         ('refusal_baseline_listener_stale', 121),
     ],
 )
-def test_unqualified_baseline_is_blind_and_retains_other_trips(key, bad):
+def test_unqualified_baseline_uses_absolute_ceiling_and_retains_other_trips(key, bad):
     v = dict(values(), **{key: bad}, first_p95=30)
     reading = guard.evaluate(v)
-    assert 'unqualified_refusal_baseline' in reading['blind']
-    assert reading['refusal_threshold'] is None
-    assert 'first_p95' in reading['trips']
+    assert not reading['blind']
+    assert reading['refusal_threshold'] == guard.REFUSAL_ABSOLUTE_CEILING
+    assert reading['refusal_mode'] == 'absolute_fallback'
+    assert 'first_p95' in reading['trips'] and 'refusal_fraction' not in reading['trips']
+    # Fail-closed on the ceiling: a live 5% refusal still trips.
+    tripped = guard.evaluate(dict(v, refusal_fraction=0.05))
+    assert 'refusal_fraction' in tripped['trips'] and not tripped['blind']
+
+
+def test_unqualified_baseline_alone_never_accumulates_blind_runs():
+    # 2026-10-24 16:05Z shape: refusal_baseline_coverage 0 (series younger than
+    # its 7d offset) with refusal_fraction 0 used to read BLIND on every run
+    # and roll floor 8 back at blind_runs=4; the absolute fallback keeps CLEAN.
     hpa, dep = objects()
+    v = dict(values(), refusal_baseline_coverage=0, refusal_fraction=0.0)
     _, state, _ = guard.decide(hpa, dep, [], v, {}, 0)
-    assert guard.decide(hpa, dep, [], v, state, 900)[0] == 'TRIP'
+    for now in (900, 1200, 1500):
+        verdict, state, reading = guard.decide(hpa, dep, [], v, state, now)
+        assert verdict == 'CLEAN' and state['blind'] == 0
+        assert reading['refusal_mode'] == 'absolute_fallback'
 
 
-def test_missing_baseline_never_becomes_clean_or_implicit_absolute_fallback():
-    hpa, dep = objects()
+def test_missing_baseline_series_falls_back_to_absolute_ceiling():
     v = values()
     del v['refusal_baseline_fraction']
-    _, state, _ = guard.decide(hpa, dep, [], v, {}, 0)
-    for now, expected in ((900, 'BLIND'), (1200, 'TRIP')):
-        verdict, state, reading = guard.decide(hpa, dep, [], v, state, now)
-        assert verdict == expected
-        assert reading['refusal_threshold'] is None
+    reading = guard.evaluate(v)
+    assert not reading['blind']
+    assert reading['refusal_mode'] == 'absolute_fallback'
+    assert reading['refusal_threshold'] == guard.REFUSAL_ABSOLUTE_CEILING
+
+
+def test_current_refusal_data_missing_or_stale_stays_blind_under_fallback():
+    base = dict(values(), refusal_baseline_coverage=0)
+    assert 'missing_or_nonfinite_refusal_fraction' in guard.evaluate(dict(base, refusal_fraction=None))['blind']
+    assert 'admission_stale' in guard.evaluate(dict(base, admission_stale=121))['blind']
 
 
 def test_baseline_queries_use_weekly_history_and_qualified_deployment_only():
@@ -207,11 +326,14 @@ def test_baseline_queries_use_weekly_history_and_qualified_deployment_only():
 
 
 def test_partial_history_does_not_raise_threshold_above_real_baseline():
-    # The review's incomplete-target example: 8% instead of the full 3% baseline
-    # must be BLIND even with abundant admissions, fresh remaining series and 12 GPUs.
+    # The review's incomplete-target example: 8% on partial coverage must not
+    # widen the gate to ~10.5%; the fallback ceiling stays 2% and a 5% live
+    # refusal still trips, harder than the full 3% baseline would.
     row = dict(values(), refusal_baseline_fraction=0.08, refusal_fraction=0.05, refusal_baseline_coverage=0)
     reading = guard.evaluate(row)
-    assert reading['refusal_threshold'] is None and reading['blind']
+    assert reading['refusal_mode'] == 'absolute_fallback'
+    assert reading['refusal_threshold'] == guard.REFUSAL_ABSOLUTE_CEILING
+    assert reading['trips'] == ['refusal_fraction']
     complete = dict(row, refusal_baseline_fraction=0.03, refusal_baseline_coverage=1)
     assert guard.evaluate(complete)['trips'] == ['refusal_fraction']
 
@@ -224,8 +346,15 @@ def test_guard_upgrade_restarts_full_lookback(monkeypatch):
     assert guard.decide(hpa, dep, [], values(), old_state, 900)[0] == 'WARMUP'
 
 
+# Weekly refusal-baseline keys are exempt like first_p95_baseline: an unqualified
+# baseline selects the absolute refusal ceiling (fail-closed), never blindness.
 @pytest.mark.parametrize(
-    'key', [k for k in guard.queries('unused') if k not in ('first_p95_baseline', 'first_count_baseline')]
+    'key',
+    [
+        k
+        for k in guard.queries('unused')
+        if k not in ('first_p95_baseline', 'first_count_baseline') and k not in guard.refusal_baseline_queries('unused')
+    ],
 )
 @pytest.mark.parametrize('bad', [None, float('nan'), float('inf'), -float('inf')])
 def test_missing_nonfinite_never_clean(key, bad):
@@ -316,14 +445,17 @@ def test_drift_refuses(drift):
         guard.build_rollback(old)
 
 
-@pytest.mark.parametrize('floor', [3, 5, 8, 12])
+@pytest.mark.parametrize('floor', [3, 5, 8, 10, 11, 12, 13])
 @pytest.mark.parametrize('latency', [False, True])
 def test_state_gating(floor, latency):
     hpa, _ = objects()
     hpa['spec']['minReplicas'] = floor
     if latency:
         hpa['spec']['metrics'].append(guard.LATENCY)
-    assert guard.workload_only(hpa['spec']) == (floor in (5, 8) and not latency)
+    # The floor is read from the HPA: any workload-only floor below the
+    # rollback cap is armed (floor 10 read NOOP all 2026-10-24/25 under the
+    # old (5, 8) enumeration); at/above the cap there is nothing to roll back to.
+    assert guard.workload_only(hpa['spec']) == (floor < 12 and not latency)
 
 
 def test_arm_full_window_and_reset_on_spec_image_generation_changes():
@@ -420,6 +552,7 @@ class FakeClient:
 def test_run_writes_only_reference_rollback_or_dry_run(dry_run, caplog):
     client = FakeClient()
     assert guard.run(client, dry_run, 0) == 0
+    assert '"refusal_mode": "relative"' in caplog.text
     client.signals['first_p95'] = 30
     assert guard.run(client, dry_run, 900) == 1
     hpa_writes = [patch for path, patch in client.patches if path == 'hpa']
@@ -456,6 +589,20 @@ def render(environment='prod', *extra):
             not in {f'{environment}-omi-incluster-guards-batch', f'{environment}-omi-incluster-guards-batch-state'}
         )
     }
+
+
+def render_docs(environment='prod', *extra, overlay=True):
+    command = [
+        'helm',
+        'template',
+        f'{environment}-omi-incluster-guards',
+        str(CHART),
+        '--namespace',
+        f'{environment}-omi-backend',
+    ]
+    if overlay:
+        command += ['-f', str(CHART / f'{environment}_omi_incluster_guards_values.yaml')]
+    return [obj for obj in yaml.safe_load_all(subprocess.check_output([*command, *extra], text=True)) if obj]
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
@@ -517,9 +664,37 @@ def test_helm_rbac_and_cpu_placement(environment):
 
 def test_cloud_run_gate_refuses_unapproved_identity_or_namespace():
     with pytest.raises(subprocess.CalledProcessError):
-        render('prod', '--set', 'batch.gcpServiceAccount=wrong@example.com')
+        render('prod', '--set', 'batch.enabled=true', '--set', 'batch.gcpServiceAccount=wrong@example.com')
     with pytest.raises(subprocess.CalledProcessError):
         render('dev', '--set', 'batch.cloudRunRollbackEnabled=true')
+
+
+BATCH_GUARD_OBJECTS = frozenset(
+    {
+        ('ServiceAccount', 'prod-omi-incluster-guards-batch'),
+        ('ConfigMap', 'prod-omi-incluster-guards-batch-state'),
+        ('Role', 'prod-omi-incluster-guards-batch'),
+        ('RoleBinding', 'prod-omi-incluster-guards-batch'),
+        ('CronJob', 'prod-omi-incluster-guards-batch'),
+    }
+)
+
+
+def test_prod_overlay_defers_batch_guard_objects_until_deployer_rbac_and_producer_exist():
+    # Deploy run 40126547763: the prod deployer's name-scoped RBAC refuses to
+    # create the -batch objects, so the prod overlay keeps batch.enabled=false
+    # until that access change is approved (David) and g2's producer exists.
+    rendered = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod')}
+    assert not rendered & BATCH_GUARD_OBJECTS
+    assert ('PodMonitor', 'prod-omi-incluster-guards-batch') in rendered  # Predates the batch guard; stays live.
+    assert ('CronJob', 'prod-omi-incluster-guards') in rendered
+    # The default toggle stays on: re-enabling in prod needs only this flip.
+    reenabled = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod', '--set', 'batch.enabled=true')}
+    assert BATCH_GUARD_OBJECTS <= reenabled
+    # Default values alone render no batch objects, exactly as before the toggle.
+    assert (
+        not {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod', overlay=False)} & BATCH_GUARD_OBJECTS
+    )
 
 
 def test_run_persists_three_blind_observations_and_trips():
@@ -1067,23 +1242,7 @@ def test_identity_change_resets_window(tmp_path, monkeypatch):
 
 
 def test_helm_dedicated_identity_state_only_rbac_and_cpu_placement():
-    docs = list(
-        yaml.safe_load_all(
-            subprocess.check_output(
-                [
-                    'helm',
-                    'template',
-                    'prod-omi-incluster-guards',
-                    str(CHART),
-                    '--namespace',
-                    'prod-omi-backend',
-                    '-f',
-                    str(CHART / 'prod_omi_incluster_guards_values.yaml'),
-                ],
-                text=True,
-            )
-        )
-    )
+    docs = render_docs('prod', '--set', 'batch.enabled=true')
     resources = {d['kind']: d for d in docs if d and d['metadata']['name'] == 'prod-omi-incluster-guards-batch'}
     assert resources['ServiceAccount']['metadata']['annotations'] == {
         'iam.gke.io/gcp-service-account': 'omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com'

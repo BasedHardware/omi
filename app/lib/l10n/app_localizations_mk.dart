@@ -11176,13 +11176,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get captureStorageAlmostFull => 'Меморијата е речиси полна';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Приврзокот ја изгуби врската со овој телефон. Omi ќе се поврзе повторно сам кога приврзокот е вклучен и во близина. Сè што е снимено досега е безбедно.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi ќе се поврзе повторно сам';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
@@ -14485,6 +14478,25 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Тековните белешки не се ажурираат. Засега погледнете го транскриптот.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Снимање · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Претходна епизода';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Делови на чекање: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Отвори ја претходната епизода';
+
+  @override
   String get episodeNotesSoon => 'Белешките се појавуваат по првите минути разговор.';
 
   @override
@@ -14621,4 +14633,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Готово. $percent% попуст за следните $months месеци.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Други';
 }

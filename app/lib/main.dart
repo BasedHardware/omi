@@ -634,16 +634,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       unawaited(ProactivityRuntime.outbox.flush());
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordResumed();
-        _performanceTelemetry.setForeground(true);
+        _performanceTelemetry.onLifecycleState(state);
         PlatformManager.instance.analytics.recordTelemetryHealth();
       }
       unawaited(_refreshAccountCutoverThenWakeUploads());
+    } else if (state == AppLifecycleState.inactive || state == AppLifecycleState.hidden) {
+      // Dart timers are throttled before `paused` arrives, so the lag
+      // watchdog must already be stopped here or the background gap reads as
+      // UI stalls on the last visible surface.
+      if (!PhysicalQualification.enabled) {
+        _performanceTelemetry.onLifecycleState(state);
+      }
     } else if (state == AppLifecycleState.paused) {
       OnboardingSyncRuntime.setActive(false);
       ClientTelemetry.instance.onBackground();
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordBackgrounded();
-        _performanceTelemetry.setForeground(false);
+        _performanceTelemetry.onLifecycleState(state);
       }
       SyncReconciler.instance.onBackground();
       _onAppPaused();

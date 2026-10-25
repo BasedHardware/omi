@@ -809,6 +809,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       people: people,
       l10n: context.l10n,
       unresolved: widget.unresolvedSpeakers,
+      deferShortVoices: widget.followLatest,
     );
     final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
     final transcriptList = NotificationListener<ScrollMetricsNotification>(

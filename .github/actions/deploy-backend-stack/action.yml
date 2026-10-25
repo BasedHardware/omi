@@ -5,7 +5,7 @@ description: >-
 
 inputs:
   backend_sync_memory:
-    description: 'C023 memory trial: 8Gi baseline or 6Gi, independently reversible'
+    description: 'backend-sync memory: 6Gi prod right-size (2026-10-24 costcut), 4Gi/8Gi fallback trial values; dev callers keep 8Gi'
     required: false
     default: '8Gi'
   firebase_probe_signer_service_account:
@@ -690,6 +690,8 @@ runs:
         project_id: ${{ inputs.project_id }}
         image: ${{ steps.service-images.outputs.backend }}
         no_traffic: true
+        # 2026-10-24 costcut mirror: prod backend keeps its live shape in source (it was
+        # revision-inherited only, so a fresh service would deploy defaults). Dev inherits.
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
@@ -697,6 +699,7 @@ runs:
           --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           ${{ steps.runtime-env.outputs.backend_identity_flags }}
+          ${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=8Gi --concurrency=20 --min-instances=3 --max-instances=100' || '' }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_env_vars }}
           OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
@@ -779,7 +782,7 @@ runs:
       env:
         SYNC_MEMORY: ${{ inputs.backend_sync_memory }}
       run: |
-        case "$SYNC_MEMORY" in 6Gi|8Gi) ;; *) echo 'backend-sync memory must be 6Gi or 8Gi' >&2; exit 1 ;; esac
+        case "$SYNC_MEMORY" in 4Gi|6Gi|8Gi) ;; *) echo 'backend-sync memory must be 4Gi, 6Gi or 8Gi' >&2; exit 1 ;; esac
 
     - name: Resolve live sync maxScale
       id: live-max-scale
@@ -937,7 +940,7 @@ runs:
           --cpu=2
           --memory=2Gi
           --concurrency=40
-          --min-instances=3
+          --min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}
           --max-instances=50
           --no-cpu-throttling
         env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}

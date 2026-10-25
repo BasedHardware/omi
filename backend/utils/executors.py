@@ -3,6 +3,7 @@
 Provides shared executors with strict separation (bulkhead pattern):
 - critical_executor: auth verification, rate limiting, hard restriction checks,
   small session/code cache reads. Must never starve — gates every request.
+- quiet_replay_executor: bounded quiet-check replay leaves, separate from the DB coordinator.
 - db_executor: Firestore CRUD and Redis data mutations. High volume, moderate latency.
 - context_executor: optional context reads and fresh mount fences, four workers,
   zero queue, isolated from setup's Firestore work even after caller cancellation.
@@ -62,6 +63,7 @@ _TASKS = frozenset(
         'trigger_realtime_integrations',
         'finish_absorb',
         'decide_and_apply',
+        '_reconcile_quiet_candidate',
     }
 )
 
@@ -208,7 +210,12 @@ speaker_tag_verify_executor = MonitoredThreadPoolExecutor(
 # database/mcp_client_metadata.py — database must not import this module.
 cimd_executor = MonitoredThreadPoolExecutor(name="cimd", max_workers=4, max_queue_size=8, thread_name_prefix="cimd")
 
+quiet_replay_executor = MonitoredThreadPoolExecutor(
+    name="quiet_replay", max_workers=16, max_queue_size=16, thread_name_prefix="quiet-replay"
+)
+
 _ALL_EXECUTORS = [
+    quiet_replay_executor,
     critical_executor,
     db_executor,
     llm_executor,

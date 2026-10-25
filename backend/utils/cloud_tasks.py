@@ -74,7 +74,9 @@ SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS = SYNC_JOB_TASK_PAYLOAD_KEYS | {'sequencer_
 # of whole-budget attempts the job has already spent (routers/sync.py).
 # ``redrive_mode`` rides only on operator-built redrive payloads and must survive
 # budget replacements and sequencer re-dispatch (utils/sync/minimal_redrive.py).
-SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset({'capture_evidence_claims', 'budget_deferrals', 'redrive_mode'})
+SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset(
+    {'capture_evidence_claims', 'budget_deferrals', 'redrive_mode', 'raw_capture_paths'}
+)
 
 
 def sync_job_payload_keys_valid(keys: Iterable[str], *, allow_sequenced: bool = True) -> bool:

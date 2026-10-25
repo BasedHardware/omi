@@ -153,7 +153,10 @@ def test_only_always_cpu_integration_host_runs_projection_pump(manifest):
         assert active == (['backend-integration'] if stage == 'prod' else [])
     deploy = (ROOT.parent / '.github/actions/deploy-backend-stack/action.yml').read_text()
     integration = deploy.split('id: deploy-backend-integration', 1)[1].split('id: capture-backend-integration', 1)[0]
-    assert '--no-cpu-throttling' in integration and '--min-instances=3' in integration
+    # 2026-10-24 right-sizing: prod integration stays warm for the projection pump;
+    # the dev project (based-hardware-dev) idles at 0 (lead's live change).
+    integration_min = "--min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}"
+    assert '--no-cpu-throttling' in integration and integration_min in integration
 
 
 def test_policy_identity_storage_and_unit_ceiling_match_chart(manifest):

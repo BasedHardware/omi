@@ -592,14 +592,19 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     # here only; do not copy onto backend.
     # backend-sync DOES carry --cpu=2 (#21668): its 6-8Gi memory requires >=2
     # CPU on Cloud Run, and 1-CPU deploys of 8Gi are rejected outright.
+    # 2026-10-24 costcut mirror: backend now pins its OWN live shape (prod-scoped
+    # 8Gi/2 CPU/20/3/100) instead of inheriting it revision-to-revision; --cpu=2
+    # is legitimate there for the same #21668 pairing, but every
+    # integration-specific flag below still must not leak onto it.
     integration_flags = _deploy_backend_stack_step_flags('deploy-backend-integration')
     backend_flags = _deploy_backend_stack_step_flags('deploy-backend')
     sync_flags = _deploy_backend_stack_step_flags('deploy-backend-sync')
+    # 2026-10-24 right-sizing: prod integration stays warm; the dev project idles at 0.
+    integration_min = "--min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}"
     for flag in (
-        '--cpu=2',
         '--memory=2Gi',
         '--concurrency=40',
-        '--min-instances=3',
+        integration_min,
         '--max-instances=50',
         '--no-cpu-throttling',
     ):
@@ -607,11 +612,16 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
         assert flag not in backend_flags, flag
         # backend-sync owns its own scale-out cap (see test_sync_two_lane.py);
         # its value may legitimately equal integration's, so only the other
-        # integration-specific flags must stay off it. --cpu=2 is likewise
-        # legitimate on sync (#21668: 8Gi needs >=2 CPU).
-        if not (flag.startswith('--max-instances=') or flag == '--cpu=2'):
+        # integration-specific flags must stay off it.
+        if not flag.startswith('--max-instances='):
             assert flag not in sync_flags, flag
+    assert '--cpu=2' in integration_flags
     assert '--cpu=2' in sync_flags
+    # Backend's own prod shape (dev branch empty: dev keeps inheriting).
+    assert (
+        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=8Gi --concurrency=20"
+        " --min-instances=3 --max-instances=100' || '' }}"
+    ) in backend_flags
 
 
 VERTEX_PT_CONTRACT = 'Company-paid Gemini text and vision generation may use only the active model'
@@ -811,7 +821,7 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     assert result.stdout == ''
     workflow_outputs = renderer_output.read_text(encoding='utf-8')
     assert (
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":100\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":100\\,"ledger_purge_coalesce":100\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":25\\,"people_scan_dedupe":0\\,"queue_age_sample_budget":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"usage_month_cache":100}\n'
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"batch_privacy_memoize":5\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":25\\,"people_scan_dedupe":0\\,"queue_age_sample_budget":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":0}\n'
         in workflow_outputs
     )
     assert workflow_outputs.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')

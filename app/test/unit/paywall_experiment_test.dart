@@ -217,6 +217,23 @@ void main() {
       expect(offer.yearlySavingPercent, 25);
     });
 
+    test('a single-plan Omi Pro catalog renders one complete offer', () {
+      // 2026-10-24 ruling: a new buyer on mobile/web sees only unlimited_v2.
+      // The paywall must resolve that one tier into both intervals — no empty
+      // offer, no fallback to a missing tier.
+      final offer = PaywallOffer.fromCatalog({
+        'plans': [
+          {'id': 'price_pro_m', 'plan_id': 'unlimited_v2', 'interval': 'month', 'unit_amount': 2999, 'currency': 'usd'},
+          {'id': 'price_pro_y', 'plan_id': 'unlimited_v2', 'interval': 'year', 'unit_amount': 26991, 'currency': 'usd'},
+        ],
+      })!;
+      expect(offer.tierId, 'unlimited_v2');
+      expect(offer.monthly!.priceId, 'price_pro_m');
+      expect(offer.yearly!.priceId, 'price_pro_y');
+      expect(offer.yearly!.amountMinor, 26991);
+      expect(offer.yearlySavingPercent, 25);
+    });
+
     test('a single-tier legacy catalog and an empty catalog', () {
       final legacy = PaywallOffer.fromCatalog({
         'plans': [

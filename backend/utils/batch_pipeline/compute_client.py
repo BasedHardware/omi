@@ -68,6 +68,12 @@ class ComputeClient:
                 for key, value in retries.items()
             ):
                 raise ValueError('invalid spend admission retry receipt')
+            held_reason = result.get('held_reason') or {}
+            if not isinstance(held_reason, dict) or any(
+                key not in identities or not isinstance(value, str) or not 1 <= len(value) <= 64
+                for key, value in held_reason.items()
+            ):
+                raise ValueError('invalid spend admission hold receipt')
             return result
         except Exception:
             self._refresh_at = 0.0

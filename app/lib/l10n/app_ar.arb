@@ -3503,7 +3503,6 @@
     "captureStarting": "جارٍ البدء…",
     "capturePhoneStorageFull": "مساحة الهاتف ممتلئة",
     "captureStorageAlmostFull": "المساحة ممتلئة تقريبًا",
-    "capturePendantDisconnectedDetail": "فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.",
     "participantsSummaryUncounted": "{name} وآخرون",
     "deviceOnboardingVoiceReplyTitle": "استمع إلى إجابات Omi",
     "deviceOnboardingVoiceReplySample": "تم. يبدأ اجتماعك التالي بعد عشرين دقيقة.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "الصوت غير متوفر",
     "playbackAudioLoadFailed": "تعذر تحميل الصوت",
     "playbackAudioNetworkFailed": "تحقق من الاتصال",
-    "capturePendantDisconnectedShort": "سيعيد Omi الاتصال تلقائيًا",
     "forYou": "من أجلك",
     "stopThese": "إيقاف هذه",
     "dismiss": "تجاهل",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "حتى الآن",
     "episodeUpdatedJustNow": "حُدّثت الآن · الملاحظات الكاملة عند الانتهاء",
     "episodeUpdatedMinutesAgo": "حُدّثت قبل {minutes} د · الملاحظات الكاملة عند الانتهاء",
+    "episodeNotesUnavailable": "الملاحظات المباشرة لا تتحدث. اعرض النص في الوقت الحالي.",
+    "episodeCaptureFor": "جارٍ التسجيل · {duration}",
+    "episodePrevious": "الحلقة السابقة",
+    "captureChunksPending": "مقاطع قيد الانتظار: {pending}",
+    "episodeOpenPrevious": "افتح الحلقة السابقة",
     "episodeNotesSoon": "تظهر الملاحظات بعد الدقائق الأولى من الحديث.",
     "episodeOpenAll": "فتح الكل",
     "episodeWrapUpNow": "إنهاء الآن",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "في الخلفية",
     "retentionOfferAccept": "ابقَ بخصم {percent}%",
     "retentionOfferBody": "ابقَ وادفع {price} شهريًا لمدة {months} أشهر قادمة.",
-    "retentionOfferApplied": "تم. خصم {percent}% لمدة {months} أشهر قادمة."
+    "retentionOfferApplied": "تم. خصم {percent}% لمدة {months} أشهر قادمة.",
+    "othersSpeakerLabel": "آخرون"
 }

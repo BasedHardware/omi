@@ -11148,13 +11148,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get captureStorageAlmostFull => 'Pomnilnik je skoraj poln';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi se bo sam znova povezal';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name in drugi';
   }
@@ -14448,6 +14441,25 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Sprotni zapiski se ne posodabljajo. Za zdaj si oglejte prepis.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Snemanje · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Prejšnja epizoda';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Čakajoči deli: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Odpri prejšnjo epizodo';
+
+  @override
   String get episodeNotesSoon => 'Zapiski se prikažejo po prvih minutah pogovora.';
 
   @override
@@ -14584,4 +14596,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Končano. $percent % popusta naslednje $months mesece.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Drugi';
 }

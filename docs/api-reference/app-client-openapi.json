@@ -7099,6 +7099,18 @@
             ],
             "title": "Coverage"
           },
+          "lifetime": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifetime"
+          },
           "origin": {
             "anyOf": [
               {
@@ -7109,6 +7121,17 @@
               }
             ],
             "title": "Origin"
+          },
+          "proof": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proof"
           },
           "reason": {
             "anyOf": [
@@ -15663,6 +15686,16 @@
                 "type": "null"
               }
             ]
+          },
+          "last_closed_episode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Episode"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -20844,6 +20877,19 @@
           "key"
         ],
         "title": "McpApiKeyCreated",
+        "type": "object"
+      },
+      "McpAuthorizeResponse": {
+        "properties": {
+          "auth_url": {
+            "title": "Auth Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "auth_url"
+        ],
+        "title": "McpAuthorizeResponse",
         "type": "object"
       },
       "McpCreateActionItem": {
@@ -26513,7 +26559,7 @@
             "default": "other"
           },
           "emoji": {
-            "default": "🧠",
+            "default": "",
             "title": "Emoji",
             "type": "string"
           },
@@ -27038,6 +27084,78 @@
           }
         },
         "title": "RecordLlmUsageBucketRequest",
+        "type": "object"
+      },
+      "RedeemCodeRequest": {
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "RedeemCodeRequest",
+        "type": "object"
+      },
+      "RedeemCodeResponse": {
+        "properties": {
+          "amount_off": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Off"
+          },
+          "applies_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applies At"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "percent_off": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent Off"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "RedeemCodeResponse",
         "type": "object"
       },
       "ReferralClaimRequest": {
@@ -30364,7 +30482,7 @@
             "default": "other"
           },
           "emoji": {
-            "default": "🧠",
+            "default": "💬",
             "title": "Emoji",
             "type": "string"
           },
@@ -30927,6 +31045,28 @@
               }
             ],
             "title": "Speaker Id"
+          },
+          "speaker_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Key"
+          },
+          "speaker_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Label"
           },
           "speaker_name": {
             "anyOf": [
@@ -32570,7 +32710,7 @@
             "description": "A category for this conversation"
           },
           "emoji": {
-            "default": "🧠",
+            "default": "💬",
             "description": "An emoji to represent the conversation",
             "title": "Emoji",
             "type": "string"
@@ -38518,6 +38658,28 @@
             ],
             "title": "Speaker Id"
           },
+          "speaker_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Key"
+          },
+          "speaker_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Label"
+          },
           "start": {
             "anyOf": [
               {
@@ -44203,6 +44365,93 @@
           }
         ],
         "summary": "Delete Api Key",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/apps/{app_id}/mcp/authorize": {
+      "post": {
+        "description": "Issue fresh OAuth authorization for an existing MCP server registration.\n\nAuthorization state is single-use and expires, so retrying a connection needs a new\nstate and PKCE pair for the same registration rather than the original URL. Only the\nstored code verifier changes; an earlier URL then fails its token exchange.",
+        "operationId": "authorize_mcp_server_v1_apps__app_id__mcp_authorize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpAuthorizeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Authorize Mcp Server",
         "tags": [
           "v1"
         ]
@@ -55676,6 +55925,111 @@
         ]
       }
     },
+    "/v1/episodes/{episode_id}": {
+      "get": {
+        "operationId": "get_episode_v1_episodes__episode_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "episode_id",
+            "required": true,
+            "schema": {
+              "title": "Episode Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Episode"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Episode",
+        "tags": [
+          "episodes"
+        ]
+      }
+    },
     "/v1/episodes/{episode_id}/items/{item_id}/dismiss": {
       "post": {
         "operationId": "dismiss_episode_item_v1_episodes__episode_id__items__item_id__dismiss_post",
@@ -64922,19 +65276,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -65174,6 +65528,90 @@
           }
         ],
         "summary": "Portal Return"
+      }
+    },
+    "/v1/payments/redeem-code": {
+      "post": {
+        "operationId": "redeem_code_endpoint_v1_payments_redeem_code_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedeemCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedeemCodeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Redeem Code Endpoint"
       }
     },
     "/v1/payments/retention-offer": {

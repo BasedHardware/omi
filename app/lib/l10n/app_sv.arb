@@ -3503,7 +3503,6 @@
     "captureStarting": "Startar…",
     "capturePhoneStorageFull": "Telefonens lagring är full",
     "captureStorageAlmostFull": "Lagringen är nästan full",
-    "capturePendantDisconnectedDetail": "Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.",
     "participantsSummaryUncounted": "{name} och andra",
     "deviceOnboardingVoiceReplyTitle": "Lyssna på Omis svar",
     "deviceOnboardingVoiceReplySample": "Uppfattat. Ditt nästa möte börjar om tjugo minuter.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "Ljudet är inte tillgängligt",
     "playbackAudioLoadFailed": "Ljudet kunde inte laddas",
     "playbackAudioNetworkFailed": "Kontrollera anslutningen",
-    "capturePendantDisconnectedShort": "Omi ansluter igen av sig själv",
     "forYou": "För dig",
     "stopThese": "Stoppa dessa",
     "dismiss": "Avvisa",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "Hittills",
     "episodeUpdatedJustNow": "Uppdaterad nyss · fullständiga anteckningar när det är klart",
     "episodeUpdatedMinutesAgo": "Uppdaterad för {minutes} min sedan · fullständiga anteckningar när det är klart",
+    "episodeNotesUnavailable": "Löpande anteckningar uppdateras inte. Visa transkriptionen tills vidare.",
+    "episodeCaptureFor": "Spelar in · {duration}",
+    "episodePrevious": "Föregående avsnitt",
+    "captureChunksPending": "Väntande delar: {pending}",
+    "episodeOpenPrevious": "Öppna föregående avsnitt",
     "episodeNotesSoon": "Anteckningarna visas efter de första minuterna av samtalet.",
     "episodeOpenAll": "Öppna alla",
     "episodeWrapUpNow": "Avsluta nu",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "I bakgrunden",
     "retentionOfferAccept": "Stanna kvar med {percent} % rabatt",
     "retentionOfferBody": "Stanna och betala {price} i månaden de kommande {months} månaderna.",
-    "retentionOfferApplied": "Klart. {percent} % rabatt de kommande {months} månaderna."
+    "retentionOfferApplied": "Klart. {percent} % rabatt de kommande {months} månaderna.",
+    "othersSpeakerLabel": "Andra"
 }

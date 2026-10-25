@@ -1570,7 +1570,7 @@ def get_conversations(
         unlocked_conversations = [conv for conv in conversations if not conv.get('is_locked', False)]
 
         for conv in unlocked_conversations:
-            conv.update(conversation_participants(conv))
+            conv.update(conversation_participants(conv, include_display=False))
             conv['transcript_included'] = include_transcript
 
         # Remove transcript_segments if not requested
@@ -1578,7 +1578,7 @@ def get_conversations(
             for conv in unlocked_conversations:
                 conv.pop('transcript_segments', None)
         else:
-            populate_speaker_names(uid, unlocked_conversations)
+            populate_speaker_names(uid, unlocked_conversations, preserve_api_values=True)
 
         populate_folder_names(uid, unlocked_conversations)
 
@@ -1738,14 +1738,14 @@ def get_conversation_endpoint(
 
         from utils.mcp_server.helpers import conversation_participants
 
-        conversation.update(conversation_participants(conversation))
+        conversation.update(conversation_participants(conversation, include_display=False))
         conversation['transcript_included'] = include_transcript
 
         # Remove transcript_segments if not requested
         if not include_transcript:
             conversation.pop('transcript_segments', None)
         else:
-            populate_speaker_names(uid, [conversation])
+            populate_speaker_names(uid, [conversation], preserve_api_values=True)
 
         populate_folder_names(uid, [conversation])
 

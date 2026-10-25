@@ -3503,7 +3503,6 @@
     "captureStarting": "Spúšťa sa…",
     "capturePhoneStorageFull": "Úložisko telefónu je plné",
     "captureStorageAlmostFull": "Úložisko je takmer plné",
-    "capturePendantDisconnectedDetail": "Prívesok stratil spojenie s týmto telefónom. Omi sa znova pripojí sám, keď bude prívesok zapnutý a nablízku. Všetko nahraté predtým je v bezpečí.",
     "participantsSummaryUncounted": "{name} a ďalší",
     "deviceOnboardingVoiceReplyTitle": "Vypočujte si odpovede Omi",
     "deviceOnboardingVoiceReplySample": "Rozumiem. Vaše ďalšie stretnutie sa začne o dvadsať minút.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "Zvuk nie je k dispozícii",
     "playbackAudioLoadFailed": "Zvuk sa nepodarilo načítať",
     "playbackAudioNetworkFailed": "Skontrolujte pripojenie",
-    "capturePendantDisconnectedShort": "Omi sa znova pripojí sám",
     "forYou": "Pre vás",
     "stopThese": "Zastaviť tieto",
     "dismiss": "Skryť",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "Zatiaľ",
     "episodeUpdatedJustNow": "Aktualizované práve teraz · úplné poznámky na konci",
     "episodeUpdatedMinutesAgo": "Aktualizované pred {minutes} min · úplné poznámky na konci",
+    "episodeNotesUnavailable": "Priebežné poznámky sa neaktualizujú. Zatiaľ si pozrite prepis.",
+    "episodeCaptureFor": "Nahrávanie · {duration}",
+    "episodePrevious": "Predchádzajúca epizóda",
+    "captureChunksPending": "Čakajúce časti: {pending}",
+    "episodeOpenPrevious": "Otvoriť predchádzajúcu epizódu",
     "episodeNotesSoon": "Poznámky sa zobrazia po prvých minútach rozhovoru.",
     "episodeOpenAll": "Otvoriť všetko",
     "episodeWrapUpNow": "Uzavrieť teraz",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "V pozadí",
     "retentionOfferAccept": "Zostať so zľavou {percent} %",
     "retentionOfferBody": "Zostaňte a plaťte {price} mesačne počas ďalších {months} mesiacov.",
-    "retentionOfferApplied": "Hotovo. Zľava {percent} % na ďalšie {months} mesiace."
+    "retentionOfferApplied": "Hotovo. Zľava {percent} % na ďalšie {months} mesiace.",
+    "othersSpeakerLabel": "Ostatní"
 }

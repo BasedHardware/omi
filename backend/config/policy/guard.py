@@ -62,12 +62,9 @@ def env_reads(source):
                         constants[target.id] = node.value.value
     for node in ast.walk(tree):
         key = None
-        if (
-            isinstance(node, ast.Call)
-            and name(node.func) in {'os.getenv', 'os.environ.get', 'os.environ.__getitem__'}
-            and node.args
-        ):
-            key = node.args[0]
+        if isinstance(node, ast.Call) and name(node.func) in {'os.getenv', 'os.environ.get', 'os.environ.__getitem__'}:
+            # getenv(key=...) and environ.get(key=...) read the same name as the positional form.
+            key = node.args[0] if node.args else next((k.value for k in node.keywords if k.arg == 'key'), None)
         elif isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Load) and name(node.value) == 'os.environ':
             key = node.slice
         if isinstance(key, ast.Constant):

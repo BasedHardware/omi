@@ -13234,14 +13234,6 @@
     "@captureStorageAlmostFull": {
         "description": "Transcribe Later card for a pendant, line 2: the pendant's own storage is almost full."
     },
-    "capturePendantDisconnectedDetail": "Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.",
-    "@capturePendantDisconnectedDetail": {
-        "description": "Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture."
-    },
-    "capturePendantDisconnectedShort": "Omi reconnects on its own",
-    "@capturePendantDisconnectedShort": {
-        "description": "Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation."
-    },
     "participantsSummaryUncounted": "{name} + others",
     "@participantsSummaryUncounted": {
         "description": "Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'",
@@ -17557,6 +17549,25 @@
             }
         }
     },
+    "episodeNotesUnavailable": "Running notes aren’t updating. View the transcript for now.",
+    "episodeCaptureFor": "Capturing · {duration}",
+    "@episodeCaptureFor": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "episodePrevious": "Previous episode",
+    "captureChunksPending": "Chunks pending: {pending}",
+    "@captureChunksPending": {
+        "placeholders": {
+            "pending": {
+                "type": "int"
+            }
+        }
+    },
+    "episodeOpenPrevious": "Open Previous Episode",
     "episodeNotesSoon": "Running notes appear after the first few minutes of talk.",
     "@episodeNotesSoon": {
         "description": "Shown in the running notes card before the first notes exist."
@@ -17790,5 +17801,9 @@
                 "type": "int"
             }
         }
+    },
+    "othersSpeakerLabel": "Others",
+    "@othersSpeakerLabel": {
+        "description": "Collective label for unidentified voices with too little evidence in an over-split transcript; not a participant count."
     }
 }

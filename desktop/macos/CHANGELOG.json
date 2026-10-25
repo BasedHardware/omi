@@ -2,6 +2,55 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.536",
+      "date": "2026-10-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.535",
+      "date": "2026-10-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.534",
+      "date": "2026-10-25",
+      "changes": [
+        "Opening app settings or retrying an integration setup now uses a fresh sign-in link instead of an expired or already-used link"
+      ]
+    },
+    {
+      "version": "0.12.533",
+      "date": "2026-10-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.532",
+      "date": "2026-10-24",
+      "changes": [
+        "Conversations summarized on-device no longer show the 🧠 placeholder when no emoji was chosen; they show the category emoji or 💬"
+      ]
+    },
+    {
+      "version": "0.12.531",
+      "date": "2026-10-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.530",
+      "date": "2026-10-24",
+      "changes": [
+        "Fixed calls splitting into multiple conversations after brief audio interruptions or an app relaunch during a scheduled meeting, while bounding recording in idle messaging voice channels"
+      ]
+    },
+    {
       "version": "0.12.529",
       "date": "2026-10-23",
       "changes": [

@@ -34,6 +34,7 @@ from config.plan_catalog import (
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import get_byok_key, get_byok_uid, get_cached_byok_state, has_validated_byok_keys
 from utils.log_sanitizer import sanitize
+from utils.metrics import OMI_NEW_BUYER_CHECKOUT_REJECTED
 from utils.plan_wire_capabilities import understands_plan_identity
 from utils.transcription_allowance import TranscriptionAllowance
 from utils.observability.fallback import record_fallback
@@ -601,6 +602,67 @@ _MOBILE_PLATFORM_TOKENS = {'ios', 'android'}
 WEB_PLATFORMS = {'web'}
 
 
+NEW_BUYER_SINGLE_PLAN_ENV = 'NEW_BUYER_SINGLE_PLAN_ENABLED'
+_NEW_BUYER_SINGLE_PLAN_OFF_VALUES = ('false', '0', 'off', 'no')
+
+
+def new_buyer_single_plan_enabled() -> bool:
+    """Kill switch for the new-buyer single-plan catalog. On unless set off.
+
+    David's ruling, 2026-10-24: a buyer with no current paid subscription gets
+    only Omi Pro (`unlimited_v2`) on mobile, web, and unknown/missing
+    platforms. Setting NEW_BUYER_SINGLE_PLAN_ENABLED to false/0/off/no
+    restores the pre-ruling catalog for those platforms.
+    """
+    return os.getenv(NEW_BUYER_SINGLE_PLAN_ENV, 'true').strip().lower() not in _NEW_BUYER_SINGLE_PLAN_OFF_VALUES
+
+
+def is_desktop_platform(platform: Optional[str]) -> bool:
+    """True for the X-App-Platform values desktop plan rules key off.
+
+    Anything that is not a real platform string (missing header, FastAPI's
+    Header default under direct invocation) is not desktop.
+    """
+    if not isinstance(platform, str):
+        return False
+    return platform.lower() in DESKTOP_PLATFORMS
+
+
+def _is_explicit_non_desktop_platform(platform: Optional[str]) -> bool:
+    """True only for the first-party non-desktop platform values.
+
+    Every desktop build ever shipped stamps `X-App-Platform` on every request
+    (macOS since the first desktop commit d51d10136e1c; Windows since its
+    platform-identity hardening), and the other desktop-identifying headers
+    (`X-Desktop-Request-ID`, `X-Omi-Plan-Identity`, `X-Device-Id-Hash`) are all
+    newer than the platform header, so a missing or unknown value has no
+    reliable desktop signal. Those callers keep the pre-ruling behaviour —
+    desktop compatibility outranks closing the header-less direct-API gap —
+    and their legacy-price checkouts are counted under
+    `unknown_platform_allowed` instead.
+    """
+    if not isinstance(platform, str):
+        return False
+    return platform.lower() in _MOBILE_PLATFORM_TOKENS or platform.lower() in WEB_PLATFORMS
+
+
+def new_buyer_single_plan_applies(current_plan: PlanType, platform: Optional[str]) -> bool:
+    """True when the single-plan rule constrains this caller.
+
+    A buyer with no current paid subscription (`basic`) on an explicitly known
+    non-desktop platform — mobile (`ios`/`android`) or `web` — is offered only
+    `unlimited_v2`. Desktop platforms keep selling Operator + Architect exactly
+    as before, any current subscriber keeps every existing plan-management
+    rule, and a missing or unknown platform header keeps the pre-ruling
+    behaviour (see `_is_explicit_non_desktop_platform`).
+    """
+    if not new_buyer_single_plan_enabled():
+        return False
+    if not _is_explicit_non_desktop_platform(platform):
+        return False
+    return current_plan == PlanType.basic
+
+
 def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     """Plans hidden from the purchase catalog per platform.
 
@@ -653,6 +715,10 @@ def filter_plans_for_user(
        from the phone. Desktop and web keep selling both.
     3. Fully churned ex-Neo users are `basic` and receive Plus + Unlimited,
        the replacement catalog, not the deprecated Neo SKU.
+    4. While NEW_BUYER_SINGLE_PLAN_ENABLED is on (default), a `basic` caller
+       on an explicitly known non-desktop platform (mobile or web) gets only
+       `unlimited_v2` (Omi Pro). Desktop platforms and missing/unknown
+       platform headers are unchanged; subscribers keep the rules above.
 
     The current-plan escape still applies on desktop/web so a Neo subscriber
     opening those surfaces can manage/cancel.
@@ -660,6 +726,9 @@ def filter_plans_for_user(
     is_mobile = (platform or '').lower() in _MOBILE_PLATFORM_TOKENS
     if is_mobile and current_plan in DESKTOP_ENTITLED_PLAN_TYPES:
         return [d for d in definitions if d.get('plan_type') == current_plan]
+
+    if new_buyer_single_plan_applies(current_plan, platform):
+        return [d for d in definitions if d.get('plan_type') == PlanType.unlimited_v2]
 
     hidden = _platform_hidden_plans(platform)
     out: List[Dict[str, Any]] = []
@@ -1534,6 +1603,132 @@ def is_pending_cancellation(subscription: Optional[Subscription], now: Optional[
     return subscription.current_period_end > (now or int(time.time()))
 
 
+NEW_BUYER_SINGLE_PLAN_ERROR = (
+    "Omi Pro is the only plan available for new subscriptions. " "Existing subscribers keep their current plan."
+)
+
+
+def _target_price_is_unlimited_v2(target_price_id: Optional[str]) -> bool:
+    if not target_price_id:
+        return False
+    try:
+        return get_plan_type_from_price_id(target_price_id) == PlanType.unlimited_v2
+    except ValueError:
+        return False
+
+
+# Closed label surfaces for omi_new_buyer_checkout_rejected_total. `reason`:
+# `non_omi_pro_price` — a restricted-platform new buyer's price outside the
+# Omi Pro single-plan catalog was rejected; `unknown_platform_allowed` — the
+# same price from a missing/unknown platform header was allowed because that
+# caller keeps the pre-ruling behaviour (do not sum reasons blindly: the
+# second is an allowance count, not a rejection). `plan` is the target price's
+# plan id or `unknown`. Never widen these with a uid, price id, or error text.
+NEW_BUYER_CHECKOUT_REJECT_REASONS = ('non_omi_pro_price', 'unknown_platform_allowed')
+NEW_BUYER_CHECKOUT_REJECT_PLANS = tuple(sorted({plan.value for plan in PlanType} | {'unknown'}))
+
+
+def _rejected_price_plan_label(target_price_id: Optional[str]) -> str:
+    if not target_price_id:
+        return 'unknown'
+    try:
+        return get_plan_type_from_price_id(target_price_id).value
+    except ValueError:
+        return 'unknown'
+
+
+def record_new_buyer_checkout_rejection(target_price_id: Optional[str]) -> None:
+    """Count one checkout rejection under the single-plan rule.
+
+    Never raises on the checkout path; the label surfaces are closed by
+    construction (no ids, no exception text). The reason is a literal at the
+    call site — the reason-label contract accepts literals only (a variable
+    needs a reviewed CLOSED_HELPERS helper or debt).
+    """
+    try:
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(
+            reason='non_omi_pro_price', plan=_rejected_price_plan_label(target_price_id)
+        ).inc()
+    except Exception:
+        logger.warning('new-buyer checkout guard metric failed', exc_info=True)
+
+
+def record_new_buyer_unknown_platform_allowance(target_price_id: Optional[str]) -> None:
+    """Count one legacy-price checkout allowed only because the platform is
+    missing/unknown (pre-ruling behaviour retained for those callers)."""
+    try:
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(
+            reason='unknown_platform_allowed', plan=_rejected_price_plan_label(target_price_id)
+        ).inc()
+    except Exception:
+        logger.warning('new-buyer checkout guard metric failed', exc_info=True)
+
+
+def _zero_initialize_rejection_children() -> None:
+    """Create every reachable label child so each series is born at 0.
+
+    A Counter child does not exist until its first ``.inc()``, and then reads
+    as a flat 1, invisible to rate()/increase() on a rare counter. Reasons are
+    literals at each call site (see the recorders above).
+    """
+    for plan in NEW_BUYER_CHECKOUT_REJECT_PLANS:
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(reason='non_omi_pro_price', plan=plan)
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(reason='unknown_platform_allowed', plan=plan)
+
+
+_zero_initialize_rejection_children()
+
+
+def _has_personal_recurring_subscription(subscription: Any) -> bool:
+    """True when this stored entitlement is a personal recurring Stripe subscription.
+
+    Organization grants store a one-time PaymentIntent (`pi_…`) in the legacy
+    `stripe_subscription_id` field (see `_try_reactivate_subscription` and
+    billing_reconciliation's `manual_payment_entitlement` bucket), and some
+    grant shapes carry no id at all. A granted plan without a personal
+    subscription is a new buyer for the single-plan rule: the exemption is
+    only for a current recurring subscriber.
+    """
+    sid = getattr(subscription, 'stripe_subscription_id', None)
+    return bool(sid) and not str(sid).startswith('pi_')
+
+
+@fresh_reader
+def new_buyer_single_plan_violation(uid: str, target_price_id: Optional[str], platform: Optional[str]) -> Optional[str]:
+    """Error text when the single-plan rule rejects this checkout target, else None.
+
+    New-buyer single-plan rule (2026-10-24): a buyer with no current paid
+    subscription on an explicitly known non-desktop platform (mobile or web)
+    may only start on Omi Pro (`unlimited_v2`). Call this AFTER every
+    subscriber escape (same-price reactivation, plan-change deferrals): a
+    stale Firestore record can make a current subscriber look basic, and those
+    callers must keep today's behavior. Only a current *recurring* personal
+    subscription exempts a caller — a granted plan (`pi_…` PaymentIntent or no
+    subscription id) is not a personal subscription. Desktop platforms and
+    missing/unknown platform headers keep the pre-ruling checkout behaviour;
+    the latter is counted in omi_new_buyer_checkout_rejected_total under
+    `unknown_platform_allowed`, rejections under `non_omi_pro_price`.
+    """
+    if not target_price_id or not new_buyer_single_plan_enabled():
+        return None
+    if is_desktop_platform(platform):
+        return None
+    if _target_price_is_unlimited_v2(target_price_id):
+        return None
+    subscription = users_db.get_user_valid_subscription(uid)
+    if (
+        subscription is not None
+        and subscription.plan != PlanType.basic
+        and _has_personal_recurring_subscription(subscription)
+    ):
+        return None
+    if not _is_explicit_non_desktop_platform(platform):
+        record_new_buyer_unknown_platform_allowance(target_price_id)
+        return None
+    record_new_buyer_checkout_rejection(target_price_id)
+    return NEW_BUYER_SINGLE_PLAN_ERROR
+
+
 @fresh_reader
 def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tuple[bool, str]:
     """
@@ -1763,6 +1958,15 @@ def resolve_transcription_allowance(
         # unlimited; resolved first so the paywall cannot contradict that snapshot.
         if is_marketplace_reviewer(uid):
             return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'marketplace_reviewer', limit_seconds=None)
+        # The fixed non-human release-probe identity exercises the full terminal
+        # desktop path (utils/release_probe.py gate convention). Its Free-plan
+        # account never buys a plan or BYOK keys, so once live STT cap-dispatch
+        # admission covers the whole fleet the strict desktop trial paywall
+        # holds every probe packet and the pusher prod canary finalization
+        # probe times out with zero transcripts (run 40190728003). Resolved
+        # before the paywall for the same reason as marketplace reviewers.
+        if uid == RELEASE_PROBE_UID:
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'release_probe', limit_seconds=None)
         # A Deepgram BYOK request is exempt from the trial paywall, as it is
         # from the quota: the user pays Deepgram directly. strict: a paywall
         # lookup failure must not open a billed socket for a paywalled account,

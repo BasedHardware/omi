@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,14 @@ import 'package:omi/utils/wal_file_manager.dart';
 
 Wal _wal(int timerStart) => Wal(
     timerStart: timerStart, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss, storage: WalStorage.disk);
+
+class _IsolateStampedWal extends Wal {
+  _IsolateStampedWal(int timerStart)
+      : super(timerStart: timerStart, codec: BleAudioCodec.opus, seconds: 10, storage: WalStorage.disk);
+
+  @override
+  Map<String, dynamic> toJson() => {...super.toJson(), 'serialized_on': Isolate.current.debugName};
+}
 
 /// The WAL index is rewritten whole on every save and grows with every kept
 /// recording, so its save path must stay off the UI isolate's critical path
@@ -108,6 +117,25 @@ void main() {
     final backup = jsonDecode(backupFile.readAsStringSync()) as Map<String, dynamic>;
     expect((backup['wals'] as List).length, 50);
     expect(offUiIsolateFallbacks, 0);
+  });
+
+  test('large main and superseded backup snapshots build every toJson map on the worker', () async {
+    offUiIsolateFallbacks = 0;
+    final wals = List<Wal>.generate(5000, (i) => _IsolateStampedWal(1000 + i));
+    // Force the coalescing path, whose superseded snapshot is serialized into
+    // the backup separately from the final index.
+    final first = WalFileManager.saveWals(wals);
+    final newest = WalFileManager.saveWals([...wals, _IsolateStampedWal(7000)]);
+    expect(await Future.wait([first, newest]), [true, true]);
+
+    for (final file in [walFile, backupFile]) {
+      final index = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final rows = index['wals'] as List;
+      expect(rows, hasLength(identical(file, walFile) ? 5001 : 5000));
+      expect(rows.map((row) => row['serialized_on']), everyElement('wal_index_encode'));
+    }
+    expect(await WalFileManager.loadWals(), hasLength(5001));
+    expect(offUiIsolateFallbacks, 0, reason: 'serialization must never silently fall back to the UI isolate');
   });
 
   // Guard for the skip-revalidation shortcut in _createBackup.

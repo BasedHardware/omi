@@ -19,9 +19,9 @@ from config.stt_cap_dispatch import (
 )
 from config.ladder_v1 import budget_enforcement_enabled
 from utils.observability.stt_cap_dispatch import (
+    allowance_decision_reason,
     record_audio,
     record_decision,
-    record_allowance_decision,
     DispatchPath,
     DispatchReason,
 )
@@ -87,24 +87,35 @@ class CapAllowanceDenied(Exception):
     """A spend refusal, handled as durable audio custody rather than STT failure."""
 
 
-def sync_allowed(
+def sync_admission(
     uid: str, seconds: float = 0, provider: Any = 'unknown', *, lane: str = 'sync', path: DispatchPath | None = None
-) -> bool:
+) -> tuple[bool, str]:
+    """``sync_allowed`` with the bounded DispatchReason surfaced for durable per-unit decisions."""
     if lane not in LANES:
         raise ValueError('unknown cap dispatch lane')
     path = path or (DispatchPath.BATCH_GPU if lane == 'batch' else DispatchPath.SYNC_SEGMENT)
     if not offline_admission_enabled(uid, lane):
-        return record_decision(path, True, DispatchReason.SCOPE_DISABLED)
-    if customer_funded(provider):
-        return record_decision(path, True, DispatchReason.BYOK)
-    from utils import funded_processing
+        allowed, reason = True, DispatchReason.SCOPE_DISABLED
+    elif customer_funded(provider):
+        allowed, reason = True, DispatchReason.BYOK
+    else:
+        from utils import funded_processing
 
-    if not funded_processing.consent_allows(uid):
-        return record_decision(path, False, DispatchReason.CONSENT_DENIED)
-    allowance = funded_allowance(uid, lane=lane)
-    if not allowance.managed:
-        record_audio(lane, 'held', provider, seconds, allowance.reason == 'plan_allowance_exhausted')
-    return record_allowance_decision(path, allowance)
+        if not funded_processing.consent_allows(uid):
+            allowed, reason = False, DispatchReason.CONSENT_DENIED
+        else:
+            allowance = funded_allowance(uid, lane=lane)
+            if not allowance.managed:
+                record_audio(lane, 'held', provider, seconds, allowance.reason == 'plan_allowance_exhausted')
+            allowed, reason = allowance.managed, allowance_decision_reason(allowance)
+    record_decision(path, allowed, reason)
+    return allowed, reason.value
+
+
+def sync_allowed(
+    uid: str, seconds: float = 0, provider: Any = 'unknown', *, lane: str = 'sync', path: DispatchPath | None = None
+) -> bool:
+    return sync_admission(uid, seconds, provider, lane=lane, path=path)[0]
 
 
 HELD_SPAN_MERGE_GAP_SECONDS = 0.5

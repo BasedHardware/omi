@@ -172,12 +172,13 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
 
 
 def _self_gate(audio: bytes, surface: str, cohort_key, audio_options) -> tuple[bool, language_gate.SelfVerdict | None]:
-    """(enforced, verdict). Batch intake is shadow-only until its GPU worker accepts self_lid evidence."""
+    """(enforced, verdict). The GPU worker accepts self_lid evidence, so batch
+    intake can enforce the self-hosted gate on its stable uid cohort too."""
     try:
         probe, _ = probe_wav(audio, **audio_options)
     except Exception:
         return False, None
-    enforced = surface != 'batch' and language_gate.enforced_for(cohort_key, probe)
+    enforced = language_gate.enforced_for(cohort_key, probe)
     if not enforced and not language_gate_shadow_enabled():
         return False, None
     return enforced, language_gate.self_detect(probe, surface=surface)
