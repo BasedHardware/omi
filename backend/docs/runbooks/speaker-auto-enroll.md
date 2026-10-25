@@ -57,7 +57,9 @@ their earliest contribution's 90-day boundary. Opt-out, privacy-generation chang
 owner change, token mismatch or unavailable authority removes cached derived
 vectors and their automatic mappings. Sync checks before extraction and again
 after embedding IO, immediately before matching publication. Live final authority
-checks follow continuity IO. Retraction and deletion fences remain active when
+checks follow continuity IO. Sync also rechecks immediately before label
+application, after any text-detection IO, preserving independent text/manual
+authority while removing revoked voice decisions and suggestions. Retraction and deletion fences remain active when
 new enrollment is killed off.
 
 All new reads are direct document gets. Bounded content-free person-ID indexes

@@ -477,7 +477,9 @@ def test_revocation_invalidates_cached_live_sync_and_stale_loads_atomically(stor
         assert p.cached_authorized(PID, {**cached, **p.cache_authority(UID, fresh, after)}, after)
 
 
-def test_sync_rechecks_revocation_after_embedding_io(store, monkeypatch):
+@pytest.mark.parametrize('timing', ['embedding', 'text'])
+@pytest.mark.parametrize('speaker_id', [0, None])
+def test_sync_rechecks_revocation_after_io(store, monkeypatch, timing, speaker_id):
     assert publish(store)
     person = store.rows[('users', UID, 'people', PID)]
     context = db.context(UID, firestore_client=store)
@@ -491,8 +493,14 @@ def test_sync_rechecks_revocation_after_embedding_io(store, monkeypatch):
     monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
 
     def extract(*args):
-        db.retract_conversation(UID, CID, firestore_client=store)
+        if timing == 'embedding':
+            db.retract_conversation(UID, CID, firestore_client=store)
         return np.asarray(VOICE)
+
+    def detect(*args, **kwargs):
+        if timing == 'text':
+            db.retract_conversation(UID, CID, firestore_client=store)
+        return None
 
     deps = replace(
         speaker_identity._DEFAULT_DEPS,
@@ -500,11 +508,14 @@ def test_sync_rechecks_revocation_after_embedding_io(store, monkeypatch):
         collect_speaker_audio=lambda *args: SimpleNamespace(clips=[(b'fake-audio', 10)], available_seconds=10),
         extract_embedding_from_bytes=extract,
         compare_embeddings=lambda *args: 0.0,
-        detect_speaker_from_text=lambda *args, **kwargs: None,
+        detect_speaker_from_text=detect,
     )
-    segment = TranscriptSegment(id='race', start=0, end=10, text='Synthetic speech.', speaker_id=0, is_user=False)
-    speaker_identity.identify_speakers_for_segments([segment], b'audio', cache, UID, dependencies=deps)
-    assert segment.person_id is None
+    segment = TranscriptSegment(
+        id='race', start=0, end=10, text='Synthetic speech.', speaker_id=speaker_id, is_user=False
+    )
+    other = TranscriptSegment(id='other', start=20, end=30, text='Other speech.', speaker_id=1, is_user=False)
+    speaker_identity.identify_speakers_for_segments([segment, other], b'audio', cache, UID, dependencies=deps)
+    assert segment.person_id is None and other.person_id is None
 
 
 def test_live_final_authority_rechecks_after_continuity_io(store):

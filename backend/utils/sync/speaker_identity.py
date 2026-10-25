@@ -393,6 +393,32 @@ def identify_speakers_for_segments(
                     if speaker_id > 0:
                         break  # One match per diarized speaker is enough
 
+    # Text detection can also perform IO after voice decisions were computed.
+    # Revoke only those derived decisions before applying any labels; independent
+    # text/manual labels keep their own authority.
+    derived = {pid: row for pid, row in person_embeddings_cache.items() if row.get('auto_enrolled')}
+    if derived:
+        final_context = auto_enroll_db.context(uid)
+        revoked = {pid for pid, row in derived.items() if not auto_enroll.cached_authorized(pid, row, final_context)}
+        if revoked:
+            voice_sources = {
+                (segment.speaker_id if segment.speaker_id is not None else 0, pid) for segment, pid in voice_assignments
+            }
+            for speaker_id, (person_id, _) in list(speaker_to_person_map.items()):
+                if person_id in revoked and (speaker_id, person_id) in voice_sources:
+                    speaker_to_person_map.pop(speaker_id)
+            for segment, person_id in voice_assignments:
+                if person_id in revoked:
+                    if segment.id is not None and segment_person_assignment_map.get(segment.id) == person_id:
+                        segment_person_assignment_map.pop(segment.id)
+                    if not segment.is_user and not segment.person_id:
+                        segment.speaker_identity_status = SpeakerIdentityStatus.no_match
+            voice_assignments = [(segment, pid) for segment, pid in voice_assignments if pid not in revoked]
+            for segment in transcript_segments:
+                if segment.voice_candidates is not None:
+                    segment.voice_candidates = [c for c in segment.voice_candidates if c['person_id'] not in revoked]
+                segment.speaker_match_scores = None
+
     # Apply all assignments to segments
     if speaker_to_person_map or segment_person_assignment_map:
         process_speaker_assigned_segments(
