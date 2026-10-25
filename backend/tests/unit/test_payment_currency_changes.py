@@ -243,3 +243,16 @@ def test_cancelled_plan_offers_keep_jpy_without_an_active_badge(case):
     rows = response.json()['plans']
     assert len(rows) == 4
     assert all(row['currency'] == 'jpy' and not row['is_active'] for row in rows)
+
+
+def test_invalid_promotion_does_not_reactivate_current_jpy_subscription(case, monkeypatch):
+    case['obj']['cancel_at_period_end'] = True
+    case['sub'].cancel_at_period_end = True
+    monkeypatch.setattr(stripe.PromotionCode, 'list', Mock(return_value=Mock(data=[])))
+    response = case['client'].post(
+        '/v1/payments/checkout-session', json={'price_id': PLUS_MONTH, 'promotion_code': 'INVALID_FIXTURE_CODE'}
+    )
+    assert response.status_code == 400
+    case['modify'].assert_not_called()
+    case['write'].assert_not_called()
+    assert case['sub'].cancel_at_period_end is True

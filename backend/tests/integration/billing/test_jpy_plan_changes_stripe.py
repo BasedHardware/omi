@@ -13,6 +13,7 @@ network guard and unrelated legacy Firebase integration-session fixture.
 """
 
 import os
+import uuid
 
 import pytest
 import stripe
@@ -203,3 +204,18 @@ def test_one_time_jpy_price_is_not_a_subscription_offer(flow, monkeypatch):
         assert writes == []
     finally:
         stripe.Price.modify(invalid.id, active=False)
+
+
+def test_invalid_promotion_does_not_reactivate_current_jpy_subscription(flow):
+    client, sub, prices, writes = flow
+    stripe.Subscription.modify(sub.id, cancel_at_period_end=True)
+    response = client.post(
+        '/v1/payments/checkout-session',
+        json={
+            'price_id': prices[(PlanType.plus, 'month', 'jpy')].id,
+            'promotion_code': f'OMI-QA-MISSING-{uuid.uuid4().hex}',
+        },
+    )
+    assert response.status_code == 400, response.text
+    assert stripe.Subscription.retrieve(sub.id).cancel_at_period_end is True
+    assert writes == []

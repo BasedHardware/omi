@@ -693,10 +693,27 @@ def create_checkout_session_endpoint(
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
-    # A retained JPY management target can only reactivate the exact current
-    # price. Never let it reach new Checkout (including after a lapsed plan).
+    # Retained currency prices are management-only; ordinary targets keep the
+    # existing purchase and eligibility checks before promotion-code lookup.
     currency_binding = management_binding(request.price_id)
-    if currency_binding is not None and not is_purchasable_price_id(request.price_id):
+    management_only = currency_binding is not None and not is_purchasable_price_id(request.price_id)
+    if not management_only:
+        _validate_price_id(request.price_id)
+        # Check if user can make a new payment
+        can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
+        if not can_pay:
+            raise HTTPException(status_code=400, detail=reason)
+
+    # Validate promotion code early — reject invalid codes before any subscription changes
+    resolved_checkout_promo_id = None
+    if request.promotion_code:
+        promo_list = stripe.PromotionCode.list(code=request.promotion_code, active=True, limit=1)
+        if not promo_list.data:
+            raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
+        resolved_checkout_promo_id = promo_list.data[0].id
+
+    # Only the exact current JPY price may reactivate; never open new Checkout.
+    if management_only and currency_binding is not None:
         current = users_db.get_user_subscription(uid)
         if current and current.stripe_subscription_id and current.stripe_subscription_id.startswith('sub_'):
             try:
@@ -710,19 +727,6 @@ def create_checkout_session_endpoint(
                 if reactivation:
                     return reactivation
         raise HTTPException(status_code=400, detail="This price is only available to manage an existing subscription.")
-    _validate_price_id(request.price_id)
-    # Check if user can make a new payment
-    can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
-    if not can_pay:
-        raise HTTPException(status_code=400, detail=reason)
-
-    # Validate promotion code early — reject invalid codes before any subscription changes
-    resolved_checkout_promo_id = None
-    if request.promotion_code:
-        promo_list = stripe.PromotionCode.list(code=request.promotion_code, active=True, limit=1)
-        if not promo_list.data:
-            raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
-        resolved_checkout_promo_id = promo_list.data[0].id
 
     # Try to reactivate canceled subscription (Scenario A)
     reactivation_result = _try_reactivate_subscription(uid, request.price_id)
