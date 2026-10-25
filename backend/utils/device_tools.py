@@ -326,6 +326,13 @@ def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: 
             # marker means a late submission is rejected rather than left in
             # Redis for the remainder of its TTL.
             await run_blocking(db_executor, clear_device_tool_inflight, uid, call_id)
+        if name == 'search_contacts' and isinstance(result, dict):
+            try:
+                from utils.llm.user_voice import record_contact_handles_for_user_voice
+
+                record_contact_handles_for_user_voice(uid, kwargs.get('query'), result)
+            except Exception as error:
+                logger.warning('Could not record contact handles uid=%s error_type=%s', uid, type(error).__name__)
         logger.info(
             'Device tool settled uid=%s tool=%s call_id=%s ok=%s elapsed_ms=%d',
             uid,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -17,7 +18,6 @@ from utils.llm.user_voice import (
     build_user_voice_profile,
     cache_user_voice_profile,
     clear_user_voice_state_for_tests,
-    format_user_voice_prompt,
     get_cached_user_voice_profile,
     get_or_build_user_voice_profile,
     is_user_voice_enabled,
@@ -80,7 +80,7 @@ def two_person_fixtures():
                     'person_id': None,
                 },
                 {
-                    'text': 'Hello Dr. Chen, we finalized theslides and sent them to the board.',
+                    'text': 'Hello Dr. Chen, we finalized the slides and sent them to the board.',
                     'is_user': True,
                     'person_id': None,
                 },
@@ -176,6 +176,39 @@ def test_locked_conversations_are_excluded(two_person_fixtures):
     assert alex_profile.exclamation_rate == 0.0
 
 
+def test_conversations_merely_about_person_and_sender_none_messages_are_ignored():
+    conversations = [
+        # Conversation with someone else that merely mentions Alex in title/overview and has a substring recipient
+        {
+            'id': 'conv-about-alex',
+            'is_locked': False,
+            'person_ids': ['person-other'],
+            'participants': ['Bob'],
+            'recipients': ['+15550101999'],
+            'structured': {
+                'title': 'Talking about Alex',
+                'overview': 'Discussed Alex project timeline.',
+            },
+            'transcript_segments': [
+                {'text': 'Formal sentence about Alex that ends with a period.', 'is_user': True},
+            ],
+        },
+    ]
+    messages = [
+        # Missing sender must NOT be treated as user-authored
+        {'sender': None, 'person_id': 'person-alex', 'text': 'Assistant output with missing sender!'},
+        {'sender': 'ai', 'person_id': 'person-alex', 'text': 'Another assistant line!'},
+    ]
+    profile = build_user_voice_profile(
+        conversations=conversations,
+        messages=messages,
+        person_id='person-alex',
+        person_name='Alex',
+        recipient='+15550101',
+    )
+    assert profile.sample_count == 0
+
+
 def test_language_and_script_mix_detection():
     bilingual_convs = [
         {
@@ -256,10 +289,11 @@ def test_deterministic_polish_fixes_ending_punctuation_and_exclamation_count(two
     # AI-sounding draft to Alex: over-punctuated with "!" and trailing period/emoji.
     raw_to_alex = 'Hey! Sounds great — I will see you at 7! 😊'
     polished_alex = polish_draft_in_user_voice(raw_to_alex, alex_profile)
+    assert polished_alex == 'hey sounds great I will see you at 7'
     assert '!' not in polished_alex
+    assert '.' not in polished_alex
     assert '😊' not in polished_alex
     assert '—' not in polished_alex
-    assert not polished_alex.endswith('.')
     assert polished_alex[0].islower()
 
     # Draft to Dr. Chen missing terminal period and containing AI exclamations.
@@ -267,7 +301,7 @@ def test_deterministic_polish_fixes_ending_punctuation_and_exclamation_count(two
     polished_chen = polish_draft_in_user_voice(raw_to_chen, chen_profile)
     assert '!' not in polished_chen
     assert polished_chen.endswith('.')
-    assert polished_chen.startswith('Hello Dr. Chen.')
+    assert polished_chen.startswith('Hello Dr. Chen,')
 
 
 @pytest.mark.asyncio
@@ -335,13 +369,118 @@ async def test_propose_message_applies_user_voice_polish_before_opening_sheet(tw
 
     assert len(requests) == 1
     sent_text = requests[0]['arguments']['text']
-    assert sent_text == 'hey. Running 5 mins late'
-    assert '!' not in sent_text
-    assert not sent_text.endswith('.')
+    assert sent_text == 'hey running 5 mins late'
+
+
+@pytest.mark.asyncio
+async def test_end_to_end_call_site_loads_stored_conversations_and_polishes_without_preseeded_cache(
+    two_person_fixtures,
+):
+    """Exercises the production call sites (no hand-passed conversations or pre-seeded cache)."""
+    conversations, stored_messages = two_person_fixtures
+    uid = 'uid-e2e-prod'
+    stored_people = [
+        {'id': 'person-alex', 'name': 'Alex'},
+        {'id': 'person-chen', 'name': 'Dr. Chen'},
+    ]
+
+    requests = []
+
+    class Callback:
+        async def put_device_tool_request(self, req):
+            requests.append(req)
+
+    class FakeRedis:
+        def __init__(self):
+            self.store = {}
+
+        def setex(self, key, _ttl, value):
+            self.store[key] = value
+
+        def get(self, key):
+            return self.store.get(key)
+
+        def delete(self, key):
+            return 1 if self.store.pop(key, None) is not None else 0
+
+    fake_redis = FakeRedis()
+
+    async def _inline(_executor, fn, *args):
+        return fn(*args)
+
+    turn_messages = [
+        {'sender': 'human', 'text': 'Can you text Alex that I am running 5 mins late?'},
+    ]
+
+    with (
+        patch.object(
+            user_voice,
+            '_load_user_voice_settings',
+            return_value={'user_voice_enabled': True},
+        ),
+        patch.object(
+            user_voice,
+            '_load_user_conversations_and_messages',
+            return_value=(conversations, stored_messages, stored_people),
+        ),
+        patch.object(device_tools, 'redis_client', fake_redis),
+        patch.object(device_tools, 'run_blocking', _inline),
+    ):
+        # 1. Agentic turn prompt builder resolves "Alex" from the user turn and stored conversations.
+        prompt_block = build_propose_message_voice_prompt_for_turn(uid, messages=turn_messages)
+        assert '<user_voice_profile recipient="Alex">' in prompt_block
+        assert 'no trailing period' in prompt_block
+        assert 'yo are you free around 7' in prompt_block
+
+        # 2. Device tools: search_contacts resolves Alex -> +15550101, then propose_message polishes draft.
+        tools = {
+            t.name: t
+            for t in build_device_tools(
+                uid,
+                {'search_contacts', 'propose_message'},
+                Callback(),
+                timeout_seconds=5,
+            )
+        }
+
+        async def answer_search():
+            while len(requests) < 1:
+                await asyncio.sleep(0.01)
+            call_id = requests[0]['call_id']
+            fake_redis.setex(
+                device_tool_result_key(uid, call_id),
+                60,
+                json.dumps(
+                    {
+                        'ok': True,
+                        'contacts': [{'name': 'Alex', 'phones': ['+15550101']}],
+                    }
+                ),
+            )
+
+        t1 = asyncio.create_task(answer_search())
+        await tools['search_contacts'].ainvoke({'query': 'Alex'})
+        await t1
+
+        async def answer_propose():
+            while len(requests) < 2:
+                await asyncio.sleep(0.01)
+            call_id = requests[1]['call_id']
+            fake_redis.setex(
+                device_tool_result_key(uid, call_id),
+                60,
+                json.dumps({'ok': True, 'status': 'sent'}),
+            )
+
+        t2 = asyncio.create_task(answer_propose())
+        await tools['propose_message'].ainvoke({'to': ['+15550101'], 'text': 'Hey! Running 5 mins late!'})
+        await t2
+
+    assert requests[1]['tool'] == 'propose_message'
+    assert requests[1]['arguments']['text'] == 'hey running 5 mins late'
 
 
 def test_blind_eval_fixtures():
-    from pathlib import Path
     from evals.user_voice.eval_blind import evaluate_fixtures
 
     fixtures_path = Path(__file__).resolve().parents[2] / 'evals' / 'user_voice' / 'fixtures.json'
@@ -349,4 +488,3 @@ def test_blind_eval_fixtures():
     assert summary['total_cases'] == 3
     assert summary['unstyled_detected_as_ai'] == 3
     assert summary['polished_indistinguishable_from_real'] == 3
-

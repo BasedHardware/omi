@@ -13,14 +13,12 @@ model calls.
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import re
 import statistics
 import time
 import unicodedata
-from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -39,33 +37,53 @@ USER_VOICE_MAX_EXAMPLE_CHARS = 140
 
 EndingStyle = Literal['none', 'period', 'exclamation', 'question']
 
-# Fallback in-process cache and opt-in state used when Redis/Firestore are not wired.
+# Fallback in-process cache, opt-in state, contact handle map, and last turn profile.
 _MEMORY_CACHE: Dict[str, Tuple[float, str]] = {}
 _MEMORY_OPT_IN: Dict[str, Any] = {}
+_CONTACT_HANDLE_TO_PERSON: Dict[Tuple[str, str], str] = {}
+_LAST_RESOLVED_PROFILE: Dict[str, 'UserVoiceProfile'] = {}
 
 _EMOJI_RE = re.compile(
     '['
-    '\U0001F300-\U0001F5FF'
-    '\U0001F600-\U0001F64F'
-    '\U0001F680-\U0001F6FF'
-    '\U0001F700-\U0001F77F'
-    '\U0001F780-\U0001F7FF'
-    '\U0001F800-\U0001F8FF'
-    '\U0001F900-\U0001F9FF'
-    '\U0001FA00-\U0001FA6F'
-    '\U0001FA70-\U0001FAFF'
-    '\u2600-\u26FF'
-    '\u2700-\u27BF'
+    '\U0001f300-\U0001f5ff'
+    '\U0001f600-\U0001f64f'
+    '\U0001f680-\U0001f6ff'
+    '\U0001f700-\U0001f77f'
+    '\U0001f780-\U0001f7ff'
+    '\U0001f800-\U0001f8ff'
+    '\U0001f900-\U0001f9ff'
+    '\U0001fa00-\U0001fa6f'
+    '\U0001fa70-\U0001faff'
+    '\u2600-\u26ff'
+    '\u2700-\u27bf'
     ']'
+)
+
+_GREETING_WORD_RE = (
+    r'(?:hey+y*|hi+i*|hello+|yo+|sup|hiya|howdy|morning|good\s+(?:morning|afternoon|evening)|'
+    r'dear\s+[a-zA-Z\u00C0-\u024F]+|hola|bonjour|salut|ciao|oi|halo|namaste|salaam)'
+)
+
+_GREETING_NAME_SUFFIX_RE = (
+    r'(?:\s+(?:dr\.?|mr\.?|ms\.?|mrs\.?|prof\.?)\s+[a-zA-Z\u00C0-\u024F]+|\s+[a-zA-Z\u00C0-\u024F]+)?'
 )
 
 _GREETING_PATTERNS = (
     re.compile(
-        r'^\s*((?:hey+y*|hi+i*|hello+|yo+|sup|hiya|howdy|morning|good\s+(?:morning|afternoon|evening)|'
-        r'dear\s+[a-zA-Z\u00C0-\u024F]+|hola|bonjour|salut|ciao|oi|halo|namaste|salaam)'
-        r'(?:\s+[a-zA-Z\u00C0-\u024F]+)?)[\s,!.:;-]*',
+        r'^\s*(' + _GREETING_WORD_RE + _GREETING_NAME_SUFFIX_RE + r')[\s,!.:;-]*',
         re.IGNORECASE,
     ),
+)
+
+_GREETING_EXCLAMATION_PREFIX_RE = re.compile(
+    r'^(\s*' + _GREETING_WORD_RE + _GREETING_NAME_SUFFIX_RE + r')\s*!+\s+(\S)',
+    re.IGNORECASE,
+)
+
+_MESSAGE_INTENT_TARGET_RE = re.compile(
+    r'\b(?:message|text|tell|ping|write(?:\s+to)?|send(?:\s+a\s+(?:message|text))?\s+to|reply\s+to)\s+'
+    r'((?:dr\.?\s+|mr\.?\s+|ms\.?\s+|mrs\.?\s+|prof\.?\s+)?[A-Z][a-zA-Z\u00C0-\u024F]+(?:\s+[A-Z][a-zA-Z\u00C0-\u024F]+)?)',
+    re.IGNORECASE,
 )
 
 _SPANISH_STOPWORDS = frozenset({'hola', 'gracias', 'para', 'pero', 'como', 'estoy', 'vamos', 'bien', 'porque', 'que'})
@@ -114,7 +132,75 @@ def _normalize_person_key(
 
 
 def user_voice_cache_key(uid: str, person_key: str) -> str:
-    return f'user_voice_profile:v1:{uid}:{person_key}'
+    normalized = _normalize_person_key(person_key) if person_key else 'default'
+    return f'user_voice_profile:v1:{uid}:{normalized}'
+
+
+def _load_user_voice_settings(uid: str, *, firestore_client: Any = None) -> Dict[str, Any]:
+    """Load user-voice opt-in settings for ``uid`` from memory override or Firestore user doc."""
+    if uid in _MEMORY_OPT_IN and isinstance(_MEMORY_OPT_IN[uid], Mapping):
+        return dict(_MEMORY_OPT_IN[uid])
+
+    client = firestore_client
+    if client is None:
+        try:
+            from database._client import get_firestore_client
+
+            client = get_firestore_client()
+        except Exception:
+            client = None
+
+    if client is not None:
+        try:
+            snap = client.collection('users').document(uid).get()
+            doc = snap.to_dict() if getattr(snap, 'exists', False) else {}
+            if isinstance(doc, Mapping):
+                return dict(doc)
+        except Exception as exc:
+            logger.debug('Could not read user_voice settings uid=%s err=%s', uid, type(exc).__name__)
+
+    return {}
+
+
+def _load_user_conversations_and_messages(
+    uid: str,
+    *,
+    limit_conversations: int = 50,
+    limit_messages: int = 50,
+) -> Tuple[List[Any], List[Any], List[Any]]:
+    """Fetch stored conversations, chat messages, and people for ``uid`` when not passed explicitly."""
+    conversations: List[Any] = []
+    messages: List[Any] = []
+    people: List[Any] = []
+
+    try:
+        from database import conversations as conversations_db
+
+        loaded_convs = conversations_db.get_conversations(uid, limit=limit_conversations)
+        if isinstance(loaded_convs, list):
+            conversations = loaded_convs
+    except Exception as exc:
+        logger.debug('Could not load conversations for user_voice uid=%s err=%s', uid, type(exc).__name__)
+
+    try:
+        from database import chat as chat_db
+
+        loaded_msgs = chat_db.get_messages(uid, limit=limit_messages)
+        if isinstance(loaded_msgs, list):
+            messages = loaded_msgs
+    except Exception as exc:
+        logger.debug('Could not load chat messages for user_voice uid=%s err=%s', uid, type(exc).__name__)
+
+    try:
+        from database import users as users_db
+
+        loaded_people = users_db.get_people(uid)
+        if isinstance(loaded_people, list):
+            people = loaded_people
+    except Exception as exc:
+        logger.debug('Could not load people for user_voice uid=%s err=%s', uid, type(exc).__name__)
+
+    return conversations, messages, people
 
 
 def is_user_voice_enabled(
@@ -127,34 +213,45 @@ def is_user_voice_enabled(
     """Return whether user-voice drafting is opted in for ``uid`` (and optionally ``person_id``).
 
     Supports both account-level opt-in (``user_voice_enabled: bool``) and per-person
-    overrides (``user_voice_people: {person_id: bool}``). Defaults to False unless
-    opted in.
+    overrides (``user_voice_people: {person_key: bool}``). Strictly defaults to False.
     """
-    data: Dict[str, Any] = {}
     if isinstance(user_settings, Mapping):
-        data.update(user_settings)
-    elif uid in _MEMORY_OPT_IN and isinstance(_MEMORY_OPT_IN[uid], Mapping):
-        data.update(_MEMORY_OPT_IN[uid])
-    elif firestore_client is not None:
-        try:
-            snap = firestore_client.collection('users').document(uid).get()
-            doc = snap.to_dict() if getattr(snap, 'exists', False) else {}
-            if isinstance(doc, Mapping):
-                data.update(doc)
-        except Exception as exc:
-            logger.debug('Could not read user_voice opt-in from firestore uid=%s err=%s', uid, type(exc).__name__)
+        data: Dict[str, Any] = dict(user_settings)
+    else:
+        data = _load_user_voice_settings(uid, firestore_client=firestore_client)
 
     if person_id:
         per_person = data.get('user_voice_people')
-        if isinstance(per_person, Mapping) and person_id in per_person and per_person[person_id] is not None:
-            return bool(per_person[person_id])
+        if isinstance(per_person, Mapping):
+            if person_id in per_person and per_person[person_id] is not None:
+                return bool(per_person[person_id])
+            norm_key = _normalize_person_key(person_id)
+            for k, v in per_person.items():
+                if v is not None and _normalize_person_key(str(k)) == norm_key:
+                    return bool(v)
 
     if 'user_voice_enabled' in data and data['user_voice_enabled'] is not None:
         return bool(data['user_voice_enabled'])
 
-    env_default = os.getenv('OMI_USER_VOICE_DEFAULT_ENABLED', '').strip().lower()
-    if env_default in ('1', 'true', 'yes', 'on'):
+    return False
+
+
+def _has_any_user_voice_opt_in(
+    uid: str,
+    *,
+    user_settings: Optional[Mapping[str, Any]] = None,
+    firestore_client: Any = None,
+) -> bool:
+    if isinstance(user_settings, Mapping):
+        data: Dict[str, Any] = dict(user_settings)
+    else:
+        data = _load_user_voice_settings(uid, firestore_client=firestore_client)
+
+    if bool(data.get('user_voice_enabled')):
         return True
+    per_person = data.get('user_voice_people')
+    if isinstance(per_person, Mapping):
+        return any(bool(v) for v in per_person.values() if v is not None)
     return False
 
 
@@ -187,10 +284,38 @@ def set_user_voice_enabled(
             logger.warning('Could not persist user_voice opt-in uid=%s err=%s', uid, type(exc).__name__)
 
 
+def record_contact_handles_for_user_voice(uid: str, query: Optional[str], result: Any) -> None:
+    """Record handle -> contact name mappings returned by ``search_contacts``."""
+    if not isinstance(result, Mapping):
+        return
+    contacts = result.get('contacts')
+    if not isinstance(contacts, list):
+        return
+    for contact in contacts:
+        if not isinstance(contact, Mapping):
+            continue
+        name = contact.get('name') or contact.get('display_name') or query
+        if not isinstance(name, str) or not name.strip():
+            continue
+        clean_name = name.strip()
+        for field_name in ('phones', 'phone_numbers', 'emails', 'email_addresses', 'handles', 'to'):
+            items = contact.get(field_name)
+            if isinstance(items, list):
+                for handle in items:
+                    if isinstance(handle, str) and handle.strip():
+                        _CONTACT_HANDLE_TO_PERSON[(uid, _normalize_person_key(handle))] = clean_name
+        for single_field in ('phone', 'email', 'handle'):
+            handle = contact.get(single_field)
+            if isinstance(handle, str) and handle.strip():
+                _CONTACT_HANDLE_TO_PERSON[(uid, _normalize_person_key(handle))] = clean_name
+
+
 def clear_user_voice_state_for_tests() -> None:
     """Clear in-memory caches and opt-in overrides used in unit tests."""
     _MEMORY_CACHE.clear()
     _MEMORY_OPT_IN.clear()
+    _CONTACT_HANDLE_TO_PERSON.clear()
+    _LAST_RESOLVED_PROFILE.clear()
 
 
 def cache_user_voice_profile(
@@ -201,14 +326,23 @@ def cache_user_voice_profile(
     ttl_seconds: int = USER_VOICE_CACHE_TTL_SECONDS,
     now_fn: Callable[[], float] = time.time,
 ) -> None:
-    key = user_voice_cache_key(uid, person_key)
+    keys = {person_key}
+    for alias in (profile.person_id, profile.person_name, profile.recipient):
+        if alias and str(alias).strip():
+            keys.add(str(alias).strip())
+
     payload = profile.model_dump_json()
-    _MEMORY_CACHE[key] = (now_fn() + ttl_seconds, payload)
-    if redis_client is not None:
-        try:
-            redis_client.setex(key, ttl_seconds, payload)
-        except Exception as exc:
-            logger.debug('Redis cache write skipped for user_voice key=%s err=%s', key, type(exc).__name__)
+    expires_at = now_fn() + ttl_seconds
+    for raw_key in keys:
+        if not raw_key:
+            continue
+        key = user_voice_cache_key(uid, raw_key)
+        _MEMORY_CACHE[key] = (expires_at, payload)
+        if redis_client is not None:
+            try:
+                redis_client.setex(key, ttl_seconds, payload)
+            except Exception as exc:
+                logger.debug('Redis cache write skipped for user_voice key=%s err=%s', key, type(exc).__name__)
 
 
 def get_cached_user_voice_profile(
@@ -276,9 +410,9 @@ def _conversation_matches_person(
     person_name: Optional[str] = None,
     recipient: Optional[str] = None,
 ) -> bool:
-    """Return True when ``conv`` involves the target person."""
+    """Return True when ``conv`` explicitly involves the target person as a participant/recipient."""
     if not person_id and not person_name and not recipient:
-        return True
+        return False
 
     target_id = person_id.strip() if isinstance(person_id, str) and person_id.strip() else None
     target_name = person_name.strip().lower() if isinstance(person_name, str) and person_name.strip() else None
@@ -291,23 +425,43 @@ def _conversation_matches_person(
         if _get_field(conv, 'person_id') == target_id:
             return True
 
+    ext = _get_field(conv, 'external_data')
+    if isinstance(ext, Mapping):
+        if target_id and ext.get('person_id') == target_id:
+            return True
+        if target_name:
+            ext_pname = ext.get('person_name') or ext.get('contact_name')
+            if isinstance(ext_pname, str) and target_name == ext_pname.strip().lower():
+                return True
+        if target_recipient:
+            for k in ('recipient', 'to', 'contact', 'handle', 'phone', 'email'):
+                v = ext.get(k)
+                if isinstance(v, str) and target_recipient == v.strip().lower():
+                    return True
+                if isinstance(v, (list, tuple, set)):
+                    if any(isinstance(item, str) and target_recipient == item.strip().lower() for item in v):
+                        return True
+
     if target_recipient:
         conv_recipients = _get_field(conv, 'recipients') or _get_field(conv, 'participants') or []
         if isinstance(conv_recipients, (list, tuple, set)):
             for item in conv_recipients:
-                if isinstance(item, str) and target_recipient in item.strip().lower():
+                if isinstance(item, str) and target_recipient == item.strip().lower():
                     return True
-                elif isinstance(item, Mapping):
+                if isinstance(item, Mapping):
                     for field_name in ('handle', 'phone', 'email', 'name', 'id'):
                         val = item.get(field_name)
                         if isinstance(val, str) and target_recipient == val.strip().lower():
                             return True
-        if isinstance(_get_field(conv, 'recipient'), str) and target_recipient == _get_field(conv, 'recipient').strip().lower():
+        conv_rec = _get_field(conv, 'recipient')
+        if isinstance(conv_rec, str) and target_recipient == conv_rec.strip().lower():
             return True
 
     segments = _get_field(conv, 'transcript_segments') or []
     for seg in segments:
-        if target_id and _get_field(seg, 'person_id') == target_id:
+        if target_id and (
+            _get_field(seg, 'person_id') == target_id or _get_field(seg, 'speaker_person_id') == target_id
+        ):
             return True
         if target_name:
             for field_name in ('person_name', 'speaker_name', 'speaker'):
@@ -324,15 +478,6 @@ def _conversation_matches_person(
                 p_name = p.get('name')
                 if isinstance(p_name, str) and target_name == p_name.strip().lower():
                     return True
-        structured = _get_field(conv, 'structured')
-        if structured is not None:
-            title = _get_field(structured, 'title') or ''
-            overview = _get_field(structured, 'overview') or ''
-            pattern = re.compile(r'\b' + re.escape(target_name) + r'\b', re.IGNORECASE)
-            if (isinstance(title, str) and pattern.search(title)) or (
-                isinstance(overview, str) and pattern.search(overview)
-            ):
-                return True
 
     return False
 
@@ -380,27 +525,20 @@ def _extract_user_lines_from_messages(
     target_id = person_id.strip() if isinstance(person_id, str) and person_id.strip() else None
     target_name = person_name.strip().lower() if isinstance(person_name, str) and person_name.strip() else None
     target_recipient = recipient.strip().lower() if isinstance(recipient, str) and recipient.strip() else None
-    name_re = re.compile(r'\b' + re.escape(target_name) + r'\b', re.IGNORECASE) if target_name else None
 
     for msg in messages or ():
         if isinstance(msg, str):
             text = msg.strip()
             if text:
                 general.append(text)
-                if name_re and name_re.search(text):
-                    matched.append(text)
             continue
 
         if _is_locked_record(msg):
             continue
 
         sender = _get_field(msg, 'sender') or _get_field(msg, 'role')
-        sender_val = getattr(sender, 'value', sender)
-        is_user_msg = (
-            _get_field(msg, 'is_user') is True
-            or sender_val in ('human', 'user')
-            or sender is None
-        )
+        sender_val = str(getattr(sender, 'value', sender) or '').strip().lower()
+        is_user_msg = _get_field(msg, 'is_user') is True or sender_val in ('human', 'user', 'me')
         if not is_user_msg:
             continue
 
@@ -424,8 +562,6 @@ def _extract_user_lines_from_messages(
                 is_match = True
         elif target_name and isinstance(msg_person_name, str) and target_name == msg_person_name.strip().lower():
             is_match = True
-        elif name_re and name_re.search(clean_text):
-            is_match = True
 
         if is_match:
             matched.append(clean_text)
@@ -433,10 +569,117 @@ def _extract_user_lines_from_messages(
     return matched, general
 
 
+def _infer_target_person_from_context(
+    *,
+    conversations: Sequence[Any] = (),
+    messages: Sequence[Any] = (),
+    people: Sequence[Any] = (),
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Infer ``(person_id, person_name, recipient)`` for the current turn from user messages & known people."""
+    known_candidates: List[Tuple[Optional[str], str, Optional[str]]] = []
+    seen_names = set()
+
+    for p in people or ():
+        pid = _get_field(p, 'id')
+        pname = _get_field(p, 'name')
+        if isinstance(pname, str) and pname.strip():
+            norm = pname.strip().lower()
+            if norm not in seen_names:
+                seen_names.add(norm)
+                known_candidates.append((str(pid) if pid else None, pname.strip(), None))
+        aliases = _get_field(p, 'aliases') or []
+        if isinstance(aliases, (list, tuple, set)):
+            for alias in aliases:
+                if isinstance(alias, str) and alias.strip():
+                    norm = alias.strip().lower()
+                    if norm not in seen_names:
+                        seen_names.add(norm)
+                        known_candidates.append((str(pid) if pid else None, alias.strip(), None))
+
+    for conv in conversations or ():
+        if _is_locked_record(conv):
+            continue
+        conv_pids = _get_field(conv, 'person_ids') or []
+        first_pid = (
+            str(conv_pids[0]) if isinstance(conv_pids, list) and len(conv_pids) == 1 else _get_field(conv, 'person_id')
+        )
+        participants = _get_field(conv, 'participants') or _get_field(conv, 'people') or []
+        for part in participants:
+            if isinstance(part, str) and part.strip():
+                norm = part.strip().lower()
+                if norm not in seen_names:
+                    seen_names.add(norm)
+                    known_candidates.append((str(first_pid) if first_pid else None, part.strip(), None))
+            elif isinstance(part, Mapping):
+                pname = part.get('name')
+                pid = part.get('id') or first_pid
+                prec = part.get('handle') or part.get('phone') or part.get('email')
+                if isinstance(pname, str) and pname.strip():
+                    norm = pname.strip().lower()
+                    if norm not in seen_names:
+                        seen_names.add(norm)
+                        known_candidates.append((str(pid) if pid else None, pname.strip(), str(prec) if prec else None))
+        for seg in _get_field(conv, 'transcript_segments') or ():
+            if _get_field(seg, 'is_user') is True:
+                continue
+            seg_pid = _get_field(seg, 'person_id') or first_pid
+            for field_name in ('person_name', 'speaker_name'):
+                val = _get_field(seg, field_name)
+                if isinstance(val, str) and val.strip():
+                    norm = val.strip().lower()
+                    if norm not in seen_names:
+                        seen_names.add(norm)
+                        known_candidates.append((str(seg_pid) if seg_pid else None, val.strip(), None))
+
+    recent_user_texts: List[str] = []
+    for msg in reversed(list(messages or ())):
+        if isinstance(msg, str):
+            if msg.strip():
+                recent_user_texts.append(msg.strip())
+            continue
+        sender = _get_field(msg, 'sender') or _get_field(msg, 'role')
+        sender_val = str(getattr(sender, 'value', sender) or '').strip().lower()
+        if _get_field(msg, 'is_user') is True or sender_val in ('human', 'user', 'me'):
+            msg_pid = _get_field(msg, 'person_id')
+            msg_pname = _get_field(msg, 'person_name')
+            msg_rec = _get_field(msg, 'recipient') or _get_field(msg, 'to')
+            if isinstance(msg_rec, list):
+                msg_rec = msg_rec[0] if msg_rec else None
+            if msg_pid or msg_pname or msg_rec:
+                return (
+                    str(msg_pid) if msg_pid else None,
+                    str(msg_pname) if msg_pname else None,
+                    str(msg_rec) if msg_rec else None,
+                )
+            text = _get_field(msg, 'text') or _get_field(msg, 'content')
+            if isinstance(text, str) and text.strip():
+                recent_user_texts.append(text.strip())
+
+    # Match longest candidate name first so "Dr. Chen" wins over "Chen".
+    sorted_candidates = sorted(known_candidates, key=lambda item: len(item[1]), reverse=True)
+    for text in recent_user_texts:
+        for pid, pname, prec in sorted_candidates:
+            pat = re.compile(r'(?<!\w)' + re.escape(pname) + r'(?!\w)', re.IGNORECASE)
+            if pat.search(text):
+                return pid, pname, prec
+
+    for text in recent_user_texts:
+        m = _MESSAGE_INTENT_TARGET_RE.search(text)
+        if m:
+            extracted_name = m.group(1).strip()
+            for pid, pname, prec in sorted_candidates:
+                if pname.lower() == extracted_name.lower():
+                    return pid, pname, prec
+            return None, extracted_name, None
+
+    if len(known_candidates) == 1:
+        return known_candidates[0]
+
+    return None, None, None
+
+
 def _classify_line_ending(line: str) -> EndingStyle:
     stripped = line.rstrip()
-    # Strip trailing closing quotes/parens or emojis to inspect punctuation underneath,
-    # unless there is no punctuation at all.
     while stripped and (_EMOJI_RE.match(stripped[-1]) or stripped[-1] in '"\')]}'):
         stripped = stripped[:-1].rstrip()
     if not stripped:
@@ -467,12 +710,7 @@ def _detect_script_and_languages(lines: Sequence[str]) -> Tuple[Dict[str, float]
                 script = 'arabic'
             elif 0x0900 <= cp <= 0x097F:
                 script = 'devanagari'
-            elif (
-                0x4E00 <= cp <= 0x9FFF
-                or 0x3040 <= cp <= 0x30FF
-                or 0xAC00 <= cp <= 0xD7AF
-                or 0x3400 <= cp <= 0x4DBF
-            ):
+            elif 0x4E00 <= cp <= 0x9FFF or 0x3040 <= cp <= 0x30FF or 0xAC00 <= cp <= 0xD7AF or 0x3400 <= cp <= 0x4DBF:
                 script = 'cjk'
             elif 0x0370 <= cp <= 0x03FF:
                 script = 'greek'
@@ -603,8 +841,13 @@ def build_user_voice_profile(
 
     if conv_lines or matched_msg_lines:
         lines = [*matched_msg_lines, *conv_lines]
-    else:
+    elif not person_id and not person_name and not recipient:
         lines = list(general_msg_lines)
+    else:
+        # When targeting a specific person and no conversations matched, fall back to
+        # string messages only when raw string history was passed directly.
+        raw_string_lines = [m.strip() for m in (messages or ()) if isinstance(m, str) and m.strip()]
+        lines = raw_string_lines
 
     if not lines:
         return UserVoiceProfile(
@@ -646,7 +889,6 @@ def build_user_voice_profile(
     total = len(lines)
     ending_rates = {k: round(v / total, 3) for k, v in ending_buckets.items()}
 
-    # Tie-break non-question endings deterministically: period vs exclamation vs none.
     non_question_candidates: List[EndingStyle] = ['none', 'period', 'exclamation']
     dominant_ending: EndingStyle = max(
         non_question_candidates,
@@ -703,17 +945,38 @@ def get_or_build_user_voice_profile(
     now_fn: Callable[[], float] = time.time,
 ) -> Optional[UserVoiceProfile]:
     """Return the cached or freshly built ``UserVoiceProfile`` when opt-in is enabled."""
+    target_opt_in_key = person_id or person_name or recipient
     if not is_user_voice_enabled(
         uid,
-        person_id=person_id,
+        person_id=target_opt_in_key,
         user_settings=user_settings,
         firestore_client=firestore_client,
     ):
         return None
 
+    for candidate_key in (person_id, recipient, person_name):
+        if candidate_key and str(candidate_key).strip():
+            cached = get_cached_user_voice_profile(uid, str(candidate_key), now_fn=now_fn)
+            if cached is not None:
+                _LAST_RESOLVED_PROFILE[uid] = cached
+                return cached
+
+    if conversations is None:
+        loaded_convs, loaded_msgs, loaded_people = _load_user_conversations_and_messages(uid)
+        conversations = loaded_convs
+        if messages is None:
+            messages = loaded_msgs
+        if not person_id and not person_name and not recipient:
+            person_id, person_name, recipient = _infer_target_person_from_context(
+                conversations=conversations,
+                messages=messages or (),
+                people=loaded_people,
+            )
+
     person_key = _normalize_person_key(person_id=person_id, person_name=person_name, recipient=recipient)
     cached = get_cached_user_voice_profile(uid, person_key, now_fn=now_fn)
     if cached is not None:
+        _LAST_RESOLVED_PROFILE[uid] = cached
         return cached
 
     profile = build_user_voice_profile(
@@ -725,6 +988,7 @@ def get_or_build_user_voice_profile(
     )
     if profile.sample_count > 0:
         cache_user_voice_profile(uid, person_key, profile, ttl_seconds=ttl_seconds, now_fn=now_fn)
+        _LAST_RESOLVED_PROFILE[uid] = profile
     return profile
 
 
@@ -775,36 +1039,54 @@ def polish_draft_in_user_voice(text: str, profile: Optional[UserVoiceProfile]) -
 
     # 1. Strip AI-style em-dashes when the user doesn't use them in examples.
     if '—' in out and not any('—' in ex for ex in profile.examples):
-        out = re.sub(r'\s*—\s*', ', ', out)
+        if profile.dominant_ending == 'none':
+            out = re.sub(r'\s*—\s*', ' ', out)
+        else:
+            out = re.sub(r'\s*—\s*', ', ', out)
 
-    # 2. Enforce exclamation mark ceiling ("!" count).
-    max_excl = max(0, profile.max_exclamations_per_line)
-    # Collapse repeated "!!!" -> "!" unless the user genuinely uses multi-exclamations.
-    if max_excl <= 1:
-        out = re.sub(r'!{2,}', '!', out)
-
-    if max_excl == 0:
-        # Replace mid-sentence "!" with "." (or nothing at the very end if dominant_ending == 'none').
-        out = re.sub(r'!(?=\s|$)', '.', out)
-    else:
-        excl_positions = [m.start() for m in re.finditer(r'!', out)]
-        if len(excl_positions) > max_excl:
-            # Keep only the last `max_excl` exclamation marks; turn earlier ones into periods.
-            drop_set = set(excl_positions[:-max_excl])
-            chars = list(out)
-            for idx in drop_set:
-                chars[idx] = '.'
-            out = ''.join(chars)
-
-    # 3. Strip emojis if the user never uses emojis with this person.
+    # 2. Strip emojis if the user never uses emojis with this person.
     if profile.emoji_rate == 0.0 and _EMOJI_RE.search(out):
         out = _EMOJI_RE.sub('', out)
         out = re.sub(r' {2,}', ' ', out).strip()
 
+    # 3. Enforce exclamation mark ceiling ("!" count).
+    max_excl = max(0, profile.max_exclamations_per_line)
+    if max_excl <= 1:
+        out = re.sub(r'!{2,}', '!', out)
+
+    if max_excl == 0:
+        # Handle greeting + "!" (e.g. "Hey! Running 5 mins late!") without leaving an unnatural "hey."
+        def _replace_greeting_excl(match: re.Match[str]) -> str:
+            greeting = match.group(1)
+            next_char = match.group(2)
+            if profile.dominant_ending == 'none':
+                if profile.lowercase_start_rate >= 0.7 and next_char.isupper():
+                    next_char = next_char.lower()
+                return f'{greeting} {next_char}'
+            return f'{greeting}, {next_char}'
+
+        out = _GREETING_EXCLAMATION_PREFIX_RE.sub(_replace_greeting_excl, out, count=1)
+
+        if profile.dominant_ending == 'none':
+            # Remove terminal "!" and replace any remaining internal "!" with a comma.
+            out = re.sub(r'!+\s*$', '', out)
+            out = re.sub(r'!(?=\s)', ',', out)
+            out = out.replace('!', '')
+        else:
+            out = re.sub(r'!(?=\s|$)', '.', out)
+    else:
+        excl_positions = [m.start() for m in re.finditer(r'!', out)]
+        if len(excl_positions) > max_excl:
+            drop_set = set(excl_positions[:-max_excl])
+            replacement_char = ',' if profile.dominant_ending == 'none' else '.'
+            chars = list(out)
+            for idx in drop_set:
+                chars[idx] = replacement_char
+            out = ''.join(chars)
+
     # 4. Enforce ending punctuation style (period, nothing, "!").
     if profile.dominant_ending == 'none':
-        # Strip a single trailing period (preserve ellipsis "...").
-        if out.endswith('.') and not out.endswith('...'):
+        if (out.endswith('.') or out.endswith(',')) and not out.endswith('...'):
             out = out[:-1].rstrip()
     elif profile.dominant_ending == 'period':
         if out.endswith('!') and max_excl == 0:
@@ -822,16 +1104,8 @@ def polish_draft_in_user_voice(text: str, profile: Optional[UserVoiceProfile]) -
         first_word_match = re.match(r'^([A-Za-z]+)', out)
         if first_word_match:
             first_word = first_word_match.group(1)
-            person_tokens = {
-                tok.lower()
-                for tok in re.findall(r'[A-Za-z]+', profile.person_name or '')
-                if tok
-            }
-            if (
-                first_word != 'I'
-                and not first_word.isupper()
-                and first_word.lower() not in person_tokens
-            ):
+            person_tokens = {tok.lower() for tok in re.findall(r'[A-Za-z]+', profile.person_name or '') if tok}
+            if first_word != 'I' and not first_word.isupper() and first_word.lower() not in person_tokens:
                 out = out[0].lower() + out[1:]
 
     return out
@@ -847,11 +1121,21 @@ def apply_user_voice_to_proposed_message(
     conversations: Optional[Sequence[Any]] = None,
     messages: Optional[Sequence[Any]] = None,
     user_settings: Optional[Mapping[str, Any]] = None,
+    firestore_client: Any = None,
 ) -> str:
     """Resolve the recipient's cached/built voice profile and polish ``text`` in-place."""
     if not isinstance(text, str) or not text:
         return text
-    recipient = to[0] if isinstance(to, (list, tuple)) and to else None
+
+    recipient = to[0].strip() if isinstance(to, (list, tuple)) and to and isinstance(to[0], str) else None
+    if not person_name and recipient:
+        mapped_name = _CONTACT_HANDLE_TO_PERSON.get((uid, _normalize_person_key(recipient)))
+        if mapped_name:
+            person_name = mapped_name
+
+    if not _has_any_user_voice_opt_in(uid, user_settings=user_settings, firestore_client=firestore_client):
+        return text
+
     profile = get_or_build_user_voice_profile(
         uid,
         person_id=person_id,
@@ -860,8 +1144,16 @@ def apply_user_voice_to_proposed_message(
         conversations=conversations,
         messages=messages,
         user_settings=user_settings,
+        firestore_client=firestore_client,
     )
-    if profile is None:
+    if (profile is None or profile.sample_count <= 0) and uid in _LAST_RESOLVED_PROFILE:
+        last_profile = _LAST_RESOLVED_PROFILE[uid]
+        if last_profile.sample_count > 0:
+            profile = last_profile
+            if recipient:
+                cache_user_voice_profile(uid, recipient, profile)
+
+    if profile is None or profile.sample_count <= 0:
         return text
     return polish_draft_in_user_voice(text, profile)
 
@@ -875,8 +1167,25 @@ def build_propose_message_voice_prompt_for_turn(
     conversations: Optional[Sequence[Any]] = None,
     messages: Optional[Sequence[Any]] = None,
     user_settings: Optional[Mapping[str, Any]] = None,
+    firestore_client: Any = None,
 ) -> str:
     """Return the ``<user_voice_profile>`` prompt block for ``propose_message`` when opted in."""
+    if not _has_any_user_voice_opt_in(uid, user_settings=user_settings, firestore_client=firestore_client):
+        return ''
+
+    loaded_people: List[Any] = []
+    if conversations is None:
+        conversations, loaded_msgs, loaded_people = _load_user_conversations_and_messages(uid)
+        if messages is None:
+            messages = loaded_msgs
+
+    if not person_id and not person_name and not recipient:
+        person_id, person_name, recipient = _infer_target_person_from_context(
+            conversations=conversations or (),
+            messages=messages or (),
+            people=loaded_people,
+        )
+
     profile = get_or_build_user_voice_profile(
         uid,
         person_id=person_id,
@@ -885,6 +1194,6 @@ def build_propose_message_voice_prompt_for_turn(
         conversations=conversations,
         messages=messages,
         user_settings=user_settings,
+        firestore_client=firestore_client,
     )
     return format_user_voice_prompt(profile)
-
