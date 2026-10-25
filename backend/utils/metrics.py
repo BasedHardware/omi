@@ -1547,12 +1547,10 @@ OMI_API_RATE_LIMIT_THROTTLED_TOTAL = Counter(
     'HTTP 429 rate-limit/quota rejections returned by backend rate limiters by bounded scope and policy family',
     ['scope', 'policy_family'],
 )
+from utils.rate_limit_config import RATE_POLICIES
+
 _API_RATE_LIMIT_SCOPES = frozenset({'redis_policy', 'ip_window'})
-_API_RATE_LIMIT_POLICY_FAMILIES = frozenset(
-    'action_items agent apps chat connectors conversations dev file frame_requests goals import integration '
-    'knowledge_graph mcp memories memory_imports proactivity review screen_activity screen_task screenshots '
-    'speaker_tag_prompts static_map storefront stt test tools tts users voice wrapped custom'.split()
-)
+_API_RATE_LIMIT_POLICY_FAMILIES = frozenset({k.split(':', 1)[0] for k in RATE_POLICIES} | {'custom'})
 for _rl_scope in _API_RATE_LIMIT_SCOPES:
     for _rl_family in _API_RATE_LIMIT_POLICY_FAMILIES:
         OMI_API_RATE_LIMIT_THROTTLED_TOTAL.labels(scope=_rl_scope, policy_family=_rl_family)

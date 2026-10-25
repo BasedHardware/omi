@@ -11,6 +11,7 @@ import pytest
 from fastapi import HTTPException
 
 from utils import metrics
+from utils.rate_limit_config import RATE_POLICIES
 from utils.llm import byok_errors
 from utils.other import endpoints
 
@@ -260,3 +261,8 @@ def test_handle_llm_error_records_platform_and_byok_429_and_quota_metrics(mock_n
         == before_byok_quota + 1.0
     )
     mock_notify.assert_called_once_with('user-1', 'openai', 'quota')
+
+
+def test_api_rate_limit_policy_families_match_rate_policies():
+    expected_families = {k.split(':', 1)[0] for k in RATE_POLICIES} | {'custom'}
+    assert metrics._API_RATE_LIMIT_POLICY_FAMILIES == expected_families
