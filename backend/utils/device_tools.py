@@ -34,6 +34,14 @@ from pydantic import BaseModel, Field
 
 from database.redis_db import r as redis_client
 from utils.executors import db_executor, run_blocking
+from utils.llm.user_voice import (
+    format_user_voice_prompt,
+    get_or_build_user_voice_profile,
+    is_user_voice_opted_in,
+    polish_draft_in_user_voice,
+    remember_contact_resolution,
+    resolve_person_for_handles,
+)
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -102,7 +110,8 @@ DEVICE_TOOL_SPECS: dict[str, dict[str, Any]] = {
             "and body. This does NOT send on its own: iOS requires the user to tap Send. The "
             "result reports status=sent when they sent it, or status=cancelled when they "
             "dismissed the sheet. Never tell the user a message was sent unless the result says "
-            "sent. Resolve a named person with search_contacts first."
+            "sent. Resolve a named person with search_contacts first, and when a user_voice_profile "
+            "is present for that recipient, write text in the user's own voice for that person."
         ),
     },
     'search_contacts': {
@@ -293,6 +302,20 @@ def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: 
         # Drop the RunnableConfig LangChain injects; it is not part of the
         # payload the device should receive.
         kwargs.pop('config', None)
+        if name == 'propose_message' and isinstance(kwargs.get('text'), str):
+            recipients = kwargs.get('to') if isinstance(kwargs.get('to'), list) else []
+            person_name = resolve_person_for_handles(uid, recipients)
+            if is_user_voice_opted_in(uid, person_name):
+                profile = await run_blocking(
+                    db_executor,
+                    lambda: get_or_build_user_voice_profile(
+                        uid,
+                        person_name,
+                        recipient_handles=recipients,
+                        opt_in=True,
+                    ),
+                )
+                kwargs['text'] = polish_draft_in_user_voice(kwargs['text'], profile)
         call_id = str(uuid.uuid4())
         request = {
             'call_id': call_id,
@@ -323,6 +346,26 @@ def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: 
             result.get('ok'),
             int((time.monotonic() - started_at) * 1000),
         )
+        if name == 'search_contacts' and isinstance(result, dict) and isinstance(result.get('contacts'), list):
+            remember_contact_resolution(uid, result['contacts'])
+            for contact in result['contacts']:
+                if not isinstance(contact, dict):
+                    continue
+                contact_name = str(contact.get('name') or contact.get('display_name') or '').strip()
+                if contact_name and is_user_voice_opted_in(uid, contact_name):
+                    handles = contact.get('phones') or contact.get('emails') or []
+                    profile = await run_blocking(
+                        db_executor,
+                        lambda cname=contact_name, ch=handles: get_or_build_user_voice_profile(
+                            uid,
+                            cname,
+                            recipient_handles=ch if isinstance(ch, list) else [],
+                            opt_in=True,
+                        ),
+                    )
+                    prompt_guidance = format_user_voice_prompt(profile)
+                    if prompt_guidance:
+                        contact['user_voice_profile'] = prompt_guidance
         # Returned as JSON text: the model reads `status` and `ok` directly, and
         # a cancelled sheet must stay visibly distinct from a delivered message.
         return json.dumps(result)
