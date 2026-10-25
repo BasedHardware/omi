@@ -28,6 +28,13 @@ Questions are left out of the ending shares: a question ends with "?" because of
 what it says, not how the person writes, and someone who mostly asks Omi things
 would otherwise look like they end every line with "?".
 
+Reciprocity: people answer in kind -- an emoji with an emoji, a "!" with a "!", a
+language with that language -- far more often than their base rate. ``fit_mirror``
+measures that on the same exchanges (the other person's message, then the user's
+reply; spoken turns give length and script only) and ``reply_target`` turns it into
+an aim for this one reply. ``infer_register`` tells work from personal with Omi's own
+conversation categories for that person, else the work words in their exchanges.
+
 Locked, discarded and deleted conversations are never read. The feature is
 opt-in (``assistant_settings.drafts.user_voice``); the profile is cached for
 seven days, encrypted with the user's key like other user content.
@@ -35,6 +42,7 @@ seven days, encrypted with the user's key like other user content.
 
 import json
 import logging
+import math
 import re
 import unicodedata
 from collections import Counter
@@ -52,7 +60,7 @@ from utils.encryption import decrypt, encrypt
 logger = logging.getLogger(__name__)
 
 USER_VOICE_CACHE_TTL_SECONDS = 7 * 24 * 3600
-USER_VOICE_PROFILE_VERSION = 3
+USER_VOICE_PROFILE_VERSION = 4
 
 # Below this many of the user's own lines a profile is noise; the prompt block
 # then says so instead of inventing a style.
@@ -125,6 +133,47 @@ class VoiceExchange(BaseModel):
     me: str
 
 
+class VoiceMirror(BaseModel):
+    """How this person writes to the user, and how the user's reply follows what they just sent.
+
+    Fitted on the same (their message -> the user's reply) exchanges. Per message, people
+    tend to answer an emoji with an emoji, a "!" with a "!" and a language with that
+    language far more often than their base rate; reply length follows the other person
+    mostly across people (already in the profile), so it moves a draft only as far as the
+    fitted slope says. Spoken exchanges carry length and script only: speech-to-text
+    writes the marks.
+    """
+
+    exchanges: int = 0
+    marks_measured: bool = False
+    their_median_chars: int = 0
+    their_emoji_rate: int = 0
+    their_exclamation_rate: int = 0
+    # Percent of the user's replies with the mark, when their message had it / did not.
+    emoji_if_they: int = 0
+    emoji_if_not: int = 0
+    exclamation_if_they: int = 0
+    exclamation_if_not: int = 0
+    # Percent of replies in the same main script as their message.
+    same_script: int = 0
+    # Slope of log(reply length) on log(their length), clamped to [-1, 1].
+    length_slope: float = 0.0
+    user_emoji: list[str] = Field(default_factory=list)
+
+
+class ReplyTarget(BaseModel):
+    chars: int
+    emoji: bool
+    emoji_percent: int
+    exclamation: str  # 'one' | 'rare' | 'none'
+    exclamation_percent: int
+    script: Optional[str] = None
+    script_percent: int = 0
+    their_chars: int = 0
+    their_emoji: bool = False
+    their_exclamation: bool = False
+
+
 class UserVoiceProfile(BaseModel):
     version: int = USER_VOICE_PROFILE_VERSION
     person_id: str
@@ -154,6 +203,10 @@ class UserVoiceProfile(BaseModel):
     exchanges: list[VoiceExchange] = Field(default_factory=list)
     reply_median_chars: int = 0
     stock_replies: list[str] = Field(default_factory=list)
+    mirror: Optional[VoiceMirror] = None
+    # 'work' | 'personal' | None, and why (conversation categories, or work words).
+    voice_register: Optional[str] = None
+    voice_register_reason: str = ''
 
     @property
     def is_reliable(self) -> bool:
@@ -231,6 +284,8 @@ def build_profile(
     *,
     written_lines: Iterable[str] = (),
     exchanges: Iterable[tuple[str, str]] = (),
+    spoken_exchanges: Iterable[tuple[str, str]] = (),
+    categories: Iterable[str] = (),
     now: Optional[datetime] = None,
 ) -> UserVoiceProfile:
     """Build the profile from the user's own lines, oldest first."""
@@ -315,7 +370,141 @@ def build_profile(
             short[key] += 1
             form[key] = line  # the newest spelling
     profile.stock_replies = [form[k] for k, n in short.most_common(USER_VOICE_MAX_STOCK) if n >= STOCK_REPLY_MIN_COUNT]
+
+    written_pairs = [(e.them, e.me) for e in profile.exchanges]
+    spoken_pairs = [(_clean(a), _clean(b)) for a, b in spoken_exchanges]
+    spoken_pairs = [(a, b) for a, b in spoken_pairs if a and b]
+    profile.mirror = fit_mirror(written_pairs, marks=True) if len(written_pairs) >= USER_VOICE_MIN_LINES else (
+        fit_mirror(spoken_pairs, marks=False) if len(spoken_pairs) >= USER_VOICE_MIN_LINES else None
+    )
+    profile.voice_register, profile.voice_register_reason = infer_register(categories, written_pairs or spoken_pairs)
     return profile
+
+
+# ---------------------------------------------------------------------------
+# Reciprocity and register (pure)
+# ---------------------------------------------------------------------------
+
+# Below this many replies to messages with a mark, the "if they" rate leans on the base rate.
+_MIRROR_PRIOR = 2
+EMOJI_REPLY_PERCENT = 30
+EXCLAMATION_ONE_PERCENT = 40
+EXCLAMATION_NONE_PERCENT = 8
+SAME_SCRIPT_PERCENT = 70
+
+
+def _reply_script(text: str) -> Optional[str]:
+    """A message's script for answering in kind: any full-width script wins (one Han word in an
+    English-heavy line still makes it a Chinese message), else the dominant one."""
+    counts = letter_scripts(text)
+    full = [s for s in counts if s in _FULL_WIDTH_SCRIPTS]
+    return max(full, key=counts.get) if full else (counts.most_common(1)[0][0] if counts else None)
+
+
+def _marks(text: str) -> tuple[int, bool, bool, Optional[str]]:
+    return len(text), bool(_EMOJI_RE.search(text)), bool(_BANG_RE.search(text)), _reply_script(text)
+
+
+def fit_mirror(pairs: list[tuple[str, str]], *, marks: bool) -> Optional[VoiceMirror]:
+    """Fit how the user's reply follows the other person's message, from real exchanges."""
+    rows = [(_marks(them), _marks(me), me) for them, me in pairs if them and me]
+    n = len(rows)
+    if n < USER_VOICE_MIN_LINES:
+        return None
+
+    def conditional(index: int) -> tuple[int, int]:
+        base = sum(1 for _, m, _ in rows if m[index]) / n
+        def smoothed(group: list) -> int:
+            return round(100 * (sum(1 for _, m, _ in group if m[index]) + _MIRROR_PRIOR * base) / (len(group) + _MIRROR_PRIOR))
+        return smoothed([r for r in rows if r[0][index]]), smoothed([r for r in rows if not r[0][index]])
+
+    lt = [math.log(t[0] + 1) for t, _, _ in rows]
+    lm = [math.log(m[0] + 1) for _, m, _ in rows]
+    mt, mm = sum(lt) / n, sum(lm) / n
+    var = sum((x - mt) ** 2 for x in lt)
+    cov = sum((x - mt) * (y - mm) for x, y in zip(lt, lm))
+    scripted = [(t[3], m[3]) for t, m, _ in rows if t[3] and m[3]]
+    mirror = VoiceMirror(
+        exchanges=n,
+        marks_measured=marks,
+        their_median_chars=_quantile(sorted(t[0] for t, _, _ in rows), 0.5),
+        same_script=_percent(sum(1 for a, b in scripted if a == b), len(scripted)),
+        length_slope=round(max(-1.0, min(1.0, cov / var)), 2) if var else 0.0,
+    )
+    if marks:
+        mirror.their_emoji_rate = _percent(sum(1 for t, _, _ in rows if t[1]), n)
+        mirror.their_exclamation_rate = _percent(sum(1 for t, _, _ in rows if t[2]), n)
+        mirror.emoji_if_they, mirror.emoji_if_not = conditional(1)
+        mirror.exclamation_if_they, mirror.exclamation_if_not = conditional(2)
+        used = Counter(ch for _, _, me in rows for ch in _EMOJI_RE.findall(me))
+        mirror.user_emoji = [e for e, _ in used.most_common(4)]
+    return mirror
+
+
+def reply_target(profile: Optional[UserVoiceProfile], incoming: str) -> Optional[ReplyTarget]:
+    """What this reply should look like, from what they just sent and the fitted mirroring."""
+    mirror = profile.mirror if profile else None
+    text = _clean(incoming)
+    if mirror is None or not text:
+        return None
+    chars, emoji, bang, script = _marks(text)
+    base = profile.reply_median_chars or profile.median_chars or 20
+    slope = max(0.0, min(1.0, mirror.length_slope))
+    ratio = max(0.6, min(1.6, (max(1, chars) / max(1, mirror.their_median_chars)) ** slope))
+    target = ReplyTarget(
+        chars=max(2, round(base * ratio)),
+        emoji=False,
+        emoji_percent=0,
+        exclamation='rare',
+        exclamation_percent=0,
+        their_chars=chars,
+        their_emoji=emoji,
+        their_exclamation=bang,
+    )
+    if mirror.marks_measured:
+        target.emoji_percent = mirror.emoji_if_they if emoji else mirror.emoji_if_not
+        target.emoji = target.emoji_percent >= EMOJI_REPLY_PERCENT
+        target.exclamation_percent = mirror.exclamation_if_they if bang else mirror.exclamation_if_not
+        if target.exclamation_percent >= EXCLAMATION_ONE_PERCENT:
+            target.exclamation = 'one'
+        elif target.exclamation_percent < EXCLAMATION_NONE_PERCENT:
+            target.exclamation = 'none'
+    if script and mirror.same_script >= SAME_SCRIPT_PERCENT:
+        target.script, target.script_percent = script, mirror.same_script
+    return target
+
+
+# Omi's own conversation categories (models.conversation_enums.CategoryEnum) that mark a work relationship.
+WORK_CATEGORIES = frozenset({'work', 'business', 'entrepreneurship', 'finance', 'legal', 'economics', 'technology', 'design'})
+PERSONAL_CATEGORIES = frozenset(
+    {'personal', 'social', 'family', 'romantic', 'parenting', 'entertainment', 'sports', 'music', 'travel', 'health', 'inspiration'}
+)
+WORK_SHARE_PERCENT = 20
+_WORK_WORDS_RE = re.compile(
+    r'\b(invoice|payment|contract|client|interview|recruit\w*|resume|deadline|deliverable|meeting|office|project|'
+    r'specs?|salary|offer|report|schedule|candidates?|website)\b|会议|會議|合同|报告|報告|客户|網站|网站',
+    re.IGNORECASE,
+)
+
+
+def infer_register(categories: Iterable[str], pairs: list[tuple[str, str]]) -> tuple[Optional[str], str]:
+    """'work' or 'personal' for this person: Omi's conversation categories first, then work words."""
+    cats = [str(c).lower() for c in categories if c]
+    work = sum(1 for c in cats if c in WORK_CATEGORIES)
+    personal = sum(1 for c in cats if c in PERSONAL_CATEGORIES)
+    if work + personal >= 3:
+        share = _percent(work, work + personal)
+        if share >= 60:
+            return 'work', f'{share}% of your conversations with them are work'
+        if share <= 40:
+            return 'personal', f'{100 - share}% of your conversations with them are personal'
+    if pairs:
+        share = _percent(sum(1 for a, b in pairs if _WORK_WORDS_RE.search(a) or _WORK_WORDS_RE.search(b)), len(pairs))
+        return ('work', f'work words in {share}% of your exchanges') if share >= WORK_SHARE_PERCENT else (
+            'personal',
+            f'work words in only {share}% of your exchanges',
+        )
+    return None, ''
 
 
 def _grams(text: str) -> set[str]:
@@ -430,13 +619,41 @@ def profile_prompt_block(
     if tail:
         lines.append('- the open thread, oldest first (reply to the last message):')
         lines.extend(f"    {'user' if t.get('is_user') else name}: {_clean(t.get('text'))}" for t in tail)
-    target = profile.reply_median_chars or profile.median_chars
+    aim = reply_target(profile, incoming)
+    target = aim.chars if aim else (profile.reply_median_chars or profile.median_chars)
     lines.append(
         "- the user's request gives the MEANING, not the words: its wording is an assistant's, so do not "
         f'reuse it; say it the way the user would to {name}, with the plain everyday words, slang and '
         f'spelling of the replies above, about {target} characters, nothing added (no explanations, '
         'no extra pleasantries, no "already"/"just"/"really" padding)'
     )
+    if profile.voice_register == 'work':
+        lines.append(
+            f'- register: work ({profile.voice_register_reason}): practical and direct, the point first; no pet '
+            'names or in-jokes; warmth only the way the replies above show it'
+        )
+    elif profile.voice_register == 'personal':
+        lines.append(
+            f'- register: personal ({profile.voice_register_reason}): the casual voice of the replies above; '
+            'pet names, slang and stretched words only the ones they use'
+        )
+    mirror = profile.mirror
+    if aim and mirror:
+        said = f'{aim.their_chars} characters' + (', an emoji' if aim.their_emoji else '') + (', "!"' if aim.their_exclamation else '')
+        parts = [f'- match {name} the way the user does (fitted on {mirror.exchanges} real replies): they just sent {said}']
+        if mirror.marks_measured:
+            if aim.emoji:
+                mine = f" ({' '.join(mirror.user_emoji)})" if mirror.user_emoji else ''
+                parts.append(f'one emoji of the user\'s own fits{mine}: they answer like this {aim.emoji_percent}% of the time')
+            else:
+                parts.append(f'no emoji (the user adds one {aim.emoji_percent}% of the time here)')
+            if aim.exclamation == 'one':
+                parts.append(f'one "!" fits ({aim.exclamation_percent}% of replies here)')
+            elif aim.exclamation == 'none':
+                parts.append(f'no "!" ({aim.exclamation_percent}%)')
+        if aim.script:
+            parts.append(f'answer in {aim.script} script like their message ({aim.script_percent}% of the time)')
+        lines.append('; '.join(parts))
     return '\n'.join(lines)
 
 
@@ -537,6 +754,41 @@ def user_lines_with_person(conversations: Iterable[dict], person_id: str) -> lis
     return [text for _, _, text in lines]
 
 
+def _with_person(conversations: Iterable[dict], person_id: str) -> list[dict]:
+    keep = []
+    for conversation in conversations:
+        if conversation.get('is_locked') or conversation.get('discarded') or conversation.get('deleted'):
+            continue
+        segments = conversation.get('transcript_segments') or []
+        if any(s.get('person_id') == person_id and not s.get('is_user') for s in segments):
+            keep.append(conversation)
+    return keep
+
+
+def spoken_exchanges_with_person(conversations: Iterable[dict], person_id: str) -> list[tuple[str, str]]:
+    """(what that person said, what the user said next) turns in conversations with them, oldest first."""
+    pairs: list[tuple[Any, tuple[str, str]]] = []
+    for conversation in _with_person(conversations, person_id):
+        started = str(conversation.get('started_at') or conversation.get('created_at') or '')
+        segments = sorted(conversation.get('transcript_segments') or [], key=lambda s: float(s.get('start') or 0))
+        for prev, seg in zip(segments, segments[1:]):
+            if seg.get('is_user') and not prev.get('is_user') and prev.get('person_id') == person_id:
+                if prev.get('text') and seg.get('text'):
+                    pairs.append((started, (prev['text'], seg['text'])))
+    pairs.sort(key=lambda item: item[0])
+    return [pair for _, pair in pairs][-USER_VOICE_MAX_EXCHANGES:]
+
+
+def categories_with_person(conversations: Iterable[dict], person_id: str) -> list[str]:
+    """Omi's own category for each conversation with that person."""
+    out = []
+    for conversation in _with_person(conversations, person_id):
+        category = (conversation.get('structured') or {}).get('category')
+        if category:
+            out.append(str(getattr(category, 'value', category)))
+    return out
+
+
 def typed_user_lines(messages: Iterable[dict]) -> list[str]:
     """What the user typed to Omi, oldest first (newest-first pages are reversed)."""
     typed = [
@@ -612,6 +864,8 @@ def get_user_voice_profile(uid: str, person: dict) -> UserVoiceProfile:
         typed_user_lines(messages),
         written_lines=user_written_lines(uid, person),
         exchanges=user_written_exchanges(uid, person),
+        spoken_exchanges=spoken_exchanges_with_person(conversations, person_id),
+        categories=categories_with_person(conversations, person_id),
     )
     _write_cached(uid, profile)
     return profile

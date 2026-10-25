@@ -499,3 +499,91 @@ def test_the_thread_and_exchanges_reach_the_contact(fake_redis, fake_sources):
     block = result['contacts'][0]['user_voice']
     assert 'Mia: dinner at 7?  ->  user: okk' in block
     assert '    Mia: dinner at 7?' in block
+
+
+# ---------------------------------------------------------------------------
+# Reciprocity and register
+# ---------------------------------------------------------------------------
+
+
+def _mirroring_exchanges():
+    # Invented: the user answers an emoji with one, a "!" with one, and plain text plainly.
+    pairs = []
+    for i in range(12):
+        pairs.append(('omg that was so fun 😭', 'right 🥰' if i % 2 == 0 else 'right'))
+        pairs.append(('see you at 5!', 'yes!' if i % 3 else 'yes'))
+        pairs.append(('are you around later', 'yeah'))
+    return pairs
+
+
+def test_the_reply_follows_their_emoji_and_exclamation():
+    profile = build_profile('p1', 'Ada', [], [], written_lines=[me for _, me in _mirroring_exchanges()], exchanges=_mirroring_exchanges())
+    assert profile.mirror is not None and profile.mirror.marks_measured
+    assert profile.mirror.emoji_if_they > 40 > profile.mirror.emoji_if_not
+    assert profile.mirror.exclamation_if_they > profile.mirror.exclamation_if_not
+    with_emoji = user_voice.reply_target(profile, 'lol that was wild 😭')
+    plain = user_voice.reply_target(profile, 'are you free tomorrow')
+    assert with_emoji.emoji and not plain.emoji
+    assert user_voice.reply_target(profile, 'see you soon!').exclamation == 'one'
+    assert plain.exclamation == 'none'
+
+
+def test_the_block_names_the_target_for_this_reply():
+    profile = build_profile('p1', 'Ada', [], [], written_lines=[me for _, me in _mirroring_exchanges()], exchanges=_mirroring_exchanges())
+    block = profile_prompt_block(profile, 'lol that was wild 😭')
+    assert 'match Ada the way the user does' in block and 'one emoji' in block and '🥰' in block
+    assert 'no emoji' in profile_prompt_block(profile, 'are you free tomorrow')
+
+
+def test_spoken_turns_give_length_and_script_but_never_marks():
+    conversations = [
+        {
+            'id': 'c1',
+            'started_at': '2026-01-01T00:00:00+00:00',
+            'transcript_segments': [
+                {'person_id': 'p1', 'is_user': False, 'text': f'did you see the game {i}!', 'start': 2 * i}
+                if j == 0
+                else {'is_user': True, 'text': 'yeah it was great!', 'start': 2 * i + 1}
+                for i in range(10)
+                for j in range(2)
+            ],
+        }
+    ]
+    turns = user_voice.spoken_exchanges_with_person(conversations, 'p1')
+    assert len(turns) == 10 and turns[0] == ('did you see the game 0!', 'yeah it was great!')
+    profile = build_profile('p1', 'Ada', ['yeah it was great!'] * 10, [], spoken_exchanges=turns)
+    assert profile.mirror is not None and not profile.mirror.marks_measured
+    target = user_voice.reply_target(profile, 'so fun!')
+    assert target.exclamation == 'rare' and not target.emoji
+
+
+def test_register_comes_from_omi_categories_then_work_words():
+    assert user_voice.infer_register(['work', 'business', 'work', 'social'], [])[0] == 'work'
+    assert user_voice.infer_register(['family', 'social', 'personal'], [])[0] == 'personal'
+    work_pairs = [('can you send the invoice before the meeting', 'yes sending now')] * 5 + [('thanks', 'np')] * 5
+    assert user_voice.infer_register([], work_pairs)[0] == 'work'
+    assert user_voice.infer_register([], [('lol', 'haha')] * 10)[0] == 'personal'
+    assert user_voice.infer_register([], []) == (None, '')
+
+
+def test_categories_are_read_only_from_conversations_with_that_person():
+    conversations = [
+        {'structured': {'category': 'work'}, 'transcript_segments': [{'person_id': 'p1', 'is_user': False, 'text': 'hi'}]},
+        {'structured': {'category': 'family'}, 'transcript_segments': [{'person_id': 'p2', 'is_user': False, 'text': 'hi'}]},
+        {'structured': {'category': 'work'}, 'is_locked': True, 'transcript_segments': [{'person_id': 'p1', 'is_user': False, 'text': 'hi'}]},
+    ]
+    assert user_voice.categories_with_person(conversations, 'p1') == ['work']
+
+
+def test_the_register_reaches_the_block():
+    pairs = [('can you send the invoice before the meeting', 'yes sending now')] * 10
+    profile = build_profile('p1', 'Ada', [], [], written_lines=['yes sending now'] * 10, exchanges=pairs)
+    assert profile.voice_register == 'work'
+    assert '- register: work' in profile_prompt_block(profile, 'and the contract?')
+
+
+def test_a_chinese_message_with_english_names_is_still_answered_in_chinese():
+    pairs = [('你今天有空吗', '有呀')] * 6 + [('明天几点', '两点')] * 6
+    profile = build_profile('p1', 'Ada', [], [], written_lines=['有呀', '两点'] * 6, exchanges=pairs)
+    target = user_voice.reply_target(profile, '這個你今天有做出一個版本嗎 Meet Our Network (or Featured Nannies)')
+    assert target.script == 'han'
