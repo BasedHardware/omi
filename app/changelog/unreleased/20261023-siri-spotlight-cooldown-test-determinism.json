@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Spotlight cooldown and deferred-removal test determinism only; no store-build behavior change"
+}
