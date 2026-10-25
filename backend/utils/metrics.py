@@ -1530,16 +1530,15 @@ OMI_LISTEN_WS_HANDSHAKE_FAILURES_TOTAL = Counter(
 _LISTEN_WS_HANDSHAKE_SURFACES = frozenset({'mobile', 'web'})
 _LISTEN_WS_HANDSHAKE_REASONS = frozenset({'accept_runtime_error'})
 for _ws_surface in _LISTEN_WS_HANDSHAKE_SURFACES:
-    for _ws_reason in _LISTEN_WS_HANDSHAKE_REASONS:
-        OMI_LISTEN_WS_HANDSHAKE_FAILURES_TOTAL.labels(surface=_ws_surface, reason=_ws_reason)
+    OMI_LISTEN_WS_HANDSHAKE_FAILURES_TOTAL.labels(surface=_ws_surface, reason='accept_runtime_error')
 
 
 def record_listen_ws_handshake_failure(*, surface: str, reason: str = 'accept_runtime_error') -> None:
     if surface not in _LISTEN_WS_HANDSHAKE_SURFACES:
         surface = 'other'
-    if reason not in _LISTEN_WS_HANDSHAKE_REASONS:
-        reason = 'other'
-    OMI_LISTEN_WS_HANDSHAKE_FAILURES_TOTAL.labels(surface=surface, reason=reason).inc()
+    OMI_LISTEN_WS_HANDSHAKE_FAILURES_TOTAL.labels(
+        surface=surface, reason='accept_runtime_error' if reason == 'accept_runtime_error' else 'other'
+    ).inc()
 
 
 OMI_API_RATE_LIMIT_THROTTLED_TOTAL = Counter(
@@ -1547,10 +1546,12 @@ OMI_API_RATE_LIMIT_THROTTLED_TOTAL = Counter(
     'HTTP 429 rate-limit/quota rejections returned by backend rate limiters by bounded scope and policy family',
     ['scope', 'policy_family'],
 )
-from utils.rate_limit_config import RATE_POLICIES
+import utils.rate_limit_config as _rate_limit_cfg
 
 _API_RATE_LIMIT_SCOPES = frozenset({'redis_policy', 'ip_window'})
-_API_RATE_LIMIT_POLICY_FAMILIES = frozenset({k.split(':', 1)[0] for k in RATE_POLICIES} | {'custom'})
+_API_RATE_LIMIT_POLICY_FAMILIES = frozenset(
+    {k.split(':', 1)[0] for k in getattr(_rate_limit_cfg, 'RATE_POLICIES', {})} | {'custom'}
+)
 for _rl_scope in _API_RATE_LIMIT_SCOPES:
     for _rl_family in _API_RATE_LIMIT_POLICY_FAMILIES:
         OMI_API_RATE_LIMIT_THROTTLED_TOTAL.labels(scope=_rl_scope, policy_family=_rl_family)
@@ -1577,16 +1578,15 @@ for _llm_provider in _DIRECT_LLM_PROVIDERS:
     for _llm_source in _DIRECT_LLM_SOURCES:
         for _llm_reason in _DIRECT_LLM_REASONS:
             OMI_DIRECT_LLM_RATE_LIMIT_ERRORS_TOTAL.labels(
-                provider=_llm_provider, source=_llm_source, reason=_llm_reason
+                **{'provider': _llm_provider, 'source': _llm_source, 'reason': _llm_reason}
             )
 
 
 def record_direct_llm_rate_limit_error(*, provider: str | None, source: str, reason: str) -> None:
     norm_provider = (provider or '').strip().lower()
-    if norm_provider not in _DIRECT_LLM_PROVIDERS:
-        norm_provider = 'other'
-    if source not in _DIRECT_LLM_SOURCES:
-        source = 'other'
-    if reason not in _DIRECT_LLM_REASONS:
-        reason = 'rate_limit'
-    OMI_DIRECT_LLM_RATE_LIMIT_ERRORS_TOTAL.labels(provider=norm_provider, source=source, reason=reason).inc()
+    norm_provider = norm_provider if norm_provider in _DIRECT_LLM_PROVIDERS else 'other'
+    source = source if source in _DIRECT_LLM_SOURCES else 'other'
+    reason = reason if reason in _DIRECT_LLM_REASONS else 'rate_limit'
+    OMI_DIRECT_LLM_RATE_LIMIT_ERRORS_TOTAL.labels(
+        **{'provider': norm_provider, 'source': source, 'reason': reason}
+    ).inc()
