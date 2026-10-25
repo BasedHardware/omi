@@ -71,31 +71,56 @@ class _PreviewFrame extends StatelessWidget {
   }
 }
 
-class _Lines extends StatelessWidget {
+class _Lines extends StatefulWidget {
   const _Lines({required this.lines, required this.bottomInset});
 
   final List<LivePreviewLine> lines;
   final double bottomInset;
 
   @override
-  Widget build(BuildContext context) {
-    // Reversed so the newest words stay in view as they arrive; shrink-wrapped
-    // and top-aligned so a short preview reads from the top. Lines are bounded.
-    return Align(
-      alignment: Alignment.topCenter,
-      child: _list(context),
-    );
+  State<_Lines> createState() => _LinesState();
+}
+
+/// Reads top-down and follows the newest words while the reader is at the
+/// bottom; scrolling up to reread stops the follow until they return.
+class _LinesState extends State<_Lines> {
+  final ScrollController _scroll = ScrollController();
+  bool _following = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(() {
+      final position = _scroll.position;
+      _following = position.pixels >= position.maxScrollExtent - 48;
+    });
   }
 
-  Widget _list(BuildContext context) {
+  @override
+  void didUpdateWidget(covariant _Lines oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_following) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
+    });
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = widget.lines;
     return ListView.builder(
-      reverse: true,
-      shrinkWrap: true,
+      controller: _scroll,
       padding: EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md,
-          MediaQuery.paddingOf(context).bottom + bottomInset + OmiSpacing.md),
+          MediaQuery.paddingOf(context).bottom + widget.bottomInset + OmiSpacing.md),
       itemCount: lines.length,
       itemBuilder: (context, index) {
-        final line = lines[lines.length - 1 - index];
+        final line = lines[index];
         return Padding(
           key: ValueKey('live_preview_line_${line.id}'),
           padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
