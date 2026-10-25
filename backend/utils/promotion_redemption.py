@@ -9,7 +9,7 @@ the subscription, so the discount lands on the first invoice after the trial.
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Optional
 
 import stripe
 
@@ -37,7 +37,7 @@ def _find_promotion_code(code: str) -> dict:
     promos = stripe.PromotionCode.list(code=code, active=True, limit=1).data
     if not promos:
         raise _invalid()
-    promo = promos[0].to_dict_recursive()
+    promo = promos[0].to_dict()
     max_redemptions = promo.get('max_redemptions')
     if max_redemptions is not None and promo.get('times_redeemed', 0) >= max_redemptions:
         raise _invalid()
@@ -49,7 +49,10 @@ def _find_promotion_code(code: str) -> dict:
 
 def _coupon_id(promo: dict) -> str:
     coupon = promo.get('coupon') or (promo.get('promotion') or {}).get('coupon')
-    return coupon['id'] if isinstance(coupon, dict) else coupon
+    coupon_id = coupon.get('id') if isinstance(coupon, dict) else coupon
+    if not isinstance(coupon_id, str):
+        raise _invalid()
+    return coupon_id
 
 
 def _check_eligible(promo: dict, coupon: dict, subscription: dict) -> None:
@@ -89,7 +92,7 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
     if not subscription_id:
         raise RedemptionError(400, 'Start your plan first, then redeem your code.')
 
-    subscription = stripe.Subscription.retrieve(subscription_id).to_dict_recursive()
+    subscription = stripe.Subscription.retrieve(subscription_id).to_dict()
     if subscription.get('status') not in REDEEMABLE_STATUSES or subscription.get('cancel_at_period_end'):
         raise RedemptionError(400, 'Start your plan first, then redeem your code.')
     if (subscription.get('metadata') or {}).get('uid') not in (None, uid):
@@ -98,7 +101,7 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
         raise RedemptionError(409, 'A discount is already applied to your plan.')
 
     promo = _find_promotion_code(code)
-    coupon = stripe.Coupon.retrieve(_coupon_id(promo), expand=['applies_to']).to_dict_recursive()
+    coupon = stripe.Coupon.retrieve(_coupon_id(promo), expand=['applies_to']).to_dict()
     _check_eligible(promo, coupon, subscription)
 
     if not redemptions_db.claim(promo['id'], uid=uid, subscription_id=subscription_id, coupon_id=coupon['id']):
@@ -114,11 +117,11 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
             subscription_id,
             discounts=[{'coupon': coupon['id']}],
             metadata={'redeemed_promotion_code_id': promo['id']},
-        ).to_dict_recursive()
+        ).to_dict()
     except Exception as e:
         logger.error(f"Promotion code redemption failed for {uid}: {sanitize(str(e))}")
         _undo_claim(promo['id'])
-        if isinstance(e, stripe.error.StripeError):
+        if isinstance(e, stripe.StripeError):
             raise RedemptionError(400, 'Could not apply this code. Please try again.') from e
         raise
 

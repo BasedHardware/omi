@@ -23,7 +23,7 @@ MONTHLY = {'id': 'price_month', 'product': 'prod_unlimited', 'currency': 'usd', 
 
 
 def _obj(d):
-    return SimpleNamespace(to_dict_recursive=lambda: d)
+    return SimpleNamespace(to_dict=lambda: d)
 
 
 def _subscription(price=YEARLY, status='trialing', **extra):
@@ -76,6 +76,7 @@ class _Env:
             Coupon=SimpleNamespace(retrieve=lambda coupon_id, **kw: _obj(self.coupon)),
             Subscription=SimpleNamespace(retrieve=lambda sub_id: _obj(self.subscription), modify=self.sub_modify),
             error=redemption.stripe.error,
+            StripeError=redemption.stripe.StripeError,
         )
         self._patches = [
             patch.object(redemption, 'stripe', fake_stripe),
@@ -176,7 +177,7 @@ def test_failed_stripe_update_gives_the_code_back():
 def test_endpoint_returns_the_refusal_as_a_client_error():
     from fastapi import HTTPException
 
-    import routers.payment as payment
+    import routers.redeem_code as payment
 
     with patch.object(payment, 'redeem_promotion_code', side_effect=RedemptionError(409, 'used')):
         with pytest.raises(HTTPException) as excinfo:

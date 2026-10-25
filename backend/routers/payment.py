@@ -49,7 +49,6 @@ from utils.subscription import (
     find_active_paid_subscription_for_user,
     price_ids_match_plan_and_interval,
 )
-from utils.promotion_redemption import RedemptionError, redeem_promotion_code
 from utils.observability.fallback import record_fallback
 from utils.observability.subscription_events import record_subscription_event
 from database.users import (
@@ -107,18 +106,6 @@ class CreateCheckoutRequest(BaseModel):
 class UpgradeSubscriptionRequest(BaseModel):
     price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
-
-
-class RedeemCodeRequest(BaseModel):
-    code: str = Field(..., min_length=1, max_length=64)
-
-
-class RedeemCodeResponse(BaseModel):
-    status: str
-    percent_off: Optional[float] = None
-    amount_off: Optional[int] = None
-    currency: Optional[str] = None
-    applies_at: Optional[int] = None
 
 
 class PaymentMutationResponse(BaseModel):
@@ -723,20 +710,6 @@ def create_checkout_session_endpoint(
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
     return {"url": session.url, "session_id": session.id}
-
-
-@router.post('/v1/payments/redeem-code', response_model=RedeemCodeResponse)
-def redeem_code_endpoint(
-    request: RedeemCodeRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'payments:redeem_code')),
-):
-    try:
-        return redeem_promotion_code(uid, request.code)
-    except RedemptionError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-    except stripe.error.StripeError as e:
-        logger.error(f"Stripe error redeeming code for {uid}: {sanitize(str(e))}")
-        raise HTTPException(status_code=502, detail="Could not apply this code. Please try again.")
 
 
 def _release_attached_schedules(stripe_sub: dict) -> None:
