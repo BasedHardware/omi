@@ -1417,18 +1417,44 @@ def test_held_sweep_completes_each_upload_once_and_contains_failures(setup, monk
     projector.store.prepare_accounting = accounting
     foreign = {'projection_binding': {**row(client)['projection_binding'], 'content_id': 'foreign'}}
     page = [('bad', row(client)), ('bad-sibling', deepcopy(row(client))), ('foreign', foreign), ('broken', {})]
-    monkeypatch.setattr(
-        'utils.batch_pipeline.projection.held_candidates', lambda client, ns, limit, after_id=None: page[:limit]
-    )
+    fetch = Mock(side_effect=[page[:4], page, page])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', fetch)
     # Same upload once; a foreign ledger is never charged; a malformed row is contained.
-    assert projector.sweep_held(limit=4) == {'partial': 0, 'waiting': 1, 'error': 2, 'units': 4, 'more': 1}
+    # Page reads: 4 examined rows + two S=2 attempts (5 reads/sibling + 7).
+    assert projector.sweep_held(limit=4) == {
+        'partial': 0,
+        'waiting': 1,
+        'error': 2,
+        'units': 4,
+        'reads': 38,
+        'more': 1,
+    }
     assert ledger_row(client, binding)['status'] == 'partial'
     assert projector.held_after == 'broken'
     writes = sum(len(tx.updates) for tx in client.transactions)
-    assert projector.sweep_held(limit=5) == {'partial': 1, 'waiting': 1, 'error': 1, 'units': 4, 'more': 0}
-    # A short page wraps the cursor; the replay wrote nothing new and re-issued
-    # the same durable fair-use step, so the lost charge lands exactly once.
+    # A short page wraps the cursor but is still the same pass: the attempted
+    # uploads stay deduped, so this segment reads rows without re-attempting.
+    assert projector.sweep_held(limit=5) == {
+        'partial': 0,
+        'waiting': 0,
+        'error': 1,
+        'units': 4,
+        'reads': 4,
+        'more': 0,
+    }
     assert projector.held_after is None
+    assert sum(len(tx.updates) for tx in client.transactions) == writes
+    # The next call is a fresh pass: the replay re-attempted the upload, wrote
+    # nothing new and re-issued the same durable fair-use step, so the lost
+    # charge lands exactly once.
+    assert projector.sweep_held(limit=5) == {
+        'partial': 1,
+        'waiting': 1,
+        'error': 1,
+        'units': 4,
+        'reads': 38,
+        'more': 0,
+    }
     assert sum(len(tx.updates) for tx in client.transactions) == writes
     keys = [(call.args[1], call.kwargs['idempotency_key']) for call in fair_use.record_speech_ms.call_args_list]
     assert keys == [(3000, 'content'), (3000, 'content')]
@@ -1464,7 +1490,7 @@ def test_full_pages_chain_into_one_pass_and_attempt_each_upload_once(setup, monk
     counts = projector.sweep_held(3, deadline=1e12)
     # Two full pages schedule the third immediately: one call, three fetches.
     assert pages.call_count == 3
-    assert counts == {'partial': 0, 'waiting': 7, 'error': 0, 'units': 8, 'more': 0}
+    assert counts == {'partial': 0, 'waiting': 7, 'error': 0, 'units': 8, 'reads': 127, 'more': 0}
     # The unit repeated across pages is one upload: one attempt for the pass.
     assert attempts == [f'upload-{index}' for index in (0, 1, 2, 3, 5, 6, 7)]
     assert projector.held_after is None
@@ -1487,10 +1513,13 @@ def test_pass_deadline_stops_between_pages_and_keeps_the_cursor(setup, monkeypat
     # The first page ran before the deadline, the second after it: two fetches
     # only, with the cursor left on the second page's last unit.
     assert pages.call_count == 2
-    assert counts == {'partial': 0, 'waiting': 4, 'error': 0, 'units': 4, 'more': 1}
+    assert counts == {'partial': 0, 'waiting': 4, 'error': 0, 'units': 4, 'reads': 72, 'more': 1}
     assert projector.held_after == 'unit-0003'
     resumed = projector.sweep_held(2, deadline=1e12)
-    assert pages.call_count == 4 and resumed['units'] == 2 and resumed['more'] == 0
+    # The resumed segment is the same pass: both uploads stay deduped, so its
+    # page reads rows without re-attempting, then the short page wraps.
+    assert pages.call_count == 4
+    assert resumed == {'partial': 0, 'waiting': 0, 'error': 0, 'units': 2, 'reads': 2, 'more': 0}
 
 
 def test_page_budget_caps_a_pass_at_max_pages(setup, monkeypatch):
@@ -1505,7 +1534,44 @@ def test_page_budget_caps_a_pass_at_max_pages(setup, monkeypatch):
     monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
     counts = projector.sweep_held(2, deadline=1e12, max_pages=3)
     assert pages.call_count == 3
-    assert counts == {'partial': 0, 'waiting': 6, 'error': 0, 'units': 6, 'more': 1}
+    assert counts == {'partial': 0, 'waiting': 6, 'error': 0, 'units': 6, 'reads': 108, 'more': 1}
+
+
+def test_max_pages_alone_chains_full_pages(setup, monkeypatch):
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda b: None)
+    rows = held_unit_rows(client, 8)
+    pages = Mock(side_effect=[rows[0:2], rows[2:4], rows[4:6], rows[6:8], []])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    # No deadline: the page budget alone must still chain the pass.
+    counts = projector.sweep_held(2, max_pages=3)
+    assert pages.call_count == 3
+    assert counts == {'partial': 0, 'waiting': 6, 'error': 0, 'units': 6, 'reads': 108, 'more': 1}
+
+
+def test_failed_fetch_ends_the_segment_with_its_pages_charged(setup, monkeypatch):
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda b: None)
+    rows = held_unit_rows(client, 4)
+    pages = Mock(side_effect=[rows[0:2], RuntimeError('synthetic fetch failure'), rows[2:4], []])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    counts = projector.sweep_held(2, deadline=1e12)
+    # The failed fetch raises nothing and charges the page already served, so
+    # the caller's read budget sees it; the cursor stays resumable.
+    assert pages.call_count == 2
+    assert counts == {'partial': 0, 'waiting': 2, 'error': 0, 'units': 2, 'reads': 36, 'more': 1}
+    assert projector.held_after == 'unit-0001'
+    resumed = projector.sweep_held(2, deadline=1e12)
+    assert pages.call_count == 4
+    assert resumed == {'partial': 0, 'waiting': 2, 'error': 0, 'units': 2, 'reads': 36, 'more': 0}
 
 
 def test_a_full_pass_over_a_large_backlog_finishes_within_the_tick_bound(setup, monkeypatch):
@@ -1526,7 +1592,8 @@ def test_a_full_pass_over_a_large_backlog_finishes_within_the_tick_bound(setup, 
     # simulated seconds, inside a 20 s tick budget.
     assert pages.call_count == 7
     assert counts['units'] == 200 and counts['more'] == 0 and counts['error'] == 0
-    assert counts['waiting'] == 200 and projector.held_after is None
+    assert counts['waiting'] == 200 and counts['reads'] == 200 + 200 * 17
+    assert projector.held_after is None
 
 
 def test_unit_failures_never_stop_a_multi_page_pass(setup, monkeypatch):
@@ -1546,9 +1613,10 @@ def test_unit_failures_never_stop_a_multi_page_pass(setup, monkeypatch):
     pages = Mock(side_effect=[rows[0:3], rows[3:6], []])
     monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
     counts = projector.sweep_held(3, deadline=1e12)
-    # Every even unit failed and the pass still served both pages to the end.
+    # Every even unit failed — still charged for its reads — and the pass
+    # served both pages to the end.
     assert pages.call_count == 3
-    assert counts == {'partial': 0, 'waiting': 3, 'error': 3, 'units': 6, 'more': 0}
+    assert counts == {'partial': 0, 'waiting': 3, 'error': 3, 'units': 6, 'reads': 108, 'more': 0}
 
 
 @pytest.mark.parametrize('change', ['speech_redrive', 'recovery_enabled'])

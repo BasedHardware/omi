@@ -34,12 +34,12 @@ HELD_PARTIAL_INTERVAL_SECONDS = 300
 # time; a pass stopped by either budget keeps its cursor and resumes on the
 # next supervisor tick instead of waiting out the interval above.
 HELD_PARTIAL_TICK_SECONDS = 20.0
-# Hourly read governor for the held sweep, charged per held document examined.
-# One unit costs its query read plus its upload attempt's reads:
-# prepare_accounting (per-sibling job+result, ledger, intake, plan on a first
-# charge) and the complete_partial transaction (per-sibling job+result, ledger,
-# privacy fence). 16 is the measured worst case: one upload per held unit on a
-# first pass (15 attempt reads + the query read; steady replays cost 14).
+# Hourly read governor for the held sweep. The sweep charges its exact
+# code-derived read count (one per examined document plus 5 per sibling and 7
+# per attempted upload); this per-unit figure is only the pacing estimate for
+# the page cap and the fallback for projector models that report no reads.
+# 16 is the measured worst case for an upload per held unit (15 attempt reads
+# + the query read; steady replays cost 14).
 HELD_PARTIAL_READS_PER_HOUR = 120_000
 HELD_PARTIAL_READS_PER_UNIT = 16
 HELD_PARTIAL_WINDOW_SECONDS = 3600.0
@@ -165,9 +165,12 @@ class Serving:
             return None
         return self.recovery.sweep()
 
-    def _charge_held_partial_reads(self, units: int) -> None:
-        if units > 0:
-            self.held_partial_reads.append((time.monotonic(), units * HELD_PARTIAL_READS_PER_UNIT))
+    def _charge_held_partial_reads(self, counts: dict) -> None:
+        reads = counts.get('reads')
+        if not isinstance(reads, int) or reads < 0:
+            reads = counts.get('units', 0) * HELD_PARTIAL_READS_PER_UNIT
+        if reads > 0:
+            self.held_partial_reads.append((time.monotonic(), reads))
 
     def _held_partial_page_budget(self) -> int:
         """Full pages this tick may still examine under the hourly read governor."""
@@ -205,7 +208,7 @@ class Serving:
                 else:
                     counts = sweep_held(deadline=time.monotonic() + HELD_PARTIAL_TICK_SECONDS, max_pages=pages)
                     if isinstance(counts, dict):
-                        self._charge_held_partial_reads(counts.get('units', 0))
+                        self._charge_held_partial_reads(counts)
                         if counts.get('more'):
                             # The tick or read budget stopped the pass mid-backlog.
                             self.held_partial_due = time.monotonic()

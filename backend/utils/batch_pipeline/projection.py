@@ -370,6 +370,9 @@ class Projector:
         self.handoff = threading.Lock()
         # Resume point of the held-partial scan; a short page wraps it.
         self.held_after: str | None = None
+        # Upload dedupe of the held-partial pass in flight; spans budget stops
+        # and wraps only when the scan's cursor does.
+        self.held_pass_seen: set[tuple[str, str]] = set()
 
     def request_drain(self, owner_id: str) -> None:
         with self.handoff:
@@ -625,37 +628,58 @@ class Projector:
     def sweep_held(
         self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None
     ) -> dict[str, int]:
-        """Bounded page of held units; one partial attempt per upload.
+        """Pages of held units chained into one bounded pass; one partial attempt per upload.
 
         A ``deadline`` (a ``time.monotonic`` instant) or ``max_pages`` chains
-        full pages back to back into one pass — the dedupe below then holds for
-        the whole pass — and is checked only between pages, so a pass overruns
-        its deadline by at most one page. Without either bound the call is a
-        single page. ``units`` counts held documents examined (the caller's read
-        budget) and ``more`` marks a pass stopped on a full page with the cursor
-        kept, so the caller can resume it without waiting out its interval.
+        full pages back to back — checked only between pages, so a pass
+        overruns its deadline by at most one page — while neither bound keeps
+        the legacy single-page contract. ``units`` counts held documents
+        examined; ``reads`` is what the caller should charge its read budget:
+        one read per examined document plus, per attempted upload, 5 reads per
+        sibling and 7 (the code-derived worst case of prepare_accounting plus
+        the complete_partial transaction, which walk every sibling).
+        ``more`` marks a pass stopped on a full page or a failed fetch with the
+        cursor kept, so the caller can resume it without waiting out its
+        interval. The upload dedupe spans the whole pass — across budget stops
+        too — and resets only when a short page wraps the cursor.
         """
-        counts = {'partial': 0, 'waiting': 0, 'error': 0, 'units': 0, 'more': 0}
-        seen = set()
+        counts = {'partial': 0, 'waiting': 0, 'error': 0, 'units': 0, 'reads': 0, 'more': 0}
         pages = 0
         while True:
-            page = held_candidates(self.store.client, self.store.store.namespace, limit, after_id=self.held_after)
+            try:
+                page = held_candidates(self.store.client, self.store.store.namespace, limit, after_id=self.held_after)
+            except Exception as error:
+                # A failed fetch bills nothing but must not lose the pages the
+                # pass already served: end the segment resumable, not by raise.
+                counts['more'] = 1
+                logger.warning(
+                    'event=batch_held_partial action=fetch outcome=retry exception_type=%s', error_type(error)
+                )
+                return counts
             full = len(page) >= limit
             self.held_after = page[-1][0] if full else None
             counts['units'] += len(page)
+            counts['reads'] += len(page)
             counts['more'] = 1 if full else 0
             pages += 1
             for _, job in page:
                 try:
                     binding = normalized_binding(job['projection_binding'])
-                    if (binding.owner_id, binding.content_id) in seen:
+                    if (binding.owner_id, binding.content_id) in self.held_pass_seen:
                         continue
-                    seen.add((binding.owner_id, binding.content_id))
+                    self.held_pass_seen.add((binding.owner_id, binding.content_id))
+                    counts['reads'] += 5 * len(binding.segment_ids) + 7
                     counts['partial' if self.complete_held(binding) is not None else 'waiting'] += 1
                 except Exception as error:
                     counts['error'] += 1
                     logger.warning('event=batch_held_partial outcome=retry exception_type=%s', error_type(error))
-            if not full or deadline is None or time.monotonic() >= deadline:
+            if not full:
+                # The scan wrapped: the pass is complete and the next one starts fresh.
+                self.held_pass_seen = set()
+                return counts
+            if deadline is None and max_pages is None:
+                return counts
+            if deadline is not None and time.monotonic() >= deadline:
                 return counts
             if max_pages is not None and pages >= max_pages:
                 return counts

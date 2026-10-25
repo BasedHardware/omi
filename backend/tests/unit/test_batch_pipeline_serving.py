@@ -332,6 +332,25 @@ def test_held_partial_kill_switch_stops_even_a_resuming_pass(monkeypatch):
     assert projector.sweep_held.call_count == 1
 
 
+def test_held_partial_governor_charges_the_sweeps_exact_reads(monkeypatch):
+    from utils.batch_pipeline import serving as serving_module
+
+    clock = {'monotonic': 20_000.0}
+    monkeypatch.setattr(
+        serving_module, 'time', SimpleNamespace(monotonic=lambda: clock['monotonic'], time=lambda: 1_000_000.0)
+    )
+    projector = Mock()
+    projector.sweep_held = Mock(
+        return_value={'partial': 2, 'waiting': 0, 'error': 0, 'units': 32, 'reads': 500, 'more': 0}
+    )
+    service = Serving(MemoryStore(), projector=projector)
+    service.reconcile()
+    # A sweep that reports its own reads (sibling-heavy uploads cost more than
+    # the per-unit estimate) is charged exactly what it reported.
+    assert projector.sweep_held.call_count == 1
+    assert service.held_partial_reads == [(20_000.0, 500)]
+
+
 def test_held_partial_read_governor_defers_the_sweep_until_the_window_refills(monkeypatch):
     from utils.batch_pipeline import serving as serving_module
 
