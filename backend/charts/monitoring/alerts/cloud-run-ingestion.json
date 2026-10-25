@@ -133,12 +133,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-cloud-run-metric-names-unnormalized",
       "component": "observability",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -276,12 +287,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-cloud-run-egress-query-rejected",
       "component": "observability",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -419,12 +441,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-cloud-run-egress-down",
       "component": "observability",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   }
