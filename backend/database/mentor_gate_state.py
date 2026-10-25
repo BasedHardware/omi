@@ -29,7 +29,7 @@ import json
 import logging
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,29 @@ _local: Dict[str, tuple[Dict[str, Any], float]] = {}
 _local_lock = threading.Lock()
 
 
+def _clean_uid(uid: Any) -> Optional[str]:
+    """Normalize and validate a user identifier.
+
+    Whitespace is stripped. Non-string, empty, or overlong identifiers fail closed
+    to None, ensuring malformed inputs cannot diverge Redis keys or crash callers.
+    """
+    if not isinstance(uid, str):
+        return None
+    cleaned = uid.strip()
+    if not cleaned or len(cleaned) > 128:
+        return None
+    return cleaned
+
+
+def _safe_ttl(ttl: Any, default: int) -> int:
+    """Clamp a TTL to a strictly positive integer, falling back to default."""
+    try:
+        val = int(ttl)
+        return val if val > 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
 def _redis_key(uid: str) -> str:
     return f'{uid}:mentor_gate_eval_state'
 
@@ -75,7 +98,9 @@ def _read_local(uid: str) -> Optional[Dict[str, Any]]:
         return state
 
 
-def _write_local(uid: str, state: Dict[str, Any], ttl: int) -> None:
+def _write_local(uid: str, state: object, ttl: int) -> None:
+    if not isinstance(state, Mapping):
+        return
     now = time.time()
     with _local_lock:
         _local[uid] = (dict(state), now + ttl)
@@ -84,7 +109,7 @@ def _write_local(uid: str, state: Dict[str, Any], ttl: int) -> None:
                 _local.pop(key, None)
             overflow = len(_local) - _MAX_LOCAL_ENTRIES
             if overflow > 0:
-                for key in sorted(_local, key=lambda k: _local[k][1])[:overflow]:
+                for key in list(_local.keys())[:overflow]:
                     _local.pop(key, None)
 
 
@@ -102,11 +127,13 @@ def _read_shared(uid: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _write_shared(uid: str, state: Dict[str, Any], ttl: int) -> bool:
+def _write_shared(uid: str, state: object, ttl: int) -> bool:
+    if not isinstance(state, Mapping):
+        return False
     try:
         from database.redis_db import r
 
-        r.set(_redis_key(uid), json.dumps(state), ex=ttl)
+        r.set(_redis_key(uid), json.dumps(dict(state)), ex=ttl)
         return True
     except Exception as e:
         logger.warning(f"mentor_gate_state write failed: {e}")
@@ -134,12 +161,15 @@ def _release_shared(uid: str) -> None:
 
 def read(uid: str) -> Optional[Dict[str, Any]]:
     """Last gate-evaluation record for a user, or None when there is none."""
-    state = _read_local(uid)
+    clean_uid = _clean_uid(uid)
+    if clean_uid is None:
+        return None
+    state = _read_local(clean_uid)
     if state is not None:
         return state
-    remote = _read_shared(uid)
+    remote = _read_shared(clean_uid)
     if remote is not None:
-        _write_local(uid, remote, STATE_TTL_SECONDS)
+        _write_local(clean_uid, remote, STATE_TTL_SECONDS)
     return remote
 
 
@@ -151,31 +181,45 @@ def read_authoritative(uid: str) -> Optional[Dict[str, Any]]:
     a possibly-outdated copy. Only the "evaluated recently -> skip" answer is
     allowed to come from the mirror.
     """
-    remote = _read_shared(uid)
+    clean_uid = _clean_uid(uid)
+    if clean_uid is None:
+        return None
+    remote = _read_shared(clean_uid)
     if remote is not None:
-        _write_local(uid, remote, STATE_TTL_SECONDS)
+        _write_local(clean_uid, remote, STATE_TTL_SECONDS)
     return remote
 
 
 def claim(uid: str, ttl: int = CLAIM_TTL_SECONDS) -> bool:
     """Try to become the one worker evaluating this user right now."""
-    return _claim_shared(uid, ttl)
+    clean_uid = _clean_uid(uid)
+    if clean_uid is None:
+        return True
+    safe_ttl = _safe_ttl(ttl, CLAIM_TTL_SECONDS)
+    return _claim_shared(clean_uid, safe_ttl)
 
 
 def release(uid: str) -> None:
     """Best-effort release; the TTL bounds a holder that crashes first."""
-    _release_shared(uid)
+    clean_uid = _clean_uid(uid)
+    if clean_uid is None:
+        return
+    _release_shared(clean_uid)
 
 
-def record(uid: str, state: Dict[str, Any], ttl: int = STATE_TTL_SECONDS) -> None:
+def record(uid: str, state: object, ttl: int = STATE_TTL_SECONDS) -> None:
     """Persist a gate evaluation.
 
     Shared tier first, mirror only after it succeeds: an evaluation that never
     reached the shared tier must not throttle this pod either, or a Redis
     outage would silently tighten the debounce instead of falling open.
     """
-    if _write_shared(uid, state, ttl):
-        _write_local(uid, state, ttl)
+    clean_uid = _clean_uid(uid)
+    if clean_uid is None or not isinstance(state, Mapping):
+        return
+    safe_ttl = _safe_ttl(ttl, STATE_TTL_SECONDS)
+    if _write_shared(clean_uid, state, safe_ttl):
+        _write_local(clean_uid, state, safe_ttl)
     else:
         with _local_lock:
-            _local.pop(uid, None)
+            _local.pop(clean_uid, None)
