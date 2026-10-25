@@ -8,9 +8,10 @@ import numpy as np
 from config.batch_conversation_speakers import sync_off_enabled
 from database import batch_voice_evidence as storage
 from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline import voice_centroids as schema
-from utils.conversations.speaker_grouping_shadow import provider_key
+from utils.speakers.provider_partition import provider_key
 from utils.observability.fallback import record_fallback
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
 from utils.sync.stage import current_stage
@@ -47,6 +48,8 @@ def prepare(projector, item, binding, conversation_id):
         if projector.fetch_audio is None or not speaker_embedding_configured():
             unavailable()
             return
+        artifacts = artifacts_for(store)
+        artifacts.verify_voice_retention()
         job_result = projector.store.ref('results', item.segment_id).get().to_dict() or {}
         payload = projector.load_result(item, job_result['result']['result_uri'])
         if payload.get('recovery_version') == 1:
@@ -61,15 +64,14 @@ def prepare(projector, item, binding, conversation_id):
             # Never populate the cross-conversation process embedding cache.
             return extract_embedding_from_bytes(clip, 'batch_voice.wav', timeout=min(3, remaining), use_cache=False)
 
-        payload = schema.extract(wav, payload['diarization']['turns'], item.capture_at, embed)
+        payload = schema.extract(wav, payload['diarization']['turns'], item.capture_at, embed, execution_deadline=stop)
         del wav
         if not payload['labels']:
             return
-        artifacts = artifacts_for(store)
         uri = artifacts.persist_voice_evidence(item, payload)
         try:
             storage.publish(store, item, uri, conversation_id)
-        except Exception:
+        except (BatchPrivacyBlocked, PermissionError):
             artifacts.discard_voice_evidence(item, uri)
             raise
     except Exception as error:
@@ -108,12 +110,13 @@ def load_vectors(uid, conversation, deadline, *, store=None, artifacts=None):
         # No upload/replay can refresh the earliest contributor's expiry.
         checks.append((unit, uri, due))
         labels = {int(row['label'].split('_')[1]): row for row in payload['labels']}
+        label_vectors = {label: np.asarray(row['vector'], dtype=np.float32) for label, row in labels.items()}
         used = set()
         for segment, label in segments:
             row = labels.get(label)
             if row is None or segment.end - segment.start < 1:
                 continue
-            vectors[segment.id] = np.asarray(row['vector'], dtype=np.float32)
+            vectors[segment.id] = label_vectors[label]
             seconds[segment.id] = row['seconds'] if label not in used else 0.0
             used.add(label)
 

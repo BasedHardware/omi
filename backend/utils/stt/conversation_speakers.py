@@ -232,11 +232,18 @@ def resolve_conversation_speakers(
         return None
 
     vectors: Dict[str, np.ndarray] = {}
+    normalized_vectors: Dict[int, Optional[np.ndarray]] = {}  # One copy per shared centroid, not per sentence.
     for segment in eligible:
         raw = embeddings.get(_seg(segment, 'id'))
         if raw is None or _duration(segment) < MIN_EMBED_SECONDS:
             continue
-        unit = _unit_vector(raw)
+        if batch:
+            vector_token = id(raw)
+            if vector_token not in normalized_vectors:
+                normalized_vectors[vector_token] = _unit_vector(raw)
+            unit = normalized_vectors[vector_token]
+        else:
+            unit = _unit_vector(raw)
         if unit is not None:
             vectors[_seg(segment, 'id')] = unit
     if not vectors:

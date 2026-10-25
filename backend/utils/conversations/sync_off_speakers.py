@@ -51,7 +51,9 @@ def resolve_sync_off(uid, conversation, receipt, deadline, load_prints, apply):
     )
     # Do not export transient centroids to the durable cache/evidence producer.
     outcome = 'resolved' if result.coverage >= 0.9 else 'partial_cached'
-    OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL.labels(outcome=outcome).inc()
+    OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL.labels(
+        outcome='resolved' if result.coverage >= 0.9 else 'partial_cached'
+    ).inc()
     logger.info(
         'event=conversation_speaker_resolution source=sync_off_centroids outcome=%s voices=%d coverage=%.2f',
         outcome,

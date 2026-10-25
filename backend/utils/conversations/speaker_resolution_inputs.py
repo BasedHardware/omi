@@ -8,7 +8,7 @@ from typing import Any, Dict, Mapping, Sequence, Optional
 from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE
 from models.transcript_segment import TranscriptSegment
 from models.conversation import Conversation
-from utils.conversations.speaker_grouping_shadow import provider_key
+from utils.speakers.provider_partition import provider_key
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import manual_rejected_speakers
 from utils.stt.conversation_speakers import Identity

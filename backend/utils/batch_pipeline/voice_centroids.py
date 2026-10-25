@@ -6,6 +6,7 @@ import json
 import math
 import re
 import wave
+import time
 
 import numpy as np
 
@@ -77,7 +78,7 @@ def decode(body: bytes) -> dict:
     return payload
 
 
-def extract(wav: bytes, turns: list, capture_at: float, extractor) -> dict:
+def extract(wav: bytes, turns: list, capture_at: float, extractor, *, execution_deadline: float = float('inf')) -> dict:
     """One <=15s clip per local label, exclusively attributed PCM only.
 
     Merge each label's intervals before subtracting every other label. This
@@ -90,6 +91,8 @@ def extract(wav: bytes, turns: list, capture_at: float, extractor) -> dict:
         pcm = source.readframes(frames)
     by_label = {}
     for turn in turns:
+        if time.monotonic() >= execution_deadline:
+            raise TimeoutError('voice extraction budget')
         label, start, end = turn['speaker'], float(turn['start']), float(turn['end'])
         if not isinstance(label, str) or not re.fullmatch(r'SPEAKER_[0-9]{2,3}', label):
             raise ValueError('invalid original voice label')
@@ -112,6 +115,8 @@ def extract(wav: bytes, turns: list, capture_at: float, extractor) -> dict:
         for other, overlaps in merged.items():
             if label != other:
                 for low, high in overlaps:
+                    if time.monotonic() >= execution_deadline:
+                        raise TimeoutError('voice extraction budget')
                     spans = [p for a, b in spans for p in ((a, min(b, low)), (max(a, high), b)) if p[1] > p[0]]
         clip = bytearray()
         for start, end in spans:

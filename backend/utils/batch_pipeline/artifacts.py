@@ -135,6 +135,8 @@ class ArtifactStore:
             'artifact_register', self.register_artifact, item, f'gs://{self.bucket_name}/{name}', kind, context
         )
         self._unchanged(item, context)
+        if kind == 'voice_evidence':
+            self.verify_voice_retention()
         if time.monotonic() - registered_at > 30:
             raise TimeoutError('artifact registration too old to begin upload')
         blob = self.bucket.blob(name)
@@ -211,9 +213,11 @@ class ArtifactStore:
         body = voice_centroids.encode(payload)
         if payload['capture_at'] != item.capture_at:
             raise ValueError('voice capture binding mismatch')
-        # A successful object DELETE is insufficient under GCS soft delete or
-        # bucket holds. Optional derived data must be physically erasable.
-        # Metadata read failure abstains; processing never changes IAM/policy.
+        self.verify_voice_retention()
+        return self._write(item, 'voice_evidence', body, voice_centroids.MAX_BYTES)
+
+    def verify_voice_retention(self) -> None:
+        """Metadata-only check, before extraction and again before upload."""
         self.bucket.reload(timeout=30, retry=None)
         if (
             self.bucket.soft_delete_policy.retention_duration_seconds != 0
@@ -221,7 +225,6 @@ class ArtifactStore:
             or self.bucket.retention_period not in (None, 0)
         ):
             raise PermissionError('voice evidence requires verified permanent erasure policy')
-        return self._write(item, 'voice_evidence', body, voice_centroids.MAX_BYTES)
 
     def discard_voice_evidence(self, item: WorkItem, uri: str) -> None:
         # Erasure must work after revocation; the URI still proves owner, unit,

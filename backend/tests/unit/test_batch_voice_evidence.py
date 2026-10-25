@@ -6,6 +6,7 @@ from functools import partial
 import io
 import time
 from types import SimpleNamespace
+from unittest.mock import Mock
 import wave
 
 from cryptography.exceptions import InvalidTag
@@ -27,6 +28,7 @@ from utils.batch_pipeline.contracts import WorkItem, Priority
 from utils.batch_pipeline.retention import batch_artifact_authorize, batch_artifact_register
 from utils.conversations import speaker_resolution as stage
 from utils.conversations import sync_off_speakers
+from utils.stt import conversation_speakers as grouping
 
 UID, CID, NS = 'synthetic-owner', 'synthetic-conversation', 'batch_pipeline_test_centroids'
 VECTOR = np.eye(1, 256, dtype=np.float32)[0]
@@ -97,6 +99,91 @@ def test_conversation_deleted_during_upload_discards_exact_generation(monkeypatc
     assert objects.uploads == 1 and not objects.objects
     assert 'voice_evidence' not in store.client.rows[(NS + '_jobs', item.segment_id)]
     assert any(path[0] == NS + '_artifacts' for path in store.client.rows)
+
+
+def setup_prepare(monkeypatch):
+    store, artifacts, objects, capture = state()
+    item, _ = persist(store, artifacts, capture, upload=False)
+    projection_store = SimpleNamespace(
+        store=store, ref=lambda table, key: store.client.collection(NS + '_' + table).document(key)
+    )
+    projector = SimpleNamespace(
+        store=projection_store,
+        load_result=Mock(return_value={'diarization': {'turns': [{'speaker': 'SPEAKER_00', 'start': 0, 'end': 8}]}}),
+        fetch_audio=Mock(return_value=audio_unit(item.capture_at, b'\x01\x00' * (10 * 16000)).wav),
+    )
+    store.client.rows[(NS + '_results', item.segment_id)]['result'] = {'result_uri': 'synthetic-result'}
+    embedding = Mock(return_value=VECTOR)
+    monkeypatch.setattr(evidence, 'artifacts_for', lambda store: artifacts)
+    monkeypatch.setattr(evidence, 'speaker_embedding_configured', lambda: True)
+    monkeypatch.setattr(evidence, 'extract_embedding_from_bytes', embedding)
+    return store, artifacts, objects, item, projector, embedding
+
+
+def test_bucket_gate_precedes_audio_and_model_calls(monkeypatch):
+    store, _, objects, item, projector, embedding = setup_prepare(monkeypatch)
+    objects.soft_delete_policy.retention_duration_seconds = 604800
+    evidence.prepare(projector, item, SimpleNamespace(private_cloud_sync_enabled=False), CID)
+    projector.load_result.assert_not_called()
+    projector.fetch_audio.assert_not_called()
+    embedding.assert_not_called()
+    assert not objects.objects and not any(path[0] == NS + '_artifacts' for path in store.client.rows)
+
+
+def test_bucket_gate_rechecks_after_extraction_and_after_registration(monkeypatch):
+    for phase in ('extraction', 'registration'):
+        store, artifacts, objects, item, projector, _ = setup_prepare(monkeypatch)
+        if phase == 'extraction':
+
+            def embed(*args, **kwargs):
+                objects.soft_delete_policy.retention_duration_seconds = 604800
+                return VECTOR
+
+            monkeypatch.setattr(evidence, 'extract_embedding_from_bytes', embed)
+        else:
+            register = artifacts.register_artifact
+
+            def register_then_change(*args):
+                register(*args)
+                objects.soft_delete_policy.retention_duration_seconds = 604800
+
+            monkeypatch.setattr(artifacts, 'register_artifact', register_then_change)
+        evidence.prepare(projector, item, SimpleNamespace(private_cloud_sync_enabled=False), CID)
+        assert not objects.objects and objects.uploads == 0
+        assert 'voice_evidence' not in store.client.rows[(NS + '_jobs', item.segment_id)]
+
+
+def test_publication_commit_with_lost_reply_preserves_object_and_replay(monkeypatch):
+    store, artifacts, objects, item, projector, _ = setup_prepare(monkeypatch)
+    publish = db.publish
+
+    def commit_then_lose_reply(*args):
+        publish(*args)
+        raise TimeoutError('synthetic publication response loss')
+
+    monkeypatch.setattr(db, 'publish', commit_then_lose_reply)
+    evidence.prepare(projector, item, SimpleNamespace(private_cloud_sync_enabled=False), CID)
+    assert objects.uploads == 1 and len(objects.objects) == 1
+    reference = db.load_reference(store, UID, item.segment_id, CID)
+    assert reference and artifacts.load_voice_evidence(item, reference[1], expires_at=reference[2])['labels']
+    projector.fetch_audio = Mock(side_effect=AssertionError('replay cannot refetch audio'))
+    evidence.prepare(projector, item, SimpleNamespace(private_cloud_sync_enabled=False), CID)
+    projector.fetch_audio.assert_not_called()
+    assert objects.uploads == 1 and len(objects.objects) == 1
+
+
+def test_extraction_deadline_covers_exclusive_turn_processing():
+    wav = audio_unit(1, b'\x01\x00' * 16000).wav
+    extractor = Mock(return_value=VECTOR)
+    with pytest.raises(TimeoutError):
+        schema.extract(
+            wav,
+            [{'speaker': 'SPEAKER_00', 'start': 0, 'end': 1}],
+            1,
+            extractor,
+            execution_deadline=time.monotonic() - 1,
+        )
+    extractor.assert_not_called()
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
@@ -241,6 +328,36 @@ def fixture_conversation(units):
             for i, unit in enumerate(units)
         ],
     )
+
+
+def test_materialized_centroid_copies_are_bounded_by_labels_not_sentence_count(monkeypatch):
+    store, artifacts, _, capture = state()
+    item, _ = persist(store, artifacts, capture)
+    conversation = fixture_conversation([item.segment_id] * 1500)
+    vectors, seconds, _ = evidence.load_vectors(
+        UID, conversation, time.monotonic() + 10, store=store, artifacts=artifacts
+    )
+    assert len({id(vector) for vector in vectors.values()}) == 1
+    assert sum(seconds.values()) == 2
+    source_vector = next(iter(vectors.values()))
+    normalize = grouping._unit_vector
+    normalized_source = []
+
+    def count_source(value):
+        if value is source_vector:
+            normalized_source.append(True)
+        return normalize(value)
+
+    monkeypatch.setattr(grouping, '_unit_vector', count_source)
+    result = grouping.resolve_conversation_speakers(
+        conversation.transcript_segments,
+        vectors,
+        embedding_seconds=seconds,
+        grouping='batch_authoritative',
+        provider_keys={s.id: ('unit', 0) for s in conversation.transcript_segments},
+    )
+    assert result and len(set(result.speaker_ids.values())) == 1
+    assert len(normalized_source) == 1
 
 
 @pytest.mark.parametrize('evidence_mode', ['off', 'serve'])
