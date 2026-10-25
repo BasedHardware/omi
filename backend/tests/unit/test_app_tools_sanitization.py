@@ -204,7 +204,7 @@ class TestAppToolsSanitization(unittest.TestCase):
                     app_tool=app_tool,
                     app_id="app_123",
                 )
-                self.assertEqual("Error calling test_tool: An unexpected error occurred.", result)
+                self.assertEqual("Error calling test_tool. Please try again later.", result)
                 self.assertNotIn("internal app tool secret leak", result)
                 self.assertNotIn("RuntimeError", result)
                 mock_log_error.assert_called_once_with(
@@ -246,7 +246,7 @@ class TestAppToolsSanitization(unittest.TestCase):
                     mcp_server_url="https://mcp.example.com",
                 )
                 result = await tool.coroutine(arg="val")
-                self.assertEqual("Error calling mcp_test_tool: An unexpected error occurred.", result)
+                self.assertEqual("Error calling MCP tool mcp_test_tool. Please try again later.", result)
                 self.assertNotIn("internal mcp client crash with secret", result)
                 self.assertNotIn("RuntimeError", result)
                 mock_log_error.assert_called_once_with(

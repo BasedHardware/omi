@@ -274,7 +274,7 @@ def create_app_tool(
                     type(e).__name__,
                     exc_info=True,
                 )
-                return f"Error calling {app_tool.name}: An unexpected error occurred."
+                return f"Error calling MCP tool {app_tool.name}. Please try again later."
 
         return StructuredTool(
             name=tool_name,
@@ -470,7 +470,7 @@ async def _call_tool_endpoint(
             type(e).__name__,
             exc_info=True,
         )
-        return f"Error calling {app_tool.name}: An unexpected error occurred."
+        return f"Error calling {app_tool.name}. Please try again later."
 
 
 def load_app_tools(uid: str) -> List[BaseTool]:
