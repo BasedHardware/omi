@@ -27,7 +27,7 @@ from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import get_profile_audio_if_exists
 from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.speaker_sample import download_sample_audio
-from utils.speaker_sample_migration import maybe_migrate_person_samples
+from utils.speaker_sample_migration import get_samples_version, maybe_migrate_person_samples
 from utils.manual_speaker_assignments import manual_owner_reserved, manual_rejected_speakers
 from utils.stt.owner_profile import load_owner_embedding, validated_embedding
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
@@ -559,7 +559,7 @@ class SpeakerMatcher:
                 if person.get('speech_samples'):
                     person = await maybe_migrate_person_samples(self.host.request.uid, person)
                 stored = person.get('speaker_embedding')
-                verified_samples = bool(person.get('speech_samples')) and (person.get('speech_samples_version', 1) >= 3)
+                verified_samples = bool(person.get('speech_samples')) and (get_samples_version(person) >= 3)
                 vector: Optional[Any] = None
                 if verified_samples:
                     if stored:

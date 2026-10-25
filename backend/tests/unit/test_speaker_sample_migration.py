@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from google.cloud.exceptions import NotFound
 
 import utils.speaker_sample_migration as migration
@@ -568,3 +570,75 @@ def test_migrate_v1_to_v3_stops_if_v1_to_v2_fails(monkeypatch):
     result = _run(migration.migrate_person_samples_v1_to_v3("uid-1", person_v1))
 
     assert result["speech_samples_version"] == 1
+
+
+# speech_samples_version null / non-int guards
+
+
+def test_get_samples_version_defaults_for_missing_and_invalid_values():
+    assert migration.get_samples_version({}) == 1
+    assert migration.get_samples_version({"speech_samples_version": None}) == 1
+    assert migration.get_samples_version({"speech_samples_version": True}) == 1
+    assert migration.get_samples_version({"speech_samples_version": False}) == 1
+    assert migration.get_samples_version({"speech_samples_version": "3"}) == 1
+    assert migration.get_samples_version({"speech_samples_version": 3.0}) == 1
+    assert migration.get_samples_version({"speech_samples_version": [3]}) == 1
+    assert migration.get_samples_version({"speech_samples_version": 0}) == 0
+    assert migration.get_samples_version({"speech_samples_version": 2}) == 2
+    assert migration.get_samples_version({"speech_samples_version": 3}) == 3
+    assert migration.get_samples_version({"speech_samples_version": None}, default=2) == 2
+
+
+def test_v1_to_v2_migrates_when_version_is_null(monkeypatch):
+    """Regression: a stored null version must not raise TypeError; treated as v1.
+
+    The fresh-person re-check inside the lock also reads the version, so a null
+    value there must not short-circuit the migration either.
+    """
+    person = {"id": "person-1", "speech_samples_version": None, "speech_samples": []}
+    version_updates = []
+
+    def fake_get_person(_uid, _person_id):
+        return person
+
+    def fake_update_version(_uid, _person_id, version):
+        version_updates.append(version)
+
+    monkeypatch.setattr(migration.users_db, "get_person", fake_get_person)
+    monkeypatch.setattr(migration.users_db, "update_person_speech_samples_version", fake_update_version)
+
+    result = _run(migration.migrate_person_samples_v1_to_v2("uid-1", person))
+
+    assert version_updates == [2]
+    assert result["speech_samples_version"] == 2
+
+
+def test_v2_to_v3_with_null_version_returns_unchanged(monkeypatch):
+    """v2→v3 must treat a null version as v1 without raising or touching the db."""
+
+    def fail_get_person(*_args, **_kwargs):
+        raise AssertionError("get_person should not be called when version coerces to v1")
+
+    monkeypatch.setattr(migration.users_db, "get_person", fail_get_person)
+
+    person = {"id": "person-1", "speech_samples_version": None, "speech_samples": ["a.wav"]}
+    result = _run(migration.migrate_person_samples_v2_to_v3("uid-1", person))
+
+    assert result == person
+
+
+@pytest.mark.parametrize("bad_value", [None, True, False, "3", 3.0])
+def test_maybe_migrate_treats_non_int_version_as_v1(monkeypatch, bad_value):
+    person = {"id": "person-1", "speech_samples_version": bad_value, "speech_samples": ["a.wav"]}
+    calls = []
+
+    async def fake_v1_to_v3(_uid, _person):
+        calls.append("v1_to_v3")
+        return person
+
+    monkeypatch.setattr(migration, "migrate_person_samples_v1_to_v3", fake_v1_to_v3)
+
+    result = _run(migration.maybe_migrate_person_samples("uid-1", person))
+
+    assert calls == ["v1_to_v3"]
+    assert result == person
