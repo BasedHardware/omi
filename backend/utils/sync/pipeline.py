@@ -107,7 +107,7 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.relevance import sync_intake_decision
-from utils.episodes.finalize import schedule_after_finalization
+from utils.episodes.finalize import schedule_after_finalization, schedule_synced_intake_attach
 from utils.executors import (
     db_executor,
     postprocess_executor,
@@ -1861,6 +1861,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             ),
             finish=finish_sync_segment,
             mark_finalize=mark_finalize,
+            attach_episode=schedule_synced_intake_attach,
             acknowledge=partial(
                 acknowledge_processed_segment,
                 deferred_outcome,

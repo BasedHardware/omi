@@ -163,6 +163,7 @@ def complete_sync_intake(
     finish: Callable,
     mark_finalize: Callable[[], None],
     acknowledge: Callable[[], None],
+    attach_episode: Optional[Callable[[str, str, dict], str]] = None,
 ) -> str:
     """Enroll the intake result, store audio, run enrichment and log telemetry.
 
@@ -171,6 +172,9 @@ def complete_sync_intake(
     ``finish`` or the response. ``store_audio`` receives the canonical id and
     decides itself whether anything is uploaded; ``mark_finalize`` and
     ``acknowledge`` keep the caller's phase and outcome bookkeeping order.
+    ``attach_episode``, when handed in, joins the landed row to the live
+    episode covering it before anything downstream can fail; it never raises
+    and never changes the intake result.
     """
     repeat_only = bool(assigned.pop('_sync_lineage_repeat_only', False))
     completion_pending = bool(assigned.pop('_sync_lineage_completion_pending', False))
@@ -196,6 +200,10 @@ def complete_sync_intake(
         log_sync_lineage_stamp_append(stamp_bucket)
     if stamp_gap_refused:
         log_sync_lineage_stamp_gap_refused()
+    if attach_episode is not None and (not repeat_only or existing_completion):
+        # The row is visible in Home from this moment; fold it under the live
+        # episode before audio storage or enrichment can stall behind it.
+        attach_episode(uid, conversation_id, assigned)
     store_audio(conversation_id)
     mark_finalize()
     if not repeat_only or existing_completion:

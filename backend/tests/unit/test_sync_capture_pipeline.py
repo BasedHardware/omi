@@ -66,6 +66,9 @@ def pipeline():
         ]
         store = StrictFirestore()
         lifecycle.ingest_sync_conversation = lambda uid, row, **kw: intake(store, row, **kw)
+        # The episodes intake attach is fail-open; the harness stand-in skips like a
+        # user whose app never called the episodes API. The wiring test spies on it.
+        module.schedule_synced_intake_attach = lambda uid, cid, row: None
         yield module, store
 
 
@@ -840,3 +843,24 @@ def test_destructive_fence_still_propagates_without_recording_a_provider_failure
     assert caught.value is error
     assert not errors and not outcome and not store.rows
     turnstile.complete.assert_called_once_with('1700000000.wav')
+
+
+def test_process_segment_attaches_the_landed_row_to_the_live_episode(pipeline, monkeypatch):
+    module, _store = pipeline
+    attached = []
+    monkeypatch.setattr(module, 'sync_enabled_for', lambda _: True)
+    monkeypatch.setattr(module, '_download_audio_bytes', lambda _: b'synthetic')
+    monkeypatch.setattr(
+        module.final_pass_test_seam, 'run_sync_final_pass', lambda *a, **kw: (None, {'outcome': 'skipped_budget'})
+    )
+    monkeypatch.setattr(
+        module,
+        'schedule_synced_intake_attach',
+        lambda uid, cid, row: attached.append((uid, cid, dict(row))) or 'joined',
+    )
+    response = {'new_memories': set(), 'updated_memories': set()}
+    assert module.process_segment('1700000000.wav', 'u', response, threading.Lock(), [])
+    # The row the intake persisted is the row handed to the episode join.
+    assert len(attached) == 1
+    uid, conversation_id, row = attached[0]
+    assert uid == 'u' and row['id'] == conversation_id and conversation_id in response['new_memories']
