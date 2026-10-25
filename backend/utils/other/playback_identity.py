@@ -24,6 +24,9 @@ def source_fingerprint(chunks: list[dict[str, Any]]) -> str | None:
     return hashlib.sha256(json.dumps(payload, sort_keys=True, allow_nan=False).encode()).hexdigest()
 
 
+_RAW_FRAGMENT_MARKERS = ('raw_source_start', 'pcm_sha256', 'raw_end')
+
+
 def resolve_sources(audio_file: dict[str, Any], chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Resolve current entries only when the complete immutable manifest matches."""
     expected = audio_file.get('source_fingerprint')
@@ -47,6 +50,23 @@ def resolve_sources(audio_file: dict[str, Any], chunks: list[dict[str, Any]]) ->
     # checksums, paths, spans and raw selectors must still match the old hash.
     if source_fingerprint([view for view, _ in compatible]) == expected:
         return [current for _, current in compatible]
+    # Stamps created before raw-fragment projection hash the encoded manifest
+    # alone, under filename keys; raw pack fragments only add coverage and carry
+    # no md5/crc identity, so they are not part of those stamps. Re-hash the
+    # encoded-only view before refusing, or every pre-fragment audio_file fails
+    # validation forever once one raw fragment appears in the listing.
+    legacy = []
+    for chunk in chunks:
+        if any(marker in chunk for marker in _RAW_FRAGMENT_MARKERS):
+            continue
+        view = dict(chunk)
+        if 'legacy_timestamp' in view:
+            view['timestamp'] = view.pop('legacy_timestamp')
+        if view['timestamp'] in timestamps:
+            legacy.append((view, chunk))
+    legacy.sort(key=lambda pair: (pair[0]['timestamp'], pair[0]['path']))
+    if source_fingerprint([view for view, _ in legacy]) == expected:
+        return [current for _, current in legacy]
     raise RuntimeError('playback source manifest changed')
 
 
