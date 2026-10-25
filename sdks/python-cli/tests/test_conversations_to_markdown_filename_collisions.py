@@ -237,5 +237,14 @@ class TestSegmentsKeyFallback(unittest.TestCase):
         self.assertNotIn("ignored", text)
 
 
+class TestFormatTimestamp(unittest.TestCase):
+    """Regression test for format_timestamp hours support."""
+
+    def test_format_timestamp_hours(self):
+        self.assertEqual(c2m.format_timestamp(0), "00:00")
+        self.assertEqual(c2m.format_timestamp(65), "01:05")
+        self.assertEqual(c2m.format_timestamp(3661), "01:01:01")
+
+
 if __name__ == "__main__":
     unittest.main()
