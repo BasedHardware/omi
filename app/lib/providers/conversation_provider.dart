@@ -961,7 +961,9 @@ class ConversationProvider extends ChangeNotifier {
     if (generation != _sessionGeneration ||
         fetchRevision != _conversationFetchRevision ||
         !_isSignedIn() ||
-        SharedPreferencesUtil().uid != ownerUid) return false;
+        SharedPreferencesUtil().uid != ownerUid) {
+      return false;
+    }
     final activeProcessingIds = processingConversations
         .where((conversation) => _isActiveProcessingStatus(conversation.status))
         .map((conversation) => conversation.id)

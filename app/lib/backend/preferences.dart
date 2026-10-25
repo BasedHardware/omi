@@ -1223,8 +1223,9 @@ class SharedPreferencesUtil {
         size: snapshot.length,
         threshold: cachedConversationsBackgroundEncodeThreshold,
         debugName: 'conversation_cache_encode');
-    if (generation != _cachedConversationsGeneration || session != _conversationCacheReadSession || uid != ownerUid)
+    if (generation != _cachedConversationsGeneration || session != _conversationCacheReadSession || uid != ownerUid) {
       return;
+    }
     await saveStringList('cachedConversations', encoded);
   }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
 
 ServerConversation _row(String id,
         {String title = 'Cached', ConversationStatus status = ConversationStatus.completed}) =>
@@ -20,6 +22,22 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({'uid': 'fixture-owner'});
     await SharedPreferencesUtil.init(mirrorNativeAuthToken: false);
+  });
+
+  test('default provider restores a large stored cache through a completed worker', () async {
+    await SharedPreferencesUtil().saveStringList(
+        'cachedConversations', [for (var i = 0; i < 2000; i++) jsonEncode(_row('fixture-$i').toJson())]);
+    offUiIsolateWorkerCompletions = 0;
+    offUiIsolateFallbacks = 0;
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    expect(await provider.fetchConversations(), isTrue);
+    expect(provider.conversations, hasLength(2000));
+    expect(offUiIsolateWorkerCompletions, greaterThan(0));
+    expect(offUiIsolateFallbacks, 0);
   });
 
   for (final serverOk in [true, false]) {
