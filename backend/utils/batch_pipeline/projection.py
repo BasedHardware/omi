@@ -40,6 +40,7 @@ from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
+from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidence
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.sync.intake_completion import log_sync_lineage_stamp_gap_refused
 
@@ -856,6 +857,8 @@ class Projector:
                     else:
                         self.persist_playback(item, binding, canonical, receipt)
             if receipt['enrichment_required']:
+                if (receipt.get('speaker_scope') or '').startswith('final:batch:'):
+                    prepare_voice_evidence(self, item, binding, canonical)
                 with projection_phase('enrichment', policy):
                     self.store.mark_enrichment(
                         item.segment_id,

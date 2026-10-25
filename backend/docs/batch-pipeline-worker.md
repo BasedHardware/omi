@@ -209,6 +209,10 @@ sweep and legacy playback/enrichment. D checks account/source deletion,
 protection and generation inside each mutation transaction. Encrypted,
 owner-bound, generation-pinned objects have a pre-upload deletion outbox.
 Completion-only retention never expires pending work.
+The optional sync-off `voice_evidence` artifact is an explicit exception:
+[ADR-0004 retention](batch-voice-evidence-retention.md) enforces a capture-based
+24h deadline even for pending work, shortened to completion +1h. It contains no
+audio and never extends accepted-audio retention or incident preservation.
 
 ## Capacity and autoscaling
 

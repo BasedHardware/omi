@@ -232,11 +232,18 @@ def resolve_conversation_speakers(
         return None
 
     vectors: Dict[str, np.ndarray] = {}
+    normalized_vectors: Dict[int, Optional[np.ndarray]] = {}  # One copy per shared centroid, not per sentence.
     for segment in eligible:
         raw = embeddings.get(_seg(segment, 'id'))
         if raw is None or _duration(segment) < MIN_EMBED_SECONDS:
             continue
-        unit = _unit_vector(raw)
+        if batch:
+            vector_token = id(raw)
+            if vector_token not in normalized_vectors:
+                normalized_vectors[vector_token] = _unit_vector(raw)
+            unit = normalized_vectors[vector_token]
+        else:
+            unit = _unit_vector(raw)
         if unit is not None:
             vectors[_seg(segment, 'id')] = unit
     if not vectors:
@@ -274,12 +281,24 @@ def resolve_conversation_speakers(
         raise ValueError('batch grouping input limit')
     unit_vector: Dict[int, np.ndarray] = {}
     for index, members in enumerate(unit_segments):
-        embedded = [
-            vectors[_seg(s, 'id')] * (max((embedding_seconds or {}).get(_seg(s, 'id'), 0.0), 0.0) if batch else 1.0)
-            for s in members
-            if _seg(s, 'id') in vectors
-        ]
-        pooled = _unit_vector(np.mean(embedded, axis=0)) if embedded else None
+        if batch:
+            # Repeated sentences share one centroid and only its first evidence
+            # weight is nonzero. Never retain a weighted copy per sentence.
+            weighted_sum = None
+            for member in members:
+                sid = _seg(member, 'id')
+                weight = max((embedding_seconds or {}).get(sid, 0.0), 0.0)
+                if sid not in vectors or weight <= 0:
+                    continue
+                weighted = vectors[sid] * weight
+                if weighted_sum is None:
+                    weighted_sum = weighted
+                else:
+                    weighted_sum += weighted
+            pooled = _unit_vector(weighted_sum) if weighted_sum is not None else None
+        else:
+            embedded = [vectors[_seg(s, 'id')] for s in members if _seg(s, 'id') in vectors]
+            pooled = _unit_vector(np.mean(embedded, axis=0)) if embedded else None
         if pooled is not None:
             unit_vector[index] = pooled
 

@@ -6861,6 +6861,21 @@ and outside completion retention. See [owner repair](runbooks/batch-projection-r
 for the dry-run operator tool, 15-minute obligation metric, and lead-only recovery.
 
 
+## Sync-off batch speaker evidence
+
+[ADR-0004](adr/0004-sync-off-speaker-centroids.md) approves bounded temporary
+Omi-v2 centroids for existing authoritative batch users with sync off.
+`Projector.finish_part` extracts exclusive per-unit label evidence from staged
+audio before enrichment and cleanup, registers and encrypts a separate
+`voice_evidence` artifact, then enrichment reuses #23581's constrained acoustic
+linking and calibrated naming without `audio_files`. Parent
+`BATCH_CONVERSATION_SPEAKERS_ENABLED` plus default-on
+`BATCH_SYNC_OFF_CENTROIDS_ENABLED` gate creation and reads. Neither extends audio
+retention, admission, profile enrollment or cross-conversation evidence lifetime.
+The [retention contract](batch-voice-evidence-retention.md) defines the 24h
+capture deadline, completion +1h shortening, privacy fences and physical erasure.
+Expired evidence stays anonymous; manual speaker receipts keep their authority.
+
 ## Live speaker epochs: bounded safe repair
 
 Soniox idle reopen continues to stamp a new socket epoch. Listen reconnect

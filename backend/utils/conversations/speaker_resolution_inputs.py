@@ -2,15 +2,33 @@
 
 import math
 import logging
-from typing import Any, Dict, Mapping
+from datetime import timezone
+from typing import Any, Dict, Mapping, Sequence, Optional
 
 from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE
 from models.transcript_segment import TranscriptSegment
-from utils.conversations.speaker_grouping_shadow import provider_key
+from models.conversation import Conversation
+from utils.speakers.provider_partition import provider_key
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import manual_rejected_speakers
 from utils.stt.conversation_speakers import Identity
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
+
+
+def started_at(conversation: Conversation) -> Optional[float]:
+    moment = conversation.started_at or conversation.created_at
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.timestamp()
+
+
+def manifest_span_load(audio_file: Any) -> int:
+    count = 0
+    for key in ('chunk_spans', 'chunk_timestamps'):
+        value = audio_file.get(key) if isinstance(audio_file, Mapping) else getattr(audio_file, key, None)
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            count = max(count, len(value))
+    return count
 
 
 def manual_speakers(receipt: Mapping[str, Any]) -> Dict[int, Identity]:
