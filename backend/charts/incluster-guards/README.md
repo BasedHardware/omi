@@ -36,7 +36,10 @@ merge; any spec/image/generation identity change still resets arming.
 
 Every five minutes, a bounded Job reads the exact HPA spec, deployment images,
 readiness, recent Pod FailedScheduling events, and direct in-cluster Prometheus.
-Only floor 5/8 without `parakeet_request_latency_p99` is armed. The state identity
+Any workload-only floor below the 12-replica rollback cap without
+`parakeet_request_latency_p99` is armed; the floor is read from the HPA itself,
+so operator floor changes cannot silently disarm the guard (the former 5/8
+enumeration read NOOP at floor 10 on 2026-10-24/25). The state identity
 includes the entire HPA spec, HPA generation and deployment images. Ordinary
 autoscaling replica changes do not restart the clock. Configuration/image changes
 reset the 15-minute clock. Readiness shortfall uses HPA desiredReplicas, not the
@@ -59,8 +62,18 @@ fallback. At a 6.3% baseline, the trip threshold is 8.375%. Values and the compu
 `reading.refusal_threshold` are logged. This guard version restarts the arming clock.
 
 Other P77 thresholds are unchanged: first-text p95 >= 30s, post/v2 p95 >=
-3s, first-text >30s count >12, no-text deadline count >36 in 15m. Under 20
-first-text/admission samples, latency/fraction thresholds are observations only;
+3s, first-text >30s count >12, no-text deadline count >36 in 15m. The
+first-text p95 trip additionally requires a decisive sample (2026-10-24 06:19Z
+and 2026-10-25 05:40Z rolled floor 8 back on 26-37 first texts whose 95th
+percentile saturated at the histogram's 60s top bucket): a measured value
+strictly inside the histogram (the exported buckets end at 60s, and
+`histogram_quantile` clamps to that boundary when the quantile lands beyond
+it), at least 5 texts over 30s, and a 15-minute count of at least
+`max(100, 0.5 * weekly same-hour count)`. A regression-shaped reading below
+that sample floor is **unmeasured**: it reads BLIND (ERROR log, nonzero exit,
+alertable) and never rolls back; it also never counts toward the
+three-consecutive-blind rollback, which missing/stale data still drives.
+Under 20 first-text/admission samples, latency/fraction thresholds are observations only;
 absolute error counts, readiness and scheduling trips remain independent.
 Missing/nonfinite data, stale counters (>120s), or absent GPU activity are blind,
 never clean. Fresh low sample counts with successful NaN histogram/ratio arithmetic are

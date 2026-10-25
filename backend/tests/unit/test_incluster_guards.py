@@ -24,10 +24,10 @@ def values():
     result = dict.fromkeys(guard.queries('prod-omi-backend'), 0.0)
     result.update(
         first_p95=20,
-        first_over30=4,
+        first_over30=6,
         post_p95=0.5,
         v2_p95=1,
-        first_count=30,
+        first_count=150,
         admission_count=100,
         dcgm_nonzero=1,
         refusal_baseline_count=100,
@@ -107,7 +107,7 @@ def test_first_p95_baseline_query_reads_same_metric_same_hour_last_week():
     )
 
 
-@pytest.mark.parametrize('baseline,limit', [(0, 30), (20, 30), (25, 30), (35, 42), (100, 120)])
+@pytest.mark.parametrize('baseline,limit', [(0, 30), (20, 30), (25, 30), (35, 42), (40, 48)])
 @pytest.mark.parametrize('delta', [-1e-8, 0, 1e-8])
 def test_first_p95_is_relative_to_weekly_same_hour_baseline(baseline, limit, delta):
     v = dict(values(), first_p95_baseline=baseline, first_count_baseline=100, first_p95=limit + delta)
@@ -120,7 +120,7 @@ def test_first_p95_is_relative_to_weekly_same_hour_baseline(baseline, limit, del
 def test_sparse_weekly_baseline_falls_back_to_floor():
     # One 60s text last week prices the historical p95 near 59.25s; unqualified,
     # the 1.2x threshold (~71.1s) would mask this week's real regression at 45s.
-    v = dict(values(), first_p95=45, first_over30=4, first_p95_baseline=59.25, first_count_baseline=1)
+    v = dict(values(), first_p95=45, first_over30=5, first_p95_baseline=59.25, first_count_baseline=1)
     reading = guard.evaluate(v)
     assert reading['first_p95_threshold'] == 30
     assert reading['trips'] == ['first_p95']
@@ -147,7 +147,83 @@ def test_one_or_two_slow_sessions_never_trip_first_p95():
     v = dict(values(), first_p95=60, first_over30=3)
     assert guard.evaluate(v)['trips'] == []
     assert guard.evaluate(dict(v, first_p95_baseline=100))['trips'] == []
-    assert 'first_p95' in guard.evaluate(dict(v, first_over30=4))['trips']
+    # A measured p95 below the top bucket with five slow texts and values()' full
+    # 150-text sample does trip; the saturated 60.0 never can, slow texts or not.
+    assert 'first_p95' in guard.evaluate(dict(v, first_p95=59.5, first_over30=5))['trips']
+    assert guard.evaluate(dict(v, first_over30=5))['unmeasured'] == ['first_p95']
+
+
+def test_thin_sample_regression_is_unmeasured_blind_never_rollback():
+    # 2026-10-25 05:40Z trip (floor 8 -> 12): p95 saturated at the 60s top
+    # bucket on 37.6 first texts against a 229-text weekly baseline. The
+    # regression-shaped reading must alert (unmeasured/BLIND, nonzero exit)
+    # without tripping, and it must never reach the three-blind-strike TRIP.
+    trip = dict(
+        values(),
+        first_p95=60.0,
+        first_count=37.62718529232818,
+        first_over30=4.0678081011852925,
+        first_p95_baseline=14.154270990401017,
+        first_count_baseline=228.98860402862007,
+    )
+    reading = guard.evaluate(trip)
+    assert reading['trips'] == [] and reading['unmeasured'] == ['first_p95']
+    assert reading['first_p95_sample_floor'] == pytest.approx(114.4943)
+    hpa, dep = objects()
+    verdict, state, reading = guard.decide(hpa, dep, [], trip, {}, 0)
+    assert verdict == 'WARMUP'  # fresh identity arms for the full window first
+    for now in (900, 1200, 1500, 1800, 2400, 3000):
+        verdict, state, reading = guard.decide(hpa, dep, [], trip, state, now)
+        assert verdict == 'BLIND' and 'first_p95' not in reading['trips']
+        assert state['blind'] == 0
+    # A measured regression at the same moment still trips through decide().
+    full = dict(trip, first_p95=45.0, first_count=200, first_over30=8)
+    assert guard.decide(hpa, dep, [], full, state, 3000)[0] == 'TRIP'
+
+
+def test_top_bucket_saturation_is_not_a_measured_p95_even_with_a_full_sample():
+    # histogram_quantile clamps to the last finite boundary (60s) when the
+    # quantile lands beyond it; that value cannot support a rollback.
+    v = dict(values(), first_p95=60.0, first_count=200, first_over30=8)
+    reading = guard.evaluate(v)
+    assert reading['trips'] == [] and reading['unmeasured'] == ['first_p95']
+    assert 'first_p95' in guard.evaluate(dict(v, first_p95=59.999999))['trips']
+
+
+@pytest.mark.parametrize('count,trip', [(99.99, False), (100, False), (114.4942, False), (114.4944, True), (200, True)])
+def test_first_p95_sample_floor_is_half_the_weekly_count_never_below_100(count, trip):
+    # Baseline 228.9886...: floor = max(100, 114.4943...); count 100 alone stays
+    # below the baseline-relative floor and never trips on this reading.
+    v = dict(
+        values(),
+        first_p95=45,
+        first_over30=8,
+        first_count=count,
+        first_p95_baseline=14.154270990401017,
+        first_count_baseline=228.98860402862007,
+    )
+    reading = guard.evaluate(v)
+    assert ('first_p95' in reading['trips']) == trip
+    assert ('first_p95' in reading['unmeasured']) == (not trip)
+    assert reading['first_p95_sample_floor'] == pytest.approx(114.4943)
+
+
+def test_sample_floor_falls_back_to_100_without_a_weekly_count():
+    v = dict(values(), first_p95=45, first_over30=8, first_count=100, first_count_baseline=None)
+    reading = guard.evaluate(v)
+    assert reading['first_p95_sample_floor'] == 100
+    assert 'first_p95' in reading['trips']
+    thin = guard.evaluate(dict(v, first_count=99.99))
+    assert 'first_p95' not in thin['trips'] and thin['unmeasured'] == ['first_p95']
+
+
+def test_healthy_thin_sample_stays_clean_and_low_sample_stays_low_sample():
+    # Quiet hours with a healthy p95 must not alert; sub-20 counts keep the
+    # existing LOW_SAMPLE verdict rather than the thin-sample BLIND.
+    healthy = guard.evaluate(dict(values(), first_p95=14, first_over30=0.5, first_count=37))
+    assert healthy['trips'] == [] and healthy['unmeasured'] == [] and not healthy['low_sample']
+    low = guard.evaluate(dict(values(), first_p95=60, first_count=15, first_over30=10))
+    assert low['low_sample'] and low['trips'] == [] and low['unmeasured'] == []
 
 
 def test_first_p95_needs_twenty_first_texts():
@@ -345,14 +421,17 @@ def test_drift_refuses(drift):
         guard.build_rollback(old)
 
 
-@pytest.mark.parametrize('floor', [3, 5, 8, 12])
+@pytest.mark.parametrize('floor', [3, 5, 8, 10, 11, 12, 13])
 @pytest.mark.parametrize('latency', [False, True])
 def test_state_gating(floor, latency):
     hpa, _ = objects()
     hpa['spec']['minReplicas'] = floor
     if latency:
         hpa['spec']['metrics'].append(guard.LATENCY)
-    assert guard.workload_only(hpa['spec']) == (floor in (5, 8) and not latency)
+    # The floor is read from the HPA: any workload-only floor below the
+    # rollback cap is armed (floor 10 read NOOP all 2026-10-24/25 under the
+    # old (5, 8) enumeration); at/above the cap there is nothing to roll back to.
+    assert guard.workload_only(hpa['spec']) == (floor < 12 and not latency)
 
 
 def test_arm_full_window_and_reset_on_spec_image_generation_changes():
