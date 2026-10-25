@@ -12,6 +12,7 @@ import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/services/wals/mobile_batch_vad.dart';
 import 'package:omi/services/wals/mobile_standard_batch.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal.dart';
 
 import '../../support/capture/capture_replay_world.dart';
@@ -195,6 +196,37 @@ void main() {
     await world.settle();
     expect(second.sentBinary, [List.filled(80, 1), List.filled(80, 2), List.filled(80, 3)],
         reason: 'live-transcript continuity across the reconnect, oldest first');
+  });
+
+  test('never-sent frames (warm-up, pre-verdict) stay in the safety WAL and upload through sync', () async {
+    // No ConversationEvent ever confirms an admitted session, so its safety
+    // WAL is unconfirmed: the ordinary recovery drain uploads it
+    // (/v2/sync-local-files -> batch record), like any frame the socket never got.
+    vadGate = Completer<void>();
+    await boot(livePreview: preview());
+    world.deviceConnection!.emitAudio(value: 1); // pre-verdict
+    await world.settle();
+    world.socket!.emitServerMessage(_admitted);
+    await world.settle();
+    expect(lane.warmingUp, true);
+    world.deviceConnection!.emitAudio(value: 2); // journal still warming up
+    await world.settle();
+    vadGate!.complete();
+    await lane.pendingInitialization;
+    world.deviceConnection!.emitAudio(value: 3); // journaled
+    await world.settle();
+    await buffer.pending;
+    expect(world.socket!.sentBinary, isEmpty, reason: 'nothing opens the deferred cloud stream');
+    expect(world.wal.syncs.phone.testFrames.map((frame) => frame.payload.first), [1, 2]);
+
+    await world.wal.syncs.phone.finalizeCurrentSession();
+    await world.settle();
+    final missing = await world.wal.syncs.phone.getMissingWals();
+    expect(missing.fold<int>(0, (sum, wal) => sum + wal.totalFrames), 2, reason: 'unconfirmed, so pending upload');
+    await world.coordinator.wake(WakeTrigger.userRetry);
+    await world.settle();
+    expect(world.uploads.attempts, hasLength(1));
+    expect((await world.walCounts())[WalStatus.synced], 1);
   });
 
   test('a server without local_preview keeps today: visible frames stream, no preview', () async {
