@@ -41,19 +41,37 @@ final class LivePreviewPlugin: NSObject, FlutterStreamHandler {
         return nil
     }
 
+    /// The previous session's cleanup; a new start waits for it.
+    private var stopping: Task<Void, Never>?
+
+    /// Stops the current session (if any) and records the cleanup so the next
+    /// start or stop reply happens only after the recognizer has let go.
+    private func retireSession() -> Task<Void, Never> {
+        let previous = stopping
+        let retiring = session
+        session = nil
+        let task = Task { @MainActor in
+            await previous?.value
+            await retiring?.stop()
+        }
+        stopping = task
+        return task
+    }
+
     private func handle(_ call: FlutterMethodCall, reply: @escaping FlutterResult) {
         switch call.method {
         case "start":
             let args = call.arguments as? [String: Any] ?? [:]
             let language = args["language"] as? String ?? "multi"
+            let exclude = Set(args["exclude"] as? [String] ?? [])
             generation += 1
             let mine = generation
-            session?.stop()
-            session = nil
+            let retired = retireSession()
             Task { @MainActor in
-                let (started, choice) = await self.select(language: language)
+                await retired.value
+                let (started, choice) = await self.select(language: language, exclude: exclude, generation: mine)
                 guard mine == self.generation else {
-                    started?.stop()
+                    await started?.stop()
                     reply(LivePreviewChoice(engine: "none", reason: "engine_error", bundledInstalled: choice.bundledInstalled).wire)
                     return
                 }
@@ -68,12 +86,22 @@ final class LivePreviewPlugin: NSObject, FlutterStreamHandler {
             reply(session.append(pcm16: data))
         case "stop":
             generation += 1
-            session?.stop()
-            session = nil
-            reply(nil)
+            let retired = retireSession()
+            Task { @MainActor in
+                await retired.value
+                reply(nil)
+            }
         default:
             reply(FlutterMethodNotImplemented)
         }
+    }
+
+    /// A running engine failed for good: tell Dart (closed reason) and release it.
+    private func runtimeFailure(engine: String, generation failed: Int) {
+        guard failed == generation, session != nil else { return }
+        NSLog("[LivePreview] runtime failure engine=%@", engine)
+        _ = retireSession()
+        sink?(["failure": "engine_error", "engine": engine])
     }
 
     private func emit(_ segmentId: String, _ text: String, _ isFinal: Bool) {
@@ -86,17 +114,24 @@ final class LivePreviewPlugin: NSObject, FlutterStreamHandler {
         return FileManager.default.fileExists(atPath: directory.appendingPathComponent("installed").path)
     }
 
-    private func select(language: String) async -> (LivePreviewSession?, LivePreviewChoice) {
+    private func select(language: String, exclude: Set<String>, generation mine: Int) async -> (LivePreviewSession?, LivePreviewChoice) {
         let bundled = bundledInstalled
         let onResult: (String, String, Bool) -> Void = { [weak self] id, text, isFinal in self?.emit(id, text, isFinal) }
+        func onFailure(_ engine: String) -> () -> Void {
+            { [weak self] in self?.runtimeFailure(engine: engine, generation: mine) }
+        }
 
         var analyzer: LivePreviewTier = .unavailable("os_too_old")
         if #available(iOS 26, *) {
             let probe = await AnalyzerPreviewSession.probe(language: language)
             analyzer = probe.tier
-            if let locale = probe.locale {
+            if exclude.contains("speech_transcriber") {
+                // Failed at runtime earlier in this session: the next engine is tried once.
+                analyzer = .unavailable("engine_error")
+            } else if let locale = probe.locale {
                 do {
-                    let started = try await AnalyzerPreviewSession.start(locale: locale, onResult: onResult)
+                    let started = try await AnalyzerPreviewSession.start(
+                        locale: locale, onResult: onResult, onFailure: onFailure("speech_transcriber"))
                     return (started, LivePreviewSelection.choose(analyzer: .ready, sfSpeech: .unavailable("engine_error"), bundledInstalled: bundled))
                 } catch {
                     NSLog("[LivePreview] SpeechAnalyzer start failed: %@", error.localizedDescription)
@@ -105,9 +140,11 @@ final class LivePreviewPlugin: NSObject, FlutterStreamHandler {
             }
         }
 
-        let legacy = SFSpeechPreviewSession.probe(language: language)
+        let legacy = exclude.contains("sf_speech")
+            ? (tier: LivePreviewTier.unavailable("engine_error"), recognizer: nil)
+            : SFSpeechPreviewSession.probe(language: language)
         if let recognizer = legacy.recognizer {
-            let started = SFSpeechPreviewSession(recognizer: recognizer, onResult: onResult)
+            let started = SFSpeechPreviewSession(recognizer: recognizer, onResult: onResult, onFailure: onFailure("sf_speech"))
             started.begin()
             return (started, LivePreviewSelection.choose(analyzer: analyzer, sfSpeech: .ready, bundledInstalled: bundled))
         }
@@ -119,7 +156,8 @@ final class LivePreviewPlugin: NSObject, FlutterStreamHandler {
 protocol LivePreviewSession: AnyObject {
     /// Appends 16 kHz mono little-endian PCM16. False when the chunk was refused.
     func append(pcm16 data: Data) -> Bool
-    func stop()
+    /// Returns once the recognizer has finished releasing its resources.
+    func stop() async
 }
 
 private let previewInputFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true)
@@ -155,7 +193,8 @@ final class AnalyzerPreviewSession: LivePreviewSession {
         return (.ready, Locale(identifier: identifier))
     }
 
-    static func start(locale: Locale, onResult: @escaping (String, String, Bool) -> Void) async throws -> AnalyzerPreviewSession {
+    static func start(locale: Locale, onResult: @escaping (String, String, Bool) -> Void,
+                      onFailure: @escaping () -> Void) async throws -> AnalyzerPreviewSession {
         let transcriber = SpeechTranscriber(locale: locale, transcriptionOptions: [],
                                             reportingOptions: [.volatileResults, .fastResults], attributeOptions: [])
         guard let inputFormat = previewInputFormat else {
@@ -176,14 +215,18 @@ final class AnalyzerPreviewSession: LivePreviewSession {
                     onResult(ids.id(isFinal: result.isFinal), text, result.isFinal)
                 }
             } catch {
-                NSLog("[LivePreview] SpeechAnalyzer results ended: %@", error.localizedDescription)
+                NSLog("[LivePreview] SpeechAnalyzer results failed: %@", error.localizedDescription)
             }
+            // Results only end on their own when the analyzer failed or finished
+            // underneath us; either way the preview is no longer live.
+            guard let session, !session.stopped, !Task.isCancelled else { return }
+            onFailure()
         }
         do {
             try await analyzer.prepareToAnalyze(in: format)
             try await analyzer.start(inputSequence: stream)
         } catch {
-            session.stop()
+            await session.stop()
             throw error
         }
         return session
@@ -233,13 +276,12 @@ final class AnalyzerPreviewSession: LivePreviewSession {
         return output
     }
 
-    func stop() {
+    func stop() async {
         guard !stopped else { return }
         stopped = true
         continuation.finish()
         results?.cancel()
-        let analyzer = analyzer
-        Task { await analyzer.cancelAndFinishNow() }
+        await analyzer.cancelAndFinishNow()
     }
 }
 
@@ -275,9 +317,17 @@ final class SFSpeechPreviewSession: LivePreviewSession {
     private var stopped = false
     private var retryAt = Date.distantPast
 
-    init(recognizer: SFSpeechRecognizer, onResult: @escaping (String, String, Bool) -> Void) {
+    /// Requests that failed in a row with no words; at this many the preview
+    /// reports a runtime failure instead of retrying forever.
+    static let maxConsecutiveFailures = 3
+    private let onFailure: () -> Void
+    private var consecutiveFailures = 0
+
+    init(recognizer: SFSpeechRecognizer, onResult: @escaping (String, String, Bool) -> Void,
+         onFailure: @escaping () -> Void) {
         self.recognizer = recognizer
         self.onResult = onResult
+        self.onFailure = onFailure
     }
 
     func begin() {
@@ -292,11 +342,24 @@ final class SFSpeechPreviewSession: LivePreviewSession {
         requestStartedAt = Date()
         let task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             let text = result?.bestTranscription.formattedString
-            let isFinal = result?.isFinal ?? false
-            let failed = error != nil
+            // "No speech detected" (kAFAssistantErrorDomain 1110) is silence,
+            // not a failure: the request just ends and the next audio reopens one.
+            let silent = (error as NSError?)?.code == 1110
+            let isFinal = (result?.isFinal ?? false) || silent
+            let failed = error != nil && !silent
             Task { @MainActor in
                 guard let self, !self.stopped else { return }
-                if let text { self.onResult(id, text, isFinal) }
+                if let text {
+                    self.onResult(id, text, isFinal)
+                    if !text.isEmpty { self.consecutiveFailures = 0 }
+                }
+                if failed, self.request === request {
+                    self.consecutiveFailures += 1
+                    if self.consecutiveFailures >= Self.maxConsecutiveFailures {
+                        self.onFailure()
+                        return
+                    }
+                }
                 // A failed or finished current request (silence timeout, a
                 // recognizer hiccup) ends; the next audio opens a new one.
                 // Requests that fail at once back off so they cannot spin.
@@ -345,7 +408,7 @@ final class SFSpeechPreviewSession: LivePreviewSession {
         return buffer
     }
 
-    func stop() {
+    func stop() async {
         guard !stopped else { return }
         stopped = true
         request?.endAudio()

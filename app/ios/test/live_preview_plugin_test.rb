@@ -125,5 +125,8 @@ class LivePreviewPluginTest < Minitest::Test
     refute_includes plugin, 'name: "com.omi/on_device"', 'must not share the single-flight overflow channel'
     refute_includes plugin, 'downloadAndInstall', 'the preview never downloads speech assets'
     refute_includes plugin, 'requestAuthorization', 'the preview never prompts from the capture path'
+    assert_includes plugin, 'await analyzer.cancelAndFinishNow()', 'stop replies only after the analyzer let go'
+    assert_includes plugin, 'await retired.value', 'start and stop wait for the previous session cleanup'
+    assert_includes plugin, '"failure": "engine_error"', 'runtime failures reach Dart with the closed reason'
   end
 end
