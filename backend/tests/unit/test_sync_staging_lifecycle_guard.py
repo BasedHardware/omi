@@ -2,14 +2,13 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
+from google.auth.transport import requests
+from google.oauth2 import service_account
 
 from scripts import check_sync_staging_lifecycle as guard
 
 
 def test_metadata_transport_only_gets_whitelisted_bucket_fields_and_preserves_unknown_actions(monkeypatch):
-    from google.auth.transport import requests
-    from google.oauth2 import service_account
-
     monkeypatch.setenv('GOOGLE_APPLICATION_CREDENTIALS', '/synthetic-agent-key')
     credentials = MagicMock()
     load = MagicMock(return_value=credentials)

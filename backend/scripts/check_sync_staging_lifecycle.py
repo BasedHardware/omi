@@ -14,17 +14,17 @@ import re
 from typing import Any
 from urllib.parse import quote
 
+from google.auth.transport import requests
+from google.oauth2 import service_account
+
 
 def read_bucket_metadata(name: str) -> dict[str, Any]:
-    from google.auth.transport.requests import AuthorizedSession
-    from google.oauth2 import service_account
-
     # No ADC fallback to an interactive human login. The sourced read-only
     # tier supplies this agent key; the OAuth scope is read-only as well.
     credentials = service_account.Credentials.from_service_account_file(
         os.environ['GOOGLE_APPLICATION_CREDENTIALS'], scopes=['https://www.googleapis.com/auth/devstorage.read_only']
     )
-    with AuthorizedSession(credentials) as session:
+    with requests.AuthorizedSession(credentials) as session:
         response = session.get(
             f'https://storage.googleapis.com/storage/v1/b/{quote(name, safe="")}',
             params={'fields': 'metageneration,lifecycle,defaultEventBasedHold,retentionPolicy'},

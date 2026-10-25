@@ -8,12 +8,17 @@ permission to destroy the last server copy. Privacy erasure uses its own purge.
 import base64
 import hashlib
 import logging
+import os
 from pathlib import Path
 import json
 from collections.abc import Iterable, Sequence
 from typing import TypedDict
 
+from google.api_core.exceptions import NotFound
+
+from database import _client as firestore_clients, sync_ledger
 from utils.audio_cleanup_custody import cleanup_hold_reason
+from utils.other import local_storage, storage
 from utils.request_validation import parse_sync_filename_timestamp
 
 logger = logging.getLogger(__name__)
@@ -108,18 +113,16 @@ def cleanup_sync_staging(
     if not uid or not content_id or not job_id:
         logger.info('event=sync_staging_cleanup outcome=retained reason=missing_receipt')
         return 0
-    from database._client import get_firestore_client
-    from database.sync_ledger import is_valid_completed_sync_content_result, sync_content_reference
-    from utils.other import storage
-    from utils.other.local_storage import create_storage_client
-
-    ledger = sync_content_reference(get_firestore_client(), uid, content_id).get().to_dict() or {}
+    ledger = (
+        sync_ledger.sync_content_reference(firestore_clients.get_firestore_client(), uid, content_id).get().to_dict()
+        or {}
+    )
     result = ledger.get('result') or {}
     receipt = ledger.get('staging_custody') or {}
     if (
         ledger.get('status') != 'completed'
         or ledger.get('job_id') != job_id
-        or not is_valid_completed_sync_content_result(result)
+        or not sync_ledger.is_valid_completed_sync_content_result(result)
         or receipt.get('version') != 1
         or not receipt.get('originals')
         or not receipt.get('staging')
@@ -159,10 +162,7 @@ def cleanup_sync_staging(
             logger.warning('event=sync_staging_cleanup outcome=retained reason=archive_mismatch')
             return 0
     cleaned = 0
-    from google.api_core.exceptions import NotFound
-    import os
-
-    storage_client = create_storage_client()
+    storage_client = local_storage.create_storage_client()
     for path in paths:
         for name in dict.fromkeys(filter(None, (storage.syncing_local_bucket, os.getenv('BUCKET_AUDIO_DERIVED')))):
             bucket = storage_client.bucket(name)

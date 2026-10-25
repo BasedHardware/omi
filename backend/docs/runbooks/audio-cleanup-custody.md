@@ -126,9 +126,11 @@ purges, including owner-scoped all-version GCS erasure, do not call the routine
 hold or the legacy success verifier. Privacy erasure remains immediate and
 retryable, even for incident artifacts or unknown capture timestamps.
 
-The rollout lead owns merge and deployment after T3b. Deploy the backend image
-to backend-sync, backend-sync-backfill and the batch-serving integration host;
-backend/pusher/listen outbox changes are owned separately. No workflow,
+The rollout lead owns merge and deployment after T3b. First deploy the backend
+image to every API role serving conversation/account privacy erasure, including
+backend, so owner-index artifact purges are reachable before cleanup can park
+malformed legacy keys. Then deploy backend-sync, backend-sync-backfill and the
+batch-serving integration host. Pusher/listen outbox changes are owned separately. No workflow,
 production env, bucket retention, restore or historical data mutation is part
 of this change. Old daemon timers already resident in an old process disappear
 only when that process is replaced.

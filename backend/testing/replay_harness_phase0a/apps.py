@@ -199,6 +199,7 @@ else:
 
 # ---- import the real backend ----
 from main import app  # noqa: E402
+from utils.stt import language_gate  # noqa: E402
 from fastapi import Header, HTTPException, Request  # noqa: E402
 from fastapi.responses import JSONResponse, Response  # noqa: E402
 
@@ -277,7 +278,6 @@ else:
     from models.structured import Structured  # noqa: E402
     import utils.sync.pipeline as sync_pipeline  # noqa: E402
     from utils.conversations import lifecycle as lifecycle_service  # noqa: E402
-    from utils.stt import language_gate  # noqa: E402
     from routers import sync as sync_router  # noqa: E402
 
     _TRANSCRIPT_TOKEN = os.getenv("OMI_REPLAY_TRANSCRIPT_TOKEN", "replay-harness-transcript")

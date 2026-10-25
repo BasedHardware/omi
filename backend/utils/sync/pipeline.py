@@ -41,6 +41,7 @@ from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
 from utils.sync import cap_recovery_provider
+from utils.sync.staging_custody import add_staging_derivatives, cleanup_sync_staging, make_staging_custody_receipt
 from utils.sync import conversation_turn as conversation_turn_lease
 
 from database import conversations as conversations_db
@@ -2561,8 +2562,6 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             # --- Phase 1: Decode ---
             raw_staging_custody = None
             if content_id and raw_capture_paths:
-                from utils.sync.staging_custody import make_staging_custody_receipt
-
                 try:
                     raw_staging_custody = await run_blocking(
                         storage_executor, make_staging_custody_receipt, uid, raw_paths, raw_capture_paths
@@ -3467,8 +3466,6 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             custody = None
             if content_id and failed_segments == 0:
                 if not cap_holds:
-                    from utils.sync.staging_custody import add_staging_derivatives
-
                     try:
                         custody = await run_blocking(
                             storage_executor,
@@ -3710,8 +3707,6 @@ def _stage_files_to_gcs(paths: list):
 
 
 def _delete_staged_blobs(blob_paths: list[str], **custody: Any) -> int:
-    from utils.sync.staging_custody import cleanup_sync_staging
-
     try:
         return cleanup_sync_staging(blob_paths, **custody)
     except Exception as e:

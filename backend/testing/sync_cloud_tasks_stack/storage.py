@@ -11,6 +11,7 @@ import base64
 import hashlib
 import json
 import shutil
+from io import BytesIO
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 from urllib.parse import urlsplit
@@ -178,8 +179,6 @@ class LocalBlob:
         self, data: bytes | str, content_type: str | None = None, *_args: Any, **_kwargs: Any
     ) -> None:
         payload = data.encode() if isinstance(data, str) else data
-        from io import BytesIO
-
         self.upload_from_file(BytesIO(payload), content_type=content_type, **_kwargs)
 
     def download_as_bytes(self, *_args: Any, if_generation_match: int | None = None, **_kwargs: Any) -> bytes:

@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import os
 import uuid
+from unittest.mock import Mock
 
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
@@ -18,10 +19,12 @@ from database.batch_pipeline_privacy import (
 )
 from database.batch_pipeline_purge import purge_batch_owner
 from database.batch_pipeline_store import FirestoreStore
+from utils.batch_pipeline import retention
 from utils.batch_pipeline.contracts import WorkItem, WorkResult, Priority
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.batch_pipeline.retention import (
+    delete_batch_object,
     register_batch_artifact,
     expire_completed_segment,
     cleanup_completed_artifacts,
@@ -303,7 +306,6 @@ def test_incident_hold_and_uri_less_receipt_do_not_block_unrelated_or_privacy_cl
 
 
 def test_real_firestore_update_precondition_preserves_a_newer_privacy_erasure(state, monkeypatch):
-    from utils.batch_pipeline import retention
 
     store, uid, _, _, _ = state
     monkeypatch.delenv('AUDIO_CLEANUP_HOLD_ENABLED', raising=False)
@@ -400,8 +402,6 @@ def test_conversation_purge_preserves_other_conversation_mismatch_and_uses_segme
 
 @pytest.mark.parametrize('scope', ['conversation', 'account'])
 def test_privacy_mismatch_discovery_refuses_foreign_uri_before_ack_or_metadata_repair(state, monkeypatch, scope):
-    from unittest.mock import Mock
-    from utils.batch_pipeline.retention import delete_batch_object
 
     store, uid, user, purge, _ = state
     monkeypatch.setenv('BUCKET_BATCH_PIPELINE', 'synthetic-batch')
@@ -438,7 +438,6 @@ def test_owner_id_artifact_fallback_pages_past_one_hundred_rows(state):
 
 
 def test_stale_owner_mismatch_scan_cannot_repark_a_repaired_privacy_outbox(state, monkeypatch):
-    from utils.batch_pipeline import retention
 
     store, uid, user, purge, erased = state
     now = datetime.now(timezone.utc)

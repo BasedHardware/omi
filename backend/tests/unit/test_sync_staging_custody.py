@@ -8,6 +8,9 @@ from unittest.mock import Mock
 import pytest
 from google.api_core.exceptions import NotFound
 
+from database import _client, sync_ledger
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.other import local_storage, storage
 from utils.sync import staging_custody as custody
 
 
@@ -29,9 +32,6 @@ def local_receipt(tmp_path, monkeypatch):
 
 @pytest.fixture
 def cleanup(local_receipt, monkeypatch):
-    from database import _client, sync_ledger
-    from utils.other import local_storage, storage
-
     monkeypatch.delenv('AUDIO_CLEANUP_HOLD_ENABLED', raising=False)
     monkeypatch.delenv('AUDIO_CLEANUP_HOLD_WINDOWS', raising=False)
     monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
@@ -163,9 +163,6 @@ def test_unlisted_or_cross_owner_paths_are_preserved(cleanup):
 
 
 def test_custody_receipt_shares_the_owner_fenced_completion_transaction(local_receipt):
-    from database import sync_ledger
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-
     client = StrictFirestore()
     ref = client.collection('ledger').document('content')
     ref.create({'job_id': 'job', 'status': 'processing', 'ledger_run_token': '1:token', 'ledger_run_epoch': 1})

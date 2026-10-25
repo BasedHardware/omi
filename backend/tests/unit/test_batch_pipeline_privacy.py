@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from google.api_core.exceptions import NotFound
 
-from database import conversation_tombstones
+from database import batch_pipeline_purge as purge, conversation_tombstones
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.user_data_deletion import purge_user_subtree
 from scripts.batch_pipeline_ttl import ttl_resources
@@ -15,8 +15,6 @@ from utils.batch_pipeline.retention import delete_batch_object, purge_batch_stor
 
 
 def test_pending_privacy_artifact_repairs_identity_only_after_object_erasure(monkeypatch):
-    from database import batch_pipeline_purge as purge
-
     monkeypatch.setattr(purge, 'mirror_refresh', MagicMock())
     reference = MagicMock()
     snapshot = SimpleNamespace(id='receipt', reference=reference)
@@ -37,8 +35,6 @@ def test_pending_privacy_artifact_repairs_identity_only_after_object_erasure(mon
 
 
 def test_privacy_artifact_foreign_uri_cannot_repair_or_ack_erasure(monkeypatch):
-    from database import batch_pipeline_purge as purge
-
     monkeypatch.setenv('BUCKET_BATCH_PIPELINE', 'synthetic-batch')
     factory = MagicMock()
     monkeypatch.setattr('utils.other.local_storage.create_storage_client', factory)
