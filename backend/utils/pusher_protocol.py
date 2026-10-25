@@ -145,3 +145,7 @@ class PrivateCloudChunk(TypedDict):
     timestamp: float
     # Audio-timeline v2 only: the chunk's authoritative PCM sample count.
     span: NotRequired[PrivateCloudSpan]
+    # Continuity window (per-connection generation) the chunk was buffered
+    # under; the pusher reconcile-skip compares it against the conversation's
+    # clean-upload window. Always set by the pusher flush path.
+    timeline_generation: NotRequired[int]

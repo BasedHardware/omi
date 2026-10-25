@@ -14,7 +14,10 @@ original Opus capture is dual-written next to the decoded PCM everywhere, and
 readers prefer it, without a percent cohort. Setting either to `false` is the
 rollback. The remaining phases stay default-off staged rollouts behind their
 enable plus the common deterministic cohort (`AUDIO_ARCHIVE_PERCENT` (0),
-`AUDIO_ARCHIVE_UID_ALLOWLIST` (empty)):
+`AUDIO_ARCHIVE_UID_ALLOWLIST` (empty)) — except STOP_PCM and REGIONAL_CACHE,
+which ramp against their own percent (`AUDIO_ARCHIVE_STOP_PCM_PERCENT`,
+`AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT`) because COALESCE pins the shared
+`AUDIO_ARCHIVE_PERCENT` at 100 fleet-wide:
 
 | Enable | Behavior |
 | --- | --- |
@@ -22,7 +25,7 @@ enable plus the common deterministic cohort (`AUDIO_ARCHIVE_PERCENT` (0),
 | `AUDIO_ARCHIVE_READ_ENABLED` (default on) | Prefer checksum-verified raw coverage for span-bearing legacy chunks in merge, playback, and final-pass consumers of the shared decoder. Missing/incomplete raw keeps PCM. |
 | `AUDIO_ARCHIVE_STOP_PCM_ENABLED` + `AUDIO_ARCHIVE_STOP_PCM_PERCENT` (default off/0) | Requires READ; ramps against its own percent (not `AUDIO_ARCHIVE_PERCENT`, which COALESCE pins at 100). Skip a PCM batch only after committed raw verifies complete coverage and the live capture-PCM SHA matches (or raw decode matches every byte). Missing raw, checksum, rate, span, or decode mismatch retains today's write. |
 | `AUDIO_ARCHIVE_SYNC_ENABLED` | v1/v2 SD/offline uploads archive original file bytes before decode/acceptance; lossy backend Opus chunks become derived renditions. Existing mobile-batch archival remains mandatory. |
-| `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED` | Route merged/playback caches, sync renditions and new intake staging to `BUCKET_AUDIO_DERIVED`. Canonical raw stays multi-region. |
+| `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED` + `AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT` (default off/0) | Route merged/playback caches, sync renditions and new intake staging to `BUCKET_AUDIO_DERIVED`. Canonical raw stays multi-region. Ramps against its own percent (not `AUDIO_ARCHIVE_PERCENT`, which COALESCE pins at 100, or the enable flag would be an instant 100% cutover). |
 | `AUDIO_ARCHIVE_COALESCE_ENABLED` | Share concurrent identical file rebuild results, including failures; released admission permits retry. Existing fingerprint-named Cloud Tasks and distributed conversation leases still cover cross-instance rebuilds. |
 | `AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED` | Route admitted merge tasks to `AUDIO_MERGE_WORKER_URL` (full `/v2/audio-merge-jobs/run` URL). Non-admitted tasks retain `AUDIO_MERGE_HANDLER_URL`. |
 
