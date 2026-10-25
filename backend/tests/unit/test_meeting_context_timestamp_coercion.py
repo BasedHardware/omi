@@ -1,19 +1,26 @@
 """Tests for resilient timestamp coercion and deterministic sorting in meeting context."""
 
-import sys
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock
-
-for _mod in (
-    'langchain_openai',
-    'langchain_community',
-    'utils.memory.memory_service',
-):
-    if _mod not in sys.modules:
-        sys.modules[_mod] = MagicMock()
 
 import pytest
+
+from testing.import_isolation import AutoMockModule, stub_modules
+
+
+@pytest.fixture(scope='module', autouse=True)
+def isolated_imports():
+    with stub_modules(
+        {
+            'langchain_openai': AutoMockModule('langchain_openai'),
+            'langchain_community': AutoMockModule('langchain_community'),
+            'utils.memory.memory_service': AutoMockModule('utils.memory.memory_service'),
+        }
+    ):
+        import utils.conversations.meeting_context_pack as pack_module
+
+        yield pack_module
+
 
 from utils.conversations import meeting_context_pack
 from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
@@ -72,6 +79,7 @@ class TestLocalDateLabel:
     def test_invalid_value_returns_unknown_date(self):
         assert meeting_context_pack._local_date_label(None, 'UTC') == 'unknown date'
         assert meeting_context_pack._local_date_label('garbage', 'UTC') == 'unknown date'
+        assert meeting_context_pack._local_date_label(meeting_context_pack._UTC_MIN, 'UTC') == 'unknown date'
 
 
 class TestGatherPriorMeetingsTimestampResilience:

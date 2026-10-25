@@ -178,7 +178,7 @@ def _as_utc(value: Any) -> Optional[datetime]:
 
 def _local_date_label(value: Optional[datetime], timezone_name: Optional[str]) -> str:
     utc = _as_utc(value)
-    if utc is None:
+    if utc is None or utc == _UTC_MIN:
         return 'unknown date'
     try:
         tz = ZoneInfo(timezone_name) if timezone_name else timezone.utc
