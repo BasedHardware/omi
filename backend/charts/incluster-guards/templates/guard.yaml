@@ -59,6 +59,21 @@ data:
 {{ .Files.Get "files/guard.py" | indent 4 }}
   batch_guard.py: |
 {{ .Files.Get "files/batch_guard.py" | indent 4 }}
+{{- if .Values.floorSchedule.enabled }}
+{{- if ne (len .Values.floorSchedule.hours) 24 }}
+{{- fail "floorSchedule.hours must have exactly 24 entries" }}
+{{- end }}
+{{- range .Values.floorSchedule.hours }}
+{{- if not (regexMatch "^(?:[1-9]|1[0-2])$" (toString .)) }}
+{{- fail (printf "floorSchedule floor %v must be an integer 1..12" .) }}
+{{- end }}
+{{- end }}
+  # Presence of this file is the guard's only schedule gate: without it the
+  # guard never writes the floor. No new objects, so the prod deployer's
+  # name-scoped RBAC (which refuses new object names) still accepts the upgrade.
+  floors.json: |
+{{ .Values.floorSchedule.hours | toJson | indent 4 }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
