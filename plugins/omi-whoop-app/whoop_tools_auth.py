@@ -1,37 +1,39 @@
+"""Shared-secret guard for Whoop chat-tool routes (#14453).
+
+The guard accepts the app-level secret via Authorization: Bearer or
+the whoop_tools_token query parameter. It fails closed with 503 when the
+secret is not configured, so a missing deployment variable can never
+silently leave the health-data surface open.
+"""
+
 import hmac
 import os
-from typing import Optional
 
-from fastapi import Header, HTTPException, Query, status
+from fastapi import HTTPException, Request
+
+SECRET_ENV = "WHOOP_TOOLS_SECRET"
+TOKEN_QUERY_PARAM = "whoop_tools_token"
 
 
-def require_whoop_tools_auth(
-    authorization: Optional[str] = Header(default=None),
-    whoop_tools_token: Optional[str] = Query(default=None),
-) -> None:
-    """Protect Whoop chat-tool routes with a deployment-provided shared secret."""
-    configured_secret = os.getenv("WHOOP_TOOLS_SECRET")
+def _presented_token(request: Request) -> str:
+    header = request.headers.get("Authorization", "")
+    scheme, _, credentials = header.partition(" ")
+    if scheme.lower() == "bearer" and credentials.strip():
+        return credentials.strip()
+    return (request.query_params.get(TOKEN_QUERY_PARAM) or "").strip()
 
-    if not configured_secret:
+
+def require_whoop_tools_auth(request: Request) -> None:
+    secret = os.environ.get(SECRET_ENV, "")
+    if not secret:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            status_code=503,
             detail="Whoop tools authentication is not configured",
         )
 
-    bearer_token: Optional[str] = None
-    if authorization:
-        scheme, _, credentials = authorization.partition(" ")
-        if scheme.lower() == "bearer" and credentials:
-            bearer_token = credentials
-
-    supplied_token = bearer_token or whoop_tools_token
-
-    if not supplied_token or not hmac.compare_digest(
-        supplied_token.encode("utf-8"),
-        configured_secret.encode("utf-8"),
-    ):
+    token = _presented_token(request)
+    if not token or not hmac.compare_digest(token.encode("utf-8"), secret.encode("utf-8")):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=401,
             detail="Invalid or missing Whoop tools credentials",
-            headers={"WWW-Authenticate": "Bearer"},
         )
