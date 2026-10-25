@@ -169,6 +169,48 @@ def read_pcm(uid: str, receipt: AudioReceipt) -> bytes:
     return pcm
 
 
+def commit_pcm_window(
+    uid: str,
+    pcm: bytes,
+    conversation_id: str | None,
+    start: float,
+    sample_rate: int,
+    source_root: str,
+    first_sequence: int,
+    frames: list[dict[str, Any]],
+    *,
+    data_protection_level: str | None = None,
+    clock_source: str = 'server_projected',
+) -> AudioReceipt:
+    """Commit one immutable media+manifest pair for a window of PCM frames.
+
+    ``frames`` are the caller's per-frame checkpoints (sequence, offsets,
+    digests), pinned verbatim into the manifest; ``first_sequence`` names the
+    window content-addressably like the single-frame path does.
+    """
+    if not pcm or len(pcm) % 2:
+        raise ValueError('audio outbox requires sample-aligned PCM16')
+    pack = CapturePack('pcm16', sample_rate)
+    pack.append(pcm, conversation_id, start, len(pcm) // 2)
+    raw, metadata = pack.encoded(preserve_pcm=True)
+    metadata.update(
+        capture_session_id=source_root,
+        channel_index=0,
+        clock_source=clock_source,
+        source_position='unknown',
+        consent_state='private_cloud_sync_enabled',
+    )
+    owner = conversation_id or 'unlinked'
+    return commit_capture(
+        uid,
+        raw,
+        f'{owner}/{int(start // 3600)}/0/{source_root}/{first_sequence}',
+        metadata,
+        frames,
+        data_protection_level=data_protection_level,
+    )
+
+
 def commit_pcm(
     uid: str,
     pcm: bytes,
@@ -181,18 +223,6 @@ def commit_pcm(
     data_protection_level: str | None = None,
     clock_source: str = 'server_projected',
 ) -> AudioReceipt:
-    if not pcm or len(pcm) % 2:
-        raise ValueError('audio outbox requires sample-aligned PCM16')
-    pack = CapturePack('pcm16', sample_rate)
-    pack.append(pcm, conversation_id, timestamp, len(pcm) // 2)
-    raw, metadata = pack.encoded(preserve_pcm=True)
-    metadata.update(
-        capture_session_id=source_root,
-        channel_index=0,
-        clock_source=clock_source,
-        source_position='unknown',
-        consent_state='private_cloud_sync_enabled',
-    )
     frames = [
         {
             'sequence': sequence,
@@ -202,12 +232,15 @@ def commit_pcm(
             'gap_before': False,
         }
     ]
-    owner = conversation_id or 'unlinked'
-    return commit_capture(
+    return commit_pcm_window(
         uid,
-        raw,
-        f'{owner}/{int(timestamp // 3600)}/0/{source_root}/{sequence}',
-        metadata,
+        pcm,
+        conversation_id,
+        timestamp,
+        sample_rate,
+        source_root,
+        sequence,
         frames,
         data_protection_level=data_protection_level,
+        clock_source=clock_source,
     )

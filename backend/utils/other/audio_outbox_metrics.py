@@ -28,7 +28,7 @@ def record_failure(stage: str) -> None:
 # A first refusal must have a scraped zero baseline; dynamically creating a
 # child at 1 would hide the first event from increase(...[5m]). Labels are a
 # bounded contract, never account/session identifiers.
-for _stage in ('commit', 'raw_commit', 'projection'):
+for _stage in ('commit', 'raw_commit', 'projection', 'window_tail'):
     CUSTODY_FAILURES.labels(stage=_stage).inc(0)
 for _stage in (
     'pusher_queue',
@@ -39,6 +39,7 @@ for _stage in (
     'raw_pack',
     'raw_capacity',
     'raw_timeout',
+    'window_tail',
 ):
     WOULD_DROP.labels(stage=_stage).inc(0)
     BACKPRESSURE.labels(stage=_stage).inc(0)
