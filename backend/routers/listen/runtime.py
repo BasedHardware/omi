@@ -855,6 +855,7 @@ class ListenSessionRuntime:
             await admission.refresh(force=bool(invalidated), subscription=subscription)
             if getattr(self.receiver, 'cap_paused', False) and admission.managed:
                 if await self.receiver.initialize_stt() and not getattr(self.receiver, 'cap_paused', False):
+                    self.receiver.note_deferred_stream_opened()
                     self.receiver.ensure_live_demand_routing()
         credit_admission = (
             admission

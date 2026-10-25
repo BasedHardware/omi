@@ -1465,7 +1465,23 @@ class ListenReceiver(ReplayFilterMixin):
         if demand is None or supervisor is None or getattr(self, '_live_demand_routing_started', False):
             return None
         self._live_demand_routing_started = True
+        # A task started after supervise() snapshots its monitored set is still
+        # tracked (drained and cancelled at teardown, exceptions logged) but cannot
+        # end the session: a routing failure only leaves it on its current lane.
         return supervisor.create_lifetime_task(demand.run(), name='live_demand_routing')
+
+    def note_deferred_stream_opened(self) -> None:
+        """Count a deferred session's stream once, whether it opened on audio or on cap recovery."""
+
+        if not getattr(self, '_cloud_live_opening', False) or getattr(self, '_deferred_open_counted', False):
+            return
+        self._deferred_open_counted = True
+        try:
+            OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL.labels(
+                deferred_by=getattr(self, '_cloud_live_deferred_by', None) or 'off'
+            ).inc()
+        except Exception:
+            pass  # Telemetry never blocks the stream.
 
     async def _open_deferred_stream(self) -> bool:
         """Audio reached a deferred session: open the provider stream it would have had."""
@@ -1475,12 +1491,7 @@ class ListenReceiver(ReplayFilterMixin):
         if not await self.initialize_stt():
             return False
         if self.stt_socket is not None or any(self.stt_sockets_multi):
-            try:
-                OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL.labels(
-                    deferred_by=getattr(self, '_cloud_live_deferred_by', None) or 'off'
-                ).inc()
-            except Exception:
-                pass  # Telemetry never blocks the stream.
+            self.note_deferred_stream_opened()
             self.ensure_live_demand_routing()
         # Otherwise cap admission paused it (audio goes to LiveHeldAudio); credit
         # refresh re-initializes and starts demand routing when the cap recovers.

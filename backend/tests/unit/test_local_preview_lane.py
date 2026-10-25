@@ -144,6 +144,7 @@ async def test_local_preview_session_defers_then_opens_on_socket_audio(monkeypat
     fake.stt_socket = None
     fake.stt_sockets_multi = []
     fake.ensure_live_demand_routing = lambda: ListenReceiver.ensure_live_demand_routing(fake)
+    fake.note_deferred_stream_opened = lambda: ListenReceiver.note_deferred_stream_opened(fake)
     before = counter(OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL, deferred_by='local_preview')
     assert await ListenReceiver._open_deferred_stream(fake) is True
     assert opened == [True]
@@ -163,6 +164,7 @@ async def test_cap_paused_deferred_open_waits_for_cap_recovery(monkeypatch):
     fake._cloud_live_deferred_by = 'local_preview'
     fake.live_demand = None
     fake.ensure_live_demand_routing = lambda: ListenReceiver.ensure_live_demand_routing(fake)
+    fake.note_deferred_stream_opened = lambda: ListenReceiver.note_deferred_stream_opened(fake)
 
     async def initialize_stt():
         fake.cap_paused = True  # Cap admission refused: no socket, audio goes to LiveHeldAudio.
@@ -173,10 +175,12 @@ async def test_cap_paused_deferred_open_waits_for_cap_recovery(monkeypatch):
     assert await ListenReceiver._open_deferred_stream(fake) is True
     assert counter(OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL, deferred_by='local_preview') == before
     fake.host.task_supervisor.create_lifetime_task.assert_not_called()
-    # Cap recovers: initialization attaches demand and the routing task starts exactly once.
+    # Cap recovers: initialization attaches demand; the open counts once and routing starts once.
     fake.live_demand = SimpleNamespace(run=Mock(return_value='run'))
-    fake.ensure_live_demand_routing()
-    fake.ensure_live_demand_routing()
+    for _ in range(2):
+        ListenReceiver.note_deferred_stream_opened(fake)
+        fake.ensure_live_demand_routing()
+    assert counter(OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL, deferred_by='local_preview') == before + 1
     fake.host.task_supervisor.create_lifetime_task.assert_called_once_with('run', name='live_demand_routing')
 
 
