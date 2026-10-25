@@ -5,6 +5,8 @@ import wave
 from collections.abc import Callable
 from typing import Any
 
+from config.batch_pipeline_empty_asr import terminal_empty_allowed
+
 from utils.observability.reasons import (
     ReasonFamily,
     RecoveryFailureReason,
@@ -156,6 +158,8 @@ def padded_long_speech(job):
 
 
 def terminal_empty_payload(duration, spans, evidence=EMPTY_EVIDENCE):
+    if not terminal_empty_allowed(spans):
+        raise MultilingualEmpty(duration, spans)
     payload = {
         'audio_seconds': duration,
         'speech_seconds': sum(s['end'] - s['start'] for s in spans),

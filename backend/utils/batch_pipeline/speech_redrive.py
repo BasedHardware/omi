@@ -8,6 +8,7 @@ import time
 from database.batch_pipeline_policy import load_stage_policy, UnpinnedPolicyRefused
 from config.prerecorded_stt import require_provider_environment, PrerecordedSTTService
 from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
+from config.batch_pipeline_empty_asr import terminal_empty_allowed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
@@ -118,6 +119,7 @@ def redrive_one(
         if (
             policy.terminal_empty_disposition
             and isinstance(error, MultilingualEmpty)
+            and terminal_empty_allowed(error.spans)
             and not padded_skipped(job)
             and (padded_empty(job) or marker.get('gpu_padded_retry_empty') is True)
         ):
@@ -126,7 +128,14 @@ def redrive_one(
     else:
         failure = None
     if failure:
-        if protocol.settle(sid, token, plan_digest, clock(), failure=failure):
+        if protocol.settle(
+            sid,
+            token,
+            plan_digest,
+            clock(),
+            failure=failure,
+            measured_held_vad_speech_seconds=sum(span['end'] - span['start'] for span in spans),
+        ):
             log_failure(failure)
         return 'failed_held'
     if payload is None:

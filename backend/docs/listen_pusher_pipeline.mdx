@@ -6948,3 +6948,34 @@ and its mean (`_sum/_count`) should fall while rotations per session
 (`rate(omi_live_speaker_scope_rotations_total[1h]) / rate(omi_listen_ws_close_total[1h])`)
 holds — ordinals falling with rotations flat means the deferral is working, not
 that conversations gained fewer speakers.
+# Batch empty-ASR custody
+
+`BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED` ships on (set `false` on the
+batch worker and CPU recovery roles to roll back). Parakeet output with no
+words, or fewer than two alphanumeric characters for at least one second of
+measured VAD speech, gets one bounded retry. It prepends the contiguous same
+owner/device/privacy-generation predecessor's onset-aware tail when available;
+otherwise it starts one second before the first VAD onset. Prefix words never
+belong to the current unit. This replaces the existing padded retry rather
+than adding a second GPU attempt; the 120-second quantum and dispatch-time
+funding checks still apply. Oversize retries go to fenced prerecorded recovery.
+
+An empty result from the independent multilingual recovery cannot terminally
+dispose positive-VAD audio while the switch is on, including sub-second
+speech. It stays `failed_held` with encrypted audio and the original paid intent
+intact; only strict-VAD silence may complete without words. Operator redrive
+uses the same boundary. Previously persisted results reconcile without another
+provider call. The switch does not enable new batch admission or bypass a
+recovery policy, allowance, consent or privacy fence.
+
+Worker recovery/validation handoffs and CPU recovery failure settlements carry
+`measured_held_vad_speech_seconds` on the job. This is the validated, unpadded
+VAD union, never captured duration or transcript length. A pre-VAD failure
+records `null` (unavailable); observers must hold the ramp on unknown evidence
+and never interpret it as measured zero. Existing historical units need a
+separately approved receipt/redrive; deploying this change does not repair them.
+Worker handoffs also carry a separate `worker_vad_receipt` with `version: 1`,
+`state: measured`, integer `speech_samples`/`captured_samples`,
+`sample_rate_hz: 16000` and `input_uri_sha256` binding the staged input URI.
+The lease CAS validates its input, duration and agreement with measured seconds
+before storing it. `worker_empty_evidence` retains its existing exact shape.

@@ -1,6 +1,7 @@
 """GPU-independent batch protocol. No provider imports or import-time IO."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import hashlib
 import math
 from typing import Protocol, Sequence
 
@@ -103,6 +104,59 @@ WORK_OUTCOMES = reason_values(WorkOutcome)
 EMPTY_WORKER_REASONS = frozenset({WorkerValidationReason.EMPTY_ASR.value, WorkerValidationReason.NO_OWNED_WORDS.value})
 
 
+def validate_measured_vad(seconds, duration=None):
+    """None is unavailable evidence, never a measured zero."""
+    if seconds is not None and (
+        type(seconds) not in {int, float}
+        or not math.isfinite(seconds)
+        or seconds < 0
+        # Decode/strict audio inspection accept up to 0.1s of metadata rounding.
+        # A bound worker receipt additionally caps speech at captured_samples.
+        or seconds > min(7200, 7200 if duration is None else duration + 0.1) + 1 / 16000
+    ):
+        raise ValueError('invalid measured VAD speech seconds')
+    return seconds
+
+
+def vad_receipt(audio_uri, captured_samples, speech_seconds):
+    return {
+        'version': 1,
+        'state': 'measured',
+        'speech_samples': round(speech_seconds * 16000),
+        'captured_samples': captured_samples,
+        'sample_rate_hz': 16000,
+        'input_uri_sha256': hashlib.sha256(audio_uri.encode()).hexdigest(),
+    }
+
+
+def attach_held_vad(job, seconds=None, receipt=None, *, receipt_field='worker_vad_receipt'):
+    """Validate immutable input binding before a fenced job mutation."""
+    measured = validate_measured_vad(seconds, job['duration_seconds'])
+    if receipt is not None:
+        expected_keys = {'version', 'state', 'speech_samples', 'captured_samples', 'sample_rate_hz', 'input_uri_sha256'}
+        if (
+            not isinstance(receipt, dict)
+            or set(receipt) != expected_keys
+            or type(receipt['version']) is not int
+            or receipt['version'] != 1
+            or receipt['state'] != 'measured'
+            or type(receipt['sample_rate_hz']) is not int
+            or receipt['sample_rate_hz'] != 16000
+            or type(receipt['speech_samples']) is not int
+            or type(receipt['captured_samples']) is not int
+            or receipt['captured_samples'] <= 0
+            or not 0 <= receipt['speech_samples'] <= receipt['captured_samples'] <= 7200 * 16000
+            or abs(receipt['captured_samples'] / 16000 - job['duration_seconds']) > 0.1
+            or receipt['input_uri_sha256'] != hashlib.sha256(job['audio_uri'].encode()).hexdigest()
+            or measured is None
+            or abs(receipt['speech_samples'] / 16000 - measured) > 1 / 16000
+        ):
+            raise ValueError('invalid bound VAD receipt')
+        job[receipt_field] = dict(receipt)
+    if measured is not None or 'measured_held_vad_speech_seconds' not in job:
+        job['measured_held_vad_speech_seconds'] = measured
+
+
 @dataclass(frozen=True)
 class WorkResult:
     segment_id: str
@@ -128,6 +182,18 @@ class HeldWork:
 
 
 @dataclass(frozen=True)
+class FailedWork:
+    """Ordinary retryable worker failure, carrying available VAD evidence."""
+
+    segment_id: str
+    measured_held_vad_speech_seconds: float | None = None
+    worker_vad_receipt: dict | None = None
+
+    def __post_init__(self):
+        validate_measured_vad(self.measured_held_vad_speech_seconds)
+
+
+@dataclass(frozen=True)
 class RecoveryWork:
     """Non-success handoff after speech VAD and an exhausted or skipped padded ASR retry."""
 
@@ -135,8 +201,11 @@ class RecoveryWork:
     padded_retry_empty: bool = False
     padded_retry: str | None = None
     reason: str = 'empty_asr'
+    measured_held_vad_speech_seconds: float | None = field(default=None, compare=False)
+    worker_vad_receipt: dict | None = field(default=None, compare=False)
 
     def __post_init__(self):
+        validate_measured_vad(self.measured_held_vad_speech_seconds)
         if self.reason not in EMPTY_WORKER_REASONS:
             raise ValueError('closed empty worker reason required')
         if self.padded_retry is None and self.padded_retry_empty:
@@ -156,15 +225,18 @@ class ValidationFailureWork:
     segment_id: str
     stage: str
     reason: str
+    measured_held_vad_speech_seconds: float | None = field(default=None, compare=False)
+    worker_vad_receipt: dict | None = field(default=None, compare=False)
 
     def __post_init__(self):
+        validate_measured_vad(self.measured_held_vad_speech_seconds)
         validate_worker_failure({'stage': self.stage, 'reason': self.reason})
 
 
 class BatchWorker(Protocol):
     def process_batch(
         self, items: Sequence[WorkItem], **kwargs
-    ) -> Sequence[WorkResult | HeldWork | RecoveryWork | ValidationFailureWork]: ...
+    ) -> Sequence[WorkResult | HeldWork | FailedWork | RecoveryWork | ValidationFailureWork]: ...
 
 
 @dataclass(frozen=True)

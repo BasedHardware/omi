@@ -12,7 +12,7 @@ from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS, scheduler_control_k
 from config.policy import resolve_batch_policy
 from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
-from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
+from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
 from utils.batch_pipeline.errors import validate_worker_failure
@@ -462,6 +462,8 @@ class Scheduler:
         padded_retry_empty: bool = False,
         padded_retry: str | None = None,
         worker_failure: dict | None = None,
+        measured_held_vad_speech_seconds: float | None = None,
+        worker_vad_receipt: dict | None = None,
     ) -> bool:
         if worker_failure is not None:
             validate_worker_failure(worker_failure)
@@ -483,6 +485,7 @@ class Scheduler:
             if not owns_lease(job, token, now):
                 return None
             policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates, observations=observations)
+            attach_held_vad(job, measured_held_vad_speech_seconds, worker_vad_receipt)
             if quarantine or worker_failure is not None or job['attempt'] >= policy.max_attempts:
                 quarantine_job(tx, job, now, 'worker_failed')
                 if quarantine and padded_retry in {'empty', 'skipped_oversize', 'skipped_long_speech'}:

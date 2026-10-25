@@ -13,7 +13,7 @@ import time
 from config.batch_pipeline_shadow import paid_recovery_limit, shadow_percent
 from config.policy import resolve_stage_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from utils.batch_pipeline.contracts import WorkItem, RecoveryWork, ValidationFailureWork
+from utils.batch_pipeline.contracts import WorkItem, RecoveryWork, ValidationFailureWork, attach_held_vad
 from utils.batch_pipeline.shadow_metrics import OUTCOMES, PAID, PAID_AUDIO, record
 
 MAX_OFFERS = 4
@@ -277,7 +277,11 @@ class ShadowStore:
             job = tx.get('shadow_jobs', segment)
             if job.get('shadow') is not True or job.get('state') != 'running':
                 return False
-            evidence_fields = {}
+            bound = dict(job['item'])
+            attach_held_vad(bound, evidence.measured_held_vad_speech_seconds, evidence.worker_vad_receipt)
+            evidence_fields = {
+                key: bound[key] for key in ('measured_held_vad_speech_seconds', 'worker_vad_receipt') if key in bound
+            }
             if isinstance(evidence, RecoveryWork) and evidence.padded_retry:
                 evidence_fields['worker_empty_evidence'] = {'padded_retry': evidence.padded_retry, 'version': 1}
             tx.put('shadow_jobs', segment, {**job, **evidence_fields, 'state': 'recovery_ready'})

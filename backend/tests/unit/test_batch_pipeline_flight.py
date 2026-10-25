@@ -21,6 +21,13 @@ from utils.batch_pipeline.errors import FatalGpuError
 RATE = 16000
 
 
+@pytest.fixture(autouse=True)
+def legacy_worker_contract(monkeypatch):
+    # Preserve rollback seams for these deterministic packed-model tests.
+    # The ship-on strict-VAD receipt path is in test_batch_pipeline_empty_safety.
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
+
+
 def item(key, seconds):
     return WorkItem(key, 'owner-' + key, 100, 'encrypted://' + key, seconds, Priority.FRESH)
 

@@ -238,7 +238,9 @@ def test_second_provider_requires_same_long_speech_handoff_as_live(repository):
     second.assert_not_called()
 
 
-def test_shadow_terminal_empty_follows_pinned_recovery_policy(repository, monkeypatch):
+@pytest.mark.parametrize('safety,expected', [('false', 'empty'), ('true', 'failed_held')])
+def test_shadow_terminal_empty_follows_pinned_recovery_policy(repository, monkeypatch, safety, expected):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', safety)
     monkeypatch.setenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'true')
     item = running(repository)
     spans = [{'start': 0.0, 'end': 300.0}]
@@ -252,7 +254,7 @@ def test_shadow_terminal_empty_follows_pinned_recovery_policy(repository, monkey
             second_stt=empty,
             inspect=lambda *a: (b'', 300, spans),
         )
-        == 'empty'
+        == expected
     )
 
 
