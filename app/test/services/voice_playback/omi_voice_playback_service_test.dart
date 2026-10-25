@@ -199,6 +199,48 @@ void main() {
     });
   }
 
+  for (final skip in ['mode off', 'no headphones', 'revoked admission']) {
+    test('skipped $skip attempt must let an admitted begin finish clearing prior audio', () async {
+      SharedPreferencesUtil().voiceResponseMode = 2;
+      final cancelEntered = Completer<void>();
+      final cancelDone = Completer<void>();
+      final response = Completer<TtsAudioStream?>();
+      var headphones = true;
+      var playerStops = 0;
+      service.debugHooks = VoicePlaybackDebugHooks(
+        probeOutput: () async => VoicePlaybackOutputSnapshot(
+            headphonesConnected: headphones, checkFailed: false, route: VoiceReplyPlaybackOutputRoute.bluetooth),
+        stopPlayback: () async => playerStops++,
+        synthesizeStream: ({required text, voiceId}) => TtsSynthesisRequest(
+          response: response.future,
+          cancel: () {
+            if (!cancelEntered.isCompleted) cancelEntered.complete();
+            return cancelDone.future;
+          },
+        ),
+      );
+      await service.beginResponse(messageId: 'old');
+      service.updateStreamingResponse(messageId: 'old', fullText: _firstSentence, isFinal: true);
+      await pumpEventQueue();
+      final preparing = service.beginResponse(messageId: 'preparing-replacement');
+      await cancelEntered.future;
+      if (skip == 'mode off') SharedPreferencesUtil().voiceResponseMode = 0;
+      if (skip == 'no headphones') {
+        SharedPreferencesUtil().voiceResponseMode = 1;
+        headphones = false;
+      }
+      await service.beginResponse(messageId: 'not-admitted', canBegin: () => skip != 'revoked admission');
+      cancelDone.complete();
+      await preparing;
+      try {
+        expect(playerStops, 2, reason: 'A skipped begin cannot abandon prior audio cleanup already in progress');
+      } finally {
+        response.complete(null);
+        await pumpEventQueue();
+      }
+    });
+  }
+
   test('mode off emits skipped once and does not probe output', () async {
     SharedPreferencesUtil().voiceResponseMode = 0;
     await service.beginResponse(messageId: 'off');

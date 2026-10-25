@@ -296,7 +296,10 @@ class OmiVoicePlaybackService {
       );
     }
 
-    await _clearInFlightState(canContinue: stillCurrent);
+    // Admission can be revoked by another begin attempt, but prior audio must
+    // still be cleared unless another response actually takes playback over.
+    final cleanupOwner = _lifecycleToken;
+    await _clearInFlightState(canContinue: () => cleanupOwner == _lifecycleToken);
     if (!stillCurrent()) return;
     final continuing = _lifecycleOpen && _activeMessageId == messageId;
     _activeMessageId = messageId;
