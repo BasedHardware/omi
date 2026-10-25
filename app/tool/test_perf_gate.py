@@ -1,4 +1,5 @@
 import unittest
+import importlib.util
 from unittest.mock import patch, Mock
 import re
 import subprocess
@@ -8,6 +9,18 @@ import perf_gate_runner
 import perf_shell
 from perf_shell import APP, OUTPUT, generate, mirrors
 from perf_gate_report import SCENARIOS, summarize
+
+
+def load_tests(loader, tests, pattern):
+    # Use the existing manifest check entrypoint for all heavy-account guards.
+    for relative in ('test_perf_sim_report.py', 'test_perf_drive.py',
+                     'perf/test_device_tools.py', 'perf/test_ios_admission.py'):
+        path = Path(__file__).parent / relative
+        spec = importlib.util.spec_from_file_location('heavy_' + path.stem, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        tests.addTests(loader.loadTestsFromModule(module))
+    return tests
 
 
 class PerfGateTests(unittest.TestCase):
