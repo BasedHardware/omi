@@ -4388,6 +4388,11 @@
     "episodeSoFar": "Tot nu toe",
     "episodeUpdatedJustNow": "Zojuist bijgewerkt · volledige notities aan het eind",
     "episodeUpdatedMinutesAgo": "{minutes} min geleden bijgewerkt · volledige notities aan het eind",
+    "episodeNotesUnavailable": "De live notities worden niet bijgewerkt. Bekijk voorlopig het transcript.",
+    "episodeCaptureFor": "Opnemen · {duration}",
+    "episodePrevious": "Vorige aflevering",
+    "captureChunksPending": "Wachtende fragmenten: {pending}",
+    "episodeOpenPrevious": "Vorige aflevering openen",
     "episodeNotesSoon": "Notities verschijnen na de eerste minuten van het gesprek.",
     "episodeOpenAll": "Alles openen",
     "episodeWrapUpNow": "Nu afronden",
@@ -4423,5 +4428,6 @@
     "recapInTheBackground": "Op de achtergrond",
     "retentionOfferAccept": "Blijf met {percent}% korting",
     "retentionOfferBody": "Blijf en betaal {price} per maand de komende {months} maanden.",
-    "retentionOfferApplied": "Klaar. {percent}% korting de komende {months} maanden."
+    "retentionOfferApplied": "Klaar. {percent}% korting de komende {months} maanden.",
+    "othersSpeakerLabel": "Anderen"
 }

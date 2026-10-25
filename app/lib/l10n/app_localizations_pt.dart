@@ -14441,6 +14441,25 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'As notas em direto não estão a atualizar. Consulte a transcrição por agora.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'A gravar · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episódio anterior';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Fragmentos pendentes: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Abrir episódio anterior';
+
+  @override
   String get episodeNotesSoon => 'As notas aparecem após os primeiros minutos de conversa.';
 
   @override
@@ -14578,4 +14597,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Pronto. $percent% de desconto nos próximos $months meses.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Outros';
 }

@@ -4388,6 +4388,11 @@
     "episodeSoFar": "Поки що",
     "episodeUpdatedJustNow": "Оновлено щойно · повні нотатки наприкінці",
     "episodeUpdatedMinutesAgo": "Оновлено {minutes} хв тому · повні нотатки наприкінці",
+    "episodeNotesUnavailable": "Поточні нотатки не оновлюються. Поки перегляньте розшифровку.",
+    "episodeCaptureFor": "Запис · {duration}",
+    "episodePrevious": "Попередній епізод",
+    "captureChunksPending": "Фрагменти в очікуванні: {pending}",
+    "episodeOpenPrevious": "Відкрити попередній епізод",
     "episodeNotesSoon": "Нотатки з’являться після перших хвилин розмови.",
     "episodeOpenAll": "Відкрити все",
     "episodeWrapUpNow": "Завершити зараз",
@@ -4423,5 +4428,6 @@
     "recapInTheBackground": "У фоні",
     "retentionOfferAccept": "Залишитися зі знижкою {percent}%",
     "retentionOfferBody": "Залишайтеся і платіть {price} на місяць наступні {months} місяці.",
-    "retentionOfferApplied": "Готово. Знижка {percent}% на наступні {months} місяці."
+    "retentionOfferApplied": "Готово. Знижка {percent}% на наступні {months} місяці.",
+    "othersSpeakerLabel": "Інші"
 }

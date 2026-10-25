@@ -4388,6 +4388,11 @@
     "episodeSoFar": "Så langt",
     "episodeUpdatedJustNow": "Oppdatert nå nettopp · fullstendige notater til slutt",
     "episodeUpdatedMinutesAgo": "Oppdatert for {minutes} min siden · fullstendige notater til slutt",
+    "episodeNotesUnavailable": "Løpende notater oppdateres ikke. Se transkripsjonen foreløpig.",
+    "episodeCaptureFor": "Tar opp · {duration}",
+    "episodePrevious": "Forrige episode",
+    "captureChunksPending": "Ventende deler: {pending}",
+    "episodeOpenPrevious": "Åpne forrige episode",
     "episodeNotesSoon": "Notatene vises etter de første minuttene av samtalen.",
     "episodeOpenAll": "Åpne alle",
     "episodeWrapUpNow": "Avslutt nå",
@@ -4423,5 +4428,6 @@
     "recapInTheBackground": "I bakgrunnen",
     "retentionOfferAccept": "Bli med {percent} % rabatt",
     "retentionOfferBody": "Bli og betal {price} i måneden de neste {months} månedene.",
-    "retentionOfferApplied": "Ferdig. {percent} % rabatt de neste {months} månedene."
+    "retentionOfferApplied": "Ferdig. {percent} % rabatt de neste {months} månedene.",
+    "othersSpeakerLabel": "Andre"
 }

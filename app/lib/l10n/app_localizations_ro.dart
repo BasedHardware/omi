@@ -14475,6 +14475,25 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Notițele live nu se actualizează. Consultați transcrierea deocamdată.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Înregistrare · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episodul anterior';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Fragmente în așteptare: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Deschide episodul anterior';
+
+  @override
   String get episodeNotesSoon => 'Notițele apar după primele minute de conversație.';
 
   @override
@@ -14611,4 +14630,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Gata. $percent% reducere în următoarele $months luni.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Alții';
 }

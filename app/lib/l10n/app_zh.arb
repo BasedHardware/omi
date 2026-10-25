@@ -4388,6 +4388,11 @@
     "episodeSoFar": "目前为止",
     "episodeUpdatedJustNow": "刚刚更新 · 结束后生成完整笔记",
     "episodeUpdatedMinutesAgo": "{minutes} 分钟前更新 · 结束后生成完整笔记",
+    "episodeNotesUnavailable": "实时笔记未在更新。请暂时查看转录文本。",
+    "episodeCaptureFor": "录音中 · {duration}",
+    "episodePrevious": "上一段记录",
+    "captureChunksPending": "待处理音频块: {pending}",
+    "episodeOpenPrevious": "打开上一段记录",
     "episodeNotesSoon": "交谈几分钟后会显示笔记。",
     "episodeOpenAll": "全部打开",
     "episodeWrapUpNow": "立即结束",
@@ -4423,5 +4428,6 @@
     "recapInTheBackground": "背景中",
     "retentionOfferAccept": "享受 {percent}% 折扣继续使用",
     "retentionOfferBody": "继续使用，每月只需 {price}，持续 {months} 个月。",
-    "retentionOfferApplied": "完成。{percent}% 折扣，持续 {months} 个月。"
+    "retentionOfferApplied": "完成。{percent}% 折扣，持续 {months} 个月。",
+    "othersSpeakerLabel": "其他人"
 }

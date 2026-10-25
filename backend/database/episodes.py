@@ -10,6 +10,11 @@ key in one ``content`` field; timing, status and ids stay queryable.
 every read is a document get: no collection query and no composite index.
 The account-deletion purge removes the whole ``users/{uid}`` subtree.
 
+Consumed unplaced-segment ids live in their own sharded per-conversation
+documents (``database.episode_receipts``), never in the episode document, and
+are written inside the episode transactions below so a receipt exists exactly
+when the state that consumed the segment was stored.
+
 Writes are compare-and-swap on ``state_version`` inside a transaction. The
 model call that produces a state happens outside the transaction; a lost race
 returns ``EpisodeConflict`` and the caller decides whether to retry.
@@ -24,6 +29,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from google.cloud import firestore
 
+from database import episode_receipts
 from database._client import get_firestore_client, run_transactional
 from utils.encryption import decrypt, encrypt
 
@@ -152,6 +158,53 @@ def record_activity(
     return run_transactional(client, _record_activity, client, uid, episode_id, conversation_id, at)
 
 
+def _receipt_conversations(segment_receipts: Optional[Mapping[str, Sequence[str]]]) -> list[str]:
+    """The conversations whose receipts this transaction touches (link names are not conversations)."""
+    return [cid for cid in dict.fromkeys(segment_receipts or {}) if cid and cid not in {CURRENT, LAST_CLOSED}]
+
+
+def _read_receipts(
+    transaction: Any, client: Any, uid: str, segment_receipts: Optional[Mapping[str, Sequence[str]]]
+) -> dict[str, Optional[dict[str, Any]]]:
+    """Transactional read of each conversation's receipt base document (read phase)."""
+    if not segment_receipts:
+        return {}
+    return {
+        conversation_id: episode_receipts.base_ref(client, uid, conversation_id).get(transaction=transaction).to_dict()
+        for conversation_id in _receipt_conversations(segment_receipts)
+    }
+
+
+def _write_receipts(
+    transaction: Any,
+    client: Any,
+    uid: str,
+    segment_receipts: Optional[Mapping[str, Sequence[str]]],
+    existing: Mapping[str, Optional[dict[str, Any]]],
+    now: datetime,
+) -> None:
+    """Record consumed ids in the same transaction as the episode state (write phase)."""
+    for conversation_id in _receipt_conversations(segment_receipts or {}):
+        payload, archives = episode_receipts.plan_write(
+            existing.get(conversation_id), (segment_receipts or {})[conversation_id], now=now
+        )
+        transaction.set(episode_receipts.base_ref(client, uid, conversation_id), payload)
+        for index, ids in archives:
+            transaction.set(episode_receipts.archive_ref(client, uid, conversation_id, index), {'ids': ids})
+
+
+def _drop_legacy_receipts(merged: dict[str, Any], segment_receipts: Optional[Mapping[str, Sequence[str]]]) -> None:
+    """Remove the pre-receipts in-document id lists this write migrated to their own documents."""
+    legacy = merged.get('applied_segment_ids')
+    if not segment_receipts or not isinstance(legacy, dict):
+        return
+    remaining = {cid: ids for cid, ids in legacy.items() if cid not in segment_receipts}
+    if remaining:
+        merged['applied_segment_ids'] = remaining
+    else:
+        merged.pop('applied_segment_ids', None)
+
+
 @firestore.transactional
 def _commit(
     transaction: Any,
@@ -164,6 +217,7 @@ def _commit(
     new_episode: Optional[Mapping[str, Any]],
     updates: Mapping[str, Any],
     link_conversation_ids: Sequence[str],
+    segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> dict[str, Any]:
     pointer = _links(client, uid).document(CURRENT)
     current_id = _link_target(client, uid, CURRENT, transaction)
@@ -172,6 +226,7 @@ def _commit(
     if current_ref is not None:
         snapshot = current_ref.get(transaction=transaction)
         current_raw = snapshot.to_dict() if snapshot.exists else None
+    receipts_raw = _read_receipts(transaction, client, uid, segment_receipts)
     if current_id != expected_episode_id:
         raise EpisodeConflict('current_episode_changed')
     if expected_episode_id is not None:
@@ -194,10 +249,12 @@ def _commit(
         if current_ref is None or current_raw is None:
             raise EpisodeConflict('no_open_episode')
         merged = _merge_state(unseal(uid, current_raw) or {}, updates)
+        _drop_legacy_receipts(merged, segment_receipts)
         merged['state_version'] = int(current_raw.get('state_version') or 0) + 1
         transaction.set(current_ref, seal(uid, merged))
         episode_id = current_id
         result = merged
+    _write_receipts(transaction, client, uid, segment_receipts, receipts_raw, now)
     for conversation_id in links:
         transaction.set(_links(client, uid).document(conversation_id), {'episode_id': episode_id, 'updated_at': now})
     return result
@@ -213,9 +270,14 @@ def commit_moment(
     close_reason: Optional[str] = None,
     closed_at: Optional[datetime] = None,
     link_conversation_ids: Sequence[str] = (),
+    segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
-    """Either update the open episode (CAS) or close it and open ``new_episode``. Returns the stored state."""
+    """Either update the open episode (CAS) or close it and open ``new_episode``. Returns the stored state.
+
+    ``segment_receipts`` records consumed unplaced-segment ids per conversation in the
+    same transaction, so a receipt exists exactly when the state that consumed it does.
+    """
     client = _client(firestore_client)
     return run_transactional(
         client,
@@ -229,6 +291,7 @@ def commit_moment(
         new_episode,
         dict(updates or {}),
         list(link_conversation_ids),
+        dict(segment_receipts or {}) or None,
     )
 
 
@@ -294,16 +357,20 @@ def _update(
     expected_version: int,
     updates: Mapping[str, Any],
     link_conversation_ids: Sequence[str],
+    segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> dict[str, Any]:
     ref = _episodes(client, uid).document(episode_id)
     snapshot = ref.get(transaction=transaction)
     raw = snapshot.to_dict() if snapshot.exists else None
+    receipts_raw = _read_receipts(transaction, client, uid, segment_receipts)
     if not raw or raw.get('state_version') != expected_version:
         raise EpisodeConflict('state_version_changed')
     merged = _merge_state(unseal(uid, raw) or {}, updates)
+    _drop_legacy_receipts(merged, segment_receipts)
     merged['state_version'] = expected_version + 1
     transaction.set(ref, seal(uid, merged))
     now = datetime.now(timezone.utc)
+    _write_receipts(transaction, client, uid, segment_receipts, receipts_raw, now)
     for conversation_id in [
         cid for cid in dict.fromkeys(link_conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}
     ]:
@@ -318,10 +385,23 @@ def update_episode(
     expected_version: int,
     updates: Mapping[str, Any],
     link_conversation_ids: Sequence[str] = (),
+    segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
-    """CAS update of any episode (open or closed). Raises ``EpisodeConflict`` on a lost race."""
+    """CAS update of any episode (open or closed). Raises ``EpisodeConflict`` on a lost race.
+
+    ``segment_receipts`` records consumed unplaced-segment ids per conversation in the
+    same transaction, so a receipt exists exactly when the state that consumed it does.
+    """
     client = _client(firestore_client)
     return run_transactional(
-        client, _update, client, uid, episode_id, expected_version, dict(updates), list(link_conversation_ids)
+        client,
+        _update,
+        client,
+        uid,
+        episode_id,
+        expected_version,
+        dict(updates),
+        list(link_conversation_ids),
+        dict(segment_receipts or {}) or None,
     )

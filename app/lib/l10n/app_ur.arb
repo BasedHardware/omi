@@ -11814,6 +11814,11 @@
     "episodeSoFar": "اب تک",
     "episodeUpdatedJustNow": "ابھی اپ ڈیٹ ہوا · آخر میں مکمل نوٹس",
     "episodeUpdatedMinutesAgo": "{minutes} منٹ پہلے اپ ڈیٹ ہوا · آخر میں مکمل نوٹس",
+    "episodeNotesUnavailable": "جاری نوٹس اپ ڈیٹ نہیں ہو رہے۔ فی الحال متن دیکھیں۔",
+    "episodeCaptureFor": "ریکارڈنگ · {duration}",
+    "episodePrevious": "پچھلی قسط",
+    "captureChunksPending": "زیرِ التوا حصے: {pending}",
+    "episodeOpenPrevious": "پچھلی قسط کھولیں",
     "episodeNotesSoon": "گفتگو کے پہلے چند منٹ بعد نوٹس ظاہر ہوں گے۔",
     "episodeOpenAll": "سب کھولیں",
     "episodeWrapUpNow": "ابھی ختم کریں",
@@ -11849,5 +11854,6 @@
     "recapInTheBackground": "پس منظر میں",
     "retentionOfferAccept": "{percent}% رعایت کے ساتھ رہیں",
     "retentionOfferBody": "رہیں اور ہر ماہ {price} ادا کریں، اگلے {months} مہینے۔",
-    "retentionOfferApplied": "ہو گیا۔ {percent}% رعایت، اگلے {months} مہینے۔"
+    "retentionOfferApplied": "ہو گیا۔ {percent}% رعایت، اگلے {months} مہینے۔",
+    "othersSpeakerLabel": "دیگر"
 }

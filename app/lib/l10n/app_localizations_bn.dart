@@ -14409,6 +14409,25 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'চলমান নোট আপডেট হচ্ছে না। আপাতত প্রতিলিপি দেখুন।';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'রেকর্ড হচ্ছে · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'আগের পর্ব';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'অপেক্ষমাণ খণ্ড: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'আগের পর্ব খুলুন';
+
+  @override
   String get episodeNotesSoon => 'কথার প্রথম কয়েক মিনিট পরে নোট দেখা যাবে।';
 
   @override
@@ -14545,4 +14564,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'হয়ে গেছে। $percent% ছাড়, পরের $months মাস।';
   }
+
+  @override
+  String get othersSpeakerLabel => 'অন্যরা';
 }

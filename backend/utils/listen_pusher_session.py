@@ -26,9 +26,11 @@ from utils.other.storage import reconcile_audio_chunk_prefix
 from utils.observability.fallback import record_fallback
 from utils.pusher import PusherCircuitBreakerOpen, connect_to_trigger_pusher
 from utils.pusher_protocol import (
+    AudioBackpressure,
     AUDIO_TIMELINE_PROTOCOL,
     PUSHER_AUDIO_TIMELINE_ACK_OPCODE,
 )
+from config.audio_outbox import enabled as audio_outbox_enabled
 
 # Typed wrapper because utils.pusher.connect_to_trigger_pusher uses the untyped
 # `callable` builtin as a parameter annotation; cast to the proper signature.
@@ -173,6 +175,7 @@ class ListenPusherSessionDeps:
     random: Callable[[], float] = random.random
     now: Callable[[], float] = time.time
     monotonic: Callable[[], float] = time.monotonic
+    ensure_audio_durable: Optional[Callable[[], Awaitable[None]]] = None
 
 
 class ListenPusherSession:
@@ -197,6 +200,7 @@ class ListenPusherSession:
         )
         self.audio_runs: Deque[AudioRun] = deque()
         self.audio_total_size = 0
+        self.audio_inflight_size = 0
         self.audio_buffer_last_received: Optional[float] = None
         # Audio-timeline v2 handshake state. ``audio_timeline_active`` means a
         # pusher acknowledged v2 on this or a previous connection of this
@@ -357,6 +361,13 @@ class ListenPusherSession:
         """
         chunk = audio_bytes
         chunk_start_wall = start_wall
+        if (
+            audio_outbox_enabled()
+            and self.audio_total_size + self.audio_inflight_size + len(chunk) > self.config.max_audio_buffer_size
+        ):
+            # The receive loop pauses/ends with the input explicitly unacked;
+            # it must not clip the new frame or evict the accepted prefix.
+            raise AudioBackpressure('listen_budget', chunk)
         if len(chunk) > self.config.max_audio_buffer_size:
             dropped = len(chunk) - self.config.max_audio_buffer_size
             chunk = chunk[-self.config.max_audio_buffer_size :]
@@ -372,6 +383,11 @@ class ListenPusherSession:
 
     async def _audio_bytes_flush(self):
         async with self.audio_flush_lock:
+            if audio_outbox_enabled() and self.deps.ensure_audio_durable is not None:
+                # A successful socket send alone never retires the last copy.
+                # This barrier also runs while pusher is disconnected, so its
+                # restart cannot erase the original listen capture.
+                await self.deps.ensure_audio_durable()
             current_conversation_id = self.deps.get_current_conversation_id()
             pusher_ws = self.pusher_ws
             if not (self.pusher_connected and pusher_ws):
@@ -383,6 +399,7 @@ class ListenPusherSession:
                 return
             pending_runs = self.audio_runs
             pending_total_size = self.audio_total_size
+            self.audio_inflight_size = pending_total_size
             self.audio_runs = deque()
             self.audio_total_size = 0
             timeline_active = self.audio_timeline_active
@@ -535,8 +552,9 @@ class ListenPusherSession:
                         unsent.append(envelope)
                 self.audio_runs.extendleft(reversed(unsent))
                 self.audio_total_size += sum(len(run.data) for run in unsent)
-                while self.audio_total_size > self.config.max_audio_buffer_size and self.audio_runs:
-                    self.audio_total_size -= len(self.audio_runs.popleft().data)
+                if not audio_outbox_enabled():
+                    while self.audio_total_size > self.config.max_audio_buffer_size and self.audio_runs:
+                        self.audio_total_size -= len(self.audio_runs.popleft().data)
                 if isinstance(e, asyncio.CancelledError):
                     raise
                 elif isinstance(e, ConnectionClosed):
@@ -553,6 +571,8 @@ class ListenPusherSession:
                         self._mark_disconnected()
                 else:
                     logger.error(f"Pusher audio_bytes failed: {e} {self.uid} {self.session_id}")
+            finally:
+                self.audio_inflight_size = 0
 
     async def audio_bytes_consume(self):
         while self.deps.is_active():

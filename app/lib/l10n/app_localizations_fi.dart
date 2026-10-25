@@ -14418,6 +14418,25 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Jatkuvat muistiinpanot eivät päivity. Katso toistaiseksi litterointi.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Tallennetaan · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Edellinen jakso';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Odottavat osat: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Avaa edellinen jakso';
+
+  @override
   String get episodeNotesSoon => 'Muistiinpanot näkyvät ensimmäisten puheminuuttien jälkeen.';
 
   @override
@@ -14554,4 +14573,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Valmis. $percent % alennus seuraavat $months kuukautta.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Muut';
 }

@@ -11814,6 +11814,11 @@
     "episodeSoFar": "இதுவரை",
     "episodeUpdatedJustNow": "இப்போது புதுப்பிக்கப்பட்டது · முடிவில் முழு குறிப்புகள்",
     "episodeUpdatedMinutesAgo": "{minutes} நிமி. முன் புதுப்பிக்கப்பட்டது · முடிவில் முழு குறிப்புகள்",
+    "episodeNotesUnavailable": "நடப்பு குறிப்புகள் புதுப்பிக்கப்படவில்லை. இப்போதைக்கு உரைப்பதிவைப் பார்க்கவும்.",
+    "episodeCaptureFor": "பதிவு செய்கிறது · {duration}",
+    "episodePrevious": "முந்தைய பகுதி",
+    "captureChunksPending": "நிலுவையில் உள்ள துண்டுகள்: {pending}",
+    "episodeOpenPrevious": "முந்தைய பகுதியைத் திறக்கவும்",
     "episodeNotesSoon": "பேச்சின் முதல் சில நிமிடங்களுக்குப் பிறகு குறிப்புகள் தோன்றும்.",
     "episodeOpenAll": "அனைத்தையும் திற",
     "episodeWrapUpNow": "இப்போதே முடி",
@@ -11849,5 +11854,6 @@
     "recapInTheBackground": "பின்னணியில்",
     "retentionOfferAccept": "{percent}% தள்ளுபடியுடன் தொடருங்கள்",
     "retentionOfferBody": "தொடருங்கள், மாதம் {price} செலுத்துங்கள், அடுத்த {months} மாதங்களுக்கு.",
-    "retentionOfferApplied": "முடிந்தது. {percent}% தள்ளுபடி, அடுத்த {months} மாதங்களுக்கு."
+    "retentionOfferApplied": "முடிந்தது. {percent}% தள்ளுபடி, அடுத்த {months} மாதங்களுக்கு.",
+    "othersSpeakerLabel": "மற்றவர்கள்"
 }

@@ -11814,6 +11814,11 @@
     "episodeSoFar": "До сада",
     "episodeUpdatedJustNow": "Ажурирано управо · потпуне белешке на крају",
     "episodeUpdatedMinutesAgo": "Ажурирано пре {minutes} мин · потпуне белешке на крају",
+    "episodeNotesUnavailable": "Текуће белешке се не ажурирају. За сада погледајте транскрипт.",
+    "episodeCaptureFor": "Снимање · {duration}",
+    "episodePrevious": "Претходна епизода",
+    "captureChunksPending": "Делови на чекању: {pending}",
+    "episodeOpenPrevious": "Отвори претходну епизоду",
     "episodeNotesSoon": "Белешке се појављују после првих минута разговора.",
     "episodeOpenAll": "Отвори све",
     "episodeWrapUpNow": "Заврши сада",
@@ -11849,5 +11854,6 @@
     "recapInTheBackground": "У позадини",
     "retentionOfferAccept": "Остани уз {percent}% попуста",
     "retentionOfferBody": "Остани и плаћај {price} месечно наредних {months} месеца.",
-    "retentionOfferApplied": "Готово. {percent}% попуста наредних {months} месеца."
+    "retentionOfferApplied": "Готово. {percent}% попуста наредних {months} месеца.",
+    "othersSpeakerLabel": "Остали"
 }

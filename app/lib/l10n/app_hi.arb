@@ -4388,6 +4388,11 @@
     "episodeSoFar": "अब तक",
     "episodeUpdatedJustNow": "अभी अपडेट हुआ · पूरे नोट्स अंत में",
     "episodeUpdatedMinutesAgo": "{minutes} मिनट पहले अपडेट हुआ · पूरे नोट्स अंत में",
+    "episodeNotesUnavailable": "चल रहे नोट अपडेट नहीं हो रहे हैं। अभी ट्रांसक्रिप्ट देखें।",
+    "episodeCaptureFor": "रिकॉर्डिंग · {duration}",
+    "episodePrevious": "पिछला एपिसोड",
+    "captureChunksPending": "लंबित खंड: {pending}",
+    "episodeOpenPrevious": "पिछला एपिसोड खोलें",
     "episodeNotesSoon": "बातचीत के पहले कुछ मिनटों के बाद नोट्स दिखेंगे।",
     "episodeOpenAll": "सब खोलें",
     "episodeWrapUpNow": "अभी समाप्त करें",
@@ -4423,5 +4428,6 @@
     "recapInTheBackground": "पृष्ठभूमि में",
     "retentionOfferAccept": "{percent}% छूट के साथ बने रहें",
     "retentionOfferBody": "बने रहें और हर महीने {price} दें, अगले {months} महीनों तक।",
-    "retentionOfferApplied": "हो गया। {percent}% छूट, अगले {months} महीनों तक।"
+    "retentionOfferApplied": "हो गया। {percent}% छूट, अगले {months} महीनों तक।",
+    "othersSpeakerLabel": "अन्य"
 }

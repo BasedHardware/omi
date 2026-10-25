@@ -4430,6 +4430,11 @@
     "episodeSoFar": "Indtil videre",
     "episodeUpdatedJustNow": "Opdateret lige nu · fulde noter når det slutter",
     "episodeUpdatedMinutesAgo": "Opdateret for {minutes} min. siden · fulde noter når det slutter",
+    "episodeNotesUnavailable": "Løbende noter opdateres ikke. Se transskriptionen indtil videre.",
+    "episodeCaptureFor": "Optager · {duration}",
+    "episodePrevious": "Forrige episode",
+    "captureChunksPending": "Afventende dele: {pending}",
+    "episodeOpenPrevious": "Åbn forrige episode",
     "episodeNotesSoon": "Noterne vises efter de første minutters snak.",
     "episodeOpenAll": "Åbn alle",
     "episodeWrapUpNow": "Afslut nu",
@@ -4465,5 +4470,6 @@
     "recapInTheBackground": "I baggrunden",
     "retentionOfferAccept": "Bliv for {percent}% rabat",
     "retentionOfferBody": "Bliv og betal {price} om måneden de næste {months} måneder.",
-    "retentionOfferApplied": "Færdig. {percent}% rabat de næste {months} måneder."
+    "retentionOfferApplied": "Færdig. {percent}% rabat de næste {months} måneder.",
+    "othersSpeakerLabel": "Andre"
 }

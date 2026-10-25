@@ -6,6 +6,20 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Durable audio outbox (default on)
+
+Consented raw capture and pusher PCM require immutable media plus a
+generation-pinned frame manifest before relinquishing custody. Listen gates
+transcript commits and pusher sends on its archive barrier. Pusher queues
+bounded durable references; overflow applies backpressure or flushes an older
+projection without deleting its archived bytes. Raw capacity/upload failures
+retain uncommitted packs. `audio_custody` events (and opt-in pusher opcode 203)
+are audio receipts; `capture_committed` remains transcript coverage.
+`AUDIO_DURABLE_OUTBOX_ENABLED=false` is the emergency legacy rollback.
+See [custody, recovery, metrics and acceptance](runbooks/audio-durable-outbox.md).
+
+## Production runtime identity
+
 Production listen uses the chart's `prod-omi-backend-listen` Kubernetes service
 account with Workload Identity as
 `backend-listen-runtime@based-hardware.iam.gserviceaccount.com`. Its values omit
@@ -449,7 +463,12 @@ This signal does not change diarization, thresholds, provider choice or labeling
 
 Conversation responses project the internal receipt's `capture_evidence.coverage`
 into optional `capture_coverage` (`mapped` / `incomplete` / `unknown`). Internal
-source-position receipts remain excluded from the wire. Mobile conversation
+source-position receipts remain excluded from the wire. A committed-proof
+`incomplete` whose lifetime is complete with zero conflicts states a ledger
+bound (evicted proof runs, transcript-note overflow), never observed loss —
+observed loss fails the snapshot before an envelope exists — so the projection
+serves `mapped` there and `unknown` for the overflow stub; only observed loss
+serves `incomplete`. Mobile conversation
 detail shows the localized “Partial recording” chip only for `incomplete`; legacy,
 unknown and mapped rows stay quiet. No conversation-list placeholder is added.
 
@@ -6488,10 +6507,31 @@ offset-only episodes retain their placed-segment cursor; it never excludes
 unplaced IDs. Placed segments may still extend their text/end under the same ID.
 No audio coordinate is synthesized for unplaced moments.
 
+Consumed unplaced IDs are receipts of the conversation, not episode content: a
+conversation spans episode boundaries and its finalization tail replays the
+whole stored transcript, so the receipts must outlive any one episode while no
+document grows with them. They live in
+`users/{uid}/episode_segment_receipts/{conversation_id}` — the base document
+holds the most recent 2,000 IDs, older IDs roll into immutable `s/{index}`
+archive documents of 2,000 each, and episode documents never carry them. The
+receipt write joins the episode compare-and-swap transaction, so a receipt
+exists exactly when the state that consumed the segment was stored. Live
+moments dedupe against the base document alone (their batches are recent); the
+finalization tail reads every archive. Episodes written before the receipts
+collection kept IDs in an `applied_segment_ids` document field: the first
+post-change write adopts that list into the receipts and retires the
+in-document field, so a tail landing across the deploy still dedupes.
+
 Closing the current episode atomically records `episode_links/last_closed` while
 clearing `episode_links/current`. `GET /v1/episodes/live` can return the additive
 `last_closed_episode` field, including alongside a newer live episode; its
-existing `episode` field remains live-only. `GET /v1/episodes/{episode_id}` reads
+existing `episode` field remains live-only. The recap changes only when an
+episode closes, so while a live episode is on screen the poll serves it from a
+short per-process cache (`LAST_CLOSED_CACHE_SECONDS`); when no live episode is
+on screen — the recovery-navigation answer — it is read fresh. Every wire field
+of `episode` and `last_closed_episode` is always sent; the route's
+`response_model_exclude_unset` omits only the recap itself when there is none.
+`GET /v1/episodes/{episode_id}` reads
 the retained recap within the authenticated account and existing episode channel
 gate. Conversation links and closed notes survive while member finalization is
 pending. Clients must use this closed recap field for recovery navigation; a
@@ -6708,6 +6748,19 @@ suggestions include explicit `is_user`, and committed capture events preserve
 channel, epoch and recording-session identity. These additive fields are ignored
 by clients until their opt-in paths serve.
 
+Notes enforce speaker identity independently of the packet rollout. The output
+contract carries the original speaker-authority map separately from prompt
+roster inference. A People spelling or `search_people` hit cannot identify an
+unresolved speaker: a resolved binding, this conversation's calendar/tile roster,
+or an affirmative owner correction must corroborate it. Model-authored evidence
+lines do not authorize identities. Unsupported participants are removed and their
+names become “a speaker” across visible notes, tasks and events; names actually
+heard in speech remain hedged, without expanding them from the People catalog.
+Unverified names never lead the title. The agent gets an evidence send-back;
+static enforcement also covers exhausted budgets, salvaged submissions and the
+one-shot fallback before persistence. Regression: the 2026-10-23 empty-evidence
+packet incorrectly named Michael Liebmann as an unresolved counterpart.
+
 Live durability → coverage ledger → committed event is the custody ordering.
 Continuation uploads stage encrypted chunks by deterministic session and index,
 retain incomplete/expired assemblies for client retry, and only return a completed
@@ -6795,3 +6848,65 @@ part receipt and advances the owner watermark only with the final assignment
 receipt transaction. Successors can drain while held uploads stay incomplete
 and outside completion retention. See [owner repair](runbooks/batch-projection-repair.md)
 for the dry-run operator tool, 15-minute obligation metric, and lead-only recovery.
+
+
+## Live speaker epochs: bounded safe repair
+
+Soniox idle reopen continues to stamp a new socket epoch. Listen reconnect
+continues to hydrate conversation-local reservations without equating provider
+labels across scopes. Raw and manual correction keys are unchanged.
+
+Live moments and Flutter live transcript naming defer a new unnamed ordinal
+until the voice has at least the shared policy's five seconds of non-overlapping,
+placed speech. Unknown short epochs keep separate identity keys and a plain
+unnamed label; they consume no live moment voice-order ledger slots. Names and
+owner attribution still require their existing authorities. Display duration is
+not acoustic evidence and never links identities. Saved transcript numbering
+retains its existing behavior.
+
+The persisted moment voice-order ledger also carries display qualification:
+later short or unplaced replies with the same conversation and scoped voice
+keep their established ordinal. A new scope or conversation cannot borrow that
+qualification and must satisfy the floor independently.
+
+The live owner's existing cross-epoch acoustic competition grouping now requires
+five seconds of extracted evidence on **both** voices, the shared `CROSS_EPOCH`
+strict cosine-distance boundary and `MATCH_MARGIN`, and complete-link agreement
+with every peer. Same-scope provider voices cannot join. Shortened owner
+continuity proofs keep their separate receipt-fenced policy and cannot supply
+voice-grouping evidence. Until the five-second floor, those provisional voices
+sit out cross-scope owner competition without being grouped; each still needs
+its own valid owner-continuity proof. Same-scope voices, manual reservations and
+retained competition-only evidence continue to constrain owner claims. Once both
+voices qualify, ordinary strict grouping and joint arbitration apply again.
+Ambiguous, invalid or weak vectors abstain.
+
+Acceptance: `tests/unit/test_live_speaker_epochs.py` drives the real Soniox idle
+close/reopen adapter, epoch stamping/allocation, short-turn embedding pooling,
+owner arbitration and a fresh listen matcher. Deterministic embeddings prove
+control-flow policy, not production acoustic accuracy. Flutter naming tests
+verify short Speaker 4–8 epochs spend no ordinals and qualified distinct IDs
+retain distinct labels.
+
+### Remaining live anonymous linking (lead follow-up)
+
+This safe repair does **not** reuse anonymous conversation IDs across epochs or
+replicas. A voice with five seconds in each of several epochs can still acquire
+several anonymous ordinals. Owner matching re-acquires against enrollment after
+reconnect; no owner is inferred from a provider label or from being the only voice.
+
+Full anonymous linking needs a bounded encrypted conversation-voice evidence
+handoff, tied to conversation and manual-receipt generations, model/policy
+version, and audio provenance. Persist a separate reversible presentation alias
+rather than changing manual correction keys. Require five seconds on each side,
+a strict cross-epoch threshold and runner-up margin, complete-link agreement,
+and same-scope/overlap cannot-link constraints. Recheck manual authority before
+publication, retract aliases on contradictory evidence/correction, and fence
+concurrent replicas and finalization. Qualify with real audio across socket and
+replica reconnects before rollout. Do not copy the owner-only continuity capsule
+into a generic voice cache without those fences.
+
+Unplaced segments still bypass matching. Their capture-placement repair belongs
+to the live timeline lane; this change never invents offsets to obtain evidence.
+No production configuration flip is required or performed. Backend/listen images
+and a Flutter build are required to deliver the corresponding safe changes.

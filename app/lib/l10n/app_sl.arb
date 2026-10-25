@@ -11814,6 +11814,11 @@
     "episodeSoFar": "Do zdaj",
     "episodeUpdatedJustNow": "Posodobljeno pravkar · celotni zapiski na koncu",
     "episodeUpdatedMinutesAgo": "Posodobljeno pred {minutes} min · celotni zapiski na koncu",
+    "episodeNotesUnavailable": "Sprotni zapiski se ne posodabljajo. Za zdaj si oglejte prepis.",
+    "episodeCaptureFor": "Snemanje · {duration}",
+    "episodePrevious": "Prejšnja epizoda",
+    "captureChunksPending": "Čakajoči deli: {pending}",
+    "episodeOpenPrevious": "Odpri prejšnjo epizodo",
     "episodeNotesSoon": "Zapiski se prikažejo po prvih minutah pogovora.",
     "episodeOpenAll": "Odpri vse",
     "episodeWrapUpNow": "Zaključi zdaj",
@@ -11849,5 +11854,6 @@
     "recapInTheBackground": "V ozadju",
     "retentionOfferAccept": "Ostani s {percent} % popustom",
     "retentionOfferBody": "Ostanite in plačujte {price} na mesec naslednje {months} mesece.",
-    "retentionOfferApplied": "Končano. {percent} % popusta naslednje {months} mesece."
+    "retentionOfferApplied": "Končano. {percent} % popusta naslednje {months} mesece.",
+    "othersSpeakerLabel": "Drugi"
 }

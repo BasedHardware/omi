@@ -11814,6 +11814,11 @@
     "episodeSoFar": "Sa ngayon",
     "episodeUpdatedJustNow": "Na-update ngayon lang · buong tala kapag natapos",
     "episodeUpdatedMinutesAgo": "Na-update {minutes} min ang nakalipas · buong tala kapag natapos",
+    "episodeNotesUnavailable": "Hindi nag-a-update ang mga live na tala. Tingnan muna ang transcript.",
+    "episodeCaptureFor": "Nagre-record · {duration}",
+    "episodePrevious": "Nakaraang episode",
+    "captureChunksPending": "Mga nakabinbing chunk: {pending}",
+    "episodeOpenPrevious": "Buksan ang Nakaraang Episode",
     "episodeNotesSoon": "Lalabas ang mga tala pagkatapos ng unang ilang minuto ng usapan.",
     "episodeOpenAll": "Buksan Lahat",
     "episodeWrapUpNow": "Tapusin Ngayon",
@@ -11849,5 +11854,6 @@
     "recapInTheBackground": "Sa background",
     "retentionOfferAccept": "Manatili nang may {percent}% diskwento",
     "retentionOfferBody": "Manatili at magbayad ng {price} kada buwan sa susunod na {months} buwan.",
-    "retentionOfferApplied": "Tapos na. {percent}% diskwento sa susunod na {months} buwan."
+    "retentionOfferApplied": "Tapos na. {percent}% diskwento sa susunod na {months} buwan.",
+    "othersSpeakerLabel": "Iba pa"
 }

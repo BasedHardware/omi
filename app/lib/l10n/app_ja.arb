@@ -4388,6 +4388,11 @@
     "episodeSoFar": "ここまで",
     "episodeUpdatedJustNow": "たった今更新 · 終了時に完全なメモ",
     "episodeUpdatedMinutesAgo": "{minutes} 分前に更新 · 終了時に完全なメモ",
+    "episodeNotesUnavailable": "リアルタイムのメモが更新されていません。今は文字起こしをご確認ください。",
+    "episodeCaptureFor": "録音中 · {duration}",
+    "episodePrevious": "前のエピソード",
+    "captureChunksPending": "保留中の音声チャンク: {pending}",
+    "episodeOpenPrevious": "前のエピソードを開く",
     "episodeNotesSoon": "会話が数分続くとメモが表示されます。",
     "episodeOpenAll": "すべて開く",
     "episodeWrapUpNow": "今すぐまとめる",
@@ -4423,5 +4428,6 @@
     "recapInTheBackground": "バックグラウンド",
     "retentionOfferAccept": "{percent}%オフで続ける",
     "retentionOfferBody": "続ければ月額{price}、次の{months}か月間。",
-    "retentionOfferApplied": "完了しました。{percent}%オフが{months}か月続きます。"
+    "retentionOfferApplied": "完了しました。{percent}%オフが{months}か月続きます。",
+    "othersSpeakerLabel": "その他"
 }

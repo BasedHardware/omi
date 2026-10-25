@@ -4484,6 +4484,11 @@
     "episodeSoFar": "Eddig",
     "episodeUpdatedJustNow": "Épp most frissült · teljes jegyzet a végén",
     "episodeUpdatedMinutesAgo": "{minutes} perce frissült · teljes jegyzet a végén",
+    "episodeNotesUnavailable": "A folyamatos jegyzetek nem frissülnek. Egyelőre tekintsd meg az átiratot.",
+    "episodeCaptureFor": "Rögzítés · {duration}",
+    "episodePrevious": "Előző epizód",
+    "captureChunksPending": "Várakozó részek: {pending}",
+    "episodeOpenPrevious": "Előző epizód megnyitása",
     "episodeNotesSoon": "A jegyzetek a beszélgetés első perceit követően jelennek meg.",
     "episodeOpenAll": "Összes megnyitása",
     "episodeWrapUpNow": "Lezárás most",
@@ -4519,5 +4524,6 @@
     "recapInTheBackground": "A háttérben",
     "retentionOfferAccept": "Maradj {percent}% kedvezménnyel",
     "retentionOfferBody": "Maradj, és fizess havi {price} összeget a következő {months} hónapban.",
-    "retentionOfferApplied": "Kész. {percent}% kedvezmény a következő {months} hónapban."
+    "retentionOfferApplied": "Kész. {percent}% kedvezmény a következő {months} hónapban.",
+    "othersSpeakerLabel": "Mások"
 }

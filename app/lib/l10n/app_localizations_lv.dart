@@ -14445,6 +14445,25 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Pašreizējās piezīmes netiek atjauninātas. Pagaidām skatiet transkripciju.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Ierakstīšana · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Iepriekšējā epizode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Gaidošie fragmenti: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Atvērt iepriekšējo epizodi';
+
+  @override
   String get episodeNotesSoon => 'Piezīmes parādās pēc pirmajām sarunas minūtēm.';
 
   @override
@@ -14581,4 +14600,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Gatavs. $percent% atlaide nākamos $months mēnešus.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Citi';
 }

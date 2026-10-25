@@ -4388,6 +4388,11 @@
     "episodeSoFar": "Досега",
     "episodeUpdatedJustNow": "Обновено току-що · пълни бележки накрая",
     "episodeUpdatedMinutesAgo": "Обновено преди {minutes} мин · пълни бележки накрая",
+    "episodeNotesUnavailable": "Текущите бележки не се обновяват. Засега вижте транскрипцията.",
+    "episodeCaptureFor": "Записване · {duration}",
+    "episodePrevious": "Предишен епизод",
+    "captureChunksPending": "Чакащи фрагменти: {pending}",
+    "episodeOpenPrevious": "Отворете предишния епизод",
     "episodeNotesSoon": "Бележките се появяват след първите минути разговор.",
     "episodeOpenAll": "Отвори всичко",
     "episodeWrapUpNow": "Приключи сега",
@@ -4423,5 +4428,6 @@
     "recapInTheBackground": "На заден план",
     "retentionOfferAccept": "Остани с {percent}% отстъпка",
     "retentionOfferBody": "Остани и плащай {price} на месец за следващите {months} месеца.",
-    "retentionOfferApplied": "Готово. {percent}% отстъпка за следващите {months} месеца."
+    "retentionOfferApplied": "Готово. {percent}% отстъпка за следващите {months} месеца.",
+    "othersSpeakerLabel": "Други"
 }

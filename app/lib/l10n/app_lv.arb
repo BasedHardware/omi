@@ -4388,6 +4388,11 @@
     "episodeSoFar": "Līdz šim",
     "episodeUpdatedJustNow": "Atjaunināts tikko · pilnas piezīmes beigās",
     "episodeUpdatedMinutesAgo": "Atjaunināts pirms {minutes} min · pilnas piezīmes beigās",
+    "episodeNotesUnavailable": "Pašreizējās piezīmes netiek atjauninātas. Pagaidām skatiet transkripciju.",
+    "episodeCaptureFor": "Ierakstīšana · {duration}",
+    "episodePrevious": "Iepriekšējā epizode",
+    "captureChunksPending": "Gaidošie fragmenti: {pending}",
+    "episodeOpenPrevious": "Atvērt iepriekšējo epizodi",
     "episodeNotesSoon": "Piezīmes parādās pēc pirmajām sarunas minūtēm.",
     "episodeOpenAll": "Atvērt visu",
     "episodeWrapUpNow": "Pabeigt tagad",
@@ -4423,5 +4428,6 @@
     "recapInTheBackground": "Fonā",
     "retentionOfferAccept": "Palikt ar {percent}% atlaidi",
     "retentionOfferBody": "Paliec un maksā {price} mēnesī nākamos {months} mēnešus.",
-    "retentionOfferApplied": "Gatavs. {percent}% atlaide nākamos {months} mēnešus."
+    "retentionOfferApplied": "Gatavs. {percent}% atlaide nākamos {months} mēnešus.",
+    "othersSpeakerLabel": "Citi"
 }

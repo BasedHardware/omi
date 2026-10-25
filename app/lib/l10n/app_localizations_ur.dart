@@ -14426,6 +14426,25 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'جاری نوٹس اپ ڈیٹ نہیں ہو رہے۔ فی الحال متن دیکھیں۔';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'ریکارڈنگ · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'پچھلی قسط';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'زیرِ التوا حصے: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'پچھلی قسط کھولیں';
+
+  @override
   String get episodeNotesSoon => 'گفتگو کے پہلے چند منٹ بعد نوٹس ظاہر ہوں گے۔';
 
   @override
@@ -14562,4 +14581,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'ہو گیا۔ $percent% رعایت، اگلے $months مہینے۔';
   }
+
+  @override
+  String get othersSpeakerLabel => 'دیگر';
 }

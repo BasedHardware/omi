@@ -502,6 +502,8 @@ class SimpleTranscriptSegment(BaseModel):
     text: str
     original_text: Optional[str] = None
     speaker_id: Optional[int] = None
+    speaker_key: Optional[str] = None
+    speaker_label: Optional[str] = None
     speaker_name: Optional[str] = None
     start: float
     end: float
@@ -517,6 +519,8 @@ class TranscriptMatchSnippet(BaseModel):
     start_ms: Optional[int] = None
     end_ms: Optional[int] = None
     speaker_id: Optional[int] = None
+    speaker_key: Optional[str] = None
+    speaker_label: Optional[str] = None
 
 
 class SimpleConversation(BaseModel):

@@ -14424,6 +14424,25 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'चालू टिपा अपडेट होत नाहीत. सध्या प्रतिलेख पहा.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'रेकॉर्डिंग · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'मागील भाग';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'प्रलंबित भाग: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'मागील भाग उघडा';
+
+  @override
   String get episodeNotesSoon => 'बोलण्याच्या पहिल्या काही मिनिटांनंतर नोट्स दिसतील.';
 
   @override
@@ -14560,4 +14579,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'झाले. $percent% सवलत, पुढील $months महिने.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'इतर';
 }

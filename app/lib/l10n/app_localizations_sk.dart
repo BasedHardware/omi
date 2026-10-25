@@ -14408,6 +14408,25 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Priebežné poznámky sa neaktualizujú. Zatiaľ si pozrite prepis.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Nahrávanie · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Predchádzajúca epizóda';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Čakajúce časti: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Otvoriť predchádzajúcu epizódu';
+
+  @override
   String get episodeNotesSoon => 'Poznámky sa zobrazia po prvých minútach rozhovoru.';
 
   @override
@@ -14544,4 +14563,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Hotovo. Zľava $percent % na ďalšie $months mesiace.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Ostatní';
 }

@@ -14417,6 +14417,25 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Løpende notater oppdateres ikke. Se transkripsjonen foreløpig.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Tar opp · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Forrige episode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Ventende deler: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Åpne forrige episode';
+
+  @override
   String get episodeNotesSoon => 'Notatene vises etter de første minuttene av samtalen.';
 
   @override
@@ -14553,4 +14572,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Ferdig. $percent % rabatt de neste $months månedene.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Andre';
 }

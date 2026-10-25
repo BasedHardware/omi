@@ -14449,6 +14449,25 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Nota langsung tidak dikemas kini. Lihat transkrip buat masa ini.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Merakam · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episod sebelumnya';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Cebisan tertunda: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Buka Episod Sebelumnya';
+
+  @override
   String get episodeNotesSoon => 'Nota muncul selepas beberapa minit pertama perbualan.';
 
   @override
@@ -14586,4 +14605,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Selesai. Diskaun $percent% untuk $months bulan akan datang.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Lain-lain';
 }

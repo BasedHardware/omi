@@ -14421,6 +14421,25 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Löpande anteckningar uppdateras inte. Visa transkriptionen tills vidare.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Spelar in · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Föregående avsnitt';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Väntande delar: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Öppna föregående avsnitt';
+
+  @override
   String get episodeNotesSoon => 'Anteckningarna visas efter de första minuterna av samtalet.';
 
   @override
@@ -14557,4 +14576,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Klart. $percent % rabatt de kommande $months månaderna.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Andra';
 }

@@ -11814,6 +11814,11 @@
     "episodeSoFar": "Пакуль што",
     "episodeUpdatedJustNow": "Абноўлена толькі што · поўныя нататкі ў канцы",
     "episodeUpdatedMinutesAgo": "Абноўлена {minutes} хв таму · поўныя нататкі ў канцы",
+    "episodeNotesUnavailable": "Бягучыя нататкі не абнаўляюцца. Пакуль праглядзіце расшыфроўку.",
+    "episodeCaptureFor": "Запіс · {duration}",
+    "episodePrevious": "Папярэдні эпізод",
+    "captureChunksPending": "Чакаюць фрагменты: {pending}",
+    "episodeOpenPrevious": "Адкрыць папярэдні эпізод",
     "episodeNotesSoon": "Нататкі з’явяцца пасля першых хвілін размовы.",
     "episodeOpenAll": "Адкрыць усё",
     "episodeWrapUpNow": "Завяршыць зараз",
@@ -11849,5 +11854,6 @@
     "recapInTheBackground": "У фоне",
     "retentionOfferAccept": "Застацца са зніжкай {percent}%",
     "retentionOfferBody": "Застаньцеся і плаціце {price} у месяц на працягу {months} месяцаў.",
-    "retentionOfferApplied": "Гатова. Зніжка {percent}% на {months} месяцы."
+    "retentionOfferApplied": "Гатова. Зніжка {percent}% на {months} месяцы.",
+    "othersSpeakerLabel": "Іншыя"
 }

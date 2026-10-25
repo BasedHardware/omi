@@ -14527,6 +14527,25 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Hindi nag-a-update ang mga live na tala. Tingnan muna ang transcript.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Nagre-record · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Nakaraang episode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Mga nakabinbing chunk: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Buksan ang Nakaraang Episode';
+
+  @override
   String get episodeNotesSoon => 'Lalabas ang mga tala pagkatapos ng unang ilang minuto ng usapan.';
 
   @override
@@ -14664,4 +14683,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Tapos na. $percent% diskwento sa susunod na $months buwan.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Iba pa';
 }

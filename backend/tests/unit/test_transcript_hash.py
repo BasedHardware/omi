@@ -516,7 +516,7 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
 
     Reviewer's reproduction: hashing stripped person_id 'alice' and ' alice '
     to the same digest while from-segments stored the raw value, so rendering
-    produced 'Alice: approved transfer' versus 'Speaker 0: approved transfer'.
+    produced 'Alice: approved transfer' versus 'Speaker A: approved transfer'.
 
     red-proof: persist ``person_id`` / ``speaker`` without canonical_segment
     (``person_id=payload['person_id']`` on TranscriptSegment) -- then the

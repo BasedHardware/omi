@@ -14332,6 +14332,25 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'الملاحظات المباشرة لا تتحدث. اعرض النص في الوقت الحالي.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'جارٍ التسجيل · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'الحلقة السابقة';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'مقاطع قيد الانتظار: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'افتح الحلقة السابقة';
+
+  @override
   String get episodeNotesSoon => 'تظهر الملاحظات بعد الدقائق الأولى من الحديث.';
 
   @override
@@ -14468,4 +14487,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'تم. خصم $percent% لمدة $months أشهر قادمة.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'آخرون';
 }

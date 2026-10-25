@@ -1112,7 +1112,9 @@ export interface CaptureEvidenceMetadata {
   clock_epoch?: string | null;
   conflicts?: number | null;
   coverage?: "unknown" | "incomplete" | "mapped" | null;
+  lifetime?: Record<string, unknown> | null;
   origin?: string | null;
+  proof?: string | null;
   reason?: string | null;
   receipts?: Array<Record<string, unknown>> | null;
   runs?: Array<Record<string, unknown>> | null;
@@ -5020,6 +5022,8 @@ export interface SimpleTranscriptSegment {
   id?: string | null;
   original_text?: string | null;
   speaker_id?: number | null;
+  speaker_key?: string | null;
+  speaker_label?: string | null;
   speaker_name?: string | null;
   start: number;
   text: string;
@@ -6248,6 +6252,8 @@ export interface routers__mcp__TranscriptMatchSnippet {
   end_ms?: number | null;
   segment_id?: string | null;
   speaker_id?: number | null;
+  speaker_key?: string | null;
+  speaker_label?: string | null;
   start?: number | null;
   start_ms?: number | null;
   text: string;

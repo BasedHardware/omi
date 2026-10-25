@@ -11814,6 +11814,11 @@
     "episodeSoFar": "ಇಲ್ಲಿಯವರೆಗೆ",
     "episodeUpdatedJustNow": "ಈಗಷ್ಟೇ ನವೀಕರಿಸಲಾಗಿದೆ · ಮುಗಿದಾಗ ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು",
     "episodeUpdatedMinutesAgo": "{minutes} ನಿಮಿಷ ಹಿಂದೆ ನವೀಕರಿಸಲಾಗಿದೆ · ಮುಗಿದಾಗ ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು",
+    "episodeNotesUnavailable": "ಚಾಲ್ತಿಯಲ್ಲಿರುವ ಟಿಪ್ಪಣಿಗಳು ನವೀಕರಿಸುತ್ತಿಲ್ಲ. ಸದ್ಯಕ್ಕೆ ಪ್ರತಿಲೇಖನವನ್ನು ನೋಡಿ.",
+    "episodeCaptureFor": "ರೆಕಾರ್ಡಿಂಗ್ · {duration}",
+    "episodePrevious": "ಹಿಂದಿನ ಸಂಚಿಕೆ",
+    "captureChunksPending": "ಬಾಕಿ ಇರುವ ತುಣುಕುಗಳು: {pending}",
+    "episodeOpenPrevious": "ಹಿಂದಿನ ಸಂಚಿಕೆಯನ್ನು ತೆರೆಯಿರಿ",
     "episodeNotesSoon": "ಮಾತಿನ ಮೊದಲ ಕೆಲವು ನಿಮಿಷಗಳ ನಂತರ ಟಿಪ್ಪಣಿಗಳು ಕಾಣಿಸುತ್ತವೆ.",
     "episodeOpenAll": "ಎಲ್ಲವನ್ನೂ ತೆರೆಯಿರಿ",
     "episodeWrapUpNow": "ಈಗ ಮುಗಿಸಿ",
@@ -11849,5 +11854,6 @@
     "recapInTheBackground": "ಹಿನ್ನೆಲೆಯಲ್ಲಿ",
     "retentionOfferAccept": "{percent}% ರಿಯಾಯಿತಿಯೊಂದಿಗೆ ಮುಂದುವರಿಸಿ",
     "retentionOfferBody": "ಮುಂದುವರಿಸಿ ಮತ್ತು ತಿಂಗಳಿಗೆ {price} ಪಾವತಿಸಿ, ಮುಂದಿನ {months} ತಿಂಗಳು.",
-    "retentionOfferApplied": "ಆಯಿತು. {percent}% ರಿಯಾಯಿತಿ, ಮುಂದಿನ {months} ತಿಂಗಳು."
+    "retentionOfferApplied": "ಆಯಿತು. {percent}% ರಿಯಾಯಿತಿ, ಮುಂದಿನ {months} ತಿಂಗಳು.",
+    "othersSpeakerLabel": "ಇತರರು"
 }
