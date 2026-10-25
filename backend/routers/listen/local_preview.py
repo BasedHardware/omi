@@ -16,26 +16,14 @@ import logging
 from config.batch_live_preview import local_preview_batch_owned
 from config.cloud_live_stt import local_preview_batch_enabled
 from utils.metrics import OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL
+from utils.observability.reasons import LocalPreviewOutcome, ReasonFamily, reason_label
 from utils.observability.transcription import bounded_client_platform
 
 logger = logging.getLogger(__name__)
 
-ADMITTED = 'admitted'
+ADMITTED = LocalPreviewOutcome.ADMITTED.value
 # Closed reason set; every refusal keeps today's streaming behavior.
-REASONS = frozenset(
-    {
-        ADMITTED,
-        'not_requested',
-        'kill_switch',
-        'custom_stt',
-        'multi_channel',
-        'onboarding',
-        'phone_call',
-        'private_sync_off',
-        'not_batch_lane',
-        'policy_error',
-    }
-)
+REASONS = frozenset(outcome.value for outcome in LocalPreviewOutcome) - {LocalPreviewOutcome.UNKNOWN.value}
 
 
 def local_preview_reason(host) -> str:
@@ -81,7 +69,8 @@ def admit_local_preview(host) -> bool:
     try:
         platform = getattr(getattr(host, 'client_device_context', None), 'platform', None)
         OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL.labels(
-            outcome=reason, client_platform=bounded_client_platform(platform)
+            outcome=reason_label(ReasonFamily.LIVE_STT, reason, LocalPreviewOutcome),
+            client_platform=bounded_client_platform(platform),
         ).inc()
     except Exception:
         pass  # Telemetry never interrupts session start.
