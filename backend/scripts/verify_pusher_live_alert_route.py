@@ -245,6 +245,18 @@ def _referenced_mute_timings(rules: dict[str, dict[str, Any]]) -> tuple[str, ...
 
 _WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 _ALL_DAY_TIMES = frozenset((("00:00", "24:00"),))
+# Calendar selectors with no enumerable "full" form (years are unbounded, and
+# days_of_month mixes ranges with negatives). They restrict the window when
+# present, so absent-on-both-sides matches and any value on either side alone
+# is a real difference.
+_CALENDAR_SELECTORS = ("days_of_month", "months", "years")
+
+
+def _calendar_selector(interval: dict[str, Any], key: str) -> tuple[str, ...]:
+    values = interval.get(key)
+    if not isinstance(values, list):
+        return ()
+    return tuple(sorted(str(value) for value in values))
 
 
 def _mute_timing_signature(timing: dict[str, Any]) -> tuple:
@@ -252,9 +264,12 @@ def _mute_timing_signature(timing: dict[str, Any]) -> tuple:
 
     An interval that omits ``weekdays`` or ``times`` covers every day or the
     whole day respectively — the shape the UI writes for an always-on mute —
-    so it must equal the explicitly enumerated committed form. Anything else
-    (narrower weekdays, business-hours times, a non-UTC location) stays a real
-    difference and fails the drift comparison.
+    so it must equal the explicitly enumerated committed form. The calendar
+    selectors (``days_of_month``, ``months``, ``years``) are compared as
+    provided: absent on both sides is the same unrestricted window, any value
+    on either side alone narrows it. Anything else (narrower weekdays,
+    business-hours times, a non-UTC location) stays a real difference and
+    fails the drift comparison.
     """
 
     intervals = timing.get("time_intervals")
@@ -283,7 +298,14 @@ def _mute_timing_signature(timing: dict[str, Any]) -> tuple:
             # the same window as an explicit UTC.
             if not isinstance(location, str) or location.strip() in ("", "UTC"):
                 location = "UTC"
-            items.add((tuple(sorted(weekdays)), tuple(sorted(normalized_times)), location))
+            items.add(
+                (
+                    tuple(sorted(weekdays)),
+                    tuple(sorted(normalized_times)),
+                    location,
+                    *(_calendar_selector(interval, key) for key in _CALENDAR_SELECTORS),
+                )
+            )
     return tuple(sorted(items))
 
 

@@ -698,12 +698,29 @@ def test_import_never_overwrites_an_existing_mute_timing(
     assert verifier._run_live_stt_import("https://monitor.omi.me", "secret") == []
 
 
+@pytest.mark.parametrize(
+    "narrowing",
+    [
+        pytest.param(
+            {
+                "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+                "times": [{"begin_time": "09:00", "end_time": "17:00"}],
+            },
+            id="business-hours",
+        ),
+        pytest.param({"months": ["january"]}, id="january-only"),
+        pytest.param({"years": ["2026"]}, id="single-year"),
+        pytest.param({"days_of_month": ["1", "2"]}, id="two-days-a-month"),
+    ],
+)
 def test_import_fails_closed_when_a_live_mute_timing_drifts_from_the_committed_window(
-    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, narrowing: dict[str, Any]
 ) -> None:
     """A narrower live mute window would let agent-tier rules page Telegram
     outside the committed silence; the import names the drift instead of
-    trusting the existing timing blindly (review round 1 finding on #23612)."""
+    trusting the existing timing blindly (review rounds 1 and 2 on #23612:
+    business hours, then the calendar selectors the signature must not
+    ignore)."""
 
     rules = verifier.load_live_stt_import_rules()
     name = verifier._referenced_mute_timings(rules)[0]
@@ -715,16 +732,7 @@ def test_import_fails_closed_when_a_live_mute_timing_drifts_from_the_committed_w
             "settings": {"bottoken": "must-never-be-logged"},
         }
     ]
-    business_hours = {
-        "name": name,
-        "time_intervals": [
-            {
-                "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"],
-                "times": [{"begin_time": "09:00", "end_time": "17:00"}],
-                "location": "UTC",
-            }
-        ],
-    }
+    narrowed_timing = {"name": name, "time_intervals": [dict(narrowing, location="UTC")]}
 
     def fake_request(_url: str, path: str, _token: str, **_kwargs: object) -> object:
         if path == verifier.ALERT_RULE_LIST_PATH:
@@ -732,7 +740,7 @@ def test_import_fails_closed_when_a_live_mute_timing_drifts_from_the_committed_w
         if path == "/api/v1/provisioning/contact-points":
             return contact_points
         if path == f"{verifier.MUTE_TIMING_PATH}/{name}":
-            return business_hours
+            return narrowed_timing
         raise AssertionError(f"unexpected Grafana read path: {path}")
 
     monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_request_json", fake_request)
