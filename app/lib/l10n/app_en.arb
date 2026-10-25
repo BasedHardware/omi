@@ -17797,5 +17797,29 @@
     "othersSpeakerLabel": "Others",
     "@othersSpeakerLabel": {
         "description": "Collective label for unidentified voices with too little evidence in an over-split transcript; not a participant count."
+    },
+    "livePreviewLabel": "Live preview",
+    "@livePreviewLabel": {
+        "description": "Small caption above the on-device live transcript preview while recording"
+    },
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "@livePreviewExplanation": {
+        "description": "One-line explanation under the Live preview caption: the provisional text is made on the phone and replaced by the final transcript"
+    },
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "@livePreviewListening": {
+        "description": "Live preview is running on the phone but no words have been recognized yet"
+    },
+    "livePreviewStarting": "Starting live preview…",
+    "@livePreviewStarting": {
+        "description": "The on-device live preview engine is starting"
+    },
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "@livePreviewTranscribingTitle": {
+        "description": "Calm state when this phone has no on-device preview: the recording is being transcribed after capture"
+    },
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "@livePreviewTranscribingMessage": {
+        "description": "Explains, under Transcribing…, where and when the transcript appears; not an error"
     }
 }

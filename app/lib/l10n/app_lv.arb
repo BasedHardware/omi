@@ -4427,5 +4427,11 @@
     "retentionOfferAccept": "Palikt ar {percent}% atlaidi",
     "retentionOfferBody": "Paliec un maksā {price} mēnesī nākamos {months} mēnešus.",
     "retentionOfferApplied": "Gatavs. {percent}% atlaide nākamos {months} mēnešus.",
-    "othersSpeakerLabel": "Citi"
+    "othersSpeakerLabel": "Citi",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }

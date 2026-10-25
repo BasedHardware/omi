@@ -319,6 +319,26 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
 
+  /// Whether the most recent [onFrameCaptured] kept the frame (false when a
+  /// storage-blocked pendant buffer was full and the frame was dropped).
+  /// Reporting only; capture behaviour is unchanged.
+  bool get lastFrameAccepted => _lastFrameAccepted;
+  bool _lastFrameAccepted = true;
+
+  /// Strict durability of [frame] (as returned by [onFrameCaptured]): its
+  /// bytes were written to a disk WAL by a flush of the CURRENT generation and
+  /// that flush's index save completed. Anything else (buffered, in a memory
+  /// WAL, written but index not yet saved, a superseded generation) is false.
+  /// Read-only; used by the local-preview custody copies.
+  bool isFrameDurable(WalFrame frame) => _durableFlushGeneration[frame.payload] == _sessionGeneration;
+
+  /// Payload object -> generation whose flush made it durable (weak keys).
+  final Expando<int> _durableFlushGeneration = Expando<int>('durableFlushGeneration');
+
+  /// Test seam: take the existing storage-blocked refusal branch.
+  @visibleForTesting
+  bool debugRefusePendantFrames = false;
+
   @visibleForTesting
   List<bool> get testFrameSynced => _frameSynced;
 
@@ -1018,6 +1038,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     if (indexSaved) {
       for (final wal in durableWals) {
+        // Recorded before the in-memory copy is released; observational only.
+        if (_isCurrent(generation)) {
+          for (final payload in wal.data) {
+            _durableFlushGeneration[payload] = generation;
+          }
+        }
         if (wal.deviceType == DeviceType.appleWatch && wal.ownerUid != null && _isCurrent(generation)) {
           try {
             await watchCoverage.record(wal.ownerUid!, wal.timerStart.toDouble(),
@@ -1851,10 +1877,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     int? liveEpoch;
     int? liveRingId;
     if (_isPendantFrame(frame)) {
-      if ((_pendantBlockedByStorage || (_retentionRisk != null && _retentionRisk!.reason != 'count_cap')) &&
-          _countPendantBuffered() >= _maxPendantBufferedFrames) {
+      if (debugRefusePendantFrames ||
+          ((_pendantBlockedByStorage || (_retentionRisk != null && _retentionRisk!.reason != 'count_cap')) &&
+              _countPendantBuffered() >= _maxPendantBufferedFrames)) {
         _backlogTelemetry.pendantFrameDropped(
             retentionReason: _retentionRisk?.reason, storageWriteBlocked: _pendantBlockedByStorage);
+        _lastFrameAccepted = false;
         return frame;
       }
       final counter = _packetCounterOf(frame);
@@ -1884,6 +1912,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     );
     _frames.add(positioned);
     _frameSynced.add(false);
+    _lastFrameAccepted = true;
     return positioned;
   }
 

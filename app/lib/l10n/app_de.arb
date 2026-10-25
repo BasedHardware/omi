@@ -4427,5 +4427,11 @@
     "retentionOfferAccept": "Bleiben mit {percent}% Rabatt",
     "retentionOfferBody": "Bleib und zahle {price} pro Monat für die nächsten {months} Monate.",
     "retentionOfferApplied": "Erledigt. {percent}% Rabatt für die nächsten {months} Monate.",
-    "othersSpeakerLabel": "Andere"
+    "othersSpeakerLabel": "Andere",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }

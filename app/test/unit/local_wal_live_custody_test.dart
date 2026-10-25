@@ -411,4 +411,34 @@ void main() {
       reason: 'deleted audio must keep both copies — never dedupe a missing file',
     );
   });
+
+  test('isFrameDurable is strict: disk written but index not saved, or a cleared generation, is not durable', () async {
+    final barrier = Completer<void>();
+    var gate = true;
+    final sync = LocalWalSyncImpl(
+      _MockListener(),
+      freeDiskBytes: () async => 1 << 40,
+      persistWals: (wals) async {
+        if (gate) await barrier.future;
+        await WalFileManager.saveWals(wals);
+      },
+    );
+    sync.setDeviceInfo('dev', 'Omi');
+    sync.start();
+    await sync.walReady;
+    final captured = [for (var i = 0; i < 20; i++) sync.onFrameCaptured(frame(i))];
+    expect(captured.any(sync.isFrameDurable), isFalse, reason: 'still buffered');
+
+    final stopping = sync.stop(); // chunk + flush: audio written, index save gated
+    await pump();
+    expect(sync.testWals.where((w) => w.storage == WalStorage.disk), isNotEmpty, reason: 'disk already marked');
+    expect(captured.any(sync.isFrameDurable), isFalse, reason: 'index save not completed');
+    barrier.complete();
+    await stopping;
+    expect(captured.every(sync.isFrameDurable), isTrue, reason: 'disk + index saved, current generation');
+
+    sync.clearUserData();
+    expect(captured.any(sync.isFrameDurable), isFalse, reason: 'a superseded generation never counts');
+    gate = false;
+  });
 }

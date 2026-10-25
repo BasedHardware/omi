@@ -4479,6 +4479,215 @@
         "native-custody-health"
       ],
       "correlation": null
+    },
+    {
+      "id": "livePreviewEngineSelected",
+      "wire_name": "Live Preview Engine",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "engine": {
+          "type": "enum",
+          "wire_name": "engine",
+          "values": [
+            "speech_transcriber",
+            "sf_speech",
+            "android_on_device",
+            "parakeet",
+            "whisper",
+            "none"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "ok",
+            "not_admitted",
+            "kill_switch",
+            "os_too_old",
+            "os_engine_unavailable",
+            "locale_unsupported",
+            "locale_asset_missing",
+            "speech_permission_denied",
+            "bundled_not_installed",
+            "bundled_not_built",
+            "engine_error"
+          ]
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "ios",
+            "android"
+          ]
+        },
+        "osMajor": {
+          "type": "int",
+          "wire_name": "os_major"
+        },
+        "bundledInstalled": {
+          "type": "bool",
+          "wire_name": "bundled_installed"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "livePreviewFirstWord",
+      "wire_name": "Live Preview First Word",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "engine": {
+          "type": "enum",
+          "wire_name": "engine",
+          "values": [
+            "speech_transcriber",
+            "sf_speech",
+            "android_on_device",
+            "parakeet",
+            "whisper",
+            "none"
+          ]
+        },
+        "latencyMs": {
+          "type": "int",
+          "wire_name": "latency_ms"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "livePreviewSessionEnded",
+      "wire_name": "Live Preview Session Ended",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "engine": {
+          "type": "enum",
+          "wire_name": "engine",
+          "values": [
+            "speech_transcriber",
+            "sf_speech",
+            "android_on_device",
+            "parakeet",
+            "whisper",
+            "none"
+          ]
+        },
+        "previewWords": {
+          "type": "int",
+          "wire_name": "preview_words"
+        },
+        "previewAudioMs": {
+          "type": "int",
+          "wire_name": "preview_audio_ms"
+        },
+        "droppedAudioMs": {
+          "type": "int",
+          "wire_name": "dropped_audio_ms"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "livePreviewNotRequested",
+      "wire_name": "Live Preview Not Requested",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "kill_switch",
+            "device_unsupported",
+            "codec_unsupported",
+            "auto_sync_off",
+            "transcribe_later",
+            "custom_stt",
+            "kept_on_phone",
+            "onboarding",
+            "no_journal"
+          ]
+        },
+        "midSession": {
+          "type": "bool",
+          "wire_name": "mid_session"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "livePreviewVerdict",
+      "wire_name": "Live Preview Verdict",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "verdict": {
+          "type": "enum",
+          "wire_name": "verdict",
+          "values": [
+            "granted",
+            "refused",
+            "timeout",
+            "overflow",
+            "socket_closed"
+          ]
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "ios",
+            "android"
+          ]
+        },
+        "verdictLatencyMs": {
+          "type": "int",
+          "wire_name": "verdict_latency_ms"
+        },
+        "holdDurationMs": {
+          "type": "int",
+          "wire_name": "hold_duration_ms"
+        },
+        "heldFrames": {
+          "type": "int",
+          "wire_name": "held_frames"
+        },
+        "holdTimeoutReplayed": {
+          "type": "bool",
+          "wire_name": "hold_timeout_replayed"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
     }
   ],
 "transport_dispositions": {

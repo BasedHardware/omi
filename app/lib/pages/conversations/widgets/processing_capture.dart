@@ -293,24 +293,31 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     // When recording is active: the one capture status and control surface.
     if (isDeviceRecording || isPhoneRecording) {
-      final card = LiveCaptureCard(
-        source: isDeviceRecording ? liveSource : 'phone',
-        status: copy.status,
-        detail: copy.detail,
-        explanation: copy.explanation,
-        // Resume only when the status says Paused and the reader paused it; a degraded transcription
-        // is still live, so its control is Pause.
-        paused: isPaused,
-        // The session clock (how long the pendant has been connected) is not the conversation.
-        compact: true,
-        lastLine: provider.segments.lastOrNull?.text,
-        note:
-            isPhoneRecording && provider.pendantPausedForPhone ? context.l10n.pendantPausedResumesWhenYouFinish : null,
-        // Photo-capture devices (OmiGlass) keep capturing photos; there is nothing to pause.
-        onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || micTaken
-            ? null
-            : () => _togglePause(provider),
-      );
+      // A local-preview session has no cloud lines yet: the card's existing
+      // last-line slot shows the newest on-device preview line instead.
+      final preview = provider.livePreview;
+      Widget buildCard(String? lastLine) => LiveCaptureCard(
+            source: isDeviceRecording ? liveSource : 'phone',
+            status: copy.status,
+            detail: copy.detail,
+            explanation: copy.explanation,
+            // Resume only when the status says Paused and the reader paused it; a degraded transcription
+            // is still live, so its control is Pause.
+            paused: isPaused,
+            // The session clock (how long the pendant has been connected) is not the conversation.
+            compact: true,
+            lastLine: lastLine,
+            note: isPhoneRecording && provider.pendantPausedForPhone
+                ? context.l10n.pendantPausedResumesWhenYouFinish
+                : null,
+            // Photo-capture devices (OmiGlass) keep capturing photos; there is nothing to pause.
+            onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || micTaken
+                ? null
+                : () => _togglePause(provider),
+          );
+      final card = preview != null && provider.localPreviewAdmitted && provider.segments.isEmpty
+          ? ListenableBuilder(listenable: preview, builder: (context, _) => buildCard(preview.latestLine))
+          : buildCard(provider.segments.lastOrNull?.text);
       return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

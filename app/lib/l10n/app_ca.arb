@@ -4427,5 +4427,11 @@
     "retentionOfferAccept": "Queda't amb un {percent}% de descompte",
     "retentionOfferBody": "Queda't i paga {price} al mes durant els propers {months} mesos.",
     "retentionOfferApplied": "Fet. {percent}% de descompte els propers {months} mesos.",
-    "othersSpeakerLabel": "Altres"
+    "othersSpeakerLabel": "Altres",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }

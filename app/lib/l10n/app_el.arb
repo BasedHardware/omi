@@ -4427,5 +4427,11 @@
     "retentionOfferAccept": "Μείνε με {percent}% έκπτωση",
     "retentionOfferBody": "Μείνε και πλήρωνε {price} τον μήνα για τους επόμενους {months} μήνες.",
     "retentionOfferApplied": "Έγινε. {percent}% έκπτωση για τους επόμενους {months} μήνες.",
-    "othersSpeakerLabel": "Άλλοι"
+    "othersSpeakerLabel": "Άλλοι",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }

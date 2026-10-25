@@ -4427,5 +4427,11 @@
     "retentionOfferAccept": "{percent}%オフで続ける",
     "retentionOfferBody": "続ければ月額{price}、次の{months}か月間。",
     "retentionOfferApplied": "完了しました。{percent}%オフが{months}か月続きます。",
-    "othersSpeakerLabel": "その他"
+    "othersSpeakerLabel": "その他",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }

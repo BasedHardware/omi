@@ -4427,5 +4427,11 @@
     "retentionOfferAccept": "Jatka {percent} % alennuksella",
     "retentionOfferBody": "Jatka ja maksa {price} kuukaudessa seuraavat {months} kuukautta.",
     "retentionOfferApplied": "Valmis. {percent} % alennus seuraavat {months} kuukautta.",
-    "othersSpeakerLabel": "Muut"
+    "othersSpeakerLabel": "Muut",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }

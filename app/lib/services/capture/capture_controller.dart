@@ -76,6 +76,8 @@ import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/services/wals/mobile_standard_batch.dart';
+import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/local_preview_admission.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/enums.dart';
@@ -162,9 +164,46 @@ class CaptureController extends ChangeNotifier
       return;
     }
     _mobileStandardBatch = lane;
-    lane.authorize(_mobileStandardBatchAllowed);
+    lane.authorize(_mobileStandardBatchAllowed, localPreview: _localPreview.admitted);
     lifetime.listenTo(lane.visibility, lane.visibilityChanged);
     lifetime.own(lane.close);
+  }
+
+  // Mobile local preview (lib/services/live_preview/README.md): display-only, never in [segments].
+  late final _localPreview = LocalPreviewAdmission(
+      now: _now,
+      onChanged: () {
+        if (!_captureControllerDisposed) notifyListeners();
+      },
+      schedule: (delay, callback) => _scheduling.once(delay, callback))
+    ..mayBeVolatile = _walMayHoldOnlyInMemory;
+
+  /// Local-preview custody probe: true unless the safety WAL reports this
+  /// frame strictly durable (on disk, index saved, current generation).
+  bool _walMayHoldOnlyInMemory(HeldPendantFrame frame) {
+    final positioned = frame.positioned;
+    final phone = _wal.getSyncs().phone;
+    if (positioned == null || phone is! LocalWalSyncImpl) return true;
+    return !phone.isFrameDurable(positioned);
+  }
+
+  /// Account change with no open socket: the WAL cleanup that follows drops
+  /// its in-memory tail, so frames this router kept off the socket are
+  /// written to the batch journal for the OLD owner (recovered and uploaded
+  /// through the ordinary sync path when that owner is back).
+  bool _preserveSuppressedForAccountChange(List<HeldPendantFrame> frames) =>
+      _mobileStandardBatch?.preserveForOwner(
+        [for (final frame in frames) (frame.payload, frame.capturedAt ?? _now())],
+        codec: _localPreview.pendantCodec,
+        recordingSessionId: activeRecordingId,
+      ) ??
+      false;
+  LivePreviewController? get livePreview => _localPreview.preview;
+  bool get localPreviewAdmitted => _localPreview.admitted;
+
+  void installLivePreview(LivePreviewController preview) {
+    if (_captureControllerDisposed) return preview.dispose();
+    lifetime.own(_localPreview.install(preview, _deviceAudioListeners, _phoneMicAudioListeners));
   }
 
   final CaptureLivenessWatchdog _livenessWatchdog = CaptureLivenessWatchdog();
@@ -229,6 +268,14 @@ class CaptureController extends ChangeNotifier
   /// and meters the level): phone-mic PCM16 16 kHz mono, and the pendant's encoded packets.
   void Function(List<int> pcm)? phoneMicAudioTap;
   void Function(List<int> packet)? deviceAudioTap;
+
+  // Extra tap listeners (the live preview); the slots above stay onboarding's.
+  final _phoneMicAudioListeners = AudioTapListeners();
+  final _deviceAudioListeners = AudioTapListeners();
+  void addPhoneMicAudioListener(void Function(List<int> pcm) listener) => _phoneMicAudioListeners.add(listener);
+  void removePhoneMicAudioListener(void Function(List<int> pcm) listener) => _phoneMicAudioListeners.remove(listener);
+  void addDeviceAudioListener(void Function(List<int> packet) listener) => _deviceAudioListeners.add(listener);
+  void removeDeviceAudioListener(void Function(List<int> packet) listener) => _deviceAudioListeners.remove(listener);
 
   /// Set by a first-run step that explains a short capture itself: holds the generic notice.
   bool suppressShortCaptureNotice = false;
@@ -517,7 +564,7 @@ class CaptureController extends ChangeNotifier
     await _phoneMic.start(
       onByteReceived: (bytes) {
         if (!_admitsCapture(revision)) return;
-        phoneMicAudioTap?.call(bytes);
+        _phoneMicAudioListeners.emit(bytes, phoneMicAudioTap);
         _recordingTelemetry.observeAudio(bytes.length);
         if (bytes.isNotEmpty) _livenessWatchdog.observeFrame(_now());
         final frames = _activeSource?.processBytes(bytes) ?? [];
@@ -1180,6 +1227,7 @@ class CaptureController extends ChangeNotifier
   void _rollCaptureSession(String identity) {
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
+    _localPreview.end(send: _openSocketSender);
     _captureEvidenceIdentity.reset();
     _sessionOwner?.replaceSession(identity);
   }
@@ -1553,6 +1601,7 @@ class CaptureController extends ChangeNotifier
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) {
     return _openSocketOverride?.call(
           codec: codec,
@@ -1573,6 +1622,7 @@ class CaptureController extends ChangeNotifier
               clientConversationId: clientConversationId,
               customSttConfig: customSttConfig,
               geolocation: geolocation ?? _sessionGeolocation,
+              localPreview: localPreview,
             );
   }
 
@@ -1635,6 +1685,8 @@ class CaptureController extends ChangeNotifier
     String language = _preferences.hasSetPrimaryLanguage ? _preferences.userPrimaryLanguage : "multi";
     final customSttConfig = _preferences.customSttConfig;
     final sessionToken = _sessionOwner?.token;
+    // Read the kill switch alongside the STT decision, not after it.
+    final previewAllowed = _localPreview.preview?.requestAllowed() ?? Future.value(false);
     final decision = await SttModeResolver.instance.decide(persistedCustomStt: customSttConfig, codec: codec);
     if (!_captureSessionIsCurrent(sessionToken) || _deviceIdentityStale(deviceRevision)) return null;
 
@@ -1682,6 +1734,17 @@ class CaptureController extends ChangeNotifier
       effectiveConfig = null;
     }
 
+    // Ask for the on-device preview only when this capture's routing can
+    // journal pendant audio; the server decides admission (batch lane etc.).
+    final allowed = await previewAllowed.catchError((Object _) => true);
+    if (!_captureSessionIsCurrent(sessionToken) || _deviceIdentityStale(deviceRevision)) return null;
+    final refusal = allowed
+        ? _localPreviewRefusal(codec, customStt: effectiveConfig != null)
+        : LocalPreviewClientRefusal.killSwitch;
+    final localPreview = _localPreview.preview != null && refusal == null;
+    if (refusal != null) _localPreview.preview?.clientRefused(refusal.wireName, midSession: false);
+    _localPreview.language = language;
+
     if (_fenceUplinkForSync()) return null;
     final socket = await openConversationSocket(
       codec: codec,
@@ -1692,6 +1755,7 @@ class CaptureController extends ChangeNotifier
       clientConversationId: _recordingTelemetry.recordingId,
       customSttConfig: effectiveConfig,
       geolocation: _sessionGeolocation,
+      localPreview: localPreview,
     );
     if (!_captureSessionIsCurrent(sessionToken) || _deviceIdentityStale(deviceRevision)) {
       await socket?.stop(reason: 'stale transcription socket attempt');
@@ -1722,6 +1786,7 @@ class CaptureController extends ChangeNotifier
     }
     if (!identical(_socket, socket)) {
       _socket = socket;
+      _localPreview.socketPublished(declared: socket.localPreview, send: _sendPendantToSocket);
       _socket?.subscribe(this, this);
       _transcriptServiceReady = true;
       _beginWedgeSession(socket);
@@ -2070,13 +2135,14 @@ class CaptureController extends ChangeNotifier
     if (!_admitsCapture(revision)) return false;
     Logger.debug('streamAudioToWs in capture_provider');
     _startMetricsTracking();
+    _localPreview.pendantCodec = codec;
     final subscription = await _getBleAudioBytesListener(
       deviceId,
       onAudioBytesReceived: (List<int> value) {
         if (_captureControllerDisposed || !_admitsCapture(revision) || _recordingDevice?.id != deviceId) return;
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 3) return;
-        deviceAudioTap?.call(snapshot);
+        _deviceAudioListeners.emit(snapshot, deviceAudioTap);
         CaptureContinuityMonitor.instance.onFrameInCustody();
 
         _metrics.addBleBytes(snapshot.length);
@@ -2101,6 +2167,8 @@ class CaptureController extends ChangeNotifier
           _commandBytes.add(payload);
         }
 
+        _checkLocalPreviewGate(codec);
+
         // Batch routing happens before either ordinary WAL or WS ownership.
         // A visibility switch never replays previously batched frames live.
         if (blePayload != null && _mobileStandardBatch != null) {
@@ -2108,7 +2176,9 @@ class CaptureController extends ChangeNotifier
             blePayload,
             codec: codec,
             realtimeConsumer: OnDeviceTranscriptionController.instance.shouldKeepAudioLocal ||
-                _voiceCommandSession != null ||
+                // Command audio is already copied into _commandBytes above; a
+                // local-preview session keeps journaling it like any frame.
+                (_voiceCommandSession != null && !_localPreview.admitted) ||
                 deviceOnboardingProvider?.isOnboardingActive == true ||
                 _socket?.customSttMode == true ||
                 _preferences.batchModeEnabled ||
@@ -2138,33 +2208,28 @@ class CaptureController extends ChangeNotifier
 
         // Process bytes through audio source and feed to WAL
         WalFrame? positionedFrame;
+        // Confirmed custody: only frames the safety WAL actually kept may be
+        // held off the socket by the local-preview paths.
+        var walAccepted = false;
         if (_isWalSupported) {
+          final phone = _wal.getSyncs().phone;
+          walAccepted = frames.isNotEmpty && phone is LocalWalSyncImpl;
           for (final frame in frames) {
-            final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
+            final positioned = phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
             if (frames.length == 1) positionedFrame = positioned;
+            if (phone is LocalWalSyncImpl && !phone.lastFrameAccepted) walAccepted = false;
           }
         }
 
-        // Send WS
+        // Send WS. A local-preview socket may hold the frame until its verdict.
         if (_socket?.state == SocketServiceState.connected &&
             !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
-          final socketPayload = blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot;
-          if (positionedFrame?.captureRoot != null && positionedFrame!.payload.length == socketPayload.length) {
-            _socket?.sendEvidenceFrame(positionedFrame);
-          } else {
-            _socket?.send(socketPayload);
-          }
-
-          final wedgeSession = _wedgeSession;
-          if (wedgeSession != null && wedgeSession.handle >= 0 && identical(wedgeSession.socket, _socket)) {
-            _wedgeMonitor.onSocketBytesSent(wedgeSession.handle, socketPayload.length);
-          }
-
-          _metrics.addSocketBytes(socketPayload.length);
-          _recordingTelemetry.observeSent(socketPayload.length);
-
-          // Do not mark pendant frames synced on transport send. The durable
-          // copy is pruned only after transcript confirmation.
+          _localPreview.routePendant(
+            HeldPendantFrame(
+                blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot, positionedFrame, walAccepted, _now()),
+            socketDeclared: _socket?.localPreview == true,
+            send: _sendPendantToSocket,
+          );
         }
       },
     );
@@ -2175,6 +2240,51 @@ class CaptureController extends ChangeNotifier
     _bleBytesStream = lifetime.takeSubscription(_bleBytesStream, subscription);
     notifyListeners();
     return subscription != null;
+  }
+
+  LocalPreviewClientRefusal? _localPreviewRefusal(BleAudioCodec codec, {required bool customStt}) =>
+      localPreviewClientRefusal(
+        omiPendant: _recordingDevice?.type == DeviceType.omi,
+        opusCodec: codec.isOpusSupported(),
+        autoSyncOfflineRecordings: _preferences.autoSyncOfflineRecordings,
+        batchModeEnabled: _preferences.batchModeEnabled,
+        customStt: customStt,
+        keptOnPhone: OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+        onboarding: deviceOnboardingProvider?.isOnboardingActive == true,
+        journalInstalled: _mobileStandardBatch != null,
+      );
+
+  /// A per-session gate flipped while admitted: this socket streams like any
+  /// other from now on, so the preview hides and today's cloud view returns.
+  void _checkLocalPreviewGate(BleAudioCodec codec) {
+    if (!_localPreview.admitted) return;
+    final refusal = _localPreviewRefusal(codec, customStt: _socket?.customSttMode == true);
+    if (refusal == null) return;
+    _localPreview.preview?.clientRefused(refusal.wireName, midSession: true);
+    _localPreview.refuseForSocket(send: _sendPendantToSocket);
+    _mobileStandardBatch?.dropLocalPreview();
+  }
+
+  /// The pendant sender while a transcription socket is still connected.
+  void Function(HeldPendantFrame frame)? get _openSocketSender =>
+      _socket?.state == SocketServiceState.connected ? _sendPendantToSocket : null;
+
+  void _sendPendantToSocket(HeldPendantFrame frame) {
+    final socketPayload = frame.payload;
+    final positionedFrame = frame.positioned;
+    if (positionedFrame?.captureRoot != null && positionedFrame!.payload.length == socketPayload.length) {
+      _socket?.sendEvidenceFrame(positionedFrame);
+    } else {
+      _socket?.send(socketPayload);
+    }
+    final wedgeSession = _wedgeSession;
+    if (wedgeSession != null && wedgeSession.handle >= 0 && identical(wedgeSession.socket, _socket)) {
+      _wedgeMonitor.onSocketBytesSent(wedgeSession.handle, socketPayload.length);
+    }
+    _metrics.addSocketBytes(socketPayload.length);
+    _recordingTelemetry.observeSent(socketPayload.length);
+    // Do not mark pendant frames synced on transport send. The durable copy is
+    // pruned only after transcript confirmation.
   }
 
   Future<void> _resetState() async {
@@ -2601,6 +2711,7 @@ class CaptureController extends ChangeNotifier
   void clearUserData() {
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
+    _localPreview.end(send: _openSocketSender, preserveForAccountChange: _preserveSuppressedForAccountChange);
     _captureEvidenceIdentity.reset();
     segments = [];
     photos = [];
@@ -2704,6 +2815,7 @@ class CaptureController extends ChangeNotifier
 
   void updateRecordingState(RecordingState state) {
     recordingState = state;
+    if (state == RecordingState.stop) _localPreview.end(send: _openSocketSender);
     if (state == RecordingState.deviceRecord) _reconcileTranscriptionKeepAlive();
     notifyListeners();
   }
@@ -2834,7 +2946,7 @@ class CaptureController extends ChangeNotifier
       await _phoneMic.start(
         onByteReceived: (bytes) {
           if (!_admitsCapture(revision)) return;
-          phoneMicAudioTap?.call(bytes);
+          _phoneMicAudioListeners.emit(bytes, phoneMicAudioTap);
           _recordingTelemetry.observeAudio(bytes.length);
           if (bytes.isNotEmpty) _livenessWatchdog.observeFrame(_now());
           // Process through AudioSource for frame splitting and sync key generation
@@ -3196,6 +3308,7 @@ class CaptureController extends ChangeNotifier
   void onClosed([int? closeCode]) {
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
+    _localPreview.revoke();
     _keepAliveEpoch++;
     _socketCloseQueued = true;
     _transcriptServiceReady = false;
@@ -3664,8 +3777,16 @@ class CaptureController extends ChangeNotifier
 
     if (event is MessageServiceStatusEvent) {
       if (event.status == 'ready' || event.status == 'mobile_batch_admission') {
+        // Local preview counts only on a socket that asked for it and with a
+        // preview model installed; absent/false is today's cloud transcript.
+        final localPreview = _localPreview.verdict(
+          granted: event.localPreview,
+          socketDeclared: _socket?.localPreview == true,
+          // A refusal streams the held frames, in order, before any new one.
+          send: _sendPendantToSocket,
+        );
         _mobileStandardBatchAllowed = event.mobileStandardBatch;
-        _mobileStandardBatch?.authorize(event.mobileStandardBatch);
+        _mobileStandardBatch?.authorize(event.mobileStandardBatch, localPreview: localPreview);
         if (event.status == 'mobile_batch_admission') return;
       }
       // Handle freemium threshold event via status field
