@@ -23,6 +23,7 @@ import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/notifications.dart';
@@ -1150,6 +1151,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return parts[2] >= 17;
   }
 
+  /// Returns the unread flash-page span advertised by a Limitless Pendant.
+  /// A reversed or absent range is not a valid pending recording range.
+  static int countLimitlessPendingFlashPages(Map<String, int>? status) {
+    if (status == null) return 0;
+    final oldestPage = status['oldest_flash_page'] ?? 0;
+    final newestPage = status['newest_flash_page'] ?? 0;
+    if (newestPage < oldestPage) return 0;
+    return newestPage - oldestPage + 1;
+  }
+
   Future<void> _checkAndStartAutoSync(BtDevice device, int generation) async {
     if (!_isCurrent(generation)) return;
     try {
@@ -1165,6 +1176,31 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       var connection = await ServiceManager.instance().device.ensureConnection(device.id);
       if (!_isCurrent(generation)) return;
       if (connection == null) return;
+
+      // Limitless Pendants keep offline audio as a flash-page ring, not as
+      // the Omi multi-file format. Their firmware commonly identifies as
+      // 1.x, so checking `supportsMultiFileSync` first used to skip this
+      // device completely and a full Pendant could never trigger the local
+      // offload path. Detect its own storage protocol before that guard.
+      if (connection is LimitlessDeviceConnection) {
+        final status = await connection.getStorageStatus();
+        if (!_isCurrent(generation)) return;
+
+        final pendingPages = countLimitlessPendingFlashPages(status);
+
+        // FlashPageWalSync uses the same threshold so we do not schedule a
+        // transfer for the tiny bootstrap/status range that has no recording.
+        if (pendingPages <= 30) return;
+
+        Logger.debug(
+          'DeviceProvider: Limitless auto-sync detected $pendingPages pending flash pages '
+          '(free=${status?['free_capture_pages']}, total=${status?['total_capture_pages']})',
+        );
+        // The callback's byte value is display-only for this flash protocol;
+        // page count is the authoritative backlog unit.
+        onOfflineDataDetected?.call(device, pendingPages, 0);
+        return;
+      }
 
       // fw >= 3.0.20 speaks the ring-buffer protocol; auto-detect via the 16-byte
       // ring status read instead of the multi-file file-list endpoint (which the

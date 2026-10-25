@@ -23,6 +23,38 @@ void main() {
       await SharedPreferencesUtil.init();
     });
 
+    test('fresh settings retain the normal Omi route without changing batch capture', () {
+      final config = SharedPreferencesUtil().customSttConfig;
+
+      expect(config.provider, SttProvider.omi);
+      expect(config.isEnabled, isFalse);
+      expect(SharedPreferencesUtil().batchModeEnabled, isFalse);
+    });
+
+    test('gateway Results use the standard Custom Live response envelope', () {
+      final result = SttTranscriptionResult.fromJsonWithSchema(
+        {
+          'type': 'Results',
+          'segments': [
+            {
+              'id': 'local-1',
+              'text': 'Dit komt uit mijn lokale transcriptie.',
+              'start': 1.25,
+              'end': 3.5,
+            },
+          ],
+          'text': 'Dit komt uit mijn lokale transcriptie.',
+        },
+        SttResponseSchema.openAI,
+      );
+
+      expect(result.rawText, 'Dit komt uit mijn lokale transcriptie.');
+      expect(result.segments, hasLength(1));
+      expect(result.segments.single.text, 'Dit komt uit mijn lokale transcriptie.');
+      expect(result.segments.single.start, 1.25);
+      expect(result.segments.single.end, 3.5);
+    });
+
     test('permanent local failure keeps capture forwarding and secondary socket alive', () async {
       final primary = _FakeSocket();
       final secondary = _FakeSocket();
@@ -83,7 +115,7 @@ void main() {
       });
     });
 
-    test('keeps forwarding non-audio control messages to Omi when audio forwarding is disabled', () async {
+    test('routes non-audio control messages only to Omi when audio forwarding is disabled', () async {
       final primary = _FakeSocket();
       final secondary = _FakeSocket();
       final socket = CompositeTranscriptionSocket(
@@ -96,8 +128,60 @@ void main() {
       final controlMessage = jsonEncode({'type': 'speaker_assigned', 'speaker_id': 1});
       socket.send(controlMessage);
 
-      expect(primary.sent, [controlMessage]);
+      expect(primary.sent, isEmpty);
       expect(secondary.sent, [controlMessage]);
+    });
+
+    test('routes non-audio control messages only to Omi when audio forwarding is enabled', () async {
+      final primary = _FakeSocket();
+      final secondary = _FakeSocket();
+      final socket = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        forwardRawAudioToSecondary: true,
+      );
+
+      expect(await socket.connect(), isTrue);
+      final controlMessage = jsonEncode({'type': 'speaker_assigned', 'speaker_id': 1});
+      socket.send(controlMessage);
+
+      expect(primary.sent, isEmpty);
+      expect(secondary.sent, [controlMessage]);
+    });
+
+    test('does not orphan an evidence control message when raw audio stays local', () async {
+      final primary = _FakeSocket();
+      final secondary = _FakeSocket();
+      final socket = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        forwardRawAudioToSecondary: false,
+      );
+
+      expect(await socket.connect(), isTrue);
+      socket.send(jsonEncode({'type': 'capture_evidence_frame', 'source_frame': 7}));
+
+      expect(primary.sent, isEmpty);
+      expect(secondary.sent, isEmpty);
+    });
+
+    test('keeps an evidence record paired with its audio when Omi audio forwarding is enabled', () async {
+      final primary = _FakeSocket();
+      final secondary = _FakeSocket();
+      final socket = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        forwardRawAudioToSecondary: true,
+      );
+      final evidence = jsonEncode({'type': 'capture_evidence_frame', 'source_frame': 7});
+      final audio = Uint8List.fromList([7, 8, 9]);
+
+      expect(await socket.connect(), isTrue);
+      socket.send(evidence);
+      socket.send(audio);
+
+      expect(primary.sent, [same(audio)]);
+      expect(secondary.sent, [evidence, same(audio)]);
     });
 
     test('keeps forwarding input frames by default', () async {

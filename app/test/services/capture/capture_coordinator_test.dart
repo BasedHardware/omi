@@ -19,6 +19,8 @@ CaptureEnvironment environment(
   bool muted = false,
   bool batch = false,
   bool batchSuspended = false,
+  bool customLiveBatchSuspended = false,
+  bool customLiveRealtimeRequired = false,
   bool call = false,
   String? cardRecordingId,
   int cardRevision = 0,
@@ -38,6 +40,8 @@ CaptureEnvironment environment(
       paused: muted,
       batchModeEnabled: batch,
       batchModeSuspendedForOnboarding: batchSuspended,
+      batchModeSuspendedForCustomLive: customLiveBatchSuspended,
+      customLiveRealtimeRequired: customLiveRealtimeRequired,
       deviceSupportsTranscribeLater: true,
       networkConnected: true,
       signedIn: () => true,
@@ -57,6 +61,7 @@ class HarnessPorts {
   bool muted = false;
   bool batch = false;
   bool batchSuspended = false;
+  bool customLiveBatchSuspended = false;
   bool permitPhone = true;
   bool prefetchedGrant = false;
   int permissionGrantClears = 0;
@@ -192,8 +197,20 @@ class HarnessPorts {
               batch = false;
               batchSuspended = true;
             } else if (!stage.suspended && batchSuspended) {
-              batch = true;
               batchSuspended = false;
+              if (!customLiveBatchSuspended) batch = true;
+            }
+          }
+          if (stage is CustomLiveBatchStage) {
+            if (stage.suspended && batch) {
+              batch = false;
+              customLiveBatchSuspended = true;
+              nativeBatchBin = false;
+            } else if (stage.suspended && batchSuspended) {
+              customLiveBatchSuspended = true;
+            } else if (!stage.suspended && customLiveBatchSuspended) {
+              customLiveBatchSuspended = false;
+              if (!batchSuspended) batch = true;
             }
           }
           if (stage is SocketClosedStage) socket = false;
@@ -1137,6 +1154,91 @@ void main() {
     expect(fake.recordingId, id);
     expect(fake.log.skip(logLength).where((entry) => entry.startsWith('stage:') || entry == 'mic:start'), isEmpty);
     coordinator.dispose();
+  });
+
+  test('Custom Live temporarily moves Pendant audio to realtime and restores Transcribe Later', () async {
+    final fake = HarnessPorts()..batch = true;
+    var customLiveActive = true;
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+      ports: fake.ports,
+      readEnvironment: () => environment(
+        coordinator.state,
+        muted: fake.muted,
+        batch: fake.batch,
+        batchSuspended: fake.batchSuspended,
+        customLiveBatchSuspended: fake.customLiveBatchSuspended,
+        customLiveRealtimeRequired: customLiveActive,
+      ),
+    );
+
+    await coordinator.dispatch(DeviceStartRequested(device: pendant));
+    expect(coordinator.state.phase, CapturePhase.pendantBatchLive);
+    expect(coordinator.state.active?.mode, CaptureTransport.batch);
+
+    final switched = await coordinator.dispatch(const CustomLiveBatchChanged(suspended: true));
+    expect(switched.failed, isFalse);
+    expect(coordinator.state.phase, CapturePhase.pendantLive);
+    expect(coordinator.state.active?.mode, CaptureTransport.live);
+    expect(fake.batch, isFalse);
+    expect(fake.customLiveBatchSuspended, isTrue);
+
+    // A live Custom route cannot coexist with the native batch writer, which
+    // would otherwise consume Pendant frames before the WebSocket sees them.
+    final rejected = await coordinator.dispatch(const BatchModeSetRequested(enabled: true));
+    expect(rejected.failed, isFalse);
+    expect(rejected.result, isFalse);
+    expect(coordinator.state.phase, CapturePhase.pendantLive);
+    expect(fake.batch, isFalse);
+
+    // The guard also closes the very short settings-update window in which
+    // the Custom Live preference is saved before the batch switch runs.
+    final staleState = CaptureCoordinatorState.idle();
+    final staleBatch = transitionCapture(
+      staleState,
+      const BatchModeSetRequested(enabled: true),
+      environment(staleState, batch: true, customLiveRealtimeRequired: true),
+    );
+    expect(staleBatch.result, isFalse);
+    expect(staleBatch.effects, isEmpty);
+
+    customLiveActive = false;
+    final restored = await coordinator.dispatch(const CustomLiveBatchChanged(suspended: false));
+    expect(restored.failed, isFalse);
+    expect(coordinator.state.phase, CapturePhase.pendantBatchLive);
+    expect(coordinator.state.active?.mode, CaptureTransport.batch);
+    expect(fake.batch, isTrue);
+    expect(fake.customLiveBatchSuspended, isFalse);
+    coordinator.dispose();
+  });
+
+  test('Custom Live release does not restore batch while onboarding still needs realtime audio', () {
+    final started = transitionCapture(
+      CaptureCoordinatorState.idle(),
+      DeviceStartRequested(device: pendant),
+      environment(CaptureCoordinatorState.idle(), batch: true),
+    ).state;
+    final customLive = transitionCapture(
+      started,
+      const CustomLiveBatchChanged(suspended: true),
+      environment(started, batch: true),
+    ).state;
+
+    final release = transitionCapture(
+      customLive,
+      const CustomLiveBatchChanged(suspended: false),
+      environment(
+        customLive,
+        batch: false,
+        batchSuspended: true,
+        customLiveBatchSuspended: true,
+      ),
+    );
+
+    expect(release.state.phase, CapturePhase.pendantLive);
+    expect(release.state.active?.mode, CaptureTransport.live);
+    expect(release.effects.single, isA<RunStage>());
+    expect((release.effects.single as RunStage).stage, isA<CustomLiveBatchStage>());
   });
 
   test('idle resume with only a connected device cannot stream without claiming ownership', () {

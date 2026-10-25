@@ -81,6 +81,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool _walUpdatePending = false;
   Timer? _progressNotifyTimer;
 
+  // Custom/on-device transcription may receive several BLE "offline data"
+  // notifications for one connection. Keep exactly one local device drain in
+  // flight so those callbacks cannot compete for the same Pendant stream.
+  Future<void>? _localDeviceOffload;
+
   @override
   void notifyListeners() {
     // Any publication already delivers the latest progress; a queued progress
@@ -837,6 +842,49 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       return;
     }
     await _syncWalsDirect(generation);
+  }
+
+  /// Transfers device-resident recordings to local phone storage only.
+  ///
+  /// Unlike [syncWals], this deliberately bypasses the upload gate and the
+  /// generic [WalSyncs.syncAll] route: it never uploads audio to Omi. The
+  /// device implementations acknowledge a page only after its local write is
+  /// durable, which is what safely frees Pendant storage for new recordings.
+  Future<void> drainDeviceWalsToPhone() {
+    final active = _localDeviceOffload;
+    if (active != null) {
+      Logger.debug('SyncProvider: coalescing duplicate local device offload request');
+      return active;
+    }
+
+    late final Future<void> offload;
+    offload = _drainDeviceWalsToPhone().whenComplete(() {
+      if (identical(_localDeviceOffload, offload)) {
+        _localDeviceOffload = null;
+      }
+    });
+    _localDeviceOffload = offload;
+    return offload;
+  }
+
+  Future<void> _drainDeviceWalsToPhone() async {
+    final generation = _sessionGeneration;
+    if (!_isCurrent(generation)) return;
+    if (_isTransferSeamBusy()) {
+      Logger.debug('SyncProvider: local device offload deferred; another transfer owns the device stream');
+      return;
+    }
+
+    _admittedWorkGeneration = generation;
+    _updateSyncState(_syncState.toIdle(), generation);
+    _totalWalsToProcess = missingWalsOnDevice.length;
+    _walsProcessedCount = 0;
+    await _performSync(
+      operation: () => _walService.getSyncs().syncDeviceWalsToPhone(progress: this),
+      context: 'local device offload',
+      checkFlashStall: true,
+      generation: generation,
+    );
   }
 
   Future<void> _syncWalsDirect(int generation) async {

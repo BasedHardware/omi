@@ -153,9 +153,35 @@ class CompositeTranscriptionSocket implements IPureSocket {
     if (_status != PureSocketStatus.connected) {
       return;
     }
+
+    // A custom streaming STT endpoint accepts audio frames only. Omi's
+    // connection/session control messages still belong on the secondary Omi
+    // socket; sending them to the custom endpoint produces noisy protocol
+    // errors and can destabilise the live route.
+    if (message is! List<int>) {
+      // An evidence record applies only to the immediately following binary
+      // frame.  Do not send an orphaned record to Omi when this Custom Live
+      // configuration intentionally keeps raw audio local.
+      if (forwardRawAudioToSecondary || !_isCaptureEvidenceFrame(message)) {
+        secondarySocket.send(message);
+      }
+      return;
+    }
+
     primarySocket.send(message);
-    if (forwardRawAudioToSecondary || message is! List<int>) {
+    if (forwardRawAudioToSecondary) {
       secondarySocket.send(message);
+    }
+  }
+
+  bool _isCaptureEvidenceFrame(dynamic message) {
+    try {
+      final value = message is String ? jsonDecode(message) : message;
+      return value is Map && value['type'] == 'capture_evidence_frame';
+    } catch (_) {
+      // A non-JSON control message is still an Omi control message.  Let the
+      // secondary socket handle it as before.
+      return false;
     }
   }
 

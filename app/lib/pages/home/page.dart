@@ -667,15 +667,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
       final syncProvider = Provider.of<SyncProvider>(context, listen: false);
       deviceProvider.onOfflineDataDetected = (device, fileCount, totalBytes) {
-        // Custom STT users sync manually (with confirmation) — never auto-sync,
-        // since offline files are transcribed on Omi and count toward the limit.
-        if (SharedPreferencesUtil().useCustomStt) {
-          Logger.debug('HomePage: Auto-sync skipped, custom STT provider enabled');
-          return;
-        }
         // Omi users can disable auto-sync from device settings. Defaults to on.
         if (!SharedPreferencesUtil().autoSyncOfflineRecordings) {
           Logger.debug('HomePage: Auto-sync skipped, disabled by user');
+          return;
+        }
+        if (SharedPreferencesUtil().useCustomStt) {
+          // Custom STT still needs the Pendant's storage kept clear, but its
+          // device recordings must not be pushed through Omi's cloud-sync
+          // route. This local-only drain ACKs a page only after its phone copy
+          // is durable and uses the flash implementation's bounded resume.
+          Logger.debug('HomePage: Local device offload triggered for custom STT ($fileCount files, $totalBytes bytes)');
+          unawaited(syncProvider.drainDeviceWalsToPhone());
           return;
         }
         if (!syncProvider.isSyncing) {
