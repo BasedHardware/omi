@@ -70,14 +70,10 @@ struct ContentView: View {
                     print(error!.localizedDescription)
                 }
                 else {
-                    var dataLeft = pcmBuffer!.dataInt()
+                    let data = pcmBuffer!.dataInt()
                     
-                    // TODO: this is ugly, must implement proper background sending
-                    while !dataLeft.isEmpty {
-                        let block = dataLeft.prefix(160)
-                        bleManager.writeAudio(block)
-                        usleep(7_000)
-                        dataLeft = dataLeft.dropFirst(160)
+                    Task {
+                        await AudioSender.shared.enqueue(data: data, bleManager: bleManager)
                     }
                 }
             }
@@ -108,4 +104,31 @@ extension AVAudioPCMBuffer {
 
 #Preview {
     ContentView()
+}
+
+
+actor AudioSender {
+    static let shared = AudioSender()
+    private var isSending = false
+    private var audioBuffer = Data()
+
+    func enqueue(data: Data, bleManager: BLEManager) {
+        audioBuffer.append(data)
+        if !isSending {
+            isSending = true
+            Task {
+                await sendLoop(bleManager: bleManager)
+            }
+        }
+    }
+
+    private func sendLoop(bleManager: BLEManager) async {
+        while !audioBuffer.isEmpty {
+            let block = audioBuffer.prefix(160)
+            bleManager.writeAudio(block)
+            audioBuffer = audioBuffer.dropFirst(block.count)
+            try? await Task.sleep(nanoseconds: 7_000_000)
+        }
+        isSending = false
+    }
 }
