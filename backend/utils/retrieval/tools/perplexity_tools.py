@@ -193,7 +193,8 @@ def _format_perplexity_response(result: dict[str, Any]) -> str:
     if isinstance(result, dict) and isinstance(result.get('choices'), list) and len(result['choices']) > 0:
         first_choice = result['choices'][0]
         if isinstance(first_choice, dict) and isinstance(first_choice.get('message'), dict):
-            content: Any = first_choice['message'].get('content', '')
+            raw_content = first_choice['message'].get('content')
+            content: Any = raw_content if isinstance(raw_content, str) else ''
         elif isinstance(first_choice, dict):
             content = str(first_choice.get('message') or '')
         else:
