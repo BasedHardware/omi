@@ -158,9 +158,7 @@ def _load_app_tools():
     _executors.run_blocking = _async_run_blocking
 
     module_name = "utils.retrieval.tools._app_tools_sanitization_test"
-    spec = importlib.util.spec_from_file_location(
-        module_name, str(BACKEND_DIR / "utils/retrieval/tools/app_tools.py")
-    )
+    spec = importlib.util.spec_from_file_location(module_name, str(BACKEND_DIR / "utils/retrieval/tools/app_tools.py"))
     mod = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = mod
     spec.loader.exec_module(mod)
