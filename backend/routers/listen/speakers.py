@@ -29,11 +29,11 @@ from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.speaker_sample import download_sample_audio
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.manual_speaker_assignments import manual_owner_reserved, manual_rejected_speakers
-from utils.speakers.policy import CROSS_EPOCH
 from utils.stt.owner_profile import load_owner_embedding, validated_embedding
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
 from utils.stt.speaker_match import (
     select_speaker_match,
+    group_epoch_voices,
     SPEAKER_MATCH_MAX_CLIPS,
     SPEAKER_MATCH_MIN_EVIDENCE_SECONDS,
     SpeakerMatchDecision,
@@ -397,6 +397,8 @@ class SpeakerMatcher:
                     {v: d for v, d in self._voice_decisions.items() if v not in rejected},
                     owner_reserved=final_authority.owner_reserved,
                     voice_groups=self._provider_epoch_voice_groups(),
+                    voice_scopes=self._voice_scopes,
+                    evidence_seconds=self._provider_epoch_evidence_seconds(),
                 )
                 # Runner-up evidence constrains the owner but never automatically
                 # carries a non-owner identity across a conversation boundary.
@@ -610,6 +612,8 @@ class SpeakerMatcher:
             automatic,
             owner_reserved=final_authority.owner_reserved,
             voice_groups=self._provider_epoch_voice_groups(),
+            voice_scopes=self._voice_scopes,
+            evidence_seconds=self._provider_epoch_evidence_seconds(),
         )
         self._publish_decisions(decisions)
         await self.continuity.update(receipt, force=True, generation=generation)
@@ -1231,6 +1235,8 @@ class SpeakerMatcher:
                 {v: d for v, d in self._voice_decisions.items() if v not in rejected},
                 owner_reserved=owner_reserved,
                 voice_groups=voice_groups,
+                voice_scopes=self._voice_scopes,
+                evidence_seconds=self._provider_epoch_evidence_seconds(),
             )
             decision = decisions.get(speaker_id)
             self._rejectors.comparison(speaker_id, decision, evidence_seconds)
@@ -1436,26 +1442,20 @@ class SpeakerMatcher:
         """
         reconcile_pinned_suggestion(self, voice, result, pinned, segment_id, assigned)
 
+    def _provider_epoch_evidence_seconds(self) -> Dict[int, float]:
+        return {
+            voice: sum(seconds for _, seconds in evidence)
+            for voice, evidence in self.speaker_evidence.items()
+            if voice not in self._competition_only
+        }
+
     def _provider_epoch_voice_groups(self) -> Dict[int, int]:
-        """Reconcile a voice only across stamped provider epochs with close audio."""
-        groups: Dict[int, int] = {}
-        members: Dict[int, list[int]] = {}
-        for voice, centroid in self._voice_centroids.items():
-            scope = self._voice_scopes.get(voice)
-            group = voice
-            if scope:
-                for representative, peers in members.items():
-                    if all(
-                        self._voice_scopes.get(peer)
-                        and self._voice_scopes[peer] != scope
-                        and compare_embeddings(centroid, self._voice_centroids[peer]) < CROSS_EPOCH.distance
-                        for peer in peers
-                    ):
-                        group = representative
-                        break
-            groups[voice] = group
-            members.setdefault(group, []).append(voice)
-        return groups
+        return group_epoch_voices(
+            self._voice_centroids,
+            self._voice_scopes,
+            self._provider_epoch_evidence_seconds(),
+            distance=compare_embeddings,
+        )
 
     async def drain(self, *, timeout: float, label: str) -> None:
         if self.tasks:

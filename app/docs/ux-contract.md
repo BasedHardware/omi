@@ -217,6 +217,7 @@ participant lists, the speaker filter and every copied, shared or exported trans
 - Everyone else is **Speaker N**, N dense per conversation (1, 2, 3… in order of first
   appearance, skipping the owner and Omi). Never a raw id, never a gap. Naming a person does not
   renumber the others. `TranscriptSegment.getDisplaySpeakerId` returns the same N.
+- Live capture passes `deferShortVoices: true`: unnamed voices remain plain **Speaker** until five seconds of non-overlapping placed speech. Unplaced text cannot qualify. Number at qualification time so a short earlier voice cannot renumber an established voice; owner and known-person names still use their existing authority. This display floor does not identify or merge voices.
 - When the server could not resolve speakers across the conversation (`speaker_resolution.status`
   is `unavailable`), raw ids from different recordings are not comparable, so an unnamed voice is
   the plain **Speaker** (`l10n.unnamedSpeakerLabel`), never "Speaker ?" and never a number, and the

@@ -17,6 +17,7 @@ from typing import Any
 
 from utils.speaker_display import SpeakerLabeler
 from utils.speakers.display_metrics import record_count_guard
+from utils.speakers.policy import MIN_EVIDENCE_SECONDS
 
 MAX_UNNAMED_VOICES = 8
 MIN_VOICE_SECONDS = 3.0
@@ -133,9 +134,13 @@ def display_participants(
     voice_order: Sequence[str] | None = None,
     display_scope: str | None = None,
     allow_automatic_names: bool = True,
+    defer_short_voices: bool = False,
 ) -> DisplayParticipants:
     """Resolve names, small first-appearance labels and bounded unknown voices once.
 
+    With defer_short_voices, unknown voices take no ordinal/ledger slot until
+    five seconds of non-overlapping placed speech (or acoustic cluster evidence).
+    This is display qualification, never acoustic proof that two voices are one.
     Unknown voices count only with resolved/capture evidence. At >8 unknown
     clusters retain up to seven with >=3 speech seconds, collapse the rest into
     Others, and emit one counter per projection. This is a display mitigation,
@@ -172,6 +177,7 @@ def display_participants(
         labeler.label(token)
     labels = {}
     tokens = {}
+    intervals: dict[Any, list[tuple[float, float]]] = {}
     for index, row in enumerate(rows):
         cluster = clusters.get(field(row, 'id'))
         raw = field(row, 'speaker_id')
@@ -218,7 +224,10 @@ def display_participants(
             name = (
                 owner_name
                 if field(row, 'is_user', False)
-                else _clean_name(names.get(str(field(row, 'person_id') or '')))
+                else (
+                    _clean_name(names.get(str(field(row, 'person_id') or '')))
+                    or (_clean_name(field(row, 'person_name')) if field(row, 'person_id') else None)
+                )
             )
         if raw == 99:
             name = 'Omi'
@@ -227,13 +236,42 @@ def display_participants(
         keys.append(key)
         row_names.append(name)
         seconds[key] = seconds.get(key, 0.0) + _seconds(row)
+        if defer_short_voices:
+            try:
+                start, end = float(field(row, 'start')), float(field(row, 'end'))
+                if isfinite(start) and isfinite(end) and 0 <= start < end:
+                    intervals.setdefault(key, []).append((start, end))
+            except (TypeError, ValueError):
+                pass
+    # A revised/overlapping turn cannot buy more display evidence. Unplaced
+    # (-1) text stays unnamed without inventing audio placement or voice identity.
+    display_seconds = {}
+    for key, ranges in intervals.items():
+        covered_end, duration = float('-inf'), 0.0
+        for start, end in sorted(ranges):
+            duration += max(0.0, end - max(start, covered_end))
+            covered_end = max(covered_end, end)
+        display_seconds[key] = duration
+    for row, key, name in zip(rows, keys, row_names):
+        raw = field(row, 'speaker_id')
+        cluster = clusters.get(field(row, 'id'))
+        token = tokens[key]
+        # A segment-bound name is never the fallback for an unbound excerpt.
+        # Live named rows also must not spend anonymous ledger slots.
+        if name and voice_order is not None:
+            continue
         if key not in labels and not (field(row, 'is_user', False) and name) and raw != 99:
             if raw is None and cluster is None:
                 labels[key] = 'Unknown speaker'
+            elif (
+                defer_short_voices
+                and not name
+                and token not in order
+                and (cluster.speech_seconds if cluster else display_seconds.get(key, 0.0)) < MIN_EVIDENCE_SECONDS
+            ):
+                labels[key] = 'Unknown speaker'
             elif voice_order is None:
                 labels[key] = labeler.label(token)
-            elif name:
-                labels[key] = name
             else:
                 if token not in order and len(order) <= MAX_UNNAMED_VOICES:
                     order.append(token)

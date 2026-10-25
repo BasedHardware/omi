@@ -382,7 +382,8 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     final key = Object.hash(capture.segmentsPhotosVersion, identityHashCode(people));
     if (_namesKey != key || _names == null) {
       _namesKey = key;
-      _names = SpeakerNames.forSegments(capture.segments, people: people ?? const <Person>[], l10n: context.l10n);
+      _names = SpeakerNames.forSegments(capture.segments,
+          people: people ?? const <Person>[], l10n: context.l10n, deferShortVoices: true);
     }
     return _names!;
   }

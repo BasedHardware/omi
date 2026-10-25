@@ -126,7 +126,9 @@ def render_moment(
 ) -> MomentText:
     """Speaker-labelled lines, consecutive lines from one voice joined, head and tail kept."""
     owner = owner_name or _resolve_owner_name(uid) or 'You'
-    display = display_participants(segments, owner_name=owner, voice_order=voice_order, display_scope=conversation_id)
+    display = display_participants(
+        segments, owner_name=owner, voice_order=voice_order, display_scope=conversation_id, defer_short_voices=True
+    )
     legacy = _legacy_moment(segments, display)
     if shadow_or_serve('NOTES_PACKET_V2_MODE'):
         serving = serving_for('NOTES_PACKET_V2_MODE', uid)
@@ -142,17 +144,29 @@ def render_moment(
 def _legacy_moment(segments: Sequence[Mapping[str, Any]], display: Any) -> tuple[str, int]:
     # refactor: superseded by moment_render.render_segments when NOTES_PACKET_V2_MODE=serve
     lines: list[list[str]] = []
+    previous_voice = None
     words = 0
     for segment in segments:
         text = str(segment.get('text') or '').strip()
         if not text:
             continue
         words += len(text.split())
-        label = display.label(segment)
-        if lines and lines[-1][0] == label:
+        participant = display.for_segment(segment)
+        label = participant.label
+        voice = (
+            ('user',)
+            if participant.name and segment.get('is_user')
+            else (
+                ('person', segment['person_id'])
+                if participant.name and segment.get('person_id')
+                else ('voice', participant.key)
+            )
+        )
+        if lines and previous_voice == voice:
             lines[-1][1] += ' ' + text
         else:
             lines.append([label, text])
+        previous_voice = voice
     return '\n'.join(f'{label}: {text}' for label, text in lines), words
 
 

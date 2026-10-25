@@ -59,6 +59,45 @@ void main() {
     expect(SpeakerNames.forSegments(before, l10n: en).forSegment(before[2]), 'Speaker 3');
   });
 
+  test('live short socket epochs stay unnamed and do not spend ordinals', () {
+    final rows = [for (var id = 4; id <= 8; id++) seg(id)];
+    final names = SpeakerNames.forSegments(rows, deferShortVoices: true, l10n: en);
+    expect(rows.map(names.forSegment).toSet(), {'Speaker'});
+    expect(rows.map((r) => r.speakerId).toSet().length, 5);
+    final qualified = [...rows, seg(20)..end = 5, seg(21)..end = 5];
+    final next = SpeakerNames.forSegments(qualified, deferShortVoices: true, l10n: en);
+    expect(qualified.take(5).map(next.forSegment).toSet(), {'Speaker'});
+    expect(qualified.skip(5).map(next.forSegment), ['Speaker 1', 'Speaker 2']);
+    expect(next.anonymousName(50), 'Speaker', reason: 'new arrivals have no evidence yet');
+  });
+
+  test('live evidence pools short turns once and allocates in qualification order', () {
+    final first = seg(4)..end = 2.5;
+    final second = seg(4)
+      ..start = 3
+      ..end = 5.5;
+    final substantial = seg(8)..end = 5;
+    final rows = [first, substantial, second];
+    final names = SpeakerNames.forSegments(rows, deferShortVoices: true, l10n: en);
+    expect(names.forSegment(substantial), 'Speaker 1');
+    expect(names.forSegment(first), 'Speaker 2');
+    final repeats = [
+      first,
+      seg(4)..end = 4.99,
+      seg(9)
+        ..start = -1
+        ..end = -1
+    ];
+    final pending = SpeakerNames.forSegments(repeats, deferShortVoices: true, l10n: en);
+    expect(repeats.map(pending.forSegment).toSet(), {'Speaker'});
+  });
+
+  test('live deferral preserves owner and manual names without guessing another owner', () {
+    final rows = [seg(4, isUser: true), seg(5, personId: 'ada'), seg(6), seg(7, isUser: true)];
+    final names = SpeakerNames.forSegments(rows, people: [person('ada', 'Ada')], deferShortVoices: true, l10n: en);
+    expect(rows.map(names.forSegment), ['You', 'Ada', 'Speaker', 'You']);
+  });
+
   test('Omi is "Omi", never "Speaker 100", and never takes a number', () {
     final segments = [seg(omiSpeakerId), seg(4)];
     final names = SpeakerNames.forSegments(segments, l10n: en);
