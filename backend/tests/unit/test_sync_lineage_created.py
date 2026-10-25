@@ -13,6 +13,7 @@ from database import sync_live_overlap
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from tests.unit.test_sync_cross_job_assignment import chunk
 from utils.sync.assignment_telemetry import created_sync_row_observation
+from utils.sync.intake_completion import log_sync_lineage_created
 
 
 @pytest.fixture(autouse=True)
@@ -37,7 +38,7 @@ def encoded_plans(monkeypatch):
     return plans
 
 
-def persist(monkeypatch, *, live=None, complete=True, eligible=True, client=None):
+def persist(monkeypatch, *, live=None, complete=True, reason=None, eligible=True, client=None, incoming=None):
     client = client or StrictFirestore()
     if live is not None:
         client.rows[('users', 'u', 'conversations', 'live')] = deepcopy(live)
@@ -45,10 +46,12 @@ def persist(monkeypatch, *, live=None, complete=True, eligible=True, client=None
     def discover(user, incoming, *, diagnostics=None):
         if diagnostics is not None:
             diagnostics['lookup_complete'] = complete
+            if reason is not None:
+                diagnostics['incomplete_reason'] = reason
         return ('live',) if live is not None else ()
 
     monkeypatch.setattr(db, 'find_sync_live_overlap_candidates', discover)
-    incoming = dict(chunk('wal', 1000), data_protection_level='standard')
+    incoming = dict(incoming or chunk('wal', 1000), data_protection_level='standard')
     # Mirror the trusted producer's admission snapshot, not a fresh policy
     # evaluation inside assignment (the real cohort resolver can perform IO).
     if eligible and sync_lineage.sync_lineage_resolve_active_for('u'):
@@ -105,8 +108,124 @@ def test_incomplete_lookup_is_unknown_not_clear(monkeypatch, caplog):
     assert created
     assert observations(caplog) == [
         'event=sync_lineage_resolve outcome=created_unknown stage=assignment '
-        'checked_live_candidates_bucket=0 lookup_complete=false'
+        'checked_live_candidates_bucket=0 lookup_complete=false incomplete_reason=not_recorded'
     ]
+
+
+@pytest.mark.parametrize('reason', ['lookup_failed', 'page_cap'])
+def test_discovery_reason_reaches_committed_unknown_log(monkeypatch, caplog, reason):
+    with caplog.at_level(logging.INFO):
+        _, (_, created, _) = persist(monkeypatch, complete=False, reason=reason)
+    assert created
+    assert observations(caplog) == [
+        'event=sync_lineage_resolve outcome=created_unknown stage=assignment '
+        f'checked_live_candidates_bucket=0 lookup_complete=false incomplete_reason={reason}'
+    ]
+
+
+def test_missing_device_is_attributed_even_when_discovery_is_skipped(monkeypatch, caplog):
+    incoming = chunk('wal', 1000)
+    incoming.pop('client_device_id', None)
+    with caplog.at_level(logging.INFO):
+        _, (_, created, _) = persist(monkeypatch, incoming=incoming)
+    assert created
+    assert observations(caplog)[0].endswith('lookup_complete=false incomplete_reason=no_device')
+
+
+def test_discovered_candidate_missing_from_transaction_cache_is_attributed(monkeypatch, caplog):
+    # Coverage discovery runs, while disabled temporal adoption leaves its
+    # candidate unread. Observation must describe that gap without filling it.
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'shadow')
+    monkeypatch.setenv('SYNC_LIVE_OVERLAP_ENABLED', 'false')
+    live = dict(chunk('live', 1002), has_content=False, transcript_segments=[])
+    with caplog.at_level(logging.INFO):
+        _, (_, created, _) = persist(monkeypatch, live=live)
+    assert created
+    assert observations(caplog)[0].endswith('lookup_complete=false incomplete_reason=candidate_unread')
+
+
+def test_committed_extent_outside_incoming_is_attributed():
+    incoming = chunk('wal', 1000)
+    result = dict(incoming, finished_at=incoming['finished_at'].timestamp() + 1)
+    observation = created_sync_row_observation([], result, incoming, lookup_complete=True)
+    assert observation['outcome'] == 'created_unknown'
+    assert observation['incomplete_reason'] == 'extent_outside_incoming'
+
+
+@pytest.mark.parametrize('candidate', [False, True])
+@pytest.mark.parametrize('end', [float('nan'), float('inf'), 1000, 999])
+def test_nonfinite_or_empty_new_or_checked_candidate_extent_is_attributed(candidate, end):
+    incoming = chunk('wal', 1000)
+    invalid = dict(incoming, finished_at=end)
+    observation = created_sync_row_observation(
+        [invalid] if candidate else [], incoming if candidate else invalid, incoming, lookup_complete=True
+    )
+    assert observation['outcome'] == 'created_unknown'
+    assert observation['incomplete_reason'] == 'invalid_extent'
+
+
+def test_observation_error_is_attributed_and_never_raises():
+    incoming = chunk('wal', 1000)
+    observation = created_sync_row_observation([], {}, incoming, lookup_complete=True)
+    assert observation['outcome'] == 'created_unknown'
+    assert observation['incomplete_reason'] == 'observation_error'
+
+
+@pytest.mark.parametrize(
+    'discovery,device,outside,unread,expected',
+    [
+        ('lookup_failed', False, True, True, 'lookup_failed'),
+        ('page_cap', False, True, True, 'page_cap'),
+        (None, False, True, True, 'no_device'),
+        (None, True, True, True, 'extent_outside_incoming'),
+        (None, True, False, True, 'candidate_unread'),
+        (None, True, False, False, 'invalid_extent'),
+    ],
+)
+def test_unknown_reasons_use_first_matching_priority(discovery, device, outside, unread, expected):
+    incoming = chunk('wal', 1000)
+    if not device:
+        incoming.pop('client_device_id', None)
+    result = dict(incoming, finished_at=incoming['finished_at'].timestamp() + 1) if outside else incoming
+    invalid_candidate = dict(result, finished_at=float('nan'))
+    observation = created_sync_row_observation(
+        [invalid_candidate],
+        result,
+        incoming,
+        lookup_complete=False,
+        lookup_incomplete_reason=discovery,
+        candidates_read=not unread,
+    )
+    assert observation['incomplete_reason'] == expected
+
+
+@pytest.mark.parametrize('reason', [None, 'private-unbounded-value'])
+def test_missing_or_unrecognized_reason_logs_only_closed_fallback(caplog, reason):
+    incoming = chunk('wal', 1000)
+    observation = created_sync_row_observation(
+        [], incoming, incoming, lookup_complete=False, lookup_incomplete_reason=reason
+    )
+    assert observation['incomplete_reason'] == 'not_recorded'
+    # Also exercise old intake payloads, which may not contain the new field.
+    observation['incomplete_reason'] = reason
+    if reason is None:
+        observation.pop('incomplete_reason')
+    with caplog.at_level(logging.INFO):
+        log_sync_lineage_created(observation)
+    assert observations(caplog)[0].endswith('incomplete_reason=not_recorded')
+    assert 'private-unbounded-value' not in observations(caplog)[0]
+
+
+def test_overlap_on_incomplete_lookup_omits_reason(caplog):
+    incoming = chunk('wal', 1000)
+    observation = created_sync_row_observation(
+        [chunk('live', 1002)], incoming, incoming, lookup_complete=False, lookup_incomplete_reason='page_cap'
+    )
+    assert observation['outcome'] == 'created_overlap'
+    assert 'incomplete_reason' not in observation
+    with caplog.at_level(logging.INFO):
+        log_sync_lineage_created(observation)
+    assert 'incomplete_reason' not in observations(caplog)[0]
 
 
 def test_live_recording_stamp_survives_sync_revision_and_replaced_capture_evidence():
@@ -188,19 +307,80 @@ def test_eligible_observation_adds_no_reads_or_persisted_fields(monkeypatch, stu
     assert reads == baseline_reads
 
 
-@pytest.mark.parametrize('size,complete', [(0, True), (127, True), (128, False)])
-def test_existing_discovery_query_preserves_limit_and_reports_completeness(size, complete):
+def test_non_admitted_incomplete_intake_has_no_reason_and_identical_reads(monkeypatch, caplog, encoded_plans):
+    from utils.sync import assignment
+
+    reads, calls = [], []
+    get, assign = StrictFirestoreDocument.get, assignment.assign_in_transaction
+
+    def counted(ref, *args, **kwargs):
+        reads.append(ref.path)
+        return get(ref, *args, **kwargs)
+
+    def capture(*args, **kwargs):
+        calls.append(kwargs)
+        return assign(*args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', counted)
+    monkeypatch.setattr(assignment, 'assign_in_transaction', capture)
+    with caplog.at_level(logging.INFO):
+        baseline, result = persist(monkeypatch, complete=False, reason='page_cap')
+        baseline_reads = list(reads)
+        reads.clear()
+        current, observed = persist(monkeypatch, complete=False, reason='page_cap', eligible=False)
+    assert result == observed and baseline.rows.keys() == current.rows.keys()
+    assert reads == baseline_reads and encoded_plans[0] == encoded_plans[1]
+    assert len(observations(caplog)) == 1
+    assert observations(caplog)[0].endswith('incomplete_reason=page_cap')
+    assert 'live_lookup_incomplete_reason' not in calls[1] and 'live_lookup_complete' not in calls[1]
+    assert 'incomplete_reason' not in observed[0]
+    assert all('incomplete_reason' not in row for row in current.rows.values())
+
+
+@pytest.mark.parametrize('size', [0, 127, 128])
+@pytest.mark.parametrize('device', [False, True])
+def test_existing_discovery_query_preserves_limit_and_reports_completeness(size, device):
     user = MagicMock()
     query = user.collection.return_value
     for name in ('where', 'order_by', 'select', 'limit'):
         getattr(query, name).return_value = query
     query.stream.return_value = [SimpleNamespace(id=str(i), to_dict=lambda: chunk('live', 1002)) for i in range(size)]
     status = {}
-    sync_live_overlap.find_sync_live_overlap_candidates(user, chunk('wal', 1000), diagnostics=status)
-    assert status == {'lookup_complete': complete}
+    incoming = chunk('wal', 1000)
+    if not device:
+        incoming.pop('client_device_id', None)
+    sync_live_overlap.find_sync_live_overlap_candidates(user, incoming, diagnostics=status)
+    expected = {'lookup_complete': size < 128 and device}
+    if size == 128:
+        expected['incomplete_reason'] = 'page_cap'
+    elif not device:
+        expected['incomplete_reason'] = 'no_device'
+    assert status == expected
     query.stream.assert_called_once_with(timeout=10)
     query.limit.assert_called_once_with(128)
     assert 'transcript_segments' not in query.select.call_args.args[0]
+
+
+def test_discovery_exception_records_lookup_failed_before_other_reasons():
+    user = MagicMock()
+    user.collection.side_effect = RuntimeError('synthetic failure')
+    status = {'incomplete_reason': 'page_cap'}
+    incoming = chunk('wal', 1000)
+    incoming.pop('client_device_id', None)
+    assert sync_live_overlap.find_sync_live_overlap_candidates(user, incoming, diagnostics=status) == ()
+    assert status == {'lookup_complete': False, 'incomplete_reason': 'lookup_failed'}
+
+
+def test_observation_logger_never_raises(monkeypatch):
+    from utils.sync import intake_completion
+
+    def fail(*args, **kwargs):
+        raise RuntimeError('synthetic log failure')
+
+    monkeypatch.setattr(intake_completion.logger, 'info', fail)
+    log_sync_lineage_created(
+        {'outcome': 'created_unknown', 'checked_live_candidates_bucket': '0', 'lookup_complete': False}
+    )
 
 
 @pytest.mark.parametrize(
