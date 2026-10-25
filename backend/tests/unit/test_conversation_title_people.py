@@ -642,6 +642,9 @@ def test_title_rules_are_static_while_names_stay_volatile(monkeypatch):
 
 
 def test_shaped_title_prompt_bytes_are_pinned_to_the_literal_fixture(monkeypatch):
+    # The fixture pins the flag-off base prompt; OPEN_LOOPS_ENABLED appends its
+    # rules only while on, so pin the bytes this fixture actually represents.
+    monkeypatch.setenv('OPEN_LOOPS_ENABLED', 'off')
     from langchain_core.output_parsers import PydanticOutputParser
     from models.structured_extraction import StructuredExtraction
     from utils.llm.conversation_processing import notes_mount

@@ -296,6 +296,12 @@ def conversations_db():
     fakes["utils.conversation_page_cursor"] = load_module_fresh(
         "utils.conversation_page_cursor", str(_BACKEND / "utils" / "conversation_page_cursor.py")
     )
+    # The open-loop field-name constants are stdlib-only; database.conversations
+    # imports them at module level, so load the real module for the isolated
+    # utils package.
+    fakes["utils.open_loops.extraction"] = load_module_fresh(
+        "utils.open_loops.extraction", str(_BACKEND / "utils" / "open_loops" / "extraction.py")
+    )
 
     with stub_modules(fakes):
         module = load_module_fresh(

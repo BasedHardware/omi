@@ -470,6 +470,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_STAGED_PROMOTE_LONG_TTL_ENABLED` | Default on unless false; one-hour write-invalidated promote empty TTL; false restores 90 seconds | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED` | Default on unless false; Cache empty staged promote projections for one hour (90 seconds with long-TTL kill switch disabled) with UID generation and write-version fences | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_VERTEX_LEGACY_TASK_MODE` | enforce (default) refuses positively identified macOS task loops below the configured capable build after confirmed inactivity; unset/invalid threshold or observe only counts | backend | env | closed | env_var | env_var | env_var | — | keep | keep | — | dazheng |
+| `OPEN_LOOPS_ENABLED` | Default on; extract open-loop fields (delegations, others' commitments, one observed issue) in the notes call and persist them server-only | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PARAKEET_STREAM_ALLOCATION_PERCENT` | Allocate streaming sessions to Parakeet | backend | env | closed | 100 | 100 (gke/parakeet, parakeet (chart)) | 100 (gke/parakeet, parakeet (chart)) | — | keep | keep | — | dazheng |
 | `PARAKEET_WINDOW_ALLOCATION_PERCENT` | Allocate live sessions to Parakeet window | backend | env | closed | declared | 1 (backend-listen (chart), gke/backend-listen) | 100 (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | dazheng |
 | `PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` | Default on; internal live-window POSTs use ready GPU pods with per-pod 2-5 minute adaptive quarantine and one different-pod retry inside the original budget | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -581,6 +582,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD` | First released macOS build containing #20374; positive integer read per request; unset/invalid serves all and counts candidate would-refuse volume in bounded build buckets | backend | env | open | env_var | env_var | 12435 | — | keep | keep | — | dazheng |
 | `OMI_VERTEX_PT_TARGET_LOCATION` | Moved Vertex order location; default us; global explicitly widens residency | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_VERTEX_RESERVATION_STATES` | Per-model active/inactive/unknown/auto JSON overrides; read per request, invalid JSON fails open | backend, llm-gateway | env | open | env_var | env_var | env_var (desktop-backend); {"gemini-2.5-flash":"inactive"} (llm-gateway (chart)) | — | keep | keep | — | dazheng |
+| `OPEN_LOOPS_CARD_POLISH_ENABLED` | Default off; allow the single cheap-model polish call for open-loop review cards (deterministic template is the default) | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `PARAKEET_ATTENTION_MODE` | Choose full versus local attention on Parakeet GPU | backend | env | closed | — | — | auto (parakeet (chart)) | — | keep | keep | — | unowned |
 | `PARAKEET_DIARIZATION` | Enable prerecorded Parakeet diarization | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `PARAKEET_INFERENCE_MODE` | Choose Parakeet transcription inference backend | backend | env | closed | — | nemo (parakeet (chart)) | nemo (parakeet (chart)) | — | keep | keep | — | unowned |
@@ -889,6 +891,8 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED` — Default on unless false; Cache empty staged promote projections for one hour (90 seconds with long-TTL kill switch disabled) with UID generation and write-version fences (fail: open)
 - `OMI_TV_ROLLUP_ENABLED` — Default off; 1 prefers complete BigQuery daily rollup windows for TV history; missing coverage falls back to HogQL (fail: closed)
 - `OMI_VERTEX_PT_TARGET_LOCATION` — Moved Vertex order location; default us; global explicitly widens residency (fail: closed)
+- `OPEN_LOOPS_CARD_POLISH_ENABLED` — Default off; allow the single cheap-model polish call for open-loop review cards (deterministic template is the default) (fail: closed)
+- `OPEN_LOOPS_ENABLED` — Default on; extract open-loop fields (delegations, others' commitments, one observed issue) in the notes call and persist them server-only (fail: open)
 - `PARAKEET_DIARIZATION` — Enable prerecorded Parakeet diarization (fail: closed)
 - `PARAKEET_USE_V2` — Select Parakeet prerecorded v2 pipeline (fail: open)
 - `PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` — Default on; internal live-window POSTs use ready GPU pods with per-pod 2-5 minute adaptive quarantine and one different-pod retry inside the original budget (fail: open)

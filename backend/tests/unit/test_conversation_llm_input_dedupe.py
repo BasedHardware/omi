@@ -96,7 +96,7 @@ def test_disabled_dedupe_preserves_calls_and_invalidates_only_metadata(monkeypat
     generate = Mock(return_value='same')
     conversation = SimpleNamespace(id='c')
     assert dedupe.notes('u', conversation, 'prefix', generate, {}) == 'same'
-    generate.assert_called_once_with('prefix', uid='u')
+    generate.assert_called_once_with('prefix', uid='u', open_loop_out=None)
     assert dedupe.l1_input('u', conversation, object()) == (None, False)
     invalidation = Mock(return_value=False)
     monkeypatch.setattr(dedupe, 'invalidate_l1', invalidation)

@@ -97,6 +97,7 @@ from utils.conversations.relevance import (
     final_relevance,
 )
 from utils.conversations.relevance_jev import jev_discard_probability, jev_tier_applies, relevance_transcript
+from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD
 from utils.conversations.reprocess_contract import (
     DERIVED_EFFECTS_TRANSCRIPT_FIELD,
     derived_effects_transcript_digest,
@@ -346,6 +347,7 @@ def _get_structured(
     recovery_transcript_decoded: bool = True,
     recovery_minimum_fallback_observer: Optional[Callable[[], None]] = None,
     llm_hashes: dict[str, str] | None = None,
+    open_loop_out: Optional[dict[str, Any]] = None,
 ) -> Tuple[Structured, bool]:
     try:
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
@@ -447,6 +449,7 @@ def _get_structured(
                         roster=roster,
                         screen_frames=_frames,
                         screen_frame_count=_frame_count,
+                        open_loop_out=open_loop_out,
                     )
                 validate_structured_source_segment_ids(structured, ())
                 return structured, False
@@ -638,6 +641,7 @@ def _get_structured(
                 roster=roster,
                 screen_frames=screen_frames,
                 screen_frame_count=screen_frame_count,
+                open_loop_out=open_loop_out,
                 **notes_agent_inputs(main_conv, desktop_capture),
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
@@ -2668,6 +2672,10 @@ def process_conversation(
     bind_generation(uid, generated_conversation_id)
     decisions: list[RelevanceDecision] = []
     llm_hashes: dict[str, str] = {}
+    # Filled only by a fresh notes parse that ran with open loops enabled; a
+    # dedupe reuse or quiet-minimum path leaves it empty so the stored
+    # extractions survive this persist untouched.
+    open_loop_sink: dict[str, Any] = {}
     recovery_minimum_fallback = False
 
     def _mark_recovery_minimum_fallback() -> None:
@@ -2686,6 +2694,7 @@ def process_conversation(
         recovery_transcript_decoded=recovery_transcript_decoded,
         recovery_minimum_fallback_observer=_mark_recovery_minimum_fallback,
         llm_hashes=llm_hashes,
+        open_loop_out=open_loop_sink,
     )
     if recovery_minimum_fallback:
         sys.stdout.write(
@@ -2762,6 +2771,12 @@ def process_conversation(
     if NOTES_OUTPUT_HASH in llm_hashes:
         llm_hashes[NOTES_OUTPUT_HASH] = output_fingerprint(structured)
     payload.update(llm_hashes)
+    if 'extractions' in open_loop_sink:
+        # Server-only derived field, deliberately outside the client wire
+        # model, like RELEVANCE_DECISION_FIELD below. None is a fresh parse
+        # that found nothing; it clears a stale prior value on reprocess.
+        # Content excluded from derived consumers must not seed open loops either.
+        payload[OPEN_LOOP_EXTRACTIONS_FIELD] = None if content_excluded else open_loop_sink['extractions']
 
     if not dedupe_enabled() and not is_initial_creation:
         # Rollback keeps generating normally; clear server-only checkpoints in

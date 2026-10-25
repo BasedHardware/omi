@@ -115,6 +115,18 @@ agent's existing budget; a depleted budget preserves grounded short notes rather
 than fabricating padding. Repaired agent submissions survive a later deadline or
 malformed turn, so salvage does not buy a second full-transcript writer.
 
+Open-loop extraction (delegations, others' commitments, one observed issue or
+blocker) rides `conversation_processing.py` behind `OPEN_LOOPS_ENABLED`
+(`config/open_loops.py`, default on): the rules append to the one-shot mount
+instructions and the fields live on schema subclasses (`OpenLoopNotesOutput`,
+`OpenLoopStructuredExtraction`) so the flag-off prompt and the agentic submit
+tool stay byte-identical. The parsed extractions flow through a mutable sink to
+`utils/conversations/process_conversation.py`, which persists them in the
+server-only `open_loop_extractions` conversation field; the deterministic card
+writer and the storage contract live in `utils/open_loops/` (see its README).
+The agentic lane's hand-written submit schema does not request these fields yet,
+so long agent-written meetings currently extract none.
+
 `NOTES_PACKET_V2_MODE` and `STT_LANGUAGE_HINTS_MODE` are read exclusively through
 `config/refactor_modes.py`. Both default to shadow, with no serving cohort in a
 manifest. `off` restores legacy output. Shadow records only counts/sizes, never
