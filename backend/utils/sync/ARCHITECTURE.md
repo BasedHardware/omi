@@ -80,6 +80,10 @@ already read in the transaction, using the same source/device/lock/clock-run
 partition. `lookup_complete=true|false` preserves existing discovery and reread
 coverage. Failed, capped (128-row), skipped and missing-device lookups cannot
 prove clear; an observed strict overlap proves overlap even when incomplete.
+Unknowns report `incomplete_reason` from the closed set, first matching in order:
+`lookup_failed|page_cap|no_device|extent_outside_incoming|candidate_unread|invalid_extent|observation_error|not_recorded`.
+Every reason remains **unmeasured** and blocks widening; clear/overlap lines omit
+the field. `not_recorded` covers older intake payloads without diagnostics.
 Eligibility/observations are transient: no persisted fields, extra Firestore
 reads, routing changes or metric labels. Legacy/held paths without an S1
 validation attestation are outside this observed population. Exclude these

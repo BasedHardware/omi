@@ -4254,7 +4254,14 @@ def assign_sync_conversation(
                 full_ids=full_ids,
                 live_candidate_ids=live_candidate_ids,
                 absorbed=absorbed,
-                **({'live_lookup_complete': live_lookup.get('lookup_complete', False)} if lineage_eligible else {}),
+                **(
+                    {
+                        'live_lookup_complete': live_lookup.get('lookup_complete', False),
+                        'live_lookup_incomplete_reason': live_lookup.get('incomplete_reason'),
+                    }
+                    if lineage_eligible
+                    else {}
+                ),
             )
         # Remember the candidate before the transaction commits.
         attempted['canonical'] = planned[0]['id']
