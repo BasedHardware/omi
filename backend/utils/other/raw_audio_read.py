@@ -9,7 +9,12 @@ from utils.other.raw_audio import decode_capture
 
 _index_lock = threading.Lock()
 _indexes: dict[tuple, tuple[float, list]] = {}
-_INDEX_TTL = 5
+# Pack writes invalidate their conversation's entry proactively
+# (invalidate_pack_index), so the TTL only bounds cross-instance staleness,
+# and staleness always fails safe: a missing pack keeps the PCM write (proof
+# path) or falls back to PCM (read path). 120 s amortizes the per-read-session
+# list over the ~6-60 s flush cadence instead of listing once per flush.
+_INDEX_TTL = 120
 _MAX_INDEXES = 128
 
 

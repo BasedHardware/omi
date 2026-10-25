@@ -811,6 +811,7 @@ def upload_audio_chunks_batch(
     data_protection_level: Optional[str] = None,
     *,
     sample_rate: Optional[int] = None,
+    reconcile_prefix: bool = True,
 ) -> List[str]:
     """
     Upload multiple audio chunks to GCS in a single streaming write.
@@ -833,6 +834,13 @@ def upload_audio_chunks_batch(
             replay against legacy objects and are streamed verbatim —
             including an overwrite at the same filename key — exactly like
             main. It is never persisted.
+        reconcile_prefix: When False, a span upload skips the replay-reconcile
+            listing and writes create-only under its generation precondition.
+            The caller may only pass False while it holds session-local proof
+            that no replay can be pending (pusher's flushed-run ledger). The
+            create-only write plus identical-content no-op still rejects
+            divergent bytes, and a PreconditionFailed retry reconciles on the
+            next loop iteration regardless of this flag.
 
     Returns:
         List of GCS paths now holding the payload: already-committed prefix
@@ -889,7 +897,7 @@ def upload_audio_chunks_batch(
     committed_paths: List[str] = []
     attempts = 0
     while True:
-        if rate is not None:
+        if rate is not None and (reconcile_prefix or attempts > 0):
             payload = b''.join(chunk['data'] for chunk in sorted_chunks)
             first_ts = float(sorted_chunks[0]['timestamp'])
             verified, proven = reconcile_audio_chunk_prefix(
