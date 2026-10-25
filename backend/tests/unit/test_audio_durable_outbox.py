@@ -958,3 +958,34 @@ async def test_midstream_commit_failure_fails_closed_without_acks(remote, monkey
     assert sock.close_code == 1011, 'the session fails closed instead of streaming on'
     media = [name for name in remote.blobs if name.startswith('raw-live/')]
     assert media == []
+
+
+@pytest.mark.asyncio
+async def test_first_conversation_id_commits_pre_id_audio_under_unlinked(remote, monkeypatch):
+    _window_harness(remote, monkeypatch)
+    pre_id = struct.pack('<160h', *[7] * 160)
+    after = struct.pack('<160h', *[8] * 160)
+    frames = [
+        # Audio BEFORE any conversation id...
+        struct.pack('<Id', 101, 1000) + pre_id,
+        # ...then the first 103 must commit that window under 'unlinked'
+        struct.pack('<I', 103) + b'conversation',
+        struct.pack('<Id', 101, 2000) + after,
+    ]
+    sock = Socket(frames)
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    receipts = _sent_receipts(sock)
+    assert [receipt.conversation_id for receipt in receipts] == [None, 'conversation']
+    assert [read_pcm('owner', receipt) for receipt in receipts] == [pre_id, after]
+
+
+@pytest.mark.asyncio
+async def test_odd_sized_durable_payload_fails_the_protocol_not_a_zero_sample_window(remote, monkeypatch):
+    _window_harness(remote, monkeypatch)
+    frames = [struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + b'\x01']
+    sock = Socket(frames)
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    assert sock.sent == []
+    assert sock.close_code == 1003
+    media = [name for name in remote.blobs if name.startswith('raw-live/')]
+    assert media == [], 'no custody object may claim a misaligned payload'

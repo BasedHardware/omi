@@ -149,6 +149,34 @@ async def _dispatch_transcript_item(
     )
 
 
+def _queue_speaker_sample_request(data: bytes, speaker_sample_queue: 'Deque[SpeakerSampleRequest]', uid: str) -> None:
+    """Parse and queue an opcode-105 speaker sample request; malformed frames raise."""
+    res = json_object(data)
+    person_id = res.get('person_id')
+    conv_id = res.get('conversation_id')
+    segment_ids = res.get('segment_ids', [])
+    if person_id is not None and not isinstance(person_id, str):
+        raise ValueError('person_id must be a string')
+    if conv_id is not None and not isinstance(conv_id, str):
+        raise ValueError('conversation_id must be a string')
+    if not isinstance(segment_ids, list) or not all(isinstance(segment_id, str) for segment_id in segment_ids):
+        raise ValueError('segment_ids must be a list of strings')
+    if person_id and conv_id and segment_ids:
+        if len(speaker_sample_queue) >= SPEAKER_SAMPLE_QUEUE_WARN_SIZE:
+            logger.warning(f"Warning: speaker_sample_queue size {len(speaker_sample_queue)} {uid}")
+        logger.info(f"Queued speaker sample request: person={person_id}, {len(segment_ids)} segments {uid}")
+        append_bounded(
+            speaker_sample_queue,
+            {
+                'person_id': person_id,
+                'conversation_id': conv_id,
+                'segment_ids': segment_ids,
+                'queued_at': time.time(),
+            },
+            'speaker_sample',
+        )
+
+
 def _append_window_run(
     *, durable: bool, sequence: int, buffer: bytearray, audio_data: bytes, start: float, budget: ByteBudget
 ) -> tuple[Optional[dict], bool]:
@@ -160,6 +188,11 @@ def _append_window_run(
     """
     checkpoint = None
     if durable:
+        # The per-message commit rejected non-sample-aligned PCM as a protocol
+        # error; keep that contract at the buffer edge so odd payloads cannot
+        # merge into a silently zero-sample window.
+        if len(audio_data) % 2:
+            raise ValueError('audio payload is not sample-aligned')
         checkpoint = {
             'sequence': sequence,
             'byte_offset': len(buffer),
@@ -179,16 +212,16 @@ async def _commit_durable_audio_window(
     payload: bytes,
     frames: List[Dict[str, Any]],
     conversation_id: Optional[str],
-    start: float,
+    start: Optional[float],
     sample_rate: int,
     custody_root: str,
     protection_level: Optional[str],
-    clock_source: str,
     audio_custody: Optional[int],
+    timeline_v2: bool,
     websocket: Any,
     durable_queue: 'asyncio.Queue[AudioProjection]',
     budget: ByteBudget,
-) -> AudioReceipt:
+) -> Optional[AudioReceipt]:
     """Commit one immutable media+manifest pair for a buffered audio window.
 
     The per-message path this replaces wrote a custody pair per opcode-101
@@ -198,8 +231,11 @@ async def _commit_durable_audio_window(
     process request, shutdown), so a receipt still exists only after both
     immutable objects commit and nothing acknowledged is ever uncommitted.
     An audio ACK still requires both remote objects; a failed commit leaves
-    the producer unacknowledged.
+    the producer unacknowledged. Returns None when there is no window to
+    commit.
     """
+    if not frames or start is None:
+        return None
     receipt = await run_blocking(
         storage_executor,
         commit_pcm_window,
@@ -212,7 +248,7 @@ async def _commit_durable_audio_window(
         frames[0]['sequence'],
         frames,
         data_protection_level=protection_level,
-        clock_source=clock_source,
+        clock_source='server_projected' if timeline_v2 else 'arrival_estimate',
     )
     if audio_custody == 1:
         await websocket.send_bytes(audio_custody_ack_frame(receipt.to_dict()))
@@ -931,8 +967,6 @@ async def _websocket_util_trigger(
 
         async def commit_durable_window() -> Optional[AudioReceipt]:
             """Commit the buffered window as one custody pair (see _commit_durable_audio_window)."""
-            if not durable_window_frames or private_cloud_chunk_start_time is None:
-                return None
             receipt = await _commit_durable_audio_window(
                 uid=uid,
                 payload=bytes(private_cloud_sync_buffer),
@@ -942,14 +976,15 @@ async def _websocket_util_trigger(
                 sample_rate=sample_rate,
                 custody_root=custody_root,
                 protection_level=cached_protection_level,
-                clock_source='server_projected' if audio_timeline_v2 else 'arrival_estimate',
                 audio_custody=audio_custody,
+                timeline_v2=audio_timeline_v2,
                 websocket=websocket,
                 durable_queue=durable_queue,
                 budget=audio_budget,
             )
-            _reset_private_cloud_buffer()
-            durable_window_frames.clear()
+            if receipt is not None:
+                _reset_private_cloud_buffer()
+                durable_window_frames.clear()
             return receipt
 
         async def _queue_private_cloud_chunk(*, skip_if_silent: bool = False) -> None:
@@ -1100,16 +1135,20 @@ async def _websocket_util_trigger(
                 # Conversation ID
                 if header_type == 103:
                     new_conversation_id = bytes(data[4:]).decode("utf-8")
-                    # Flush private cloud buffer for the old conversation before switching
-                    if current_conversation_id and current_conversation_id != new_conversation_id:
-                        if len(private_cloud_sync_buffer) > 0:
-                            logger.info(
-                                f"Flushed private cloud buffer on conversation switch: "
-                                f"{len(private_cloud_sync_buffer)} bytes {uid}"
-                            )
+                    # Flush the private cloud buffer before switching. When no
+                    # conversation id was set yet, durable custody may still hold
+                    # pre-ID audio: it commits under 'unlinked' here rather than
+                    # riding into the new conversation's window.
+                    if current_conversation_id != new_conversation_id and (
+                        current_conversation_id or len(private_cloud_sync_buffer) > 0
+                    ):
+                        logger.info(
+                            f"Flushed private cloud buffer on conversation switch: "
+                            f"{len(private_cloud_sync_buffer)} bytes {uid}"
+                        )
                         await _queue_private_cloud_chunk()
                         _reset_private_cloud_buffer()
-                        if private_cloud_sync_enabled and len(record_close_requests) < 128:
+                        if current_conversation_id and private_cloud_sync_enabled and len(record_close_requests) < 128:
                             record_close_requests.add(current_conversation_id)
                     current_conversation_id = new_conversation_id
                     episode_session['conversation_id'] = new_conversation_id
@@ -1209,34 +1248,7 @@ async def _websocket_util_trigger(
 
                 # Speaker sample extraction request - queue for background processing
                 if header_type == 105:
-                    res = json_object(data)
-                    person_id = res.get('person_id')
-                    conv_id = res.get('conversation_id')
-                    segment_ids = res.get('segment_ids', [])
-                    if person_id is not None and not isinstance(person_id, str):
-                        raise ValueError('person_id must be a string')
-                    if conv_id is not None and not isinstance(conv_id, str):
-                        raise ValueError('conversation_id must be a string')
-                    if not isinstance(segment_ids, list) or not all(
-                        isinstance(segment_id, str) for segment_id in segment_ids
-                    ):
-                        raise ValueError('segment_ids must be a list of strings')
-                    if person_id and conv_id and segment_ids:
-                        if len(speaker_sample_queue) >= SPEAKER_SAMPLE_QUEUE_WARN_SIZE:
-                            logger.warning(f"Warning: speaker_sample_queue size {len(speaker_sample_queue)} {uid}")
-                        logger.info(
-                            f"Queued speaker sample request: person={person_id}, {len(segment_ids)} segments {uid}"
-                        )
-                        append_bounded(
-                            speaker_sample_queue,
-                            {
-                                'person_id': person_id,
-                                'conversation_id': conv_id,
-                                'segment_ids': segment_ids,
-                                'queued_at': time.time(),
-                            },
-                            'speaker_sample',
-                        )
+                    _queue_speaker_sample_request(data, speaker_sample_queue, uid)
                     continue
 
                 # Audio bytes
@@ -1330,8 +1342,7 @@ async def _websocket_util_trigger(
                             start=buffer_start_timestamp,
                             budget=audio_budget,
                         )
-                        if durable_audio:
-                            custody_sequence += 1
+                        custody_sequence += 1
                         if not stored_capture:
                             if current_conversation_id:
                                 fail_recording(current_conversation_id)
