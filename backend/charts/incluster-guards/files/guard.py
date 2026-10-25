@@ -35,6 +35,8 @@ FIRST_P95_MIN_SLOW_TEXTS = 5
 FIRST_P95_BASELINE_MIN_COUNT = 20
 FIRST_P95_MIN_COUNT = 100
 FIRST_P95_BASELINE_COUNT_SHARE = 0.5
+# The weekly baseline counts one hour; the live sample counts WINDOW seconds.
+WINDOW_SHARE_OF_BASELINE = WINDOW / 3600
 # live_metrics.py buckets end at (2, 5, 10, 15, 20, 25, 30, 45, 60): a quantile
 # that lands beyond the last finite bucket is reported as exactly this
 # boundary, not measured.
@@ -144,10 +146,17 @@ def first_p95_limit(values):
 
 
 def first_p95_sample_floor(values):
-    """max(100, half the weekly same-hour first-text count); 100 when that baseline is unavailable."""
+    """max(100, half the weekly same-hour rate); 100 when that baseline is unavailable.
+
+    first_count_baseline counts a whole hour; first_count counts the live
+    15-minute window. Convert the baseline to its per-window equivalent
+    (x 15/60) before halving, or the floor would always demand roughly twice
+    the historical window rate and a real regression at normal volume could
+    never collect a decisive sample (review r1 P1).
+    """
     baseline = values.get('first_count_baseline')
     if finite(baseline):
-        return max(FIRST_P95_MIN_COUNT, FIRST_P95_BASELINE_COUNT_SHARE * baseline)
+        return max(FIRST_P95_MIN_COUNT, FIRST_P95_BASELINE_COUNT_SHARE * WINDOW_SHARE_OF_BASELINE * baseline)
     return FIRST_P95_MIN_COUNT
 
 

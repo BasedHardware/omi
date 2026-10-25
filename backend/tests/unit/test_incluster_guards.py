@@ -168,7 +168,9 @@ def test_thin_sample_regression_is_unmeasured_blind_never_rollback():
     )
     reading = guard.evaluate(trip)
     assert reading['trips'] == [] and reading['unmeasured'] == ['first_p95']
-    assert reading['first_p95_sample_floor'] == pytest.approx(114.4943)
+    # The 228.99 baseline counts a whole hour; its 15-minute equivalent (x .25)
+    # halved is 28.6, so the absolute 100 floor binds for this reading.
+    assert reading['first_p95_sample_floor'] == pytest.approx(100)
     hpa, dep = objects()
     verdict, state, reading = guard.decide(hpa, dep, [], trip, {}, 0)
     assert verdict == 'WARMUP'  # fresh identity arms for the full window first
@@ -190,22 +192,44 @@ def test_top_bucket_saturation_is_not_a_measured_p95_even_with_a_full_sample():
     assert 'first_p95' in guard.evaluate(dict(v, first_p95=59.999999))['trips']
 
 
-@pytest.mark.parametrize('count,trip', [(99.99, False), (100, False), (114.4942, False), (114.4944, True), (200, True)])
-def test_first_p95_sample_floor_is_half_the_weekly_count_never_below_100(count, trip):
-    # Baseline 228.9886...: floor = max(100, 114.4943...); count 100 alone stays
-    # below the baseline-relative floor and never trips on this reading.
+@pytest.mark.parametrize(
+    'baseline,count,trip',
+    [
+        # Baseline is a 1h count; the floor is half its 15-minute equivalent,
+        # so 1000/h -> 125, and the absolute 100 binds below 800/h.
+        (1000, 99.99, False),
+        (1000, 124.999, False),
+        (1000, 125, True),
+        (1000, 250, True),
+        (228.98860402862007, 99.99, False),
+        (228.98860402862007, 100, True),
+        (228.98860402862007, 175.3, True),
+    ],
+)
+def test_first_p95_sample_floor_is_half_the_weekly_window_rate_never_below_100(baseline, count, trip):
     v = dict(
         values(),
         first_p95=45,
         first_over30=8,
         first_count=count,
         first_p95_baseline=14.154270990401017,
-        first_count_baseline=228.98860402862007,
+        first_count_baseline=baseline,
     )
     reading = guard.evaluate(v)
     assert ('first_p95' in reading['trips']) == trip
     assert ('first_p95' in reading['unmeasured']) == (not trip)
-    assert reading['first_p95_sample_floor'] == pytest.approx(114.4943)
+    assert reading['first_p95_sample_floor'] == pytest.approx(max(100, 0.5 * baseline / 4))
+
+
+def test_sample_floor_never_demands_above_the_historical_window_rate():
+    # Review r1 P1: comparing the 15-minute count directly against half the
+    # hourly baseline would demand ~2x the historical per-window rate (a 517/h
+    # evening hour -> floor 259) and a real regression at normal volume (175
+    # texts, 22:35Z shape) could never collect a decisive sample.
+    v = dict(values(), first_p95=45, first_over30=8, first_count=175, first_count_baseline=517.87)
+    reading = guard.evaluate(v)
+    assert reading['first_p95_sample_floor'] == pytest.approx(100)
+    assert 'first_p95' in reading['trips']
 
 
 def test_sample_floor_falls_back_to_100_without_a_weekly_count():

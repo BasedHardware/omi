@@ -69,7 +69,10 @@ percentile saturated at the histogram's 60s top bucket): a measured value
 strictly inside the histogram (the exported buckets end at 60s, and
 `histogram_quantile` clamps to that boundary when the quantile lands beyond
 it), at least 5 texts over 30s, and a 15-minute count of at least
-`max(100, 0.5 * weekly same-hour count)`. A regression-shaped reading below
+`max(100, 0.5 * the weekly same-hour count's 15-minute equivalent)` (the
+baseline counts one hour, so its window share is halved, never the raw hour
+against the live window; 100 when that baseline is unavailable). A
+regression-shaped reading below
 that sample floor is **unmeasured**: it reads BLIND (ERROR log, nonzero exit,
 alertable) and never rolls back; it also never counts toward the
 three-consecutive-blind rollback, which missing/stale data still drives.
