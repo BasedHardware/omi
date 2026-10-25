@@ -336,6 +336,32 @@ void main() {
         reason: 'the WAL in-memory tail does not survive an account change on main');
   });
 
+  test('FriendPendant (no BleDeviceSource, no batch, no safety WAL) routes exactly as main', () async {
+    // Pin: main 86fcbcce500 capture_controller.dart:2341-2344 creates a
+    // BleDeviceSource only for Omi/OpenGlass, :2089 batch needs that source,
+    // :2132-2134 the safety WAL needs Omi/OpenGlass + Opus, :2148-2165 sends
+    // the raw packet when a socket is connected. #23617 never declares
+    // local_preview here and its router sends such a frame unchanged.
+    await boot(livePreview: preview(), type: DeviceType.friendPendant);
+    expect(world.localPreviewRequests, everyElement(false));
+    final packet = [0, 0, 0, ...List.filled(80, 6)];
+    world.deviceConnection!.emitRawAudio(packet);
+    await world.settle();
+    final sent = world.socket!.sentBinary;
+    expect(sent, hasLength(1));
+    expect(world.wal.syncs.phone.testFrames, isEmpty, reason: 'no safety WAL for this device on main either');
+    expect(published, isEmpty, reason: 'no batch journal');
+    // No socket: as on main, nothing holds the frame (no journal, no WAL).
+    world.socket!.emitClose(1006);
+    await world.settle();
+    world.deviceConnection!.emitRawAudio(packet);
+    await world.settle();
+    expect(world.wal.syncs.phone.testFrames, isEmpty);
+    expect(sent, hasLength(1));
+    // No source: the whole packet, header included, exactly as main sends it.
+    expect(sent.single, packet);
+  });
+
   test('a server without local_preview keeps today: visible frames stream, no preview', () async {
     final live = preview();
     await boot(livePreview: live);
