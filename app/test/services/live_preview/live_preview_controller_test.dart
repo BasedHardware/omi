@@ -193,6 +193,80 @@ void main() {
       expect(ended.properties['dropped_audio_ms'], 6 * 20 + 2 * 20);
     });
 
+    test('runtime failure falls back to the next engine once, keeping the lines', () async {
+      engine.nextStart = const LivePreviewStart(LivePreviewEngineKind.speechTranscriber, LivePreviewReason.ok);
+      engine.laterStarts.add(const LivePreviewStart(LivePreviewEngineKind.sfSpeech, LivePreviewReason.ok));
+      preview.admit(language: 'en');
+      await pumpEventQueue();
+      engine.emit('a0', 'before the failure', true);
+      await pumpEventQueue();
+      engine.fail(LivePreviewEngineKind.speechTranscriber);
+      await pumpEventQueue();
+      expect(engine.startExclusions.last, {LivePreviewEngineKind.speechTranscriber});
+      expect(engine.stops, 1, reason: 'the dead engine is released before the next starts');
+      expect(preview.phase, LivePreviewPhase.streaming);
+      expect(preview.selected?.engine, LivePreviewEngineKind.sfSpeech);
+      expect(preview.lines.single.text, 'before the failure');
+      engine.emit('s1', 'after the fallback', true);
+      await pumpEventQueue();
+      expect(preview.lines.map((line) => line.text), ['before the failure', 'after the fallback']);
+      // Each engine run is one selected + one ended event.
+      expect(events.whereType<LivePreviewEngineSelected>().map((e) => e.properties['engine']),
+          ['speech_transcriber', 'sf_speech']);
+      expect(events.whereType<LivePreviewSessionEnded>().single.properties['engine'], 'speech_transcriber');
+    });
+
+    test('a second runtime failure, or no next engine, is the calm no-engine state', () async {
+      engine.nextStart = const LivePreviewStart(LivePreviewEngineKind.speechTranscriber, LivePreviewReason.ok);
+      engine.laterStarts.add(const LivePreviewStart(LivePreviewEngineKind.sfSpeech, LivePreviewReason.ok));
+      preview.admit(language: 'en');
+      await pumpEventQueue();
+      engine.fail(LivePreviewEngineKind.speechTranscriber);
+      await pumpEventQueue();
+      engine.fail(LivePreviewEngineKind.sfSpeech);
+      await pumpEventQueue();
+      expect(preview.phase, LivePreviewPhase.unavailable);
+      expect(engine.startedLanguages.length, 2, reason: 'only one fallback per admitted session');
+      final last = events.whereType<LivePreviewEngineSelected>().last.properties;
+      expect([last['engine'], last['reason']], ['none', 'engine_error']);
+
+      // A fresh admission starts clean.
+      preview.revoke();
+      engine.laterStarts.addAll(const [
+        LivePreviewStart(LivePreviewEngineKind.speechTranscriber, LivePreviewReason.ok),
+        LivePreviewStart.none(LivePreviewReason.speechPermissionDenied),
+      ]);
+      preview.admit(language: 'en');
+      await pumpEventQueue();
+      expect(engine.startExclusions.last, isEmpty);
+      expect(preview.phase, LivePreviewPhase.streaming);
+      engine.fail(LivePreviewEngineKind.speechTranscriber);
+      await pumpEventQueue();
+      expect(preview.phase, LivePreviewPhase.unavailable, reason: 'the fallback had no engine');
+    });
+
+    test('native failure events and channel errors surface as typed runtime failures', () async {
+      final failures = <Object>[];
+      const events = EventChannel('test/live_preview/events');
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockStreamHandler(events, MockStreamHandler.inline(onListen: (args, sink) {
+        sink.success({'segmentId': 'a0', 'text': 'hi', 'isFinal': false});
+        sink.success({'failure': 'engine_error', 'engine': 'speech_transcriber'});
+        sink.error(code: 'broken');
+      }));
+      addTearDown(() => messenger.setMockStreamHandler(events, null));
+      final results = <String>[];
+      final sub = MethodChannelLivePreviewEngine(events: events)
+          .results
+          .listen((result) => results.add(result.text), onError: failures.add);
+      await pumpEventQueue();
+      await sub.cancel();
+      expect(results, ['hi']);
+      expect(failures.map((f) => (f as LivePreviewRuntimeFailure).engine),
+          [LivePreviewEngineKind.speechTranscriber, LivePreviewEngineKind.none]);
+      expect((failures.first as LivePreviewRuntimeFailure).reason, LivePreviewReason.engineError);
+    });
+
     test('a burst never delays capture callbacks: decode yields every few packets', () async {
       final decodes = <int>[];
       final sliced = LivePreviewController(

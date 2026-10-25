@@ -128,11 +128,23 @@ class LivePreviewController extends ChangeNotifier {
   void admit({required String language}) {
     if (_phase != LivePreviewPhase.inactive) return;
     final generation = ++_generation;
+    _language = language;
+    _failedEngines.clear();
     _phase = LivePreviewPhase.starting;
     notifyListeners();
+    _startEngine(generation);
+  }
+
+  String _language = 'multi';
+
+  /// Engines that failed at runtime in this admitted session. One fallback to
+  /// the next engine is allowed; a second failure is the no-engine state.
+  final Set<LivePreviewEngineKind> _failedEngines = {};
+
+  void _startEngine(int generation) {
     _serial = _serial.then((_) async {
       if (generation != _generation) return;
-      final start = await _engine.start(language);
+      final start = await _engine.start(_language, exclude: Set.of(_failedEngines));
       if (generation != _generation) {
         if (start.running) await _engine.stop();
         return;
@@ -141,13 +153,30 @@ class LivePreviewController extends ChangeNotifier {
       _resetSessionTelemetry();
       telemetry.engineSelected(start, platform: platform, osMajor: osMajor);
       if (start.running) {
-        _results = _engine.results.listen(_onResult);
+        _results = _engine.results.listen(_onResult, onError: (Object error) => _onRuntimeFailure(generation, error));
         _phase = LivePreviewPhase.streaming;
       } else {
         _phase = LivePreviewPhase.unavailable;
       }
       notifyListeners();
     });
+  }
+
+  /// The running engine died: close its run, then try the next engine once;
+  /// otherwise settle in the calm no-engine state. Lines already shown stay.
+  void _onRuntimeFailure(int generation, Object error) {
+    final failed = _start;
+    if (generation != _generation || failed == null || !failed.running) return;
+    _failedEngines.add(failed.engine);
+    _stopEngine();
+    if (_failedEngines.length > 1) {
+      _phase = LivePreviewPhase.unavailable;
+      telemetry.engineSelected(const LivePreviewStart.none(LivePreviewReason.engineError),
+          platform: platform, osMajor: osMajor);
+      notifyListeners();
+      return;
+    }
+    _startEngine(generation);
   }
 
   /// Admission ended (socket closed, server revoked, reconnecting). Lines are

@@ -89,16 +89,31 @@ class LivePreviewResult {
   }
 }
 
+/// A running engine stopped working for good (closed reason: engine_error).
+/// Delivered as an error on [LivePreviewEngine.results].
+class LivePreviewRuntimeFailure implements Exception {
+  const LivePreviewRuntimeFailure(this.engine);
+
+  final LivePreviewEngineKind engine;
+  LivePreviewReason get reason => LivePreviewReason.engineError;
+
+  @override
+  String toString() => 'LivePreviewRuntimeFailure(${engine.wireName})';
+}
+
 /// A display-only streaming recognizer fed 16 kHz mono PCM16. It never owns,
 /// stores or uploads audio.
 abstract interface class LivePreviewEngine {
-  Future<LivePreviewStart> start(String language);
+  /// Selects and starts the best engine, skipping any in [exclude] (engines
+  /// that already failed at runtime in this session).
+  Future<LivePreviewStart> start(String language, {Set<LivePreviewEngineKind> exclude = const {}});
 
   /// Returns false when the engine refused or failed the chunk. Callers drop it.
   Future<bool> feedPcm16(Uint8List pcm);
 
   Future<void> stop();
 
+  /// Hypotheses; a [LivePreviewRuntimeFailure] error when the engine dies.
   Stream<LivePreviewResult> get results;
 }
 
@@ -117,17 +132,29 @@ class MethodChannelLivePreviewEngine implements LivePreviewEngine {
   Stream<LivePreviewResult>? _results;
 
   @override
-  Stream<LivePreviewResult> get results => _results ??= _events
-      .receiveBroadcastStream()
-      .map(LivePreviewResult.fromWire)
-      .where((result) => result != null)
-      .cast<LivePreviewResult>()
-      .handleError((Object _) {});
+  Stream<LivePreviewResult> get results => _results ??= _events.receiveBroadcastStream().transform(
+        StreamTransformer<dynamic, LivePreviewResult>.fromHandlers(
+          handleData: (event, sink) {
+            if (event is Map && event['failure'] != null) {
+              sink.addError(LivePreviewRuntimeFailure(LivePreviewEngineKind.parse(event['engine'])));
+              return;
+            }
+            final result = LivePreviewResult.fromWire(event);
+            if (result != null) sink.add(result);
+          },
+          // A broken event channel is a dead engine too.
+          handleError: (error, stack, sink) =>
+              sink.addError(const LivePreviewRuntimeFailure(LivePreviewEngineKind.none), stack),
+        ),
+      );
 
   @override
-  Future<LivePreviewStart> start(String language) async {
+  Future<LivePreviewStart> start(String language, {Set<LivePreviewEngineKind> exclude = const {}}) async {
     try {
-      return LivePreviewStart.fromWire(await _channel.invokeMethod<Object?>('start', {'language': language}));
+      return LivePreviewStart.fromWire(await _channel.invokeMethod<Object?>('start', {
+        'language': language,
+        if (exclude.isNotEmpty) 'exclude': [for (final engine in exclude) engine.wireName],
+      }));
     } on MissingPluginException {
       // No native engine on this platform build yet.
       return const LivePreviewStart.none(LivePreviewReason.osEngineUnavailable);
