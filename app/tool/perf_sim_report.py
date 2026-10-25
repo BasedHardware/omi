@@ -83,6 +83,13 @@ def summarize(directory, expected_runs):
             raise ValueError(f'{path.name}: missing build identity')
         identities.append(identity)
         reports.append(validate(raw.get("heavy_profile", {})))
+        if identity['platform'] == 'ios' and reports[-1]['build_mode'] == 'profile':
+            preservation_path = directory / f'{path.stem}-preservation.json'
+            if not preservation_path.is_file():
+                raise ValueError(f'{path.name}: missing DEV sandbox preservation proof')
+            preservation = json.loads(preservation_path.read_text())
+            if preservation != {'verified': True, 'bundle_id': 'com.friend-app-with-wearable.ios12.development'}:
+                raise ValueError(f'{path.name}: failed DEV sandbox preservation proof')
         capture = raw.get('heavy_timeline_capture', {})
         expected_timeline = f'{path.stem}-timeline.json'
         if reports[-1].get('timeline_enabled') is True:

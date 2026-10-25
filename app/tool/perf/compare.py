@@ -10,7 +10,7 @@ from statistics import median
 def compare(before, after):
     if before.get('accepted_baseline') is not True:
         raise ValueError('reference is not an accepted three-run profile baseline')
-    for key in ('dataset', 'frame_policy', 'build_mode', 'timeline_enabled', 'pacing'):
+    for key in ('dataset', 'frame_policy', 'build_mode', 'timeline_enabled', 'pacing', 'runs'):
         if before.get(key) != after.get(key):
             raise ValueError(f'incomparable {key}')
     if after.get('timeline_enabled') is not False:

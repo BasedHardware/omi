@@ -104,7 +104,7 @@ Native: `ruby ios/test/batch_audio_energy_test.rb`; [phone/BLE replay](../script
 
 ### Performance
 UI: `bash app/tool/perf_gate.sh` ([guide](integration_test/perf/README.md)); red blocks shipping.
-Heavy: `bash app/tool/perf_device_run.sh` ([DEV device guide](tool/perf/README.md)).
+Heavy: `bash app/tool/perf_device_run.sh` ([never-uninstall guide](tool/perf/README.md)).
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable

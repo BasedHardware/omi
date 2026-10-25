@@ -69,6 +69,8 @@ class ReportTests(unittest.TestCase):
                 if i == 2:
                     value['heavy_profile']['scenarios']['cold_start']['build_p90_us'] = 12
                 (root / f'receipt-{i}.json').write_text(json.dumps(value))
+                (root / f'receipt-{i}-preservation.json').write_text(json.dumps({
+                    'verified': True, 'bundle_id': 'com.friend-app-with-wearable.ios12.development'}))
             summary = reporter.summarize(root, 3)
             self.assertTrue(summary['acceptance_eligible'])
             self.assertFalse(summary['variance_pass'])
@@ -82,6 +84,8 @@ class ReportTests(unittest.TestCase):
             value['heavy_timeline_capture'].update(enabled=True, file='receipt-1-timeline.json',
                                                     events=1, truncated=True)
             (root / 'receipt-1.json').write_text(json.dumps(value))
+            (root / 'receipt-1-preservation.json').write_text(json.dumps({
+                'verified': True, 'bundle_id': 'com.friend-app-with-wearable.ios12.development'}))
             (root / 'receipt-1-timeline.json').write_text('{"traceEvents":[]}')
             with self.assertRaises(ValueError):
                 reporter.summarize(root, 1)
@@ -97,6 +101,14 @@ class ReportTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 reporter.summarize(root, 3)
 
+    def test_missing_physical_ios_retention_proof_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for i in range(3):
+                (root / f'receipt-{i}.json').write_text(json.dumps(driver_response(run=i)))
+            with self.assertRaisesRegex(ValueError, 'missing DEV sandbox preservation proof'):
+                reporter.summarize(root, 3)
+
     def test_debug_never_eligible_and_mode_mismatch_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -105,6 +117,8 @@ class ReportTests(unittest.TestCase):
                 (root / f'receipt-{i}-timeline.json').write_text('{"traceEvents":[]}')
             self.assertFalse(reporter.summarize(root, 3)['acceptance_eligible'])
             (root / 'receipt-1.json').write_text(json.dumps(driver_response()))
+            (root / 'receipt-1-preservation.json').write_text(json.dumps({
+                'verified': True, 'bundle_id': 'com.friend-app-with-wearable.ios12.development'}))
             with self.assertRaises(ValueError):
                 reporter.summarize(root, 3)
 

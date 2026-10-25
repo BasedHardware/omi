@@ -1,5 +1,16 @@
 # Physical-device performance runs
 
+**Rule 1: never uninstall.** Flutter3.44.5 `flutter drive` stops and uninstalls
+the app by default. An earlier qualification attempt exposed the DEV sandbox
+to that cleanup; pre-existing DEV data could not be ruled out. Every invocation
+must use `--keep-app-running`. The command guard rejects missing/conflicting
+flags, non-DEV flavors and uninstall-first before spawning. Do not bypass it.
+Only the still-connected harness process may be terminated; keep its app/data.
+Each physical iOS attempt must read back a unique synthetic preservation canary
+written by this run. Never enumerate or read existing app data. Missing canary
+proof stops the batch, including after failed attempts. Android retention still
+needs qualification on the dedicated hardware.
+
 Run from a prepared product task worktree on a fleet Mac:
 
 ```bash
@@ -20,6 +31,11 @@ and the DEV app needs the phone's local-network permission. The caller waits for
 result. Interrupting the caller cancels the worker's process group. A killed
 headless caller is also observed by the Aqua worker. Only one benchmark may own
 this worktree's build output at a time.
+
+USB runs explicitly disable VM-port publication (`--no-publish-port`, plus
+`--disable-vm-service-publication` on native prelaunch). The SDK documents this
+as avoiding the iOS Local Network dialog. VM service authentication remains
+enabled. This changes no TCC setting and does not dismiss a permission prompt.
 
 Use `--aqua-app iTerm` when that route is approved and configured. iTerm needs Automation permission
 for the controlling app; Terminal needs Local Network permission or accepts a
@@ -87,6 +103,7 @@ accepted profile baseline.
 
 | Symptom | Evidence and action |
 | --- | --- |
+| DEV app disappears / fixture directory disappears after a run | Stop. Default flutter drive cleanup uninstalls the app even after test failure. Enforce Rule1 and --keep-app-running; validate synthetic canary survival on every attempt. Never assume a DEV flavor is disposable or that an owner has no data in it. |
 | `errSecInternalComponent` from codesign | Check `launchctl managername`. A Background session cannot use the GUI keychain like Aqua. Launch through approved iTerm; allow an actual owner-approved signing prompt. Preserve the existing identity/team. Never switch to ad-hoc signing or alter key ACLs. |
 | UDP 5353 `No route to host`, VM service not discovered | Check the launching app's Local Network permission. On the qualification host, Terminal was absent from the permission list while iTerm was granted. Use iTerm. USB log discovery sometimes recovers after 2–3 minutes; the warning itself is not a result. Each driver launch is capped at 14 minutes. |
 | iTerm AppleScript times out before a worker PID appears | The controlling app may need Automation permission. A command-file fallback was tried during qualification and stopped at an iTerm modal open-file warning, so unattended command-file fallback is not used. An atomic claim and caller identity/expiry checks reject duplicate or stale delayed launches. Use the approved `--aqua-app Terminal` route, or arrange permission/modal handling with the owner. Never alter TCC or blindly dismiss a warning. |

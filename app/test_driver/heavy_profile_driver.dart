@@ -34,12 +34,15 @@ Future<void> main() async {
 
   final driver = await FlutterDriver.connect();
   StreamSubscription? subscription;
+  int? ownedPid;
+  var ownsHarness = false;
   try {
     final service = driver.serviceClient;
     final vm = await service.getVM();
     final isolates = vm.isolates!.where((isolate) => isolate.name == 'main').toList();
     if (isolates.length != 1) throw StateError('Expected one main application isolate');
     final isolateId = isolates.single.id!;
+    ownedPid = vm.pid;
     if (platform == 'ios' && Platform.environment['OMI_PERF_SIMULATOR'] != '1') {
       // Discovery may take minutes. Activate this exact DEV bundle before
       // releasing the scenario handshake; never terminate a connected VM.
@@ -68,6 +71,7 @@ Future<void> main() async {
     }
     await service.clearCpuSamples(isolateId);
     await service.callServiceExtension('ext.omi.heavy.start', isolateId: isolateId);
+    ownsHarness = true;
     final response = Response.fromJson(await driver.requestData(null, timeout: const Duration(minutes: 12)));
     final data = response.data ?? <String, dynamic>{};
     await service.setVMTimelineFlags([]);
@@ -123,6 +127,35 @@ Future<void> main() async {
     await subscription?.cancel();
     sink?.write(']}');
     await sink?.close();
+    if (ownsHarness && platform == 'ios' && Platform.environment['OMI_PERF_SIMULATOR'] != '1') {
+      // Keep the installation/data. Terminate only the still-connected process
+      // that answered this harness's unique extension, never a guessed PID.
+      try {
+        final current = await driver.serviceClient.getVM();
+        if (ownedPid == null || current.pid != ownedPid) throw StateError('Harness process ownership changed');
+        final stopped = await Process.run('xcrun', [
+          'devicectl',
+          'device',
+          'process',
+          'terminate',
+          '--device',
+          device,
+          '--pid',
+          '$ownedPid',
+          '--timeout',
+          '20'
+        ]);
+        await File('$output/process-cleanup.json').writeAsString(jsonEncode({
+          'pid': ownedPid,
+          'terminated': stopped.exitCode == 0,
+          'uninstall_requested': false,
+        }));
+        if (stopped.exitCode != 0) throw StateError('Owned DEV process termination failed: ${stopped.stderr}');
+      } catch (error) {
+        stderr.writeln('Harness process cleanup: $error');
+        exitCode = 1;
+      }
+    }
     await driver.close();
   }
 }

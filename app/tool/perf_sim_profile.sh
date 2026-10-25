@@ -65,8 +65,11 @@ git rev-parse HEAD > "$OUT_DIR/source-sha.txt"
 printf '%s\n' "$DEVICE" > "$OUT_DIR/device-id.txt"
 printf '%s\n' "$PLATFORM" > "$OUT_DIR/platform.txt"
 git diff HEAD --binary -- . > "$OUT_DIR/source.patch"
-find integration_test/perf -name 'heavy_*.dart' -exec shasum -a 256 {} + > "$OUT_DIR/harness-sha256.txt"
-shasum -a 256 test_driver/heavy_profile_driver.dart >> "$OUT_DIR/harness-sha256.txt"
+find integration_test/perf -name 'heavy_*.dart' -exec shasum -a 256 {} + > "$OUT_DIR/protocol-files.raw"
+shasum -a 256 integration_test/perf/production_shell.dart test_driver/heavy_profile_driver.dart \
+  tool/perf_sim_profile.sh tool/perf_sim_report.py tool/perf_drive.py tool/perf_device_run.sh \
+  tool/perf/device_run.py tool/perf/compare.py >> "$OUT_DIR/protocol-files.raw"
+LC_ALL=C sort "$OUT_DIR/protocol-files.raw" > "$OUT_DIR/harness-sha256.txt"
 flutter --version --machine > "$OUT_DIR/flutter-version.json"
 OMI_APP_PROFILE=local_dev bash scripts/validate_mobile_build_config.sh --flavor dev --profile local_dev > "$OUT_DIR/config-validation.log" 2>&1
 if [[ "$PLATFORM" == android ]]; then
@@ -93,6 +96,11 @@ find "$BINARY" -type f -exec shasum -a 256 {} + | LC_ALL=C sort | shasum -a 256 
 if [[ "$PLATFORM" == ios && "$SIMULATOR" != 1 ]]; then
   # Update the exact DEV bundle in place; never uninstall or remove its data.
   xcrun devicectl device install app --device "$DEVICE" --timeout 90 "$BINARY" > "$OUT_DIR/install.log" 2>&1
+  CANARY_NAME="omi-heavy-preserve-$(uuidgen).txt"
+  printf '%s\n' 'Synthetic heavy-profile sandbox preservation canary.' > "$OUT_DIR/preservation-canary.txt"
+  xcrun devicectl device copy to --device "$DEVICE" --source "$OUT_DIR/preservation-canary.txt" \
+    --domain-type appDataContainer --domain-identifier "$BUNDLE_ID" \
+    --destination "Documents/$CANARY_NAME" --timeout 20 > "$OUT_DIR/canary-create.log" 2>&1
 fi
 for ((run=1; run<=RUNS; run++)); do
   for attempt in 1 2 3; do
@@ -104,19 +112,33 @@ for ((run=1; run<=RUNS; run++)); do
     echo "heavy $MODE run $run/$RUNS attempt $attempt/3 on $DEVICE"
     if [[ "$PLATFORM" == ios && "$SIMULATOR" != 1 ]]; then
       xcrun devicectl device process launch --terminate-existing --device "$DEVICE" --timeout 20 \
-        "$BUNDLE_ID" -- --start-paused > "$ATTEMPT_DIR/foreground.log" 2>&1
+        "$BUNDLE_ID" -- --start-paused --disable-vm-service-publication > "$ATTEMPT_DIR/foreground.log" 2>&1
     fi
-    if OMI_PERF_DEVICE_OUTPUT_DIR="$ATTEMPT_DIR" \
+    DRIVE_RESULT=0
+    OMI_PERF_DEVICE_OUTPUT_DIR="$ATTEMPT_DIR" \
       OMI_PERF_RUN_NUMBER="$run" \
       OMI_PERF_TIMELINE="$TIMELINE" \
       OMI_PERF_SIMULATOR="$SIMULATOR" \
       python3 -I tool/perf_drive.py "$ATTEMPT_DIR/driver.log" \
-      flutter drive --"$MODE" --flavor dev --no-pub --no-dds \
+      flutter drive --"$MODE" --flavor dev --no-pub --no-dds --keep-app-running --no-publish-port \
       --driver=test_driver/heavy_profile_driver.dart --target="$TARGET" \
-      --use-application-binary="$BINARY" "${DEFINES[@]}" -d "$DEVICE"; then
+      --use-application-binary="$BINARY" "${DEFINES[@]}" -d "$DEVICE" || DRIVE_RESULT=$?
+    if [[ "$PLATFORM" == ios && "$SIMULATOR" != 1 ]]; then
+      xcrun devicectl device copy from --device "$DEVICE" --source "Documents/$CANARY_NAME" \
+        --domain-type appDataContainer --domain-identifier "$BUNDLE_ID" \
+        --destination "$ATTEMPT_DIR/preserved-canary.txt" --timeout 20 > "$ATTEMPT_DIR/canary-check.log" 2>&1
+      cmp "$OUT_DIR/preservation-canary.txt" "$ATTEMPT_DIR/preserved-canary.txt" || {
+        echo 'DEV sandbox preservation failed; stopping without retry' >&2; exit 1;
+      }
+      printf '{"verified":true,"bundle_id":"%s"}\n' "$BUNDLE_ID" > "$ATTEMPT_DIR/preservation.json"
+    fi
+    if [[ "$DRIVE_RESULT" == 0 ]]; then
       [[ -s "$ATTEMPT_DIR/integration_response_data.json" ]] || {
         echo "run $run produced no receipt" >&2; exit 1;
       }
+      if [[ "$PLATFORM" == ios && "$SIMULATOR" != 1 ]]; then
+        cp "$ATTEMPT_DIR/preservation.json" "$OUT_DIR/receipt-$run-preservation.json"
+      fi
       cp "$ATTEMPT_DIR/integration_response_data.json" "$OUT_DIR/receipt-$run.json"
       if [[ -f "$ATTEMPT_DIR/receipt-$run-timeline.json" ]]; then
         cp "$ATTEMPT_DIR/receipt-$run-timeline.json" "$OUT_DIR/receipt-$run-timeline.json"
