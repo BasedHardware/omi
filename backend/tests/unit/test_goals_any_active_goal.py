@@ -95,7 +95,9 @@ def test_advice_is_generated_for_an_active_goal_past_the_first_three(monkeypatch
 def test_advice_for_an_achieved_goal_still_falls_back(monkeypatch):
     prompts = _stub_goals(monkeypatch, {'goal_a': {**_goal('Run a 10k'), 'status': 'achieved', 'is_active': False}})
 
-    assert llm_goals.get_goal_advice('u1', 'goal_a') == 'Focus on the next small step toward your goal.'
+    import pytest
+    with pytest.raises(ValueError, match="Goal not found"):
+        llm_goals.get_goal_advice('u1', 'goal_a')
     assert prompts == []
 
 
@@ -115,5 +117,6 @@ def test_progress_is_saved_for_an_active_goal_past_the_first_three(monkeypatch):
 
     result = llm_goals.extract_and_update_goal_progress('u1', 'I have saved 2500 dollars so far')
 
+    assert result is not None
     assert result['status'] == 'updated'
     assert saved == [('goal_d', 2500.0)]

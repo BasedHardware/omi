@@ -299,10 +299,13 @@ def get_current_goal_advice(
 ) -> dict:
     """Get AI-generated advice for the current active goal."""
     goal = goals_db.get_user_goal(uid)
-    if not goal:
+    if not goal or not goal.get('id'):
         return {'advice': 'Set a goal to get personalized advice!'}
 
-    return get_goal_advice(goal_id=goal['id'], uid=uid)
+    try:
+        return get_goal_advice(goal_id=goal['id'], uid=uid)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Goal not found")
 
 
 class ProgressExtractRequest(BaseModel):

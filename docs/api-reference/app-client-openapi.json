@@ -38754,6 +38754,22 @@
       },
       "routers__payment__PricingOption": {
         "properties": {
+          "billing_total": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing Total"
+          },
+          "currency": {
+            "default": "usd",
+            "title": "Currency",
+            "type": "string"
+          },
           "description": {
             "anyOf": [
               {
@@ -65190,6 +65206,22 @@
             "schema": {
               "title": "X-App-Version",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Billing-Currency",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Billing-Currency"
             }
           },
           {

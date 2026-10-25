@@ -14553,7 +14553,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getAvailablePlansEndpointV1PaymentsAvailablePlansGet(client: OmiApiClient, xAppPlatform: String? = nil, xAppVersion: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil) async throws -> OmiAnyCodable {
+  public static func getAvailablePlansEndpointV1PaymentsAvailablePlansGet(client: OmiApiClient, xAppPlatform: String? = nil, xAppVersion: String? = nil, xOmiBillingCurrency: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/payments/available-plans"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -14567,6 +14567,7 @@ public enum OmiAPI {
     }
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    if let xOmiBillingCurrency { req.setValue(String(xOmiBillingCurrency), forHTTPHeaderField: "X-Omi-Billing-Currency") }
     if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
     let (data, resp) = try await URLSession.shared.data(for: req)

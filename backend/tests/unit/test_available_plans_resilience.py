@@ -71,6 +71,7 @@ def ctx():
 def _make_stripe_price(price_id, amount, interval):
     """Return a MagicMock mimicking a stripe.Price object."""
     price = MagicMock()
+    price.currency = "usd"
     price.id = price_id
     price.unit_amount = amount
     price.recurring = MagicMock()
@@ -251,6 +252,7 @@ def test_legacy_unlimited_subscriber_sees_is_active(ctx):
     # Mock Stripe subscription retrieval to return the monthly price
     stripe_sub = MagicMock()
     stripe_sub.to_dict.return_value = {
+        "currency": "usd",
         "items": {"data": [{"price": {"id": UNLIM_MONTHLY}}]},
         "customer": "cus_123",
     }
@@ -295,6 +297,7 @@ def test_operator_subscriber_on_old_client_gets_remapped_is_active(ctx, monkeypa
 
     stripe_sub = MagicMock()
     stripe_sub.to_dict.return_value = {
+        "currency": "usd",
         "items": {"data": [{"price": {"id": OP_MONTHLY}}]},
         "customer": "cus_456",
     }

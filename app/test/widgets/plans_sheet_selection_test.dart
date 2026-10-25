@@ -187,4 +187,27 @@ void main() {
     expect(_selected(tester, 'Unlimited Annual'), isFalse);
     expect(find.byKey(const ValueKey('plans_sheet_upgrade_button')), findsOneWidget);
   });
+  testWidgets('JPY annual card uses whole-yen billing total and keeps the selected target', (tester) async {
+    final yearly = _price('unlimited_v2', 'Unlimited Annual', 'year', 43200)
+      ..addAll({'currency': 'jpy', 'billing_total': '43,200 JPY', 'price_string': '3,600 JPY/mo'});
+    final monthly = _price('unlimited_v2', 'Unlimited Monthly', 'month', 4800)
+      ..addAll({'currency': 'jpy', 'billing_total': '4,800 JPY', 'price_string': '4,800 JPY/mo'});
+    await _pumpPlansSheet(tester,
+        subscription:
+            Subscription(plan: PlanType.plus, status: SubscriptionStatus.active, stripeSubscriptionId: 'sub_fixture'),
+        plans: [yearly, monthly]);
+    expect(find.textContaining('43,200 JPY'), findsOneWidget);
+    expect(find.textContaining('\$432'), findsNothing);
+    expect(_selected(tester, 'Unlimited Annual'), isTrue);
+    await _tapVisible(tester, find.widgetWithText(PlanOptionCard, 'Unlimited Monthly'));
+    expect(_selected(tester, 'Unlimited Monthly'), isTrue);
+    await _tapVisible(tester, find.byKey(const ValueKey('plans_sheet_upgrade_button')));
+    // Continue stays busy while its confirmation is open, so its spinner
+    // intentionally keeps scheduling frames. Pump the dialog transition only.
+    await tester.pump(const Duration(milliseconds: 400));
+    final l10n = AppLocalizations.of(tester.element(find.byType(PlansSheet)));
+    expect(find.text(l10n.confirmPlanChange), findsOneWidget,
+        reason: 'fresh JPY offer must not require a matching USD ID in the usage catalog');
+    expect(find.textContaining('4,800 JPY'), findsWidgets);
+  });
 }

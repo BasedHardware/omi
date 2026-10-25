@@ -277,6 +277,7 @@ def test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify(payment_
     router.users_db.get_user_subscription.return_value = current_sub
 
     stripe_sub_dict = {
+        "currency": "usd",
         "id": "sub_active_plus",
         "customer": "cus_123",
         "status": "active",
@@ -300,7 +301,7 @@ def test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify(payment_
         patch.object(
             router.stripe.Price,
             "retrieve",
-            return_value=SimpleNamespace(recurring=SimpleNamespace(interval="month")),
+            return_value=SimpleNamespace(currency="usd", recurring=SimpleNamespace(interval="month")),
         ),
         patch.object(router, "_release_attached_schedules"),
         patch.object(router, "funded_processing_enabled", return_value=False),
@@ -334,6 +335,7 @@ def test_declined_proration_card_error_returns_402_and_preserves_paid_plan(payme
     router.users_db.get_user_subscription.return_value = current_sub
 
     stripe_sub_dict = {
+        "currency": "usd",
         "id": "sub_active_plus",
         "customer": "cus_123",
         "status": "active",
@@ -358,7 +360,7 @@ def test_declined_proration_card_error_returns_402_and_preserves_paid_plan(payme
         patch.object(
             router.stripe.Price,
             "retrieve",
-            return_value=SimpleNamespace(recurring=SimpleNamespace(interval="month")),
+            return_value=SimpleNamespace(currency="usd", recurring=SimpleNamespace(interval="month")),
         ),
         patch.object(router, "_release_attached_schedules"),
     ):
@@ -389,6 +391,7 @@ def test_declined_proration_past_due_snapshot_returns_402_and_never_projects_bas
     router.users_db.get_user_subscription.return_value = current_sub
 
     stripe_sub_dict = {
+        "currency": "usd",
         "id": "sub_active_plus",
         "customer": "cus_123",
         "status": "active",
@@ -413,7 +416,7 @@ def test_declined_proration_past_due_snapshot_returns_402_and_never_projects_bas
         patch.object(
             router.stripe.Price,
             "retrieve",
-            return_value=SimpleNamespace(recurring=SimpleNamespace(interval="month")),
+            return_value=SimpleNamespace(currency="usd", recurring=SimpleNamespace(interval="month")),
         ),
         patch.object(router, "_release_attached_schedules"),
     ):
