@@ -247,6 +247,23 @@ def test_bound_worker_receipt_persists_with_unchanged_empty_evidence():
     assert job['worker_empty_evidence'] == {'padded_retry': 'empty', 'version': 1}
 
 
+def test_short_unit_cannot_claim_measured_vad_from_zero_captured_samples():
+    store = MemoryStore()
+    scheduler = Scheduler(store)
+    work = item('short-bound', 0.02)
+    scheduler.enqueue(work, 0)
+    lease = scheduler.pull(1)[0]
+    with pytest.raises(ValueError, match='bound VAD'):
+        scheduler.fail(
+            work.segment_id,
+            lease.token,
+            2,
+            quarantine=True,
+            measured_held_vad_speech_seconds=0,
+            worker_vad_receipt=vad_receipt(work.audio_uri, 0, 0),
+        )
+
+
 @pytest.mark.asyncio
 async def test_worker_to_pump_to_scheduler_persists_bound_receipt():
     store = MemoryStore()

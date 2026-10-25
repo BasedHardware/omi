@@ -142,6 +142,7 @@ def attach_held_vad(job, seconds=None, receipt=None, *, receipt_field='worker_va
             or receipt['sample_rate_hz'] != 16000
             or type(receipt['speech_samples']) is not int
             or type(receipt['captured_samples']) is not int
+            or receipt['captured_samples'] <= 0
             or not 0 <= receipt['speech_samples'] <= receipt['captured_samples'] <= 7200 * 16000
             or abs(receipt['captured_samples'] / 16000 - job['duration_seconds']) > 0.1
             or receipt['input_uri_sha256'] != hashlib.sha256(job['audio_uri'].encode()).hexdigest()
