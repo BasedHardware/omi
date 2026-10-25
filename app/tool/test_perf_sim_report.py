@@ -29,7 +29,7 @@ def receipt(mode='profile'):
 def driver_response(mode='profile', run=1):
     return {'heavy_profile': receipt(mode), 'heavy_run': {
         'source_sha': 'test-source', 'binary_sha256': 'test-binary', 'harness_sha256': 'test-harness',
-        'device_id': 'test-device', 'platform': 'ios', 'flutter_revision': 'test-sdk'},
+        'device_id': 'test-device', 'device_os_version': 'test-os', 'platform': 'ios', 'flutter_revision': 'test-sdk'},
         'heavy_timeline_capture': {'enabled': False, 'file': None, 'events': 0, 'truncated': False}}
 
 

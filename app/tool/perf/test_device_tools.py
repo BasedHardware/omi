@@ -25,6 +25,7 @@ def summary():
             'dataset': {'wals': 6500}, 'frame_policy': 'framework-requested/v1',
             'pacing': 'fixed-real-time/v1', 'timeline_enabled': False,
             'identity': {'device_id': 'fixture-device', 'platform': 'ios',
+                         'device_os_version': 'fixture-os',
                          'flutter_revision': 'fixture-sdk', 'harness_sha256': 'fixture-harness'},
             'scenarios': {'cold_start': {'build_p90_us': [10, 11, 10], 'raster_p90_us': [20, 21, 20],
                           'total_p90_us': [30, 31, 30], 'frames_over_16ms': [1, 2, 3],
@@ -76,7 +77,7 @@ class DeviceToolsTests(unittest.TestCase):
         self.assertEqual(result['scenarios']['cold_start']['frames_over_100ms'], {'before': 1, 'after': 1})
 
     def test_incomparable_or_unaccepted_reference_rejected(self):
-        for key in ('device_id', 'platform', 'flutter_revision', 'harness_sha256'):
+        for key in ('device_id', 'device_os_version', 'platform', 'flutter_revision', 'harness_sha256'):
             after = summary()
             after['identity'][key] = 'different'
             with self.assertRaises(ValueError):

@@ -80,8 +80,10 @@ def summarize(directory, expected_runs):
         raw = json.loads(path.read_text())
         identity = raw.get('heavy_run')
         if not identity or not all(identity.get(key) for key in ('source_sha', 'binary_sha256', 'harness_sha256',
-                                                               'device_id', 'platform', 'flutter_revision')):
+                                                               'device_id', 'platform', 'flutter_revision', 'device_os_version')):
             raise ValueError(f'{path.name}: missing build identity')
+        if not isinstance(identity['device_os_version'], str) or not identity['device_os_version'].strip():
+            raise ValueError(f'{path.name}: missing runtime device OS version')
         identities.append(identity)
         reports.append(validate(raw.get("heavy_profile", {})))
         if identity['platform'] == 'ios' and reports[-1]['build_mode'] == 'profile':

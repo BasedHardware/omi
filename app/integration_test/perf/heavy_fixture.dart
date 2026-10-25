@@ -26,6 +26,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_frame_encoder.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import 'heavy_storage_budget.dart';
 
 int _knob(String name, String raw, int fallback, {required int min, required int max}) {
   if (raw.isEmpty) return fallback;
@@ -116,7 +117,7 @@ Future<void> seedHeavyPreferences() async {
 /// A unique run directory keeps even an installed development app's audio safe.
 Future<Directory> isolateHeavyStorage() async {
   final root = await getTemporaryDirectory();
-  final directory = await root.createTemp('omi-heavy-fixture-');
+  final directory = await HeavyStorageBudget(Directory('${root.path}/omi-heavy-perf-fixtures-v1')).reserve();
   PathProviderPlatform.instance = _HeavyPaths(directory.path);
   return directory;
 }

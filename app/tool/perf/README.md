@@ -37,8 +37,7 @@ result. Interrupting the caller cancels the worker's process group. A killed
 headless caller is also observed by the Aqua worker. Only one benchmark may own
 this worktree's build output at a time.
 
-USB runs explicitly disable VM-port publication (`--no-publish-port`, plus
-`--disable-vm-service-publication` on native prelaunch). The SDK documents this
+USB runs explicitly disable VM-port publication (`--no-publish-port`). The SDK documents this
 as avoiding the iOS Local Network dialog. VM service authentication remains
 enabled. This changes no TCC setting and does not dismiss a permission prompt.
 
@@ -61,6 +60,21 @@ scratch volume. `--out <new-directory>` selects one batch. Existing nonempty
 directories are refused. `--dry-run` prints the plan without building or
 installing. Logs and failures remain alongside successful receipts.
 
+Reserve an idle device with its owner. Before installation and each launch,
+the physical iOS runner checks the exact DEV installation URL against native
+process metadata; Android checks the DEV package PID. A running main process or
+extension, a failed query, or incomplete metadata blocks the operation. It never
+force-stops an unowned app. These are point-in-time checks: the owner must keep
+the device idle for the batch. Only the VM-attested harness PID may be stopped.
+
+Fixtures use an owned `omi-heavy-perf-fixtures-v1` temporary namespace and an
+append-only allocation ledger, capped at 24 allocations per installation/cache
+namespace. A reservation remains consumed after a crash; the runner deletes no
+WAL/audio. At the normal fixture shape, 24 allocations are roughly half a GB
+plus indexes. On exhaustion or an unreadable ledger, stop and ask the owner;
+never increase the cap to hide accumulation or delete files to make a run pass.
+Earlier qualification directories predate this ledger and remain retained.
+
 Each frame receipt includes per-flow build/raster/total p50/p90/p99, counts over
 16/32/100 ms, worst frame, nonempty-frame checks and exact measurement windows.
 The gate requires three identical-binary runs and `(max p90 - min p90)/min p90`
@@ -71,8 +85,8 @@ never discard one run, reduce the heavy fixture, or raise the limit to pass.
 profile batch. Prior pointers are archived, and receipts are never removed.
 Without that flag, a new run compares with the last accepted reference and
 writes `comparison.json`; it never silently replaces it. `--baseline <dir>`
-pins a particular reference. Comparison requires the same device, Flutter
-revision, fixture, frame policy and harness hash. A changed measurement
+pins a particular reference. Comparison requires the same device, runtime OS,
+Flutter revision, fixture, frame policy and harness hash. A changed measurement
 protocol needs an explicitly qualified new baseline. Deltas are median p90s
 across runs, worst frame and total jank counts; a variance failure remains
 visible even when a median improves. Review comparisons before accepting a
@@ -121,7 +135,7 @@ accepted profile baseline.
 | Variance exceeds 15% | Preserve the whole failed batch. Check fixed pacing, fixture identity, device/refresh rate, thermal/power state, background activity, VM discovery, and tracing mode. `pumpAndSettle` can vary with endless production tickers; the harness uses fixed real-time pacing. Do not tune thresholds after seeing results. |
 | Giant CPU receipt | The VM may return its entire AOT function table, including unused entries. Keep sampled stacks and their referenced functions; do not attribute unused functions or post-run serialization to the measured flows. |
 | App says tests passed but transport failed | Require the driver receipt and the host variance result as well. Test output, artifact identity and acceptance are separate checks. |
-| Scenario assertions pass but engine frame count is zero | One qualification run lost frame callbacks for three flows; native foreground loss was suspected, not proven. Reset only the exact DEV bundle before each attempt and activate it before the scenario handshake. Require resumed state and nonempty frames. Only tagged foreground/no-frame failures retry, at most twice. Every rejected attempt remains under `attempts/`; valid slow runs and variance failures never retry. |
+| Scenario assertions pass but engine frame count is zero | One qualification run lost frame callbacks for three flows; native foreground loss was suspected, not proven. Start only when the exact DEV app is idle; never terminate an unowned app to retry. Activate the connected harness before the scenario handshake. Require resumed state and nonempty frames. Only tagged foreground/no-frame failures retry, at most twice. Every rejected attempt remains under `attempts/`; valid slow runs and variance failures never retry. |
 | Native app-active getter and Flutter lifecycle both stay inactive | Stop after the bounded retries. A system alert is one possible cause, not a diagnosis. Do not invent resumed events, capture a personal device's screen, tap dialogs or alter permissions. Ask the owner to clear the blocker, then requalify. The overnight device run was paused on this evidence. |
 | Runner is cancelled during startup | The attempted measurement has no acceptance receipt. Retain all artifacts and `preservation-canary-name.txt`; a cancelled attempt may lack its post-run canary check. Later owner-approved checks may read only that exact synthetic file, never enumerate the app container. |
 | Foreground guard rejects a phone that is unlocked | Flutter's TestPlatformDispatcher starts with an empty initial lifecycle value. The harness reads the actual native buffered state once when binding state is null, then retains live lifecycle events as authoritative. It never invents a resumed event. Receipts record both values. Profile failure formatting can lose exception text, so retry reasons travel as structured reportData. |

@@ -15,7 +15,7 @@ def compare(before, after):
             raise ValueError(f'incomparable {key}')
     if after.get('timeline_enabled') is not False:
         raise ValueError('timeline diagnostics cannot be compared as frame acceptance')
-    for key in ('device_id', 'platform', 'flutter_revision', 'harness_sha256'):
+    for key in ('device_id', 'device_os_version', 'platform', 'flutter_revision', 'harness_sha256'):
         if not before.get('identity', {}).get(key) or before['identity'][key] != after.get('identity', {}).get(key):
             raise ValueError(f'incomparable or missing {key}; qualify a new baseline')
     result = {'before': before['identity'], 'after': after['identity'],

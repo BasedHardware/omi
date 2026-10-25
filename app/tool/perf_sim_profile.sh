@@ -69,6 +69,7 @@ find integration_test/perf -name 'heavy_*.dart' -exec shasum -a 256 {} + > "$OUT
 shasum -a 256 integration_test/perf/production_shell.dart test_driver/heavy_profile_driver.dart \
   tool/perf_sim_profile.sh tool/perf_sim_report.py tool/perf_drive.py tool/perf_device_run.sh \
   tool/perf/device_run.py tool/perf/compare.py >> "$OUT_DIR/protocol-files.raw"
+shasum -a 256 tool/perf/device_admission.py >> "$OUT_DIR/protocol-files.raw"
 LC_ALL=C sort "$OUT_DIR/protocol-files.raw" > "$OUT_DIR/harness-sha256.txt"
 flutter --version --machine > "$OUT_DIR/flutter-version.json"
 OMI_APP_PROFILE=local_dev bash scripts/validate_mobile_build_config.sh --flavor dev --profile local_dev > "$OUT_DIR/config-validation.log" 2>&1
@@ -94,6 +95,7 @@ fi
 find "$BINARY" -type f -exec shasum -a 256 {} + | LC_ALL=C sort | shasum -a 256 > "$OUT_DIR/binary-sha256.txt"
 
 if [[ "$PLATFORM" == ios && "$SIMULATOR" != 1 ]]; then
+  python3 -I tool/perf/device_admission.py --device "$DEVICE" --out "$OUT_DIR/admission-before-install.json"
   # Update the exact DEV bundle in place; never uninstall or remove its data.
   xcrun devicectl device install app --device "$DEVICE" --timeout 90 "$BINARY" > "$OUT_DIR/install.log" 2>&1
   CANARY_NAME="omi-heavy-preserve-$(uuidgen).txt"
@@ -111,9 +113,9 @@ for ((run=1; run<=RUNS; run++)); do
       cp "$OUT_DIR/$identity" "$ATTEMPT_DIR/$identity"
     done
     echo "heavy $MODE run $run/$RUNS attempt $attempt/3 on $DEVICE"
-    if [[ "$PLATFORM" == ios && "$SIMULATOR" != 1 ]]; then
-      xcrun devicectl device process launch --terminate-existing --device "$DEVICE" --timeout 20 \
-        "$BUNDLE_ID" -- --start-paused --disable-vm-service-publication > "$ATTEMPT_DIR/foreground.log" 2>&1
+    if [[ "$SIMULATOR" != 1 ]]; then
+      python3 -I tool/perf/device_admission.py --platform "$PLATFORM" --device "$DEVICE" \
+        --out "$ATTEMPT_DIR/admission-before-launch.json"
     fi
     DRIVE_RESULT=0
     OMI_PERF_DEVICE_OUTPUT_DIR="$ATTEMPT_DIR" \

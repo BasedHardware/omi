@@ -253,6 +253,7 @@ void main() {
       'idle_preflight_frames': idleFrames,
       'pacing': 'fixed-real-time/v1',
       'build_mode': kProfileMode ? 'profile' : 'debug',
+      'device_os_version': Platform.operatingSystemVersion,
       'acceptance_eligible': kProfileMode && !simulatorQualification && !timelineEnabled,
       'timeline_enabled': timelineEnabled,
       'storage_isolated': true,

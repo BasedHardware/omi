@@ -90,6 +90,7 @@ Future<void> main() async {
       'harness_sha256': (await File('$output/harness-sha256.txt').readAsString()).trim(),
       'device_id': device,
       'platform': platform,
+      'device_os_version': data['heavy_profile']?['device_os_version'],
       'flutter_revision':
           (jsonDecode(await File('$output/flutter-version.json').readAsString()) as Map)['frameworkRevision'],
     };

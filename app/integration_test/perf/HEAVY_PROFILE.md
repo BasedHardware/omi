@@ -19,6 +19,7 @@ Physical-device installation needs the device owner's approval. Use the DEV
 flavor only; the production bundle and data are outside this harness. Keep the
 phone connected and unlocked during runs. Three fresh launches reuse one built
 app binary; source revision, Flutter version and binary hash accompany receipts.
+Runtime OS version is also part of identity; an OS update invalidates comparison.
 Do not compare different phones, refresh rates, thermal states or host loads.
 
 The [runner guide](../../tool/perf/README.md) covers device selection, comparison
