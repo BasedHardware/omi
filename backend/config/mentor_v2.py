@@ -19,10 +19,26 @@ class MentorV2Config(BaseModel):
 
 
 @lru_cache(maxsize=1)
-def mentor_config() -> tuple[MentorV2Config, dict[str, str]]:
-    raw = json.loads(Path(__file__).with_suffix('.json').read_text())
+def _load_mentor_bundle() -> tuple[MentorV2Config, dict[str, dict[str, str]]]:
+    raw = json.loads(Path(__file__).with_suffix('.json').read_text(encoding='utf-8'))
     config = MentorV2Config.model_validate(raw['mentor_v2'])
-    prompts = raw['prompts'][config.prompt_version]
-    if set(prompts) != {'gate', 'generate', 'critic'}:
+    for prompts in raw['prompts'].values():
+        if set(prompts) != {'gate', 'generate', 'critic'}:
+            raise ValueError('invalid mentor prompt version')
+    if config.prompt_version not in raw['prompts']:
         raise ValueError('invalid mentor prompt version')
-    return config, prompts
+    return config, raw['prompts']
+
+
+@lru_cache(maxsize=1)
+def mentor_config() -> tuple[MentorV2Config, dict[str, str]]:
+    config, all_prompts = _load_mentor_bundle()
+    return config, all_prompts[config.prompt_version]
+
+
+def mentor_prompts(version: str) -> dict[str, str]:
+    _, all_prompts = _load_mentor_bundle()
+    prompts = all_prompts.get(version)
+    if not isinstance(prompts, dict) or set(prompts) != {'gate', 'generate', 'critic'}:
+        raise ValueError('invalid mentor prompt version')
+    return prompts
