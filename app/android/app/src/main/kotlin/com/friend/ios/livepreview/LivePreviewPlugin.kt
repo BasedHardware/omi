@@ -134,11 +134,11 @@ class LivePreviewPlugin private constructor(private val context: Context) :
             if (answered) return
             answered = true
             if (mine != generation) {
-                keep?.stop() ?: recognizer.destroy()
+                keep?.stop() ?: runCatching { recognizer.destroy() }
                 result.success(LivePreviewPolicy.none("engine_error"))
                 return
             }
-            if (keep == null) recognizer.destroy()
+            if (keep == null) runCatching { recognizer.destroy() }
             session = keep
             Log.i(TAG, "engine=${value["engine"]} reason=${value["reason"]}")
             result.success(value)
@@ -151,6 +151,7 @@ class LivePreviewPlugin private constructor(private val context: Context) :
                 ContextCompat.getMainExecutor(context),
                 object : RecognitionSupportCallback {
                     override fun onSupportResult(support: RecognitionSupport) {
+                        if (answered) return // Timed out already; nothing may start now.
                         val pick = LivePreviewPolicy.pickLanguage(
                             code,
                             support.installedOnDeviceLanguages,
@@ -163,10 +164,13 @@ class LivePreviewPlugin private constructor(private val context: Context) :
                             answer(LivePreviewPolicy.none(pick.reason), null)
                             return
                         }
+                        val candidate = OnDeviceSession(recognizer, tag, ::emit) { runtimeFailure(mine) }
                         val started = try {
-                            OnDeviceSession(recognizer, tag, ::emit) { runtimeFailure(mine) }.also { it.begin() }
+                            candidate.also { it.begin() }
                         } catch (error: Exception) {
+                            // begin() already closed both pipe ends; release the rest.
                             Log.w(TAG, "on-device session failed: ${error.javaClass.simpleName}")
+                            candidate.stop()
                             null
                         }
                         answer(started?.let { LivePreviewPolicy.running() } ?: LivePreviewPolicy.none("engine_error"), started)
@@ -252,24 +256,25 @@ private class OnDeviceSession(
         bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
 
     /** Main looper only. */
+    /** Main looper only. Throws (with both pipe ends closed) when the recognizer cannot start. */
     fun begin() {
         if (stopped) return
         val pipe = ParcelFileDescriptor.createPipe()
-        val intent = baseIntent(languageTag).apply {
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, pipe[0])
-            putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_CHANNEL_COUNT, 1)
-            putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
-            putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_SAMPLING_RATE, 16_000)
-            // One session for as long as the pipe stays open; results arrive per segment.
-            putExtra(RecognizerIntent.EXTRA_SEGMENTED_SESSION, RecognizerIntent.EXTRA_AUDIO_SOURCE)
+        val write = LivePreviewPolicy.startOnPipe(pipe[0], pipe[1]) { read ->
+            val intent = baseIntent(languageTag).apply {
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, read)
+                putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_CHANNEL_COUNT, 1)
+                putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
+                putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_SAMPLING_RATE, 16_000)
+                // One session for as long as the pipe stays open; results arrive per segment.
+                putExtra(RecognizerIntent.EXTRA_SEGMENTED_SESSION, RecognizerIntent.EXTRA_AUDIO_SOURCE)
+            }
+            recognizer.setRecognitionListener(listener)
+            recognizer.startListening(intent)
         }
-        recognizer.setRecognitionListener(listener)
-        recognizer.startListening(intent)
-        // The service holds its own duplicate of the read end now.
-        pipe[0].close()
         val previous = output
-        output = ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])
+        output = ParcelFileDescriptor.AutoCloseOutputStream(write)
         previous?.let { stale -> writer.execute { runCatching { stale.close() } } }
     }
 
@@ -288,7 +293,11 @@ private class OnDeviceSession(
             restartPending = false
             if (stopped) return@postDelayed
             runCatching { recognizer.cancel() }
-            runCatching { begin() }.onFailure { Log.w(TAG, "restart failed: ${it.javaClass.simpleName}") }
+            runCatching { begin() }.onFailure {
+                // A dead recognizer must not look running: Dart falls back.
+                Log.w(TAG, "restart failed: ${it.javaClass.simpleName}")
+                onFailure()
+            }
         }, RESTART_DELAY_MS)
     }
 

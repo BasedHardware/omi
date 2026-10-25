@@ -44,6 +44,24 @@ object LivePreviewPolicy {
         error != android.speech.SpeechRecognizer.ERROR_NO_MATCH &&
             error != android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT
 
+    /**
+     * Starts a recognizer on a fresh pipe: [start] receives the read end. On
+     * success the read end is closed (the service holds its own duplicate) and
+     * the write end returned; if [start] throws, BOTH ends are closed and the
+     * error rethrown, so a failed (re)start never leaks descriptors.
+     */
+    fun <T : java.io.Closeable> startOnPipe(read: T, write: T, start: (T) -> Unit): T {
+        try {
+            start(read)
+        } catch (error: Throwable) {
+            runCatching { read.close() }
+            runCatching { write.close() }
+            throw error
+        }
+        runCatching { read.close() }
+        return write
+    }
+
     /** The app's bare language code; "multi"/empty use the device language. */
     fun languageCode(language: String, deviceLanguage: String): String {
         if (language.isEmpty() || language == "multi") return deviceLanguage.lowercase(Locale.ROOT)

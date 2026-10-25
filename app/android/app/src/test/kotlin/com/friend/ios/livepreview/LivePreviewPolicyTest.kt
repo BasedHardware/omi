@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class LivePreviewPolicyTest {
@@ -62,5 +64,31 @@ class LivePreviewPolicyTest {
         assertFalse(LivePreviewPolicy.isRuntimeFailure(android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT))
         assertTrue(LivePreviewPolicy.isRuntimeFailure(android.speech.SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE))
         assertTrue(LivePreviewPolicy.isRuntimeFailure(android.speech.SpeechRecognizer.ERROR_CLIENT))
+    }
+
+    private class Fd : java.io.Closeable {
+        var closed = 0
+        override fun close() { closed++ }
+    }
+
+    @Test fun `a recognizer that fails to start closes both pipe ends and rethrows`() {
+        val read = Fd()
+        val write = Fd()
+        val error = assertThrows(IllegalStateException::class.java) {
+            LivePreviewPolicy.startOnPipe(read, write) { throw IllegalStateException("startListening") }
+        }
+        assertEquals("startListening", error.message)
+        assertEquals(1, read.closed)
+        assertEquals(1, write.closed)
+    }
+
+    @Test fun `a started recognizer keeps only the write end`() {
+        val read = Fd()
+        val write = Fd()
+        var handed: Fd? = null
+        assertSame(write, LivePreviewPolicy.startOnPipe(read, write) { handed = it })
+        assertSame(read, handed)
+        assertEquals(1, read.closed)
+        assertEquals(0, write.closed)
     }
 }
