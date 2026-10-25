@@ -854,7 +854,8 @@ class ListenSessionRuntime:
         if admission is not None:
             await admission.refresh(force=bool(invalidated), subscription=subscription)
             if getattr(self.receiver, 'cap_paused', False) and admission.managed:
-                await self.receiver.initialize_stt()
+                if await self.receiver.initialize_stt() and not getattr(self.receiver, 'cap_paused', False):
+                    self.receiver.ensure_live_demand_routing()
         credit_admission = (
             admission
             if admission is not None
@@ -1187,9 +1188,9 @@ class ListenSessionRuntime:
             current_routing_cohort.set(self._routing_cohort)
             if not await self.receiver.initialize_stt():
                 return
-            demand = getattr(self.receiver, 'live_demand', None)
-            if demand is not None:
-                background.append(self.task_supervisor.create_lifetime_task(demand.run(), name='live_demand_routing'))
+            demand_task = self.receiver.ensure_live_demand_routing()
+            if demand_task is not None:
+                background.append(demand_task)
             record_listen_session_accepted(
                 source=self.request.source,
                 platform=self.client_device_context.platform,

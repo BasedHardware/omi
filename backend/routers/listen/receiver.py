@@ -1457,24 +1457,33 @@ class ListenReceiver(ReplayFilterMixin):
             return False
         return await switch_live_demand(self, lane)
 
+    def ensure_live_demand_routing(self) -> Any:
+        """Start demand routing once a stream exists; idempotent for deferred and cap-paused starts."""
+
+        demand = getattr(self, 'live_demand', None)
+        supervisor = getattr(self.host, 'task_supervisor', None)
+        if demand is None or supervisor is None or getattr(self, '_live_demand_routing_started', False):
+            return None
+        self._live_demand_routing_started = True
+        return supervisor.create_lifetime_task(demand.run(), name='live_demand_routing')
+
     async def _open_deferred_stream(self) -> bool:
         """Audio reached a deferred session: open the provider stream it would have had."""
 
         self._cloud_live_opening = True
-        try:
-            OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL.labels(
-                deferred_by=getattr(self, '_cloud_live_deferred_by', None) or 'off'
-            ).inc()
-        except Exception:
-            pass  # Telemetry never blocks the stream.
         self.cloud_live_suppressed = False
         if not await self.initialize_stt():
             return False
-        demand = getattr(self, 'live_demand', None)
-        supervisor = getattr(self.host, 'task_supervisor', None)
-        if demand is not None and supervisor is not None:
-            # Session start skipped this task while the stream was deferred.
-            supervisor.create_lifetime_task(demand.run(), name='live_demand_routing')
+        if self.stt_socket is not None or any(self.stt_sockets_multi):
+            try:
+                OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL.labels(
+                    deferred_by=getattr(self, '_cloud_live_deferred_by', None) or 'off'
+                ).inc()
+            except Exception:
+                pass  # Telemetry never blocks the stream.
+            self.ensure_live_demand_routing()
+        # Otherwise cap admission paused it (audio goes to LiveHeldAudio); credit
+        # refresh re-initializes and starts demand routing when the cap recovers.
         return True
 
     async def _failover_stt_socket(self) -> bool:

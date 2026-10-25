@@ -137,15 +137,47 @@ async def test_local_preview_session_defers_then_opens_on_socket_audio(monkeypat
         assert fake._cloud_live_opening is True
         opened.append(True)
         fake.live_demand = SimpleNamespace(run=Mock(return_value='run'))
+        fake.stt_socket = object()
         return True
 
     fake.initialize_stt = initialize_stt
+    fake.stt_socket = None
+    fake.stt_sockets_multi = []
+    fake.ensure_live_demand_routing = lambda: ListenReceiver.ensure_live_demand_routing(fake)
     before = counter(OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL, deferred_by='local_preview')
     assert await ListenReceiver._open_deferred_stream(fake) is True
     assert opened == [True]
     assert fake.cloud_live_suppressed is False
     fake.host.task_supervisor.create_lifetime_task.assert_called_once_with('run', name='live_demand_routing')
     assert counter(OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL, deferred_by='local_preview') == before + 1
+    # Idempotent: a later cap recovery or re-init never starts a second routing task.
+    assert fake.ensure_live_demand_routing() is None
+    fake.host.task_supervisor.create_lifetime_task.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_cap_paused_deferred_open_waits_for_cap_recovery(monkeypatch):
+    fake = make_receiver(make_host())
+    fake.stt_socket = None
+    fake.stt_sockets_multi = []
+    fake._cloud_live_deferred_by = 'local_preview'
+    fake.live_demand = None
+    fake.ensure_live_demand_routing = lambda: ListenReceiver.ensure_live_demand_routing(fake)
+
+    async def initialize_stt():
+        fake.cap_paused = True  # Cap admission refused: no socket, audio goes to LiveHeldAudio.
+        return True
+
+    fake.initialize_stt = initialize_stt
+    before = counter(OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL, deferred_by='local_preview')
+    assert await ListenReceiver._open_deferred_stream(fake) is True
+    assert counter(OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL, deferred_by='local_preview') == before
+    fake.host.task_supervisor.create_lifetime_task.assert_not_called()
+    # Cap recovers: initialization attaches demand and the routing task starts exactly once.
+    fake.live_demand = SimpleNamespace(run=Mock(return_value='run'))
+    fake.ensure_live_demand_routing()
+    fake.ensure_live_demand_routing()
+    fake.host.task_supervisor.create_lifetime_task.assert_called_once_with('run', name='live_demand_routing')
 
 
 @pytest.mark.asyncio
