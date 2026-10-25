@@ -1318,3 +1318,192 @@ def test_an_intake_joined_clip_merged_away_follows_membership_to_the_survivor():
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
     assert episode is not None and episode['conversation_ids'] == ['survivor']
     assert episodes_db.get_episode_for_conversation(UID, 'survivor', firestore_client=store)['id'] == episode['id']
+
+
+# ---------------------------------------------------------------- silence-closed rejoin
+
+
+def _close_on_gap(store, conversation_id='c-live', *, at_minutes=20):
+    """The server ends the phone's occasion conversation on silence: the episode closes on gap."""
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=at_minutes), store=store)
+    assert (
+        service.close_on_finalize(UID, conversation_id, trigger='server_recovery', source='omi', collaborators=c)
+        == 'closed'
+    )
+
+
+def test_a_late_sync_clip_rejoins_the_gap_closed_episode_and_reopens_it():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    _close_on_gap(store)
+    # The pendant's WAL clip finalized moments after the close, its span inside the
+    # closed episode: it rejoins and reopens the most recent episode.
+    c = _collaborators(model, now=T0 + timedelta(minutes=21), store=store)
+    assert (
+        service.on_conversation_finalized(UID, 'c-wal', _wal_row(minutes=15), trigger='sync_update', collaborators=c)
+        == 'rejoined'
+    )
+    reopened = episodes_db.get_episode(UID, episode['id'], firestore_client=store)
+    assert reopened['status'] == 'live' and reopened['close_reason'] is None and reopened['closed_at'] is None
+    assert reopened['conversation_ids'] == ['c-live', 'c-wal']
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['id'] == episode['id']
+    assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store)['id'] == episode['id']
+    # A parallel capture still feeds no text, spends nothing, and its speech is activity.
+    assert len(model.calls) == 1 and reopened['applied'].keys() == {'c-live'}
+    assert reopened['last_activity_at'] == _wal_row(minutes=15)['finished_at']
+    # The recap no longer advertises the reopened episode as the last closed one.
+    assert episodes_db.get_last_closed_episode(UID, firestore_client=store) is None
+
+
+def test_a_late_sync_clip_starting_within_the_continue_gap_of_the_close_rejoins():
+    store = StrictFirestore()
+    service.record_moment(
+        UID, _moment('c-live'), _collaborators(FakeModel(), now=T0 + timedelta(minutes=1), store=store)
+    )
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    _close_on_gap(store)
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=21), store=store)
+    # Started a minute after the closed episode's end, inside CONTINUE_GAP_SECONDS.
+    assert (
+        service.on_conversation_finalized(
+            UID, 'c-next', _wal_row('c-next', minutes=21), trigger='sync_update', collaborators=c
+        )
+        == 'rejoined'
+    )
+    reopened = episodes_db.get_episode(UID, episode['id'], firestore_client=store)
+    assert reopened['status'] == 'live' and 'c-next' in reopened['conversation_ids']
+    # The pause beyond the continue gap is a different occasion: the clip stands alone.
+    assert (
+        service.on_conversation_finalized(
+            UID, 'c-after', _wal_row('c-after', minutes=24), trigger='sync_update', collaborators=c
+        )
+        == 'no_episode'
+    )
+    assert episodes_db.get_episode_for_conversation(UID, 'c-after', firestore_client=store) is None
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['id'] == episode['id']
+
+
+def test_a_late_sync_clip_attaches_to_the_gap_closed_episode_without_reopening_when_newer_speech_exists():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    first = episodes_db.get_current_episode(UID, firestore_client=store)
+    _close_on_gap(store)
+    # New live words open the next episode; the occasion moved on.
+    _attach(store, 'c-new', minutes=45)
+    newer = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert newer['id'] != first['id']
+    # The WAL clip belongs to the closed occasion: a member of it, never a reopen.
+    c = _collaborators(model, now=T0 + timedelta(minutes=46), store=store)
+    assert (
+        service.on_conversation_finalized(UID, 'c-wal', _wal_row(minutes=15), trigger='sync_update', collaborators=c)
+        == 'rejoined_member'
+    )
+    closed = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    assert closed['status'] == 'closed' and closed['close_reason'] == 'gap'
+    assert closed['conversation_ids'] == ['c-live', 'c-wal']
+    assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store)['id'] == first['id']
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['id'] == newer['id']
+    assert 'c-wal' not in episodes_db.get_current_episode(UID, firestore_client=store)['conversation_ids']
+
+
+def test_a_user_wrap_up_or_boundary_close_is_never_rejoined_by_a_late_sync_clip():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    c = _collaborators(model, now=T0 + timedelta(minutes=3), store=store)
+    assert service.wrap_up(UID, episode['id'], conversation_id='c-live', collaborators=c)['status'] == 'closed'
+    assert (
+        service.on_conversation_finalized(UID, 'c-wal', _wal_row(minutes=0.5), trigger='sync_update', collaborators=c)
+        == 'no_episode'
+    )
+    assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store) is None
+    assert episodes_db.get_episode(UID, episode['id'], firestore_client=store)['conversation_ids'] == ['c-live']
+
+    # A hard boundary (a meeting window edge) is just as final.
+    service.record_moment(UID, _moment('c-live2'), _collaborators(model, now=T0 + timedelta(minutes=10), store=store))
+    bounded = episodes_db.get_current_episode(UID, firestore_client=store)
+    episodes_db.close_episode(
+        UID, bounded['id'], 'boundary', closed_at=T0 + timedelta(minutes=11), firestore_client=store
+    )
+    assert (
+        service.on_conversation_finalized(
+            UID, 'c-wal2', _wal_row('c-wal2', minutes=10.5), trigger='sync_update', collaborators=c
+        )
+        == 'no_episode'
+    )
+    assert episodes_db.get_episode(UID, bounded['id'], firestore_client=store)['conversation_ids'] == ['c-live2']
+
+
+def test_sync_speech_extends_the_live_episodes_activity_and_defers_the_idle_close():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    # A pendant clip joins at intake nine minutes after the live stream's last moment.
+    clip = _wal_row(minutes=0.5)
+    clip['finished_at'] = clip['started_at'] + timedelta(minutes=9)
+    c = _collaborators(model, now=T0 + timedelta(minutes=10), store=store)
+    assert service.attach_synced_intake(UID, 'c-wal', clip, collaborators=c) == 'joined'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['last_activity_at'] == clip['finished_at']
+    # Thirty minutes past the live moment, the idle close does not fire: the
+    # occasion's latest speech is the sync clip's end, twenty-one minutes back.
+    later = _collaborators(model, now=T0 + timedelta(minutes=31), store=store)
+    still_live = service.live_episode(UID, collaborators=later)
+    assert still_live is not None and still_live['id'] == episode['id']
+    # The close measures from the sync activity too: at thirty minutes past it, idle fires.
+    idle = _collaborators(model, now=T0 + timedelta(minutes=40), store=store)
+    closed = service.live_episode(UID, collaborators=idle)
+    assert closed is None
+    finished = episodes_db.get_episode(UID, episode['id'], firestore_client=store)
+    assert finished['close_reason'] == 'idle' and finished['conversation_ids'] == ['c-live', 'c-wal']
+
+
+def test_a_backfilled_sync_clip_attaches_to_the_closed_episode_without_reopening_it():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    _close_on_gap(store)
+    # The same clip, delivered hours later: its speech is older than the close gap,
+    # so it joins as a member and the episode stays closed (no "Listening now" flash).
+    c = _collaborators(model, now=T0 + timedelta(hours=3), store=store)
+    service.on_conversation_finalized(UID, 'c-wal', _wal_row(minutes=15), trigger='sync_update', collaborators=c)
+    after = episodes_db.get_episode(UID, episode['id'], firestore_client=store)
+    assert after['status'] == 'closed' and 'c-wal' in after['conversation_ids']
+    assert episodes_db.get_current_episode(UID, firestore_client=store) is None
+
+
+def test_a_pendant_clock_running_ahead_never_pins_the_episode_open():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    clip = _wal_row(minutes=0.5)
+    clip['finished_at'] = T0 + timedelta(minutes=22)  # pendant clock ~20 min ahead
+    now = T0 + timedelta(minutes=2)
+    assert (
+        service.attach_synced_intake(UID, 'c-wal', clip, collaborators=_collaborators(model, now=now, store=store))
+        == 'joined'
+    )
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['last_activity_at'] == now
+
+
+def test_late_sync_audio_from_before_the_closed_episode_stays_out():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(
+        UID, _moment('c-live', minutes=8), _collaborators(model, now=T0 + timedelta(minutes=10), store=store)
+    )
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    _close_on_gap(store, at_minutes=30)
+    c = _collaborators(model, now=T0 + timedelta(minutes=31), store=store)
+    # The clip's span ended long before the episode's first recorded words.
+    old = _wal_row(minutes=5)
+    old['finished_at'] = old['started_at'] + timedelta(seconds=30)
+    assert service.on_conversation_finalized(UID, 'c-old', old, trigger='sync_update', collaborators=c) == 'no_episode'
+    assert episodes_db.get_episode_for_conversation(UID, 'c-old', firestore_client=store) is None
+    closed = episodes_db.get_episode(UID, episode['id'], firestore_client=store)
+    assert closed['conversation_ids'] == ['c-live'] and closed['status'] == 'closed'

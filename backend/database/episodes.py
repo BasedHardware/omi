@@ -296,6 +296,81 @@ def commit_moment(
 
 
 @firestore.transactional
+def _reopen(
+    transaction: Any,
+    client: Any,
+    uid: str,
+    episode_id: str,
+    expected_version: int,
+    updates: Mapping[str, Any],
+    link_conversation_ids: Sequence[str],
+) -> Optional[dict[str, Any]]:
+    ref = _episodes(client, uid).document(episode_id)
+    snapshot = ref.get(transaction=transaction)
+    raw = snapshot.to_dict() if snapshot.exists else None
+    if not raw or raw.get('status') != 'closed':
+        return None
+    if int(raw.get('state_version') or 0) != expected_version:
+        raise EpisodeConflict('state_version_changed')
+    if _link_target(client, uid, CURRENT, transaction):
+        return None  # A newer episode went live: the closed one stays closed.
+    last_closed_id = _link_target(client, uid, LAST_CLOSED, transaction)
+    if last_closed_id != episode_id:
+        return None  # A newer episode opened and closed since the read: only the latest reopens.
+    now = datetime.now(timezone.utc)
+    merged = _merge_state(
+        unseal(uid, raw) or {},
+        {
+            **updates,
+            'status': 'live',
+            'closed_at': None,
+            'close_reason': None,
+            'closing_conversation_id': None,
+            'wrap_up_requested_at': None,
+        },
+    )
+    merged['state_version'] = int(raw.get('state_version') or 0) + 1
+    transaction.set(ref, seal(uid, merged))
+    transaction.set(_links(client, uid).document(CURRENT), {'episode_id': episode_id, 'updated_at': now})
+    # The recap must not advertise a live episode as the last closed one.
+    transaction.set(_links(client, uid).document(LAST_CLOSED), {'episode_id': None, 'updated_at': now})
+    for conversation_id in [
+        cid for cid in dict.fromkeys(link_conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}
+    ]:
+        transaction.set(_links(client, uid).document(conversation_id), {'episode_id': episode_id, 'updated_at': now})
+    return merged
+
+
+def reopen_episode(
+    uid: str,
+    episode_id: str,
+    *,
+    expected_version: int,
+    updates: Optional[Mapping[str, Any]] = None,
+    link_conversation_ids: Sequence[str] = (),
+    firestore_client: Any = None,
+) -> Optional[dict[str, Any]]:
+    """Reopen a closed episode as the current one. Returns the live state, or None.
+
+    None means the episode is no longer closed, its state version moved on
+    (``EpisodeConflict`` is raised for that), or another episode is already
+    current: the caller then attaches without reopening. Only the episode-join
+    path for a late sync capture reopens; every other close stays final.
+    """
+    client = _client(firestore_client)
+    return run_transactional(
+        client,
+        _reopen,
+        client,
+        uid,
+        episode_id,
+        expected_version,
+        dict(updates or {}),
+        list(link_conversation_ids),
+    )
+
+
+@firestore.transactional
 def _close(
     transaction: Any,
     client: Any,
