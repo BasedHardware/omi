@@ -320,10 +320,19 @@ def test_process_segment_saved_rows_results_finish_and_log_bytes_match_main(
                         'finish': calls,
                         # Shadow comparison telemetry is new; serving events,
                         # persisted rows and results must retain their old bytes.
+                        # The episodes intake attach (with its capability-marker
+                        # read) is likewise new additive telemetry, not a sync
+                        # serving change.
                         'logs': [
                             record.getMessage()
                             for record in caplog.records
-                            if not record.getMessage().startswith('event=refactor_shadow ')
+                            if not record.getMessage().startswith(
+                                (
+                                    'event=refactor_shadow ',
+                                    'event=episodes_client_seen_',
+                                    'event=episode_sync_intake_attach',
+                                )
+                            )
                         ],
                     }
                 )

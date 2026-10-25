@@ -11,12 +11,18 @@ Entry points (all synchronous, fail-open, run on a worker thread by callers):
   live stream, or its conversation finalized). Decide the boundary, run the one
   cheap incremental update on the previous state plus this moment's new text,
   and store the result with a compare-and-swap.
+- ``attach_synced_intake``: a sync (WAL) conversation the moment intake
+  persisted it. It joins the live episode covering its span right away, so
+  Home folds it under the live row from its first appearance instead of only
+  after enrichment finishes. Same rules as the finalize-time join: no model
+  call, never opens or closes an episode.
 - ``on_conversation_finalized``: the conversation's normal processing has
   completed. Apply any trailing text the live stream did not deliver, then
   reconcile the provisional items heard in it against the tasks that
   processing saved (the shadow precision metric). A sync-finalized
   conversation that never attached (no realtime stream carried it) joins the
-  live episode covering its span here, as a parallel capture.
+  live episode covering its span here, as a parallel capture — the safety net
+  for a row that landed before intake could attach it.
 - ``close_on_finalize``: a conversation just ended (a client finalize, or the
   server ending an occasion conversation). Its live episode closes at once, and
   the next words open a new one. The ended conversation never reopens it or
@@ -40,6 +46,7 @@ from uuid import uuid4
 
 from config.episodes import (
     CLOSE_GAP_SECONDS,
+    CONTINUE_GAP_SECONDS,
     LAST_CLOSED_CACHE_SECONDS,
     MOMENT_MIN_INTERVAL_SECONDS,
     MOMENT_MIN_WORDS,
@@ -846,8 +853,17 @@ def _attach_synced(uid: str, conversation_id: str, row: Mapping[str, Any], c: Co
         return 'no_episode' if episode is None else 'attached'
     episode_started = policy.utc(episode.get('started_at'))
     if episode_started is not None and started < episode_started:
-        # Older audio than this episode: it belongs to an occasion already over.
-        return 'no_episode'
+        # Older audio than this episode's first recorded words still belongs to the
+        # occasion in progress when its span reaches the episode (a parallel capture
+        # that caught the opening words) or it began within the continue gap (the
+        # pendant and the phone clock separately, and the episode's recorded start
+        # can sit slightly after the speech). A clip that ended earlier than that is
+        # an occasion already over.
+        finished = policy.utc(row.get('finished_at')) or started
+        reached = finished >= episode_started
+        began_within_gap = (episode_started - started).total_seconds() <= CONTINUE_GAP_SECONDS
+        if not (reached or began_within_gap):
+            return 'no_episode'
     source = str(row.get('source') or '') or None
     facts = policy.MomentFacts(
         conversation_id=conversation_id,
@@ -874,6 +890,38 @@ def _attach_synced(uid: str, conversation_id: str, row: Mapping[str, Any], c: Co
         firestore_client=c.firestore_client,
     )
     return 'joined'
+
+
+def attach_synced_intake(
+    uid: str,
+    conversation_id: str,
+    row: Mapping[str, Any],
+    *,
+    collaborators: Optional[Collaborators] = None,
+) -> str:
+    """A sync conversation at the moment intake persisted it: join the live episode now.
+
+    Without this, a landed WAL clip stays a standalone Home row until its
+    enrichment finalizes (``on_conversation_finalized``), which offline sync
+    can leave minutes behind. The join is the same one the finalize-time path
+    makes (``_attach_synced``): no model call, never opens or closes an
+    episode, joins only the current live episode covering its span, and a
+    conversation already owned by an episode (live or closed) never moves.
+    Fail-open; returns a bounded outcome label; never raises.
+    """
+    c = collaborators or Collaborators()
+    if not episodes_enabled_for(uid) or not conversation_id:
+        return 'disabled'
+    try:
+        if not client_gate.client_seen_cached(uid):
+            return 'skipped_no_client'
+        owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
+        if owner is not None:
+            return 'attached' if policy.is_live(owner) else 'no_episode'
+        return _attach_synced(uid, conversation_id, row, c)
+    except Exception as error:
+        logger.warning('event=episode_sync_intake_attach outcome=error exception_type=%s', type(error).__name__)
+        return 'error'
 
 
 def _on_finalized(

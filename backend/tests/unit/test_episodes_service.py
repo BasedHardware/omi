@@ -1164,11 +1164,12 @@ def test_an_ambiguous_or_stale_sync_row_stays_an_ordinary_row():
         == 'no_episode'
     )
     assert episodes_db.get_episode(UID, episode['id'], firestore_client=store)['status'] == 'live'
-    # Audio older than the episode belongs to an occasion already over.
+    # Audio from an occasion already over: it began far before this episode and
+    # its span ended long before the episode's first recorded words.
     _attach(store, 'c-next', minutes=60, now_minutes=60)
     current = episodes_db.get_current_episode(UID, firestore_client=store)
     assert (
-        service.on_conversation_finalized(UID, 'c-wal', _wal_row(minutes=59), trigger='sync_update', collaborators=c)
+        service.on_conversation_finalized(UID, 'c-wal', _wal_row(minutes=45), trigger='sync_update', collaborators=c)
         == 'no_episode'
     )
     after = episodes_db.get_current_episode(UID, firestore_client=store)
@@ -1195,3 +1196,104 @@ def test_sync_finalize_with_no_live_episode_creates_nothing_but_capture_end_stil
     }
     opened = episodes_db.get_episode_for_conversation(UID, 'c-cap', firestore_client=store)
     assert opened is not None and 'c-cap' in opened['conversation_ids']
+
+
+# --------------------------------------------------------------------------- sync intake attach
+
+
+def test_a_sync_clip_joins_the_live_episode_at_intake_and_the_finalize_hook_stays_idempotent():
+    store = StrictFirestore()
+    _attach(store, 'c-live', minutes=0)
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    model = FakeModel()
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    # The WAL row exists the moment intake persisted it; Home must fold it now, not
+    # after enrichment finishes.
+    assert service.attach_synced_intake(UID, 'c-wal', _wal_row(), collaborators=c) == 'joined'
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['id'] == episode['id'] and after['status'] == 'live'
+    assert after['conversation_ids'] == ['c-live', 'c-wal']
+    assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store)['id'] == episode['id']
+    # The cheap rules alone decided: no model call, and no text fed.
+    assert model.calls == [] and after['applied'].keys() == set() and after['moments'] == []
+    # Enrichment finishing later neither re-joins nor replays the duplicate transcript.
+    assert service.on_conversation_finalized(UID, 'c-wal', _wal_row(), trigger='sync_update', collaborators=c) == (
+        'finalized'
+    )
+    replay = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert replay['conversation_ids'] == ['c-live', 'c-wal'] and model.calls == []
+    # A replayed intake is a no-op on the same membership.
+    assert service.attach_synced_intake(UID, 'c-wal', _wal_row(), collaborators=c) == 'attached'
+
+
+def test_intake_attach_respects_the_gates_and_an_existing_episode_ownership(monkeypatch):
+    store = StrictFirestore()
+    _attach(store, 'c-live', minutes=0)
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=2), store=store)
+    monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'off')
+    assert service.attach_synced_intake(UID, 'c-wal', _wal_row(), collaborators=c) == 'disabled'
+    monkeypatch.delenv(config.EPISODES_ENABLED_ENV)
+    monkeypatch.setattr(service.client_gate, 'client_seen_cached', lambda uid: False)
+    assert service.attach_synced_intake(UID, 'c-wal', _wal_row(), collaborators=c) == 'skipped_no_client'
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['conversation_ids'] == ['c-live']
+    monkeypatch.setattr(service.client_gate, 'client_seen_cached', lambda uid: True)
+    # A member of the live episode never re-joins, and an episode owner never moves.
+    assert service.attach_synced_intake(UID, 'c-live', _wal_row('c-live'), collaborators=c) == 'attached'
+    assert service.close_on_finalize(UID, 'c-live', trigger='client_finalize', collaborators=c) == 'closed'
+    assert service.attach_synced_intake(UID, 'c-live', _wal_row('c-live'), collaborators=c) == 'no_episode'
+    assert episodes_db.get_current_episode(UID, firestore_client=store) is None
+    assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store) is None
+
+
+def test_intake_attach_with_no_live_episode_creates_nothing():
+    store = StrictFirestore()
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=2), store=store)
+    assert service.attach_synced_intake(UID, 'c-wal', _wal_row(), collaborators=c) == 'no_episode'
+    assert episodes_db.get_current_episode(UID, firestore_client=store) is None
+    assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store) is None
+
+
+def test_a_clip_starting_slightly_before_the_episode_start_joins_within_the_continue_gap():
+    store = StrictFirestore()
+    # The pendant caught the opening words before the phone's stream recorded the start.
+    _attach(store, 'c-live', minutes=1)
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=2), store=store)
+    # Span overlap: started before the episode, finished inside it.
+    assert service.attach_synced_intake(UID, 'c-ov', _wal_row('c-ov', minutes=0.75), collaborators=c) == 'joined'
+    # Clock skew: began a minute before the recorded start, ended half a minute before it.
+    skew = _wal_row('c-skew', minutes=0)
+    skew['finished_at'] = skew['started_at'] + timedelta(seconds=30)
+    assert service.attach_synced_intake(UID, 'c-skew', skew, collaborators=c) == 'joined'
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['id'] == episode['id'] and after['conversation_ids'] == ['c-live', 'c-ov', 'c-skew']
+
+
+def test_a_clip_that_ended_before_the_episode_stays_out_beyond_the_continue_gap():
+    store = StrictFirestore()
+    _attach(store, 'c-live', minutes=10)
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=11), store=store)
+    assert service.attach_synced_intake(UID, 'c-old', _wal_row('c-old'), collaborators=c) == 'no_episode'
+    assert episodes_db.get_episode_for_conversation(UID, 'c-old', firestore_client=store) is None
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['id'] == episode['id'] and after['conversation_ids'] == ['c-live']
+
+
+def test_an_intake_joined_clip_merged_away_follows_membership_to_the_survivor():
+    store = StrictFirestore()
+    _attach(store, 'survivor', minutes=0)
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=2), store=store)
+    assert service.attach_synced_intake(UID, 'donor', _wal_row('donor'), collaborators=c) == 'joined'
+    # Smart merge folds the donor away: the episode keeps standing for the survivor
+    # only, and the deleted donor row can never render on Home.
+    donor_row = {'id': 'donor', 'smart_merge': {'role': 'donor', 'survivor_id': 'survivor'}, 'finished_at': T0}
+    assert (
+        service.on_conversation_finalized(
+            UID, 'survivor', donor_row, trigger='sync_update', absorbed_from='donor', collaborators=c
+        )
+        == 'finalized'
+    )
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode is not None and episode['conversation_ids'] == ['survivor']
+    assert episodes_db.get_episode_for_conversation(UID, 'survivor', firestore_client=store)['id'] == episode['id']

@@ -53,7 +53,14 @@ one capture window's evidence.
      sealed with the user's key. A lost race retries once.
 3. When a conversation's finalize starts, its live episode closes
    (`service.close_on_finalize`, through `finalize.close_now`; see "Close and wrap-up").
-4. After a conversation's finalization job completes,
+4. A sync (WAL) conversation joins the live episode covering its span the
+   moment intake persisted it (`service.attach_synced_intake`, through
+   `finalize.attach_synced_at_intake`, called from the sync pipeline's
+   `complete_sync_intake`). The join is the cheap parallel-capture one below,
+   so Home folds the clip under the live row from its first appearance instead
+   of only after its enrichment finalizes. Fail-open and gated on the same
+   admission and client-capability markers as the finalize-time hook.
+5. After a conversation's finalization job completes,
    `utils/conversations/finalizer.py` calls `service.on_conversation_finalized`
    (bounded, fail-open, after `complete_finalization_fanout`). The synchronous
    `POST /v1/conversations` route runs the same hook off the request path
@@ -64,11 +71,15 @@ one capture window's evidence.
      per-conversation applied offset), to the conversation's own episode even
      when that one has closed.
    - A sync-finalized conversation that never attached (no realtime stream
-     carried it) joins the live episode covering its span first, as a parallel
-     capture: a member whose text the live stream already fed, so no moment and
-     no reconcile. It never closes the live episode, never opens one, and a
-     closed covering episode stays closed; a discarded conversation never
-     joins.
+     carried it, and intake did not or could not join it) joins the live
+     episode covering its span first, as a parallel capture: a member whose
+     text the live stream already fed, so no moment and no reconcile. It never
+     closes the live episode, never opens one, and a closed covering episode
+     stays closed; a discarded conversation never joins. A clip that started
+     before the episode's recorded start still joins when its span reaches the
+     episode or it began within `CONTINUE_GAP_SECONDS` of that start (the
+     pendant and the phone clock separately); one that ended earlier belongs
+     to an occasion already over.
    - It repoints a smart-merge donor to its survivor.
    - It reconciles the provisional items heard in that conversation against the
      tasks its normal processing saved: each becomes `kept` (with the task id)

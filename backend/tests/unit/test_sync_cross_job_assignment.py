@@ -291,6 +291,10 @@ def independent_job_pipeline():
         pipeline = load_module_fresh(
             'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
         )
+        # The episodes intake attach is fail-open; the harness stand-in skips like
+        # a user whose app never called the episodes API, keeping the overlay's
+        # deferred service import out of this file's behavior timing budget.
+        pipeline.attach_synced_at_intake = lambda uid, cid, row: 'skipped_no_client'
         yield pipeline, transcript_segment, lifecycle
 
 
