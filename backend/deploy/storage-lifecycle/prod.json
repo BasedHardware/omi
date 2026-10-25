@@ -13,6 +13,14 @@
           "matchesStorageClass": ["STANDARD", "MULTI_REGIONAL"],
           "matchesSuffix": [".batch.enc", ".batch.bin"]
         }
+      },
+      {
+        "action": {"type": "SetStorageClass", "storageClass": "COLDLINE"},
+        "condition": {
+          "age": 30,
+          "matchesPrefix": ["raw-live/", "raw-sync/", "raw-mobile-batch/"],
+          "matchesStorageClass": ["STANDARD", "MULTI_REGIONAL"]
+        }
       }
     ]
   }
