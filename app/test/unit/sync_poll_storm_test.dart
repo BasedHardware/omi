@@ -12,6 +12,8 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/wal_backlog_telemetry.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
@@ -155,6 +157,7 @@ void main() {
 
   test('large reconcile backlog visits only one due batch and eventually acknowledges every job', () async {
     final poller = _CountingPoller(clock: () => now);
+    final summaries = <RegisteredEvent>[];
     var requests = 0;
     var maxActive = 0;
     var active = 0;
@@ -162,6 +165,7 @@ void main() {
       _Listener(),
       now: () => now,
       jobPoller: poller,
+      backlogTelemetry: WalBacklogTelemetry(emit: summaries.add),
       persistWals: (_) async {},
       jobStatusFetcher: (id) async {
         requests++;
@@ -188,6 +192,46 @@ void main() {
     expect(sync.testWals, hasLength(127));
     expect(sync.testWals.map((wal) => wal.status), everyElement(WalStatus.synced));
     expect(sync.testWals.map((wal) => wal.syncedAt), everyElement(greaterThan(0)));
+    expect(summaries.whereType<WalReconcilePollSummary>(), hasLength(8));
+    expect(summaries.whereType<WalReconcilePollSummary>().fold<int>(0, (n, e) => n + e.polledJobs), 127);
+    expect(summaries.first.properties, {
+      'backlog_jobs': 127,
+      'polled_jobs': 18,
+      'transient_jobs': 0,
+      'throttled_jobs': 0,
+      'locally_deferred_jobs': 109,
+    });
+  });
+
+  test('real reconciliation summarizes actual transient and throttle results without acknowledging audio', () async {
+    final events = <RegisteredEvent>[];
+    var requests = 0;
+    final sync = LocalWalSyncImpl(
+      _Listener(),
+      now: () => now,
+      backlogTelemetry: WalBacklogTelemetry(emit: events.add),
+      persistWals: (_) async {},
+      jobStatusFetcher: (_) async {
+        requests++;
+        return requests == 2
+            ? SyncJobFetch.throttled(
+                SyncRateLimitedException(kind: SyncRateLimitKind.edgeThrottle, retryAfterSeconds: 60))
+            : const SyncJobFetch(SyncJobFetchOutcome.transient);
+      },
+    );
+    sync.testWals = List.generate(50, pending);
+    await sync.reconcileUploadedWals();
+    expect(requests, 2);
+    expect(events.single.properties, {
+      'backlog_jobs': 50,
+      'polled_jobs': 2,
+      'transient_jobs': 1,
+      'throttled_jobs': 1,
+      'locally_deferred_jobs': 48,
+    });
+    expect(sync.testWals.map((w) => w.status), everyElement(WalStatus.uploaded));
+    await sync.reconcileUploadedWals();
+    expect(events, hasLength(1));
   });
 
   test('127 restored uploads recover without deleting audio or letting a queued job starve siblings', () async {

@@ -8,6 +8,22 @@ PostHog ingestion-side sampling is also active; see the [sampling table](../../.
 New events default to 2% unless added to the explicit keep-list or matched by
 its keep rules. Cloud Run server events stay dark.
 
+`Pendant Frames Dropped` and `WAL Reconcile Poll Summary` are typed, count-only
+WAL health observations with no client sampling. Drops aggregate by closed
+reason across each nonempty flush window; a summary is emitted once per
+reconcile pass with an actual poll, including actual transient/throttle counts
+and a separate count of locally deferred jobs. Empty/budget-only wakes emit
+nothing. The existing 18-requests/minute budget also bounds summary volume.
+No content, account/device/job/WAL identifiers or raw errors are properties.
+`disk_space_unknown` and `storage_write_failed` remain distinct from
+`disk_reserve`; `count_cap` should be zero after the capture hotfix.
+
+These two new names require the observability owner to add them to PostHog's
+**100% ingestion keep-list before fleet counts are treated as complete**.
+This repository change does not apply that external configuration, deploy an
+alert, bypass consent, or guarantee SDK delivery. The executable consumer is
+`contracts/analytics/consumers/wal-backlog-health.json`.
+
 `Recording Requested` stays on PostHog. It means capture-session preparation,
 not a confirmed user attempt and not audio start. `request_origin` is
 `explicit_user` only for `PhoneStartRequested` and explicit Transcribe Later,

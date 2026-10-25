@@ -16,6 +16,18 @@ const int maxRetainedCaptureWalCount = 720;
 
 const int minFreeDiskReserveBytes = 512 * 1024 * 1024;
 
+extension _PendantBufferPolicy on LocalWalSyncImpl {
+  int _countPendantBuffered() {
+    var count = _frames.where(_isPendantFrame).length;
+    for (final wal in _wals) {
+      if (wal.storage == WalStorage.mem && _isPendantWal(wal)) {
+        count += wal.totalFrames;
+      }
+    }
+    return count;
+  }
+}
+
 class WalRetentionRisk {
   const WalRetentionRisk({
     required this.engagedAt,

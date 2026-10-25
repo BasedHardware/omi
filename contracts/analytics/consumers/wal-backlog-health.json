@@ -1,0 +1,11 @@
+{
+  "id": "wal-backlog-health",
+  "kind": "question",
+  "owner": "dazheng",
+  "events": ["pendantFramesDropped", "walReconcilePollSummary"],
+  "namespace_property": "$app_namespace",
+  "question": "For each mobile build, sum dropped pendant frames by reason and reconcile polled/transient/deferred jobs. Drops are per nonempty flush window; reconciliation summaries are per pass with at least one poll. Distinguish client deferral from network transients.",
+  "zero_policy": "No rows is unknown until release identity, analytics consent/delivery and the external 100 percent ingestion keep-list are verified. Count-cap drops should remain zero after the hotfix.",
+  "query": "contracts/analytics/consumers/wal-backlog-health.sql",
+  "posthog_query": "SELECT event, sum(toInt(properties['count'])) AS dropped_frames, sum(toInt(properties['polled_jobs'])) AS polled_jobs, sum(toInt(properties['transient_jobs'])) AS transient_jobs, sum(toInt(properties['locally_deferred_jobs'])) AS locally_deferred_jobs FROM events WHERE event IN ('Pendant Frames Dropped', 'WAL Reconcile Poll Summary') AND properties['$app_namespace'] = '{app_namespace}' AND properties['build_number'] = '{build_number}' GROUP BY event"
+}
