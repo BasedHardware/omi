@@ -35,6 +35,7 @@ Future<void> main() async {
   final driver = await FlutterDriver.connect();
   StreamSubscription? subscription;
   int? ownedPid;
+  String? ownedIsolateId;
   var ownsHarness = false;
   try {
     final service = driver.serviceClient;
@@ -42,6 +43,7 @@ Future<void> main() async {
     final isolates = vm.isolates!.where((isolate) => isolate.name == 'main').toList();
     if (isolates.length != 1) throw StateError('Expected one main application isolate');
     final isolateId = isolates.single.id!;
+    ownedIsolateId = isolateId;
     ownedPid = vm.pid;
     if (platform == 'ios' && Platform.environment['OMI_PERF_SIMULATOR'] != '1') {
       // Discovery may take minutes. Activate this exact DEV bundle before
@@ -128,31 +130,25 @@ Future<void> main() async {
     await subscription?.cancel();
     sink?.write(']}');
     await sink?.close();
-    if (ownsHarness && platform == 'ios' && Platform.environment['OMI_PERF_SIMULATOR'] != '1') {
-      // Keep the installation/data. Terminate only the still-connected process
-      // that answered this harness's unique extension, never a guessed PID.
+    if (ownsHarness) {
+      // Keep installation/data. The authenticated extension exits this exact
+      // completed harness process on both OSes; no external PID/package kill.
       try {
         final current = await driver.serviceClient.getVM();
-        if (ownedPid == null || current.pid != ownedPid) throw StateError('Harness process ownership changed');
-        final stopped = await Process.run('xcrun', [
-          'devicectl',
-          'device',
-          'process',
-          'terminate',
-          '--device',
-          device,
-          '--pid',
-          '$ownedPid',
-          '--kill',
-          '--timeout',
-          '20'
-        ]);
+        if (ownedPid == null ||
+            current.pid != ownedPid ||
+            ownedIsolateId == null ||
+            !current.isolates!.any((isolate) => isolate.id == ownedIsolateId)) {
+          throw StateError('Harness process/isolate ownership changed');
+        }
+        final response =
+            await driver.serviceClient.callServiceExtension('ext.omi.heavy.exit', isolateId: ownedIsolateId);
+        if (response.json?['exiting'] != true) throw StateError('Harness refused completed-process exit');
         await File('$output/process-cleanup.json').writeAsString(jsonEncode({
           'pid': ownedPid,
-          'sigkill_request_succeeded': stopped.exitCode == 0,
+          'self_exit_acknowledged': true,
           'uninstall_requested': false,
         }));
-        if (stopped.exitCode != 0) throw StateError('Owned DEV process termination failed: ${stopped.stderr}');
       } catch (error) {
         stderr.writeln('Harness process cleanup: $error');
         exitCode = 1;

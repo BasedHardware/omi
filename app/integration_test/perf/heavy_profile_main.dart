@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:ui' as ui;
 import 'heavy_binding.dart';
+import 'heavy_process_exit.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -75,6 +76,7 @@ import 'production_shell.dart';
 /// is explicitly marked as scenario qualification, never profile acceptance.
 void main() {
   final binding = HeavyProfileBinding();
+  registerHeavyProcessExit(testsComplete: () => binding.allTestsPassed.isCompleted);
   final hostReady = Completer<void>();
   developer.registerExtension('ext.omi.heavy.start', (method, parameters) async {
     if (!hostReady.isCompleted) hostReady.complete();
