@@ -8,6 +8,7 @@ import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 import wave
+import weakref
 
 from cryptography.exceptions import InvalidTag
 import numpy as np
@@ -342,11 +343,21 @@ def test_materialized_centroid_copies_are_bounded_by_labels_not_sentence_count(m
     source_vector = next(iter(vectors.values()))
     normalize = grouping._unit_vector
     normalized_source = []
+    live_weighted, peak_weighted = [], []
+
+    class TrackedVector(np.ndarray):
+        def __mul__(self, weight):
+            result = np.asarray(super().__mul__(weight))
+            live_weighted[:] = [reference for reference in live_weighted if reference() is not None]
+            live_weighted.append(weakref.ref(result))
+            peak_weighted.append(len(live_weighted))
+            return result
 
     def count_source(value):
         if value is source_vector:
             normalized_source.append(True)
-        return normalize(value)
+        result = normalize(value)
+        return result.view(TrackedVector) if result is not None else None
 
     monkeypatch.setattr(grouping, '_unit_vector', count_source)
     result = grouping.resolve_conversation_speakers(
@@ -358,6 +369,7 @@ def test_materialized_centroid_copies_are_bounded_by_labels_not_sentence_count(m
     )
     assert result and len(set(result.speaker_ids.values())) == 1
     assert len(normalized_source) == 1
+    assert max(peak_weighted) <= 4  # Bound live arrays even for 1,500 sentences.
 
 
 @pytest.mark.parametrize('evidence_mode', ['off', 'serve'])
