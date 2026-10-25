@@ -4,8 +4,6 @@ Convert Omi conversation JSON exports to clean Markdown notes for Obsidian, Noti
 Usage:
   python conversations_to_markdown.py input.json --output-dir ./notes/
   omi --json conversation list --include-transcript | python conversations_to_markdown.py - --output-dir ./vault/
-
-Failure-Class: new
 """
 
 from __future__ import annotations
@@ -56,8 +54,11 @@ def format_timestamp(seconds: float | int | None) -> str:
     if seconds is None:
         return "00:00"
     total_seconds = int(seconds)
+    hours = total_seconds // 3600
     minutes = (total_seconds % 3600) // 60
     secs = total_seconds % 60
+    if hours > 0:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
     return f"{minutes:02d}:{secs:02d}"
 
 
