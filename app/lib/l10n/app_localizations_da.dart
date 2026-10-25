@@ -12235,12 +12235,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Tjek forbindelsen';
 
   @override
-  String get forYou => 'Til dig';
-
-  @override
-  String get stopThese => 'Stop disse';
-
-  @override
   String get dismiss => 'Afvis';
 
   @override

@@ -12274,12 +12274,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Semak Sambungan';
 
   @override
-  String get forYou => 'Untuk Anda';
-
-  @override
-  String get stopThese => 'Hentikan Ini';
-
-  @override
   String get dismiss => 'Tutup';
 
   @override

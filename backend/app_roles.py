@@ -128,7 +128,6 @@ from routers import (
     pending_work,
     episodes,
     boundary_evidence,
-    commitment_followup,
     public_shared_conversation_chat,
     screen_frames,
     csat,
@@ -221,7 +220,6 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(pending_work),
     Mount(boundary_evidence),
     Mount(episodes),  # main #22877 via sync 15 (same position as main.py)
-    Mount(commitment_followup),
     Mount(trends),
     Mount(other, roles=EVERY),  # health and readiness
     Mount(firmware),

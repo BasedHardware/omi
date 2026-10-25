@@ -3780,8 +3780,6 @@
     "playbackAudioUnavailable": "오디오를 사용할 수 없음",
     "playbackAudioLoadFailed": "오디오를 불러올 수 없음",
     "playbackAudioNetworkFailed": "연결 확인",
-    "forYou": "나를 위한 추천",
-    "stopThese": "이 유형 중지",
     "dismiss": "닫기",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

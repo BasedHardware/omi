@@ -1,11 +1,10 @@
 // Derived by python3 tool/perf_shell.py from main.dart. Do not hand edit.
-// Extracted shell SHA256 (imports, telemetry field, builder chain): bcc4fd25592b68097a6277be409ee99442fc1a01b2f333d51e305e2d21de195f
+// Extracted shell SHA256 (imports, telemetry field, builder chain): c493dd9098cd21e93eaf0006850fc3cf7f4009e6880a4d3f9554ac7c75232324
 // ignore_for_file: unused_import, unnecessary_import
 import 'package:omi/services/on_device/on_device_background.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
-import 'package:omi/services/proactivity/proactivity_runtime.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/services/telemetry/client_telemetry_transport.dart';

@@ -3822,8 +3822,6 @@
     "playbackAudioUnavailable": "Lyd ikke tilgængelig",
     "playbackAudioLoadFailed": "Lyden kunne ikke indlæses",
     "playbackAudioNetworkFailed": "Tjek forbindelsen",
-    "forYou": "Til dig",
-    "stopThese": "Stop disse",
     "dismiss": "Afvis",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

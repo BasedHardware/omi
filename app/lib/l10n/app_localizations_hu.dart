@@ -12295,12 +12295,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Ellenőrizze a kapcsolatot';
 
   @override
-  String get forYou => 'Önnek';
-
-  @override
-  String get stopThese => 'Ezek leállítása';
-
-  @override
   String get dismiss => 'Elrejtés';
 
   @override

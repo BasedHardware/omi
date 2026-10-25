@@ -449,7 +449,7 @@ AREA_TESTS = (
     (
         ('backend/routers/notifications', 'backend/services/notifications/', 'backend/utils/notifications'),
         (),
-        ('tests/unit/test_*notification*.py', 'tests/unit/test_mentor_notifications.py'),
+        ('tests/unit/test_*notification*.py',),
     ),
     (
         ('backend/routers/twilio', 'backend/services/twilio/', 'backend/utils/twilio'),

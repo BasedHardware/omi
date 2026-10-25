@@ -3815,8 +3815,6 @@
     "playbackAudioUnavailable": "Audio Tidak Tersedia",
     "playbackAudioLoadFailed": "Audio Tidak Dapat Dimuat",
     "playbackAudioNetworkFailed": "Periksa Koneksi",
-    "forYou": "Untuk Anda",
-    "stopThese": "Hentikan Ini",
     "dismiss": "Tutup",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

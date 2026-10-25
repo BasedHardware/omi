@@ -12291,12 +12291,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Проверьте соединение';
 
   @override
-  String get forYou => 'Для вас';
-
-  @override
-  String get stopThese => 'Отключить такие';
-
-  @override
   String get dismiss => 'Скрыть';
 
   @override

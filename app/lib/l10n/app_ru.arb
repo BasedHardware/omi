@@ -3815,8 +3815,6 @@
     "playbackAudioUnavailable": "Аудио недоступно",
     "playbackAudioLoadFailed": "Не удалось загрузить аудио",
     "playbackAudioNetworkFailed": "Проверьте соединение",
-    "forYou": "Для вас",
-    "stopThese": "Отключить такие",
     "dismiss": "Скрыть",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

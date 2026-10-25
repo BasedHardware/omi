@@ -12313,12 +12313,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Comprova la connexió';
 
   @override
-  String get forYou => 'Per a tu';
-
-  @override
-  String get stopThese => 'Atura aquests';
-
-  @override
   String get dismiss => 'Descarta';
 
   @override

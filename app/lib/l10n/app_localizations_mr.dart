@@ -12256,12 +12256,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'कनेक्शन तपासा';
 
   @override
-  String get forYou => 'तुमच्यासाठी';
-
-  @override
-  String get stopThese => 'हे थांबवा';
-
-  @override
   String get dismiss => 'लपवा';
 
   @override

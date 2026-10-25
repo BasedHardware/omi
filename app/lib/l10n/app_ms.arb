@@ -3780,8 +3780,6 @@
     "playbackAudioUnavailable": "Audio Tidak Tersedia",
     "playbackAudioLoadFailed": "Audio Tidak Dapat Dimuatkan",
     "playbackAudioNetworkFailed": "Semak Sambungan",
-    "forYou": "Untuk Anda",
-    "stopThese": "Hentikan Ini",
     "dismiss": "Tutup",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

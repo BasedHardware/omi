@@ -12241,12 +12241,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Skontrolujte pripojenie';
 
   @override
-  String get forYou => 'Pre vás';
-
-  @override
-  String get stopThese => 'Zastaviť tieto';
-
-  @override
   String get dismiss => 'Skryť';
 
   @override

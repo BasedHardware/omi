@@ -66700,6 +66700,7 @@
     },
     "/v1/proactivity/feed": {
       "get": {
+        "deprecated": true,
         "operationId": "get_proactivity_feed",
         "parameters": [
           {
@@ -66797,6 +66798,7 @@
     },
     "/v1/proactivity/items/{item_id}/outcomes": {
       "post": {
+        "deprecated": true,
         "operationId": "record_proactivity_outcome",
         "parameters": [
           {

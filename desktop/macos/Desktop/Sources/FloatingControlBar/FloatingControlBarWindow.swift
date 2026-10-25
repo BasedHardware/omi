@@ -4587,12 +4587,7 @@ class FloatingControlBarManager {
       let window
     else { return }
 
-    if case .openProactivityItem = notification.action {
-      guard let authorization = notificationAuthorizationSnapshots[notification.id],
-        RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
-      else { return }
-    }
-    if notification.kind != .proactivityV2 { notification.onInteraction?(.opened) }
+    notification.onInteraction?(.opened)
     DesktopUsageDailyReporter.shared.recordProactiveCardActed()
 
     AnalyticsManager.shared.notificationClicked(
@@ -4606,9 +4601,6 @@ class FloatingControlBarManager {
     cancelNotificationDismissTimer()
     dismissNotificationAndAdvanceQueue(trackDismissal: false, kind: .user)
     switch notification.action {
-    case .openProactivityItem(let target):
-      ProactivityNotificationAdapter.open(target) { notification.onInteraction?(.opened) }
-      return
     case .openWhatMattersNow(let recommendationID):
       ContextualTaskNavigationRouter.shared.request(recommendationID: recommendationID)
       return
@@ -4783,7 +4775,7 @@ class FloatingControlBarManager {
     }
 
     window.showNotification(notification)
-    if notification.kind != .proactivityV2 { notificationDidRender(notification) }
+    notificationDidRender(notification)
     if let suggestionIdentity = notification.suggestionTelemetryIdentity {
       AnalyticsManager.shared.suggestionAssistantDeliveryOutcome(.delivered, identity: suggestionIdentity)
     }

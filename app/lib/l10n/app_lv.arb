@@ -3780,8 +3780,6 @@
     "playbackAudioUnavailable": "Audio nav pieejams",
     "playbackAudioLoadFailed": "Audio neizdevās ielādēt",
     "playbackAudioNetworkFailed": "Pārbaudiet savienojumu",
-    "forYou": "Jums",
-    "stopThese": "Apturēt šos",
     "dismiss": "Paslēpt",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

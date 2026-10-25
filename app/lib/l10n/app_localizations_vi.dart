@@ -12245,12 +12245,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Kiểm tra kết nối';
 
   @override
-  String get forYou => 'Dành Cho Bạn';
-
-  @override
-  String get stopThese => 'Dừng Loại Này';
-
-  @override
   String get dismiss => 'Ẩn';
 
   @override

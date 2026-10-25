@@ -21879,18 +21879,6 @@ abstract class AppLocalizations {
   /// **'Check Connection'**
   String get playbackAudioNetworkFailed;
 
-  /// Home proactivity feed section title
-  ///
-  /// In en, this message translates to:
-  /// **'For You'**
-  String get forYou;
-
-  /// Disable the producer of a For You card
-  ///
-  /// In en, this message translates to:
-  /// **'Stop These'**
-  String get stopThese;
-
   /// Hide a For You card
   ///
   /// In en, this message translates to:

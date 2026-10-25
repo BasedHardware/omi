@@ -3780,8 +3780,6 @@
     "playbackAudioUnavailable": "Heli pole saadaval",
     "playbackAudioLoadFailed": "Heli ei õnnestunud laadida",
     "playbackAudioNetworkFailed": "Kontrollige ühendust",
-    "forYou": "Sulle",
-    "stopThese": "Peata need",
     "dismiss": "Peida",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

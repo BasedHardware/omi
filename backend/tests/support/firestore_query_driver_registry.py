@@ -2985,11 +2985,26 @@ _add(
         setup=_seed(f'users/{UID}', {'subscription': {'plan': 'basic'}}),
     )
 )
+
+
+def _synthetic_proactivity_registry(_client):
+    # The production producer registry is empty after the mentor/follow-up
+    # deletion; ledger drivers still validate against synthetic rows.
+    from unittest.mock import patch
+
+    from config.proactivity_v2 import Producer
+    from tests.support.synthetic_proactivity_producers import COMMITMENT_FOLLOWUP, MENTOR_V2
+
+    rows = {row['name']: Producer.model_validate(row) for row in (MENTOR_V2, COMMITMENT_FOLLOWUP)}
+    return patch('config.proactivity_v2.producers', lambda: rows)
+
+
 _add(
     DriverEntry(
         'database.proactivity.refresh_health',
         base={'name': 'commitment_followup'},
         neutrals={'now': (T0, 'fixed UTC cohort boundary')},
+        patchers=(_synthetic_proactivity_registry,),
     )
 )
 _add(

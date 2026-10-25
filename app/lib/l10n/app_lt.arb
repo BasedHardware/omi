@@ -3780,8 +3780,6 @@
     "playbackAudioUnavailable": "Garsas nepasiekiamas",
     "playbackAudioLoadFailed": "Nepavyko įkelti garso",
     "playbackAudioNetworkFailed": "Patikrinkite ryšį",
-    "forYou": "Jums",
-    "stopThese": "Sustabdyti šiuos",
     "dismiss": "Slėpti",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
