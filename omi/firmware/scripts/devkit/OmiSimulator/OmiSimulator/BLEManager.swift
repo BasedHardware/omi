@@ -9,14 +9,14 @@ import Foundation
 import CoreBluetooth
 
 class BLEManager: NSObject, ObservableObject {
-    
+
     var manager: CBPeripheralManager?
     var packetCounter: UInt16 = 0
-    
+
     private static let audioServiceUUID = CBUUID(string: "19B10000-E8F2-537E-4F6C-D104768A1214")
     private static let audioCharacteristicUUID = CBUUID(string: "19B10001-E8F2-537E-4F6C-D104768A1214")
     private static let audioCodecCharacteristicUUID = CBUUID(string: "19B10002-E8F2-537E-4F6C-D104768A1214")
-    
+
     private let audioCharacteristic = CBMutableCharacteristic(type: BLEManager.audioCharacteristicUUID, properties: .notify, value: nil, permissions: .readable)
 
 
@@ -26,10 +26,10 @@ class BLEManager: NSObject, ObservableObject {
 }
 
 extension BLEManager: CBPeripheralManagerDelegate {
-    
+
     func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
         print("Peripheral state update \(peripheral.state)")
-        
+
         if peripheral.state == .poweredOn {
             let audioCodecCharacteristic = CBMutableCharacteristic(type: Self.audioCodecCharacteristicUUID, properties: .read, value: nil, permissions: .readable)
             let audioService = CBMutableService(type: Self.audioServiceUUID, primary: true)
@@ -41,7 +41,7 @@ extension BLEManager: CBPeripheralManagerDelegate {
                                    CBAdvertisementDataServiceUUIDsKey : [Self.audioServiceUUID/*, BatteryService.serviceUUID*/]])
         }
     }
-    
+
     func peripheralManager(
         _ peripheral: CBPeripheralManager,
         didAdd service: CBService,
@@ -57,7 +57,23 @@ extension BLEManager: CBPeripheralManagerDelegate {
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
         print("Did receive read request \(request)")
     }
-    
+
+
+    private let sendQueue = DispatchQueue(label: "com.friend.audioSendQueue")
+
+    func sendAudioData(_ data: Data) {
+        sendQueue.async { [weak self] in
+            guard let self = self else { return }
+            var dataLeft = data
+            while !dataLeft.isEmpty {
+                let block = dataLeft.prefix(160)
+                self.writeAudio(block)
+                Thread.sleep(forTimeInterval: 0.007) // 7_000 microseconds
+                dataLeft = dataLeft.dropFirst(160)
+            }
+        }
+    }
+
     func writeAudio(_ data: Data) {
         var packet = withUnsafeBytes(of: UInt16(littleEndian: packetCounter)) { Data($0) }
         if packetCounter == UInt16.max {
@@ -69,5 +85,5 @@ extension BLEManager: CBPeripheralManagerDelegate {
         packet.append(data)
         manager?.updateValue(packet, for: audioCharacteristic, onSubscribedCentrals: nil)
     }
-    
+
 }
