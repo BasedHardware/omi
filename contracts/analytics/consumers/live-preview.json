@@ -17,5 +17,5 @@
     "platform",
     "os_major"
   ],
-  "zero_policy": "Presence is not quality. Engine none is an expected outcome (calm Transcribing state), not an error; report it by reason. First-word latency exists only for sessions that heard speech. Preview words are not compared with the batch record in this release (no text leaves the phone); disagreement needs a follow-up on-device comparison."
+  "zero_policy": "Presence is not quality. Engine none is an expected outcome (calm Transcribing state), not an error; report it by reason. First-word latency exists only for sessions that heard speech. Preview words are not compared with the batch record in this release (no text leaves the phone); disagreement needs a follow-up on-device comparison. Live Preview Engine is emitted per engine run: a runtime failure ends that run (Session Ended) and a one-time fallback emits a second Engine event (engine none, reason engine_error when nothing could take over), so count admitted sessions by their first Engine event."
 }

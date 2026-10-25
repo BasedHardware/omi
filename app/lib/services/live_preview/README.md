@@ -54,7 +54,10 @@ single-flight `com.omi/on_device`. iOS (`ios/Runner/LivePreviewPlugin.swift`):
 SpeechAnalyzer/SpeechTranscriber with volatile results on iOS 26+ when the locale
 asset is already installed (never downloads), else on-device SFSpeech with
 existing permission (never prompts), rotated every 50 s, else none. Omi's own
-Parakeet model is not used for streaming yet (`bundled_not_built`). No engine is
+Parakeet model is not used for streaming yet (`bundled_not_built`). A running
+engine that dies reports a typed runtime failure (`engine_error`); the
+controller retries the selection once without it, else shows the no-engine
+state. Decode work runs in bounded slices (8 packets per event-loop turn). No engine is
 a calm "Transcribing…" state; there is never a cloud fallback.
 
 Pendant packets are copied, the 3-byte header stripped and decoded with a
