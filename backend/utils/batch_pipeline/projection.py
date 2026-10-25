@@ -637,7 +637,8 @@ class Projector:
         examined; ``reads`` is what the caller should charge its read budget:
         one read per examined document plus, per attempted upload, 5 reads per
         sibling and 7 (the code-derived worst case of prepare_accounting plus
-        the complete_partial transaction, which walk every sibling).
+        the complete_partial transaction, which walk every sibling), floored
+        at the benchmark's measured per-attempt worst case.
         ``more`` marks a pass stopped on a full page or a failed fetch with the
         cursor kept, so the caller can resume it without waiting out its
         interval. The upload dedupe spans the whole pass — across budget stops
@@ -668,7 +669,10 @@ class Projector:
                     if (binding.owner_id, binding.content_id) in self.held_pass_seen:
                         continue
                     self.held_pass_seen.add((binding.owner_id, binding.content_id))
-                    counts['reads'] += 5 * len(binding.segment_ids) + 7
+                    # 5 reads per sibling and 7 more per attempt bound both
+                    # accounting passes; the floor keeps a one-segment upload
+                    # at the benchmark's measured per-attempt worst case.
+                    counts['reads'] += max(16, 5 * len(binding.segment_ids) + 7)
                     counts['partial' if self.complete_held(binding) is not None else 'waiting'] += 1
                 except Exception as error:
                     counts['error'] += 1

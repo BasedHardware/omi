@@ -1619,6 +1619,25 @@ def test_unit_failures_never_stop_a_multi_page_pass(setup, monkeypatch):
     assert counts == {'partial': 0, 'waiting': 3, 'error': 3, 'units': 6, 'reads': 108, 'more': 0}
 
 
+def test_attempt_charge_floors_at_the_measured_single_upload_worst(setup, monkeypatch):
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda b: None)
+    solo = deepcopy(row(client))
+    solo['projection_binding'] = {**solo['projection_binding'], 'segment_ids': ['solo-unit']}
+    pages = Mock(side_effect=[[('solo-unit', solo)], []])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    counts = projector.sweep_held(2, deadline=1e12)
+    # One examined row plus a 16-read attempt charge: the formula's 5 x 1 + 7
+    # must never undercut the measured per-attempt worst case. The short page
+    # wraps the scan in the same call.
+    assert pages.call_count == 1
+    assert counts == {'partial': 0, 'waiting': 1, 'error': 0, 'units': 1, 'reads': 17, 'more': 0}
+
+
 @pytest.mark.parametrize('change', ['speech_redrive', 'recovery_enabled'])
 def test_unfinished_held_unit_is_never_accounted_or_charged(setup, monkeypatch, change):
     from utils import fair_use
