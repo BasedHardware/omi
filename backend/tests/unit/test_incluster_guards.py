@@ -618,9 +618,32 @@ def test_floor_schedule_dry_run_and_cap_refusals(monkeypatch, caplog):
     assert 'refused_target_above_cap' in caplog.text
     assert all(path == 'state' for path, _ in client.patches)
     monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [8] * 24)
-    assert guard.run(client, True, 0) == 0  # floor 5 -> 8, suppressed by the kill switch
+    assert guard.run(client, True, 24 * 3600) == 0  # lower 12 -> 8, kill switch first
     assert '"result": "dry_run"' in caplog.text
     assert all(path == 'state' for path, _ in client.patches)
+
+
+def test_scheduled_lower_waits_for_armed_guard_not_a_fresh_warmup(monkeypatch, caplog):
+    # Review r1 P1: after an operator clears a rollback while parked at 12, the
+    # schedule must not drop the floor onto a disarmed guard. NOOP readings
+    # advance the arming clock (floor is excluded from the identity), a lower
+    # before the window elapses defers, and the drop applies armed - after which
+    # a decisive regression trips without a fresh WARMUP.
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [8] * 24)
+    client = FakeClient()
+    client.hpa['spec']['minReplicas'] = 12  # parked above the cap; decide reads NOOP
+    assert guard.run(client, False, 1000) == 0
+    client.patches = []
+    assert guard.run(client, False, 1500) == 0  # 500s < WINDOW since identity start
+    assert 'deferred_guard_not_armed' in caplog.text
+    assert all(path == 'state' for path, _ in client.patches)
+    assert guard.run(client, False, 2000) == 0  # 1000s >= WINDOW elapsed while parked: drop applies
+    hpa_writes = [patch for path, patch in client.patches if path == 'hpa']
+    assert hpa_writes[-1][1] == {'op': 'replace', 'path': '/spec/minReplicas', 'value': 8}
+    client.hpa['spec']['minReplicas'] = 8  # the scheduled state is live
+    client.signals['first_p95'] = 30
+    verdict, _, _ = guard.decide(client.hpa, client.dep, [], client.signals, client.state, 2050)
+    assert verdict == 'TRIP'  # armed across the scheduled drop; no fresh warmup
 
 
 def test_floor_schedule_renders_into_script_configmap_only_when_enabled():

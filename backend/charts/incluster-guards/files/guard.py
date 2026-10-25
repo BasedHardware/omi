@@ -373,18 +373,18 @@ def advance(state, identity, now, blind):
     }
 
 
-def decide(hpa, deployment, events, values, state, now):
-    reading = evaluate(values)
-    if not workload_only(hpa['spec']):
-        return 'NOOP', {}, reading
-    # HPA configuration and image changes invalidate the lookback, but scheduled
-    # floor changes do not: the floor-schedule patcher rewrites spec.minReplicas
-    # hourly, which also bumps the HPA generation, so both minReplicas and the
-    # generation counter are excluded and arming survives every scheduled patch.
-    # Deployment generation also changes on ordinary HPA replica writes; using
-    # it here would keep a scaling or unschedulable workload in perpetual warmup.
+def state_identity(hpa, deployment):
+    """Arming identity: the whole HPA spec except the floor, plus serving images.
+
+    HPA configuration and image changes invalidate the lookback, but scheduled
+    floor changes do not: the floor schedule rewrites spec.minReplicas hourly,
+    which also bumps the HPA generation, so both minReplicas and the generation
+    counter are excluded and arming survives every scheduled change. Deployment
+    generation also changes on ordinary HPA replica writes; using it here would
+    keep a scaling or unschedulable workload in perpetual warmup.
+    """
     spec_identity = {k: v for k, v in hpa['spec'].items() if k != 'minReplicas'}
-    identity = hashlib.sha256(
+    return hashlib.sha256(
         json.dumps(
             [
                 REFUSAL_GATE_VERSION,
@@ -394,6 +394,18 @@ def decide(hpa, deployment, events, values, state, now):
             sort_keys=True,
         ).encode()
     ).hexdigest()
+
+
+def decide(hpa, deployment, events, values, state, now):
+    reading = evaluate(values)
+    identity = state_identity(hpa, deployment)
+    if not workload_only(hpa['spec']):
+        # Keep advancing the arming clock while parked above the rollback cap
+        # (or rolled back): a scheduled drop onto this spec must land on an
+        # already-armed guard, never a fresh 15-minute warmup during which a
+        # demand spike could not roll the floor back (review r1 P1). The floor
+        # itself is excluded from the identity, so this elapsed time counts.
+        return 'NOOP', advance(state, identity, now, False), reading
     reading['trips'] += scheduling_failures(events, hpa['metadata']['name'], now)
     if not any(
         c['type'] == 'ScalingActive' and c['status'] == 'True' for c in hpa.get('status', {}).get('conditions', [])
@@ -534,14 +546,19 @@ def load_floor_schedule():
     return rows
 
 
-def apply_floor_schedule(client, spec, schedule, now, dry_run):
+def apply_floor_schedule(client, hpa, deployment, state, schedule, now, dry_run):
     """One bounded scheduled-floor write per hourly change; never fights the guard.
 
     Deferred whenever the guard has rolled back (the latency metric is present):
     the reviewed schedule resumes only after an operator clears the rollback.
-    The whole observed /spec is JSON-patch tested, so a concurrent change fails
-    this run loudly instead of overwriting.
+    A LOWER also requires the guard to be armed under the current spec
+    identity: dropping onto a fresh warmup would leave a demand spike unable to
+    roll the floor back (review r1 P1). Raises apply immediately - more
+    capacity is the safe direction. The whole observed /spec is JSON-patch
+    tested, so a concurrent change fails this run loudly instead of
+    overwriting.
     """
+    spec = hpa['spec']
     hour = dt.datetime.fromtimestamp(now, dt.timezone.utc).hour
     target = schedule[hour]
     current = spec.get('minReplicas')
@@ -559,6 +576,11 @@ def apply_floor_schedule(client, spec, schedule, now, dry_run):
     if dry_run:
         log('floor_schedule', result='dry_run', hour=hour, target=target, floor=current)
         return
+    if target < current:
+        armed = state.get('identity') == state_identity(hpa, deployment) and now - state.get('since', now) >= WINDOW
+        if not armed:
+            log('floor_schedule', result='deferred_guard_not_armed', hour=hour, target=target, floor=current)
+            return
     client.kube(
         client.path('hpa'),
         [
@@ -579,10 +601,16 @@ def run(client, dry_run, now=None):
     log('batch_safety', **batch, values=batch_values, cloud_run_rollback='disabled')
     hpa = None
     values = {}
+    schedule = None
     try:
         hpa = client.kube(client.path('hpa'))
         values = client.sample(queries(client.namespace))
-        if workload_only(hpa['spec']):
+        schedule = load_floor_schedule()
+        # With a schedule installed, even a parked (non-workload) HPA runs the
+        # full decide pass so the arming clock advances and the scheduled change
+        # is evaluated against an armed guard; without one, the historical
+        # minimal NOOP path (no deployment/events reads) is preserved.
+        if workload_only(hpa['spec']) or schedule is not None:
             deployment = client.kube(client.path('deployment'))
             events = client.kube(client.path('events'))['items']
             verdict, state, reading = decide(hpa, deployment, events, values, state, now)
@@ -629,13 +657,16 @@ def run(client, dry_run, now=None):
         if not dry_run:
             client.kube(client.path('hpa'), patch)
         log('parakeet_rollback', result='dry_run' if dry_run else 'applied')
-    elif hpa is not None and verdict != 'BLIND':
+    elif hpa is not None and verdict != 'BLIND' and schedule is not None:
         # Scheduled floor changes are ordinary operation, not a safety action:
         # they run after the reading (never in the same run as a rollback) and
-        # apply_floor_schedule defers while a guard rollback is in force.
-        schedule = load_floor_schedule()
-        if schedule is not None:
-            apply_floor_schedule(client, hpa['spec'], schedule, now, dry_run)
+        # apply_floor_schedule defers while a guard rollback is in force or the
+        # guard is not yet armed for a lower.
+        try:
+            apply_floor_schedule(client, hpa, deployment, state, schedule, now, dry_run)
+        except Exception as exc:
+            log('floor_schedule_error', error=type(exc).__name__)
+            return 2
     return 1 if verdict in {'TRIP', 'BLIND'} or batch['verdict'] in {'TRIP', 'BLIND'} else 0
 
 

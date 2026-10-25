@@ -60,7 +60,13 @@ name-scoped RBAC (which refuses new object names) accepts the upgrade. The
 schedule defers, logging `deferred_guard_rollback`, whenever a guard rollback
 is in force (the `parakeet_request_latency_p99` metric is present), and never
 runs in the same reading as a rollback; the safety guard can still raise any
-hour to 12. The 2026-10-25 table was derived from the 10-23..10-25 guard
+hour to 12. A scheduled **lower** additionally requires the guard to be armed
+under the current spec identity: readings taken while the HPA is parked above
+the cap still advance the arming clock (the floor is excluded from the
+identity), so a drop lands on an armed guard - if the clock has not elapsed
+(for example right after an operator clears a rollback), the lower defers
+(`deferred_guard_not_armed`) until it has, and the higher floor holds in the
+meantime. The 2026-10-25 table was derived from the 10-23..10-25 guard
 trace with decisive samples only: floor 10 degraded across Sunday
 12:05-13:50Z (measured p95 34.5-55.5s on >= 100-text windows) so 12-13Z
 carries 12; Saturday 22:30Z ran 8 replicas at 701 first texts/h with p95
