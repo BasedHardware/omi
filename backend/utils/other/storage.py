@@ -757,31 +757,51 @@ def upload_audio_chunk(
 
     with owner_storage_write_gate(uid, bucket):
         if protection_level == 'enhanced':
-            encrypted_chunk = encryption.encrypt_audio_chunk(upload_data, uid)
+            payload = encryption.encrypt_audio_chunk(upload_data, uid)
             path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus.enc'
-            blob = bucket.blob(path)
-            if audio_archive.admitted(uid, 'SYNC'):
-                blob.metadata = {
-                    **span_blob_metadata({'start': timestamp, 'samples': len(chunk_data) // 2, 'sample_rate': 16000}),
-                    'canonical': 'false',
-                    'codec': 'opus',
-                    'rendition': 'sync-pcm-reencode',
-                }
-            blob.upload_from_string(encrypted_chunk, content_type='application/octet-stream')
         else:
+            payload = upload_data
             path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus'
-            blob = bucket.blob(path)
-            if audio_archive.admitted(uid, 'SYNC'):
-                blob.metadata = {
-                    **span_blob_metadata({'start': timestamp, 'samples': len(chunk_data) // 2, 'sample_rate': 16000}),
-                    'canonical': 'false',
-                    'codec': 'opus',
-                    'rendition': 'sync-pcm-reencode',
-                }
-            blob.upload_from_string(upload_data, content_type='application/octet-stream')
+        blob = bucket.blob(path)
+        if audio_archive.admitted(uid, 'SYNC'):
+            blob.metadata = {
+                **span_blob_metadata({'start': timestamp, 'samples': len(chunk_data) // 2, 'sample_rate': 16000}),
+                'canonical': 'false',
+                'codec': 'opus',
+                'rendition': 'sync-pcm-reencode',
+            }
+        try:
+            # Create-only: a retried upload of the same rendition must not
+            # overwrite the committed object and mint a superseded generation
+            # (the batch writer holds the same precondition).
+            blob.upload_from_string(payload, content_type='application/octet-stream', if_generation_match=0)
+        except PreconditionFailed:
+            if _stored_chunk_matches(blob, uid, protection_level, upload_data):
+                del upload_data
+                return path
+            # Genuinely different bytes: keep the historical update-in-place
+            # semantics for this writer rather than fail the sync path.
+            blob.upload_from_string(payload, content_type='application/octet-stream')
 
     del upload_data
     return path
+
+
+def _stored_chunk_matches(blob, uid: str, protection_level: str, plain_payload: bytes) -> bool:
+    """True when the stored chunk generation is the same plaintext rendition.
+
+    Enhanced-protection objects are ciphertext with a random nonce, so identity
+    is decided on the decrypted plaintext digest. Any read failure is False:
+    uncertainty falls back to the writer's overwrite semantics, never to a
+    silent skip.
+    """
+    try:
+        stored = blob.download_as_bytes()
+        if protection_level == 'enhanced':
+            stored = encryption.decrypt_audio_chunk(stored, uid)[0]
+        return hashlib.sha256(stored).digest() == hashlib.sha256(plain_payload).digest()
+    except Exception:
+        return False
 
 
 def reconcile_audio_chunk_prefix(
