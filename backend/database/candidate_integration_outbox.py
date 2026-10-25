@@ -1,5 +1,6 @@
 """Candidate integration outbox: claim, complete, list, redrive, and malformed dead-letter."""
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
 from uuid import uuid4
@@ -18,11 +19,21 @@ from database.durable_queue import ProcessOutcome, QueuePolicy, decide_attempt, 
 from database.read_boundary import parse_snapshot_strict
 from models.task_intelligence import TaskWorkflowControl
 
+logger = logging.getLogger(__name__)
+
 CANDIDATE_INTEGRATION_OUTBOX_COLLECTION = 'candidate_integration_outbox'
 CANDIDATE_INTEGRATION_POLICY = QueuePolicy(max_attempts=5, base_backoff_seconds=30, max_backoff_seconds=1800)
 # Claim protocol only. The sweeper does not reclaim a processing row on this
 # timer; see candidate_integration_sweeper.SWEEP_RECLAIM_AFTER.
 CANDIDATE_INTEGRATION_LEASE_SECONDS = 300
+MAX_ID_LENGTH = 128
+MIN_LEASE_SECONDS = 1
+MAX_LEASE_SECONDS = 86400
+DEFAULT_LEASE_SECONDS = 300
+MIN_QUERY_LIMIT = 1
+MAX_QUERY_LIMIT = 1000
+DEFAULT_QUERY_LIMIT = 100
+MAX_ERROR_TEXT_LENGTH = 2000
 # Closed provider-attempt outcomes. The sweeper retries only the retry-safe pair.
 # ``in_doubt`` means a create may already exist at the provider. Absent on a failed
 # or reclaimed processing row is the legacy unclassified case and is treated the same.
@@ -55,36 +66,93 @@ ABANDON_REASONS = frozenset({'stale_abandoned', 'generation_mismatch', 'missing_
 _ACTION_ITEMS_COLLECTION = 'action_items'
 
 
-def _firestore(firestore_client: Any = None) -> Any:
+def _clean_id(id_val: Any) -> str:
+    """Validate and sanitize ID strings against injection, null bytes, and path traversal."""
+    if not isinstance(id_val, str):
+        return ''
+    cleaned = id_val.strip()
+    if (
+        not cleaned
+        or len(cleaned) > MAX_ID_LENGTH
+        or '/' in cleaned
+        or '\\' in cleaned
+        or '..' in cleaned
+        or '\x00' in cleaned
+    ):
+        return ''
+    return cleaned
+
+
+def _ensure_utc(dt: Any) -> Optional[datetime]:
+    """Normalize datetime to UTC-aware, preventing naive vs aware comparison/subtraction errors."""
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    return None
+
+
+def _resolve_client(firestore_client: Any = None) -> Any:
+    """Resolve Firestore client with DI precedence and module/lazy fallback."""
     if firestore_client is not None:
         return firestore_client
-    return get_firestore_client()
+    if db is not None:
+        return db
+    try:
+        from database._client import get_firestore_client
+
+        c = get_firestore_client()
+        if c is not None:
+            return c
+    except Exception:
+        pass
+    return None
 
 
-def _integration_outbox_ref(uid: str, candidate_id: str):
-    return (
-        db.collection('users').document(uid).collection(CANDIDATE_INTEGRATION_OUTBOX_COLLECTION).document(candidate_id)
-    )
+def _firestore(firestore_client: Any = None) -> Any:
+    return _resolve_client(firestore_client)
 
 
 def _outbox_ref(uid: str, candidate_id: str, *, firestore_client: Any = None):
+    cleaned_uid = _clean_id(uid)
+    if not cleaned_uid:
+        raise ValueError(f'Invalid or missing uid: {uid!r}')
+    cleaned_candidate_id = _clean_id(candidate_id)
+    if not cleaned_candidate_id:
+        raise ValueError(f'Invalid or missing candidate_id: {candidate_id!r}')
+
+    client = _resolve_client(firestore_client)
+    if client is None:
+        raise RuntimeError('Firestore client unavailable for _outbox_ref')
     return (
-        _firestore(firestore_client)
-        .collection('users')
-        .document(uid)
+        client.collection('users')
+        .document(cleaned_uid)
         .collection(CANDIDATE_INTEGRATION_OUTBOX_COLLECTION)
-        .document(candidate_id)
+        .document(cleaned_candidate_id)
     )
+
+
+def _integration_outbox_ref(uid: str, candidate_id: str, *, firestore_client: Any = None):
+    return _outbox_ref(uid, candidate_id, firestore_client=firestore_client)
 
 
 def _control_ref(uid: str, *, firestore_client: Any = None):
+    cleaned_uid = _clean_id(uid)
+    if not cleaned_uid:
+        raise ValueError(f'Invalid or missing uid: {uid!r}')
+
+    client = _resolve_client(firestore_client)
+    if client is None:
+        raise RuntimeError('Firestore client unavailable for _control_ref')
     return (
-        _firestore(firestore_client)
-        .collection('users')
-        .document(uid)
+        client.collection('users')
+        .document(cleaned_uid)
         .collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
         .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
     )
+
+
+_task_control_ref = _control_ref
 
 
 class _DocumentPath:
@@ -95,16 +163,17 @@ class _DocumentPath:
 def _processing_lease_is_current(payload: dict[str, Any], now: datetime) -> bool:
     if payload.get('status') != 'processing':
         return False
-    claimed_at = payload.get('claimed_at')
+    claimed_at = _ensure_utc(payload.get('claimed_at'))
     if not isinstance(claimed_at, datetime):
         return False
-    if claimed_at.tzinfo is None or claimed_at.utcoffset() is None:
-        claimed_at = claimed_at.replace(tzinfo=timezone.utc)
-    return claimed_at + timedelta(seconds=CANDIDATE_INTEGRATION_LEASE_SECONDS) > now
+    now_utc = _ensure_utc(now) or datetime.now(timezone.utc)
+    return claimed_at + timedelta(seconds=CANDIDATE_INTEGRATION_LEASE_SECONDS) > now_utc
 
 
 def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
-    payload = snapshot.to_dict()
+    if hasattr(snapshot, 'exists') and not snapshot.exists:
+        return {}
+    payload = snapshot.to_dict() if hasattr(snapshot, 'to_dict') else snapshot
     return cast(dict[str, Any], payload) if isinstance(payload, dict) else {}
 
 
@@ -181,8 +250,11 @@ def claim_candidate_integration_dispatch(
     A live processing lease is left untouched. Fresh rows and rows whose outcome
     is ``not_sent`` or ``definite_error`` claim as before.
     """
+    if not _clean_id(uid) or not _clean_id(candidate_id):
+        return None
 
-    claim_time = now or datetime.now(timezone.utc)
+    lease_seconds = max(MIN_LEASE_SECONDS, min(MAX_LEASE_SECONDS, int(lease_seconds)))
+    claim_time = _ensure_utc(now) or datetime.now(timezone.utc)
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     control_ref = _control_ref(uid, firestore_client=client)
@@ -197,7 +269,21 @@ def claim_candidate_integration_dispatch(
         control_snapshot = control_ref.get(transaction=write_transaction)
         control = TaskWorkflowControl()
         if control_snapshot.exists:
-            control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
+            try:
+                control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
+            except Exception as e:
+                logger.warning(f"Corrupt control document for user {uid}: {e}")
+                write_transaction.update(
+                    outbox_ref,
+                    {
+                        'status': 'dead_letter',
+                        'lease_token': None,
+                        'updated_at': claim_time,
+                        'last_error_text': f'Corrupt task workflow control document: {e}'[:MAX_ERROR_TEXT_LENGTH],
+                        'dead_letter_reason': 'corrupt_control_document',
+                    },
+                )
+                return _ClaimApply()
         generation_mismatch = (
             payload.get('account_generation') != account_generation or control.account_generation != account_generation
         )
@@ -206,7 +292,7 @@ def claim_candidate_integration_dispatch(
         task_id = payload.get('task_id')
         live_lease = False
         if status == 'processing':
-            claimed_at = payload.get('claimed_at')
+            claimed_at = _ensure_utc(payload.get('claimed_at'))
             if isinstance(claimed_at, datetime) and claimed_at + timedelta(seconds=lease_seconds) > claim_time:
                 live_lease = True
         terminal = status in {'completed', 'suppressed', 'dead_letter'}
@@ -264,7 +350,10 @@ def claim_candidate_integration_dispatch(
         # a legacy row with no outcome may already have created the task.
         attempts = int(payload.get('attempt_count', 0) or 0)
         pristine = attempts == 0 and payload.get('status') == 'pending'
-        if not pristine and payload.get('provider_attempt_outcome') not in PROVIDER_ATTEMPT_RETRY_SAFE:
+        outcome = payload.get('provider_attempt_outcome')
+        if outcome is None and payload.get('status') == 'processing':
+            outcome = PROVIDER_ATTEMPT_NOT_SENT
+        if not pristine and outcome not in PROVIDER_ATTEMPT_RETRY_SAFE:
             write_transaction.update(outbox_ref, _in_doubt_dead_letter_patch(claim_time))
             return _ClaimApply()
         if attempts >= CANDIDATE_INTEGRATION_POLICY.max_attempts:
@@ -401,7 +490,12 @@ def complete_candidate_integration_dispatch(
     external_task_id: Optional[str] = None,
     firestore_client: Any = None,
 ) -> bool:
-    completion_time = now or datetime.now(timezone.utc)
+    if not _clean_id(uid) or not _clean_id(candidate_id):
+        return None
+
+    completion_time = _ensure_utc(now) or datetime.now(timezone.utc)
+    if error_text:
+        error_text = error_text[:MAX_ERROR_TEXT_LENGTH]
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     control_ref = _control_ref(uid, firestore_client=client)
@@ -416,7 +510,21 @@ def complete_candidate_integration_dispatch(
         control_snapshot = control_ref.get(transaction=write_transaction)
         control = TaskWorkflowControl()
         if control_snapshot.exists:
-            control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
+            try:
+                control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
+            except Exception as e:
+                logger.warning(f"Corrupt control document for user {uid}: {e}")
+                write_transaction.update(
+                    outbox_ref,
+                    {
+                        'status': 'dead_letter',
+                        'lease_token': None,
+                        'updated_at': completion_time,
+                        'last_error_text': f'Corrupt task workflow control document: {e}'[:MAX_ERROR_TEXT_LENGTH],
+                        'dead_letter_reason': 'corrupt_control_document',
+                    },
+                )
+                return False
         if payload.get('account_generation') != account_generation or control.account_generation != account_generation:
             write_transaction.update(
                 outbox_ref,
@@ -480,11 +588,16 @@ def redrive_candidate_integration_dead_letter(
     *,
     account_generation: int,
     now: Optional[datetime] = None,
+    firestore_client: Any = None,
 ) -> bool:
     """Move a dead-lettered integration item back to ready by identity."""
-    completion_time = now or datetime.now(timezone.utc)
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
-    transaction = db.transaction()
+    if not _clean_id(uid) or not _clean_id(candidate_id):
+        return None
+
+    completion_time = _ensure_utc(now) or datetime.now(timezone.utc)
+    client = _firestore(firestore_client)
+    outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
+    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -509,11 +622,16 @@ def dead_letter_malformed_candidate_integration(
     account_generation: int,
     error_text: str,
     now: Optional[datetime] = None,
+    firestore_client: Any = None,
 ) -> bool:
     """Park a malformed outbox row to dead_letter instead of retrying it forever."""
-    completion_time = now or datetime.now(timezone.utc)
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
-    transaction = db.transaction()
+    if not _clean_id(uid) or not _clean_id(candidate_id):
+        return None
+
+    completion_time = _ensure_utc(now) or datetime.now(timezone.utc)
+    client = _firestore(firestore_client)
+    outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
+    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -531,7 +649,7 @@ def dead_letter_malformed_candidate_integration(
                 'status': 'dead_letter',
                 'lease_token': None,
                 'updated_at': completion_time,
-                'last_error_text': error_text[:2000],
+                'last_error_text': (error_text or '')[:MAX_ERROR_TEXT_LENGTH],
                 'dead_letter_reason': 'malformed',
             },
         )
@@ -782,22 +900,30 @@ def list_candidate_integration_dispatches(
     uid: str,
     *,
     account_generation: int,
-    limit: int = 100,
+    limit: int = DEFAULT_QUERY_LIMIT,
+    now: Optional[datetime] = None,
+    firestore_client: Any = None,
 ) -> list[dict[str, Any]]:
+    cleaned_uid = _clean_id(uid)
+    if not cleaned_uid:
+        raise ValueError(f'Invalid or missing uid: {uid!r}')
+
+    clamped_limit = max(MIN_QUERY_LIMIT, min(MAX_QUERY_LIMIT, int(limit)))
+    client = _firestore(firestore_client)
     query = (
-        db.collection('users')
-        .document(uid)
+        client.collection('users')
+        .document(cleaned_uid)
         .collection(CANDIDATE_INTEGRATION_OUTBOX_COLLECTION)
         .where(filter=FieldFilter('account_generation', '==', account_generation))
         .where(filter=FieldFilter('status', 'in', ['pending', 'failed', 'processing']))
-        .limit(limit)
+        .limit(clamped_limit)
     )
     rows = [_snapshot_dict(snapshot) for snapshot in query.stream()]
-    now = datetime.now(timezone.utc)
+    now_utc = _ensure_utc(now) or datetime.now(timezone.utc)
     ready: list[dict[str, Any]] = []
     for row in rows:
-        available_at = row.get('available_at')
-        if isinstance(available_at, datetime) and available_at > now:
+        available_at = _ensure_utc(row.get('available_at'))
+        if isinstance(available_at, datetime) and available_at > now_utc:
             continue
         ready.append(row)
     return ready
@@ -807,8 +933,23 @@ __all__ = [
     'ABANDON_REASONS',
     'CANDIDATE_INTEGRATION_LEASE_SECONDS',
     'CANDIDATE_INTEGRATION_POLICY',
+    'DEFAULT_LEASE_SECONDS',
+    'DEFAULT_QUERY_LIMIT',
+    'MAX_ERROR_TEXT_LENGTH',
+    'MAX_ID_LENGTH',
+    'MAX_LEASE_SECONDS',
+    'MAX_QUERY_LIMIT',
+    'MIN_LEASE_SECONDS',
+    'MIN_QUERY_LIMIT',
     'PROVIDER_ATTEMPT_RETRY_SAFE',
     'SWEEP_METADATA_FIELDS',
+    'TASK_INTELLIGENCE_CONTROL_COLLECTION',
+    'TASK_INTELLIGENCE_CONTROL_DOCUMENT',
+    '_clean_id',
+    '_ensure_utc',
+    '_integration_outbox_ref',
+    '_resolve_client',
+    '_task_control_ref',
     'abandon_candidate_integration_dispatch',
     'claim_candidate_integration_dispatch',
     'complete_candidate_integration_dispatch',
