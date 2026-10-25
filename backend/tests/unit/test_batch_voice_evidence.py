@@ -79,7 +79,7 @@ def persist(store, artifacts, capture, unit='unit0', seconds=2):
 def test_encryption_aad_and_no_audio_or_identity_payload(level):
     store, artifacts, objects, capture = state(level)
     item, uri = persist(store, artifacts, capture)
-    assert artifacts.load_voice_evidence(item, uri) == payload(capture)
+    assert artifacts.load_voice_evidence(item, uri, expires_at=schema.deadline(capture)) == payload(capture)
     assert len(objects.objects) == 1
     assert all('/voice_evidence/' in name and b'SPEAKER_00' not in body for name, (_, body) in objects.objects.items())
     for changed in (
@@ -89,7 +89,7 @@ def test_encryption_aad_and_no_audio_or_identity_payload(level):
         replace(item, conversation_id='other'),
     ):
         with pytest.raises(InvalidTag):
-            artifacts.load_voice_evidence(changed, uri)
+            artifacts.load_voice_evidence(changed, uri, expires_at=schema.deadline(changed.capture_at))
     assert not any('audio_files' in row for row in store.client.rows.values())
 
 
@@ -151,9 +151,11 @@ def test_capture_expiry_and_finalization_shortening_refuse_before_download(monke
     metadata['cleanup_after'] = datetime.fromtimestamp(shortened, timezone.utc)
     monkeypatch.setattr(db.time, 'time', lambda: shortened)
     assert db.load_reference(store, UID, item.segment_id, CID) is None
+    with pytest.raises(PermissionError):
+        artifacts.load_voice_evidence(item, uri, expires_at=shortened)
     monkeypatch.setattr(db.time, 'time', lambda: schema.deadline(capture))
     with pytest.raises(PermissionError):
-        artifacts.load_voice_evidence(item, uri)
+        artifacts.load_voice_evidence(item, uri, expires_at=schema.deadline(capture))
     assert objects.downloads == 0
 
 

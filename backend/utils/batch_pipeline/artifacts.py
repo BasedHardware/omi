@@ -210,11 +210,16 @@ class ArtifactStore:
             raise ValueError('voice capture binding mismatch')
         return self._write(item, 'voice_evidence', body, voice_centroids.MAX_BYTES)
 
-    def load_voice_evidence(self, item: WorkItem, uri: str) -> dict:
-        if time.time() >= voice_centroids.deadline(item.capture_at):
+    def load_voice_evidence(self, item: WorkItem, uri: str, *, expires_at: float) -> dict:
+        # The caller obtains the shortened deadline from the registered,
+        # privacy-fenced unit receipt; it is mandatory even for direct reads.
+        due = min(voice_centroids.deadline(item.capture_at), expires_at)
+        if not isinstance(expires_at, (int, float)) or not 0 < expires_at <= voice_centroids.deadline(item.capture_at):
+            raise ValueError('registered voice evidence deadline required')
+        if time.time() >= due:
             raise PermissionError('voice evidence expired')
         payload = voice_centroids.decode(self._read(item, uri, 'voice_evidence', voice_centroids.MAX_BYTES))
-        if payload['capture_at'] != item.capture_at or time.time() >= payload['expires_at']:
+        if payload['capture_at'] != item.capture_at or time.time() >= min(due, payload['expires_at']):
             raise PermissionError('voice evidence expired or unbound')
         return payload
 

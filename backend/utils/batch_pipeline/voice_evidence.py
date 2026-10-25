@@ -96,7 +96,7 @@ def load_vectors(uid, conversation, deadline, *, store=None, artifacts=None):
         if reference is None:
             continue
         item, uri, due = reference
-        payload = artifacts.load_voice_evidence(item, uri)
+        payload = artifacts.load_voice_evidence(item, uri, expires_at=due)
         byte_count += len(schema.encode(payload))
         label_count += len(payload['labels'])
         if byte_count > 2 * 1024 * 1024 or label_count > 1024:

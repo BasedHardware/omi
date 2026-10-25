@@ -132,7 +132,7 @@ def test_account_delete_revokes_reads_and_erases_registered_voice_object(state, 
     assert reference[1] in erased
     assert not objects.objects
     with pytest.raises(BatchPrivacyBlocked):
-        artifacts.load_voice_evidence(item, reference[1])
+        artifacts.load_voice_evidence(item, reference[1], expires_at=reference[2])
     rows = list(store.client.collection(f'{store.namespace}_artifacts').stream())
     # Pending upload tombstone survives until the provider's maximum IO window.
     assert rows and rows[0].to_dict()['erasure_requested']
