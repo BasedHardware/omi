@@ -397,6 +397,8 @@ class SpeakerMatcher:
                     {v: d for v, d in self._voice_decisions.items() if v not in rejected},
                     owner_reserved=final_authority.owner_reserved,
                     voice_groups=self._provider_epoch_voice_groups(),
+                    voice_scopes=self._voice_scopes,
+                    evidence_seconds=self._provider_epoch_evidence_seconds(),
                 )
                 # Runner-up evidence constrains the owner but never automatically
                 # carries a non-owner identity across a conversation boundary.
@@ -610,6 +612,8 @@ class SpeakerMatcher:
             automatic,
             owner_reserved=final_authority.owner_reserved,
             voice_groups=self._provider_epoch_voice_groups(),
+            voice_scopes=self._voice_scopes,
+            evidence_seconds=self._provider_epoch_evidence_seconds(),
         )
         self._publish_decisions(decisions)
         await self.continuity.update(receipt, force=True, generation=generation)
@@ -1231,6 +1235,8 @@ class SpeakerMatcher:
                 {v: d for v, d in self._voice_decisions.items() if v not in rejected},
                 owner_reserved=owner_reserved,
                 voice_groups=voice_groups,
+                voice_scopes=self._voice_scopes,
+                evidence_seconds=self._provider_epoch_evidence_seconds(),
             )
             decision = decisions.get(speaker_id)
             self._rejectors.comparison(speaker_id, decision, evidence_seconds)
@@ -1436,15 +1442,18 @@ class SpeakerMatcher:
         """
         reconcile_pinned_suggestion(self, voice, result, pinned, segment_id, assigned)
 
+    def _provider_epoch_evidence_seconds(self) -> Dict[int, float]:
+        return {
+            voice: sum(seconds for _, seconds in evidence)
+            for voice, evidence in self.speaker_evidence.items()
+            if voice not in self._competition_only
+        }
+
     def _provider_epoch_voice_groups(self) -> Dict[int, int]:
         return group_epoch_voices(
             self._voice_centroids,
             self._voice_scopes,
-            {
-                voice: sum(seconds for _, seconds in evidence)
-                for voice, evidence in self.speaker_evidence.items()
-                if voice not in self._competition_only
-            },
+            self._provider_epoch_evidence_seconds(),
             distance=compare_embeddings,
         )
 

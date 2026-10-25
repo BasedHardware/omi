@@ -6826,7 +6826,12 @@ five seconds of extracted evidence on **both** voices, the shared `CROSS_EPOCH`
 strict cosine-distance boundary and `MATCH_MARGIN`, and complete-link agreement
 with every peer. Same-scope provider voices cannot join. Shortened owner
 continuity proofs keep their separate receipt-fenced policy and cannot supply
-voice-grouping evidence. Ambiguous, invalid or weak vectors abstain.
+voice-grouping evidence. Until the five-second floor, those provisional voices
+sit out cross-scope owner competition without being grouped; each still needs
+its own valid owner-continuity proof. Same-scope voices, manual reservations and
+retained competition-only evidence continue to constrain owner claims. Once both
+voices qualify, ordinary strict grouping and joint arbitration apply again.
+Ambiguous, invalid or weak vectors abstain.
 
 Acceptance: `tests/unit/test_live_speaker_epochs.py` drives the real Soniox idle
 close/reopen adapter, epoch stamping/allocation, short-turn embedding pooling,

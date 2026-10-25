@@ -166,6 +166,8 @@ def arbitrate_owner_matches(
     margin: float = SPEAKER_MATCH_MARGIN,
     owner_reserved: bool = False,
     voice_groups: Optional[Mapping[SpeakerKey, SpeakerKey]] = None,
+    voice_scopes: Optional[Mapping[SpeakerKey, str]] = None,
+    evidence_seconds: Optional[Mapping[SpeakerKey, float]] = None,
 ) -> dict[SpeakerKey, SpeakerMatchDecision]:
     """Require an owner claim to beat the other *voices*, not just other prints.
 
@@ -177,6 +179,8 @@ def arbitrate_owner_matches(
 
     Callers supply one row per diarized voice with sufficient audio, retain those
     rows for live re-arbitration, and project withdrawn accepts onto old segments.
+    Short continuity voices with known scopes defer cross-scope competition until
+    both reach the grouping evidence floor; same-scope competition remains active.
     This never promotes a failed voiceprint decision or guesses a second identity.
     """
     ranked = sorted(
@@ -190,24 +194,43 @@ def arbitrate_owner_matches(
         ),
         key=lambda item: item[0],
     )
-    winner = None
-    if ranked and not owner_reserved:
-        best, key = ranked[0]
-        competing = next(
-            (
-                distance
-                for distance, other in ranked[1:]
-                if voice_groups is None or voice_groups.get(other, other) != voice_groups.get(key, key)
-            ),
-            float('inf'),
+    # Group scores retain the strongest evidenced owner claim in each acoustic
+    # group. A short continuity accept remains a separate, provisional group.
+    groups: dict[SpeakerKey, list[SpeakerKey]] = {}
+    scores: dict[SpeakerKey, float] = {}
+    for distance, key in ranked:
+        group = voice_groups.get(key, key) if voice_groups is not None else key
+        groups.setdefault(group, []).append(key)
+        scores.setdefault(group, distance)
+
+    def competes(left: SpeakerKey, right: SpeakerKey) -> bool:
+        if voice_scopes is None or evidence_seconds is None:
+            return True
+        # Only known, different scopes can defer competition. Same-scope voices
+        # and retained competition-only evidence still constrain the owner.
+        return any(
+            not voice_scopes.get(a)
+            or not voice_scopes.get(b)
+            or voice_scopes[a] == voice_scopes[b]
+            or (
+                not 0 <= evidence_seconds.get(a, float('inf')) < MIN_EVIDENCE_SECONDS
+                and not 0 <= evidence_seconds.get(b, float('inf')) < MIN_EVIDENCE_SECONDS
+            )
+            for a in groups[left]
+            for b in groups[right]
         )
-        if competing - best >= margin:
-            winner = voice_groups.get(key, key) if voice_groups is not None else key
+
+    winners = {
+        group
+        for group, best in scores.items()
+        if not owner_reserved
+        and all(other - best >= margin for peer, other in scores.items() if peer != group and competes(group, peer))
+    }
     return {
         key: (
             replace(decision, person_id=None, owner_contended=True)
             if decision.person_id == 'user'
-            and (voice_groups.get(key, key) if voice_groups is not None else key) != winner
+            and (voice_groups.get(key, key) if voice_groups is not None else key) not in winners
             else decision
         )
         for key, decision in decisions.items()
