@@ -40,10 +40,34 @@ Any workload-only floor below the 12-replica rollback cap without
 `parakeet_request_latency_p99` is armed; the floor is read from the HPA itself,
 so operator floor changes cannot silently disarm the guard (the former 5/8
 enumeration read NOOP at floor 10 on 2026-10-24/25). The state identity
-includes the entire HPA spec, HPA generation and deployment images. Ordinary
+includes the entire HPA spec except `minReplicas`, and deployment images. Ordinary
 autoscaling replica changes do not restart the clock. Configuration/image changes
-reset the 15-minute clock. Readiness shortfall uses HPA desiredReplicas, not the
+reset the 15-minute clock; scheduled floor writes do not (they also bump the HPA
+generation, which is likewise excluded), or the guard could never arm under a
+time-of-day floor. Readiness shortfall uses HPA desiredReplicas, not the
 floor. ScalingActive must be true, as in the original P77 guard.
+
+## Time-of-day floor schedule
+
+`floorSchedule.enabled` renders a reviewed 24-entry UTC-hour floor table into
+the guard's script ConfigMap as `floors.json`; the table's presence is the
+schedule's only switch (development and non-opted releases never write the
+floor from a schedule). On the first reading after each hour rollover the
+guard patches `spec.minReplicas` to the hour's entry with the same atomic
+test-the-whole-spec JSON patch as the rollback, under the same dry-run kill
+switch and the same existing RBAC: **no new objects**, so the prod deployer's
+name-scoped RBAC (which refuses new object names) accepts the upgrade. The
+schedule defers, logging `deferred_guard_rollback`, whenever a guard rollback
+is in force (the `parakeet_request_latency_p99` metric is present), and never
+runs in the same reading as a rollback; the safety guard can still raise any
+hour to 12. The 2026-10-25 table was derived from the 10-23..10-25 guard
+trace with decisive samples only: floor 10 degraded across Sunday
+12:05-13:50Z (measured p95 34.5-55.5s on >= 100-text windows) so 12-13Z
+carries 12; Saturday 22:30Z ran 8 replicas at 701 first texts/h with p95
+12.4s (8), and Saturday 14-15Z held 10 replicas at 521-692/h with p95 14-20s
+(10-11). At the measured $0.583448/pod-hour the table projects ~$4.2k/mo
+against ~$5.1k/mo for a flat 12, realized only when the parakeet-pool nodes
+actually deschedule (p77 PLAN caveat).
 
 P77r refusal threshold: `max(.02, baseline * 1.25 + .005)`, inclusive. The
 baseline is the admission-weighted refusal fraction over the same rolling UTC

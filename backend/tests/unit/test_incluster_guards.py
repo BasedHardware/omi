@@ -458,19 +458,23 @@ def test_state_gating(floor, latency):
     assert guard.workload_only(hpa['spec']) == (floor < 12 and not latency)
 
 
-def test_arm_full_window_and_reset_on_spec_image_generation_changes():
+def test_arm_full_window_resets_on_config_but_not_scheduled_floor_changes():
     hpa, dep = objects()
     verdict, state, _ = guard.decide(hpa, dep, [], values(), {}, 1000)
     assert verdict == 'WARMUP'
     assert guard.decide(hpa, dep, [], values(), state, 1899)[0] == 'WARMUP'
     assert guard.decide(hpa, dep, [], values(), state, 1900)[0] == 'CLEAN'
+    # Scheduled floor patches rewrite spec.minReplicas hourly and bump the HPA
+    # generation; neither may reset the arming window or the guard would sit in
+    # perpetual WARMUP and never be able to raise the floor.
     changed_hpa, changed_dep = deepcopy(hpa), deepcopy(dep)
     changed_hpa['spec']['minReplicas'] = 8
-    assert guard.decide(changed_hpa, dep, [], values(), state, 1900)[0] == 'WARMUP'
+    changed_hpa['metadata']['generation'] += 1
+    assert guard.decide(changed_hpa, dep, [], values(), state, 1900)[0] == 'CLEAN'
     changed_dep['spec']['template']['spec']['containers'][0]['image'] = 'another:sha'
     assert guard.decide(hpa, changed_dep, [], values(), state, 1900)[0] == 'WARMUP'
     changed_hpa = deepcopy(hpa)
-    changed_hpa['metadata']['generation'] += 1
+    changed_hpa['spec']['behavior']['scaleDown']['stabilizationWindowSeconds'] = 600
     assert guard.decide(changed_hpa, dep, [], values(), state, 1900)[0] == 'WARMUP'
 
 
@@ -562,6 +566,84 @@ def test_run_writes_only_reference_rollback_or_dry_run(dry_run, caplog):
     client.patches = []
     assert guard.run(client, dry_run, 1200) == 0
     assert all(path == 'state' for path, _ in client.patches)
+
+
+def test_floor_schedule_table_shape_is_validated():
+    # The real file is absent in tests and in any release that has not opted in.
+    assert guard.load_floor_schedule() is None
+
+
+def test_floor_schedule_applies_after_clean_reading_and_idles_at_target(monkeypatch, caplog):
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [8] * 24)
+    client = FakeClient()  # objects() floor 5; epoch hour 0 -> target 8
+    assert guard.run(client, False, 0) == 0
+    hpa_writes = [patch for path, patch in client.patches if path == 'hpa']
+    assert hpa_writes == [
+        [
+            {'op': 'test', 'path': '/spec', 'value': client.hpa['spec']},
+            {'op': 'replace', 'path': '/spec/minReplicas', 'value': 8},
+        ]
+    ]
+    assert '"result": "applied"' in caplog.text
+    client.hpa['spec']['minReplicas'] = 8
+    client.patches = []
+    assert guard.run(client, False, 300) == 0
+    assert all(path == 'state' for path, _ in client.patches)  # at target: no write, no log spam
+
+
+def test_floor_schedule_never_shadows_a_rollback(monkeypatch, caplog):
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [8] * 24)
+    client = FakeClient()
+    client.signals['first_p95'] = 30  # decisive regression -> TRIP once armed
+    assert guard.run(client, False, 0) == 0  # WARMUP seeds the arming window
+    client.patches = []
+    assert guard.run(client, False, 900) == 1
+    hpa_writes = [patch for path, patch in client.patches if path == 'hpa']
+    assert hpa_writes == [guard.build_rollback(client.hpa['spec'])]
+    # While the rollback is in force (latency metric present) the schedule defers.
+    client.hpa['spec']['minReplicas'] = 12
+    client.hpa['spec']['metrics'].append(guard.LATENCY)
+    client.signals = values()
+    client.patches = []
+    assert guard.run(client, False, 1200) == 0
+    assert all(path == 'state' for path, _ in client.patches)
+    assert 'deferred_guard_rollback' in caplog.text
+
+
+def test_floor_schedule_dry_run_and_cap_refusals(monkeypatch, caplog):
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [8] * 23 + [13])
+    client = FakeClient()
+    client.hpa['spec']['minReplicas'] = 12
+    assert guard.run(client, False, 23 * 3600) == 0  # hour 23 -> target 13 > cap 12
+    assert 'refused_target_above_cap' in caplog.text
+    assert all(path == 'state' for path, _ in client.patches)
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [8] * 24)
+    assert guard.run(client, True, 0) == 0  # floor 5 -> 8, suppressed by the kill switch
+    assert '"result": "dry_run"' in caplog.text
+    assert all(path == 'state' for path, _ in client.patches)
+
+
+def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
+    prod = next(
+        obj
+        for obj in render_docs('prod')
+        if obj['kind'] == 'ConfigMap' and obj['metadata']['name'] == 'prod-omi-incluster-guards-script'
+    )
+    assert json.loads(prod['data']['floors.json']) == guard_yaml_hours()
+    default = next(
+        obj
+        for obj in render_docs('prod', overlay=False)
+        if obj['kind'] == 'ConfigMap' and obj['metadata']['name'] == 'prod-omi-incluster-guards-script'
+    )
+    assert 'floors.json' not in default['data']
+    with pytest.raises(subprocess.CalledProcessError):
+        render_docs('prod', '--set', 'floorSchedule.hours={1,2}')
+    kinds = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod')}
+    assert not any(name.endswith('-floor') for _, name in kinds)
+
+
+def guard_yaml_hours():
+    return yaml.safe_load((CHART / 'values.yaml').read_text())['floorSchedule']['hours']
 
 
 def render(environment='prod', *extra):

@@ -7,3 +7,5 @@ batch:
   enabled: false
   cloudRunRollbackEnabled: true
   gcpServiceAccount: omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com
+floorSchedule:
+  enabled: true

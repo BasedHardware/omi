@@ -377,15 +377,18 @@ def decide(hpa, deployment, events, values, state, now):
     reading = evaluate(values)
     if not workload_only(hpa['spec']):
         return 'NOOP', {}, reading
-    # HPA configuration/generation and image changes invalidate the lookback.
+    # HPA configuration and image changes invalidate the lookback, but scheduled
+    # floor changes do not: the floor-schedule patcher rewrites spec.minReplicas
+    # hourly, which also bumps the HPA generation, so both minReplicas and the
+    # generation counter are excluded and arming survives every scheduled patch.
     # Deployment generation also changes on ordinary HPA replica writes; using
     # it here would keep a scaling or unschedulable workload in perpetual warmup.
+    spec_identity = {k: v for k, v in hpa['spec'].items() if k != 'minReplicas'}
     identity = hashlib.sha256(
         json.dumps(
             [
                 REFUSAL_GATE_VERSION,
-                hpa['spec'],
-                hpa['metadata'].get('generation'),
+                spec_identity,
                 [c['image'] for c in deployment['spec']['template']['spec']['containers']],
             ],
             sort_keys=True,
@@ -513,6 +516,59 @@ def log(event, **fields):
     )
 
 
+def load_floor_schedule():
+    """The reviewed 24-entry UTC-hour floor table, or None when not installed.
+
+    The chart renders /guard/floors.json only when floorSchedule.enabled; its
+    absence is the schedule's off switch, so development and any release that
+    does not opt in never write the floor from a schedule.
+    """
+    try:
+        rows = json.loads(open('/guard/floors.json').read())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(rows, list) or len(rows) != 24:
+        return None
+    if any(not isinstance(v, int) or not 1 <= v <= 12 for v in rows):
+        return None
+    return rows
+
+
+def apply_floor_schedule(client, spec, schedule, now, dry_run):
+    """One bounded scheduled-floor write per hourly change; never fights the guard.
+
+    Deferred whenever the guard has rolled back (the latency metric is present):
+    the reviewed schedule resumes only after an operator clears the rollback.
+    The whole observed /spec is JSON-patch tested, so a concurrent change fails
+    this run loudly instead of overwriting.
+    """
+    hour = dt.datetime.fromtimestamp(now, dt.timezone.utc).hour
+    target = schedule[hour]
+    current = spec.get('minReplicas')
+    if any(
+        m.get('external', {}).get('metric', {}).get('name') == 'parakeet_request_latency_p99'
+        for m in spec.get('metrics', [])
+    ):
+        log('floor_schedule', result='deferred_guard_rollback', hour=hour, target=target, floor=current)
+        return
+    if current == target:
+        return
+    if not isinstance(spec.get('maxReplicas'), int) or target > spec['maxReplicas']:
+        log('floor_schedule', result='refused_target_above_cap', hour=hour, target=target, floor=current)
+        return
+    if dry_run:
+        log('floor_schedule', result='dry_run', hour=hour, target=target, floor=current)
+        return
+    client.kube(
+        client.path('hpa'),
+        [
+            {'op': 'test', 'path': '/spec', 'value': copy.deepcopy(spec)},
+            {'op': 'replace', 'path': '/spec/minReplicas', 'value': target},
+        ],
+    )
+    log('floor_schedule', result='applied', hour=hour, target=target, floor=current)
+
+
 def run(client, dry_run, now=None):
     now = time.time() if now is None else now
     cm = client.kube(client.path('state'))
@@ -573,6 +629,13 @@ def run(client, dry_run, now=None):
         if not dry_run:
             client.kube(client.path('hpa'), patch)
         log('parakeet_rollback', result='dry_run' if dry_run else 'applied')
+    elif hpa is not None and verdict != 'BLIND':
+        # Scheduled floor changes are ordinary operation, not a safety action:
+        # they run after the reading (never in the same run as a rollback) and
+        # apply_floor_schedule defers while a guard rollback is in force.
+        schedule = load_floor_schedule()
+        if schedule is not None:
+            apply_floor_schedule(client, hpa['spec'], schedule, now, dry_run)
     return 1 if verdict in {'TRIP', 'BLIND'} or batch['verdict'] in {'TRIP', 'BLIND'} else 0
 
 
