@@ -5,6 +5,7 @@
   "canonical_prevention": "Retain the immutable unit partition, link whole labels across units using verified compatible-space acoustic evidence with transitive same-unit cannot-links, then run calibrated naming and joint owner arbitration on the conversation groups. Names and roster heuristics cannot regroup authoritative labels; missing evidence abstains and manual receipts remain authoritative.",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_batch_conversation_speakers.py",
+    "backend/tests/unit/test_batch_speaker_persistence.py",
     "backend/tests/unit/test_conversation_speaker_resolution_stage.py",
     "backend/tests/unit/test_audio_placement.py"
   ],

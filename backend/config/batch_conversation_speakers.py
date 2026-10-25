@@ -3,6 +3,7 @@
 from config.refactor_modes import default_on
 
 BATCH_CONVERSATION_SPEAKERS_ENV = 'BATCH_CONVERSATION_SPEAKERS_ENABLED'
+BATCH_CONVERSATION_SCOPE = 'final:batch:conversation:'
 
 
 def has_batch_authority(segments) -> bool:

@@ -13,6 +13,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from config.refactor_modes import shadow_or_serve
+from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE
 from database import speaker_evidence as storage
 from models.speaker_evidence import (
     OWNER,
@@ -95,7 +96,7 @@ def _receipt_scope(segment: Any, scope: str | None) -> str | None:
     provider = _get(segment, 'provider_speaker') or {}
     original = _get(provider, 'scope')
     if (
-        (scope or '').startswith(('conversation:', 'legacy-conversation:'))
+        (scope or '').startswith(('conversation:', 'legacy-conversation:', BATCH_CONVERSATION_SCOPE))
         and isinstance(original, str)
         and original
         and str(_get(provider, 'id', -1)).isdigit()

@@ -17,7 +17,16 @@ cross-scope distance (0.60). One unit label stays together; distinct labels in o
 unit cannot link transitively. Missing provenance and diarization gaps abstain.
 Work retains the existing 45-second resolver budget, embedding/read caps and
 cache; grouping additionally caps at 1,024 label groups and two seconds. A later
-enrichment reuses the cache and immutable provider partition.
+enrichment reuses the cache and immutable provider partition. Resolved transcripts
+retain a durable `final:batch:conversation:<id>` scope. If optional encrypted unit
+metadata is lost (including the existing 256-segment sidecar limit), the entire
+prior conversation partition becomes the constraint graph: each prior group stays
+whole and distinct prior groups cannot merge. New upload labels can still join a
+prior group acoustically. This conservative fallback may preserve an earlier
+over-split; it cannot silently relax batch authority. It adds no retained data or
+storage-budget exception and emits a shared degraded-fallback event. The resolved
+scope itself does not prove an upload audio clock; retained placement evidence is
+still required.
 
 The shared `name_centroids` matcher runs after grouping, with its existing
 threshold, margin, five-second measured-evidence floor and joint owner

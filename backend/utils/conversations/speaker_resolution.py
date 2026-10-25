@@ -6,7 +6,11 @@ Encrypted embeddings bound repeat work; missing audio abstains and manual receip
 from __future__ import annotations
 
 from config.transcription_final_pass import authoritative_for
-from config.batch_conversation_speakers import enabled as batch_speakers_enabled, has_batch_authority
+from config.batch_conversation_speakers import (
+    BATCH_CONVERSATION_SCOPE,
+    enabled as batch_speakers_enabled,
+    has_batch_authority,
+)
 from config.refactor_modes import serving_for
 from utils.speakers import processing as speaker_evidence
 
@@ -40,7 +44,7 @@ from utils.conversations.audio_placement import (
     prepare_audio_coverage,
     text_window_refusal,
 )
-from utils.conversations.speaker_grouping_shadow import compare_and_select, provider_key
+from utils.conversations.speaker_grouping_shadow import compare_and_select, batch_provider_keys
 from utils.conversations.speaker_resolution_inputs import (
     manual_speakers as _manual_speakers,
     measured_embedding_seconds,
@@ -762,8 +766,9 @@ def apply_speaker_resolution(
     *,
     owner_voiceprint_available: bool,
     contradicted_segment_ids: Optional[set[str]] = None,
+    scope: Optional[str] = None,
 ) -> None:
-    scope = f'conversation:{conversation.id}'
+    scope = scope or f'conversation:{conversation.id}'
     origin = _started_at(conversation)
     contradicted = contradicted_segment_ids or set()
     preserved_voices = {
@@ -794,6 +799,7 @@ def apply_speaker_resolution(
             segment.audio_source is None
             and origin is not None
             and segment_scope.startswith(('sync:', 'final:batch:'))
+            and not segment_scope.startswith(BATCH_CONVERSATION_SCOPE)
             and segment_scope not in ('sync:', 'final:batch:')
             and segment.audio_alignment != 'unplaced'
             and math.isfinite(segment.start)
@@ -1272,7 +1278,9 @@ def _resolve(
         placement = placements.get(segment.id)
         if placement is not None and placement.reason == 'capture_span' and placement.window is not None:
             scope = segment.speaker_id_scope or ''
-            historical = scope == f'conversation:{conversation.id}' or scope.startswith('legacy-conversation:')
+            historical = scope == f'conversation:{conversation.id}' or scope.startswith(
+                ('legacy-conversation:', BATCH_CONVERSATION_SCOPE)
+            )
             cached = cache.get(segment.id)
             if (
                 historical
@@ -1317,7 +1325,10 @@ def _resolve(
         scope = segment.speaker_id_scope or ''
         if (
             segment.id
-            and (scope == f'conversation:{conversation.id}' or scope.startswith('legacy-conversation:'))
+            and (
+                scope == f'conversation:{conversation.id}'
+                or scope.startswith(('legacy-conversation:', BATCH_CONVERSATION_SCOPE))
+            )
             and cache_hit(segment.id)
         ):
             return False
@@ -1325,9 +1336,7 @@ def _resolve(
 
     pending = [s for s in segments if needs_embedding(s)]
     abstained = set(invalid_text_ids)
-    provider_keys = (
-        {s.id: key for s in segments if s.id and (key := provider_key(s)) is not None} if batch_resolution else {}
-    )
+    provider_keys = batch_provider_keys(segments) if batch_resolution else {}
     if batch_resolution:
         abstained.update(
             s.id
@@ -1367,7 +1376,10 @@ def _resolve(
             return (
                 segment.audio_capture_start is None
                 and segment.audio_capture_end is None
-                and (scope == f'conversation:{conversation.id}' or scope.startswith('legacy-conversation:'))
+                and (
+                    scope == f'conversation:{conversation.id}'
+                    or scope.startswith(('legacy-conversation:', BATCH_CONVERSATION_SCOPE))
+                )
                 and segment.id in cache
                 and not needs_embedding(segment)
             )
@@ -1497,6 +1509,7 @@ def _resolve(
         resolution.voice_identity_statuses,
         owner_voiceprint_available=resolution.owner_voiceprint_available,
         contradicted_segment_ids=resolution.contradicted_segment_ids,
+        scope=f'{BATCH_CONVERSATION_SCOPE}{conversation.id}' if batch_resolution else None,
     )
     owner_diagnostics.resolver_counts(coverage=resolution.coverage)
     if resolution.coverage >= MIN_RESOLVED_COVERAGE:

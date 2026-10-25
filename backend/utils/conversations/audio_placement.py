@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence, Tuple
 
+from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE
 from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS, chunk_span_bounds
 from utils.audio_timeline import is_audio_timeline_v2
 from utils.text_utils import compute_text_containment
@@ -394,6 +395,7 @@ def locate(
         is_sync_scope = (
             isinstance(scope, str)
             and scope.startswith(('sync:', 'final:batch:'))
+            and not scope.startswith(BATCH_CONVERSATION_SCOPE)
             and scope not in ('sync:', 'final:batch:')
         )
         if not is_sync_scope and not saved_sync_window(segment, origin):

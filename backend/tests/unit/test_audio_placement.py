@@ -63,7 +63,9 @@ def test_upload_file_scopes_have_the_same_proven_clock(scope):
     assert locate(conv, 2, 6).window is None
 
 
-@pytest.mark.parametrize('scope', ['final:batch:', 'sync:', 'final:pyannote:upload', 'live:upload'])
+@pytest.mark.parametrize(
+    'scope', ['final:batch:', 'sync:', 'final:pyannote:upload', 'live:upload', 'final:batch:conversation:c1']
+)
 def test_other_or_empty_scopes_do_not_prove_upload_clock(scope):
     assert locate(_conv([_seg('s', 2, 6, scope=scope)]), 2, 6).window is None
 
