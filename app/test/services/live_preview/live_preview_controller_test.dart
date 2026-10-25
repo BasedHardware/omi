@@ -193,6 +193,41 @@ void main() {
       expect(ended.properties['dropped_audio_ms'], 6 * 20 + 2 * 20);
     });
 
+    test('a burst never delays capture callbacks: decode yields every few packets', () async {
+      final decodes = <int>[];
+      final sliced = LivePreviewController(
+        engine: engine,
+        telemetry: LivePreviewTelemetry(emit: events.add),
+        platform: LivePreviewPlatform.ios,
+        osMajor: 26,
+        maxPacketsPerTurn: 8,
+        decodeOpus: (opus) {
+          // A slow decoder: a busy-wait per packet.
+          final watch = Stopwatch()..start();
+          while (watch.elapsedMicroseconds < 2000) {}
+          decodes.add(opus.first);
+          return Int16List(320);
+        },
+      );
+      addTearDown(sliced.dispose);
+      sliced.admit(language: 'en');
+      await pumpEventQueue();
+      final enqueue = Stopwatch()..start();
+      for (var i = 0; i < 40; i++) {
+        sliced.onPendantPacket([0, 0, 0, i], BleAudioCodec.opus);
+      }
+      enqueue.stop();
+      expect(decodes, isEmpty, reason: 'the tap only enqueues');
+      expect(enqueue.elapsedMilliseconds, lessThan(20));
+      // The next capture event (a zero timer queued after the burst) runs
+      // after at most one bounded slice of decode work.
+      final seenByNextCallback = Completer<int>();
+      Timer.run(() => seenByNextCallback.complete(decodes.length));
+      expect(await seenByNextCallback.future, lessThanOrEqualTo(8));
+      await pumpEventQueue();
+      expect(decodes, List.generate(40, (i) => i), reason: 'every packet still decoded, in order');
+    });
+
     test('a conversation-length silence starts a fresh preview span', () async {
       final gapped = LivePreviewController(
         engine: engine,

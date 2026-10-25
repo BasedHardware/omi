@@ -56,6 +56,7 @@ class LivePreviewController extends ChangeNotifier {
     this.maxQueuedPackets = 64,
     this.maxInFlightFeeds = 4,
     this.feedChunkBytes = 3200,
+    this.maxPacketsPerTurn = 8,
   })  : _engine = engine,
         _now = now ?? DateTime.now,
         _conversationGap = conversationGap ?? (() => const Duration(minutes: 2)),
@@ -74,6 +75,9 @@ class LivePreviewController extends ChangeNotifier {
   final int maxQueuedPackets;
   final int maxInFlightFeeds;
   final int feedChunkBytes;
+
+  /// Packets decoded per event-loop turn before yielding.
+  final int maxPacketsPerTurn;
 
   LivePreviewPhase _phase = LivePreviewPhase.inactive;
   LivePreviewPhase get phase => _phase;
@@ -224,14 +228,27 @@ class LivePreviewController extends ChangeNotifier {
       return;
     }
     _queue.add(audio);
+    _scheduleDrain();
+  }
+
+  /// Decode work runs on later event-loop turns (a timer, not a microtask), at
+  /// most [maxPacketsPerTurn] packets per turn, so a burst never delays the
+  /// next capture callback (BLE, mic, socket, WAL) by more than one bounded
+  /// slice.
+  void _scheduleDrain() {
     if (_drainScheduled) return;
     _drainScheduled = true;
-    scheduleMicrotask(_drain);
+    Timer.run(_drain);
   }
 
   void _drain() {
     _drainScheduled = false;
+    var budget = maxPacketsPerTurn;
     while (_queue.isNotEmpty) {
+      if (budget-- == 0) {
+        _scheduleDrain();
+        return;
+      }
       final audio = _queue.removeFirst();
       if (!_feeding) continue;
       List<int> pcm;
