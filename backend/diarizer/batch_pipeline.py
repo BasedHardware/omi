@@ -679,6 +679,7 @@ class PipelineWorker:
                         frozen_languages[item.segment_id] = None
                     yield item, samples
 
+            flight_excluded = set()
             if self.flight is None:
                 # Serial: VAD each unit as soon as it is decoded (prefetch overlap).
                 units = ((unit, None) for unit in decoded_units())
@@ -696,7 +697,9 @@ class PipelineWorker:
                 eligible_ids = {item.segment_id for item, _ in eligible}
                 # A frozen language the word provider cannot serve can only end
                 # at the language barrier; such units never join the packed
-                # segmentation pass and take the serial VAD path instead.
+                # segmentation pass. The per-unit loop resolves them with the
+                # independent strict VAD instead of a serial pyannote forward.
+                flight_excluded = {item.segment_id for item, _ in decoded} - eligible_ids
                 flight_features = iter(self._flight_segment(eligible))
                 units = (
                     (unit, None if unit[0].segment_id not in eligible_ids else next(flight_features))
@@ -707,25 +710,52 @@ class PipelineWorker:
                 try:
                     duration = len(samples) / SAMPLE_RATE
                     silence = None
-                    try:
-                        spans = list(
-                            self.timings.call('vad', self.vad, samples)
-                            if features is None
-                            else self.timings.call('vad', self.flight.vad_spans, samples, features)
-                        )
-                    except BatchValidationError as error:
-                        if error.reason != 'vad_bounds' or not worker_validation_disposition_enabled():
-                            raise
-                        # A frame may start beyond a very short real buffer (20 ms
-                        # in production). Only independent strict VAD can establish
-                        # silence; malformed/unavailable evidence stays held.
+                    spans = None
+                    if item.segment_id in flight_excluded and worker_validation_disposition_enabled():
+                        # Excluded from the packed pass by the frozen language:
+                        # the independent strict VAD decides speech vs silence
+                        # with no pyannote forward at all. Speech raises at the
+                        # language barrier; strict silence is the disposition;
+                        # unavailable evidence falls back to the serial VAD call.
+                        strict_failed = False
                         try:
                             silence = inspect_worker_silence(item, samples)
                         except Exception:
-                            pass
-                        if silence is None:
-                            raise
-                        spans = []
+                            silence = None
+                            strict_failed = True
+                        if not strict_failed and silence is None:
+                            # The early raise skips the barrier below, so the
+                            # route signal must be recorded here.
+                            if not item.shadow:
+                                record_route(
+                                    'worker',
+                                    frozen_languages.get(item.segment_id),
+                                    'blocked',
+                                    segment_id=item.segment_id,
+                                )
+                            raise BatchValidationError(ValidationReason.UNSUPPORTED_LANGUAGE)
+                        if not strict_failed:
+                            spans = []
+                    if spans is None:
+                        try:
+                            spans = list(
+                                self.timings.call('vad', self.vad, samples)
+                                if features is None
+                                else self.timings.call('vad', self.flight.vad_spans, samples, features)
+                            )
+                        except BatchValidationError as error:
+                            if error.reason != 'vad_bounds' or not worker_validation_disposition_enabled():
+                                raise
+                            # A frame may start beyond a very short real buffer (20 ms
+                            # in production). Only independent strict VAD can establish
+                            # silence; malformed/unavailable evidence stays held.
+                            try:
+                                silence = inspect_worker_silence(item, samples)
+                            except Exception:
+                                pass
+                            if silence is None:
+                                raise
+                            spans = []
                     shapes[item.segment_id]['vad_spans'] = len(spans)
                     clips = self.timings.call(
                         'windows', lambda: list(speech_windows(item, samples, spans, self.config))
