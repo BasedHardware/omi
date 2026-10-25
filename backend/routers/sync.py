@@ -1,4 +1,5 @@
 from database import sync_redrive
+from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
 from utils.sync import minimal_redrive, redrive_policy, playback_build
 from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
@@ -2115,6 +2116,7 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
 
 
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
+@sync_snapshot_resolve_job
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Persisted sequencer epochs survive the kill switch; old tasks keep their legacy path."""
     # One absolute budget deadline for the whole request, anchored at the

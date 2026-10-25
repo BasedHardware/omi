@@ -16,7 +16,9 @@ def test_default_off(monkeypatch):
     assert not levers.lever_enabled('singleton_loops', 'pod-1')
 
 
-@pytest.mark.parametrize('name', ['conversation_list_cursor', 'finjob_candidate_queries'])
+@pytest.mark.parametrize(
+    'name', ['conversation_list_cursor', 'finjob_candidate_queries', 'sync_snapshot_resolve_cache']
+)
 @pytest.mark.parametrize('raw', [None, '', '{}', '{"singleton_loops":100}'])
 def test_registered_lever_stays_off_when_key_absent(monkeypatch, name, raw):
     if raw is None:
@@ -29,7 +31,9 @@ def test_registered_lever_stays_off_when_key_absent(monkeypatch, name, raw):
     assert not levers.lever_enabled(name, 'uid-1')
 
 
-@pytest.mark.parametrize('name', ['conversation_list_cursor', 'finjob_candidate_queries'])
+@pytest.mark.parametrize(
+    'name', ['conversation_list_cursor', 'finjob_candidate_queries', 'sync_snapshot_resolve_cache']
+)
 def test_registered_lever_is_addressable(monkeypatch, name):
     monkeypatch.setenv(levers.ENV_KEY, '{"%s":100}' % name)
     assert levers.lever_percent(name) == 100
