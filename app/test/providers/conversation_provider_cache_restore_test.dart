@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -178,4 +179,54 @@ void main() {
     expect(await pending, isTrue);
     expect(provider.conversations.firstWhere((row) => row.id == 'ondevice-local').structured.title, 'Local latest');
   });
+
+  for (final serverOk in [true, false]) {
+    for (final searchFinishesFirst in [true, false]) {
+      test('cache restore preserves a newer search: server=$serverOk searchFirst=$searchFinishesFirst', () async {
+        final entered = Completer<void>();
+        final cache = Completer<List<ServerConversation>>();
+        final search = Completer<ConversationSearchResult>();
+        final provider = ConversationProvider(
+          conversationListFetcher: () async => (items: <ServerConversation>[], ok: serverOk),
+          conversationCacheLoader: () {
+            entered.complete();
+            return cache.future;
+          },
+          conversationSearchResultFetcher:
+              (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) => search.future,
+          isSignedIn: () => true,
+        );
+        addTearDown(provider.dispose);
+        final pending = provider.fetchConversations();
+        await entered.future;
+        final searching = provider.searchConversations('needle', showShimmer: true);
+        void completeSearch() => search.complete(ConversationSearchResult(
+              items: [_row('ranked-hit')],
+              currentPage: 1,
+              totalPages: 1,
+              outcome: ConversationSearchResultOutcome.success,
+            ));
+        if (searchFinishesFirst) {
+          completeSearch();
+          await searching;
+          // The base fetch still owns its loading state until decode completes.
+          expect(provider.isLoadingConversations, isTrue);
+        }
+        cache.complete([_row('unrelated-history')]);
+        expect(await pending, serverOk);
+        expect(provider.conversations.single.id, 'unrelated-history');
+        expect(provider.searchedConversations.map((row) => row.id), searchFinishesFirst ? ['ranked-hit'] : isEmpty);
+        expect(provider.groupedConversations.values.expand((rows) => rows).map((row) => row.id),
+            searchFinishesFirst ? ['ranked-hit'] : isEmpty);
+        expect(provider.isLoadingConversations, !searchFinishesFirst);
+        if (!searchFinishesFirst) {
+          completeSearch();
+          await searching;
+        }
+        expect(provider.isLoadingConversations, isFalse);
+        await provider.searchConversations('');
+        expect(provider.groupedConversations.values.expand((rows) => rows).single.id, 'unrelated-history');
+      });
+    }
+  }
 }

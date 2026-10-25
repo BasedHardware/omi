@@ -79,6 +79,8 @@ class ConversationProvider extends ChangeNotifier {
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
 
   bool isLoadingConversations = false;
+  bool _isLoadingConversationList = false;
+  bool _isLoadingConversationSearch = false;
   bool showDiscardedConversations = false;
   HomeEmptyExplanation homeEmptyExplanation = HomeEmptyExplanation.none;
   bool showShortConversations = false;
@@ -327,6 +329,8 @@ class ConversationProvider extends ChangeNotifier {
     totalSearchPages = 1;
     currentSearchPage = 1;
     isLoadingConversations = false;
+    _isLoadingConversationList = false;
+    _isLoadingConversationSearch = false;
     isFetchingConversations = false;
     conversationsLoadFailed = false;
     _listViewState = const ApiViewState(phase: ApiViewPhase.data);
@@ -360,6 +364,8 @@ class ConversationProvider extends ChangeNotifier {
       return result;
     }
     if (query.isEmpty && selectedSpeakerId == null) {
+      _setLoadingConversationSearch(false);
+      setIsFetchingConversations(false);
       previousQuery = "";
       currentSearchPage = 0;
       totalSearchPages = 0;
@@ -376,8 +382,10 @@ class ConversationProvider extends ChangeNotifier {
     }
 
     if (showShimmer) {
-      setLoadingConversations(true);
+      setIsFetchingConversations(false);
+      _setLoadingConversationSearch(true);
     } else {
+      _setLoadingConversationSearch(false);
       setIsFetchingConversations(true);
     }
 
@@ -398,7 +406,7 @@ class ConversationProvider extends ChangeNotifier {
       const failure = ConversationSearchResult.failure();
       lastSearchResult = failure;
       if (showShimmer) {
-        setLoadingConversations(false);
+        _setLoadingConversationSearch(false);
       } else {
         setIsFetchingConversations(false);
       }
@@ -411,7 +419,7 @@ class ConversationProvider extends ChangeNotifier {
     lastSearchResult = result;
     if (!result.isSuccess) {
       if (showShimmer) {
-        setLoadingConversations(false);
+        _setLoadingConversationSearch(false);
       } else {
         setIsFetchingConversations(false);
       }
@@ -426,7 +434,7 @@ class ConversationProvider extends ChangeNotifier {
     groupSearchConvosByDate();
 
     if (showShimmer) {
-      setLoadingConversations(false);
+      _setLoadingConversationSearch(false);
     } else {
       setIsFetchingConversations(false);
     }
@@ -447,7 +455,7 @@ class ConversationProvider extends ChangeNotifier {
     }
     final generation = _sessionGeneration;
     final requestGeneration = _searchRequestGeneration;
-    setLoadingConversations(true);
+    _setLoadingConversationSearch(true);
     late final ConversationSearchResult result;
     try {
       result = await _conversationSearchResultFetcher(
@@ -460,7 +468,7 @@ class ConversationProvider extends ChangeNotifier {
       );
     } catch (_) {
       if (generation == _sessionGeneration && requestGeneration == _searchRequestGeneration && _isSignedIn()) {
-        setLoadingConversations(false);
+        _setLoadingConversationSearch(false);
       }
       return;
     }
@@ -468,14 +476,14 @@ class ConversationProvider extends ChangeNotifier {
       return;
     }
     if (!result.isSuccess) {
-      setLoadingConversations(false);
+      _setLoadingConversationSearch(false);
       return;
     }
     searchedConversations.addAll(result.items);
     totalSearchPages = result.totalPages;
     currentSearchPage = result.currentPage;
     groupSearchConvosByDate();
-    setLoadingConversations(false);
+    _setLoadingConversationSearch(false);
     notifyListeners();
   }
 
@@ -655,7 +663,16 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void setLoadingConversations(bool value) {
-    isLoadingConversations = value;
+    _isLoadingConversationList = value;
+    isLoadingConversations = _isLoadingConversationList || _isLoadingConversationSearch;
+    notifyListeners();
+  }
+
+  // Search can start while a cache worker is running. Each operation releases
+  // only its own loading state, whichever one completes first.
+  void _setLoadingConversationSearch(bool value) {
+    _isLoadingConversationSearch = value;
+    isLoadingConversations = _isLoadingConversationList || _isLoadingConversationSearch;
     notifyListeners();
   }
 
@@ -801,6 +818,10 @@ class ConversationProvider extends ChangeNotifier {
     final processingRowsAtStart = _realProcessingConversationsById();
     final processingIdsAtStart = processingRowsAtStart.keys.toSet();
     final processingRevisionsAtStart = _processingStateRevisionSnapshot();
+    // This full fetch clears search. Invalidate any older search completion
+    // and its shimmer before a new query can claim the search loading state.
+    _searchRequestGeneration++;
+    _isLoadingConversationSearch = false;
     previousQuery = "";
     currentSearchPage = 0;
     totalSearchPages = 0;
@@ -833,10 +854,14 @@ class ConversationProvider extends ChangeNotifier {
           return false;
         }
       }
-      if (searchedConversations.isEmpty) {
+      if (!hasActiveSearch && searchedConversations.isEmpty) {
         searchedConversations = conversations;
       }
-      _groupConversationsByDateWithoutNotify();
+      if (hasActiveSearch) {
+        _groupSearchConvosByDateWithoutNotify();
+      } else {
+        _groupConversationsByDateWithoutNotify();
+      }
       setLoadingConversations(false);
       notifyListeners();
       _scheduleInitialFetchRetry();
@@ -926,10 +951,14 @@ class ConversationProvider extends ChangeNotifier {
       if (!conversations.any((c) => c.id == row.id) && _matchesActiveConversationFilters(row)) conversations.add(row);
     }
     if (conversations.isNotEmpty) clearEmptyRecordingExplanation();
-    if (searchedConversations.isEmpty) {
+    if (!hasActiveSearch && searchedConversations.isEmpty) {
       searchedConversations = conversations;
     }
-    _groupConversationsByDateWithoutNotify();
+    if (hasActiveSearch) {
+      _groupSearchConvosByDateWithoutNotify();
+    } else {
+      _groupConversationsByDateWithoutNotify();
+    }
     // Only the unfiltered successful server page can prove absence. The UI may
     // show cached rows after an empty server response; never use those as the
     // authoritative keep-set for Spotlight.
