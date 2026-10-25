@@ -136,6 +136,24 @@ void main() {
       expect(recent.existsSync(), isTrue, reason: 'a receiving app may still be reading it');
     });
 
+    test('an old export that cannot be removed does not stop the sweep', () async {
+      final folder = await Directory('${temp.path}/transcript_exports').create();
+      final now = DateTime.now();
+      final stale = <File>[];
+      for (final name in ['a.txt', 'b.txt']) {
+        final f = File('${folder.path}/$name')..writeAsStringSync('x');
+        f.setLastModifiedSync(now.subtract(const Duration(days: 2)));
+        stale.add(f);
+      }
+      // The first delete fails, as it does for a file the receiving app still holds open.
+      await sweepTranscriptExports(folder, now.subtract(const Duration(days: 1)), delete: (f) async {
+        if (f.path.endsWith('a.txt')) throw FileSystemException('busy', f.path);
+        await f.delete();
+      });
+      expect(stale[0].existsSync(), isTrue);
+      expect(stale[1].existsSync(), isFalse, reason: 'one stuck file must not stop the rest');
+    });
+
     test('a write that fails throws to the caller', () async {
       final notADirectory = File('${temp.path}/blocked')..writeAsStringSync('');
       expect(

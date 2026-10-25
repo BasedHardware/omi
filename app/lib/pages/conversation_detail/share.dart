@@ -91,6 +91,18 @@ String conversationTranscriptFileName(ServerConversation conversation) {
 /// still be reading the file.
 const Duration _exportRetention = Duration(days: 1);
 
+/// Removes exports last modified before [cutoff]. Best effort: an old export that cannot be removed
+/// (still open in the app it was shared to) must not fail the new one. [delete] is a test seam.
+Future<void> sweepTranscriptExports(Directory folder, DateTime cutoff, {Future<void> Function(File)? delete}) async {
+  await for (final old in folder.list()) {
+    try {
+      if (old is File && (await old.stat()).modified.isBefore(cutoff)) await (delete ?? (f) => f.delete())(old);
+    } on FileSystemException {
+      continue;
+    }
+  }
+}
+
 /// Writes the transcript to `<temp>/transcript_exports/<name>.txt`, first removing exports older
 /// than [_exportRetention].
 Future<File> writeConversationTranscript(
@@ -103,10 +115,7 @@ Future<File> writeConversationTranscript(
   final root = temporaryDirectory ?? await getTemporaryDirectory();
   final folder = Directory('${root.path}/transcript_exports');
   if (await folder.exists()) {
-    final cutoff = (now ?? DateTime.now()).subtract(_exportRetention);
-    await for (final old in folder.list()) {
-      if (old is File && (await old.stat()).modified.isBefore(cutoff)) await old.delete();
-    }
+    await sweepTranscriptExports(folder, (now ?? DateTime.now()).subtract(_exportRetention));
   } else {
     await folder.create(recursive: true);
   }
