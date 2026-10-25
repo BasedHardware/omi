@@ -68,6 +68,25 @@ def test_prod_coldline_rule_is_pinned_to_batch_suffixes():
     )
 
 
+def test_prod_raw_capture_coldline_rule_shape_is_pinned():
+    for name in APPLY_FILES:
+        set_class = [
+            r
+            for r in _rules(_load(name))
+            if r["action"]["type"] == "SetStorageClass"
+            and r["condition"].get("matchesPrefix") == list(RAW_CAPTURE_PREFIXES)
+        ]
+        assert len(set_class) == 1, name
+        assert set_class[0] == {
+            "action": {"type": "SetStorageClass", "storageClass": "COLDLINE"},
+            "condition": {
+                "age": 30,
+                "matchesPrefix": ["raw-live/", "raw-sync/", "raw-mobile-batch/"],
+                "matchesStorageClass": ["STANDARD", "MULTI_REGIONAL"],
+            },
+        }, f"{name}: raw-* Coldline rule shape must stay pinned to the three capture prefixes"
+
+
 def test_prod_re_declares_the_two_legacy_delete_rules_verbatim():
     for name in ("prod.json", "prod.rollback.json"):
         rules = _rules(_load(name))
