@@ -281,5 +281,52 @@ class TestConversationsToMarkdown(unittest.TestCase):
             self.assertIn("hello  world", text)
 
 
+    def test_same_batch_collision_disambiguation_when_overwrite_true(self):
+        conv1 = {
+            "id": "12345678-1111-4111-8111-111111111111",
+            "started_at": "2026-09-17T12:00:00Z",
+            "structured": {"title": "Team Standup", "overview": "first sync"},
+        }
+        conv2 = {
+            "id": "12345678-2222-4222-8222-222222222222",
+            "started_at": "2026-09-17T12:00:00Z",
+            "structured": {"title": "Team Standup", "overview": "second sync"},
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_dir = Path(tmp_dir)
+            exported = c2m.export_conversations([conv1, conv2], output_dir=out_dir, overwrite=True)
+            self.assertEqual(len(exported), 2)
+            self.assertNotEqual(exported[0], exported[1])
+            self.assertTrue(exported[0].exists())
+            self.assertTrue(exported[1].exists())
+            self.assertIn("first sync", exported[0].read_text(encoding="utf-8"))
+            self.assertIn("second sync", exported[1].read_text(encoding="utf-8"))
+
+    def test_category_none_and_boolean_speaker_fallback(self):
+        conv = {
+            "id": "conv-fallback-test",
+            "started_at": "2026-09-17T12:00:00Z",
+            "structured": {"title": "Test", "category": None},
+            "transcript_segments": [
+                {"text": "Hello world", "speaker": False, "speaker_id": 0, "start": 0.0},
+            ],
+        }
+        md = c2m.conversation_to_markdown(conv)
+        self.assertIn("Speaker 0", md)
+        self.assertNotIn("Speaker False", md)
+
+    def test_multiline_transcript_text_flattening(self):
+        conv = {
+            "id": "conv-multiline-test",
+            "started_at": "2026-09-17T12:00:00Z",
+            "structured": {"title": "Multiline Test"},
+            "transcript_segments": [
+                {"text": "line one\nline two\nline three", "speaker": "Alice", "start": 1.5},
+            ],
+        }
+        md = c2m.conversation_to_markdown(conv)
+        self.assertIn("> **[00:01] Alice:** line one line two line three", md)
+
+
 if __name__ == "__main__":
     unittest.main()
