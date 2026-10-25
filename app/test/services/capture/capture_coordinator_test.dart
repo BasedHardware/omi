@@ -14,6 +14,19 @@ import '../../support/capture/scripted_device_connection.dart';
 
 final pendant = BtDevice(id: 'pendant-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
 
+class _OneShotAudioSetupFailure extends ScriptedDeviceConnection {
+  bool failNextAudio = false;
+
+  @override
+  Future<StreamSubscription?> getBleAudioBytesListener({required void Function(List<int>) onAudioBytesReceived}) async {
+    if (failNextAudio) {
+      failNextAudio = false;
+      throw StateError('synthetic audio capture start failure');
+    }
+    return super.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+  }
+}
+
 CaptureEnvironment environment(
   CaptureCoordinatorState state, {
   bool muted = false,
@@ -1833,6 +1846,36 @@ void main() {
       await world.dispose();
       if (directory.existsSync()) directory.deleteSync(recursive: true);
     }
+  }
+
+  for (final duringResume in [false, true]) {
+    test('audio setup failure during ${duringResume ? 'resume' : 'start'} fails closed and permits a fresh start',
+        () async {
+      await withReviewWorld((world) async {
+        final connection = _OneShotAudioSetupFailure();
+        world.deviceConnection = connection;
+        if (duringResume) {
+          await world.controller.streamDeviceRecording(device: pendant);
+          await world.controller.pauseDeviceRecording();
+          await world.settle();
+        }
+        connection.failNextAudio = true;
+        await expectLater(
+          duringResume
+              ? world.controller.resumeDeviceRecording()
+              : world.controller.streamDeviceRecording(device: pendant),
+          throwsA(isA<StateError>()),
+        );
+        await world.settle();
+        expect(world.controller.liveCaptureSource, isNull);
+        expect(world.controller.bleBytesStream, isNull);
+        expect(connection.openAudioSubscriptions, 0);
+        await world.controller.streamDeviceRecording(device: pendant);
+        await world.settle();
+        expect(world.controller.liveCaptureSource, 'omi');
+        expect(connection.openAudioSubscriptions, 1);
+      });
+    });
   }
 
   test('real controller rejects denied phone permission before touching the pendant', () async {
