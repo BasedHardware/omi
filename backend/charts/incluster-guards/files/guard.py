@@ -405,7 +405,14 @@ def decide(hpa, deployment, events, values, state, now):
         # already-armed guard, never a fresh 15-minute warmup during which a
         # demand spike could not roll the floor back (review r1 P1). The floor
         # itself is excluded from the identity, so this elapsed time counts.
-        return 'NOOP', advance(state, identity, now, False), reading
+        # advance() rebuilds its dict, so the rolled-back clean streak must be
+        # carried explicitly - same identity only; a spec change restarts it
+        # (review r3 P1: without the carry the streak reset on every run and
+        # the rollback could never expire).
+        advanced = advance(state, identity, now, False)
+        if state.get('identity') == identity and 'rollback' in state:
+            advanced['rollback'] = state['rollback']
+        return 'NOOP', advanced, reading
     reading['trips'] += scheduling_failures(events, hpa['metadata']['name'], now)
     if not any(
         c['type'] == 'ScalingActive' and c['status'] == 'True' for c in hpa.get('status', {}).get('conditions', [])

@@ -708,6 +708,26 @@ def test_rollback_expiry_restarts_on_any_unusable_reading(caplog):
     assert 'parakeet_rollback_expired' in caplog.text
 
 
+def test_rollback_expiry_survives_parked_decide_passes_and_restarts(monkeypatch, caplog):
+    # Review r3 P1: with the schedule installed (production shape), a
+    # rolled-back HPA takes decide()'s parked path, whose advance() rebuilds
+    # the state dict - the clean streak must survive those rebuilds across Job
+    # restarts, or the rollback never expires. A spec change restarts it.
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [12] * 24)
+    client = FakeClient()
+    client.hpa['spec']['minReplicas'] = 12
+    client.hpa['spec']['metrics'].append(guard.LATENCY)
+    for now in (1000, 1300, 1600):  # three separate Jobs, same parked spec
+        assert guard.run(client, False, now) == 0
+    assert not any(path == 'hpa' for path, _ in client.patches)
+    assert guard.run(client, False, 1900) == 0  # 900s of clean parked readings
+    assert 'parakeet_rollback_expired' in caplog.text
+    assert any(
+        path == 'hpa' and any(p.get('op') == 'replace' and p['path'] == '/spec/metrics' for p in patch)
+        for path, patch in client.patches
+    )
+
+
 def test_batch_safety_trips_are_isolated_evidence_not_job_failures(caplog):
     # 2026-10-25 21:06Z ruling: a batch trip or unknown inputs must not fail
     # the whole Job or block the Parakeet schedule. The batch section still
