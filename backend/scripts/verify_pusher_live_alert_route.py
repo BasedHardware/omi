@@ -194,6 +194,12 @@ def _write_rule(base_url: str, uid: str, rule: dict[str, Any], token: str, *, ex
 
 
 def _create_mute_timing(base_url: str, timing: dict[str, Any], token: str) -> None:
+    # Name the timing in failures: the collection path alone could not say
+    # which interval Grafana refused (the 2026-10-25 HTTP 400 on the first
+    # merge attempt pointed only at /mute-timings).
+    name = timing.get("name")
+    label = name if isinstance(name, str) and name else "unnamed"
+    detail = f"{MUTE_TIMING_PATH}/{label}"
     request = urllib.request.Request(
         base_url.rstrip("/") + MUTE_TIMING_PATH,
         data=json.dumps(timing, separators=(",", ":")).encode("utf-8"),
@@ -208,13 +214,11 @@ def _create_mute_timing(base_url: str, timing: dict[str, Any], token: str) -> No
         with urllib.request.urlopen(request, timeout=15) as response:
             response.read(SINGLE_RULE_SIZE_LIMIT + 1)
     except urllib.error.HTTPError as exc:
-        raise AlertRouteError(
-            f"Grafana API request failed for {MUTE_TIMING_PATH}: HTTP {exc.code} {exc.reason}"
-        ) from exc
+        raise AlertRouteError(f"Grafana API request failed for {detail}: HTTP {exc.code} {exc.reason}") from exc
     except urllib.error.URLError as exc:
-        raise AlertRouteError(f"Grafana API request failed for {MUTE_TIMING_PATH}: URLError {exc.reason}") from exc
+        raise AlertRouteError(f"Grafana API request failed for {detail}: URLError {exc.reason}") from exc
     except OSError as exc:
-        raise AlertRouteError(f"Grafana API request failed for {MUTE_TIMING_PATH}: {type(exc).__name__}") from exc
+        raise AlertRouteError(f"Grafana API request failed for {detail}: {type(exc).__name__}") from exc
 
 
 def load_committed_mute_timings() -> dict[str, dict[str, Any]]:
