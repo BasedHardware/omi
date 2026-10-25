@@ -223,6 +223,26 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
+    def observe_vad(self, segment_id, token, seconds):
+        """A prepared intent can retain measured evidence without authorizing STT."""
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            if (
+                job.get('state') != 'quarantined'
+                or job.get('recovery_state') != 'prepared'
+                or job.get('recovery', {}).get('token') != token
+                or job.get('result')
+            ):
+                return False
+            measured = validate_measured_vad(seconds, job['duration_seconds'])
+            if job.get('measured_held_vad_speech_seconds') != measured:
+                job['measured_held_vad_speech_seconds'] = measured
+                tx.put('jobs', segment_id, job)
+            return True
+
+        return self.store.run(commit)
+
     def settle(
         self,
         segment_id,

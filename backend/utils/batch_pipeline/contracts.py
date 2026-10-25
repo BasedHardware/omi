@@ -110,7 +110,9 @@ def validate_measured_vad(seconds, duration=None):
         type(seconds) not in {int, float}
         or not math.isfinite(seconds)
         or seconds < 0
-        or seconds > (7200 if duration is None else duration) + 1 / 16000
+        # Decode/strict audio inspection accept up to 0.1s of metadata rounding.
+        # A bound worker receipt additionally caps speech at captured_samples.
+        or seconds > min(7200, 7200 if duration is None else duration + 0.1) + 1 / 16000
     ):
         raise ValueError('invalid measured VAD speech seconds')
     return seconds

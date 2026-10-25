@@ -18,7 +18,7 @@ from diarizer import batch_pipeline
 from tests.unit.test_batch_pipeline_worker import setup_worker, item
 from tests.unit.test_batch_pipeline_shadow import repository, running, row  # noqa: F401
 from utils.batch_pipeline.artifacts import ArtifactStore
-from utils.batch_pipeline.contracts import RecoveryWork, WorkResult, PoolCapacity, WorkItem
+from utils.batch_pipeline.contracts import RecoveryWork, WorkResult, PoolCapacity, WorkItem, FailedWork
 from utils.batch_pipeline.shadow_worker import ShadowRunner
 from routers import batch_pipeline as router
 from utils.batch_pipeline import intake, shadow_recovery
@@ -35,6 +35,21 @@ from utils.batch_pipeline.pump import Pump
 
 async def run_shadow(runner, pump):
     return await runner.run_once(pump, capacity=PoolCapacity(time.time(), available_slots=1))
+
+
+async def test_generic_failed_shadow_keeps_measured_error_without_new_paid_call(repository):
+    work = running(repository)
+    repository.take = lambda _: work
+    recovery = Mock(side_effect=AssertionError('opaque model errors must not authorize paid calls'))
+    runner = ShadowRunner(repository, recovery)
+    worker = Mock()
+    worker.process_batch.return_value = [FailedWork(work.segment_id, 2)]
+    pump = SimpleNamespace(_gpu=asyncio.Lock(), _normal_flights=0, worker=worker)
+    assert await run_shadow(runner, pump) == 1
+    result = row(repository, work.segment_id)
+    assert result['outcome'] == 'error' and result['vad'] == 'worker'
+    assert result['speech_seconds'] == result['speech_loss_seconds'] == 2
+    recovery.assert_not_called()
 
 
 @pytest.mark.parametrize('restriction', ['zero_slots', 'fresh_reserved', 'stale', 'shared_live', 'oversized'])

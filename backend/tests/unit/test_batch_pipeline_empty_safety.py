@@ -193,6 +193,54 @@ def test_vad_receipt_is_lease_fenced_and_unknown_is_not_zero():
         assert job['measured_held_vad_speech_seconds'] == measured
 
 
+def test_valid_decode_rounding_cannot_block_failure_receipt():
+    store = MemoryStore()
+    scheduler = Scheduler(store)
+    work = item('rounded', 3.99)
+    scheduler.enqueue(work, 0)
+    lease = scheduler.pull(1)[0]
+    assert scheduler.fail(
+        work.segment_id,
+        lease.token,
+        2,
+        quarantine=True,
+        measured_held_vad_speech_seconds=4,
+        worker_vad_receipt=vad_receipt(work.audio_uri, 64000, 4),
+    )
+    assert store.rows['jobs', work.segment_id]['measured_held_vad_speech_seconds'] == 4
+
+
+def test_untimed_parakeet_text_enters_the_context_retry():
+    model = Mock()
+    model.transcribe.return_value = [SimpleNamespace(text='.', timestamp={'word': []})]
+    provider = ParakeetWords(model)
+    worker = make_worker(vad=lambda _: [(0, 2)], retry=provider.recover_empty)
+    worker.words = provider
+    result = worker.process_batch([item('untimed', 4)])[0]
+    assert isinstance(result, RecoveryWork)
+    assert model.transcribe.call_count == 2
+    assert result.measured_held_vad_speech_seconds == 2
+
+
+def test_allowance_hold_retains_strict_vad_without_starting_paid_intent(setup, monkeypatch, legacy_dependencies):
+    from utils.batch_pipeline import quarantine_recovery
+
+    client, _, binding, artifacts, legacy, alternate, _ = terminal_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    monkeypatch.setattr(quarantine_recovery, 'sync_allowed', lambda *_args, **_kwargs: False)
+    row(client).pop('recovery')
+    row(client)['recovery_state'] = 'held'
+    recovery = setup[-1]
+    recovery.stt = transcribe
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'prepared'
+    assert 'started_at' not in row(client)['recovery']
+    assert row(client)['measured_held_vad_speech_seconds'] == 1
+    legacy.assert_not_called()
+    alternate.assert_not_called()
+    artifacts.persist_recovery_result.assert_not_called()
+
+
 @pytest.mark.parametrize('corrupt', ['input', 'speech', 'capture', 'version', 'rate', 'scalar'])
 def test_bound_worker_vad_receipt_rejects_foreign_or_inconsistent_evidence(corrupt):
     store = MemoryStore()

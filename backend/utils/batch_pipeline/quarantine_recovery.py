@@ -325,6 +325,8 @@ class QuarantineRecovery:
                 and not byok
                 and not sync_allowed(owner_id, item.duration_seconds, lane='batch', path=DispatchPath.QUARANTINE)
             ):
+                if measured_vad is not None:
+                    self.protocol.observe_vad(segment_id, token, measured_vad)
                 return 'held'
             # Existing guard-owned custody must drain safely even after the
             # new-admission guard is rolled back.
