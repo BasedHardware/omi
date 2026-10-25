@@ -10,6 +10,8 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/wal_backlog_telemetry.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -167,5 +169,30 @@ void main() {
     sync.onFrameCaptured(frame(2000));
     expect(sync.testFrames, isEmpty, reason: 'the full memory WAL counts toward the storage-blocked buffer');
     expect((await eventsOfType('WARN')).single['extra']['dropped_count'], 1);
+  });
+
+  test('the real flush reports one count-only observation per nonempty pendant drop window', () async {
+    final events = <RegisteredEvent>[];
+    final sync = LocalWalSyncImpl(
+      _Listener(),
+      freeDiskBytes: () async => minFreeDiskReserveBytes,
+      backlogTelemetry: WalBacklogTelemetry(emit: events.add),
+    );
+    sync.setDeviceInfo('test-pendant', 'Omi');
+    expect(await sync.ensureStorageAdmission(bytes: 1024, admittedGeneration: sync.sessionGeneration), isFalse);
+    for (var i = 0; i < 2003; i++) {
+      sync.onFrameCaptured(frame(i));
+    }
+    expect(events, isEmpty);
+    await sync.stop();
+    expect(events.whereType<PendantFramesDropped>().map((e) => e.properties), [
+      {'count': 3, 'reason': 'disk_reserve'},
+    ]);
+    expect(sync.testWals.single.storage, WalStorage.mem);
+    expect(sync.testWals.single.totalFrames, 2000);
+    sync.onFrameCaptured(frame(2003));
+    await sync.stop();
+    expect(events.whereType<PendantFramesDropped>().last.properties, {'count': 1, 'reason': 'disk_reserve'});
+    expect(events.whereType<PendantFramesDropped>(), hasLength(2));
   });
 }

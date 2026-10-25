@@ -205,7 +205,7 @@ class SyncJobPoller {
         _inFlight.contains(jobId) ||
         now.isBefore(_nextPoll[jobId] ?? DateTime(1970)) ||
         _requests.length >= maxRequestsPerMinute) {
-      return const SyncJobFetch(SyncJobFetchOutcome.transient);
+      return const SyncJobFetch.deferred();
     }
     // Reserve before awaiting, including failed requests and overlapping owners.
     _requests.add(now);
@@ -226,7 +226,7 @@ class SyncJobPoller {
             _missing.putIfAbsent(jobId, () => now);
             if (firstSeen == null) _saveMissing();
             defer(jobId, missingConfirmationInterval.inMilliseconds);
-            return const SyncJobFetch(SyncJobFetchOutcome.transient);
+            return const SyncJobFetch.missingConfirmation();
           }
           _missing.remove(jobId);
           _confirmedMissing.add(jobId);

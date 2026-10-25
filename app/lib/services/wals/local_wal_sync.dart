@@ -24,6 +24,7 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal_frame_encoder.dart';
+import 'package:omi/services/wals/wal_backlog_telemetry.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
@@ -210,6 +211,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   void clearUserData() {
+    _backlogTelemetry.clearUserData();
     _sessionGeneration++;
     conversationCompletions.value = null;
     _lastStaleWalReportAt = null;
@@ -261,6 +263,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final WalCoverageTelemetryEmitter? _staleWalTelemetry;
   DateTime? _lastStaleWalReportAt;
   final Future<int?> Function()? _freeDiskBytesOverride;
+  final WalBacklogTelemetry _backlogTelemetry;
   final PendantRingCustody _custody;
   final Future<DeviceConnection?> Function(String deviceId)? _connectionResolver;
 
@@ -281,6 +284,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     this.listener, {
     SyncUploadGate? uploadGate,
     SyncJobPoller? jobPoller,
+    WalBacklogTelemetry? backlogTelemetry,
     DateTime Function()? now,
     Timer Function(Duration, void Function(Timer))? periodic,
     Future<SyncJobFetch> Function(String jobId)? jobStatusFetcher,
@@ -292,6 +296,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     PendantRingCustody? custody,
     Future<DeviceConnection?> Function(String deviceId)? connectionResolver,
   })  : _jobPollerOverride = jobPoller,
+        _backlogTelemetry = backlogTelemetry ?? WalBacklogTelemetry(),
         _uploadGateOverride = uploadGate,
         _nowOverride = now,
         _periodicOverride = periodic,
@@ -948,6 +953,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   Future _flush(int generation) async {
+    _backlogTelemetry.flushPendantDrops();
     Logger.debug("_flushing");
     int flushedCount = 0;
     final durableWals = <Wal>[];
@@ -1782,11 +1788,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     if (_isPendantFrame(frame)) {
       if ((_pendantBlockedByStorage || (_retentionRisk != null && _retentionRisk!.reason != 'count_cap')) &&
           _countPendantBuffered() >= _maxPendantBufferedFrames) {
-        _pendantDroppedWhileBlocked++;
-        DebugLogManager.logWarning('LocalWalSync: pendant frame dropped, storage admission blocked', {
-          'device': _deviceId,
-          'dropped_count': _pendantDroppedWhileBlocked,
-        });
+        _backlogTelemetry.pendantFrameDropped(
+            retentionReason: _retentionRisk?.reason, storageWriteBlocked: _pendantBlockedByStorage);
         return frame;
       }
       final counter = _packetCounterOf(frame);
@@ -1834,7 +1837,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   static const _maxPendantBufferedFrames = 2000;
-  int _pendantDroppedWhileBlocked = 0;
 
   final Set<String> _confirmedDurableWalKeys = {};
 
@@ -1844,16 +1846,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   bool _isPendantWal(Wal wal) =>
       _deviceId != null && _deviceId!.isNotEmpty && _deviceId != 'phone' && wal.device == _deviceId;
-
-  int _countPendantBuffered() {
-    var count = _frames.where(_isPendantFrame).length;
-    for (final wal in _wals) {
-      if (wal.storage == WalStorage.mem && _isPendantWal(wal)) {
-        count += wal.totalFrames;
-      }
-    }
-    return count;
-  }
 
   @override
   void markFrameSynced(FrameSyncKey key) {
