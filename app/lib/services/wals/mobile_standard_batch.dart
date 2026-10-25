@@ -43,10 +43,22 @@ class MobileStandardBatch {
   final Stopwatch inferenceTime = Stopwatch();
   int vadAudioSamples = 0;
 
+  bool _localPreview = false;
+
+  /// The current authorization is a local-preview grant: the phone renders an
+  /// on-device preview, so every pendant frame is journaled whether or not the
+  /// transcript is on screen. Same expiry as the authorization it rides on.
+  bool get localPreview => _localPreview;
+
+  /// Authorized, but the journal is still loading its model/disk check. Frames
+  /// arriving now are refused (today's WAL path) only until it is ready.
+  bool get warmingUp => !_closed && _serverAllowed && !_ready && _initializing;
+
   /// Authorization is connection-scoped and expires. Reconnect obtains a
   /// fresh integration inventory and cohort decision from the server.
-  void authorize(bool allowed) {
+  void authorize(bool allowed, {bool localPreview = false}) {
     _serverAllowed = allowed;
+    _localPreview = allowed && localPreview;
     _authorizedUid = ownerUid();
     _authorizedAt = now();
     if (!allowed) buffer.seal();
@@ -87,7 +99,9 @@ class MobileStandardBatch {
       ownerUid() == _authorizedUid &&
       _authorizedAt != null &&
       now().difference(_authorizedAt!) < const Duration(minutes: 2) &&
-      !visibility.value.transcriptVisible;
+      // Ordinary Standard batch hands visible audio back to live STT. A
+      // local-preview session never does: the preview is on-device.
+      (_localPreview || !visibility.value.transcriptVisible);
 
   /// Called at the actual packet routing boundary, before ordinary safety WAL
   /// and WS delivery. A true return suppresses BOTH for exactly this packet.
@@ -159,7 +173,7 @@ class MobileStandardBatch {
   }
 
   void visibilityChanged() {
-    if (visibility.value.transcriptVisible) buffer.seal();
+    if (visibility.value.transcriptVisible && !_localPreview) buffer.seal();
   }
 
   Future<void> close() => _closing ??= _close();

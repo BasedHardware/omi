@@ -4429,5 +4429,11 @@
     "retentionOfferAccept": "Ở lại với ưu đãi giảm {percent}%",
     "retentionOfferBody": "Ở lại và chỉ trả {price} mỗi tháng trong {months} tháng tới.",
     "retentionOfferApplied": "Xong. Giảm {percent}% trong {months} tháng tới.",
-    "othersSpeakerLabel": "Những người khác"
+    "othersSpeakerLabel": "Những người khác",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }

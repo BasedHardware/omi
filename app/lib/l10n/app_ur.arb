@@ -11855,5 +11855,11 @@
     "retentionOfferAccept": "{percent}% رعایت کے ساتھ رہیں",
     "retentionOfferBody": "رہیں اور ہر ماہ {price} ادا کریں، اگلے {months} مہینے۔",
     "retentionOfferApplied": "ہو گیا۔ {percent}% رعایت، اگلے {months} مہینے۔",
-    "othersSpeakerLabel": "دیگر"
+    "othersSpeakerLabel": "دیگر",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }

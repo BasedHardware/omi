@@ -11855,5 +11855,11 @@
     "retentionOfferAccept": "{percent}% తగ్గింపుతో కొనసాగండి",
     "retentionOfferBody": "కొనసాగండి, నెలకు {price} చెల్లించండి, తదుపరి {months} నెలలు.",
     "retentionOfferApplied": "పూర్తైంది. {percent}% తగ్గింపు, తదుపరి {months} నెలలు.",
-    "othersSpeakerLabel": "ఇతరులు"
+    "othersSpeakerLabel": "ఇతరులు",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }

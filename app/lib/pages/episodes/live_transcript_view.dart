@@ -15,6 +15,7 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
 import 'package:omi/pages/conversation_capturing/widgets/speaker_suggestion_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
+import 'package:omi/pages/episodes/live_preview_transcript.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -22,6 +23,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/components/local_stt_recovery_notice.dart';
 import 'package:omi/ui/ui.dart';
@@ -103,44 +105,47 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
               ),
             _buildUnsyncedWalIndicator(provider),
             Expanded(
-              child: provider.segments.isEmpty && provider.photos.isEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 50, OmiSpacing.xxl, 0),
-                        child: Text(
-                          textAlign: TextAlign.center,
-                          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                          _liveCaptureEmptyStateText(
-                            provider,
-                            connectivity: connectivity,
-                            usage: usage,
-                            photoChannelActive: photoChannelActive,
-                            transcriptionInterrupted: transcriptionInterrupted,
+              child: _showsLivePreview(provider)
+                  ? LivePreviewTranscript(preview: provider.livePreview!, bottomInset: widget.jumpToLatestBottom)
+                  : provider.segments.isEmpty && provider.photos.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 50, OmiSpacing.xxl, 0),
+                            child: Text(
+                              textAlign: TextAlign.center,
+                              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                              _liveCaptureEmptyStateText(
+                                provider,
+                                connectivity: connectivity,
+                                usage: usage,
+                                photoChannelActive: photoChannelActive,
+                                transcriptionInterrupted: transcriptionInterrupted,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    )
-                  : provider.photos.isNotEmpty || decorated
-                      ? _buildChronologicalTimeline(
-                          provider,
-                          transcriptSessionId,
-                          transcriptScrollState,
-                          widget.topConversationId ?? provider.topConversationId,
                         )
-                      : getTranscriptWidget(
-                          false,
-                          List<TranscriptSegment>.of(provider.segments),
-                          provider.photos,
-                          deviceProvider.connectedDevice,
-                          bottomMargin: 0,
-                          taggingSegmentIds: provider.taggingSegmentIds,
-                          transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
-                          followLatest: true,
-                          scrollState: transcriptScrollState,
-                          jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + widget.jumpToLatestBottom,
-                          contentVersion: provider.segmentsPhotosVersion,
-                          editSegment: (segmentId, speakerId) => _nameSpeaker(segmentId, speakerId, provider),
-                        ),
+                      : provider.photos.isNotEmpty || decorated
+                          ? _buildChronologicalTimeline(
+                              provider,
+                              transcriptSessionId,
+                              transcriptScrollState,
+                              widget.topConversationId ?? provider.topConversationId,
+                            )
+                          : getTranscriptWidget(
+                              false,
+                              List<TranscriptSegment>.of(provider.segments),
+                              provider.photos,
+                              deviceProvider.connectedDevice,
+                              bottomMargin: 0,
+                              taggingSegmentIds: provider.taggingSegmentIds,
+                              transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
+                              followLatest: true,
+                              scrollState: transcriptScrollState,
+                              jumpToLatestButtonBottom:
+                                  MediaQuery.paddingOf(context).bottom + widget.jumpToLatestBottom,
+                              contentVersion: provider.segmentsPhotosVersion,
+                              editSegment: (segmentId, speakerId) => _nameSpeaker(segmentId, speakerId, provider),
+                            ),
             ),
           ],
         );
@@ -573,6 +578,17 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         ],
       ),
     );
+  }
+
+  /// A local-preview session shows the on-device preview instead of the cloud
+  /// transcript. Cloud lines can still arrive (phone-mic capture, or audio the
+  /// batch journal refused); they keep today's view only when this phone has
+  /// no preview engine, and a photo timeline always keeps today's view.
+  bool _showsLivePreview(CaptureProvider provider) {
+    final preview = provider.livePreview;
+    if (preview == null || !provider.localPreviewAdmitted || !preview.admitted) return false;
+    if (!provider.pendantCaptureVerified || provider.photos.isNotEmpty) return false;
+    return provider.segments.isEmpty || preview.phase != LivePreviewPhase.unavailable;
   }
 
   /// Photos reach a live conversation only through camera-capable wearables

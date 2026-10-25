@@ -4429,5 +4429,11 @@
     "retentionOfferAccept": "Bli med {percent} % rabatt",
     "retentionOfferBody": "Bli og betal {price} i måneden de neste {months} månedene.",
     "retentionOfferApplied": "Ferdig. {percent} % rabatt de neste {months} månedene.",
-    "othersSpeakerLabel": "Andre"
+    "othersSpeakerLabel": "Andre",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }

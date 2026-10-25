@@ -506,6 +506,7 @@ and an explicit empty literal renders as `''`.
 | `client_telemetry_posthog_retirement` | Kill switch that stops moved infrastructure telemetry on PostHog after parity; desktop_health_event and connection-balance events are structurally exempt | macos | posthog | inverted | — | — | — | absent (enable) | pending | keep | — | dazheng |
 | `desktop-rating-prompt-disabled` | Stop the rating prompt | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
 | `free-tier-kill-switch-v1` | Remote free-tier stop | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
+| `mobile-local-preview-disabled` | Stop the iOS client declaring local_preview=enabled on /v4/listen; false or absent keeps the on-device live preview request on for batch-lane sessions | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | dazheng |
 | `mobile-speech-analyzer-disabled` | Force existing iOS freemium fallback to SFSpeech; false or absent selects SpeechAnalyzer on supported iOS 26 devices/locales | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | dazheng |
 | `negative_feedback_remediation_kill` | Stop negative-feedback remediation on macOS | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
 | `screen_task_jev_gate` | Default-on screen OCR text dedupe gate using Jev; explicit false is the kill switch; flag read failures keep it on | macos | posthog | open | — | — | — | expected (enable) | keep | keep | — | dazheng |

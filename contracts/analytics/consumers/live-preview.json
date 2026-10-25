@@ -1,0 +1,21 @@
+{
+  "id": "live-preview",
+  "kind": "question",
+  "owner": "Mobile capture",
+  "question": "For batch-lane mobile sessions admitted to the on-device live preview, which engine runs and why not, by platform, OS major and release build; how long until the first preview word; and how many preview words and audio seconds each session rendered or dropped?",
+  "query": "contracts/analytics/consumers/live-preview-presence.sql",
+  "events": [
+    "livePreviewEngineSelected",
+    "livePreviewFirstWord",
+    "livePreviewSessionEnded"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "build_number",
+    "engine",
+    "reason",
+    "platform",
+    "os_major"
+  ],
+  "zero_policy": "Presence is not quality. Engine none is an expected outcome (calm Transcribing state), not an error; report it by reason. First-word latency exists only for sessions that heard speech. Preview words are not compared with the batch record in this release (no text leaves the phone); disagreement needs a follow-up on-device comparison."
+}

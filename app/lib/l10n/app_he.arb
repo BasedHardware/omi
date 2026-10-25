@@ -11855,5 +11855,11 @@
     "retentionOfferAccept": "הישארו עם {percent}% הנחה",
     "retentionOfferBody": "הישארו ושלמו {price} לחודש ב-{months} החודשים הבאים.",
     "retentionOfferApplied": "בוצע. {percent}% הנחה ב-{months} החודשים הבאים.",
-    "othersSpeakerLabel": "אחרים"
+    "othersSpeakerLabel": "אחרים",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }

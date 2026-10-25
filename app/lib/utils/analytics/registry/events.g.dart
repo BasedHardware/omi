@@ -3022,3 +3022,94 @@ final class NativeCustodyObserved extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"outcome": outcome.wireName};
 }
+
+enum LivePreviewEngineSelectedEngine {
+  speechTranscriber("speech_transcriber"),
+  sfSpeech("sf_speech"),
+  androidOnDevice("android_on_device"),
+  parakeet("parakeet"),
+  whisper("whisper"),
+  none("none");
+  const LivePreviewEngineSelectedEngine(this.wireName);
+  final String wireName;
+}
+
+enum LivePreviewEngineSelectedReason {
+  ok("ok"),
+  notAdmitted("not_admitted"),
+  killSwitch("kill_switch"),
+  osTooOld("os_too_old"),
+  osEngineUnavailable("os_engine_unavailable"),
+  localeUnsupported("locale_unsupported"),
+  localeAssetMissing("locale_asset_missing"),
+  speechPermissionDenied("speech_permission_denied"),
+  bundledNotInstalled("bundled_not_installed"),
+  bundledNotBuilt("bundled_not_built"),
+  engineError("engine_error");
+  const LivePreviewEngineSelectedReason(this.wireName);
+  final String wireName;
+}
+
+enum LivePreviewEngineSelectedPlatform {
+  ios("ios"),
+  android("android");
+  const LivePreviewEngineSelectedPlatform(this.wireName);
+  final String wireName;
+}
+
+final class LivePreviewEngineSelected extends RegisteredEvent {
+  const LivePreviewEngineSelected({required this.engine, required this.reason, required this.platform, required this.osMajor, required this.bundledInstalled});
+  final LivePreviewEngineSelectedEngine engine;
+  final LivePreviewEngineSelectedReason reason;
+  final LivePreviewEngineSelectedPlatform platform;
+  final int osMajor;
+  final bool bundledInstalled;
+  @override
+  String get wireName => "Live Preview Engine";
+  @override
+  Map<String, Object> get properties => {"engine": engine.wireName, "reason": reason.wireName, "platform": platform.wireName, "os_major": osMajor, "bundled_installed": bundledInstalled};
+}
+
+enum LivePreviewFirstWordEngine {
+  speechTranscriber("speech_transcriber"),
+  sfSpeech("sf_speech"),
+  androidOnDevice("android_on_device"),
+  parakeet("parakeet"),
+  whisper("whisper"),
+  none("none");
+  const LivePreviewFirstWordEngine(this.wireName);
+  final String wireName;
+}
+
+final class LivePreviewFirstWord extends RegisteredEvent {
+  const LivePreviewFirstWord({required this.engine, required this.latencyMs});
+  final LivePreviewFirstWordEngine engine;
+  final int latencyMs;
+  @override
+  String get wireName => "Live Preview First Word";
+  @override
+  Map<String, Object> get properties => {"engine": engine.wireName, "latency_ms": latencyMs};
+}
+
+enum LivePreviewSessionEndedEngine {
+  speechTranscriber("speech_transcriber"),
+  sfSpeech("sf_speech"),
+  androidOnDevice("android_on_device"),
+  parakeet("parakeet"),
+  whisper("whisper"),
+  none("none");
+  const LivePreviewSessionEndedEngine(this.wireName);
+  final String wireName;
+}
+
+final class LivePreviewSessionEnded extends RegisteredEvent {
+  const LivePreviewSessionEnded({required this.engine, required this.previewWords, required this.previewAudioMs, required this.droppedAudioMs});
+  final LivePreviewSessionEndedEngine engine;
+  final int previewWords;
+  final int previewAudioMs;
+  final int droppedAudioMs;
+  @override
+  String get wireName => "Live Preview Session Ended";
+  @override
+  Map<String, Object> get properties => {"engine": engine.wireName, "preview_words": previewWords, "preview_audio_ms": previewAudioMs, "dropped_audio_ms": droppedAudioMs};
+}

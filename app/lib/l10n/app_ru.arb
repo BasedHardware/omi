@@ -4464,5 +4464,11 @@
     "retentionOfferAccept": "Остаться со скидкой {percent}%",
     "retentionOfferBody": "Оставайтесь и платите {price} в месяц следующие {months} месяца.",
     "retentionOfferApplied": "Готово. Скидка {percent}% на следующие {months} месяца.",
-    "othersSpeakerLabel": "Другие"
+    "othersSpeakerLabel": "Другие",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }

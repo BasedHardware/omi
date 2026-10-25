@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
@@ -34,6 +35,11 @@ import 'package:omi/utils/enums.dart';
 enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantBatch, phone, phoneAfterPendant }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
+  @override
+  LivePreviewController? get livePreview => null;
+  @override
+  bool get localPreviewAdmitted => false;
+
   _Capture(this.live,
       {this.failure = false,
       this.batch = false,

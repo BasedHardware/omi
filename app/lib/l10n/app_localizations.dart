@@ -25766,6 +25766,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Others'**
   String get othersSpeakerLabel;
+
+  /// Small caption above the on-device live transcript preview while recording
+  ///
+  /// In en, this message translates to:
+  /// **'Live preview'**
+  String get livePreviewLabel;
+
+  /// One-line explanation under the Live preview caption: the provisional text is made on the phone and replaced by the final transcript
+  ///
+  /// In en, this message translates to:
+  /// **'On-device preview. The final transcript replaces it shortly.'**
+  String get livePreviewExplanation;
+
+  /// Live preview is running on the phone but no words have been recognized yet
+  ///
+  /// In en, this message translates to:
+  /// **'Listening… words appear here as you speak.'**
+  String get livePreviewListening;
+
+  /// The on-device live preview engine is starting
+  ///
+  /// In en, this message translates to:
+  /// **'Starting live preview…'**
+  String get livePreviewStarting;
+
+  /// Calm state when this phone has no on-device preview: the recording is being transcribed after capture
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing…'**
+  String get livePreviewTranscribingTitle;
+
+  /// Explains, under Transcribing…, where and when the transcript appears; not an error
+  ///
+  /// In en, this message translates to:
+  /// **'Your transcript appears in Conversations when processing finishes.'**
+  String get livePreviewTranscribingMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

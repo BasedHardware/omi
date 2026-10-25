@@ -59,6 +59,7 @@ class _NoSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     // Tests must never open a real transcription socket: connecting would hit
     // buildHeaders → AuthService.isSignedIn → FirebaseAuth, none of which are

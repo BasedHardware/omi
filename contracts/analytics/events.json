@@ -4479,6 +4479,133 @@
         "native-custody-health"
       ],
       "correlation": null
+    },
+    {
+      "id": "livePreviewEngineSelected",
+      "wire_name": "Live Preview Engine",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "engine": {
+          "type": "enum",
+          "wire_name": "engine",
+          "values": [
+            "speech_transcriber",
+            "sf_speech",
+            "android_on_device",
+            "parakeet",
+            "whisper",
+            "none"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "ok",
+            "not_admitted",
+            "kill_switch",
+            "os_too_old",
+            "os_engine_unavailable",
+            "locale_unsupported",
+            "locale_asset_missing",
+            "speech_permission_denied",
+            "bundled_not_installed",
+            "bundled_not_built",
+            "engine_error"
+          ]
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "ios",
+            "android"
+          ]
+        },
+        "osMajor": {
+          "type": "int",
+          "wire_name": "os_major"
+        },
+        "bundledInstalled": {
+          "type": "bool",
+          "wire_name": "bundled_installed"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "livePreviewFirstWord",
+      "wire_name": "Live Preview First Word",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "engine": {
+          "type": "enum",
+          "wire_name": "engine",
+          "values": [
+            "speech_transcriber",
+            "sf_speech",
+            "android_on_device",
+            "parakeet",
+            "whisper",
+            "none"
+          ]
+        },
+        "latencyMs": {
+          "type": "int",
+          "wire_name": "latency_ms"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "livePreviewSessionEnded",
+      "wire_name": "Live Preview Session Ended",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "engine": {
+          "type": "enum",
+          "wire_name": "engine",
+          "values": [
+            "speech_transcriber",
+            "sf_speech",
+            "android_on_device",
+            "parakeet",
+            "whisper",
+            "none"
+          ]
+        },
+        "previewWords": {
+          "type": "int",
+          "wire_name": "preview_words"
+        },
+        "previewAudioMs": {
+          "type": "int",
+          "wire_name": "preview_audio_ms"
+        },
+        "droppedAudioMs": {
+          "type": "int",
+          "wire_name": "dropped_audio_ms"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
     }
   ],
 "transport_dispositions": {

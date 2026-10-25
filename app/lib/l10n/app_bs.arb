@@ -11855,5 +11855,11 @@
     "retentionOfferAccept": "Ostani uz {percent}% popusta",
     "retentionOfferBody": "Ostani i plaćaj {price} mjesečno sljedećih {months} mjeseca.",
     "retentionOfferApplied": "Gotovo. {percent}% popusta sljedećih {months} mjeseca.",
-    "othersSpeakerLabel": "Ostali"
+    "othersSpeakerLabel": "Ostali",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }

@@ -11855,5 +11855,11 @@
     "retentionOfferAccept": "Застацца са зніжкай {percent}%",
     "retentionOfferBody": "Застаньцеся і плаціце {price} у месяц на працягу {months} месяцаў.",
     "retentionOfferApplied": "Гатова. Зніжка {percent}% на {months} месяцы.",
-    "othersSpeakerLabel": "Іншыя"
+    "othersSpeakerLabel": "Іншыя",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
 }
