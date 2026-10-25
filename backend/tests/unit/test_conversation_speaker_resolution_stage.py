@@ -1371,3 +1371,23 @@ def test_manual_gap_receipt_does_not_turn_gap_into_acoustic_evidence(monkeypatch
     assert conv.transcript_segments[1].person_id == 'manual-person'
     assert conv.transcript_segments[1].speaker == 'BATCH_UNASSIGNED_unit_1'
     assert conv.transcript_segments[1].speaker_id_scope == 'final:batch:1'
+
+
+@pytest.mark.parametrize('evidence_mode', ['off', 'serve'])
+def test_sync_off_batch_preserves_incumbent_path_and_gap_participant_policy(monkeypatch, evidence_mode):
+    from unittest.mock import Mock
+    from utils.speakers import processing as evidence_processing
+
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', evidence_mode)
+    monkeypatch.setattr(evidence_processing, '_roster', lambda *_: [])
+    monkeypatch.setattr(evidence_processing.storage, 'store_evidence', lambda *a, **kw: None)
+    resolver = Mock()
+    monkeypatch.setattr(stage, '_resolve', resolver)
+    conv = _conversation([0, 1], pcs=False, seconds=12, scopes=['final:batch:unit'] * 2)
+    conv.transcript_segments[1].speaker = 'BATCH_UNASSIGNED_unit_1'
+    conv.transcript_segments[1].speaker_match_source = 'batch_abstention'
+    before = [s.model_dump() for s in conv.transcript_segments]
+    assert stage.resolve_speakers_for_processing('synthetic', conv)
+    resolver.assert_not_called()
+    assert [s.model_dump() for s in conv.transcript_segments] == before
+    assert conv.speaker_resolution.participant_speaker_ids == [0]

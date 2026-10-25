@@ -5,6 +5,10 @@ For transcripts with `final:batch:` provenance (including retained
 `provider_speaker` scopes after resolution), `BATCH_CONVERSATION_SPEAKERS_ENABLED`
 defaults on. The existing batch admission cohort determines which new records
 reach this path. No additional account cohort or ASR call is introduced.
+It only runs for conversations with private-cloud sync enabled. Sync-off records
+retain the incumbent anonymous path; temporary voice-vector storage for those
+users requires a separate privacy/retention decision (lead ruling 846abb,
+2026-10-25 10:00Z).
 
 The resolver reads only verified, generation-pinned audio windows and reuses its
 encrypted Omi-v2 embedding cache. It pools measured evidence within each original

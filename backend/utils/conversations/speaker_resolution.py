@@ -920,7 +920,9 @@ def resolve_speakers_for_processing(
                 )
         # Batch authority survives admission rollback and subsequent resolution.
         batch_record = has_batch_authority(conversation.transcript_segments)
-        batch_resolution = batch_speakers_enabled(conversation.transcript_segments)
+        batch_resolution = conversation.private_cloud_sync_enabled and batch_speakers_enabled(
+            conversation.transcript_segments
+        )
         # The kill switch also stops linking/naming when speaker evidence serves.
         if batch_record and not batch_resolution:
             resolver_reason('batch_authoritative')
@@ -1191,7 +1193,7 @@ def _resolve(
 ) -> None:
     began = time.monotonic()
     segments = conversation.transcript_segments
-    batch_resolution = batch_speakers_enabled(segments)
+    batch_resolution = conversation.private_cloud_sync_enabled and batch_speakers_enabled(segments)
     input_ids = len({s.speaker_id for s in segments if s.speaker_id != OMI_SPEAKER_ID_SENTINEL})
     if not conversation.private_cloud_sync_enabled or not speaker_embedding_configured():
         resolver_reason('no_audio')
@@ -1445,15 +1447,9 @@ def _resolve(
         voiceprints=voiceprints,
         embedding_seconds=score_durations,
         abstained_segment_ids=abstained,
-        **(
-            {
-                'grouping': 'batch_authoritative',
-                'provider_keys': provider_keys,
-                'grouping_deadline': min(deadline, time.monotonic() + 2.0),
-            }
-            if batch_resolution
-            else {}
-        ),
+        grouping='batch_authoritative' if batch_resolution else 'incumbent',
+        provider_keys=provider_keys if batch_resolution else None,
+        grouping_deadline=min(deadline, time.monotonic() + 2.0) if batch_resolution else float('inf'),
     )
     if resolution is None:
         reason, fields = _no_embeddings_diagnostics(
