@@ -133,8 +133,10 @@ cohort on legacy sync, or an audio-hash cohort for voice messages, uses the gate
 instead of the Modulate probe, which no longer runs for that cohort. Any gate
 failure (503, timeout, malformed body, no `HOSTED_PARAKEET_API_URL`) falls back
 to the vendor probe path, counted as `route=vendor_fallback` in
-`omi_stt_language_gate_enforced_total`. Batch intake stays shadow-only at any
-percent until the GPU worker accepts `self_lid` evidence.
+`omi_stt_language_gate_enforced_total`. Batch intake shares the same stable uid
+cohort enforcement: the GPU worker accepts `self_lid` evidence (with the probe
+length frozen beside it), so an enforced cohort classifies on the self-hosted
+gate and skips the paid vendor probe.
 
 Wrong-language alarm: Parakeet counts the text language of every `/v2`
 transcript with at least 24 letters in `parakeet_output_language_total{bucket}`.
