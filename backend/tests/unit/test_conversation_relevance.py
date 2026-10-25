@@ -70,10 +70,6 @@ def test_every_trigger_has_a_mode():
 
 def test_only_user_actions_skip_assessment():
     keep = {trigger for trigger, mode in PROCESSING_MODES.items() if mode.relevance is RelevancePolicy.KEEP}
-    # SERVER_RECOVERY is not a user action, but it repairs a stale row the
-    # pipeline never successfully finished; letting relevance discard the only
-    # recovered copy would defeat the recovery itself. SMART_MERGE refreshes a
-    # survivor whose fragments were each already assessed and kept.
     assert keep == {
         ProcessingTrigger.FIRST_OPEN,
         ProcessingTrigger.USER_REPROCESS,
@@ -202,7 +198,6 @@ def test_stored_decision_reports_the_structuring_models_empty_title():
 
 
 def test_withheld_model_keeps_what_the_rules_cannot_settle():
-    """Free-tier desktop: the rules still run; the ambiguous middle is kept."""
     decision = decide_relevance(
         trigger=ProcessingTrigger.CAPTURE_END,
         texts=['Coming over there in a second.'],
