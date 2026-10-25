@@ -13,6 +13,15 @@
           "matchesStorageClass": ["STANDARD", "MULTI_REGIONAL"],
           "matchesSuffix": [".batch.enc", ".batch.bin"]
         }
+      },
+      {
+        "action": {"type": "Delete"},
+        "condition": {
+          "isLive": false,
+          "numNewerVersions": 1,
+          "matchesPrefix": ["chunks/"],
+          "matchesSuffix": [".opus.enc"]
+        }
       }
     ]
   }
