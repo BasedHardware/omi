@@ -17,7 +17,6 @@ import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
-import 'package:omi/pages/episodes/previous_episode_link.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
@@ -658,8 +657,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               SliverToBoxAdapter(
                 child: ConversationCaptureWidget(showsCall: true, deferStreamingToEpisode: episodeLive),
               ),
-              if (episodesOn && showRecordings && !convoProvider.isSelectionModeActive)
-                const SliverToBoxAdapter(child: PreviousEpisodeLink()),
               const SliverToBoxAdapter(child: CaptureContinuityDogfoodBanner()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
