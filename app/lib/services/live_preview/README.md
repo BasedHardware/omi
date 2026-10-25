@@ -49,8 +49,11 @@ they stay in the safety WAL; an admitted session gets no ConversationEvent, so
 that WAL stays unconfirmed and the ordinary recovery drain uploads it through
 `/v2/sync-local-files` to the batch record (covered by
 `test/services/live_preview/local_preview_routing_test.dart`). Until the WAL
-reports them durable (`LocalWalSyncImpl.mayHoldOnlyInMemory`) the router keeps
-a bounded copy: at capture end the copies (and any held frames of an ungranted
+reports them strictly durable (`LocalWalSyncImpl.isFrameDurable`: written to a
+disk WAL by a flush of the current generation whose index save completed) the
+router keeps a copy and never drops it early. The copies are capped at 18000
+frames (2x the WAL's ~3 min worst-case in-memory window at 50 frames/s); at the
+cap the router stops suppressing new frames (they stream) instead of evicting: at capture end the copies (and any held frames of an ungranted
 socket) go to an open socket first; on an account change with no socket they
 are written to the batch journal for the old owner, because the account
 cleanup (unchanged from main) discards the WAL's in-memory tail.

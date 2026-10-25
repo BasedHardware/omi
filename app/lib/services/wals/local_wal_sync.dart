@@ -325,11 +325,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   bool get lastFrameAccepted => _lastFrameAccepted;
   bool _lastFrameAccepted = true;
 
-  /// Whether [frame] (as returned by [onFrameCaptured]) may still exist only
-  /// in memory: still in the capture buffer, or chunked into a WAL not yet
-  /// flushed to disk. Read-only; used by the local-preview custody copies.
-  bool mayHoldOnlyInMemory(WalFrame frame) =>
-      _wals.any((wal) => wal.storage == WalStorage.mem) || _frames.any((buffered) => identical(buffered, frame));
+  /// Strict durability of [frame] (as returned by [onFrameCaptured]): its
+  /// bytes were written to a disk WAL by a flush of the CURRENT generation and
+  /// that flush's index save completed. Anything else (buffered, in a memory
+  /// WAL, written but index not yet saved, a superseded generation) is false.
+  /// Read-only; used by the local-preview custody copies.
+  bool isFrameDurable(WalFrame frame) => _durableFlushGeneration[frame.payload] == _sessionGeneration;
+
+  /// Payload object -> generation whose flush made it durable (weak keys).
+  final Expando<int> _durableFlushGeneration = Expando<int>('durableFlushGeneration');
 
   /// Test seam: take the existing storage-blocked refusal branch.
   @visibleForTesting
@@ -1034,6 +1038,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     if (indexSaved) {
       for (final wal in durableWals) {
+        // Recorded before the in-memory copy is released; observational only.
+        if (_isCurrent(generation)) {
+          for (final payload in wal.data) {
+            _durableFlushGeneration[payload] = generation;
+          }
+        }
         if (wal.deviceType == DeviceType.appleWatch && wal.ownerUid != null && _isCurrent(generation)) {
           try {
             await watchCoverage.record(wal.ownerUid!, wal.timerStart.toDouble(),

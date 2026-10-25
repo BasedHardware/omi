@@ -131,7 +131,11 @@ class LocalPreviewAdmission {
     required this.onChanged,
     this.onVerdictReport,
     Timer Function(Duration delay, void Function() callback)? schedule,
+    this.copyCap = maxNotYetDurable,
   }) : _schedule = schedule ?? Timer.new;
+
+  /// Upper bound of [_notYetDurable] + held frames (tests lower it).
+  final int copyCap;
 
   final Timer Function(Duration delay, void Function() callback) _schedule;
 
@@ -286,10 +290,9 @@ class LocalPreviewAdmission {
     if (effective) {
       // Only frames the safety WAL holds may be dropped from the socket path,
       // and they stay copied here until the WAL has made them durable.
-      final unconfirmed = _held.where((frame) => !frame.walAccepted).toList();
-      _keepUntilDurable(_held.where((frame) => frame.walAccepted));
+      final held = List.of(_held);
       _held.clear();
-      unconfirmed.forEach(send);
+      _keepUntilDurable(held, send);
     } else {
       _flush(send);
     }
@@ -357,11 +360,14 @@ class LocalPreviewAdmission {
   }
 
   /// Copies of WAL-accepted frames this router kept off the socket after a
-  /// grant, oldest first, until the safety WAL reports them durable (no longer
-  /// only in memory). Bounded: past it the oldest copies are released (their
-  /// WAL copy remains; only the account-change exposure returns for them).
+  /// grant, oldest first, until the safety WAL reports them strictly durable.
+  /// A copy is never dropped before that. The cap bounds memory by refusing
+  /// NEW suppression instead: at the cap, frames go to the socket.
   final List<HeldPendantFrame> _notYetDurable = [];
-  static const maxNotYetDurable = 3000;
+
+  /// The WAL's worst-case in-memory window is about 3 minutes (chunk every
+  /// 60+15 s, flush every 90+15 s) at 50 pendant frames/s = 9000 frames; 2x.
+  static const maxNotYetDurable = 18000;
   int get notYetDurableForTesting => _notYetDurable.length;
 
   /// Whether the WAL may still hold [frame] only in memory. Null keeps copies
@@ -369,11 +375,20 @@ class LocalPreviewAdmission {
   bool Function(HeldPendantFrame frame)? mayBeVolatile;
   DateTime? _lastPrune;
 
-  void _keepUntilDurable(Iterable<HeldPendantFrame> frames) {
-    _notYetDurable.addAll(frames);
-    final excess = _notYetDurable.length - maxNotYetDurable;
-    if (excess > 0) _notYetDurable.removeRange(0, excess);
+  /// Granted held frames: WAL-accepted ones are kept off the socket as copies
+  /// while there is room; anything else (not WAL-accepted, or past the cap)
+  /// goes to the socket now, oldest first. Nothing is ever evicted.
+  void _keepUntilDurable(List<HeldPendantFrame> frames, void Function(HeldPendantFrame frame) send) {
+    for (final frame in frames) {
+      if (frame.walAccepted && _notYetDurable.length < copyCap) {
+        _notYetDurable.add(frame);
+      } else {
+        send(frame);
+      }
+    }
   }
+
+  bool get _copiesAtCap => _notYetDurable.length + _held.length >= copyCap;
 
   void _pruneDurable({bool force = false}) {
     final probe = mayBeVolatile;
@@ -381,12 +396,7 @@ class LocalPreviewAdmission {
     final at = now();
     if (!force && _lastPrune != null && at.difference(_lastPrune!) < const Duration(seconds: 5)) return;
     _lastPrune = at;
-    // Oldest first: once one may still be volatile, newer ones may be too.
-    var durable = 0;
-    while (durable < _notYetDurable.length && !probe(_notYetDurable[durable])) {
-      durable++;
-    }
-    if (durable > 0) _notYetDurable.removeRange(0, durable);
+    _notYetDurable.removeWhere((copy) => !probe(copy));
   }
 
   /// Routes one pendant frame for a connected socket. A frame the safety WAL
@@ -407,14 +417,15 @@ class LocalPreviewAdmission {
       return;
     }
     if (socketDeclared && _holdingForVerdict()) {
-      if (_held.length < maxHeldFrames) {
+      if (_held.length < maxHeldFrames && !_copiesAtCap) {
         _firstHeldAt ??= now();
         _heldThisSocket++;
         _held.add(frame);
         return;
       }
-      // Overflow: stop holding, stream everything in order from here on. The
-      // socket is refused for good: a late grant must not claim it.
+      // Overflow (held frames, or durability copies at their cap): stop
+      // holding, stream everything in order from here on. The socket is
+      // refused for good: a late grant must not claim it.
       _cancelDeadline();
       _report(LocalPreviewVerdictOutcome.overflow);
       _verdictPendingSince = null;

@@ -178,13 +178,13 @@ class CaptureController extends ChangeNotifier
       schedule: (delay, callback) => _scheduling.once(delay, callback))
     ..mayBeVolatile = _walMayHoldOnlyInMemory;
 
-  /// Local-preview custody probe: true while the safety WAL may still hold
-  /// this frame only in memory (anything but the production WAL: assume so).
+  /// Local-preview custody probe: true unless the safety WAL reports this
+  /// frame strictly durable (on disk, index saved, current generation).
   bool _walMayHoldOnlyInMemory(HeldPendantFrame frame) {
     final positioned = frame.positioned;
     final phone = _wal.getSyncs().phone;
     if (positioned == null || phone is! LocalWalSyncImpl) return true;
-    return phone.mayHoldOnlyInMemory(positioned);
+    return !phone.isFrameDurable(positioned);
   }
 
   /// Account change with no open socket: the WAL cleanup that follows drops

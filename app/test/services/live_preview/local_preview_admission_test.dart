@@ -443,4 +443,73 @@ void main() {
       expect(reports.single.outcome, LocalPreviewVerdictOutcome.granted);
     });
   });
+
+  group('durability copies under pressure', () {
+    test('the cap never evicts a non-durable copy; new suppression stops instead', () {
+      final capped = LocalPreviewAdmission(now: () => clock, onChanged: () {}, copyCap: 3)..preview = preview;
+      final durable = <int>{};
+      capped.mayBeVolatile = (frame) => !durable.contains(frame.payload.single);
+      void routeCapped(int value) => capped.routePendant(frame(value), socketDeclared: true, send: send);
+
+      capped.socketPublished(declared: true, send: send);
+      routeCapped(1);
+      routeCapped(2);
+      capped.verdict(granted: true, socketDeclared: true, send: send);
+      expect(capped.notYetDurableForTesting, 2);
+
+      capped.revoke();
+      capped.socketPublished(declared: true, send: send);
+      routeCapped(3); // 2 copies + 1 held reaches the cap of 3
+      routeCapped(4); // at the cap: holding stops, everything streams in order
+      expect(sent, [3, 4]);
+      expect(capped.notYetDurableForTesting, 2, reason: 'no non-durable copy was dropped');
+      expect(capped.verdict(granted: true, socketDeclared: true, send: send), false,
+          reason: 'a capped hold is latched as refused like an overflow');
+
+      durable.addAll([1, 2]);
+      clock = clock.add(const Duration(seconds: 6));
+      routeCapped(5);
+      expect(capped.notYetDurableForTesting, 0, reason: 'released only once strictly durable');
+      capped.end();
+    });
+
+    test('a flush in progress (written, index not saved) is not durable: the copy is preserved at account change', () {
+      // The probe is LocalWalSyncImpl.isFrameDurable, which is false until the
+      // index save of the current generation completes (unit-tested there).
+      var indexSaved = false;
+      admission.mayBeVolatile = (frame) => !indexSaved;
+      admission.socketPublished(declared: true, send: send);
+      route(1);
+      admission.verdict(granted: true, socketDeclared: true, send: send);
+      admission.revoke();
+      clock = clock.add(const Duration(seconds: 6));
+      final preserved = <List<int>>[];
+      admission.end(preserveForAccountChange: (frames) {
+        preserved.addAll(frames.map((f) => f.payload));
+        return true;
+      });
+      expect(preserved, [
+        [1]
+      ]);
+      expect(indexSaved, isFalse);
+    });
+
+    test('account change preserves only copies the strict probe says are not durable', () {
+      final durable = <int>{1};
+      admission.mayBeVolatile = (frame) => !durable.contains(frame.payload.single);
+      admission.socketPublished(declared: true, send: send);
+      route(1);
+      route(2);
+      admission.verdict(granted: true, socketDeclared: true, send: send);
+      admission.revoke();
+      final preserved = <List<int>>[];
+      admission.end(preserveForAccountChange: (frames) {
+        preserved.addAll(frames.map((f) => f.payload));
+        return true;
+      });
+      expect(preserved, [
+        [2]
+      ]);
+    });
+  });
 }
