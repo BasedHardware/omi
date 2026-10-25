@@ -241,3 +241,95 @@ def test_metrics_dark_and_label_abstention_is_separate(correctness, monkeypatch)
     )
     for authority in ('batch', 'abstained', 'legacy'):
         assert registry.get_sample_value('omi_batch_pipeline_projected_segments_total', {'authority': authority}) == 1
+
+
+def test_allowance_policy_hold_does_not_trip_the_uncommitted_age_proxy():
+    # 2026-10-25: 131 allowance_exhausted holds (~26h old) kept the in-cluster
+    # guard's uncommitted_job_age_over_30m proxy tripped permanently. A durable
+    # policy hold is parking, not a compute commitment: the proxy must not
+    # measure it.
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('held'), 0)
+    lease = queue.pull(100)[0]
+    assert queue.defer('held', lease.token, 110, 86400, held_reason='allowance_exhausted')
+    metrics.refresh(store, 93444)  # ~26h later: the hold alone reads age 0
+    assert (
+        registry.get_sample_value(
+            'omi_batch_pipeline_oldest_age_seconds',
+            {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'},
+        )
+        == 0
+    )
+
+
+def test_admitted_job_stuck_31_minutes_still_trips_the_proxy():
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('held'), 0)
+    lease = queue.pull(100)[0]
+    assert queue.defer('held', lease.token, 110, 86400, held_reason='allowance_exhausted')
+    queue.enqueue(item('stuck'), 100_000)  # admitted, uncommitted, no decision
+    metrics.refresh(store, 101_860)  # the stuck job is 1860s old; the hold is ignored
+    assert (
+        registry.get_sample_value(
+            'omi_batch_pipeline_oldest_age_seconds',
+            {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'},
+        )
+        == 1860
+    )
+
+
+def test_firestore_oldest_walks_past_policy_holds():
+    from database.batch_pipeline_store import is_allowance_policy_hold, oldest
+
+    assert is_allowance_policy_hold({'compute_decision': {'outcome': 'held', 'reason': 'allowance_exhausted', 'at': 1}})
+    assert not is_allowance_policy_hold({'compute_decision': {'outcome': 'allowed', 'reason': 'batch', 'at': 1}})
+    assert not is_allowance_policy_hold({'compute_decision': {'outcome': 'held', 'reason': 'privacy_blocked', 'at': 1}})
+    assert not is_allowance_policy_hold({})
+
+    class Query:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def where(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def limit(self, count):
+            assert count == 500
+            return self
+
+        def stream(self):
+            return iter(self.rows)
+
+    class Doc:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def to_dict(self):
+            return self.payload
+
+    class Client:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def collection(self, name):
+            return Query(self.rows)
+
+    held = {
+        'merge_pending': True,
+        'enqueued_at': 1.0,
+        'compute_decision': {'outcome': 'held', 'reason': 'allowance_exhausted'},
+    }
+    commitment = {'merge_pending': True, 'enqueued_at': 2.0}
+    rows = [Doc(held), Doc(dict(held)), Doc(commitment)]
+    assert oldest(Client(rows), 'omi', 2) == 2.0  # skips the hold prefix, early-returns the commitment
+    assert oldest(Client([Doc(dict(held))]), 'omi', 2) is None  # only holds: nothing measurable
+    assert oldest(Client([]), 'omi', 2) is None

@@ -392,11 +392,42 @@ def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -
     return [doc.id for doc in docs]
 
 
+# Bounded FIFO prefix the uncommitted-age proxy walks past policy holds. A
+# hold population beyond it leaves no measurable commitment in the scan and the
+# proxy reads 0; the custody track owns retiring the holds themselves.
+OLDEST_POLICY_HOLD_SCAN_LIMIT = 500
+
+
+def is_allowance_policy_hold(job: dict[str, Any]) -> bool:
+    """A durable end-of-allowance hold parks the obligation outside compute.
+
+    scheduler.defer records the decision on the job document; an
+    allowance_exhausted hold is a policy parking state, not a compute
+    commitment, so age-based safety proxies must not measure it (2026-10-25:
+    131 such holds, ~26h old, kept the in-cluster guard's
+    uncommitted_job_age_over_30m proxy tripped permanently and masked real
+    wedges).
+    """
+    decision = job.get('compute_decision') or {}
+    return decision.get('outcome') == 'held' and decision.get('reason') == 'allowance_exhausted'
+
+
 def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = False) -> float | None:
     query = client.collection(f'{namespace}_jobs').where('priority', '==', priority)
-    query = query.where('state', '==', 'ready') if ready_only else query.where('merge_pending', '==', True)
-    docs = list(query.order_by('enqueued_at').limit(1).stream())
-    return docs[0].to_dict()['enqueued_at'] if docs else None
+    if ready_only:
+        docs = list(query.where('state', '==', 'ready').order_by('enqueued_at').limit(1).stream())
+        return docs[0].to_dict()['enqueued_at'] if docs else None
+    # The uncommitted-age proxy must measure the oldest real commitment: walk a
+    # bounded prefix of the FIFO and skip allowance policy holds. Early return
+    # keeps the healthy case a one-document read.
+    docs = (
+        query.where('merge_pending', '==', True).order_by('enqueued_at').limit(OLDEST_POLICY_HOLD_SCAN_LIMIT).stream()
+    )
+    for doc in docs:
+        job = doc.to_dict()
+        if not is_allowance_policy_hold(job):
+            return job['enqueued_at']
+    return None
 
 
 def control_candidate(client: Any, namespace: str, priority: int, pool: str, now: float) -> str | None:

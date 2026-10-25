@@ -160,8 +160,11 @@ age and scrape age must be <=120s. Missing/stale/nonfinite samples are BLIND.
 A fresh `omi_batch_pipeline_oldest_age_seconds > 1800` emits **TRIP**,
 `uncommitted_job_age_over_30m`. This is a conservative stuck-job **proxy**:
 `database/batch_pipeline_store.py:oldest()` queries `merge_pending=true` and
-measures from enqueue. It includes historical obligations and legitimate deep
-queues; it cannot identify new jobs or prove a projection wedge. Retry age is
+measures from enqueue, skipping durable allowance policy holds
+(`compute_decision` outcome=held reason=allowance_exhausted; 131 such holds
+kept this proxy tripped permanently on 2026-10-25) within a bounded 500-row
+FIFO prefix. It still includes legitimate deep queues; it cannot identify new
+jobs or prove a projection wedge. Retry age is
 logged, not another rollback condition. Usable readings without that trip are
 **PARTIAL**, never a claim of complete batch safety.
 
