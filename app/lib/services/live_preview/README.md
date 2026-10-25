@@ -22,10 +22,16 @@ and it rides `MobileStandardBatch.authorize` (same two-minute expiry).
 While admitted, `MobileStandardBatch.eligible` ignores transcript visibility and
 voice-command sessions no longer force frames to the socket. Every other
 realtime-consumer clause is unchanged; a frame the journal refuses still goes to
-the safety WAL and the socket. Two windows keep pendant frames WAL-only (never
-lost, never sent): a socket that declared local preview, until the verdict
-arrives (at most 10 s), and the journal's first-use warm-up. Any audio reaching
-an admitted socket opens the deferred cloud stream, so these windows matter.
+the safety WAL and the socket. Any audio reaching an admitted socket opens the
+deferred cloud stream, so a socket that declared local preview holds pendant
+frames until its verdict (`LocalPreviewAdmission`). They still go to the safety
+WAL, and an in-memory copy (at most 10 s / 500 frames, oldest first) is kept: a
+refusal (verdict without `local_preview`, or no verdict within 10 s) sends them
+to the socket in order before any newer frame, so non-admitted sessions keep
+their whole live transcript; a grant drops the copy; overflow stops holding and
+flushes. Socket close/replacement drops the copy (no socket; the WAL has them,
+as for any frame captured while the socket is down). The journal's first-use
+warm-up also keeps frames off the socket, only on an admitted socket.
 
 Known gaps:
 - Phone-mic capture is not in the batch route: its audio still streams to the

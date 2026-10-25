@@ -151,6 +151,24 @@ void main() {
     expect(lane.localPreview, false);
   });
 
+  test('a refusal streams the frames held before it, in order, then live frames', () async {
+    final live = preview();
+    await boot(livePreview: live);
+    world.deviceConnection!.emitAudio(value: 1);
+    world.deviceConnection!.emitAudio(value: 2);
+    await world.settle();
+    expect(world.socket!.sentBinary, isEmpty);
+    world.socket!.emitServerMessage(_batchOnly);
+    await world.settle();
+    expect(world.socket!.sentBinary, [List.filled(80, 1), List.filled(80, 2)]);
+    state.capturePageOpened();
+    world.deviceConnection!.emitAudio(value: 3);
+    await world.settle();
+    expect(world.socket!.sentBinary, [List.filled(80, 1), List.filled(80, 2), List.filled(80, 3)]);
+    expect(world.wal.syncs.phone.testFrames.map((frame) => frame.payload.first), [1, 2, 3]);
+    expect(live.phase, LivePreviewPhase.inactive);
+  });
+
   test('a server without local_preview keeps today: visible frames stream, no preview', () async {
     final live = preview();
     await boot(livePreview: live);

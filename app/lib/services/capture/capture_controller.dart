@@ -2187,29 +2187,15 @@ class CaptureController extends ChangeNotifier
           }
         }
 
-        // Send WS
+        // Send WS. A local-preview socket may hold the frame until its verdict.
         if (_socket?.state == SocketServiceState.connected &&
-            !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal &&
-            !_localPreview.holdPendant(
-                socketDeclared: _socket?.localPreview == true,
-                journalWarmingUp: _mobileStandardBatch?.warmingUp ?? false)) {
-          final socketPayload = blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot;
-          if (positionedFrame?.captureRoot != null && positionedFrame!.payload.length == socketPayload.length) {
-            _socket?.sendEvidenceFrame(positionedFrame);
-          } else {
-            _socket?.send(socketPayload);
-          }
-
-          final wedgeSession = _wedgeSession;
-          if (wedgeSession != null && wedgeSession.handle >= 0 && identical(wedgeSession.socket, _socket)) {
-            _wedgeMonitor.onSocketBytesSent(wedgeSession.handle, socketPayload.length);
-          }
-
-          _metrics.addSocketBytes(socketPayload.length);
-          _recordingTelemetry.observeSent(socketPayload.length);
-
-          // Do not mark pendant frames synced on transport send. The durable
-          // copy is pruned only after transcript confirmation.
+            !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
+          _localPreview.routePendant(
+            HeldPendantFrame(blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot, positionedFrame),
+            socketDeclared: _socket?.localPreview == true,
+            journalWarmingUp: _mobileStandardBatch?.warmingUp ?? false,
+            send: _sendPendantToSocket,
+          );
         }
       },
     );
@@ -2220,6 +2206,24 @@ class CaptureController extends ChangeNotifier
     _bleBytesStream = lifetime.takeSubscription(_bleBytesStream, subscription);
     notifyListeners();
     return subscription != null;
+  }
+
+  void _sendPendantToSocket(HeldPendantFrame frame) {
+    final socketPayload = frame.payload;
+    final positionedFrame = frame.positioned;
+    if (positionedFrame?.captureRoot != null && positionedFrame!.payload.length == socketPayload.length) {
+      _socket?.sendEvidenceFrame(positionedFrame);
+    } else {
+      _socket?.send(socketPayload);
+    }
+    final wedgeSession = _wedgeSession;
+    if (wedgeSession != null && wedgeSession.handle >= 0 && identical(wedgeSession.socket, _socket)) {
+      _wedgeMonitor.onSocketBytesSent(wedgeSession.handle, socketPayload.length);
+    }
+    _metrics.addSocketBytes(socketPayload.length);
+    _recordingTelemetry.observeSent(socketPayload.length);
+    // Do not mark pendant frames synced on transport send. The durable copy is
+    // pruned only after transcript confirmation.
   }
 
   Future<void> _resetState() async {
@@ -3714,8 +3718,12 @@ class CaptureController extends ChangeNotifier
       if (event.status == 'ready' || event.status == 'mobile_batch_admission') {
         // Local preview counts only on a socket that asked for it and with a
         // preview model installed; absent/false is today's cloud transcript.
-        final localPreview =
-            _localPreview.verdict(granted: event.localPreview, socketDeclared: _socket?.localPreview == true);
+        final localPreview = _localPreview.verdict(
+          granted: event.localPreview,
+          socketDeclared: _socket?.localPreview == true,
+          // A refusal streams the held frames, in order, before any new one.
+          send: _sendPendantToSocket,
+        );
         _mobileStandardBatchAllowed = event.mobileStandardBatch;
         _mobileStandardBatch?.authorize(event.mobileStandardBatch, localPreview: localPreview);
         if (event.status == 'mobile_batch_admission') return;
