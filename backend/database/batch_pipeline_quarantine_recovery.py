@@ -13,7 +13,7 @@ from database.batch_pipeline_policy import (
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, normalized_binding
 from database.sync_ledger import batch_projection_ledger_owner_matches
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
-from utils.batch_pipeline.contracts import WorkResult
+from utils.batch_pipeline.contracts import WorkResult, validate_measured_vad
 from utils.batch_pipeline.scheduler import owner_key
 
 
@@ -247,8 +247,6 @@ class RecoveryStore:
                 return False, 0
             if result_uri is None:
                 job.update(recovery_state='failed_held')
-                from utils.batch_pipeline.contracts import validate_measured_vad
-
                 measured = validate_measured_vad(measured_held_vad_speech_seconds, job['duration_seconds'])
                 if measured is not None or 'measured_held_vad_speech_seconds' not in job:
                     job['measured_held_vad_speech_seconds'] = measured

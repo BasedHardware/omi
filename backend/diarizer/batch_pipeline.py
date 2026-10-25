@@ -176,6 +176,10 @@ def padded_retry_seconds(samples) -> float:
     return (len(samples) + left + right) / SAMPLE_RATE
 
 
+def near_empty_words(words: Sequence[dict[str, Any]], speech_seconds: float) -> bool:
+    return speech_seconds >= 1 and sum(char.isalnum() for word in words for char in word['word']) < 2
+
+
 def padded_retry_fits(samples, max_padded_seconds: float) -> bool:
     return padded_retry_seconds(samples) <= min(120, max_padded_seconds)
 
@@ -554,7 +558,8 @@ class PipelineWorker:
             return results
 
     def _process(self, items, *, authorize_dispatch=None):
-        states, windows, failed, results = {}, [], set(), []
+        states: dict[str, dict[str, Any]] = {}
+        windows, failed, results = [], set(), []
         failure_records = []
         held = set()
         held_reasons = {}
@@ -792,7 +797,7 @@ class PipelineWorker:
                     )
                     shapes[item.segment_id]['windows'] = len(clips)
                     speech_spans = vad_speech_spans(spans, len(samples))
-                    state = {
+                    state: dict[str, Any] = {
                         'item': item,
                         'samples': samples,
                         'words': [],
@@ -938,11 +943,7 @@ class PipelineWorker:
                     duration = len(state['samples']) / SAMPLE_RATE
                     words = validate_words(sorted(state['words'], key=lambda w: w['timestamp'][0]), duration)
                     safety = self.config.words == 'parakeet' and safety_net_enabled()
-                    near_empty = (
-                        lambda value: state['speech_seconds'] >= 1
-                        and sum(char.isalnum() for word in value for char in word['word']) < 2
-                    )
-                    if safety and words and near_empty(words):
+                    if safety and words and near_empty_words(words, state['speech_seconds']):
                         # Punctuation/single-character debris is not sufficient
                         # recognition of a speech-bearing unit. Replace the whole
                         # hypothesis; never combine it with the retry.
@@ -1028,7 +1029,7 @@ class PipelineWorker:
                                     if 0 <= (start + end) / 2 < duration:
                                         words.append({**word, 'timestamp': [max(0.0, start), min(duration, end)]})
                                 words = validate_words(words, duration)
-                                if safety and near_empty(words):
+                                if safety and near_empty_words(words, state['speech_seconds']):
                                     words = []
                                 state['padded_retry'] = 'recovered' if words else 'empty'
                                 state['padded_retry_empty'] = not words

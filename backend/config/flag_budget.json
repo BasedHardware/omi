@@ -20,7 +20,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 170,
-  "count": 170,
+  "count": 171,
   "names": {
     "BATCH_PIPELINE_API_URL": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS": {"seeded": "2026-10-25"},
@@ -31,6 +31,7 @@
     "BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED": {"seeded": "2026-10-25"},
+    "BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED": {"owner": "dazheng (batch record lane / rollout lead)", "review_by": "2026-11-15"},
     "BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_FLIGHT_BATCH_SECONDS": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED": {"seeded": "2026-10-25"},
