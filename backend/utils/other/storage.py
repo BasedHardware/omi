@@ -763,25 +763,28 @@ def upload_audio_chunk(
             payload = upload_data
             path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus'
         blob = bucket.blob(path)
+        wanted_metadata = None
         if audio_archive.admitted(uid, 'SYNC'):
-            blob.metadata = {
+            wanted_metadata = {
                 **span_blob_metadata({'start': timestamp, 'samples': len(chunk_data) // 2, 'sample_rate': 16000}),
                 'canonical': 'false',
                 'codec': 'opus',
                 'rendition': 'sync-pcm-reencode',
             }
+            blob.metadata = wanted_metadata
         try:
             # Create-only: a retried upload of the same rendition must not
             # overwrite the committed object and mint a superseded generation
             # (the batch writer holds the same precondition).
             blob.upload_from_string(payload, content_type='application/octet-stream', if_generation_match=0)
         except PreconditionFailed:
-            if _stored_chunk_matches(blob, uid, protection_level, upload_data):
+            verified_generation = _stored_chunk_generation(blob, uid, protection_level, upload_data)
+            if verified_generation is not None:
                 # The committed generation already holds these exact bytes; an
                 # object written before SYNC admission may still lack the span
                 # metadata this session wanted, so repair it in place instead
                 # of leaving a legacy-marked rendition behind a no-op.
-                _backfill_chunk_metadata(blob)
+                _backfill_chunk_metadata(blob, verified_generation, wanted_metadata)
                 del upload_data
                 return path
             # Genuinely different bytes: keep the historical update-in-place
@@ -792,13 +795,15 @@ def upload_audio_chunk(
     return path
 
 
-def _backfill_chunk_metadata(blob) -> None:
-    """Patch this writer's metadata onto a pre-existing identical chunk object.
+def _backfill_chunk_metadata(blob, generation: int, wanted: Optional[dict]) -> None:
+    """Patch this writer's metadata onto the verified generation of a chunk.
 
-    Best-effort by design: the bytes are already proven identical, so a failed
-    patch leaves the object exactly as this change's baseline would have.
+    The patch is pinned to the generation whose bytes were proven identical:
+    a concurrent divergent overwrite fails the precondition instead of
+    receiving metadata describing bytes it does not hold. Best-effort by
+    design — a failed patch leaves the object exactly as this change's
+    baseline would have.
     """
-    wanted = blob.metadata or {}
     if not wanted:
         return
     try:
@@ -807,26 +812,31 @@ def _backfill_chunk_metadata(blob) -> None:
         missing = {key: value for key, value in wanted.items() if current.get(key) != value}
         if missing:
             blob.metadata = {**current, **missing}
-            blob.patch(retry=None, timeout=10)
+            blob.patch(if_generation_match=generation, retry=None, timeout=10)
     except Exception:
         return
 
 
-def _stored_chunk_matches(blob, uid: str, protection_level: str, plain_payload: bytes) -> bool:
-    """True when the stored chunk generation is the same plaintext rendition.
+def _stored_chunk_generation(blob, uid: str, protection_level: str, plain_payload: bytes) -> Optional[int]:
+    """The generation whose bytes are exactly this plaintext rendition, else None.
 
     Enhanced-protection objects are ciphertext with a random nonce, so identity
-    is decided on the decrypted plaintext digest. Any read failure is False:
+    is decided on the decrypted plaintext digest. Any read failure is None:
     uncertainty falls back to the writer's overwrite semantics, never to a
-    silent skip.
+    silent skip. The generation is pinned by reloading before the pinned read,
+    so the returned generation is the one the digest was verified against.
     """
     try:
-        stored = blob.download_as_bytes()
+        blob.reload(timeout=10, retry=None)
+        generation = int(blob.generation)
+        stored = blob.download_as_bytes(if_generation_match=generation)
         if protection_level == 'enhanced':
             stored = encryption.decrypt_audio_chunk(stored, uid)[0]
-        return hashlib.sha256(stored).digest() == hashlib.sha256(plain_payload).digest()
+        if hashlib.sha256(stored).digest() != hashlib.sha256(plain_payload).digest():
+            return None
+        return generation
     except Exception:
-        return False
+        return None
 
 
 def reconcile_audio_chunk_prefix(

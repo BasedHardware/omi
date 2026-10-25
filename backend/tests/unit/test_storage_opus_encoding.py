@@ -153,6 +153,7 @@ class TestUploadOpusEncoding:
     def _setup_mock_bucket(self):
         mock_bucket = MagicMock()
         mock_blob = MagicMock()
+        mock_blob.generation = 17
         mock_bucket.blob.return_value = mock_blob
         storage_mod.storage_client.bucket.return_value = mock_bucket
         return mock_bucket, mock_blob
@@ -240,7 +241,7 @@ class TestUploadOpusEncoding:
         mock_blob.upload_from_string.side_effect = upload
         # The stored generation is exactly what the first attempt wrote, so the
         # identity check compares real bytes rather than an assumed fixture.
-        mock_blob.download_as_bytes.side_effect = lambda: recorded['payload']
+        mock_blob.download_as_bytes.side_effect = lambda **kwargs: recorded['payload']
 
         path = storage_mod.upload_audio_chunk(
             chunk_data=b'\x00' * 640,
@@ -291,7 +292,7 @@ class TestUploadOpusEncoding:
             recorded['overwrite'] = True
 
         mock_blob.upload_from_string.side_effect = upload
-        mock_blob.download_as_bytes.side_effect = lambda: recorded['payload']
+        mock_blob.download_as_bytes.side_effect = lambda **kwargs: recorded['payload']
 
         # The stored generation predates SYNC admission: reload surfaces its
         # metadata, which carries no span keys.
@@ -299,6 +300,7 @@ class TestUploadOpusEncoding:
             mock_blob.metadata = {'legacy': '1'}
 
         mock_blob.reload.side_effect = reload
+        # The stored generation predates SYNC admission and carries no span keys.
 
         path = storage_mod.upload_audio_chunk(
             chunk_data=b'\x00' * 640,
