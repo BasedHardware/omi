@@ -475,7 +475,7 @@ def search_conversations_tool(
     if cfg is None:
         return "Error: Configuration not available"
 
-    if not query:
+    if not len(query or ''):
         return "Error: Query cannot be empty"
 
     configurable = cfg.get('configurable') if isinstance(cfg.get('configurable'), dict) else {}
