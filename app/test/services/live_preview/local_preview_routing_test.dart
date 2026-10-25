@@ -237,6 +237,9 @@ void main() {
     expect(world.socket!.sentBinary, [List.filled(80, 1), List.filled(80, 2), List.filled(80, 3)]);
     expect(world.wal.syncs.phone.testFrames.map((frame) => frame.payload.first), [1, 2, 3]);
     expect(live.phase, LivePreviewPhase.inactive);
+    final verdict = telemetry.whereType<LivePreviewVerdict>().single.properties;
+    expect([verdict['verdict'], verdict['platform'], verdict['held_frames'], verdict['hold_timeout_replayed']],
+        ['refused', 'ios', 2, false]);
   });
 
   test('socket close before the verdict: held frames are replayed to the replacement socket on refusal', () async {

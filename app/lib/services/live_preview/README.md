@@ -101,6 +101,10 @@ the record.
 
 `Live Preview Engine` (engine, reason, platform, os_major, bundled_installed),
 `Live Preview First Word` (latency_ms from first fed audio) and `Live Preview
-Session Ended` (preview_words, preview_audio_ms, dropped_audio_ms). No text,
+Session Ended` (preview_words, preview_audio_ms, dropped_audio_ms). `Live Preview Verdict` is one row per socket that declared local_preview
+(observational only): verdict (granted, refused, timeout, overflow,
+socket_closed), platform, verdict_latency_ms from the request, hold_duration_ms,
+held_frames and hold_timeout_replayed; `live-preview-verdict.sql` reads p50/p95
+latency by verdict and platform and the timeout-replay rate. No text,
 audio or locale leaves the phone. Preview-to-record disagreement is a follow-up:
 it needs an on-device span match against the batch record.

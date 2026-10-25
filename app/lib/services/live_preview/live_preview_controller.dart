@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/live_preview/live_preview_engine.dart';
 import 'package:omi/services/live_preview/live_preview_telemetry.dart';
+import 'package:omi/services/live_preview/local_preview_admission.dart';
 
 /// What the live transcript surface shows for an admitted local-preview session.
 enum LivePreviewPhase {
@@ -122,6 +123,9 @@ class LivePreviewController extends ChangeNotifier {
 
   int get droppedPacketsForTesting => _droppedPackets;
   int get queuedPacketsForTesting => _queue.length;
+
+  /// One verdict measurement per declaring socket (observational).
+  void reportVerdict(LocalPreviewVerdictReport report) => telemetry.verdict(report, platform: platform);
 
   String? _lastNotRequested;
 

@@ -77,10 +77,50 @@ LocalPreviewClientRefusal? localPreviewClientRefusal({
   return null;
 }
 
+/// How a socket that declared local preview was settled. Closed set.
+enum LocalPreviewVerdictOutcome {
+  granted('granted'),
+  refused('refused'),
+  timeout('timeout'),
+  overflow('overflow'),
+  socketClosed('socket_closed');
+
+  const LocalPreviewVerdictOutcome(this.wireName);
+  final String wireName;
+}
+
+/// One measurement per declaring socket (observational only).
+class LocalPreviewVerdictReport {
+  const LocalPreviewVerdictReport({
+    required this.outcome,
+    required this.verdictLatencyMs,
+    required this.holdDurationMs,
+    required this.heldFrames,
+    required this.holdTimeoutReplayed,
+  });
+
+  final LocalPreviewVerdictOutcome outcome;
+
+  /// Socket published (request sent) to its settlement.
+  final int verdictLatencyMs;
+
+  /// First frame held on this socket to its settlement; 0 when none was held.
+  final int holdDurationMs;
+
+  /// Frames held on this socket (carried-over frames are counted by their own socket).
+  final int heldFrames;
+
+  /// The timeout or overflow forced the held frames to be replayed to the socket.
+  final bool holdTimeoutReplayed;
+}
+
 /// Capture's socket-scoped local-preview state: whether the server admitted
 /// this socket, and which pendant frames must not reach it yet.
 class LocalPreviewAdmission {
-  LocalPreviewAdmission({required this.now, required this.onChanged});
+  LocalPreviewAdmission({required this.now, required this.onChanged, this.onVerdictReport});
+
+  /// Observational hook; defaults to the preview controller's telemetry.
+  final void Function(LocalPreviewVerdictReport report)? onVerdictReport;
 
   final DateTime Function() now;
   final void Function() onChanged;
@@ -110,6 +150,37 @@ class LocalPreviewAdmission {
   bool _refusedForSocket = false;
   bool get refusedForSocketForTesting => _refusedForSocket;
   DateTime? _verdictPendingSince;
+
+  // Per-socket verdict measurement (telemetry only; never changes routing).
+  DateTime? _socketDeclaredAt;
+  DateTime? _firstHeldAt;
+  int _heldThisSocket = 0;
+
+  void _report(LocalPreviewVerdictOutcome outcome) {
+    final declaredAt = _socketDeclaredAt;
+    if (declaredAt == null) return; // Not a declaring socket, or already reported.
+    _socketDeclaredAt = null;
+    final at = now();
+    int ms(DateTime from) => at.difference(from).inMilliseconds.clamp(0, 1 << 31);
+    final report = LocalPreviewVerdictReport(
+      outcome: outcome,
+      verdictLatencyMs: ms(declaredAt),
+      holdDurationMs: _firstHeldAt == null ? 0 : ms(_firstHeldAt!),
+      heldFrames: _heldThisSocket,
+      holdTimeoutReplayed:
+          (outcome == LocalPreviewVerdictOutcome.timeout || outcome == LocalPreviewVerdictOutcome.overflow) &&
+              _held.isNotEmpty,
+    );
+    _firstHeldAt = null;
+    _heldThisSocket = 0;
+    final hook = onVerdictReport ?? preview?.reportVerdict;
+    try {
+      hook?.call(report);
+    } catch (_) {
+      // Telemetry never affects capture.
+    }
+  }
+
   String language = 'multi';
   BleAudioCodec pendantCodec = BleAudioCodec.opus;
 
@@ -142,9 +213,11 @@ class LocalPreviewAdmission {
   /// refusal, so they are [send] to it now, before any newer frame.
   void socketPublished({required bool declared, required void Function(HeldPendantFrame frame) send}) {
     if (admitted) _set(false);
+    _report(LocalPreviewVerdictOutcome.socketClosed); // An unsettled predecessor.
     _refusedForSocket = !declared;
     if (declared) {
       _verdictPendingSince = now();
+      _socketDeclaredAt = _verdictPendingSince;
     } else {
       _verdictPendingSince = null;
       _flush(send);
@@ -160,6 +233,7 @@ class LocalPreviewAdmission {
     required void Function(HeldPendantFrame frame) send,
   }) {
     final effective = granted && socketDeclared && preview != null && !_refusedForSocket;
+    _report(effective ? LocalPreviewVerdictOutcome.granted : LocalPreviewVerdictOutcome.refused);
     _verdictPendingSince = null;
     if (effective) {
       _held.clear();
@@ -187,6 +261,7 @@ class LocalPreviewAdmission {
   /// frames stay queued for the replacement socket's verdict (bounded); only
   /// capture end or an account change discards them.
   void revoke() {
+    _report(LocalPreviewVerdictOutcome.socketClosed);
     _verdictPendingSince = null;
     _set(false);
   }
@@ -194,6 +269,7 @@ class LocalPreviewAdmission {
   /// Capture ended (stop, account change, dispose): the preview and any held
   /// frames are dropped (the safety WAL has every one).
   void end() {
+    _report(LocalPreviewVerdictOutcome.socketClosed);
     admitted = false;
     _verdictPendingSince = null;
     _held.clear();
@@ -211,11 +287,14 @@ class LocalPreviewAdmission {
   }) {
     if (socketDeclared && _holdingForVerdict()) {
       if (_held.length < maxHeldFrames) {
+        _firstHeldAt ??= now();
+        _heldThisSocket++;
         _held.add(frame);
         return;
       }
       // Overflow: stop holding, stream everything in order from here on. The
       // socket is refused for good: a late grant must not claim it.
+      _report(LocalPreviewVerdictOutcome.overflow);
       _verdictPendingSince = null;
       _refusedForSocket = true;
     }
@@ -234,6 +313,7 @@ class LocalPreviewAdmission {
     if (pendingSince == null) return false;
     if (now().difference(pendingSince) < verdictHold) return true;
     // Timed out: a refusal for this socket, latched like an overflow.
+    _report(LocalPreviewVerdictOutcome.timeout);
     _verdictPendingSince = null;
     _refusedForSocket = true;
     return false;

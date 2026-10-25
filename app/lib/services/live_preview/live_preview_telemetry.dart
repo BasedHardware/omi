@@ -1,4 +1,5 @@
 import 'package:omi/services/live_preview/live_preview_engine.dart';
+import 'package:omi/services/live_preview/local_preview_admission.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
 
@@ -27,6 +28,17 @@ class LivePreviewTelemetry {
     _emit(LivePreviewNotRequested(
       reason: LivePreviewNotRequestedReason.values.firstWhere((value) => value.wireName == reasonWireName),
       midSession: midSession,
+    ));
+  }
+
+  void verdict(LocalPreviewVerdictReport report, {required LivePreviewPlatform platform}) {
+    _emit(LivePreviewVerdict(
+      verdict: LivePreviewVerdictVerdict.values.firstWhere((value) => value.wireName == report.outcome.wireName),
+      platform: LivePreviewVerdictPlatform.values.byName(platform.name),
+      verdictLatencyMs: report.verdictLatencyMs,
+      holdDurationMs: report.holdDurationMs,
+      heldFrames: report.heldFrames,
+      holdTimeoutReplayed: report.holdTimeoutReplayed,
     ));
   }
 

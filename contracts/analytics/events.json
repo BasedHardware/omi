@@ -4639,6 +4639,55 @@
         "live-preview"
       ],
       "correlation": null
+    },
+    {
+      "id": "livePreviewVerdict",
+      "wire_name": "Live Preview Verdict",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "verdict": {
+          "type": "enum",
+          "wire_name": "verdict",
+          "values": [
+            "granted",
+            "refused",
+            "timeout",
+            "overflow",
+            "socket_closed"
+          ]
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "ios",
+            "android"
+          ]
+        },
+        "verdictLatencyMs": {
+          "type": "int",
+          "wire_name": "verdict_latency_ms"
+        },
+        "holdDurationMs": {
+          "type": "int",
+          "wire_name": "hold_duration_ms"
+        },
+        "heldFrames": {
+          "type": "int",
+          "wire_name": "held_frames"
+        },
+        "holdTimeoutReplayed": {
+          "type": "bool",
+          "wire_name": "hold_timeout_replayed"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
     }
   ],
 "transport_dispositions": {

@@ -3137,3 +3137,34 @@ final class LivePreviewNotRequested extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"reason": reason.wireName, "mid_session": midSession};
 }
+
+enum LivePreviewVerdictVerdict {
+  granted("granted"),
+  refused("refused"),
+  timeout("timeout"),
+  overflow("overflow"),
+  socketClosed("socket_closed");
+  const LivePreviewVerdictVerdict(this.wireName);
+  final String wireName;
+}
+
+enum LivePreviewVerdictPlatform {
+  ios("ios"),
+  android("android");
+  const LivePreviewVerdictPlatform(this.wireName);
+  final String wireName;
+}
+
+final class LivePreviewVerdict extends RegisteredEvent {
+  const LivePreviewVerdict({required this.verdict, required this.platform, required this.verdictLatencyMs, required this.holdDurationMs, required this.heldFrames, required this.holdTimeoutReplayed});
+  final LivePreviewVerdictVerdict verdict;
+  final LivePreviewVerdictPlatform platform;
+  final int verdictLatencyMs;
+  final int holdDurationMs;
+  final int heldFrames;
+  final bool holdTimeoutReplayed;
+  @override
+  String get wireName => "Live Preview Verdict";
+  @override
+  Map<String, Object> get properties => {"verdict": verdict.wireName, "platform": platform.wireName, "verdict_latency_ms": verdictLatencyMs, "hold_duration_ms": holdDurationMs, "held_frames": heldFrames, "hold_timeout_replayed": holdTimeoutReplayed};
+}

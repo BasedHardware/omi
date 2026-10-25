@@ -201,6 +201,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | livePreviewFirstWord | Live Preview First Word | engine, latency_ms | active | live-preview |
 | livePreviewSessionEnded | Live Preview Session Ended | engine, preview_words, preview_audio_ms, dropped_audio_ms | active | live-preview |
 | livePreviewNotRequested | Live Preview Not Requested | reason, mid_session | active | live-preview |
+| livePreviewVerdict | Live Preview Verdict | verdict, platform, verdict_latency_ms, hold_duration_ms, held_frames, hold_timeout_replayed | active | live-preview |
 
 ## App Review Opportunity decisions
 
