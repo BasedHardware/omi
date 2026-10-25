@@ -841,6 +841,7 @@ def _sync_member_updates(
     *,
     finished: Optional[datetime],
     started: datetime,
+    now: Optional[datetime] = None,
 ) -> dict[str, Any]:
     """Membership plus the clip's speech as activity: sync speech keeps the occasion's clock honest.
 
@@ -850,6 +851,8 @@ def _sync_member_updates(
     updates = _with_conversation(episode, conversation_id, source)
     last = policy.utc(episode.get('last_activity_at'))
     activity = finished or started
+    if now is not None and activity > now:
+        activity = now  # A pendant clock running ahead must never pin the episode open.
     if last is None or activity > last:
         updates['last_activity_at'] = activity
     return updates
@@ -897,7 +900,7 @@ def _join_live_synced(
         uid,
         expected_episode_id=str(episode['id']),
         expected_version=episode.get('state_version'),
-        updates=_sync_member_updates(episode, conversation_id, source, finished=finished, started=started),
+        updates=_sync_member_updates(episode, conversation_id, source, finished=finished, started=started, now=_now(c)),
         link_conversation_ids=[conversation_id],
         firestore_client=c.firestore_client,
     )
@@ -927,12 +930,18 @@ def _rejoin_closed_synced(
     if closed is None or not policy.rejoinable_closed_episode(closed, started, finished):
         return 'no_episode'
     source = str(row.get('source') or '') or None
+    if allow_reopen and finished is not None and (_now(c) - finished).total_seconds() >= policy.CLOSE_GAP_SECONDS:
+        # Speech already older than the close gap (a backfill) would only make the
+        # episode live until the next read re-closes it: attach as a member instead.
+        allow_reopen = False
     if allow_reopen:
         reopened = episodes_db.reopen_episode(
             uid,
             str(closed['id']),
             expected_version=int(closed.get('state_version') or 0),
-            updates=_sync_member_updates(closed, conversation_id, source, finished=finished, started=started),
+            updates=_sync_member_updates(
+                closed, conversation_id, source, finished=finished, started=started, now=_now(c)
+            ),
             link_conversation_ids=[conversation_id],
             firestore_client=c.firestore_client,
         )
@@ -950,7 +959,7 @@ def _rejoin_closed_synced(
         uid,
         str(closed['id']),
         expected_version=int(closed.get('state_version') or 0),
-        updates=_sync_member_updates(closed, conversation_id, source, finished=finished, started=started),
+        updates=_sync_member_updates(closed, conversation_id, source, finished=finished, started=started, now=_now(c)),
         link_conversation_ids=[conversation_id],
         firestore_client=c.firestore_client,
     )

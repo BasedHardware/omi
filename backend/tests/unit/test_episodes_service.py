@@ -1462,6 +1462,35 @@ def test_sync_speech_extends_the_live_episodes_activity_and_defers_the_idle_clos
     assert finished['close_reason'] == 'idle' and finished['conversation_ids'] == ['c-live', 'c-wal']
 
 
+def test_a_backfilled_sync_clip_attaches_to_the_closed_episode_without_reopening_it():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    _close_on_gap(store)
+    # The same clip, delivered hours later: its speech is older than the close gap,
+    # so it joins as a member and the episode stays closed (no "Listening now" flash).
+    c = _collaborators(model, now=T0 + timedelta(hours=3), store=store)
+    service.on_conversation_finalized(UID, 'c-wal', _wal_row(minutes=15), trigger='sync_update', collaborators=c)
+    after = episodes_db.get_episode(UID, episode['id'], firestore_client=store)
+    assert after['status'] == 'closed' and 'c-wal' in after['conversation_ids']
+    assert episodes_db.get_current_episode(UID, firestore_client=store) is None
+
+
+def test_a_pendant_clock_running_ahead_never_pins_the_episode_open():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    clip = _wal_row(minutes=0.5)
+    clip['finished_at'] = T0 + timedelta(minutes=22)  # pendant clock ~20 min ahead
+    now = T0 + timedelta(minutes=2)
+    assert (
+        service.attach_synced_intake(UID, 'c-wal', clip, collaborators=_collaborators(model, now=now, store=store))
+        == 'joined'
+    )
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['last_activity_at'] == now
+
+
 def test_late_sync_audio_from_before_the_closed_episode_stays_out():
     store = StrictFirestore()
     model = FakeModel({'title': 'Lunch', 'bullets': ['A']})

@@ -14,13 +14,13 @@ from utils.llm.notes_refactor_metrics import shadow, result
 
 NOTES_MIN_WORDS = 12
 
-# The same floor measured on the clock: a capture whose entire speech fits a few
-# seconds cannot hold a conversation, however many tokens the recognizer squeezed
-# into it (a 2 s clip kept by Jev with a full model title, 2026-10-25). Twelve
-# words at a slow check-in pace (~0.8 words/s) is 15 s; anything shorter is a
-# fragment of an occasion, not a standalone conversation, so it takes this quiet
-# minimum instead of paid notes — regardless of which tier would have kept it.
-SHORT_CLIP_MAX_SPEECH_SECONDS = 15.0
+# The same floor measured on the clock, kept deliberately tiny: a capture whose
+# entire speech fits a few seconds cannot hold a dozen real words, however many
+# tokens the recognizer squeezed into it (a 2 s clip kept by Jev with a full
+# model title, 2026-10-25). The word floor does the real work; this leg only
+# catches token-inflated slivers. It must stay well below a short real command
+# ("remind me to call mom at five", ~3-6 s): those keep their notes and tasks.
+SHORT_CLIP_MAX_SPEECH_SECONDS = 4.0
 
 
 def speech_seconds(segments: Any) -> float | None:

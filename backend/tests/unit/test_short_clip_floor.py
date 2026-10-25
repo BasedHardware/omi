@@ -51,8 +51,9 @@ def _segments(words: int, *, start: float, end: float) -> list[SimpleNamespace]:
         (12, None, False),
         (12, SHORT_CLIP_MAX_SPEECH_SECONDS, False),
         (25, 2.0, True),  # the 2 s clip with a dozen-plus words
-        (25, 14.9, True),
-        (25, 15.0, False),
+        (25, 3.9, True),
+        (25, 4.0, False),
+        (14, 6.0, False),  # a short real command keeps its notes
         (25, 60.0, False),
         (12, -1.0, False),  # an invalid span is unknown, never sub-floor
     ],
@@ -128,9 +129,11 @@ def test_jev_is_never_asked_about_a_sub_floor_clip_and_cannot_keep_it():
     assert decision.verdict == 'keep' and decision.reason == 'model_withheld'
 
 
-def test_a_calendar_overlap_does_not_rescue_a_sub_floor_clip():
+def test_a_calendar_overlap_still_rescues_a_sub_floor_clip_that_reaches_relevance():
+    # Paths quiet_minimum does not cover (non-v2 cohort, rules-only desktop, recovery)
+    # must not turn a short in-meeting fragment into a discard.
     calls, decision = _relevance(texts=AMBIGUOUS, speech_seconds=2.0, calendar=True, model_discards=True)
-    assert decision.verdict == 'discard' and decision.reason != 'calendar_overlap'
+    assert decision.verdict == 'keep' and decision.reason == 'calendar_overlap'
 
 
 def test_a_calendar_overlap_still_keeps_a_clip_that_meets_the_floor():

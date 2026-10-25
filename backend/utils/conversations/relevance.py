@@ -260,9 +260,10 @@ def decide_relevance(
     model exception advances the chain. The final arm uses only lexicon evidence,
     never duration or raw length to discard. Photos and trusted wake words
     keep when no model can assess their content. Calendar protection applies
-    to every discard — except on a capture below the short-clip floor, which
-    no tier or override may keep as a standalone conversation: Jev is not
-    asked, and a calendar overlap no longer rescues a sub-floor clip.
+    to every discard. A capture below the short-clip floor is not sent to Jev
+    (its keep would stand the clip up with full notes); the quiet-minimum path
+    upstream normally intercepts such clips first, so a calendar rescue here
+    only ever keeps a short in-meeting fragment instead of discarding it.
     """
 
     # Speech the floor can measure: an empty transcript is not a short clip but a
@@ -285,7 +286,7 @@ def decide_relevance(
         jev_threshold: Optional[float] = None,
         jev_comparison: Optional[Literal['>', '>=']] = None,
     ) -> RelevanceDecision:
-        if not short_clip and calendar_retains():
+        if calendar_retains():
             return RelevanceDecision(
                 'keep',
                 'override',

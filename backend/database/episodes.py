@@ -315,6 +315,8 @@ def _reopen(
     if _link_target(client, uid, CURRENT, transaction):
         return None  # A newer episode went live: the closed one stays closed.
     last_closed_id = _link_target(client, uid, LAST_CLOSED, transaction)
+    if last_closed_id != episode_id:
+        return None  # A newer episode opened and closed since the read: only the latest reopens.
     now = datetime.now(timezone.utc)
     merged = _merge_state(
         unseal(uid, raw) or {},
@@ -330,9 +332,8 @@ def _reopen(
     merged['state_version'] = int(raw.get('state_version') or 0) + 1
     transaction.set(ref, seal(uid, merged))
     transaction.set(_links(client, uid).document(CURRENT), {'episode_id': episode_id, 'updated_at': now})
-    if last_closed_id == episode_id:
-        # The recap must not advertise a live episode as the last closed one.
-        transaction.set(_links(client, uid).document(LAST_CLOSED), {'episode_id': None, 'updated_at': now})
+    # The recap must not advertise a live episode as the last closed one.
+    transaction.set(_links(client, uid).document(LAST_CLOSED), {'episode_id': None, 'updated_at': now})
     for conversation_id in [
         cid for cid in dict.fromkeys(link_conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}
     ]:
