@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib
 import unittest.mock
+from itertools import cycle
 
 from config.rollout_cohorts import legacy_membership
 from datetime import timedelta, timezone
@@ -778,12 +779,27 @@ _add(
         body_digest=BODY_DIGEST['database.conversation_finalization_jobs._create_or_get_finalization_intent_txn'],
     )
 )
+
+
+# Each candidate-query builder evaluates the lever once per invocation. Two
+# trials capture the exact off shape and the additive on shape, independent of
+# the operator's environment. Cursor domains run through both trials.
+def _finjob_candidate_lever_trials(client):
+    states = cycle((False, True))
+    return unittest.mock.patch(
+        'database.conversation_finalization_jobs._candidate_queries_enabled',
+        side_effect=lambda: next(states),
+    )
+
+
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.get_abandoned_byok_job_candidates',
         base={'abandoned_after': timedelta(minutes=10)},
         domains={'resume_after_path': [None, 'users/shape-user/jobs/job-1']},
         neutrals={'limit': _LIMIT, 'max_scan': (200, 'scan bound; fixed, not filter-affecting')},
+        trials=2,
+        patchers=(_finjob_candidate_lever_trials,),
     )
 )
 _add(DriverEntry('database.conversation_finalization_jobs.get_finalization_job_summary'))
@@ -806,6 +822,7 @@ _add(
         neutrals={'limit': _LIMIT},
         setup=_byok_reclaim_cursor,
         trials=2,
+        patchers=(_finjob_candidate_lever_trials,),
     )
 )
 
@@ -855,8 +872,11 @@ _add(
         domains={
             'resume_after_path': [None, 'users/shape-user/conversations/c-1'],
             'content_due_before': [None, T0],
+            'finished_before': [None, T0],
         },
         neutrals={'page_size': _PAGE, 'max_scan': (200, 'scan bound; fixed, not filter-affecting')},
+        trials=2,
+        patchers=(_finjob_candidate_lever_trials,),
     )
 )
 _add(

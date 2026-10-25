@@ -1742,6 +1742,40 @@ FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('status'), _asc('created_at'), _asc('__name__')),
 )
 
+# WQ13: candidate filters are read-only and gated independently of loop leases.
+FINALIZATION_BYOK_ABANDONMENT_QUERY = FirestoreQuerySpec(
+    identifier='finalization_byok_active_candidates',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('requires_byok', '==', 'requires_byok'),
+        FirestoreQueryFilter('status', 'in', 'statuses'),
+    ),
+    index_fields=(_asc('requires_byok'), _asc('status'), _asc('__name__')),
+)
+
+FINALIZATION_BYOK_RECLAIM_QUERY = FirestoreQuerySpec(
+    identifier='finalization_byok_reclaim_candidates',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('requires_byok', '==', 'requires_byok'),
+        FirestoreQueryFilter('status', '==', 'status'),
+    ),
+    index_fields=(_asc('requires_byok'), _asc('status'), _asc('created_at'), _asc('__name__')),
+)
+
+FINALIZATION_STALE_IN_PROGRESS_QUERY = FirestoreQuerySpec(
+    identifier='finalization_stale_in_progress_candidates',
+    collection_group='conversations',
+    query_scope='COLLECTION_GROUP',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('finished_at', '<=', 'finished_before'),
+    ),
+    index_fields=(_asc('status'), _asc('finished_at'), _asc('__name__')),
+)
+
 CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY = FirestoreQuerySpec(
     identifier='conversation_keyframe_jobs_device_state',
     collection_group='conversation_keyframe_jobs',
@@ -1982,6 +2016,9 @@ QUERY_SPECS = (
     *MCP_CONVERSATION_CARD_QUERY_SPECS.values(),
     SYNC_RECORDING_LINEAGE_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
+    FINALIZATION_BYOK_ABANDONMENT_QUERY,
+    FINALIZATION_BYOK_RECLAIM_QUERY,
+    FINALIZATION_STALE_IN_PROGRESS_QUERY,
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
     FRAME_VISION_OUTPUT_EXPIRY_QUERY,

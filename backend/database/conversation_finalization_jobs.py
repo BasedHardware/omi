@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import socket
 from hashlib import sha256
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Literal, Mapping, TypedDict
@@ -17,7 +18,10 @@ from typing import Any, Callable, Literal, Mapping, TypedDict
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from config.firestore_read_levers import lever_enabled
 from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
+from config.occasion_conversations import LIFECYCLE_V2_MODE_ENV
+from config.refactor_modes import cohort_configured
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -31,6 +35,9 @@ from database.conversation_terminal_title import (
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_index_registry import (
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
+    FINALIZATION_BYOK_RECLAIM_QUERY,
+    FINALIZATION_BYOK_ABANDONMENT_QUERY,
+    FINALIZATION_STALE_IN_PROGRESS_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
 )
 from database.people_stats_cache import invalidate_people_stats_cache
@@ -120,6 +127,11 @@ class FinalizationClaim(TypedDict):
     lease_epoch: int | None
     attempt_count: int
     created_at: datetime | None
+
+
+def _candidate_queries_enabled() -> bool:
+    key = os.getenv('HOSTNAME') or f"{os.getenv('K_REVISION', '')}:{socket.gethostname()}"
+    return lever_enabled('finjob_candidate_queries', key)
 
 
 def _now() -> datetime:
@@ -1818,9 +1830,10 @@ def claim_finalization_replay(
 
 
 def recover_stranded_byok_jobs(*, limit: int = 50, firestore_client: Any = None) -> dict[str, int]:
-    """Rotate through at most 50 rows per active status using the existing age index.
+    """Rotate through at most 50 rows per active status in creation-time order.
 
-    Persisted CAS cursors prevent a stable non-BYOK prefix from starving legacy
+    The candidate-query lever adds ``requires_byok == True`` before the page
+    cap; otherwise retain the existing all-payer age query. Persisted CAS cursors prevent a stable non-BYOK prefix from starving legacy
     rows. Candidate reads are advisory; each reclaim rereads ownership inside a
     transaction. Failed rows are revisited on the next rotation.
     """
@@ -1828,12 +1841,18 @@ def recover_stranded_byok_jobs(*, limit: int = 50, firestore_client: Any = None)
     collection = client.collection(FINALIZATION_JOBS_COLLECTION)
     page_size = max(1, min(limit, 50))
     result = {'scanned': 0, 'blocked': 0, 'errors': 0}
+    candidate_queries = _candidate_queries_enabled()
     for status in ('queued', 'leased'):
         state_ref = client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(f'byok_reclaim_{status}')
         state = state_ref.get().to_dict() or {}
-        query = FINALIZATION_OLDEST_NONTERMINAL_QUERY.build(
-            collection, {'status': status}, field_filter_factory=FieldFilter
-        ).order_by('created_at')
+        if candidate_queries:
+            query = FINALIZATION_BYOK_RECLAIM_QUERY.build(
+                collection, {'status': status, 'requires_byok': True}, field_filter_factory=FieldFilter
+            ).order_by('created_at')
+        else:
+            query = FINALIZATION_OLDEST_NONTERMINAL_QUERY.build(
+                collection, {'status': status}, field_filter_factory=FieldFilter
+            ).order_by('created_at')
         path = state.get('resume_after_path')
         if isinstance(path, str) and path.startswith(FINALIZATION_JOBS_COLLECTION + '/'):
             cursor = client.document(path).get()
@@ -2102,24 +2121,41 @@ def scan_in_progress_conversations(
     page_size: int = 100,
     max_scan: int = 2000,
     resume_after_path: str | None = None,
+    finished_before: datetime | None = None,
     firestore_client: Any = None,
     content_due_before: datetime | None = None,
 ) -> dict[str, Any]:
     """Return a bounded window of ``status == 'in_progress'`` conversation rows.
 
-    The legacy query shape is fixed: a single-equality ``collection_group`` on
-    ``conversations.status == 'in_progress'``, limited per page, optionally
-    resuming after the persisted cursor snapshot. Every recovery predicate is
-    evaluated Python-side by the caller; no extra Firestore predicate may be
-    added to that legacy shape. The always-on fast recovery caller explicitly
-    selects the content-bearing, due-by-finished_at collection-group index.
-    This avoids rotating through historical empty stubs before finding a
-    recently expired recording. Lease and admission guards remain transactional.
+    The default-off path preserves the status-only scan and main's explicit
+    content-bearing due scan. With the candidate-query lever and a caller cutoff,
+    the status-only scan instead pushes ``finished_at <= finished_before`` into
+    the query. The content-bearing fast recovery scan retains its own cutoff,
+    predicates and cursor behavior regardless of the candidate-query lever.
+    Lease and admission guards remain transactional.
+
+    The pushdown is admission-equivalent only while no uid can serve lifecycle
+    v2: ``recovery_admission_refusal`` clocks v2-serving uids by
+    ``last_speech_at or finished_at`` (``speech_clock``), and v2 serving
+    suppresses legacy ``finished_at`` writes, so a v2-serving uid can hold a
+    missing or fresh ``finished_at`` with a stale ``last_speech_at``. Such a row
+    must stay reachable by this status-only catch-all (it is the only
+    ``finished_at``-agnostic recovery owner), so while any v2 serve cohort can
+    exist (``LIFECYCLE_V2_MODE=serve`` or a configured shadow cohort) the
+    candidate shape is withheld and the status-only scan runs.
 
     Returns ``{'rows', 'scanned', 'resume_after_path', 'exhausted'}`` where each
     row is ``{'uid', 'conversation_id', 'path', 'data'}``.
     """
     client = _client(firestore_client)
+    candidate_queries = (
+        content_due_before is None
+        and _candidate_queries_enabled()
+        and finished_before is not None
+        and not cohort_configured(LIFECYCLE_V2_MODE_ENV)
+    )
+    if finished_before is not None and finished_before.tzinfo is None:
+        finished_before = finished_before.replace(tzinfo=timezone.utc)
     page_size = max(1, min(page_size, 100))
     rows: list[dict[str, Any]] = []
     scanned = 0
@@ -2130,20 +2166,34 @@ def scan_in_progress_conversations(
     if resume_after_path:
         fetched = client.document(resume_after_path).get()
         if getattr(fetched, 'exists', False):
-            cursor_snapshot = fetched
+            # A status-only cursor from before rollout can lack the range
+            # field. Such a snapshot cannot seed the new ordered query.
+            if not candidate_queries or isinstance((fetched.to_dict() or {}).get('finished_at'), datetime):
+                cursor_snapshot = fetched
 
     while scanned < max_scan:
-        query = (
-            client.collection_group(CONVERSATIONS_COLLECTION)
-            .where(filter=firestore.FieldFilter('status', '==', 'in_progress'))
-            .limit(page_size)
-        )
-        if content_due_before is not None:
+        if candidate_queries:
             query = (
-                query.where(filter=firestore.FieldFilter('has_content', '==', True))
-                .where(filter=firestore.FieldFilter('finished_at', '<=', content_due_before))
+                FINALIZATION_STALE_IN_PROGRESS_QUERY.build(
+                    client.collection_group(CONVERSATIONS_COLLECTION),
+                    {'status': 'in_progress', 'finished_before': finished_before},
+                    field_filter_factory=FieldFilter,
+                )
                 .order_by('finished_at')
+                .limit(page_size)
             )
+        else:
+            query = (
+                client.collection_group(CONVERSATIONS_COLLECTION)
+                .where(filter=firestore.FieldFilter('status', '==', 'in_progress'))
+                .limit(page_size)
+            )
+            if content_due_before is not None:
+                query = (
+                    query.where(filter=firestore.FieldFilter('has_content', '==', True))
+                    .where(filter=firestore.FieldFilter('finished_at', '<=', content_due_before))
+                    .order_by('finished_at')
+                )
         if cursor_snapshot is not None:
             query = query.start_after(cursor_snapshot)
         page = list(query.stream())
@@ -2610,7 +2660,7 @@ def get_abandoned_byok_job_candidates(
     """Return a bounded window of BYOK jobs that no consumer can ever claim again.
 
     The sweep never executes finalization or reads credentials. Its bounded
-    single-field query selects all BYOK rows, including blocked_byok; eligibility
+    default single-field query selects all BYOK rows, including blocked_byok; eligibility
     is checked after pagination and again in the terminal transaction:
 
     * ``status`` in ``queued`` / ``leased`` / ``blocked_byok``.
@@ -2619,7 +2669,7 @@ def get_abandoned_byok_job_candidates(
       that instant in ``byok_last_activity_at`` before updating bookkeeping;
       reconnect clears it and refreshes activity. Unknown age fails closed.
 
-    The cross-collection sweep is a single-equality query on
+    With the lever off, the sweep is a single-equality query on
     ``requires_byok == True``, served by Firestore's automatic single-field index
     (no composite index is registered or deployed). Because exclusion happens
     after the page cap, the sweep pages with a ``start_after`` cursor and stops
@@ -2627,9 +2677,15 @@ def get_abandoned_byok_job_candidates(
     ``None`` once ``exhausted``) so repeated bounded sweeps cover the whole
     collection and a stable terminal prefix cannot starve a later stranded row.
 
+    With ``finjob_candidate_queries`` enabled the same name-ordered sweep
+    additionally filters to active statuses, excluding terminal history before
+    the page cap. Age stays client-side: BYOK activity takes precedence over
+    bookkeeping ``updated_at`` and legacy rows fall back to ``created_at``.
+
     Returns ``{'candidates', 'resume_after_path', 'exhausted'}``.
     """
     client = _client(firestore_client)
+    candidate_queries = _candidate_queries_enabled()
     now = _now()
     cutoff = now - abandoned_after
     try:
@@ -2655,7 +2711,15 @@ def get_abandoned_byok_job_candidates(
         # A vanished cursor document wraps the sweep back to the top (safe re-scan).
 
     while len(collected) < safe_limit and scanned < safe_max_scan:
-        query = collection.where(filter=firestore.FieldFilter('requires_byok', '==', True)).limit(page_size)
+        if candidate_queries:
+            query = FINALIZATION_BYOK_ABANDONMENT_QUERY.build(
+                collection,
+                {'requires_byok': True, 'statuses': ['queued', 'leased', 'blocked_byok']},
+                field_filter_factory=FieldFilter,
+            )
+        else:
+            query = collection.where(filter=firestore.FieldFilter('requires_byok', '==', True))
+        query = query.limit(page_size)
         if cursor_snapshot is not None:
             query = query.start_after(cursor_snapshot)
         page = list(query.stream())
