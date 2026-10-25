@@ -17,7 +17,6 @@ from utils.executors import db_executor, run_blocking, start_background_task
 from utils.observability.fallback import record_fallback
 from utils.speaker_identification import extract_speaker_samples
 from utils.speaker_auto_enroll import enroll
-from utils.speakers import auto_enroll
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +64,13 @@ async def _execute_job(uid: str, conversation_id: str, job: Mapping[str, Any]) -
             )
         except Exception as error:
             logger.warning('speaker_auto_enroll failed exception_type=%s', type(error).__name__)
+            record_fallback(
+                component='speaker_learning',
+                from_mode='vector',
+                to_mode='verified_audio',
+                reason='other',
+                outcome='degraded',
+            )
             vector_outcome = None
         if vector_outcome is not None:
             return vector_outcome
@@ -73,7 +79,7 @@ async def _execute_job(uid: str, conversation_id: str, job: Mapping[str, Any]) -
             job.get('person_id') or '',
             conversation_id,
             list(job.get('segment_ids') or []),
-            require_owner_exclusion=auto_enroll.enabled(),
+            require_owner_exclusion=True,
             **({'sample_rate': job['sample_rate']} if job.get('sample_rate') is not None else {}),
         )
     except asyncio.CancelledError:

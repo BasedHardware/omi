@@ -558,9 +558,11 @@ class SpeakerMatcher:
             if not await self.named_speakers_allowed():
                 return
             people = await self.host.persistence.call(user_db.get_people, self.host.request.uid)
-            enrollment_allowed = any(
-                p.get(auto_enroll.POOL_FIELD) for p in people
-            ) and await self.host.persistence.call(auto_enroll_db.allowed, self.host.request.uid)
+            enrollment_allowed = (
+                await self.host.persistence.call(auto_enroll_db.context, self.host.request.uid)
+                if any(p.get(auto_enroll.POOL_FIELD) for p in people)
+                else {}
+            )
             for person in people:
                 if person.get('speech_samples'):
                     person = await maybe_migrate_person_samples(self.host.request.uid, person)
@@ -581,7 +583,14 @@ class SpeakerMatcher:
                         'embedding': vector,
                         'name': person['name'],
                         'pinned': person.get('pinned') is True,
-                        **({'auto_enrolled': True} if enrolled is not None else {}),
+                        **(
+                            {
+                                'auto_enrolled': True,
+                                'enrollment_privacy_version': enrollment_allowed.get(auto_enroll_db.PRIVACY_VERSION, 0),
+                            }
+                            if enrolled is not None
+                            else {}
+                        ),
                     }
         except Exception as error:
             logger.error('Speaker ID embeddings load failed type=%s', type(error).__name__)
@@ -903,6 +912,30 @@ class SpeakerMatcher:
             return replace(decision, person_id=None)
         return decision
 
+    async def refresh_enrollment_authority(self) -> None:
+        enrolled = {pid: row for pid, row in self.person_embeddings.items() if row.get('auto_enrolled')}
+        if not enrolled:
+            return
+        try:
+            context = await self.host.persistence.call(auto_enroll_db.context, self.host.request.uid)
+        except Exception as error:
+            logger.warning('Speaker ID enrollment authority unavailable type=%s', type(error).__name__)
+            context = {}
+        invalid = {
+            pid
+            for pid, row in enrolled.items()
+            if not auto_enroll.retained(context)
+            or row.get('enrollment_privacy_version') != context.get(auto_enroll_db.PRIVACY_VERSION, 0)
+            or not auto_enroll.owner_safe(row.get('embedding'), context.get('speaker_embedding'))
+        }
+        for pid in invalid:
+            self.person_embeddings.pop(pid, None)
+        for voice, (pid, _) in list(self.speaker_to_person.items()):
+            if pid in invalid and self._mapping_origin.get(voice) == 'automatic':
+                self._retract_rejected_voice(voice, self._voice_segments.get(voice))
+                self.host.state.speaker_map_dirty = True
+                self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
+
     async def _final_authority(
         self,
         receipt: Mapping[str, Any],
@@ -911,6 +944,7 @@ class SpeakerMatcher:
         receipt_unavailable: bool = False,
         rollover_donor: Optional[str] = None,
     ) -> FinalSpeakerAuthority:
+        await self.refresh_enrollment_authority()
         if (
             rollover_donor
             or include_short

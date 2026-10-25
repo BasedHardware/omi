@@ -6,9 +6,9 @@ from typing import Any
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client, run_transactional
+from database._client import get_firestore_client
+from database import _client, speaker_profile_authority
 from database.legal_holds import external_write_fence
-from database.speaker_profile_authority import current_source
 from utils.speakers import auto_enroll as policy
 from utils.stt.voiceprints import usable_person_voiceprint
 
@@ -30,13 +30,24 @@ def audio_guard(uid: str, *, firestore_client: Any = None) -> dict:
     }
 
 
-def authorize_audio(transaction, user_ref, user_doc, source, embedding, privacy_version, *, firestore_client) -> bool:
+def authorize_audio(
+    transaction, user_ref, user_doc, person_id, source, embedding, privacy_version, *, firestore_client
+) -> bool:
     uid, cid = source[:2]
     with external_write_fence(uid, transaction=transaction, firestore_client=firestore_client):
         row = user_ref.collection('conversations').document(cid).get(transaction=transaction).to_dict() or {}
         deleted = user_ref.collection('deleted_conversations').document(cid).get(transaction=transaction).exists
+        current = speaker_profile_authority.current_source(transaction, user_ref, uid, cid, source[3])
+        if current is None:
+            return False
+        segments, receipt = current
+        explicit = policy.explicit_segments(
+            {'transcript_segments': segments, 'manual_speaker_assignments': receipt}, person_id
+        )
         return (
             not deleted
+            and bool(source[2])
+            and set(source[2]).issubset({s.get('id') for s in explicit})
             and row.get('private_cloud_sync_enabled') is True
             and policy.audio_allowed(
                 user_doc,
@@ -46,13 +57,12 @@ def authorize_audio(transaction, user_ref, user_doc, source, embedding, privacy_
         )
 
 
-def allowed(uid: str, *, firestore_client: Any = None) -> bool:
+def context(uid: str, *, firestore_client: Any = None) -> dict:
     try:
-        client = firestore_client if firestore_client is not None else get_firestore_client()
-        return policy.enabled() and policy.retained(client.collection('users').document(uid).get().to_dict() or {})
+        return audio_guard(uid, firestore_client=firestore_client) if policy.enabled() else {}
     except Exception as error:
         logger.warning('speaker_auto_enroll consent unavailable exception_type=%s', type(error).__name__)
-        return False
+        return {}
 
 
 def publish(
@@ -90,7 +100,7 @@ def publish(
                 or raw_source.get('private_cloud_sync_enabled') is not True
             ):
                 return False
-            authorized = current_source(transaction, user, uid, conversation_id, generation)
+            authorized = speaker_profile_authority.current_source(transaction, user, uid, conversation_id, generation)
             if authorized is None:
                 return False
             segments, receipt = authorized
@@ -124,7 +134,7 @@ def publish(
                 contribution,
                 now.timestamp(),
             )
-            if entries is None:
+            if entries is None or policy.vector(entries, now.timestamp(), owner.get('speaker_embedding')) is None:
                 return False
             # All reads precede writes. A retry sees corrections, consent and deletion
             # atomically; never resurrect a profile from a stale audio snapshot.
@@ -143,7 +153,7 @@ def publish(
             transaction.update(user, {OWNER_INDEX: sorted(set([*index, person_id]))})
             return True
 
-    return run_transactional(client, commit)
+    return _client.run_transactional(client, commit)
 
 
 def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None) -> None:
@@ -178,7 +188,7 @@ def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None) -> 
         else:
             transaction.set(user, patch)
 
-    run_transactional(client, commit)
+    _client.run_transactional(client, commit)
 
 
 def retract_conversation(uid: str, conversation_id: str, *, firestore_client: Any = None) -> None:
@@ -211,4 +221,4 @@ def retract_conversation(uid: str, conversation_id: str, *, firestore_client: An
         # Even a source without published contributions must fence in-flight work.
         transaction.update(source, {'deleted': True, OWNER_INDEX: []})
 
-    run_transactional(client, commit)
+    _client.run_transactional(client, commit)

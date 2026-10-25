@@ -53,6 +53,7 @@ import routers.listen.receiver as receiver_module
 import utils.stt.replay_delivery as replay_delivery_module
 import utils.stt.vad_gate as vad_gate_module
 from database import conversations as conversations_db
+from database import speaker_auto_enroll
 from database import live_owner_continuity as continuity_cache
 from routers.listen.contracts import ListenLimits, ListenSessionState
 from routers.listen.receiver import ListenReceiver
@@ -844,6 +845,58 @@ async def test_diarization_completed_emitted_for_both_persistence_modes(monkeypa
     assert source_events[-1]['properties']['conversation_id'] == CONV
     assert not {'recording_id', 'conversation_id'} & events[-1]['properties'].keys()
     assert events[-1]['properties']['speaker_count'] >= 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('v2', [False, True])
+async def test_live_optout_revokes_a_cached_derived_mapping_before_the_next_batch(monkeypatch, telemetry, v2):
+    stack = FailoverStack(monkeypatch, v2=v2)
+    original_call = stack.host.persistence.call
+
+    async def current_authority(fn, *args, **kwargs):
+        if fn is speaker_auto_enroll.context:
+            return {
+                'private_cloud_sync_enabled': True,
+                'save_other_voice_profiles': False,
+                speaker_auto_enroll.PRIVACY_VERSION: 1,
+            }
+        return await original_call(fn, *args, **kwargs)
+
+    stack.host.persistence.call = current_authority
+    loop_task = asyncio.create_task(stack.processor.process_loop())
+    stack.tasks.append(loop_task)
+    try:
+        await stack.host.speakers.refresh_for_conversation(CONV)
+        matcher = stack.host.speakers
+        matcher.person_embeddings['derived-person'] = {
+            'embedding': _unit_vector(2),
+            'name': 'Synthetic',
+            'auto_enrolled': True,
+            'enrollment_privacy_version': 0,
+        }
+        matcher.speaker_to_person[0] = ('derived-person', 'Synthetic')
+        matcher._mapping_origin[0] = 'automatic'
+        assert await stack.receiver.initialize_stt()
+        websocket = await stack.run_receive(_frames_for(_tone(OTHER_FREQUENCY_HZ, 6.0)))
+        stack.provider(0)['callback']([_provider_segment('after-optout', 0, 6, 'Later speech after opting out.')])
+        await _wait_for(lambda: bool(stack.decode_segments()), message='post-optout persisted speech', stack=stack)
+        await _wait_for(
+            lambda: bool(_delivered_items(websocket.sent_json, 'Later speech')), message='post-optout delivery'
+        )
+        assert 0 not in matcher.speaker_to_person
+        assert all(s.get('person_id') != 'derived-person' for s in stack.decode_segments())
+        assert all(
+            s.get('person_id') != 'derived-person' for s in _delivered_items(websocket.sent_json, 'Later speech')
+        )
+    finally:
+        stack.state.active = False
+        stack.state.shutdown_event.set()
+        await stack.finish()
+        await asyncio.wait_for(loop_task, timeout=30)
+        for task in stack.tasks:
+            task.cancel()
+        await asyncio.gather(*stack.tasks, return_exceptions=True)
+        stack.restore()
 
 
 @pytest.mark.anyio

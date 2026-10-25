@@ -103,13 +103,13 @@ def build_person_embeddings_cache(
     # Load paid non-owner candidates only after resolving the batch entitlement.
     try:
         people = users_db.get_people(uid)
-        enrollment_allowed = any(p.get(POOL_FIELD) for p in people or []) and auto_enroll_db.allowed(uid)
+        enrollment_allowed = auto_enroll_db.context(uid) if any(p.get(POOL_FIELD) for p in people or []) else {}
     except Exception as error:
         logger.warning('sync person profile read failed type=%s', type(error).__name__)
         return cache
     for person in people or []:
         emb = (
-            usable_person_voiceprint(person, uid=uid, auto_enroll_allowed=True)
+            usable_person_voiceprint(person, uid=uid, auto_enroll_allowed=enrollment_allowed)
             if enrollment_allowed
             else usable_person_voiceprint(person)
         )
@@ -120,7 +120,14 @@ def build_person_embeddings_cache(
                 'embedding': vector,
                 'name': person.get('name') or 'Unknown',
                 'pinned': person.get('pinned') is True,
-                **({'auto_enrolled': True} if auto_enroll.usable(uid, person, enrollment_allowed) is not None else {}),
+                **(
+                    {
+                        'auto_enrolled': True,
+                        'enrollment_privacy_version': enrollment_allowed.get(auto_enroll_db.PRIVACY_VERSION, 0),
+                    }
+                    if auto_enroll.usable(uid, person, enrollment_allowed) is not None
+                    else {}
+                ),
             }
 
     return cache
@@ -149,8 +156,18 @@ def identify_speakers_for_segments(
     3. Apply assignments via process_speaker_assigned_segments.
     """
     named_allowed = getattr(person_embeddings_cache, 'named_allowed', None)
-    if not auto_enroll.enabled():
-        person_embeddings_cache = {k: v for k, v in person_embeddings_cache.items() if not v.get('auto_enrolled')}
+    if any(row.get('auto_enrolled') for row in person_embeddings_cache.values()):
+        enrollment_context = auto_enroll_db.context(uid)
+        person_embeddings_cache = {
+            k: v
+            for k, v in person_embeddings_cache.items()
+            if not v.get('auto_enrolled')
+            or (
+                auto_enroll.retained(enrollment_context)
+                and v.get('enrollment_privacy_version') == enrollment_context.get(auto_enroll_db.PRIVACY_VERSION, 0)
+                and auto_enroll.owner_safe(v.get('embedding'), enrollment_context.get('speaker_embedding'))
+            )
+        }
     if named_allowed is None:
         named_allowed = named_speaker_prompts_allowed(uid)
     if not named_allowed:

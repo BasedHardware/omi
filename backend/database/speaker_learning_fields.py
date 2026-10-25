@@ -2,6 +2,8 @@
 
 from datetime import datetime, timezone
 from typing import Optional
+from database import speaker_auto_enroll
+from utils.speakers import auto_enroll
 
 __all__ = ['project_person_learning', 'speech_sample_source', 'voice_learning_fields']
 
@@ -13,18 +15,15 @@ def project_person_learning(*args, **kwargs):
 
     data = project(*args, **kwargs)
     if data and data.get('speaker_auto_enroll_pool'):
-        from database.speaker_auto_enroll import allowed
-        from utils.speakers.auto_enroll import usable
-
         uid = args[0] if args else kwargs['uid']
         cache = kwargs.get('projection_cache')
-        key = ('auto_enroll_allowed', uid)
+        key = ('auto_enroll_context', uid)
         can_use = cache.get(key) if cache is not None else None
         if can_use is None:
-            can_use = allowed(uid, firestore_client=kwargs.get('firestore_client'))
+            can_use = speaker_auto_enroll.context(uid, firestore_client=kwargs.get('firestore_client'))
             if cache is not None:
                 cache[key] = can_use
-        if usable(uid, data, can_use) is not None:
+        if auto_enroll.usable(uid, data, can_use) is not None:
             # Public Person accepts explicit readiness when no raw embedding is
             # present. Keep the encrypted pool for internal voiceprint consumers.
             data = {k: v for k, v in data.items() if k != 'speaker_embedding'}

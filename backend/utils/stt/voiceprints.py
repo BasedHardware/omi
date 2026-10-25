@@ -9,7 +9,7 @@ def usable_person_voiceprint(
     person: Mapping[str, Any],
     *,
     uid: Optional[str] = None,
-    auto_enroll_allowed: bool = False,
+    auto_enroll_allowed: Mapping[str, Any] | bool = False,
 ) -> Optional[list]:
     """The person's embedding, or None when it cannot be trusted.
     Only people with v3+ speech samples qualify (pre-v3 models carry stale embeddings, #6238).

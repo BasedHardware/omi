@@ -1133,6 +1133,7 @@ def _replace_speech_profile_transaction(
             transaction,
             user_ref,
             user_doc,
+            person_ref.id,
             source,
             profile.get('speaker_embedding'),
             enrollment_privacy_version,

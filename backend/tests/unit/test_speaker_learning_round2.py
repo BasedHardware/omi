@@ -304,13 +304,17 @@ def test_coordinator_cycle_and_restart_retry_preserve_rate(world):
 
 
 def test_live_24k_job_teaches_at_persisted_rate(pool_world, monkeypatch):
-    # This is the legacy rollback's sample-rate contract; strict Omi-v2 owner
-    # publication is exercised below with full-dimensional voice fixtures.
+    # Kill-switch rollback keeps the persisted sample rate and privacy guards.
     monkeypatch.setenv('SPEAKER_AUTO_ENROLL_ENABLED', 'false')
+    owner = [1.0, *([0.0] * 255)]
+    other = [0.0, 1.0, *([0.0] * 254)]
+    pool_world.store.rows[('users', pool.UID)].update(private_cloud_sync_enabled=True, speaker_embedding=owner)
+    monkeypatch.setattr(auto_enroll_db, 'get_firestore_client', lambda: pool_world.store)
+    monkeypatch.setattr(pool.teaching, 'extract_embedding_from_bytes', lambda *args: np.asarray([other]))
     rate = 24000
     pcm = b'\x01\x00' * (rate * 60)
     pool_world.store.rows[pool.CONV_PATH] = pool.conversation(
-        [pool.seg('s0', 0, 12)], receipt=pool.receipt_segments(['s0'])
+        [pool.seg('s0', 0, 12)], receipt=pool.receipt_segments(['s0']), private_cloud_sync_enabled=True
     )
     chunk = {
         'timestamp': pool.STARTED_AT,
@@ -339,8 +343,12 @@ def test_live_24k_job_teaches_at_persisted_rate(pool_world, monkeypatch):
     assert legacy == 'uncovered_audio'
 
 
-@pytest.mark.parametrize('case', ['valid', 'owner', 'missing_owner', 'sync_off', 'privacy_race'])
-def test_real_audio_fallback_obeys_strict_owner_and_retention_guards(pool_world, monkeypatch, case):
+@pytest.mark.parametrize('killed', [False, True])
+@pytest.mark.parametrize(
+    'case', ['valid', 'owner', 'missing_owner', 'sync_off', 'privacy_race', 'carried', 'carried_race', 'automatic']
+)
+def test_real_audio_fallback_obeys_strict_owner_and_retention_guards(pool_world, monkeypatch, case, killed):
+    monkeypatch.setenv('SPEAKER_AUTO_ENROLL_ENABLED', 'false' if killed else 'true')
     owner = [1.0, *([0.0] * 255)]
     other = [0.0, 1.0, *([0.0] * 254)]
     user = pool_world.store.rows[('users', pool.UID)]
@@ -354,6 +362,11 @@ def test_real_audio_fallback_obeys_strict_owner_and_retention_guards(pool_world,
         receipt=pool.receipt_segments(['s0']),
         private_cloud_sync_enabled=True,
     )
+    row = pool_world.store.rows[pool.CONV_PATH]
+    if case == 'carried':
+        row['manual_speaker_assignments']['segments']['s0']['source'] = 'carried'
+    elif case == 'automatic':
+        row.pop('manual_speaker_assignments')
     monkeypatch.setattr(jobs, 'enroll', lambda *args: None)
     monkeypatch.setattr(auto_enroll_db, 'get_firestore_client', lambda: pool_world.store)
     monkeypatch.setattr(jobs, 'extract_speaker_samples', pool.teaching.extract_speaker_samples)
@@ -361,6 +374,8 @@ def test_real_audio_fallback_obeys_strict_owner_and_retention_guards(pool_world,
     def embed(*args):
         if case == 'privacy_race':
             user[auto_enroll_db.PRIVACY_VERSION] = 1
+        elif case == 'carried_race':
+            row['manual_speaker_assignments']['segments']['s0']['source'] = 'carried'
         return np.asarray([owner if case == 'owner' else other], dtype=np.float32)
 
     monkeypatch.setattr(pool.teaching, 'extract_embedding_from_bytes', embed)
@@ -377,10 +392,13 @@ def test_real_audio_fallback_obeys_strict_owner_and_retention_guards(pool_world,
         'missing_owner': 'rejected_embedding',
         'sync_off': 'disabled',
         'privacy_race': 'stale_assignment',
+        'carried': 'no_authorized_segments',
+        'carried_race': 'stale_assignment',
+        'automatic': 'no_authorized_segments',
     }
     assert outcome == expected[case]
     assert bool(pool_world.store.rows[pool.PERSON_PATH].get('speaker_embedding')) is (case == 'valid')
-    if case == 'privacy_race':
+    if case in {'privacy_race', 'carried_race'}:
         assert pool_world.deleted == pool_world.uploads
 
 

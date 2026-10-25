@@ -181,12 +181,12 @@ def _competing_voiceprints(uid: str) -> dict[str, np.ndarray]:
     # 'user' is the owner identity that select_speaker_match reserves.
     competitors = [('user', users_db.get_user_speaker_embedding(uid))]
     people = users_db.get_people(uid) or []
-    allowed = any(p.get(POOL_FIELD) for p in people) and auto_enroll_db.allowed(uid)
+    allowed = auto_enroll_db.context(uid) if any(p.get(POOL_FIELD) for p in people) else {}
     competitors += [
         (
             person.get('id'),
             (
-                usable_person_voiceprint(person, uid=uid, auto_enroll_allowed=True)
+                usable_person_voiceprint(person, uid=uid, auto_enroll_allowed=allowed)
                 if allowed
                 else usable_person_voiceprint(person)
             ),
@@ -216,11 +216,11 @@ async def find_person_voice_matches(uid: str, person_id: str) -> VoiceMatchesRes
             raise LookupError('Person not found')
         if not await _read(db_executor, partial(named_speaker_prompts_allowed, uid), deadline):
             return VoiceMatchesResponse()
-        allowed = bool(person.get(POOL_FIELD)) and await _read(
-            db_executor, partial(auto_enroll_db.allowed, uid), deadline
+        allowed = (
+            await _read(db_executor, partial(auto_enroll_db.context, uid), deadline) if person.get(POOL_FIELD) else {}
         )
         raw_print = (
-            usable_person_voiceprint(person, uid=uid, auto_enroll_allowed=True)
+            usable_person_voiceprint(person, uid=uid, auto_enroll_allowed=allowed)
             if allowed
             else usable_person_voiceprint(person)
         )

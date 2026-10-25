@@ -5,11 +5,12 @@ durable speaker-learning job. Person jobs first try the owner-encrypted,
 measured Omi-v2 evidence cache; absent/unbound evidence may fall through to
 verified audio with the same owner, retention, privacy-generation and deletion
 publication fences. A quality/authority rejection cannot bypass those gates
-through audio. Automatic and carried
-labels, rejected/untagged identities and `use_for_speech_training=false` cannot
-authorize vector enrollment. Owner confirmations keep the existing owner path.
+through audio. Automatic and carried labels, rejected/untagged identities and
+`use_for_speech_training=false` cannot authorize either path. The verified-audio
+fallback retains these privacy gates while the pool's switch is off. Owner
+confirmations keep the existing owner path.
 
-`SPEAKER_AUTO_ENROLL_ENABLED` defaults **on**. Set false on API, enrichment,
+`SPEAKER_AUTO_ENROLL_ENABLED` defaults **on**. Set false on API, sync, enrichment,
 listen and pusher processes to stop both publication and use of this pool.
 Retraction remains active. Restoring true resumes eligible learning on future
 explicit jobs; it does not rewrite historical labels or backfill a roster.
@@ -20,12 +21,14 @@ This implements lead ruling 65d10d (2026-10-25). Sync-off tags cannot promote
 qualfix2's transient encrypted conversation evidence into a durable roster;
 that evidence keeps its separate capture/finalization lifetime contract.
 
-The evidence cache gains an additive model marker and exact segment/acoustic
+The evidence cache gains an additive model marker, binding format v2 and exact segment/acoustic
 window bindings. Only freshly embedded or previously bound unchanged entries
 receive that authority; older caches abstain. Enrollment selects one acoustic
 voice with at least ten seconds of disjoint measured speech, refuses foreign
 overlap and inconsistent vectors, and requires a compatible owner vector that
-the candidate does not match. Manual audio voiceprints remain independently
+the candidate does not match. Owner exclusion is checked on individual clips,
+their normalized average, the full roster average at commit, and the decayed
+average when read against the current owner vector. Manual audio voiceprints remain independently
 stored and must agree before the vector pool can refresh them.
 
 `people/{person_id}.speaker_auto_enroll_pool` is an AES-GCM ciphertext using
@@ -43,9 +46,12 @@ same transaction as the new assignment. Conversation deletion fences further
 publication and retracts its contributions before hard cleanup. Survivor deletion
 also retracts every `sync_merged_from` donor through the bounded owner index,
 so a best-effort donor cleanup failure cannot leave a voice contribution behind.
-Person/account
-deletion removes the owning documents. Privacy opt-out removes indexed pools
+Person/account deletion removes the owning documents. Privacy opt-out removes indexed pools
 and updates person versions in the same transaction as the setting change.
+Live transcript batches and final match publication re-read derived-profile
+authority. Opt-out, privacy-generation change, owner change or an unavailable
+authority removes cached derived vectors and their automatic mappings. Sync
+rechecks cached derived vectors against the same current context before use.
 
 All new reads are direct document gets. Bounded content-free person-ID indexes
 on the owner (400 maximum) and source conversation (32 maximum) make privacy
@@ -57,5 +63,5 @@ database functions with strict read-before-write transactions. Durable-job,
 publication, privacy, resolution and sync suites cover the surrounding paths.
 The Gate T top-N tagging simulation uses local frozen qworker words/turns and
 separate enrollment/evaluation audio; it estimates coverage, not production
-acceptance. Lead owns merge and deployment; deploy all API/enrichment/listen/
+acceptance. Lead owns merge and deployment; deploy all API/sync/enrichment/listen/
 pusher consumers together so privacy retraction and use share this contract.

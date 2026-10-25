@@ -15,8 +15,8 @@ from typing import Any, Mapping
 
 import numpy as np
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from utils import encryption
 
-from utils.encryption import derive_key
 from utils.speaker_learning_policy import authorized_teaching_segments, segment_group, winning_receipt_decision
 
 POOL_FIELD = 'speaker_auto_enroll_pool'
@@ -54,6 +54,20 @@ def audio_allowed(user: Mapping, embedding: Any, expected_privacy_version: Any) 
     )
 
 
+def owner_safe(embedding: Any, owner: Any) -> bool:
+    incoming, reference = unit(embedding), unit(owner)
+    return incoming is not None and reference is not None and 1 - incoming @ reference > OWNER_DISTANCE
+
+
+def explicit_segments(conversation: Mapping, person_id: str) -> list:
+    receipt = conversation.get('manual_speaker_assignments') or {}
+    return [
+        s
+        for s in authorized_teaching_segments(conversation, person_id)
+        if (winning_receipt_decision(receipt, s) or {}).get('source') != 'carried'
+    ]
+
+
 def unit(value: Any) -> Any:
     try:
         v = np.asarray(value, dtype=np.float64)
@@ -72,17 +86,23 @@ def binding(segment: Mapping[str, Any]) -> str:
     return hashlib.sha256(json.dumps([segment.get(k) for k in fields], separators=(',', ':')).encode()).hexdigest()
 
 
-def evidence_bindings(segments: Any, keys: Mapping, placements: Mapping) -> dict:
+def evidence_bindings(segments: Any, keys: Mapping, placements: Mapping, measured: Mapping, prior: Mapping) -> dict:
     result = {}
     for segment in segments:
         data = segment.model_dump(mode='json')
         placement = placements.get(segment.id)
         if segment.id in keys and placement is not None and placement.window is not None:
-            low, high = placement.window
-            if high - low > 10:
-                center = (low + high) / 2
-                low, high = center - 5, center + 5
-            result[keys[segment.id]] = {'binding': binding(data), 'window': [low, high]}
+            key = keys[segment.id]
+            previous = prior.get(key, {})
+            window = measured.get(segment.id)
+            if (
+                window is None
+                and previous.get('binding') == binding(data)
+                and previous.get('placement') == list(placement.window)
+            ):
+                window = previous.get('window')
+            if window is not None:
+                result[key] = {'binding': binding(data), 'window': list(window), 'placement': list(placement.window)}
     return result
 
 
@@ -97,6 +117,7 @@ def accepted_bindings(bindings: Mapping, cache: Mapping, before: Mapping, prior:
             or (
                 prior.get(key, {}).get('binding') == value['binding']
                 and prior.get(key, {}).get('window') == value['window']
+                and prior.get(key, {}).get('placement') == value.get('placement')
             )
         )
     }
@@ -112,7 +133,13 @@ def decode_evidence(data: bytes | None) -> dict:
             return {}
         h = json.loads(data[4 : 4 + size])
         ids = h['ids']
-        if h.get('v') != 1 or h.get('enrollment_model') != MODEL or h['dim'] != DIM or len(ids) > 2000:
+        if (
+            h.get('v') != 1
+            or h.get('enrollment_model') != MODEL
+            or h.get('enrollment_binding_version') != 2
+            or h['dim'] != DIM
+            or len(ids) > 2000
+        ):
             return {}
         vectors = np.frombuffer(data[4 + size :], dtype='<f2').reshape(len(ids), DIM)
         return {
@@ -130,12 +157,7 @@ def candidate(conversation: Mapping, person_id: str, requested: Any, evidence: M
     if owner is None:
         return None
     all_segments = conversation.get('transcript_segments') or []
-    receipt = conversation.get('manual_speaker_assignments') or {}
-    authorized = [
-        s
-        for s in authorized_teaching_segments(conversation, person_id)
-        if (winning_receipt_decision(receipt, s) or {}).get('source') != 'carried'
-    ]
+    authorized = explicit_segments(conversation, person_id)
     groups = {segment_group(s) for s in authorized if s.get('id') in set(requested or [])}
     if len(groups) != 1:
         return None
@@ -154,7 +176,7 @@ def candidate(conversation: Mapping, person_id: str, requested: Any, evidence: M
             if not all(math.isfinite(x) for x in (low, high, seconds, start, end)):
                 continue
             # A partial/nominal duration cannot stand in for a full measured clip.
-            if high <= low or high - low > 10.01 or seconds < high - low - 0.02 or seconds > 10.01:
+            if high <= low or high - low > 15.01 or seconds < high - low - 0.02 or seconds > 15.01:
                 continue
             if any(
                 (segment_group(other) != segment_group(segment) or other.get('id') not in authorized_ids)
@@ -177,6 +199,8 @@ def candidate(conversation: Mapping, person_id: str, requested: Any, evidence: M
         # Do not fractionally reuse a vector whose PCM overlaps an earlier clip.
         if low < covered_end:
             continue
+        if sum(weights) + high - low > 30.01:
+            continue
         covered_end = high
         vectors.append(vector)
         ids.append(sid)
@@ -188,6 +212,8 @@ def candidate(conversation: Mapping, person_id: str, requested: Any, evidence: M
     if any(1 - a @ b > MAX_DISTANCE for i, a in enumerate(vectors) for b in vectors[i + 1 :]):
         return None
     pooled = unit(np.average(vectors, axis=0, weights=weights))
+    if not owner_safe(pooled, owner):
+        return None
     return {'vector': pooled.tolist(), 'segment_ids': ids, 'seconds': sum(weights), 'model': MODEL}
 
 
@@ -198,7 +224,9 @@ def _aad(uid: str, person_id: str) -> bytes:
 def seal(uid: str, person_id: str, entries: list) -> str:
     nonce = os.urandom(12)
     payload = json.dumps({'v': 1, 'model': MODEL, 'entries': entries}, separators=(',', ':'), allow_nan=False).encode()
-    return base64.b64encode(nonce + AESGCM(derive_key(uid)).encrypt(nonce, payload, _aad(uid, person_id))).decode()
+    return base64.b64encode(
+        nonce + AESGCM(encryption.derive_key(uid)).encrypt(nonce, payload, _aad(uid, person_id))
+    ).decode()
 
 
 def _open_pool(uid: str, person_id: str, blob: Any) -> list | None:
@@ -206,7 +234,7 @@ def _open_pool(uid: str, person_id: str, blob: Any) -> list | None:
         return None
     try:
         raw = base64.b64decode(blob, validate=True)
-        value = json.loads(AESGCM(derive_key(uid)).decrypt(raw[:12], raw[12:], _aad(uid, person_id)))
+        value = json.loads(AESGCM(encryption.derive_key(uid)).decrypt(raw[:12], raw[12:], _aad(uid, person_id)))
         if (
             value.get('v') != 1
             or value.get('model') != MODEL
@@ -236,7 +264,7 @@ def active(entries: list, now: float) -> list:
     ]
 
 
-def vector(entries: list, now: float) -> Any:
+def vector(entries: list, now: float, owner: Any) -> Any:
     entries = active(entries, now)
     if not entries:
         return None
@@ -247,7 +275,7 @@ def vector(entries: list, now: float) -> Any:
             weights=[2 ** (-(now - e['at']) / HALF_LIFE_SECONDS) for e in entries],
         )
     )
-    return v.tolist() if v is not None else None
+    return v.tolist() if owner_safe(v, owner) else None
 
 
 def refresh(entries: list, contribution: dict, now: float) -> Any:
@@ -284,11 +312,13 @@ def legacy_voiceprint(person: Mapping) -> Any:
     return None
 
 
-def usable(uid: str, person: Mapping, allowed: bool) -> Any:
-    if not allowed or not enabled() or person.get('is_dismissed'):
+def usable(uid: str, person: Mapping, allowed: Any) -> Any:
+    if not isinstance(allowed, Mapping) or not retained(allowed) or not enabled() or person.get('is_dismissed'):
         return None
     enrolled = vector(
-        open_pool(uid, person.get('id') or '', person.get(POOL_FIELD)), datetime.now(timezone.utc).timestamp()
+        open_pool(uid, person.get('id') or '', person.get(POOL_FIELD)),
+        datetime.now(timezone.utc).timestamp(),
+        allowed.get('speaker_embedding'),
     )
     legacy = legacy_voiceprint(person)
     if enrolled is not None and legacy is not None:

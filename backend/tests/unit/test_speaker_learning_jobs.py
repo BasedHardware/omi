@@ -81,11 +81,16 @@ def test_vector_enrollment_completes_job_without_audio(world, monkeypatch):
 
 
 def test_vector_failure_preserves_audio_fallback(world, monkeypatch):
+    telemetry = MagicMock()
+    monkeypatch.setattr(jobs, 'record_fallback', telemetry)
     monkeypatch.setattr(jobs, 'enroll', MagicMock(side_effect=ValueError('invalid evidence')))
     world.claimed.append(_claimed_job())
     asyncio.run(jobs.run_speaker_learning_jobs(UID, CONV))
     world.extract.assert_awaited_once()
     assert world.extract.await_args.kwargs['require_owner_exclusion'] is True
+    telemetry.assert_called_once_with(
+        component='speaker_learning', from_mode='vector', to_mode='verified_audio', reason='other', outcome='degraded'
+    )
 
 
 @pytest.mark.parametrize('outcome', ['disabled', 'rejected_embedding', 'rejected_quality', 'stale_assignment'])
