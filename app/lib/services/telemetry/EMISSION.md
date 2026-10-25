@@ -11,9 +11,11 @@ its keep rules. Cloud Run server events stay dark.
 `Pendant Frames Dropped` and `WAL Reconcile Poll Summary` are typed, count-only
 WAL health observations with no client sampling. Drops aggregate by closed
 reason across each nonempty flush window; a summary is emitted once per
-reconcile pass with an actual poll, including actual transient/throttle counts
-and a separate count of locally deferred jobs. Empty/budget-only wakes emit
-nothing. The existing 18-requests/minute budget also bounds summary volume.
+anomalous reconcile pass with an admitted poll: backlog beyond the minute's
+18-request budget, transient/throttle results, or missing-job confirmation.
+Missing confirmation, network transients, and local deferrals are separate
+counts. Routine successful/nonterminal polling and empty/budget-only wakes
+emit nothing. The existing request budget also bounds summary volume.
 No content, account/device/job/WAL identifiers or raw errors are properties.
 `disk_space_unknown` and `storage_write_failed` remain distinct from
 `disk_reserve`; `count_cap` should be zero after the capture hotfix.

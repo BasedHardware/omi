@@ -54,6 +54,20 @@ void main() {
     expect(() => second.validateOwner(UploadFilesResult.queued('dead')), throwsA(isA<SyncRateLimitedException>()));
   });
 
+  test('fetch provenance distinguishes a missing confirmation, a local deferral and a network transient', () async {
+    final poller = SyncJobPoller(clock: () => now);
+    final first = await poller.fetch('missing', _missing);
+    expect(first.outcome, SyncJobFetchOutcome.transient);
+    expect(first.pollAdmitted, isTrue);
+    expect(first.missingConfirmationPending, isTrue);
+    final deferred = await poller.fetch('missing', _missing);
+    expect(deferred.pollAdmitted, isFalse);
+    expect(deferred.missingConfirmationPending, isFalse);
+    final network = await poller.fetch('network', (_) async => const SyncJobFetch(SyncJobFetchOutcome.transient));
+    expect(network.pollAdmitted, isTrue);
+    expect(network.missingConfirmationPending, isFalse);
+  });
+
   test('confirmation still needs five minutes, even across processes', () async {
     final store = _MemoryStore();
     await SyncJobPoller(clock: () => now, missingStore: store).fetch('dead', _missing);

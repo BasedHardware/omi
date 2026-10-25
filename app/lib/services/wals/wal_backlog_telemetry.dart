@@ -1,6 +1,7 @@
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
 
 /// Count-only observations. No identifiers, paths, content, or client sampling.
 /// The PostHog ingestion keep-list is a separate operator-owned requirement.
@@ -40,21 +41,27 @@ class WalBacklogTelemetry {
     _totalDrops = 0;
   }
 
-  /// One summary per pass that actually polled, not per pending job or wake.
-  /// The shared poller bounds these to at most 18 per minute. Local deferrals
-  /// remain distinct from actual fetch results classified as transient.
+  /// Only anomalous passes emit: backlog beyond one minute's poll budget,
+  /// transient/throttle results, or missing jobs awaiting confirmation.
+  /// Routine success, nonterminal status and budget-only wakes stay silent.
   void reconcilePass({
     required int backlogJobs,
     required int polledJobs,
     required int transientJobs,
     required int throttledJobs,
+    int missingConfirmationJobs = 0,
   }) {
     if (polledJobs == 0) return;
+    if (backlogJobs <= SyncJobPoller.maxRequestsPerMinute &&
+        transientJobs == 0 &&
+        throttledJobs == 0 &&
+        missingConfirmationJobs == 0) return;
     _safeEmit(WalReconcilePollSummary(
       backlogJobs: backlogJobs,
       polledJobs: polledJobs,
       transientJobs: transientJobs,
       throttledJobs: throttledJobs,
+      missingConfirmationJobs: missingConfirmationJobs,
       locallyDeferredJobs: backlogJobs - polledJobs,
     ));
   }

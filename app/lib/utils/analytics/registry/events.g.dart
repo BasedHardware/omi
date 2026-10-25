@@ -2990,16 +2990,17 @@ final class PendantFramesDropped extends RegisteredEvent {
 }
 
 final class WalReconcilePollSummary extends RegisteredEvent {
-  const WalReconcilePollSummary({required this.backlogJobs, required this.polledJobs, required this.transientJobs, required this.throttledJobs, required this.locallyDeferredJobs});
+  const WalReconcilePollSummary({required this.backlogJobs, required this.polledJobs, required this.transientJobs, required this.throttledJobs, required this.missingConfirmationJobs, required this.locallyDeferredJobs});
   final int backlogJobs;
   final int polledJobs;
   final int transientJobs;
   final int throttledJobs;
+  final int missingConfirmationJobs;
   final int locallyDeferredJobs;
   @override
   String get wireName => "WAL Reconcile Poll Summary";
   @override
-  Map<String, Object> get properties => {"backlog_jobs": backlogJobs, "polled_jobs": polledJobs, "transient_jobs": transientJobs, "throttled_jobs": throttledJobs, "locally_deferred_jobs": locallyDeferredJobs};
+  Map<String, Object> get properties => {"backlog_jobs": backlogJobs, "polled_jobs": polledJobs, "transient_jobs": transientJobs, "throttled_jobs": throttledJobs, "missing_confirmation_jobs": missingConfirmationJobs, "locally_deferred_jobs": locallyDeferredJobs};
 }
 
 enum NativeCustodyObservedOutcome {

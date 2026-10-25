@@ -48,10 +48,13 @@ void main() {
       'polled_jobs': 18,
       'transient_jobs': 5,
       'throttled_jobs': 1,
+      'missing_confirmation_jobs': 0,
       'locally_deferred_jobs': 4982,
     });
     telemetry.reconcilePass(backlogJobs: 5000, polledJobs: 0, transientJobs: 0, throttledJobs: 0);
     expect(events, hasLength(1), reason: 'budget-denied wakes never produce a stream of summary events');
+    telemetry.reconcilePass(backlogJobs: 1, polledJobs: 1, transientJobs: 0, throttledJobs: 0);
+    expect(events, hasLength(1), reason: 'routine successful/nonterminal polling is not rare-failure telemetry');
   });
 
   test('account cutover retires pending counters and emitter failures cannot affect producers', () {

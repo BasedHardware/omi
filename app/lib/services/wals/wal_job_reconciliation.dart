@@ -8,7 +8,7 @@ extension _WalJobCompletion on LocalWalSyncImpl {
     final completed = <SyncLocalFilesResponse>[];
     bool changed = false;
     bool heldChanged = false;
-    var polledJobs = 0, transientJobs = 0, throttledJobs = 0;
+    var polledJobs = 0, transientJobs = 0, throttledJobs = 0, missingConfirmationJobs = 0;
     final nowSecs = _now().millisecondsSinceEpoch ~/ 1000;
     // A restored uploaded row with no job handle cannot ever be polled.
     // Retained audio re-enters the normal deduplicated upload path; missing
@@ -56,8 +56,9 @@ extension _WalJobCompletion on LocalWalSyncImpl {
       final fetched = await Future.wait(slice.map((e) async => (e.value, await _jobStatusFetcher(e.key))));
       if (!_isCurrent(generation)) return resp;
 
-      polledJobs += fetched.length;
       for (final (members, fetch) in fetched) {
+        if (!fetch.pollAdmitted) continue;
+        polledJobs++;
         final jobId = members.first.jobId;
         final memberWalIds = members.map((w) => w.id).toList();
         switch (fetch.outcome) {
@@ -72,12 +73,16 @@ extension _WalJobCompletion on LocalWalSyncImpl {
             }
             break; // 429 rate limit cooldown installed; stop reconcile pass below (#21279).
           case SyncJobFetchOutcome.transient:
-            transientJobs++;
+            if (fetch.missingConfirmationPending) {
+              missingConfirmationJobs++;
+            } else {
+              transientJobs++;
+            }
             // Network/5xx — leave as `uploaded`, retry on the next pass.
             DebugLogManager.logEvent('reconcile_poll', {
               'jobId': jobId,
               'memberWalIds': memberWalIds,
-              'outcome': 'transient',
+              'outcome': fetch.missingConfirmationPending ? 'missing_confirmation' : 'transient',
             });
             break;
           case SyncJobFetchOutcome.notFound:
@@ -229,8 +234,14 @@ extension _WalJobCompletion on LocalWalSyncImpl {
       if (SyncRateLimiter.instance.isLimited) break;
     }
 
-    _backlogTelemetry.reconcilePass(
-        backlogJobs: byJob.length, polledJobs: polledJobs, transientJobs: transientJobs, throttledJobs: throttledJobs);
+    if (_isCurrent(generation)) {
+      _backlogTelemetry.reconcilePass(
+          backlogJobs: byJob.length,
+          polledJobs: polledJobs,
+          transientJobs: transientJobs,
+          throttledJobs: throttledJobs,
+          missingConfirmationJobs: missingConfirmationJobs);
+    }
     if (changed) {
       await _saveWalsToFile(generation);
       _notifyUpdated(generation);

@@ -4440,6 +4440,10 @@
           "type": "int",
           "wire_name": "throttled_jobs"
         },
+        "missingConfirmationJobs": {
+          "type": "int",
+          "wire_name": "missing_confirmation_jobs"
+        },
         "locallyDeferredJobs": {
           "type": "int",
           "wire_name": "locally_deferred_jobs"

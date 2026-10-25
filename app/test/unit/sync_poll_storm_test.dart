@@ -42,6 +42,12 @@ class _CountingPoller extends SyncJobPoller {
   }
 }
 
+class _AccountSwitchListener extends _Listener {
+  void Function()? onSynced;
+  @override
+  void onWalSynced(Wal wal, {ServerConversation? conversation}) => onSynced?.call();
+}
+
 Wal pending(int i) => Wal(
     timerStart: 1700000000 + i,
     codec: BleAudioCodec.opus,
@@ -192,13 +198,14 @@ void main() {
     expect(sync.testWals, hasLength(127));
     expect(sync.testWals.map((wal) => wal.status), everyElement(WalStatus.synced));
     expect(sync.testWals.map((wal) => wal.syncedAt), everyElement(greaterThan(0)));
-    expect(summaries.whereType<WalReconcilePollSummary>(), hasLength(8));
-    expect(summaries.whereType<WalReconcilePollSummary>().fold<int>(0, (n, e) => n + e.polledJobs), 127);
+    expect(summaries.whereType<WalReconcilePollSummary>(), hasLength(7));
+    expect(summaries.whereType<WalReconcilePollSummary>().fold<int>(0, (n, e) => n + e.polledJobs), 126);
     expect(summaries.first.properties, {
       'backlog_jobs': 127,
       'polled_jobs': 18,
       'transient_jobs': 0,
       'throttled_jobs': 0,
+      'missing_confirmation_jobs': 0,
       'locally_deferred_jobs': 109,
     });
   });
@@ -227,11 +234,55 @@ void main() {
       'polled_jobs': 2,
       'transient_jobs': 1,
       'throttled_jobs': 1,
+      'missing_confirmation_jobs': 0,
       'locally_deferred_jobs': 48,
     });
     expect(sync.testWals.map((w) => w.status), everyElement(WalStatus.uploaded));
     await sync.reconcileUploadedWals();
     expect(events, hasLength(1));
+  });
+
+  test('a synchronous account cutover during completion cannot emit the prior account poll counts', () async {
+    final events = <RegisteredEvent>[];
+    final listener = _AccountSwitchListener();
+    final sync = LocalWalSyncImpl(
+      listener,
+      now: () => now,
+      backlogTelemetry: WalBacklogTelemetry(emit: events.add),
+      persistWals: (_) async {},
+      jobStatusFetcher: (id) async =>
+          SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'completed')),
+    );
+    listener.onSynced = sync.clearUserData;
+    sync.testWals = List.generate(50, pending);
+    await sync.reconcileUploadedWals();
+    expect(sync.testWals, isEmpty);
+    expect(sync.testRetiredWals, hasLength(50));
+    expect(events, isEmpty, reason: 'the old generation cannot attribute counts to the successor identity');
+  });
+
+  test('unconfirmed missing jobs are not reported as network transients', () async {
+    final events = <RegisteredEvent>[];
+    final sync = LocalWalSyncImpl(
+      _Listener(),
+      now: () => now,
+      backlogTelemetry: WalBacklogTelemetry(emit: events.add),
+      persistWals: (_) async {},
+      jobStatusFetcher: (_) async => const SyncJobFetch(SyncJobFetchOutcome.notFound),
+    );
+    sync.testWals = [pending(0)];
+    await sync.reconcileUploadedWals();
+    expect(events.single.properties, {
+      'backlog_jobs': 1,
+      'polled_jobs': 1,
+      'transient_jobs': 0,
+      'throttled_jobs': 0,
+      'missing_confirmation_jobs': 1,
+      'locally_deferred_jobs': 0,
+    });
+    expect(sync.testWals.single.status, WalStatus.uploaded);
+    await sync.reconcileUploadedWals();
+    expect(events, hasLength(1), reason: 'the local confirmation cooldown is not a failed network attempt');
   });
 
   test('127 restored uploads recover without deleting audio or letting a queued job starve siblings', () async {
