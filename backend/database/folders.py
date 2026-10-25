@@ -264,17 +264,25 @@ def delete_folder(
     return True
 
 
-def reorder_folders(uid: str, folder_ids: List[str]) -> bool:
+def reorder_folders(uid: str, folder_ids: List[str], firestore_client: Any = None) -> bool:
     """Reorder folders by providing an ordered list of folder IDs."""
-    user_ref = db.collection('users').document(uid)
+    if not folder_ids:
+        return True
+
+    client = firestore_client or db
+    user_ref = client.collection('users').document(uid)
     folders_ref = user_ref.collection('folders')
 
-    batch = db.batch()
+    batch = client.batch()
     for i, folder_id in enumerate(folder_ids):
         folder_ref = folders_ref.document(folder_id)
         batch.update(folder_ref, {'order': i, 'updated_at': datetime.now(timezone.utc)})
+        if (i + 1) % 450 == 0:
+            batch.commit()
+            batch = client.batch()
 
-    batch.commit()
+    if len(folder_ids) % 450 != 0:
+        batch.commit()
     return True
 
 

@@ -1207,7 +1207,7 @@ def delete_memories(uid: str, *, firestore_client: Any = None) -> None:
     for doc in memories_ref.stream():
         batch.delete(doc.reference)
         count += 1
-        if count >= 499:  # Firestore batch limit is 500
+        if count >= 450:  # Firestore batch limit is 500, chunked to 450
             batch.commit()
             batch = database.batch()
             count = 0
@@ -1563,16 +1563,12 @@ def delete_memories_batch(uid: str, memory_ids: List[str], *, firestore_client: 
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
-    batch = database.batch()
-    count = 0
-    for memory_id in memory_ids:
-        batch.delete(memories_ref.document(memory_id))
-        count += 1
-        if count >= 499:  # Firestore batch limit is 500
-            batch.commit()
-            batch = database.batch()
-            count = 0
-    if count > 0:
+    batch_size = 450
+    for i in range(0, len(memory_ids), batch_size):
+        chunk = memory_ids[i : i + batch_size]
+        batch = database.batch()
+        for memory_id in chunk:
+            batch.delete(memories_ref.document(memory_id))
         batch.commit()
 
 
@@ -1589,7 +1585,7 @@ def delete_all_memories(uid: str, *, firestore_client: Any = None) -> None:
     for doc in memories_ref.stream():
         batch.delete(doc.reference)
         count += 1
-        if count >= 499:  # Firestore batch limit is 500
+        if count >= 450:  # Firestore batch limit is 500, chunked to 450
             batch.commit()
             batch = database.batch()
             count = 0
