@@ -41,6 +41,10 @@ from utils.conversations.audio_placement import (
     text_window_refusal,
 )
 from utils.conversations.speaker_grouping_shadow import compare_and_select, provider_key
+from utils.conversations.speaker_resolution_inputs import (
+    manual_speakers as _manual_speakers,
+    measured_embedding_seconds,
+)
 from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
 from utils.metrics import (
     OMI_AUDIO_PLACEMENT_TOTAL,
@@ -226,27 +230,6 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
         ):
             prints[person['id']] = embedding.reshape(-1)
     return prints
-
-
-def _manual_speakers(receipt: Mapping[str, Any]) -> Dict[int, Identity]:
-    """Receipt speaker entries as identities; a key labeled neither owner nor person stays its own voice."""
-    speakers: Dict[int, Identity] = {}
-    for key, entry in (receipt.get('speakers') or {}).items():
-        try:
-            speaker_id = int(key)
-        except (TypeError, ValueError):
-            continue
-        if not isinstance(entry, Mapping):
-            continue
-        if entry.get('is_user'):
-            speakers[speaker_id] = Identity(is_user=True, person_id=None)
-        elif entry.get('person_id'):
-            speakers[speaker_id] = Identity(is_user=False, person_id=str(entry['person_id']))
-        else:
-            speakers[speaker_id] = Identity(is_user=False, person_id=None, anonymous_key=speaker_id)
-    for speaker_id in manual_rejected_speakers(receipt):
-        speakers[speaker_id] = Identity(is_user=False, person_id=None, anonymous_key=speaker_id)
-    return speakers
 
 
 @dataclass
@@ -1441,34 +1424,7 @@ def _resolve(
     # Evidence duration is identity policy, independent of score instrumentation.
     # Older v1 entries remain useful for grouping; without clip metadata they
     # contribute no claimed owner evidence until new verified audio is embedded.
-    score_durations = {}
-    covered_windows = []
-    for segment in segments:
-        sid = segment.id
-        if sid not in vectors:
-            continue
-        key = keys.get(sid, sid)
-        seconds = clip_seconds.get(key, 0.0)
-        if not math.isfinite(seconds) or seconds < 0:
-            seconds = 0.0
-        seconds = min(seconds, _duration(segment), MAX_CLIP_SECONDS)
-        window = placements[sid].window if sid in placements else None
-        if window is not None:
-            low, high = window
-            if high - low > MAX_CLIP_SECONDS:
-                center = (low + high) / 2
-                low, high = center - MAX_CLIP_SECONDS / 2, center + MAX_CLIP_SECONDS / 2
-            fresh = [(low, high)]
-            for used_low, used_high in covered_windows:
-                fresh = [
-                    part
-                    for a, b in fresh
-                    for part in ((a, min(b, used_low)), (max(a, used_high), b))
-                    if part[1] > part[0]
-                ]
-            seconds = min(seconds, sum(b - a for a, b in fresh))
-            covered_windows.append((low, high))
-        score_durations[sid] = seconds
+    score_durations = measured_embedding_seconds(segments, vectors, keys, clip_seconds, placements, MAX_CLIP_SECONDS)
     owner_diagnostics.resolver_counts(
         attempted=diagnostics.attempted,
         successful=new_embeddings,
