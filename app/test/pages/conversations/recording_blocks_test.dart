@@ -11,6 +11,7 @@ Wal _wal(
   int seconds, {
   WalStatus status = WalStatus.miss,
   WalStorage storage = WalStorage.disk,
+  WalStorage? originalStorage,
   String device = 'pendant-a',
   int retryCount = 0,
 }) =>
@@ -20,6 +21,7 @@ Wal _wal(
       seconds: seconds,
       status: status,
       storage: storage,
+      originalStorage: originalStorage,
       device: device,
       retryCount: retryCount,
     );
@@ -121,9 +123,10 @@ void main() {
 
   test('counts overlapping device and phone copies once in union (#23561)', () {
     final wals = _newestFirst([
-      _wal(0, 75),
+      _wal(0, 75, storage: WalStorage.disk, originalStorage: WalStorage.sdcard),
       _wal(0, 75, storage: WalStorage.sdcard),
-      _wal(100, 50),
+      _wal(20, 30, storage: WalStorage.disk, originalStorage: WalStorage.sdcard),
+      _wal(100, 50, storage: WalStorage.sdcard),
     ]);
     final blocks = groupRecordingBlocks(wals, joinDeviceCopies: true);
     final block = blocks.single;
