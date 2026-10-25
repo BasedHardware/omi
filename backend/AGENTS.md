@@ -1,6 +1,6 @@
 # Backend (Python) — Developer Guide
 
-Inherits `../AGENTS.md`; adds backend guidance.
+Speaker text: `utils.speakers.display.display_participants` + `DiarizationLabel`; raw ids are storage keys.
 
 ## Setup
 
@@ -94,6 +94,8 @@ backend/
 ```
 
 ## Service Map
+
+[Plugin transport](docs/plugin-transport.md).
 
 ```
 Shared: Firestore, Redis
@@ -238,7 +240,7 @@ Live suites record `NOT_RUN` when credentials/backend are unavailable — never 
 
 ## Self-Testing a Change (run the real path)
 
-A passing unit test is not the same as exercising the endpoint. Before putting a change in a PR:
+Before a PR, exercise the endpoint:
 
 1. **Serve locally**: `./scripts/dev-serve.sh` (per-worktree port) or `uvicorn main:app --port 8080`. No GCP credentials? Use the offline harness — `PROVIDER_MODE=offline make dev-up` from the repo root (fake providers, no external services).
 2. **Authenticate without a client**: set `ADMIN_KEY` in `.env`, then call endpoints as any uid with `Authorization: Bearer <ADMIN_KEY><uid>` (the key concatenated with the uid).
@@ -314,7 +316,7 @@ WS handlers in `transcribe.py` and `pusher.py` manage 5-11 concurrent tasks per 
 8. **Mutable WebSocket state races** — snapshot `nonlocal` variables before spawning async work
 9. **Silent fire-and-forget drops** — functions gating on connection state must log when dropping work
 10. **New fallbacks** — call `utils.observability.fallback.record_fallback` (see `.github/agent-docs/fallback-telemetry.md`); do not invent a new `*_fallback_total` Counter
-11. **Queue caps for user data** — `private_cloud_queue` uses `deque(maxlen=20)` to prevent OOM kills (sized for 30 conns/pod); dropping oldest chunk is better than killing the pod and losing ALL data for ALL users
+11. **Audio custody** — never drop uncommitted audio. Queue durable receipts and backpressure producers; see the [runbook](docs/runbooks/audio-durable-outbox.md).
 12. **`langdetect` unreliable on short text** — don't use on <20 chars or gate paid API calls on interim streaming text
 
 Speaker assignments: [owner and teaching](docs/listen_pusher_pipeline.mdx).

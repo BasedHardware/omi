@@ -52,6 +52,8 @@ class AppDetailPage extends StatefulWidget {
   final Future<(bool, String)> Function(String) enableApp;
   final Future<Map<String, dynamic>?> Function(String) appDetailsLoader;
   final Future<ApiResult<AppSetupStatus>> Function(String?) setupChecker;
+  final void Function(BuildContext context, App app) openAppHome;
+  final Future<bool> Function(Uri)? launchSetupUrl;
 
   const AppDetailPage({
     super.key,
@@ -60,10 +62,14 @@ class AppDetailPage extends StatefulWidget {
     this.enableApp = enableAppServer,
     this.appDetailsLoader = getAppDetailsServer,
     this.setupChecker = getAppSetupStatus,
+    this.openAppHome = _routeToAppHome,
+    this.launchSetupUrl,
     this.detailReader,
     this.setupProbeTimeout = const Duration(seconds: 20),
     this.setupWaitTimeout = const Duration(minutes: 5),
   });
+
+  static void _routeToAppHome(BuildContext context, App app) => routeToPage(context, AppHomeWebPage(app: app));
 
   final Future<App?> Function(String)? detailReader;
   final Duration setupProbeTimeout;
@@ -198,7 +204,8 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Resolve the current server URL before opening a cached app home.
+      // Load details first: a transport-backed app's home URL carries a one-use
+      // launch grant that only a fresh details response contains.
       final loaded = await _refreshAppDetails();
       if (loaded &&
           mounted &&
@@ -206,12 +213,49 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
           !widget.preventAutoOpenHomePage &&
           app.enabled &&
           app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
-        routeToPage(context, AppHomeWebPage(app: app));
+        widget.openAppHome(context, app);
       }
     });
     if (app.worksExternally()) {
       checkSetupCompleted();
       _loadSetupInstructionsMarkdown();
+    }
+  }
+
+  /// Opens the app's home page with a launch grant fetched for this open. A grant
+  /// is one-use and short-lived, so a catalog copy or an earlier response is never
+  /// reused. A failed refresh must not fall back to a consumed grant.
+  Future<void> _openAppHome() async {
+    if (!await _refreshLaunchDetails() || !mounted) return;
+    if (app.externalIntegration?.appHomeUrl?.isNotEmpty != true) return;
+    widget.openAppHome(context, app);
+  }
+
+  Future<bool> _refreshLaunchDetails() async {
+    final uid = SharedPreferencesUtil().uid;
+    final appId = app.id;
+    final fresh = await (widget.detailReader?.call(appId) ?? context.read<AppProvider>().getAppDetails(appId));
+    if (!mounted || SharedPreferencesUtil().uid != uid || app.id != appId) return false;
+    if (fresh == null) {
+      OmiFeedback.error(context, context.l10n.unableToFetchApps);
+      return false;
+    }
+    setState(() => app = fresh);
+    return true;
+  }
+
+  Future<void> _openSetupStep(int index) async {
+    if (!await _refreshLaunchDetails() || !mounted) return;
+    final steps = app.externalIntegration?.authSteps ?? const [];
+    if (index < 0 || index >= steps.length) return;
+    final uri = Uri.tryParse(appSetupUrlWithUid(steps[index].url, SharedPreferencesUtil().uid));
+    if (uri == null) {
+      OmiFeedback.error(context, context.l10n.invalidIntegrationUrl);
+      return;
+    }
+    final uid = SharedPreferencesUtil().uid;
+    if (await (widget.launchSetupUrl ?? _launchUrlSafely)(uri) && mounted && SharedPreferencesUtil().uid == uid) {
+      _startSetupCompletionCheck(autoInstallIfCompleted: true);
     }
   }
 
@@ -357,7 +401,7 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
                 OmiIconButton.filled(
                   icon: const FaIcon(FontAwesomeIcons.gear, size: 16),
                   label: l10n.appSettingsLabel(app.name.decodeString),
-                  onPressed: () => routeToPage(context, AppHomeWebPage(app: app)),
+                  onPressed: _openAppHome,
                 ),
               if (!isLoading && !app.private)
                 Builder(
@@ -462,16 +506,7 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
                     AppSetupSteps(
                       steps: app.externalIntegration!.authSteps,
                       completed: setupCompleted && !_setupFailed && !_setupWaiting,
-                      onStepTap: (step) async {
-                        final uri = Uri.tryParse(appSetupUrlWithUid(step.url, SharedPreferencesUtil().uid));
-                        if (uri == null) {
-                          OmiFeedback.error(context, l10n.invalidIntegrationUrl);
-                          return;
-                        }
-                        if (await _launchUrlSafely(uri) && mounted) {
-                          _startSetupCompletionCheck(autoInstallIfCompleted: true);
-                        }
-                      },
+                      onStepTap: (step) => _openSetupStep(app.externalIntegration!.authSteps.indexOf(step)),
                     ),
                   if (_setupWaiting || _setupFailed) ...[
                     AppDetailNotice(
@@ -702,6 +737,8 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
   }
 
   Future<void> _navigateToSetup() async {
+    if (!await _refreshLaunchDetails() || !mounted) return;
+    final uid = SharedPreferencesUtil().uid;
     final authSteps = app.externalIntegration?.authSteps ?? const [];
     if (app.worksExternally() && authSteps.isNotEmpty) {
       final uri = Uri.tryParse(appSetupUrlWithUid(authSteps.first.url, SharedPreferencesUtil().uid));
@@ -709,11 +746,11 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
         if (mounted) OmiFeedback.error(context, context.l10n.invalidIntegrationUrl);
         return;
       }
-      if (!await _launchUrlSafely(uri)) return;
+      if (!await (widget.launchSetupUrl ?? _launchUrlSafely)(uri)) return;
     } else {
       await _openSetupInstructions();
     }
-    if (mounted) _startSetupCompletionCheck(autoInstallIfCompleted: true);
+    if (mounted && SharedPreferencesUtil().uid == uid) _startSetupCompletionCheck(autoInstallIfCompleted: true);
   }
 
   /// Opens an integration's setup instructions: rendered markdown, an external link, or inline text.
@@ -802,9 +839,7 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
     if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
       _openHomeTimer?.cancel();
       _openHomeTimer = Timer(const Duration(seconds: 1), () {
-        if (mounted) {
-          routeToPage(context, AppHomeWebPage(app: app));
-        }
+        if (mounted) _openAppHome();
       });
     }
   }

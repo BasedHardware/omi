@@ -10926,7 +10926,6 @@
     "captureStarting": "Запуск…",
     "capturePhoneStorageFull": "Памяць тэлефона запоўнена",
     "captureStorageAlmostFull": "Памяць амаль запоўнена",
-    "capturePendantDisconnectedDetail": "Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.",
     "participantsSummaryUncounted": "{name} і іншыя",
     "deviceOnboardingVoiceReplyTitle": "Слухайце адказы Omi",
     "deviceOnboardingVoiceReplySample": "Гатова. Ваша наступная сустрэча пачнецца праз дваццаць хвілін.",
@@ -11204,7 +11203,6 @@
     "playbackAudioUnavailable": "Аўдыё недаступнае",
     "playbackAudioLoadFailed": "Не ўдалося загрузіць аўдыё",
     "playbackAudioNetworkFailed": "Праверце злучэнне",
-    "capturePendantDisconnectedShort": "Omi перападключыцца сам",
     "forYou": "Для вас",
     "stopThese": "Спыніць гэта",
     "dismiss": "Схаваць",
@@ -11816,6 +11814,11 @@
     "episodeSoFar": "Пакуль што",
     "episodeUpdatedJustNow": "Абноўлена толькі што · поўныя нататкі ў канцы",
     "episodeUpdatedMinutesAgo": "Абноўлена {minutes} хв таму · поўныя нататкі ў канцы",
+    "episodeNotesUnavailable": "Бягучыя нататкі не абнаўляюцца. Пакуль праглядзіце расшыфроўку.",
+    "episodeCaptureFor": "Запіс · {duration}",
+    "episodePrevious": "Папярэдні эпізод",
+    "captureChunksPending": "Чакаюць фрагменты: {pending}",
+    "episodeOpenPrevious": "Адкрыць папярэдні эпізод",
     "episodeNotesSoon": "Нататкі з’явяцца пасля першых хвілін размовы.",
     "episodeOpenAll": "Адкрыць усё",
     "episodeWrapUpNow": "Завяршыць зараз",
@@ -11851,5 +11854,6 @@
     "recapInTheBackground": "У фоне",
     "retentionOfferAccept": "Застацца са зніжкай {percent}%",
     "retentionOfferBody": "Застаньцеся і плаціце {price} у месяц на працягу {months} месяцаў.",
-    "retentionOfferApplied": "Гатова. Зніжка {percent}% на {months} месяцы."
+    "retentionOfferApplied": "Гатова. Зніжка {percent}% на {months} месяцы.",
+    "othersSpeakerLabel": "Іншыя"
 }

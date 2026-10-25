@@ -134,7 +134,6 @@ def _segment_fixture(monkeypatch, stt_result):
     monkeypatch.setattr(minimal_redrive, 'provider_is_enabled', lambda *_: True)
     monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', Mock(return_value='url'))
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
     monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', Mock(return_value=('modulate', 'en', 'velma-2')))
     stt = Mock(return_value=stt_result)

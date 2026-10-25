@@ -10926,7 +10926,6 @@
     "captureStarting": "Покретање…",
     "capturePhoneStorageFull": "Меморија телефона је пуна",
     "captureStorageAlmostFull": "Меморија је скоро пуна",
-    "capturePendantDisconnectedDetail": "Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.",
     "participantsSummaryUncounted": "{name} и други",
     "deviceOnboardingVoiceReplyTitle": "Чујте Omi одговоре",
     "deviceOnboardingVoiceReplySample": "Разумем. Ваш следећи састанак почиње за двадесет минута.",
@@ -11204,7 +11203,6 @@
     "playbackAudioUnavailable": "Zvuk nije dostupan",
     "playbackAudioLoadFailed": "Zvuk nije moguće učitati",
     "playbackAudioNetworkFailed": "Proverite vezu",
-    "capturePendantDisconnectedShort": "Omi ће се сам поново повезати",
     "forYou": "За вас",
     "stopThese": "Заустави ово",
     "dismiss": "Сакриј",
@@ -11816,6 +11814,11 @@
     "episodeSoFar": "До сада",
     "episodeUpdatedJustNow": "Ажурирано управо · потпуне белешке на крају",
     "episodeUpdatedMinutesAgo": "Ажурирано пре {minutes} мин · потпуне белешке на крају",
+    "episodeNotesUnavailable": "Текуће белешке се не ажурирају. За сада погледајте транскрипт.",
+    "episodeCaptureFor": "Снимање · {duration}",
+    "episodePrevious": "Претходна епизода",
+    "captureChunksPending": "Делови на чекању: {pending}",
+    "episodeOpenPrevious": "Отвори претходну епизоду",
     "episodeNotesSoon": "Белешке се појављују после првих минута разговора.",
     "episodeOpenAll": "Отвори све",
     "episodeWrapUpNow": "Заврши сада",
@@ -11851,5 +11854,6 @@
     "recapInTheBackground": "У позадини",
     "retentionOfferAccept": "Остани уз {percent}% попуста",
     "retentionOfferBody": "Остани и плаћај {price} месечно наредних {months} месеца.",
-    "retentionOfferApplied": "Готово. {percent}% попуста наредних {months} месеца."
+    "retentionOfferApplied": "Готово. {percent}% попуста наредних {months} месеца.",
+    "othersSpeakerLabel": "Остали"
 }

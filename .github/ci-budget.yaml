@@ -1377,7 +1377,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_diarizer.yml/deploy": {
-      "budget_p50_minutes": 20,
+      "budget_p50_minutes": 21,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1386,7 +1386,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4762,7 +4762,7 @@
     "gcp_diarizer.yml": {
       "name": "Deploy Diarizer to GKE",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added; triggers otherwise unchanged",
+      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4802,6 +4802,7 @@
               "description": "Select the GPU service to deploy",
               "options": [
                 "diarizer",
+                "diarizer-batch",
                 "batch-pipeline-worker"
               ],
               "required": "true",

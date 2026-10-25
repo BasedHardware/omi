@@ -11113,13 +11113,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get captureStorageAlmostFull => 'حافظه تقریباً پر است';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi خودش دوباره وصل می‌شود';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name و دیگران';
   }
@@ -14415,6 +14408,25 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'یادداشت‌های زنده به‌روز نمی‌شوند. فعلاً متن پیاده‌شده را ببینید.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'در حال ضبط · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'قسمت قبلی';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'قطعه‌های در انتظار: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'باز کردن قسمت قبلی';
+
+  @override
   String get episodeNotesSoon => 'یادداشت‌ها پس از چند دقیقهٔ اول گفت‌وگو نمایش داده می‌شوند.';
 
   @override
@@ -14551,4 +14563,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'انجام شد. $percent% تخفیف برای $months ماه آینده.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'دیگران';
 }

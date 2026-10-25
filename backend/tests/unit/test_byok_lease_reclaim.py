@@ -27,6 +27,7 @@ def finalization_fixture_metadata(monkeypatch):
     """
     original_get = StrictFirestoreDocument.get
     original_set = StrictFirestoreTransaction.set
+    original_update = StrictFirestoreTransaction.update
 
     def get(ref, *args, **kwargs):
         snapshot = original_get(ref, *args, **kwargs)
@@ -45,8 +46,16 @@ def finalization_fixture_metadata(monkeypatch):
         for key, value in data.items():
             row[key] = row.get(key, 0) + value.value if isinstance(value, jobs.firestore.Increment) else value
 
+    def update_with_field_deletion(txn, ref, data):
+        original_update(txn, ref, data)
+        # Model the SDK result, so repeated claims see the due index absent.
+        for key, value in data.items():
+            if value is jobs.firestore.DELETE_FIELD:
+                txn._database.rows[ref.path].pop(key, None)
+
     monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
     monkeypatch.setattr(StrictFirestoreTransaction, 'set', set_projection)
+    monkeypatch.setattr(StrictFirestoreTransaction, 'update', update_with_field_deletion)
 
 
 def store_job(status='leased', **extra):
@@ -78,7 +87,7 @@ def test_reclaim_projection_idempotency_and_stale_terminal_fence(status):
     assert not intent['created']
     data = ref.get().to_dict()
     assert data['lease_epoch'] == 3
-    assert data['reconcile_after_at'] == jobs.firestore.DELETE_FIELD
+    assert 'reconcile_after_at' not in data
     fields = txn.sets[0][1]
     assert fields[status].value == -1
     assert fields['blocked_byok'].value == 1

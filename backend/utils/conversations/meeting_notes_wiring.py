@@ -218,4 +218,5 @@ def notes_agent_inputs(conversation: Any, desktop_capture: bool) -> Dict[str, An
         'finished_at': getattr(conversation, 'finished_at', None),
         'desktop_meeting_capture': desktop_capture,
         'capture_sources': notes_capture_sources(conversation),
+        'user_corrections': getattr(conversation, 'user_corrections', None) or [],
     }

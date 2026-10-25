@@ -177,8 +177,9 @@ BODY_DIGEST = {
     # Re-reviewed: the post-commit task-list cache invalidation adds no query.
     'database.workstreams.import_task_goal_links': '5d2384ad2102107cc487d29c18a47204f5d5fea0201c9ae0d2a56f5959b91971',
     # Re-reviewed: public size guard rename and correction-parent rejection add
-    # no query. The terminal streams still belong to the two driven callees.
-    'database.smart_merge.absorb_conversation': 'fc5e7e64436af99e10e92c08c4e0ecf763d1d9ff2865c756c79f3a4952771fef',
+    # no query. Post-commit quiet retirement adds document reads only; terminal
+    # streams still belong to the two driven callees.
+    'database.smart_merge.absorb_conversation': 'facd30a0fd6c743eae3e6d24a601568f035c3ae5b67182f18c78ed10c65cfdd5',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
     'database.memory_ledger._append_commit_transaction': 'a30c4549844f8f10865249fc2c4444476c92a4d901191c69d2bac89a657ee7a8',
@@ -214,6 +215,13 @@ _add(
     )
 )
 _add(DriverEntry('database._client.get_users_uid'))
+_add(
+    DriverEntry(
+        'database.quiet_check_retirement.stop_quiet_checks_for_account',
+        base={'uid': UID},
+        neutrals={'page_size': _PAGE},
+    )
+)
 
 # Authenticated pending-work projections use bounded, single-field owner queries.
 _add(DriverEntry('database.processing_attention.list_items', base={'uid': UID}, domains={'limit': [None, 100]}))
@@ -800,11 +808,25 @@ _add(
         trials=2,
     )
 )
+
+
+def _replay_cursor(client, combo, trial):
+    if trial:
+        client.documents['conversation_recovery_state/finalization_replay'] = {
+            'cursor': {'reconcile_after_at': T0, 'job_id': 'cursor-row'},
+            'generation': 1,
+        }
+
+
 _add(
     DriverEntry(
-        'database.conversation_finalization_jobs.get_finalization_replay_candidates', neutrals={'limit': _LIMIT}
+        'database.conversation_finalization_jobs.get_finalization_replay_candidates',
+        neutrals={'limit': _LIMIT},
+        setup=_replay_cursor,
+        trials=2,
     )
 )
+_add(DriverEntry('database.conversation_finalization_jobs.get_finalization_replay_oldest_overdue_age_seconds'))
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.get_meeting_receipt_backfill_candidates',

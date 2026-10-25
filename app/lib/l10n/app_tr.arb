@@ -3538,7 +3538,6 @@
     "captureStarting": "Başlatılıyor…",
     "capturePhoneStorageFull": "Telefon depolama alanı dolu",
     "captureStorageAlmostFull": "Depolama neredeyse dolu",
-    "capturePendantDisconnectedDetail": "Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.",
     "participantsSummaryUncounted": "{name} ve diğerleri",
     "deviceOnboardingVoiceReplyTitle": "Omi'nin yanıtlarını dinleyin",
     "deviceOnboardingVoiceReplySample": "Anladım. Sonraki toplantınız yirmi dakika içinde başlıyor.",
@@ -3816,7 +3815,6 @@
     "playbackAudioUnavailable": "Ses Kullanılamıyor",
     "playbackAudioLoadFailed": "Ses Yüklenemedi",
     "playbackAudioNetworkFailed": "Bağlantıyı Kontrol Edin",
-    "capturePendantDisconnectedShort": "Omi kendiliğinden yeniden bağlanır",
     "forYou": "Sizin İçin",
     "stopThese": "Bunları Durdur",
     "dismiss": "Gizle",
@@ -4425,6 +4423,11 @@
     "episodeSoFar": "Şu ana kadar",
     "episodeUpdatedJustNow": "Az önce güncellendi · bitince tam notlar",
     "episodeUpdatedMinutesAgo": "{minutes} dk önce güncellendi · bitince tam notlar",
+    "episodeNotesUnavailable": "Canlı notlar güncellenmiyor. Şimdilik dökümü görüntüleyin.",
+    "episodeCaptureFor": "Kaydediliyor · {duration}",
+    "episodePrevious": "Önceki bölüm",
+    "captureChunksPending": "Bekleyen parçalar: {pending}",
+    "episodeOpenPrevious": "Önceki Bölümü Aç",
     "episodeNotesSoon": "Notlar konuşmanın ilk birkaç dakikasından sonra görünür.",
     "episodeOpenAll": "Tümünü Aç",
     "episodeWrapUpNow": "Şimdi Bitir",
@@ -4460,5 +4463,6 @@
     "recapInTheBackground": "Arka planda",
     "retentionOfferAccept": "%{percent} indirimle kal",
     "retentionOfferBody": "Kal ve ayda {price} öde, önümüzdeki {months} ay boyunca.",
-    "retentionOfferApplied": "Tamam. %{percent} indirim, önümüzdeki {months} ay."
+    "retentionOfferApplied": "Tamam. %{percent} indirim, önümüzdeki {months} ay.",
+    "othersSpeakerLabel": "Diğerleri"
 }

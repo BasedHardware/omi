@@ -66,6 +66,7 @@ from utils.llm.meeting_notes_validation import (
 from config.refactor_modes import serving_for
 from utils.llm.notes_packet import PACKET_RULES, select_notes_packet, _local_started_at_iso
 from utils.llm.notes_output_contract import finish_notes_contract, OUTPUT_RULES
+from utils.llm.notes_identity import notes_identity
 from utils.llm.notes_output import NotesOutput
 from utils.llm.notes_observability import current_run, observe_notes
 from utils.llm.notes_effort import bind_notes_effort
@@ -479,6 +480,7 @@ def _get_shaped_conversation_notes(
     packet = select_notes_packet(
         legacy_packet, prefix=prefix, uid=uid, capture_evidence=context, words=words, inputs=kwargs
     )
+    kwargs['notes_identity'] = notes_identity(prefix, kwargs, packet)
     if serving_for('NOTES_PACKET_V2_MODE', uid):
         evidence[0]['content'] = json.dumps(packet, ensure_ascii=False, default=str)
         mount = replace(mount, instructions=mount.instructions + '\n\n' + PACKET_RULES + '\n\n' + OUTPUT_RULES)

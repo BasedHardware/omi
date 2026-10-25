@@ -3503,7 +3503,6 @@
     "captureStarting": "開始中…",
     "capturePhoneStorageFull": "端末の空き容量なし",
     "captureStorageAlmostFull": "空き容量わずか",
-    "capturePendantDisconnectedDetail": "ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。",
     "participantsSummaryUncounted": "{name}ほか",
     "deviceOnboardingVoiceReplyTitle": "Omiの回答を聞く",
     "deviceOnboardingVoiceReplySample": "了解しました。次の会議は20分後に始まります。",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "音声を利用できません",
     "playbackAudioLoadFailed": "音声を読み込めませんでした",
     "playbackAudioNetworkFailed": "接続を確認してください",
-    "capturePendantDisconnectedShort": "Omiは自動で再接続します",
     "forYou": "あなたへのおすすめ",
     "stopThese": "この種類を停止",
     "dismiss": "非表示",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "ここまで",
     "episodeUpdatedJustNow": "たった今更新 · 終了時に完全なメモ",
     "episodeUpdatedMinutesAgo": "{minutes} 分前に更新 · 終了時に完全なメモ",
+    "episodeNotesUnavailable": "リアルタイムのメモが更新されていません。今は文字起こしをご確認ください。",
+    "episodeCaptureFor": "録音中 · {duration}",
+    "episodePrevious": "前のエピソード",
+    "captureChunksPending": "保留中の音声チャンク: {pending}",
+    "episodeOpenPrevious": "前のエピソードを開く",
     "episodeNotesSoon": "会話が数分続くとメモが表示されます。",
     "episodeOpenAll": "すべて開く",
     "episodeWrapUpNow": "今すぐまとめる",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "バックグラウンド",
     "retentionOfferAccept": "{percent}%オフで続ける",
     "retentionOfferBody": "続ければ月額{price}、次の{months}か月間。",
-    "retentionOfferApplied": "完了しました。{percent}%オフが{months}か月続きます。"
+    "retentionOfferApplied": "完了しました。{percent}%オフが{months}か月続きます。",
+    "othersSpeakerLabel": "その他"
 }

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -18,6 +21,7 @@ import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/episodes/episode_moments_section.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
+import 'package:omi/pages/episodes/previous_episode_link.dart';
 import 'package:omi/pages/settings/device/device_live_sections.dart';
 import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -29,6 +33,7 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/widgets/transcript.dart';
@@ -83,17 +88,27 @@ class _LiveCapture extends CaptureProvider {
       : super(
           walService: _WalService(),
           connectivity: CaptureConnectivityBoundary(
-              initiallyConnected: true, changes: const Stream.empty(), isConnected: () => true),
+            initiallyConnected: true,
+            changes: const Stream.empty(),
+            isConnected: () => true,
+          ),
           bleListeners: _NoopBle(),
           inProgressConversationLoader: () async {},
           localSegmentStore: LocalSegmentStore.disabled(),
         );
 
+  String source = 'omi';
+
   @override
-  String? get liveCaptureSource => 'omi';
+  String? get liveCaptureSource => source;
 
   @override
   String? get topConversationId => 'c1';
+
+  String? recordingId;
+
+  @override
+  String? get activeRecordingId => recordingId;
 
   DateTime? _startedAt;
   set startedAt(DateTime? value) {
@@ -194,8 +209,12 @@ EpisodeProvider _episodes({Episode? live, bool enabled = true, List<String>? dis
   return provider;
 }
 
-Future<void> _pump(WidgetTester tester, Widget home,
-    {required CaptureProvider capture, EpisodeProvider? episodes}) async {
+Future<void> _pump(
+  WidgetTester tester,
+  Widget home, {
+  required CaptureProvider capture,
+  EpisodeProvider? episodes,
+}) async {
   tester.view.physicalSize = const Size(800, 1800);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
@@ -210,7 +229,8 @@ Future<void> _pump(WidgetTester tester, Widget home,
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
         if (episodes != null) ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
         ChangeNotifierProvider(
-            create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))),
+          create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: [])),
+        ),
         ChangeNotifierProvider<DeviceProvider>.value(value: device),
         ChangeNotifierProvider<ConnectivityProvider>(create: (_) => _StubConnectivityProvider()),
         ChangeNotifierProvider<UsageProvider>.value(value: usage),
@@ -244,19 +264,236 @@ void main() {
   });
 
   group('live episode page', () {
+    testWidgets('no server episode waits briefly, then names unavailable notes without resetting capture time', (
+      tester,
+    ) async {
+      final clock = tester.binding.clock;
+      final start = clock.now();
+      final capture = _LiveCapture()..startedAt = start;
+      final episodes = _episodes(clock: clock.now);
+      addTearDown(capture.dispose);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const LiveEpisodePage(), capture: capture, episodes: episodes);
+      expect(find.text('Running notes appear after the first few minutes of talk.'), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const Key('live_episode_status'))).data, 'Capturing · 0s');
+      await tester.pump(const Duration(minutes: 3));
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsOneWidget);
+      expect(find.text('Running notes appear after the first few minutes of talk.'), findsNothing);
+      expect(tester.widget<Text>(find.byKey(const Key('live_episode_status'))).data, 'Capturing · 3m');
+      await _unmount(tester);
+    });
+
+    testWidgets('an old empty server episode cannot renew the initial notes promise', (tester) async {
+      final capture = _LiveCapture();
+      final episode = Episode(
+        id: 'empty',
+        live: true,
+        startedAt: _now.subtract(const Duration(minutes: 4)),
+        lastActivityAt: _now,
+        stateUpdatedAt: _now,
+      );
+      final episodes = _episodes(live: episode);
+      addTearDown(capture.dispose);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const LiveEpisodePage(), capture: capture, episodes: episodes);
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsOneWidget);
+      expect(find.text('Running notes appear after the first few minutes of talk.'), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('a new recording gets its own wait and timer; reconnects keep its deadline', (tester) async {
+      final clock = tester.binding.clock;
+      final capture = _LiveCapture()
+        ..source = 'phone'
+        ..recordingState = RecordingState.record
+        ..recordingId = 'first'
+        ..startedAt = clock.now();
+      final episodes = _episodes(clock: clock.now);
+      addTearDown(capture.dispose);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const LiveEpisodePage(), capture: capture, episodes: episodes);
+      await tester.pump(const Duration(minutes: 4));
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsOneWidget);
+      capture
+        ..recordingId = 'second'
+        ..startedAt = clock.now();
+      await tester.pump();
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
+      expect(tester.widget<Text>(find.byKey(const Key('live_episode_status'))).data, 'Capturing · 0s');
+      await tester.pump(const Duration(minutes: 2));
+      // A newer ingress timestamp for the same capture must not renew the promise or clock.
+      capture.startedAt = clock.now();
+      await tester.pump();
+      await tester.pump(const Duration(minutes: 1));
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const Key('live_episode_status'))).data, 'Capturing · 3m');
+      await _unmount(tester);
+    });
+
+    testWidgets('the open previous episode adopts delayed closure and finalization by ID', (tester) async {
+      final pending = Completer<ApiResult<EpisodeRead>>();
+      var firstRead = true;
+      Episode closed = Episode(
+        id: 'ep1',
+        live: false,
+        startedAt: _liveEpisode().startedAt,
+        lastActivityAt: _now,
+        title: 'Recovered title',
+        bullets: const ['Recovered note'],
+        conversationIds: const ['c1'],
+      );
+      final capture = _LiveCapture();
+      final episodes = EpisodeProvider(
+        clock: () => _now,
+        fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+        lookup: (_) {
+          if (firstRead) {
+            firstRead = false;
+            return pending.future;
+          }
+          return Future.value(ApiSuccess(EpisodeRead(enabled: true, episode: closed)));
+        },
+      )..debugSetLive(_liveEpisode());
+      addTearDown(capture.dispose);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const Scaffold(body: PreviousEpisodeLink()), capture: capture, episodes: episodes);
+      await tester.tap(find.byKey(const Key('previous_episode_link')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Picking a place near the office'), findsOneWidget);
+      pending.complete(ApiSuccess(EpisodeRead(enabled: true, episode: closed)));
+      await tester.pump();
+      expect(find.text('Recovered note'), findsOneWidget);
+      expect(find.text('Picking a place near the office'), findsNothing);
+      // A newer closed episode must not redirect the already-open page.
+      episodes.debugSetLive(Episode(
+        id: 'newer',
+        live: false,
+        startedAt: _now,
+        lastActivityAt: _now,
+        title: 'Newer episode',
+      ));
+      closed = Episode(
+        id: 'ep1',
+        live: false,
+        startedAt: _liveEpisode().startedAt,
+        lastActivityAt: _now,
+        title: 'Final title',
+        bullets: const ['Final note'],
+        moments: _liveEpisode().moments,
+        conversationIds: const ['c1'],
+      );
+      await tester.pump(EpisodeProvider.pollInterval);
+      await tester.pump();
+      expect(find.text('Final note'), findsOneWidget);
+      expect(find.textContaining('Where to eat'), findsOneWidget);
+      expect(find.text('Final title'), findsOneWidget);
+      expect(episodes.previous?.id, 'newer');
+      await _unmount(tester);
+    });
+
+    testWidgets('an already old capture never starts another first-few-minutes promise', (tester) async {
+      final capture = _LiveCapture()..startedAt = _now.subtract(const Duration(minutes: 88));
+      final episodes = _episodes();
+      addTearDown(capture.dispose);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const LiveEpisodePage(), capture: capture, episodes: episodes);
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsOneWidget);
+      expect(find.text('Running notes appear after the first few minutes of talk.'), findsNothing);
+      expect(tester.widget<Text>(find.byKey(const Key('live_episode_status'))).data, 'Capturing · 1h 28m 0s');
+      await _unmount(tester);
+    });
+
+    testWidgets('stale notes stay readable with an explicit warning; fresh server state recovers', (tester) async {
+      final clock = tester.binding.clock;
+      final start = clock.now();
+      final capture = _LiveCapture()..startedAt = start;
+      Episode? live = Episode(
+        id: 'stale',
+        live: true,
+        startedAt: start,
+        lastActivityAt: start,
+        stateUpdatedAt: start,
+        bullets: const ['Retained note'],
+      );
+      var failed = false;
+      final episodes = EpisodeProvider(
+        clock: clock.now,
+        fetchLive: () async => failed
+            ? const ApiFailure(ApiProblem(ApiProblemKind.transport))
+            : ApiSuccess(EpisodeRead(enabled: true, episode: live)),
+      )..debugSetLive(live);
+      addTearDown(capture.dispose);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const LiveEpisodePage(), capture: capture, episodes: episodes);
+      failed = true;
+      await tester.pump(const Duration(minutes: 3));
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsOneWidget);
+      expect(find.text('Retained note'), findsOneWidget);
+      failed = false;
+      live = Episode(
+        id: 'stale',
+        live: true,
+        startedAt: start,
+        lastActivityAt: clock.now(),
+        stateUpdatedAt: clock.now(),
+        bullets: const ['Fresh note'],
+      );
+      await episodes.refreshLive();
+      await tester.pump();
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
+      expect(find.text('Fresh note'), findsOneWidget);
+      await _unmount(tester);
+    });
+
+    testWidgets('a closed episode is immediately explicit and stays reachable from the live page', (tester) async {
+      final capture = _LiveCapture()..startedAt = _now.subtract(const Duration(minutes: 10));
+      Episode? live = _liveEpisode();
+      final closed = _liveEpisode().copyWith(live: false);
+      final episodes = EpisodeProvider(
+        clock: () => _now,
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: live)),
+        lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: closed)),
+      )..debugSetLive(live);
+      addTearDown(capture.dispose);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const LiveEpisodePage(), capture: capture, episodes: episodes);
+      live = closed;
+      await episodes.refreshLive();
+      await tester.pump();
+      expect(episodes.live, isNull);
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsOneWidget);
+      expect(find.text('Open Previous Episode: Lunch plans with Maya'), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const Key('live_episode_status'))).data, 'Capturing · 10m 0s');
+      await tester.tap(find.byKey(const Key('previous_episode_link')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(const Key('previous_episode_page')), findsOneWidget);
+      expect(find.text('Lunch plans with Maya'), findsOneWidget);
+      expect(find.text('Picking a place near the office'), findsOneWidget);
+      expect(find.byKey(const ValueKey('previous_episode_conversation_c1')), findsOneWidget);
+      await _unmount(tester);
+    });
+
     testWidgets('lazy transcript keeps its frame when the live segment list shrinks', (tester) async {
       final capture = _LiveCapture();
       addTearDown(capture.dispose);
       capture.segments = [for (var i = 0; i < 80; i++) _segment('s$i', 'Synthetic live line $i', i * 20.0)];
       final episodes = _episodes(live: _liveEpisode(items: []));
       addTearDown(episodes.dispose);
-      await _pump(tester, const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
-          capture: capture, episodes: episodes);
+      await _pump(
+        tester,
+        const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
+        capture: capture,
+        episodes: episodes,
+      );
       await tester.pump(const Duration(seconds: 1));
       final list = find.descendant(of: find.byType(TranscriptWidget), matching: find.byType(Scrollable)).first;
       final scroll = tester.state<ScrollableState>(list).position;
       final delegate = tester
-          .widget<ListView>(find.descendant(of: find.byType(TranscriptWidget), matching: find.byType(ListView)).first)
+          .widget<ListView>(
+            find.descendant(of: find.byType(TranscriptWidget), matching: find.byType(ListView)).first,
+          )
           .childrenDelegate as SliverChildBuilderDelegate;
       // A server deletion/rollover changes the provider's mutable list before
       // the parent supplies the next frame. The old lazy delegate still exists.
@@ -302,7 +539,7 @@ void main() {
       addTearDown(capture.dispose);
       capture.segments = [
         _segment('s1', 'Where should we go for lunch?', 0),
-        _segment('s2', 'Book it for Friday.', 70)
+        _segment('s2', 'Book it for Friday.', 70),
       ];
       final dismissed = <String>[];
       final episodes = _episodes(live: _liveEpisode(), dismissed: dismissed);
@@ -333,8 +570,9 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('Wrap up with nothing new never pauses the pendant: the episode closes and the clock restarts',
-        (tester) async {
+    testWidgets('Wrap up with nothing new never pauses the pendant: the episode closes and the clock restarts', (
+      tester,
+    ) async {
       final capture = _PausableCapture();
       addTearDown(capture.dispose);
       final episodes = _episodes(live: _liveEpisode());
@@ -358,8 +596,10 @@ void main() {
       final resume = find.byKey(const Key('episode_resume_button'));
       expect(resume, findsOneWidget);
       expect(find.byKey(const Key('episode_wrap_up_button')), findsOneWidget);
-      expect(tester.getTopLeft(resume).dy,
-          lessThan(tester.getTopLeft(find.byKey(const Key('episode_wrap_up_button'))).dy));
+      expect(
+        tester.getTopLeft(resume).dy,
+        lessThan(tester.getTopLeft(find.byKey(const Key('episode_wrap_up_button'))).dy),
+      );
       await tester.tap(resume);
       await tester.pump();
       expect(capture.resumes, 1);
@@ -372,13 +612,17 @@ void main() {
       addTearDown(capture.dispose);
       capture.segments = [
         _segment('s1', 'Where should we go for lunch?', 0),
-        _segment('s2', 'Book it for Friday.', 70)
+        _segment('s2', 'Book it for Friday.', 70),
       ];
       final episodes = _episodes(live: _liveEpisode());
       addTearDown(episodes.dispose);
 
-      await _pump(tester, const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
-          capture: capture, episodes: episodes);
+      await _pump(
+        tester,
+        const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
+        capture: capture,
+        episodes: episodes,
+      );
 
       expect(find.textContaining('Where should we go for lunch?', findRichText: true), findsOneWidget);
       expect(find.textContaining('Booking'), findsWidgets);
@@ -404,6 +648,44 @@ void main() {
   });
 
   group('home live row', () {
+    testWidgets('Home keeps the disappeared episode even with no history row and opens its member', (tester) async {
+      final capture = _LiveCapture();
+      final closed = _liveEpisode().copyWith(live: false);
+      Episode? live = _liveEpisode();
+      final episodes = EpisodeProvider(
+        clock: () => _now,
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: live)),
+        lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: closed)),
+      )..debugSetLive(live);
+      final opened = <String>[];
+      addTearDown(capture.dispose);
+      addTearDown(episodes.dispose);
+      await _pump(
+        tester,
+        Scaffold(
+          body: Column(
+            children: [
+              const LiveEpisodeRow(),
+              PreviousEpisodeLink(onOpenConversation: opened.add),
+            ],
+          ),
+        ),
+        capture: capture,
+        episodes: episodes,
+      );
+      live = null;
+      await episodes.refreshLive();
+      await tester.pump();
+      expect(find.byKey(const Key('previous_episode_link')), findsOneWidget);
+      expect(episodes.previous?.live, isFalse);
+      await tester.tap(find.byKey(const Key('previous_episode_link')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.byKey(const ValueKey('previous_episode_conversation_c1')));
+      expect(opened, ['c1']);
+      await _unmount(tester);
+    });
+
     testWidgets('elapsed time counts seconds through the first minute, then whole minutes', (tester) async {
       final capture = _LiveCapture();
       addTearDown(capture.dispose);
@@ -411,11 +693,20 @@ void main() {
       final start = clock.now();
       final episodes = _episodes(
         live: Episode(
-            id: 'timer', live: true, startedAt: start.subtract(const Duration(seconds: 59)), lastActivityAt: start),
+          id: 'timer',
+          live: true,
+          startedAt: start.subtract(const Duration(seconds: 59)),
+          lastActivityAt: start,
+        ),
         clock: clock.now,
       );
       addTearDown(episodes.dispose);
-      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      await _pump(
+        tester,
+        const Scaffold(body: LiveEpisodeRow()),
+        capture: capture,
+        episodes: episodes,
+      );
       expect(find.textContaining('Live · 59s', findRichText: true), findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
       expect(find.textContaining('Live · 1m', findRichText: true), findsOneWidget);
@@ -429,15 +720,20 @@ void main() {
       addTearDown(capture.dispose);
       final episodes = _episodes(live: null, clock: clock.now);
       addTearDown(episodes.dispose);
-      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
-      expect(find.textContaining('Live · 3m', findRichText: true), findsOneWidget);
+      await _pump(
+        tester,
+        const Scaffold(body: LiveEpisodeRow()),
+        capture: capture,
+        episodes: episodes,
+      );
+      expect(find.textContaining('Capturing · 3m', findRichText: true), findsOneWidget);
       // The verified-ingress start reads null between health updates, then re-arms later on reconnect.
       capture.startedAt = null;
       await tester.pump(const Duration(seconds: 1));
-      expect(find.textContaining('Live · 3m', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Capturing · 3m', findRichText: true), findsOneWidget);
       capture.startedAt = clock.now();
       await tester.pump(const Duration(seconds: 1));
-      expect(find.textContaining('Live · 3m', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Capturing · 3m', findRichText: true), findsOneWidget);
       await _unmount(tester);
     });
     testWidgets('unnamed voices are never counted as people, however many diarization ids appear', (tester) async {
@@ -459,7 +755,12 @@ void main() {
       ];
       final episodes = _episodes(live: _liveEpisode());
       addTearDown(episodes.dispose);
-      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      await _pump(
+        tester,
+        const Scaffold(body: LiveEpisodeRow()),
+        capture: capture,
+        episodes: episodes,
+      );
       expect(find.textContaining('people', findRichText: true), findsNothing);
       await _unmount(tester);
     });
@@ -470,7 +771,12 @@ void main() {
       final episodes = _episodes(live: _liveEpisode());
       addTearDown(episodes.dispose);
 
-      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      await _pump(
+        tester,
+        const Scaffold(body: LiveEpisodeRow()),
+        capture: capture,
+        episodes: episodes,
+      );
 
       expect(find.byKey(const Key('home_live_episode_row')), findsOneWidget);
       expect(find.text('Lunch plans with Maya'), findsOneWidget);
@@ -480,6 +786,65 @@ void main() {
       // No filled green tile: the live mark is the small breathing dot.
       expect(find.byType(OmiBreathingDot), findsOneWidget);
       expect(find.byType(OmiLiveDot), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('the ticking elapsed time never re-announces the row, only a real state change does', (tester) async {
+      final capture = _PausableCapture();
+      addTearDown(capture.dispose);
+      final clock = tester.binding.clock;
+      final start = clock.now();
+      final episodes = _episodes(
+        live: Episode(
+            id: 'announce', live: true, startedAt: start.subtract(const Duration(seconds: 10)), lastActivityAt: start),
+        clock: clock.now,
+      );
+      addTearDown(episodes.dispose);
+      final announcements = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockDecodedMessageHandler<Object?>(SystemChannels.accessibility,
+          (message) async {
+        final data = (message as Map)['data'] as Map?;
+        final text = data?['message'] as String?;
+        if (text != null) announcements.add(text);
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockDecodedMessageHandler<Object?>(SystemChannels.accessibility, null));
+
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      final handle = tester.ensureSemantics();
+
+      // The row's own semantics node must not be a live region: previously it wrapped the whole
+      // "$title, $rest" label (which includes the ticking elapsed time) in `liveRegion: true`, so
+      // assistive tech re-announced the entire row every second it was live.
+      expect(
+        tester
+            .getSemantics(find.byKey(const Key('home_live_episode_row')))
+            .getSemanticsData()
+            .flagsCollection
+            .isLiveRegion,
+        isFalse,
+      );
+
+      // Several ticks go by with the capture still listening: no announcement fires.
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      expect(announcements, isEmpty);
+
+      // A real state change (paused) still gets announced exactly once.
+      capture.paused = true;
+      capture.notifyListeners();
+      await tester.pump();
+      expect(announcements, hasLength(1));
+
+      // Further ticks in the new (paused) state don't repeat the announcement.
+      for (var i = 0; i < 3; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      expect(announcements, hasLength(1));
+
+      handle.dispose();
       await _unmount(tester);
     });
   });
@@ -506,21 +871,23 @@ void main() {
     testWidgets('collapsed by default, expands, and opens a moment from another conversation', (tester) async {
       final opened = <String>[];
       var expanded = false;
-      await tester.pumpWidget(MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: StatefulBuilder(
-            builder: (context, setState) => EpisodeMomentsList(
-              episode: closed(3),
-              conversationId: 'c1',
-              expanded: expanded,
-              onToggle: () => setState(() => expanded = !expanded),
-              onOpenConversation: opened.add,
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) => EpisodeMomentsList(
+                episode: closed(3),
+                conversationId: 'c1',
+                expanded: expanded,
+                onToggle: () => setState(() => expanded = !expanded),
+                onOpenConversation: opened.add,
+              ),
             ),
           ),
         ),
-      ));
+      );
       expect(find.textContaining('3 moments'), findsOneWidget);
       expect(find.text('Part 1'), findsNothing);
       await tester.tap(find.byKey(const Key('episode_moments_toggle')));
@@ -534,14 +901,16 @@ void main() {
     testWidgets('a one-moment episode adds nothing to the conversation page', (tester) async {
       final episodes = _episodes(live: null)..debugSetLive(null, byConversation: {'c1': closed(1)});
       addTearDown(episodes.dispose);
-      await tester.pumpWidget(ChangeNotifierProvider<EpisodeProvider>.value(
-        value: episodes,
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: EpisodeMomentsSection(conversationId: 'c1')),
+      await tester.pumpWidget(
+        ChangeNotifierProvider<EpisodeProvider>.value(
+          value: episodes,
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: EpisodeMomentsSection(conversationId: 'c1')),
+          ),
         ),
-      ));
+      );
       await tester.pump();
       expect(find.byKey(const Key('episode_moments_section')), findsNothing);
     });
@@ -555,34 +924,34 @@ void main() {
         );
 
     testWidgets('stats leave out a battery the device has not reported', (tester) async {
-      await tester.pumpWidget(wrap(const DeviceStatsRow(
-        batteryLevel: 0,
-        isCharging: false,
-        heardTodaySeconds: 3 * 3600,
-        onDeviceSeconds: 600,
-      )));
+      await tester.pumpWidget(
+        wrap(
+          const DeviceStatsRow(batteryLevel: 0, isCharging: false, heardTodaySeconds: 3 * 3600, onDeviceSeconds: 600),
+        ),
+      );
       expect(find.byKey(const Key('device_stat_battery')), findsNothing);
       expect(find.byKey(const Key('device_stat_heard_today')), findsOneWidget);
       expect(find.text('to sync'), findsOneWidget);
 
-      await tester.pumpWidget(wrap(const DeviceStatsRow(
-        batteryLevel: 72,
-        isCharging: true,
-        heardTodaySeconds: 0,
-        onDeviceSeconds: 0,
-      )));
+      await tester.pumpWidget(
+        wrap(const DeviceStatsRow(batteryLevel: 72, isCharging: true, heardTodaySeconds: 0, onDeviceSeconds: 0)),
+      );
       expect(find.text('72%'), findsOneWidget);
       expect(find.text('to sync'), findsNothing);
     });
 
     testWidgets('right now shows the live episode and catching-up progress', (tester) async {
       var opened = 0;
-      await tester.pumpWidget(wrap(DeviceRightNowGroup(
-        liveTitle: 'Lunch plans with Maya',
-        liveLength: '24m',
-        onOpenLive: () => opened++,
-        catchingUp: const DeviceCatchUpSummary(status: 'Waiting to sync'),
-      )));
+      await tester.pumpWidget(
+        wrap(
+          DeviceRightNowGroup(
+            liveTitle: 'Lunch plans with Maya',
+            liveLength: '24m',
+            onOpenLive: () => opened++,
+            catchingUp: const DeviceCatchUpSummary(status: 'Waiting to sync'),
+          ),
+        ),
+      );
       expect(find.text('Live episode · 24m'), findsOneWidget);
       expect(find.text('Waiting to sync'), findsOneWidget);
       await tester.tap(find.byKey(const Key('device_right_now_live')));
@@ -590,8 +959,12 @@ void main() {
     });
 
     testWidgets('recently lists only real drops from the last day', (tester) async {
-      BleDisconnectEvent event(DateTime at,
-              {int reconnectMs = 90000, bool manual = false, String type = 'disconnect'}) =>
+      BleDisconnectEvent event(
+        DateTime at, {
+        int reconnectMs = 90000,
+        bool manual = false,
+        String type = 'disconnect',
+      }) =>
           BleDisconnectEvent(
             timestamp: at.millisecondsSinceEpoch,
             reason: 'link_lost',
@@ -604,16 +977,20 @@ void main() {
             timeToReconnectMs: reconnectMs,
             rssiTrend: 'stable',
           );
-      await tester.pumpWidget(wrap(DeviceRecentlyGroup(
-        now: () => _now,
-        load: () async => [
-          event(_now.subtract(const Duration(hours: 30))),
-          event(_now.subtract(const Duration(hours: 2)), manual: true),
-          event(_now.subtract(const Duration(hours: 1)), type: 'fail_to_connect'),
-          event(_now.subtract(const Duration(minutes: 40)), reconnectMs: 0),
-          event(_now.subtract(const Duration(minutes: 20))),
-        ],
-      )));
+      await tester.pumpWidget(
+        wrap(
+          DeviceRecentlyGroup(
+            now: () => _now,
+            load: () async => [
+              event(_now.subtract(const Duration(hours: 30))),
+              event(_now.subtract(const Duration(hours: 2)), manual: true),
+              event(_now.subtract(const Duration(hours: 1)), type: 'fail_to_connect'),
+              event(_now.subtract(const Duration(minutes: 40)), reconnectMs: 0),
+              event(_now.subtract(const Duration(minutes: 20))),
+            ],
+          ),
+        ),
+      );
       await tester.pump();
       expect(find.byKey(const Key('device_recently')), findsOneWidget);
       expect(find.textContaining('Disconnected for'), findsOneWidget);
@@ -634,21 +1011,23 @@ void main() {
     );
     final provider = ConversationProvider(isSignedIn: () => false)..conversations = [conversation];
     addTearDown(provider.dispose);
-    await tester.pumpWidget(ChangeNotifierProvider<ConversationProvider>.value(
-      value: provider,
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: ConversationListItem(
-            conversation: conversation,
-            date: conversation.createdAt,
-            conversationIdx: 0,
-            fillingSeconds: 720,
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ConversationProvider>.value(
+        value: provider,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: ConversationListItem(
+              conversation: conversation,
+              date: conversation.createdAt,
+              conversationIdx: 0,
+              fillingSeconds: 720,
+            ),
           ),
         ),
       ),
-    ));
+    );
     expect(find.byKey(const Key('conversation_row_filling')), findsOneWidget);
     expect(find.textContaining('from your Omi'), findsOneWidget);
   });

@@ -10926,7 +10926,6 @@
     "captureStarting": "শুরু হচ্ছে…",
     "capturePhoneStorageFull": "ফোনের স্টোরেজ পূর্ণ",
     "captureStorageAlmostFull": "স্টোরেজ প্রায় পূর্ণ",
-    "capturePendantDisconnectedDetail": "আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে। পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে। এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।",
     "participantsSummaryUncounted": "{name} ও অন্যরা",
     "deviceOnboardingVoiceReplyTitle": "Omi-এর উত্তর শুনুন",
     "deviceOnboardingVoiceReplySample": "হয়ে গেছে। আপনার পরবর্তী মিটিং বিশ মিনিট পরে শুরু হবে।",
@@ -11204,7 +11203,6 @@
     "playbackAudioUnavailable": "অডিও উপলব্ধ নয়",
     "playbackAudioLoadFailed": "অডিও লোড করা যায়নি",
     "playbackAudioNetworkFailed": "সংযোগ পরীক্ষা করুন",
-    "capturePendantDisconnectedShort": "Omi নিজে থেকেই আবার সংযোগ করবে",
     "forYou": "আপনার জন্য",
     "stopThese": "এগুলো বন্ধ করুন",
     "dismiss": "সরিয়ে দিন",
@@ -11816,6 +11814,11 @@
     "episodeSoFar": "এখন পর্যন্ত",
     "episodeUpdatedJustNow": "এইমাত্র আপডেট হয়েছে · শেষে পূর্ণ নোট",
     "episodeUpdatedMinutesAgo": "{minutes} মিনিট আগে আপডেট · শেষে পূর্ণ নোট",
+    "episodeNotesUnavailable": "চলমান নোট আপডেট হচ্ছে না। আপাতত প্রতিলিপি দেখুন।",
+    "episodeCaptureFor": "রেকর্ড হচ্ছে · {duration}",
+    "episodePrevious": "আগের পর্ব",
+    "captureChunksPending": "অপেক্ষমাণ খণ্ড: {pending}",
+    "episodeOpenPrevious": "আগের পর্ব খুলুন",
     "episodeNotesSoon": "কথার প্রথম কয়েক মিনিট পরে নোট দেখা যাবে।",
     "episodeOpenAll": "সব খুলুন",
     "episodeWrapUpNow": "এখনই শেষ করুন",
@@ -11851,5 +11854,6 @@
     "recapInTheBackground": "পটভূমিতে",
     "retentionOfferAccept": "{percent}% ছাড়ে থাকুন",
     "retentionOfferBody": "থাকুন এবং মাসে {price} দিন, পরের {months} মাস।",
-    "retentionOfferApplied": "হয়ে গেছে। {percent}% ছাড়, পরের {months} মাস।"
+    "retentionOfferApplied": "হয়ে গেছে। {percent}% ছাড়, পরের {months} মাস।",
+    "othersSpeakerLabel": "অন্যরা"
 }

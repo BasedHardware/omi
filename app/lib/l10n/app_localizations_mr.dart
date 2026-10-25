@@ -11129,13 +11129,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get captureStorageAlmostFull => 'स्टोरेज जवळजवळ भरले';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'तुमच्या पेंडंटचा या फोनशी संपर्क तुटला. पेंडंट चालू आणि जवळ असल्यावर Omi आपोआप पुन्हा कनेक्ट होईल. याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi आपोआप पुन्हा कनेक्ट होईल';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name आणि इतर';
   }
@@ -14431,6 +14424,25 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'चालू टिपा अपडेट होत नाहीत. सध्या प्रतिलेख पहा.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'रेकॉर्डिंग · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'मागील भाग';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'प्रलंबित भाग: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'मागील भाग उघडा';
+
+  @override
   String get episodeNotesSoon => 'बोलण्याच्या पहिल्या काही मिनिटांनंतर नोट्स दिसतील.';
 
   @override
@@ -14567,4 +14579,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'झाले. $percent% सवलत, पुढील $months महिने.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'इतर';
 }

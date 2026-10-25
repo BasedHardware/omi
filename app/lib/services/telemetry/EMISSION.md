@@ -14,6 +14,11 @@ not a confirmed user attempt and not audio start. `request_origin` is
 `automatic_roll` only for a batch-mode phone session roll, and `unknown`
 otherwise.
 
+The `mobile_lag_*` lag capture (`lib/utils/analytics/lag_recorder.dart`) is
+local debug-log only, behind the same Debug logs switch, and never transmitted.
+It shares the render observations' `mobile_render_diagnostic` log type; its
+`event` field names the lag event.
+
 Replacement observations use `POST /v1/telemetry/client/batches` only when
 `OMI_CLIENT_TELEMETRY_MIGRATION` is enabled. The outbox flushes after 30
 seconds, at 100 observations, and best-effort on background. HTTP 202 is

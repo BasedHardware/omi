@@ -3503,7 +3503,6 @@
     "captureStarting": "正在启动…",
     "capturePhoneStorageFull": "手机存储空间已满",
     "captureStorageAlmostFull": "存储空间即将用完",
-    "capturePendantDisconnectedDetail": "吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。",
     "participantsSummaryUncounted": "{name}等人",
     "deviceOnboardingVoiceReplyTitle": "聆听 Omi 的回答",
     "deviceOnboardingVoiceReplySample": "明白了。你的下一场会议将在二十分钟后开始。",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "音频不可用",
     "playbackAudioLoadFailed": "无法加载音频",
     "playbackAudioNetworkFailed": "请检查网络连接",
-    "capturePendantDisconnectedShort": "Omi 会自动重新连接",
     "forYou": "为你推荐",
     "stopThese": "停止此类推荐",
     "dismiss": "忽略",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "目前为止",
     "episodeUpdatedJustNow": "刚刚更新 · 结束后生成完整笔记",
     "episodeUpdatedMinutesAgo": "{minutes} 分钟前更新 · 结束后生成完整笔记",
+    "episodeNotesUnavailable": "实时笔记未在更新。请暂时查看转录文本。",
+    "episodeCaptureFor": "录音中 · {duration}",
+    "episodePrevious": "上一段记录",
+    "captureChunksPending": "待处理音频块: {pending}",
+    "episodeOpenPrevious": "打开上一段记录",
     "episodeNotesSoon": "交谈几分钟后会显示笔记。",
     "episodeOpenAll": "全部打开",
     "episodeWrapUpNow": "立即结束",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "背景中",
     "retentionOfferAccept": "享受 {percent}% 折扣继续使用",
     "retentionOfferBody": "继续使用，每月只需 {price}，持续 {months} 个月。",
-    "retentionOfferApplied": "完成。{percent}% 折扣，持续 {months} 个月。"
+    "retentionOfferApplied": "完成。{percent}% 折扣，持续 {months} 个月。",
+    "othersSpeakerLabel": "其他人"
 }

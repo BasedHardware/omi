@@ -11165,13 +11165,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get captureStorageAlmostFull => 'A tárhely majdnem megtelt';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Az Omi magától újracsatlakozik';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name és mások';
   }
@@ -14478,6 +14471,25 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'A folyamatos jegyzetek nem frissülnek. Egyelőre tekintsd meg az átiratot.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Rögzítés · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Előző epizód';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Várakozó részek: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Előző epizód megnyitása';
+
+  @override
   String get episodeNotesSoon => 'A jegyzetek a beszélgetés első perceit követően jelennek meg.';
 
   @override
@@ -14614,4 +14626,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Kész. $percent% kedvezmény a következő $months hónapban.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Mások';
 }

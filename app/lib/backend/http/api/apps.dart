@@ -422,8 +422,8 @@ Future<ApiResult<AppSetupStatus>> getAppSetupStatus(String? url, {ApiSend? send,
       target.scheme == omi.scheme &&
       target.host == omi.host &&
       target.port == omi.port;
-  // Vendor endpoints implement a uid-based completion probe. A vendor 401 must
-  // not refresh/expire the Omi session or receive its Firebase bearer token.
+  // Plugin capabilities are the vendor authority. Never forward Omi's Firebase
+  // bearer token, refresh the Omi session on a vendor 401, or log signed URLs.
   final ApiSend? transport = send ??
       (isOmiOrigin
           ? null
@@ -587,13 +587,13 @@ Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/$appId', headers: {}, body: '', method: 'GET');
   try {
     if (response == null || response.statusCode != 200) return null;
-    log('getAppDetailsServer: ${response.body}');
+    Logger.debug('getAppDetailsServer: ${response.statusCode}');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     wire.GeneratedApp.fromJson(data);
     return data;
   } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    Logger.debug('getAppDetailsServer decode failed: ${e.runtimeType}');
+    PlatformManager.instance.crashReporter.reportCrash(StateError('App details decode failed'), stackTrace);
     return null;
   }
 }

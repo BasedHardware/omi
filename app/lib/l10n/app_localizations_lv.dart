@@ -11147,13 +11147,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get captureStorageAlmostFull => 'Krātuve gandrīz pilna';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi pats atjaunos savienojumu';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name un citi';
   }
@@ -14452,6 +14445,25 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Pašreizējās piezīmes netiek atjauninātas. Pagaidām skatiet transkripciju.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Ierakstīšana · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Iepriekšējā epizode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Gaidošie fragmenti: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Atvērt iepriekšējo epizodi';
+
+  @override
   String get episodeNotesSoon => 'Piezīmes parādās pēc pirmajām sarunas minūtēm.';
 
   @override
@@ -14588,4 +14600,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Gatavs. $percent% atlaide nākamos $months mēnešus.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Citi';
 }

@@ -3538,7 +3538,6 @@
     "captureStarting": "Uruchamianie…",
     "capturePhoneStorageFull": "Pamięć telefonu pełna",
     "captureStorageAlmostFull": "Pamięć prawie pełna",
-    "capturePendantDisconnectedDetail": "Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.",
     "participantsSummaryUncounted": "{name} i inni",
     "deviceOnboardingVoiceReplyTitle": "Posłuchaj odpowiedzi Omi",
     "deviceOnboardingVoiceReplySample": "Rozumiem. Twoje następne spotkanie zaczyna się za dwadzieścia minut.",
@@ -3816,7 +3815,6 @@
     "playbackAudioUnavailable": "Dźwięk niedostępny",
     "playbackAudioLoadFailed": "Nie udało się wczytać dźwięku",
     "playbackAudioNetworkFailed": "Sprawdź połączenie",
-    "capturePendantDisconnectedShort": "Omi połączy się ponownie samo",
     "forYou": "Dla Ciebie",
     "stopThese": "Zatrzymaj te",
     "dismiss": "Ukryj",
@@ -4425,6 +4423,11 @@
     "episodeSoFar": "Na razie",
     "episodeUpdatedJustNow": "Zaktualizowano przed chwilą · pełne notatki na końcu",
     "episodeUpdatedMinutesAgo": "Zaktualizowano {minutes} min temu · pełne notatki na końcu",
+    "episodeNotesUnavailable": "Bieżące notatki nie są aktualizowane. Na razie zobacz transkrypcję.",
+    "episodeCaptureFor": "Nagrywanie · {duration}",
+    "episodePrevious": "Poprzedni odcinek",
+    "captureChunksPending": "Oczekujące fragmenty: {pending}",
+    "episodeOpenPrevious": "Otwórz poprzedni odcinek",
     "episodeNotesSoon": "Notatki pojawią się po pierwszych minutach rozmowy.",
     "episodeOpenAll": "Otwórz wszystko",
     "episodeWrapUpNow": "Zakończ teraz",
@@ -4460,5 +4463,6 @@
     "recapInTheBackground": "W tle",
     "retentionOfferAccept": "Zostań z rabatem {percent}%",
     "retentionOfferBody": "Zostań i płać {price} miesięcznie przez kolejne {months} miesiące.",
-    "retentionOfferApplied": "Gotowe. {percent}% rabatu przez kolejne {months} miesiące."
+    "retentionOfferApplied": "Gotowe. {percent}% rabatu przez kolejne {months} miesiące.",
+    "othersSpeakerLabel": "Inni"
 }

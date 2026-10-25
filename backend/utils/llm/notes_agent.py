@@ -31,6 +31,8 @@ from utils.llm.notes_agent_prompt import INSTRUCTIONS, SUBMIT, TOOL_SCHEMAS, scr
 from utils.llm.notes_output_contract import FORMAT, check_notes, repair_notes, repair_contract, OUTPUT_RULES
 from utils.llm.notes_output import NotesOutput, submit_tool
 from utils.llm.notes_packet import PACKET_RULES
+from utils.llm.notes_identity import NotesIdentity, repair_identity
+from utils.llm.notes_output_contract import record_identity_repair
 from utils.llm.shaped_agent import (
     Budget,
     LoopStop,
@@ -160,6 +162,7 @@ async def run_notes_agent(
     contract_v2: bool = False,
     transcript_segment_ids: Sequence[str] = (),
     uid: str | None = None,
+    identity: NotesIdentity | None = None,
 ) -> NotesAgentResult:
     started = clock()
     mount = notes_agent_mount(budget, owner, getattr(toolbox, 'window', None))
@@ -173,6 +176,7 @@ async def run_notes_agent(
             tools=tuple(tool for tool in mount.tools if tool['function']['name'] != SUBMIT) + (submit_tool(),),
         )
     last_submission: Optional[dict[str, Any]] = None
+    last_identity_repaired = False
     send_backs = SendBackBudget(SEND_BACKS)
     result = NotesAgentResult(submission=None, stop='no_submission')
     state: dict[str, Any] = {'last_turn_cost': 0.0, 'force': False}
@@ -227,7 +231,7 @@ async def run_notes_agent(
         )
 
     async def execute(calls: tuple[Any, ...]) -> list[Any] | LoopStop:
-        nonlocal last_submission
+        nonlocal last_submission, last_identity_repaired
         responses: list[Any] = []
         images: list[Any] = []
         accepted: Optional[dict[str, Any]] = None
@@ -251,16 +255,18 @@ async def run_notes_agent(
                 if contract_v2:
                     try:
                         candidate = validate_output(NotesOutput, arguments).model_dump(mode='json')
-                        candidate, _ = repair_contract(
+                        candidate, candidate_repairs = repair_contract(
                             candidate,
                             transcript_words=transcript_words,
                             open_tasks=open_tasks,
                             owner_names=owner_names,
                             transcript_segment_ids=transcript_segment_ids,
+                            identity=identity,
                         )
                         # Save only a usable, schema-valid submission; later malformed turns cannot erase it.
                         if candidate.get('sections') and candidate.get('title'):
                             last_submission = candidate
+                            last_identity_repaired = 'unsupported_speaker_identity' in candidate_repairs
                     except ValidationError:
                         pass
                 sent_back, payload = _review_submission(
@@ -269,6 +275,7 @@ async def run_notes_agent(
                     lookups_missing=max(0, budget.min_tool_calls - result.tool_calls),
                     naming_leads=naming_leads,
                     contract_v2=contract_v2,
+                    identity=identity,
                     send_backs=send_backs,
                     # Only while a further turn still fits the budget.
                     may_reject=result.turns < budget.max_turns
@@ -323,6 +330,8 @@ async def run_notes_agent(
     if contract_v2 and result.submission is None and last_submission is not None:
         result.submission = last_submission
         result.repairs.append('salvaged_submission')
+        if last_identity_repaired:
+            result.repairs.append('unsupported_speaker_identity')
         REPAIRS.labels(kind='salvaged_submission').inc()
     if result.submission is not None:
         if contract_v2:
@@ -332,10 +341,18 @@ async def run_notes_agent(
                 open_tasks=open_tasks,
                 owner_names=owner_names,
                 transcript_segment_ids=transcript_segment_ids,
+                identity=identity,
             )
             result.repairs.extend(repairs)
         result.submission, final_repairs = _final_repairs(result.submission, open_tasks, owner_names)
         result.repairs.extend(final_repairs)
+        if identity is not None:
+            result.submission, identity_repairs = repair_identity(result.submission, identity)
+            result.repairs.extend(identity_repairs)
+            for repair in identity_repairs:
+                REPAIRS.labels(kind=repair).inc()
+        if 'unsupported_speaker_identity' in result.repairs:
+            record_identity_repair()
     return result
 
 
@@ -352,6 +369,7 @@ def _review_submission(
     send_backs: SendBackBudget,
     naming_leads: Sequence[str] = (),
     contract_v2: bool = False,
+    identity: NotesIdentity | None = None,
 ) -> tuple[list[Problem], Optional[dict[str, Any]]]:
     """``(problems sent back, None)`` or ``([], accepted payload)``."""
     try:
@@ -361,7 +379,7 @@ def _review_submission(
         problem = Problem(FORMAT, 'Schema problems at: ' + ', '.join(fields))
         # An invalid payload cannot be accepted; past the format budget it is returned uncharged.
         return send_backs.review([problem], may_send_back=may_reject) or [problem], None
-    check = check_notes(arguments, transcript_words=transcript_words, contract_v2=contract_v2)
+    check = check_notes(arguments, transcript_words=transcript_words, contract_v2=contract_v2, identity=identity)
     if lookups_missing:
         check.findings.insert(
             0,

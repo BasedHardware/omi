@@ -649,7 +649,7 @@ class TestRestStatusContract:
         resp = client.get("/v1/mcp/conversations/c1")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["transcript_segments"][0]["speaker_name"] == "Speaker 0"
+        assert body["transcript_segments"][0]["speaker_name"] == "Speaker A"
         assert body["truncated"] is False
         assert body["apps_results"] == [{"app_id": "app-1", "content": "note"}]
 

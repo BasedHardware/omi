@@ -11112,13 +11112,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get captureStorageAlmostFull => 'Mälu on peaaegu täis';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi loob ühenduse ise uuesti';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name ja teised';
   }
@@ -14413,6 +14406,25 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Jooksvad märkmed ei uuene. Vaata praegu transkriptsiooni.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Salvestamine · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Eelmine episood';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Ootel lõigud: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Ava eelmine episood';
+
+  @override
   String get episodeNotesSoon => 'Märkmed ilmuvad pärast esimesi vestlusminuteid.';
 
   @override
@@ -14549,4 +14561,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Valmis. $percent% allahindlust järgmised $months kuud.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Teised';
 }

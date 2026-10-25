@@ -5,7 +5,13 @@ namespace: prod-omi-backend
 hpaName: prod-omi-parakeet
 prometheusUrl: http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc:9090
 image: python:3.13.12-slim-bookworm@sha256:a58daefb915e1e03ad48f3ca4df8832065412c5c35cacb9d39f4229184de12b6
-# Reserved approval gate. v1 fails rendering if enabled; no GCP identity is installed.
+# Production enables the approved dedicated identity; dev never installs a writer.
 batch:
+  # Installs the -batch guard objects; prod overlays keep this false until the
+  # deployer RBAC for those objects is approved (access change, David) and
+  # g2's producer exists.
+  enabled: true
   monitoringRelease: prod-omi-kube-prometheus-stack
   cloudRunRollbackEnabled: false
+  gcpServiceAccount: ""
+  safetyConfigMap: prod-omi-batch-ramp-safety

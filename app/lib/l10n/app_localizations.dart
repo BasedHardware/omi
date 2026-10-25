@@ -20217,18 +20217,6 @@ abstract class AppLocalizations {
   /// **'Storage almost full'**
   String get captureStorageAlmostFull;
 
-  /// Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture.
-  ///
-  /// In en, this message translates to:
-  /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
-  String get capturePendantDisconnectedDetail;
-
-  /// Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation.
-  ///
-  /// In en, this message translates to:
-  /// **'Omi reconnects on its own'**
-  String get capturePendantDisconnectedShort;
-
   /// Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'
   ///
   /// In en, this message translates to:
@@ -25527,6 +25515,36 @@ abstract class AppLocalizations {
   /// **'Updated {minutes} min ago · full notes when it wraps up'**
   String episodeUpdatedMinutesAgo(int minutes);
 
+  /// No description provided for @episodeNotesUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Running notes aren’t updating. View the transcript for now.'**
+  String get episodeNotesUnavailable;
+
+  /// No description provided for @episodeCaptureFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Capturing · {duration}'**
+  String episodeCaptureFor(String duration);
+
+  /// No description provided for @episodePrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous episode'**
+  String get episodePrevious;
+
+  /// No description provided for @captureChunksPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Chunks pending: {pending}'**
+  String captureChunksPending(int pending);
+
+  /// No description provided for @episodeOpenPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Previous Episode'**
+  String get episodeOpenPrevious;
+
   /// Shown in the running notes card before the first notes exist.
   ///
   /// In en, this message translates to:
@@ -25742,6 +25760,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Done. {percent}% off your next {months} months.'**
   String retentionOfferApplied(int percent, int months);
+
+  /// Collective label for unidentified voices with too little evidence in an over-split transcript; not a participant count.
+  ///
+  /// In en, this message translates to:
+  /// **'Others'**
+  String get othersSpeakerLabel;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -4,6 +4,7 @@ from collections.abc import Callable
 import logging
 from typing import Any
 
+from database.quiet_check_retirement import stop_quiet_checks_for_account
 from database._client import get_data_plane_firestore_client
 from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD
 from database.staged_promote_cache import invalidate_around_write
@@ -52,4 +53,5 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     if root_exists:
         logger.info(f"Deleting user document: {uid}")
         user_ref.delete()
+    stop_quiet_checks_for_account(uid, firestore_client=client)
     return {'status': 'ok', 'message': 'Account deleted successfully'}

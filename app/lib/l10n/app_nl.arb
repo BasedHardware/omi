@@ -3503,7 +3503,6 @@
     "captureStarting": "Starten…",
     "capturePhoneStorageFull": "Telefoonopslag vol",
     "captureStorageAlmostFull": "Opslag bijna vol",
-    "capturePendantDisconnectedDetail": "Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.",
     "participantsSummaryUncounted": "{name} en anderen",
     "deviceOnboardingVoiceReplyTitle": "Luister naar Omi's antwoorden",
     "deviceOnboardingVoiceReplySample": "Begrepen. Je volgende vergadering begint over twintig minuten.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "Audio niet beschikbaar",
     "playbackAudioLoadFailed": "Audio kon niet worden geladen",
     "playbackAudioNetworkFailed": "Controleer verbinding",
-    "capturePendantDisconnectedShort": "Omi maakt vanzelf opnieuw verbinding",
     "forYou": "Voor jou",
     "stopThese": "Deze stoppen",
     "dismiss": "Verbergen",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "Tot nu toe",
     "episodeUpdatedJustNow": "Zojuist bijgewerkt · volledige notities aan het eind",
     "episodeUpdatedMinutesAgo": "{minutes} min geleden bijgewerkt · volledige notities aan het eind",
+    "episodeNotesUnavailable": "De live notities worden niet bijgewerkt. Bekijk voorlopig het transcript.",
+    "episodeCaptureFor": "Opnemen · {duration}",
+    "episodePrevious": "Vorige aflevering",
+    "captureChunksPending": "Wachtende fragmenten: {pending}",
+    "episodeOpenPrevious": "Vorige aflevering openen",
     "episodeNotesSoon": "Notities verschijnen na de eerste minuten van het gesprek.",
     "episodeOpenAll": "Alles openen",
     "episodeWrapUpNow": "Nu afronden",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "Op de achtergrond",
     "retentionOfferAccept": "Blijf met {percent}% korting",
     "retentionOfferBody": "Blijf en betaal {price} per maand de komende {months} maanden.",
-    "retentionOfferApplied": "Klaar. {percent}% korting de komende {months} maanden."
+    "retentionOfferApplied": "Klaar. {percent}% korting de komende {months} maanden.",
+    "othersSpeakerLabel": "Anderen"
 }

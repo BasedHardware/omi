@@ -341,7 +341,14 @@ def test_account_wipe_drops_a_late_index_document(monkeypatch):
         ),
     )
     client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
+    retirements = []
+    monkeypatch.setattr(
+        user_data_deletion,
+        'stop_quiet_checks_for_account',
+        lambda uid, **kwargs: retirements.append((uid, kwargs['firestore_client'])),
+    )
     user_data_deletion.purge_user_subtree(UID, client, lambda *a, **k: None)
+    assert retirements == [(UID, client)]
     assert ('memory_state', msi.DOC) in deleted
     assert ('memory_state', user_data_deletion.RELEASED_MEMORY_CHANGE_HEAD) in deleted
 
@@ -380,7 +387,14 @@ def test_account_wipe_erases_head_recreated_after_state_collection(monkeypatch, 
             rows.update({family: {'version': 'source-delete-commit'} for family in list_heads})
 
     client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
+    retirements = []
+    monkeypatch.setattr(
+        user_data_deletion,
+        'stop_quiet_checks_for_account',
+        lambda uid, **kwargs: retirements.append((uid, kwargs['firestore_client'])),
+    )
     assert user_data_deletion.purge_user_subtree(UID, client, erase)['status'] == 'ok'
+    assert retirements == [(UID, client)]
     assert rows == {}
     assert events == ['memory_state', user_data_deletion.STATE_COLLECTION, 'memories', 'conversations'] + (
         ['root'] if root_exists else []
