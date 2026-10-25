@@ -382,6 +382,7 @@ void main() {
 
     // Restore selected Limitless device and run a matched query through DeviceService.
     await SharedPreferencesUtil().btDeviceSet(limitless);
+    final preferencesBeforeQuery = SharedPreferencesUtil().btDevice.toJson();
     final queryFuture = service.queryLimitlessCompatibilityMetadata();
     await Future<void>.delayed(const Duration(milliseconds: 10));
 
@@ -421,8 +422,7 @@ void main() {
     expect(allowlisted.values.join(' '), isNot(contains('PRIVATE-KEY-BYTES')));
 
     // Paired device selection and preferences remain untouched (transient result).
-    expect(SharedPreferencesUtil().btDevice.id, limitless.id);
-    expect(SharedPreferencesUtil().btDevice.firmwareRevision, isNull);
+    expect(SharedPreferencesUtil().btDevice.toJson(), preferencesBeforeQuery);
     expect(
       transport.streamListenCounts[limitlessRxCharUuid],
       1,
@@ -524,7 +524,8 @@ void main() {
 
     // Emit live audio and a double-press button event while the metadata query is waiting.
     final expectedFrame = _opusFrame(0xb8, 1, 40);
-    final audioPayload = _bytesField(1, expectedFrame);
+    // Live Opus frames use field 4 (0x22); field 1 is not an audio frame.
+    final audioPayload = _bytesField(4, expectedFrame);
     transport.emitRx(_bleWrapper(20, 0, 1, audioPayload));
 
     final doublePressPayload = _bytesField(8, _intField(1, 3));
@@ -533,7 +534,9 @@ void main() {
     final timedOutResult = await timedOutFuture;
     expect(timedOutResult.status, LimitlessMetadataQueryStatus.timeout);
     expect(receivedAudio, [expectedFrame]);
-    expect(receivedButtons, [[2, 0, 0, 0]]);
+    expect(receivedButtons, [
+      [2, 0, 0, 0]
+    ]);
 
     // Late notification for the retired query arrives after timeout; must not emit audio or break next query.
     // Note: manufacturer starts with 'p' (0x70) and is 16 chars long to verify DeviceInfo is never
