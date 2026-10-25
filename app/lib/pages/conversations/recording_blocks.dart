@@ -21,8 +21,34 @@ class RecordingBlock {
   int get startSeconds => oldest.timerStart;
 
   int get seconds {
-    final end = wals.map((w) => w.timerStart + w.seconds).reduce((a, b) => a > b ? a : b);
-    return end - startSeconds;
+    final intervals = <(int, int)>[];
+    for (final w in wals) {
+      if (w.seconds > 0) {
+        intervals.add((w.timerStart, w.timerStart + w.seconds));
+      }
+    }
+    if (intervals.isEmpty) return 0;
+    intervals.sort((a, b) {
+      final c = a.$1.compareTo(b.$1);
+      return c != 0 ? c : a.$2.compareTo(b.$2);
+    });
+    var total = 0;
+    var curStart = intervals.first.$1;
+    var curEnd = intervals.first.$2;
+    for (var i = 1; i < intervals.length; i++) {
+      final next = intervals[i];
+      if (next.$1 <= curEnd) {
+        if (next.$2 > curEnd) {
+          curEnd = next.$2;
+        }
+      } else {
+        total += curEnd - curStart;
+        curStart = next.$1;
+        curEnd = next.$2;
+      }
+    }
+    total += curEnd - curStart;
+    return total;
   }
 
   /// The piece whose state the row shows: the most serious one, so a block is

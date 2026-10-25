@@ -107,4 +107,36 @@ void main() {
     expect(block.state, WalSyncDisplayState.failed);
     expect(block.representative.timerStart, _t0 + 150);
   });
+
+  test('counts union of audio intervals when recording has gaps (#23561)', () {
+    final wals = _newestFirst([
+      _wal(0, 5),
+      _wal(60, 5),
+      _wal(120, 5),
+    ]);
+    final block = groupRecordingBlocks(wals).single;
+    expect(block.wals, hasLength(3));
+    expect(block.seconds, 15);
+  });
+
+  test('counts overlapping device and phone copies once in union (#23561)', () {
+    final wals = _newestFirst([
+      _wal(0, 75),
+      _wal(0, 75, storage: WalStorage.sdcard),
+      _wal(100, 50),
+    ]);
+    final blocks = groupRecordingBlocks(wals, joinDeviceCopies: true);
+    final block = blocks.single;
+    expect(block.seconds, 125);
+  });
+
+  test('ignores empty or negative lengths in audio duration (#23561)', () {
+    final wals = _newestFirst([
+      _wal(0, 10),
+      _wal(20, 0),
+      _wal(30, -5),
+    ]);
+    final block = groupRecordingBlocks(wals).single;
+    expect(block.seconds, 10);
+  });
 }
