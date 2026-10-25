@@ -1054,6 +1054,7 @@ def dismiss_person(uid: str, person_id: str) -> bool:
 
 
 def delete_person(uid: str, person_id: str):
+    auto_enroll_db.revoke_person(uid, person_id, firestore_client=db)
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_ref.delete()
 
@@ -1142,6 +1143,8 @@ def _replace_speech_profile_transaction(
     ):
         return None
     person = snapshot.to_dict()
+    if person.get('speaker_auto_enroll_revoked'):
+        return None
     if person.get('updated_at') != expected_updated_at:
         return None  # Deleted, corrected or replaced while audio work was in flight.
     old_samples = person.get('speech_samples', [])

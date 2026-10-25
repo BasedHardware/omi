@@ -20,6 +20,9 @@ from utils import encryption
 from utils.speaker_learning_policy import authorized_teaching_segments, segment_group, winning_receipt_decision
 
 POOL_FIELD = 'speaker_auto_enroll_pool'
+AUTHORITY_FIELD = 'speaker_auto_enroll_authority'
+REVOKED_FIELD = 'speaker_auto_enroll_revoked'
+MAX_PEOPLE = 400
 MODEL = 'wespeaker-voxceleb-resnet34-LM:v2'
 DIM = 256
 MAX_CONTRIBUTIONS = 5
@@ -76,6 +79,57 @@ def unit(value: Any) -> Any:
         return v / np.linalg.norm(v)
     except (ValueError, TypeError):
         return None
+
+
+def pool_token(blob: Any) -> Any:
+    return hashlib.sha256(blob.encode()).hexdigest() if isinstance(blob, str) and 0 < len(blob) <= 128 * 1024 else None
+
+
+def authority_after(owner: Mapping, pools: Mapping) -> dict:
+    authority = owner.get(AUTHORITY_FIELD) or {}
+    if not isinstance(authority, dict):
+        raise ValueError('Invalid speaker enrollment authority')
+    authority = dict(authority)
+    for pid, blob in pools.items():
+        token = pool_token(blob)
+        if token is None:
+            authority.pop(pid, None)
+        else:
+            authority[pid] = token
+    if len(authority) > MAX_PEOPLE:
+        raise ValueError('Speaker enrollment authority exceeds person bound')
+    return {AUTHORITY_FIELD: authority}
+
+
+def cache_authority(uid: str, person: Mapping, context: Mapping) -> dict:
+    entries = active(
+        open_pool(uid, person.get('id') or '', person.get(POOL_FIELD)), datetime.now(timezone.utc).timestamp()
+    )
+    return {
+        'enrollment_privacy_version': context.get('speaker_auto_enroll_privacy_version', 0),
+        'enrollment_token': pool_token(person.get(POOL_FIELD)),
+        'enrollment_expires_at': min((e['at'] + MAX_AGE_SECONDS for e in entries), default=0),
+    }
+
+
+def cached_authorized(person_id: str, cached: Mapping, context: Mapping, *, now: Any = None) -> bool:
+    authority = context.get(AUTHORITY_FIELD)
+    token = cached.get('enrollment_token')
+    expires = cached.get('enrollment_expires_at')
+    now = datetime.now(timezone.utc).timestamp() if now is None else now
+    return (
+        enabled()
+        and retained(context)
+        and isinstance(authority, Mapping)
+        and isinstance(token, str)
+        and len(token) == 64
+        and authority.get(person_id) == token
+        and isinstance(expires, (int, float))
+        and math.isfinite(expires)
+        and now < expires
+        and cached.get('enrollment_privacy_version') == context.get('speaker_auto_enroll_privacy_version', 0)
+        and owner_safe(cached.get('embedding'), context.get('speaker_embedding'))
+    )
 
 
 def binding(segment: Mapping[str, Any]) -> str:
@@ -295,14 +349,14 @@ def retract(uid: str, pid: str, blob: Any, conversations: Any, segments: Any = N
     if entries is None:
         # Never let a temporary key/codec failure preserve opaque source data
         # that would reappear after a successful deletion when decoding recovers.
-        return {POOL_FIELD: seal(uid, pid, [])} if blob else {}
+        return {POOL_FIELD: None} if blob else {}
     kept = [
         e
         for e in entries
         if e.get('conversation_id') not in conversations
         or (segments is not None and not set(segments).intersection(e.get('segment_ids') or []))
     ]
-    return {POOL_FIELD: seal(uid, pid, kept)} if kept != entries else {}
+    return {POOL_FIELD: seal(uid, pid, kept) if kept else None} if kept != entries else {}
 
 
 def legacy_voiceprint(person: Mapping) -> Any:
@@ -313,7 +367,17 @@ def legacy_voiceprint(person: Mapping) -> Any:
 
 
 def usable(uid: str, person: Mapping, allowed: Any) -> Any:
-    if not isinstance(allowed, Mapping) or not retained(allowed) or not enabled() or person.get('is_dismissed'):
+    if (
+        not isinstance(allowed, Mapping)
+        or not retained(allowed)
+        or not enabled()
+        or person.get('is_dismissed')
+        or person.get(REVOKED_FIELD)
+    ):
+        return None
+    authority = allowed.get(AUTHORITY_FIELD)
+    token = pool_token(person.get(POOL_FIELD))
+    if token is None or not isinstance(authority, Mapping) or authority.get(person.get('id')) != token:
         return None
     enrolled = vector(
         open_pool(uid, person.get('id') or '', person.get(POOL_FIELD)),

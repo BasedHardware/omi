@@ -61,6 +61,7 @@ from routers.listen.speakers import SpeakerMatcher
 from routers.listen.transcripts import TranscriptProcessor
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.audio import AudioRingBuffer
+from utils.speakers import auto_enroll
 from utils.product_telemetry import set_product_telemetry_client_for_tests
 from utils.stt.socket import STTSocket
 from utils.stt.streaming import STTService
@@ -849,17 +850,28 @@ async def test_diarization_completed_emitted_for_both_persistence_modes(monkeypa
 
 @pytest.mark.anyio
 @pytest.mark.parametrize('v2', [False, True])
-async def test_live_optout_revokes_a_cached_derived_mapping_before_the_next_batch(monkeypatch, telemetry, v2):
+@pytest.mark.parametrize('revocation', ['optout', 'source'])
+async def test_live_revocation_removes_a_cached_derived_mapping_before_the_next_batch(
+    monkeypatch, telemetry, v2, revocation
+):
     stack = FailoverStack(monkeypatch, v2=v2)
     original_call = stack.host.persistence.call
+    owner = [1.0, *([0.0] * 255)]
+    voice = [0.0, 1.0, *([0.0] * 254)]
+    token = 'a' * 64
+    context = {
+        'private_cloud_sync_enabled': True,
+        'save_other_voice_profiles': True,
+        speaker_auto_enroll.PRIVACY_VERSION: 0,
+        'speaker_embedding': owner,
+        auto_enroll.AUTHORITY_FIELD: {'derived-person': token},
+    }
 
     async def current_authority(fn, *args, **kwargs):
         if fn is speaker_auto_enroll.context:
-            return {
-                'private_cloud_sync_enabled': True,
-                'save_other_voice_profiles': False,
-                speaker_auto_enroll.PRIVACY_VERSION: 1,
-            }
+            return dict(context)
+        if fn is user_db.get_user_speaker_embedding:
+            return owner
         return await original_call(fn, *args, **kwargs)
 
     stack.host.persistence.call = current_authority
@@ -869,13 +881,21 @@ async def test_live_optout_revokes_a_cached_derived_mapping_before_the_next_batc
         await stack.host.speakers.refresh_for_conversation(CONV)
         matcher = stack.host.speakers
         matcher.person_embeddings['derived-person'] = {
-            'embedding': _unit_vector(2),
+            'embedding': voice,
             'name': 'Synthetic',
             'auto_enrolled': True,
             'enrollment_privacy_version': 0,
+            'enrollment_token': token,
+            'enrollment_expires_at': time.time() + 3600,
         }
+        assert auto_enroll.cached_authorized('derived-person', matcher.person_embeddings['derived-person'], context)
         matcher.speaker_to_person[0] = ('derived-person', 'Synthetic')
         matcher._mapping_origin[0] = 'automatic'
+        if revocation == 'optout':
+            context['save_other_voice_profiles'] = False
+            context[speaker_auto_enroll.PRIVACY_VERSION] = 1
+        else:
+            context[auto_enroll.AUTHORITY_FIELD] = {}
         assert await stack.receiver.initialize_stt()
         websocket = await stack.run_receive(_frames_for(_tone(OTHER_FREQUENCY_HZ, 6.0)))
         stack.provider(0)['callback']([_provider_segment('after-optout', 0, 6, 'Later speech after opting out.')])

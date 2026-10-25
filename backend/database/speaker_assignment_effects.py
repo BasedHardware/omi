@@ -105,6 +105,7 @@ def persist_assignment_effects(
         source_conversation_ids=donor_ids,
     )
     owner_update = retract_owner_contributions(user_doc, donor_ids, resolved, now)
+    pool_changes = {}
     # Retraction is mandatory even when new enrollment/use is killed off.
     for pid, doc in docs.items():
         change = auto_enroll.retract(
@@ -116,6 +117,9 @@ def persist_assignment_effects(
         )
         if change:
             updates.setdefault(pid, {}).update(change)
+            pool_changes[pid] = change[auto_enroll.POOL_FIELD]
+    if pool_changes:
+        owner_update.update(auto_enroll.authority_after(user_doc, pool_changes))
     if bookkeeping.enabled:
         bookkeeping.involved = True
         projected_docs = {pid: {**(doc or {}), **updates.get(pid, {})} for pid, doc in docs.items()}

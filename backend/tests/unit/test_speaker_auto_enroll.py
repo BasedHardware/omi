@@ -6,6 +6,9 @@ import asyncio
 import io
 import time
 import wave
+from copy import deepcopy
+from dataclasses import replace
+from unittest.mock import MagicMock
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -15,11 +18,13 @@ import pytest
 from database import speaker_auto_enroll as db
 from database import conversations as conversations_db
 from database import users as users_db
+from database import person_aliases
 from database.speaker_learning_fields import project_person_learning
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from routers.listen.speakers import SpeakerMatcher
 from utils.conversations import speaker_resolution
+from utils.sync import speaker_identity
 from utils.speakers import auto_enroll as p
 from utils.stt.voiceprints import usable_person_voiceprint
 from utils import speaker_auto_enroll as workflow
@@ -30,6 +35,10 @@ NOW = datetime.now(timezone.utc)
 OWNER = [1.0, *([0.0] * 255)]
 VOICE = [0.0, 1.0, *([0.0] * 254)]
 CONTEXT = dict(private_cloud_sync_enabled=True, save_other_voice_profiles=True, speaker_embedding=OWNER)
+
+
+def authorized_context(blob):
+    return {**CONTEXT, p.AUTHORITY_FIELD: {PID: p.pool_token(blob)}}
 
 
 def source():
@@ -101,7 +110,7 @@ def test_owner_exclusion_checks_candidate_and_decayed_pool_averages():
     entries = [contribution('first', NOW.timestamp(), first), contribution('second', NOW.timestamp(), second)]
     assert p.vector(entries, NOW.timestamp(), OWNER) is None
     person = dict(id=PID, **{p.POOL_FIELD: p.seal(UID, PID, entries)})
-    assert p.usable(UID, person, CONTEXT) is None
+    assert p.usable(UID, person, authorized_context(person[p.POOL_FIELD])) is None
 
 
 def test_new_conversation_cannot_publish_an_owner_like_roster_average(store):
@@ -132,8 +141,15 @@ def test_live_cached_derived_profiles_recheck_privacy_and_retract_automatic_maps
         emit_speaker_suggestion=lambda *args, **kwargs: emitted.append((args, kwargs)),
     )
     matcher = SpeakerMatcher(host)
+    blob = p.seal(UID, PID, [contribution(at=NOW.timestamp())])
+    store.rows[('users', UID)][p.AUTHORITY_FIELD] = {PID: p.pool_token(blob)}
     matcher.person_embeddings = {
-        PID: dict(embedding=VOICE, name='Synthetic', auto_enrolled=True, enrollment_privacy_version=0),
+        PID: dict(
+            embedding=VOICE,
+            name='Synthetic',
+            auto_enrolled=True,
+            **p.cache_authority(UID, dict(id=PID, **{p.POOL_FIELD: blob}), CONTEXT),
+        ),
         'legacy': dict(embedding=VOICE, name='Independent audio'),
     }
     matcher.speaker_to_person = {7: (PID, 'Synthetic'), 8: (PID, 'Synthetic')}
@@ -306,10 +322,10 @@ def test_encryption_is_owner_and_person_bound_and_kill_switch_stops_use(monkeypa
     assert p.open_pool('different-owner', PID, blob) == []
     assert p.open_pool(UID, 'different-person', blob) == []
     person = dict(id=PID, **{p.POOL_FIELD: blob})
-    assert usable_person_voiceprint(person, uid=UID, auto_enroll_allowed=CONTEXT) == VOICE
+    assert usable_person_voiceprint(person, uid=UID, auto_enroll_allowed=authorized_context(blob)) == VOICE
     assert usable_person_voiceprint(person, uid=UID) is None
     monkeypatch.setenv('SPEAKER_AUTO_ENROLL_ENABLED', 'off')
-    assert usable_person_voiceprint(person, uid=UID, auto_enroll_allowed=CONTEXT) is None
+    assert usable_person_voiceprint(person, uid=UID, auto_enroll_allowed=authorized_context(blob)) is None
     assert p.retract(UID, PID, blob, [CID], ['s0'])
 
 
@@ -323,8 +339,8 @@ def test_independent_manual_audio_replacement_cannot_be_shadowed_by_old_pool():
         speech_samples_version=3,
         **{p.POOL_FIELD: blob},
     )
-    assert p.usable(UID, person, CONTEXT) is None
-    assert usable_person_voiceprint(person, uid=UID, auto_enroll_allowed=CONTEXT) == replacement
+    assert p.usable(UID, person, authorized_context(blob)) is None
+    assert usable_person_voiceprint(person, uid=UID, auto_enroll_allowed=authorized_context(blob)) == replacement
 
 
 def test_retraction_clears_opaque_pool_so_key_recovery_cannot_resurrect_it():
@@ -365,6 +381,173 @@ def store():
 
 def publish(store):
     return db.publish(UID, PID, CID, ['s0', 's1'], evidence(), NOW, 1, firestore_client=store)
+
+
+@pytest.mark.parametrize(
+    'kind', ['correction', 'conversation_delete', 'person_delete', 'dismiss', 'partial_retraction']
+)
+@pytest.mark.parametrize('killed', [False, True])
+def test_revocation_invalidates_cached_live_sync_and_stale_loads_atomically(store, monkeypatch, kind, killed):
+    assert publish(store)
+    path = ('users', UID, 'people', PID)
+    if kind == 'partial_retraction':
+        store.rows[('users', UID, 'conversations', 'other-source')] = source()
+        assert db.publish(
+            UID,
+            PID,
+            'other-source',
+            ['s0', 's1'],
+            evidence(),
+            store.rows[path]['updated_at'],
+            1,
+            firestore_client=store,
+        )
+    person = deepcopy(store.rows[path])
+    before = db.context(UID, firestore_client=store)
+    cached = dict(
+        embedding=p.usable(UID, person, before),
+        name='Synthetic',
+        auto_enrolled=True,
+        **p.cache_authority(UID, person, before),
+    )
+    assert p.cached_authorized(PID, cached, before)
+    monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
+    extractor = MagicMock(return_value=np.asarray(VOICE))
+    deps = replace(
+        speaker_identity._DEFAULT_DEPS,
+        speaker_embedding_configured=lambda: True,
+        collect_speaker_audio=lambda *args: SimpleNamespace(clips=[(b'fake-audio', 10)], available_seconds=10),
+        extract_embedding_from_bytes=extractor,
+        compare_embeddings=lambda *args: 0.0,
+        detect_speaker_from_text=lambda *args, **kwargs: None,
+    )
+    cache = speaker_identity.PersonEmbeddingsCache(True)
+    cache[PID] = cached
+    first = TranscriptSegment(id='before', start=0, end=10, text='Synthetic speech.', speaker_id=0, is_user=False)
+    speaker_identity.identify_speakers_for_segments([first], b'audio', cache, UID, dependencies=deps)
+    assert extractor.call_count == 1 and first.person_id == PID
+    if killed:
+        monkeypatch.setenv('SPEAKER_AUTO_ENROLL_ENABLED', 'false')
+    if kind == 'correction':
+        store.rows[('users', UID, 'people', 'replacement')] = {'id': 'replacement', 'name': 'Replacement'}
+        conversations_db.assign_conversation_speaker(
+            UID, CID, person_id='replacement', segment_ids=['s0'], firestore_client=store
+        )
+    elif kind in {'conversation_delete', 'partial_retraction'}:
+        db.retract_conversation(UID, CID, firestore_client=store)
+    elif kind == 'person_delete':
+        db.revoke_person(UID, PID, firestore_client=store)
+        assert not db.publish(
+            UID, PID, CID, ['s0', 's1'], evidence(), store.rows[path]['updated_at'], 1, firestore_client=store
+        )
+    else:
+        person_aliases.dismiss_person_transaction.to_wrap(
+            store.transaction(), store.collection('users').document(UID).collection('people').document(PID)
+        )
+    monkeypatch.setenv('SPEAKER_AUTO_ENROLL_ENABLED', 'true')
+    after = db.context(UID, firestore_client=store)
+    assert after[db.PRIVACY_VERSION] == before[db.PRIVACY_VERSION]
+    assert not p.cached_authorized(PID, cached, after)
+    # A people snapshot from before revocation cannot be paired with newer
+    # authority to bless its stale vector at load time.
+    assert p.usable(UID, person, after) is None
+
+    async def call(fn, *args):
+        return fn(*args, firestore_client=store)
+
+    host = SimpleNamespace(
+        request=SimpleNamespace(uid=UID),
+        persistence=SimpleNamespace(call=call),
+        state=SimpleNamespace(speaker_map_dirty=False),
+        emit_speaker_suggestion=lambda *args, **kwargs: None,
+    )
+    matcher = SpeakerMatcher(host)
+    matcher.person_embeddings[PID] = cached
+    matcher.speaker_to_person = {7: (PID, 'Synthetic'), 8: (PID, 'Synthetic')}
+    matcher._mapping_origin = {7: 'automatic', 8: 'manual'}
+    asyncio.run(matcher.refresh_enrollment_authority())
+    assert PID not in matcher.person_embeddings and 7 not in matcher.speaker_to_person
+    assert 8 in matcher.speaker_to_person
+    later = TranscriptSegment(id='after', start=0, end=10, text='Synthetic speech.', speaker_id=0, is_user=False)
+    speaker_identity.identify_speakers_for_segments([later], b'audio', cache, UID, dependencies=deps)
+    assert extractor.call_count == 1 and later.person_id is None
+    if kind == 'partial_retraction':
+        fresh = store.rows[path]
+        assert p.usable(UID, fresh, after) == VOICE
+        assert p.cached_authorized(PID, {**cached, **p.cache_authority(UID, fresh, after)}, after)
+
+
+def test_sync_rechecks_revocation_after_embedding_io(store, monkeypatch):
+    assert publish(store)
+    person = store.rows[('users', UID, 'people', PID)]
+    context = db.context(UID, firestore_client=store)
+    cache = speaker_identity.PersonEmbeddingsCache(True)
+    cache[PID] = dict(
+        embedding=p.usable(UID, person, context),
+        name='Synthetic',
+        auto_enrolled=True,
+        **p.cache_authority(UID, person, context),
+    )
+    monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
+
+    def extract(*args):
+        db.retract_conversation(UID, CID, firestore_client=store)
+        return np.asarray(VOICE)
+
+    deps = replace(
+        speaker_identity._DEFAULT_DEPS,
+        speaker_embedding_configured=lambda: True,
+        collect_speaker_audio=lambda *args: SimpleNamespace(clips=[(b'fake-audio', 10)], available_seconds=10),
+        extract_embedding_from_bytes=extract,
+        compare_embeddings=lambda *args: 0.0,
+        detect_speaker_from_text=lambda *args, **kwargs: None,
+    )
+    segment = TranscriptSegment(id='race', start=0, end=10, text='Synthetic speech.', speaker_id=0, is_user=False)
+    speaker_identity.identify_speakers_for_segments([segment], b'audio', cache, UID, dependencies=deps)
+    assert segment.person_id is None
+
+
+def test_live_final_authority_rechecks_after_continuity_io(store):
+    assert publish(store)
+    person = store.rows[('users', UID, 'people', PID)]
+    context = db.context(UID, firestore_client=store)
+
+    async def call(fn, *args):
+        return fn(*args, firestore_client=store)
+
+    async def authorize(*args, **kwargs):
+        db.retract_conversation(UID, CID, firestore_client=store)
+        return (False, set()), None
+
+    host = SimpleNamespace(
+        request=SimpleNamespace(uid=UID),
+        persistence=SimpleNamespace(call=call),
+        state=SimpleNamespace(speaker_map_dirty=False),
+        emit_speaker_suggestion=lambda *args, **kwargs: None,
+    )
+    matcher = SpeakerMatcher(host)
+    matcher.person_embeddings[PID] = dict(
+        embedding=p.usable(UID, person, context),
+        auto_enrolled=True,
+        **p.cache_authority(UID, person, context),
+    )
+    matcher.continuity.authorize_roster = authorize
+    asyncio.run(matcher._final_authority({}, include_short=True))
+    assert PID not in matcher.person_embeddings
+
+
+def test_cached_authority_expires_when_the_first_contribution_expires():
+    now = datetime.now(timezone.utc).timestamp()
+    blob = p.seal(UID, PID, [contribution('old', now - p.MAX_AGE_SECONDS + 60), contribution('new', now)])
+    person = dict(id=PID, **{p.POOL_FIELD: blob})
+    context = authorized_context(blob)
+    cached = dict(embedding=VOICE, **p.cache_authority(UID, person, context))
+    assert cached['enrollment_expires_at'] == pytest.approx(now + 60)
+    assert p.cached_authorized(PID, cached, context, now=now)
+    assert not p.cached_authorized(PID, cached, context, now=now + 60)
+    # A mutation to a different person's pool does not revoke this one.
+    unrelated = {**context, **p.authority_after(context, {'other-person': 'opaque-new-pool'})}
+    assert p.cached_authorized(PID, cached, unrelated, now=now)
 
 
 def test_publication_and_retraction_are_strict_transactions(store):

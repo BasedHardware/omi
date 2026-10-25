@@ -123,7 +123,7 @@ def build_person_embeddings_cache(
                 **(
                     {
                         'auto_enrolled': True,
-                        'enrollment_privacy_version': enrollment_allowed.get(auto_enroll_db.PRIVACY_VERSION, 0),
+                        **auto_enroll.cache_authority(uid, person, enrollment_allowed),
                     }
                     if auto_enroll.usable(uid, person, enrollment_allowed) is not None
                     else {}
@@ -161,12 +161,7 @@ def identify_speakers_for_segments(
         person_embeddings_cache = {
             k: v
             for k, v in person_embeddings_cache.items()
-            if not v.get('auto_enrolled')
-            or (
-                auto_enroll.retained(enrollment_context)
-                and v.get('enrollment_privacy_version') == enrollment_context.get(auto_enroll_db.PRIVACY_VERSION, 0)
-                and auto_enroll.owner_safe(v.get('embedding'), enrollment_context.get('speaker_embedding'))
-            )
+            if not v.get('auto_enrolled') or auto_enroll.cached_authorized(k, v, enrollment_context)
         }
     if named_allowed is None:
         named_allowed = named_speaker_prompts_allowed(uid)
@@ -269,6 +264,19 @@ def identify_speakers_for_segments(
                 failed_clips,
             )
 
+        # Extraction may perform remote IO. Recheck immediately before matching
+        # publication so a correction/delete during that work revokes its cache.
+        if any(row.get('auto_enrolled') for row in person_embeddings_cache.values()):
+            final_context = auto_enroll_db.context(uid)
+            person_embeddings_cache = {
+                pid: row
+                for pid, row in person_embeddings_cache.items()
+                if not row.get('auto_enrolled') or auto_enroll.cached_authorized(pid, row, final_context)
+            }
+            for voice, distances in voice_distances.items():
+                remaining = {pid: distance for pid, distance in distances.items() if pid in person_embeddings_cache}
+                voice_distances[voice] = remaining
+                voice_decisions[voice] = select_speaker_match(remaining)
         decisions = arbitrate_owner_matches(voice_distances, voice_decisions, owner_reserved=owner_reserved)
         prior = pinned_speaker_prior_enabled()
         pinned = {pid for pid, data in person_embeddings_cache.items() if data.get('pinned')}

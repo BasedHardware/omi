@@ -49,9 +49,16 @@ so a best-effort donor cleanup failure cannot leave a voice contribution behind.
 Person/account deletion removes the owning documents. Privacy opt-out removes indexed pools
 and updates person versions in the same transaction as the setting change.
 Live transcript batches and final match publication re-read derived-profile
-authority. Opt-out, privacy-generation change, owner change or an unavailable
-authority removes cached derived vectors and their automatic mappings. Sync
-rechecks cached derived vectors against the same current context before use.
+authority. The owner stores a bounded per-person SHA-256 token of the encrypted
+pool. Publication, source retraction, dismissal and person deletion update that
+token atomically with the pool or deletion fence. A stale people snapshot cannot
+authorize an older vector against a newer token. Cached vectors also expire at
+their earliest contribution's 90-day boundary. Opt-out, privacy-generation change,
+owner change, token mismatch or unavailable authority removes cached derived
+vectors and their automatic mappings. Sync checks before extraction and again
+after embedding IO, immediately before matching publication. Live final authority
+checks follow continuity IO. Retraction and deletion fences remain active when
+new enrollment is killed off.
 
 All new reads are direct document gets. Bounded content-free person-ID indexes
 on the owner (400 maximum) and source conversation (32 maximum) make privacy

@@ -586,7 +586,7 @@ class SpeakerMatcher:
                         **(
                             {
                                 'auto_enrolled': True,
-                                'enrollment_privacy_version': enrollment_allowed.get(auto_enroll_db.PRIVACY_VERSION, 0),
+                                **auto_enroll.cache_authority(self.host.request.uid, person, enrollment_allowed),
                             }
                             if enrolled is not None
                             else {}
@@ -921,13 +921,7 @@ class SpeakerMatcher:
         except Exception as error:
             logger.warning('Speaker ID enrollment authority unavailable type=%s', type(error).__name__)
             context = {}
-        invalid = {
-            pid
-            for pid, row in enrolled.items()
-            if not auto_enroll.retained(context)
-            or row.get('enrollment_privacy_version') != context.get(auto_enroll_db.PRIVACY_VERSION, 0)
-            or not auto_enroll.owner_safe(row.get('embedding'), context.get('speaker_embedding'))
-        }
+        invalid = {pid for pid, row in enrolled.items() if not auto_enroll.cached_authorized(pid, row, context)}
         for pid in invalid:
             self.person_embeddings.pop(pid, None)
         for voice, (pid, _) in list(self.speaker_to_person.items()):
@@ -944,7 +938,6 @@ class SpeakerMatcher:
         receipt_unavailable: bool = False,
         rollover_donor: Optional[str] = None,
     ) -> FinalSpeakerAuthority:
-        await self.refresh_enrollment_authority()
         if (
             rollover_donor
             or include_short
@@ -956,6 +949,7 @@ class SpeakerMatcher:
             authority, snapshots = await self.continuity.authorize_roster(
                 self._profile_conversation_id or '', rollover_donor=rollover_donor
             )
+            await self.refresh_enrollment_authority()
             if snapshots is not None:
                 current = snapshots.get(self._profile_conversation_id or '')
                 unavailable = current is None
@@ -969,6 +963,7 @@ class SpeakerMatcher:
                     unavailable=unavailable,
                 )
             return FinalSpeakerAuthority(authority, receipt, unavailable=receipt_unavailable)
+        await self.refresh_enrollment_authority()
         return FinalSpeakerAuthority((False, set()), receipt, unavailable=receipt_unavailable)
 
     def _allow_authority_publication(

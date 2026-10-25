@@ -223,6 +223,8 @@ def conversations_db():
         "database.sync_live_overlap": sync_live_overlap,
         "utils.sync.live_overlap": live_overlap,
         "database.speaker_assignment_effects": AutoMockModule("database.speaker_assignment_effects"),
+        # Archive queries never invoke the separate speaker publication/revocation IO seam.
+        "database.speaker_auto_enroll": ModuleType("database.speaker_auto_enroll"),
         "database.speaker_learning_jobs": AutoMockModule("database.speaker_learning_jobs"),
         "database.users": AutoMockModule("database.users"),
         "models": models,

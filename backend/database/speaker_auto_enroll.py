@@ -14,7 +14,7 @@ from utils.stt.voiceprints import usable_person_voiceprint
 
 OWNER_INDEX = 'speaker_auto_enroll_people'
 PRIVACY_VERSION = 'speaker_auto_enroll_privacy_version'
-MAX_PEOPLE = 400
+MAX_PEOPLE = policy.MAX_PEOPLE
 MAX_SOURCE_PEOPLE = 32
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ def audio_guard(uid: str, *, firestore_client: Any = None) -> dict:
         'save_other_voice_profiles': user.get('save_other_voice_profiles', True) if user else False,
         'speaker_embedding': user.get('speaker_embedding'),
         PRIVACY_VERSION: user.get(PRIVACY_VERSION, 0),
+        policy.AUTHORITY_FIELD: user.get(policy.AUTHORITY_FIELD) or {},
     }
 
 
@@ -91,7 +92,13 @@ def publish(
             current = person.get(transaction=transaction).to_dict() or {}
             raw_source = source.get(transaction=transaction).to_dict() or {}
             tombstone = user.collection('deleted_conversations').document(conversation_id).get(transaction=transaction)
-            if tombstone.exists or not policy.retained(owner) or not current or current.get('is_dismissed'):
+            if (
+                tombstone.exists
+                or not policy.retained(owner)
+                or not current
+                or current.get('is_dismissed')
+                or current.get(policy.REVOKED_FIELD)
+            ):
                 return False
             if owner.get(PRIVACY_VERSION, 0) != expected_privacy_version:
                 return False
@@ -136,12 +143,14 @@ def publish(
             )
             if entries is None or policy.vector(entries, now.timestamp(), owner.get('speaker_embedding')) is None:
                 return False
+            blob = policy.seal(uid, person_id, entries)
+            authority_update = policy.authority_after(owner, {person_id: blob})
             # All reads precede writes. A retry sees corrections, consent and deletion
             # atomically; never resurrect a profile from a stale audio snapshot.
             transaction.update(
                 person,
                 {
-                    policy.POOL_FIELD: policy.seal(uid, person_id, entries),
+                    policy.POOL_FIELD: blob,
                     'updated_at': now,
                     'voice_learning_state': 'learned',
                     'voice_learning_outcome': 'stored',
@@ -150,7 +159,7 @@ def publish(
                 },
             )
             transaction.update(source, {OWNER_INDEX: sorted(set([*source_index, person_id]))})
-            transaction.update(user, {OWNER_INDEX: sorted(set([*index, person_id]))})
+            transaction.update(user, {OWNER_INDEX: sorted(set([*index, person_id])), **authority_update})
             return True
 
     return _client.run_transactional(client, commit)
@@ -181,7 +190,7 @@ def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None) -> 
         patch = {
             **updates,
             PRIVACY_VERSION: version + 1,
-            **({OWNER_INDEX: []} if not policy.retained(following) else {}),
+            **({OWNER_INDEX: [], policy.AUTHORITY_FIELD: {}} if not policy.retained(following) else {}),
         }
         if owner:
             transaction.update(user, patch)
@@ -202,12 +211,13 @@ def retract_conversation(uid: str, conversation_id: str, *, firestore_client: An
         row = source.get(transaction=transaction).to_dict()
         if not row:
             return
+        owner_snapshot = user.get(transaction=transaction)
+        owner = owner_snapshot.to_dict() or {}
         source_ids = {conversation_id, *(row.get('sync_merged_from') or [])}
         people = set(row.get(OWNER_INDEX) or [])
         if len(source_ids) > 1:
             # Donor cleanup is best-effort upstream. Revoke every immutable
             # source even if a donor row/index was already removed by an old writer.
-            owner = user.get(transaction=transaction).to_dict() or {}
             people.update(owner.get(OWNER_INDEX) or [])
         changes = []
         for pid in sorted(people):
@@ -218,7 +228,41 @@ def retract_conversation(uid: str, conversation_id: str, *, firestore_client: An
                 changes.append((ref, change))
         for ref, change in changes:
             transaction.update(ref, change)
+        if changes and owner_snapshot.exists:
+            transaction.update(
+                user, policy.authority_after(owner, {ref.id: change[policy.POOL_FIELD] for ref, change in changes})
+            )
         # Even a source without published contributions must fence in-flight work.
         transaction.update(source, {'deleted': True, OWNER_INDEX: []})
+
+    _client.run_transactional(client, commit)
+
+
+def revoke_person(uid: str, person_id: str, *, firestore_client: Any = None) -> None:
+    """Revoke cached authority and fence new publication before a person is hard-deleted."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user = client.collection('users').document(uid)
+    person = user.collection('people').document(person_id)
+
+    @firestore.transactional
+    def commit(transaction):
+        owner_snapshot = user.get(transaction=transaction)
+        owner = owner_snapshot.to_dict() or {}
+        snapshot = person.get(transaction=transaction)
+        authority_update = policy.authority_after(owner, {person_id: None})
+        if snapshot.exists:
+            transaction.update(
+                person,
+                {
+                    policy.POOL_FIELD: firestore.DELETE_FIELD,
+                    policy.REVOKED_FIELD: True,
+                    'updated_at': datetime.now(timezone.utc),
+                },
+            )
+        if owner_snapshot.exists:
+            transaction.update(
+                user,
+                {**authority_update, OWNER_INDEX: [pid for pid in owner.get(OWNER_INDEX) or [] if pid != person_id]},
+            )
 
     _client.run_transactional(client, commit)
