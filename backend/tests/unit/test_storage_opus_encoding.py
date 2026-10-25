@@ -279,6 +279,7 @@ class TestUploadOpusEncoding:
         assert path.endswith('.opus')
         assert attempts == [0, None], 'divergent bytes fall back to an unpinned overwrite'
 
+    @patch.object(storage_mod.audio_archive, 'admitted', lambda uid, phase: True)
     @patch.object(storage_mod, 'users_db')
     def test_identical_retry_backfills_span_metadata_on_legacy_object(self, mock_users_db):
         """An identical retry against a pre-admission object repairs its span metadata in place."""
