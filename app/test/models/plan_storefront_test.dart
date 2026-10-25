@@ -13,7 +13,7 @@ Map<String, dynamic> fixture([String name = 'plus_monthly_yearly_toggle']) =>
 void main() {
   test('schema version 2 parses deck fields and rejects every other version', () {
     final data = PlanStorefront.fromJson(fixture());
-    expect(data.catalogRevision, 10);
+    expect(data.catalogRevision, 11);
     expect(data.header, 'Choose your plan');
     expect(data.current!.line, r"You're on Plus · $19.99/mo · renews Nov 1");
     expect(data.current!.legacyNote, isNull);
