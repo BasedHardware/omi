@@ -122,11 +122,11 @@ protocol LivePreviewSession: AnyObject {
     func stop()
 }
 
-private let previewInputFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true)!
+private let previewInputFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true)
 
 private func int16Buffer(_ data: Data) -> AVAudioPCMBuffer? {
     let frames = AVAudioFrameCount(data.count / 2)
-    guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: previewInputFormat, frameCapacity: frames),
+    guard frames > 0, let format = previewInputFormat, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames),
           let channel = buffer.int16ChannelData?[0] else { return nil }
     buffer.frameLength = frames
     data.withUnsafeBytes { raw in
@@ -158,11 +158,15 @@ final class AnalyzerPreviewSession: LivePreviewSession {
     static func start(locale: Locale, onResult: @escaping (String, String, Bool) -> Void) async throws -> AnalyzerPreviewSession {
         let transcriber = SpeechTranscriber(locale: locale, transcriptionOptions: [],
                                             reportingOptions: [.volatileResults, .fastResults], attributeOptions: [])
+        guard let inputFormat = previewInputFormat else {
+            throw NSError(domain: "LivePreview", code: 1, userInfo: [NSLocalizedDescriptionKey: "No PCM16 input format"])
+        }
         let analyzer = SpeechAnalyzer(modules: [transcriber])
         let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber],
-                                                                   considering: previewInputFormat) ?? previewInputFormat
+                                                                   considering: inputFormat) ?? inputFormat
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingNewest(64))
-        let session = AnalyzerPreviewSession(analyzer: analyzer, format: format, continuation: continuation)
+        let session = AnalyzerPreviewSession(analyzer: analyzer, inputFormat: inputFormat, format: format,
+                                             continuation: continuation)
         session.results = Task { @MainActor [weak session] in
             var ids = LivePreviewSegmentIds(prefix: "a")
             do {
@@ -186,14 +190,17 @@ final class AnalyzerPreviewSession: LivePreviewSession {
     }
 
     private let analyzer: SpeechAnalyzer
+    private let inputFormat: AVAudioFormat
     private let format: AVAudioFormat
     private let continuation: AsyncStream<AnalyzerInput>.Continuation
     private var converter: AVAudioConverter?
     fileprivate var results: Task<Void, Never>?
     fileprivate var stopped = false
 
-    private init(analyzer: SpeechAnalyzer, format: AVAudioFormat, continuation: AsyncStream<AnalyzerInput>.Continuation) {
+    private init(analyzer: SpeechAnalyzer, inputFormat: AVAudioFormat, format: AVAudioFormat,
+                 continuation: AsyncStream<AnalyzerInput>.Continuation) {
         self.analyzer = analyzer
+        self.inputFormat = inputFormat
         self.format = format
         self.continuation = continuation
     }
@@ -205,10 +212,10 @@ final class AnalyzerPreviewSession: LivePreviewSession {
     }
 
     private func convert(_ input: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
-        if format == previewInputFormat { return input }
-        if converter == nil { converter = AVAudioConverter(from: previewInputFormat, to: format) }
+        if format == inputFormat { return input }
+        if converter == nil { converter = AVAudioConverter(from: inputFormat, to: format) }
         guard let converter else { return nil }
-        let ratio = format.sampleRate / previewInputFormat.sampleRate
+        let ratio = format.sampleRate / inputFormat.sampleRate
         let capacity = AVAudioFrameCount((Double(input.frameLength) * ratio).rounded(.up)) + 16
         guard let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else { return nil }
         var consumed = false
@@ -260,7 +267,7 @@ final class SFSpeechPreviewSession: LivePreviewSession {
 
     private let recognizer: SFSpeechRecognizer
     private let onResult: (String, String, Bool) -> Void
-    private let floatFormat = AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1)!
+    private let floatFormat = AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1)
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var tasks: [SFSpeechRecognitionTask] = []
     private var requestStartedAt = Date()
@@ -327,7 +334,8 @@ final class SFSpeechPreviewSession: LivePreviewSession {
 
     private func floatBuffer(_ data: Data) -> AVAudioPCMBuffer? {
         let frames = data.count / 2
-        guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: floatFormat, frameCapacity: AVAudioFrameCount(frames)),
+        guard frames > 0, let floatFormat,
+              let buffer = AVAudioPCMBuffer(pcmFormat: floatFormat, frameCapacity: AVAudioFrameCount(frames)),
               let channel = buffer.floatChannelData?[0] else { return nil }
         buffer.frameLength = AVAudioFrameCount(frames)
         data.withUnsafeBytes { raw in
