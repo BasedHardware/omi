@@ -140,17 +140,28 @@ _fallback_mod = _mod("utils.observability.fallback")
 _fallback_mod.record_fallback = MagicMock()
 
 
-def _ensure_metrics():
-    if "utils.metrics" in sys.modules:
-        return
+def _ensure_optional_deps():
     try:
-        import utils.metrics  # noqa: F401
+        import prometheus_client  # noqa: F401
     except ImportError:
-        _m = _mod("utils.metrics")
-        _m.OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL = MagicMock()
+        _prom = _mod("prometheus_client")
+        _prom.Counter = lambda *a, **kw: MagicMock()
+        _prom.Gauge = lambda *a, **kw: MagicMock()
+        _prom.Histogram = lambda *a, **kw: MagicMock()
+        _prom.Summary = lambda *a, **kw: MagicMock()
+        _prom.REGISTRY = MagicMock()
+        _prom.CONTENT_TYPE_LATEST = "text/plain"
+        _prom.disable_created_metrics = MagicMock()
+        _prom.generate_latest = MagicMock()
+        _prom.start_http_server = MagicMock()
+    try:
+        import fastapi  # noqa: F401
+    except ImportError:
+        _fa = _mod("fastapi")
+        _fa.Response = MagicMock
 
 
-_ensure_metrics()
+_ensure_optional_deps()
 
 # Stub utils.retrieval.chat_scope
 _chat_scope_mod = _mod("utils.retrieval.chat_scope")
