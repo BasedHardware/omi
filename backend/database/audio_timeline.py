@@ -18,10 +18,10 @@ from typing import Dict, List, Mapping, Optional, Tuple
 COVERAGE_TOLERANCE_SECONDS = 0.001
 
 
-def chunk_span(chunk: Mapping) -> Optional[Dict]:
+def chunk_span(chunk: object) -> Optional[Dict]:
     """Validated v2 span metadata ('start', 'samples', 'sample_rate') or None."""
-    span = chunk.get('span') if isinstance(chunk, dict) else None
-    if not isinstance(span, dict):
+    span = chunk.get('span') if isinstance(chunk, Mapping) else None
+    if not isinstance(span, Mapping):
         return None
     try:
         start = float(span['start'])
@@ -29,28 +29,42 @@ def chunk_span(chunk: Mapping) -> Optional[Dict]:
         rate = int(span['sample_rate'])
     except (KeyError, TypeError, ValueError):
         return None
-    if samples <= 0 or rate <= 0:
+    if samples <= 0 or rate <= 0 or not math.isfinite(start):
         return None
     return {'start': start, 'samples': samples, 'sample_rate': rate}
 
 
-def span_blob_metadata(span: Dict) -> Dict[str, str]:
-    """Blob metadata keys carrying one authoritative v2 span."""
+def span_blob_metadata(span: object) -> Dict[str, str]:
+    """Blob metadata keys carrying one authoritative v2 span.
+
+    Validating constructor: raises ValueError on non-Mapping or non-finite/non-positive
+    spans to prevent corrupted metadata from reaching cloud storage.
+    """
+    if not isinstance(span, Mapping):
+        raise ValueError("span must be a Mapping")
+    try:
+        start = float(span['start'])
+        samples = int(span['samples'])
+        rate = int(span['sample_rate'])
+    except (KeyError, TypeError, ValueError) as err:
+        raise ValueError(f"Invalid span fields: {err}") from err
+    if samples <= 0 or rate <= 0 or not math.isfinite(start):
+        raise ValueError(f"Span values must be finite and positive: start={start}, samples={samples}, rate={rate}")
     return {
-        'v2_start': repr(span['start']),
-        'v2_samples': str(span['samples']),
-        'v2_sample_rate': str(span['sample_rate']),
+        'v2_start': repr(start),
+        'v2_samples': str(samples),
+        'v2_sample_rate': str(rate),
     }
 
 
-def parse_span_blob_metadata(metadata: Optional[Dict]) -> Optional[Dict]:
+def parse_span_blob_metadata(metadata: object) -> Optional[Dict]:
     """Rehydrate a v2 span from blob metadata, or None when absent/malformed.
 
     Only a real mapping is a metadata document: a GCS blob carries ``None`` or
     a dict, and anything else (an ORM/test double answering attribute probes)
     is not span evidence and must fail closed to the legacy listing behavior.
     """
-    if not isinstance(metadata, dict):
+    if not isinstance(metadata, Mapping):
         return None
     try:
         start = float(metadata['v2_start'])
@@ -58,7 +72,7 @@ def parse_span_blob_metadata(metadata: Optional[Dict]) -> Optional[Dict]:
         rate = int(metadata['v2_sample_rate'])
     except (KeyError, TypeError, ValueError):
         return None
-    if samples <= 0 or rate <= 0:
+    if samples <= 0 or rate <= 0 or not math.isfinite(start):
         return None
     return {'start': start, 'samples': samples, 'sample_rate': rate}
 
@@ -98,7 +112,7 @@ def span_valid(start: float, end: float) -> bool:
 
 
 def group_chunks_by_coverage(
-    chunks: List[Dict], *, gap_threshold: float, tolerance: float = COVERAGE_TOLERANCE_SECONDS
+    chunks: object, *, gap_threshold: float, tolerance: float = COVERAGE_TOLERANCE_SECONDS
 ) -> List[List[Dict]]:
     """Group listed chunks into contiguous AudioFile parts.
 
@@ -106,15 +120,42 @@ def group_chunks_by_coverage(
     ends or overlaps — not just start-to-start differences; a single spanless
     chunk keeps the whole listing legacy so no false coverage is claimed.
     """
+    if not isinstance(chunks, list):
+        return []
+
+    # Non-finite gap_threshold falls back to 0.0 (splitting conservatively on any gap).
+    try:
+        gap_threshold_val = float(gap_threshold)
+        if not math.isfinite(gap_threshold_val):
+            gap_threshold_val = 0.0
+    except (TypeError, ValueError):
+        gap_threshold_val = 0.0
+
+    # Non-finite tolerance defaults back to the authoritative COVERAGE_TOLERANCE_SECONDS constant.
+    try:
+        tolerance_val = float(tolerance)
+        if not math.isfinite(tolerance_val):
+            tolerance_val = COVERAGE_TOLERANCE_SECONDS
+    except (TypeError, ValueError):
+        tolerance_val = COVERAGE_TOLERANCE_SECONDS
+
     spans: List[Optional[Tuple[float, float]]] = []
     for chunk in chunks:
+        if not isinstance(chunk, Mapping):
+            spans.append(None)
+            continue
         span = chunk.get('span')
-        if not isinstance(span, dict):
+        if not isinstance(span, Mapping):
             spans.append(None)
             continue
         try:
             start = float(span['start'])
-            end = start + float(span['samples']) / float(span['sample_rate'])
+            samples = float(span['samples'])
+            sample_rate = float(span['sample_rate'])
+            if samples <= 0 or sample_rate <= 0 or not math.isfinite(start):
+                spans.append(None)
+                continue
+            end = start + samples / sample_rate
         except (KeyError, TypeError, ValueError, ZeroDivisionError):
             spans.append(None)
             continue
@@ -127,9 +168,16 @@ def group_chunks_by_coverage(
         if groups and v2_listing:
             prev_end = spans[index - 1]
             this_start = spans[index]
-            split = prev_end is not None and this_start is not None and abs(this_start[0] - prev_end[1]) > tolerance
+            split = prev_end is not None and this_start is not None and abs(this_start[0] - prev_end[1]) > tolerance_val
         if not split and groups:
-            split = chunk['timestamp'] - groups[-1][-1]['timestamp'] > gap_threshold
+            try:
+                prev_ts = groups[-1][-1]['timestamp']
+                curr_ts = chunk['timestamp']
+                diff = curr_ts - prev_ts
+                split = diff > gap_threshold_val
+            except (KeyError, TypeError, ValueError, OverflowError):
+                # Malformed or missing timestamp splits the group rather than raising KeyError/TypeError
+                split = True
         if split or not groups:
             groups.append([chunk])
         else:
