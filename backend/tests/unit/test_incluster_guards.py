@@ -646,6 +646,29 @@ def test_scheduled_lower_waits_for_armed_guard_not_a_fresh_warmup(monkeypatch, c
     assert verdict == 'TRIP'  # armed across the scheduled drop; no fresh warmup
 
 
+def test_scheduled_lower_defers_while_the_reading_cannot_measure(monkeypatch, caplog):
+    # Review r2 P1: an armed guard with a blind or unmeasured reading must not
+    # hand back capacity it cannot defend; the higher floor holds until a
+    # usable reading arrives.
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [8] * 24)
+    client = FakeClient()
+    client.hpa['spec']['minReplicas'] = 12
+    assert guard.run(client, False, 1000) == 0  # parked readings arm the clock
+    for bad in ({'first_p95': None}, {'first_p95': 60.0, 'first_count': 37.6}):
+        client.signals = dict(values(), **bad)
+        client.patches = []
+        assert guard.run(client, False, 2000) == 0  # window elapsed; reading unusable
+        assert 'deferred_guard_blind' in caplog.text
+        assert all(path == 'state' for path, _ in client.patches)
+    client.signals = values()
+    assert guard.run(client, False, 2000) == 0  # usable reading: the lower applies
+    assert any(
+        patch[1] == {'op': 'replace', 'path': '/spec/minReplicas', 'value': 8}
+        for path, patch in client.patches
+        if path == 'hpa'
+    )
+
+
 def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
     prod = next(
         obj

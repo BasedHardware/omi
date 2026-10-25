@@ -546,14 +546,17 @@ def load_floor_schedule():
     return rows
 
 
-def apply_floor_schedule(client, hpa, deployment, state, schedule, now, dry_run):
+def apply_floor_schedule(client, hpa, deployment, state, reading, schedule, now, dry_run):
     """One bounded scheduled-floor write per hourly change; never fights the guard.
 
     Deferred whenever the guard has rolled back (the latency metric is present):
     the reviewed schedule resumes only after an operator clears the rollback.
-    A LOWER also requires the guard to be armed under the current spec
-    identity: dropping onto a fresh warmup would leave a demand spike unable to
-    roll the floor back (review r1 P1). Raises apply immediately - more
+    A LOWER requires the guard to be armed under the current spec identity AND
+    the current reading to be usable - not blind, and not carrying an
+    unmeasured regression-shaped first_p95. Dropping onto a fresh warmup would
+    leave a spike unable to roll back (review r1 P1); dropping while the guard
+    cannot even measure would leave capacity reduced until three post-drop
+    blind runs accumulate (review r2 P1). Raises apply immediately - more
     capacity is the safe direction. The whole observed /spec is JSON-patch
     tested, so a concurrent change fails this run loudly instead of
     overwriting.
@@ -577,9 +580,11 @@ def apply_floor_schedule(client, hpa, deployment, state, schedule, now, dry_run)
         log('floor_schedule', result='dry_run', hour=hour, target=target, floor=current)
         return
     if target < current:
-        armed = state.get('identity') == state_identity(hpa, deployment) and now - state.get('since', now) >= WINDOW
-        if not armed:
+        if state.get('identity') != state_identity(hpa, deployment) or now - state.get('since', now) < WINDOW:
             log('floor_schedule', result='deferred_guard_not_armed', hour=hour, target=target, floor=current)
+            return
+        if reading.get('blind') or reading.get('unmeasured'):
+            log('floor_schedule', result='deferred_guard_blind', hour=hour, target=target, floor=current)
             return
     client.kube(
         client.path('hpa'),
@@ -663,7 +668,7 @@ def run(client, dry_run, now=None):
         # apply_floor_schedule defers while a guard rollback is in force or the
         # guard is not yet armed for a lower.
         try:
-            apply_floor_schedule(client, hpa, deployment, state, schedule, now, dry_run)
+            apply_floor_schedule(client, hpa, deployment, state, reading, schedule, now, dry_run)
         except Exception as exc:
             log('floor_schedule_error', error=type(exc).__name__)
             return 2
