@@ -2461,7 +2461,9 @@ async def test_sync_task_final_attempt_converges_a_ledger_completed_by_the_faili
         module._run_full_pipeline_background_async.assert_awaited_once()
         module._finalize_sync_job_failure.assert_not_awaited()
         module.fenced_mark_job_queued_for_retry.assert_not_called()
-        module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
+        module._delete_staged_blobs_async.assert_awaited_once_with(
+            ['staged/audio.opus'], uid='test-uid', content_id='content-1', job_id='job-1'
+        )
         module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
     finally:
         sys.modules.pop('routers.sync', None)

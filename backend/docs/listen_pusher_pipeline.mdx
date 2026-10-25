@@ -47,6 +47,40 @@ transcript, lifecycle, privacy or hold policy. Conditional list reads require a
 completed writer-fleet rollout; see [list serving projections](list-serving-projection.md)
 for the kill switch, rollout epoch, migration coverage and read/write cost contract.
 
+## Legacy sync staging and batch cleanup custody
+
+Legacy sync no longer schedules staging deletion when it creates a signed URL.
+Routine deletion requires an owner-fenced completed content-ledger result with
+all segments successful and a `staging_custody` receipt. The receipt binds original
+bytes to their content-addressed raw archives and records staging checksums.
+Cleanup verifies that every original archive still exists with matching SHA-256
+metadata, checks the staged object's MD5 and deletes only its observed generation.
+Failures, retries, missing archives or proof, and uncertain legacy admissions
+retain staging. Elapsed time alone never authorizes deletion.
+
+Legacy and batch cleanup share the default-on `AUDIO_CLEANUP_HOLD_ENABLED` policy.
+`AUDIO_CLEANUP_HOLD_WINDOWS` defaults to the inclusive capture window
+`2026-10-22T13:36:30Z..2026-10-24T07:16:00Z`; comma-separated windows are supported.
+Overlapping captures, unknown capture bounds and invalid configuration are held.
+An explicit false kill switch releases the window hold while the legacy success
+receipt requirement remains enforced. Batch cleanup flags and parks URI-less or
+inconsistent-owner receipts without blocking unrelated cleanup; held rows retain
+their artifact URI, lose TTL eligibility and retry after one hour.
+
+Privacy erasure takes precedence: explicit boolean `erasure_requested: true` and
+direct account/conversation purges bypass routine holds. Purges also discover
+artifacts by `owner_id`, so parked malformed owner keys cannot hide them; storage
+ownership and conversation/segment scope checks still apply. Pending-upload rows
+retain an erasure outbox without TTL so later uploads remain erasable. Stale
+cleanup snapshots cannot overwrite a newer privacy request.
+
+The rollout lead deploys this image after T3b, covering API privacy-purge services
+before sync/backfill and batch cleanup workers. Audit every staging bucket's
+lifecycle/retention policy first: application custody cannot override GCS lifecycle
+deletion. Verify the serving release identity, hold/progress logs and approved
+synthetic privacy canary separately. See the [custody runbook](runbooks/audio-cleanup-custody.md)
+for release checks and the retained legacy-data reconciliation obligation.
+
 At a new recording reservation during a partial batch ramp, the owner-load
 predicate in `config/policy/ramp.py` keeps heavy owners on the legacy route.
 `BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS=off` disables this admission narrowing.

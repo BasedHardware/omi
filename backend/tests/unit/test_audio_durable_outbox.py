@@ -3,8 +3,10 @@
 import asyncio
 from collections import deque
 from contextlib import nullcontext
+from datetime import datetime, timezone
 import hashlib
 import json
+from pathlib import Path
 import struct
 import threading
 from types import SimpleNamespace
@@ -25,6 +27,9 @@ from utils.other.live_audio_archive import LiveAudioArchive
 from utils.other.raw_audio import CapturePack, AudioSegment, decode_capture
 from utils.other.raw_audio_read import list_packs, read_pack
 from database.audio_timeline import span_blob_metadata
+from database import _client, sync_ledger
+from utils.other import local_storage
+from utils.sync import staging_custody
 from utils.other.audio_chunks import iter_audio_chunk_pcm
 from utils.pusher_protocol import AudioBackpressure, ByteBudget, append_bounded, extend_bounded, bound_private_pending
 import routers.pusher as pusher
@@ -191,6 +196,72 @@ def test_manifest_failure_never_issues_receipt(remote, monkeypatch):
     with pytest.raises(OSError):
         commit_pcm('owner', b'\x01\x00' * 160, 'conversation', 1000, 16000, 'root', 0)
     assert len(remote.list_blobs('raw-live/owner/conversation/')) == 1
+
+
+@pytest.mark.parametrize('manifest_committed', [False, True])
+@pytest.mark.parametrize('incident_hold', [False, True])
+def test_sync_cleanup_cannot_spend_outbox_custody(remote, monkeypatch, tmp_path, manifest_committed, incident_hold):
+    """A sync completion never authorizes deletion of live media or manifests.
+
+    Exercise the real archive writer and both receipt builders, including the
+    media-only state left by an interrupted outbox commit. Only independently
+    receipted sync staging is eligible, and its incident hold still wins.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    monkeypatch.delenv('AUDIO_CLEANUP_HOLD_ENABLED', raising=False)
+    monkeypatch.setenv(
+        'AUDIO_CLEANUP_HOLD_WINDOWS',
+        '2026-10-24T08:00:00Z..2026-10-24T09:00:00Z' if incident_hold else '2026-10-22T13:36:30Z..2026-10-24T07:16:00Z',
+    )
+    stamp = int(datetime(2026, 10, 24, 8, tzinfo=timezone.utc).timestamp())
+    raw = f'syncing/owner/job/audio_pcm16_{stamp}.bin'
+    Path(raw).parent.mkdir(parents=True)
+    Path(raw).write_bytes(b'synthetic sync original')
+    archive = storage.archive_capture_bytes('owner', Path(raw).read_bytes(), 'raw-sync', Path(raw).name, {})
+    receipt = staging_custody.make_staging_custody_receipt('owner', [raw], [archive])
+    assert receipt is not None
+    staged = remote.blob(raw)
+    staged.upload_from_string(Path(raw).read_bytes(), if_generation_match=0)
+    staged.md5_hash = receipt['staging'][0]['md5']
+    ledger = {
+        'job_id': 'job',
+        'status': 'completed',
+        'staging_custody': receipt,
+        'result': {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'},
+    }
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: None)
+    ref = SimpleNamespace(get=lambda: SimpleNamespace(to_dict=lambda: ledger))
+    monkeypatch.setattr(sync_ledger, 'sync_content_reference', lambda *args: ref)
+    monkeypatch.setattr(local_storage, 'create_storage_client', lambda: SimpleNamespace(bucket=lambda name: remote))
+    monkeypatch.setattr(storage, 'syncing_local_bucket', remote.name)
+    real_archive = storage.archive_capture_bytes
+
+    def write(uid, payload, prefix, *args, **kwargs):
+        if prefix == 'audio-outbox' and not manifest_committed:
+            raise OSError('manifest unavailable')
+        return real_archive(uid, payload, prefix, *args, **kwargs)
+
+    monkeypatch.setattr(storage, 'archive_capture_bytes', write)
+    pcm = b'\x01\x00' * 160
+    if manifest_committed:
+        outbox_receipt = commit_pcm('owner', pcm, 'conversation', stamp, 16000, 'root', 0)
+    else:
+        with pytest.raises(OSError, match='manifest unavailable'):
+            commit_pcm('owner', pcm, 'conversation', stamp, 16000, 'root', 0)
+    outbox = remote.list_blobs('raw-live/owner/') + remote.list_blobs('audio-outbox/owner/')
+    assert len(outbox) == (2 if manifest_committed else 1)
+    outbox_paths = [blob.name for blob in outbox]
+    assert staging_custody.make_staging_custody_receipt('owner', [raw], outbox_paths) is None
+    context = {'uid': 'owner', 'content_id': 'content', 'job_id': 'job'}
+    assert staging_custody.cleanup_sync_staging([raw, *outbox_paths], **context) == 0
+    assert staged.data is not None
+    assert staging_custody.cleanup_sync_staging([raw], **context) == (0 if incident_hold else 1)
+    assert (staged.data is not None) is incident_hold
+    assert remote.blob(archive).data == Path(raw).read_bytes()
+    assert all(blob.data is not None for blob in outbox)
+    if manifest_committed:
+        assert read_pcm('owner', outbox_receipt) == pcm
 
 
 def test_one_sample_commits_exact_pcm_even_when_encoder_is_unavailable(remote, monkeypatch):

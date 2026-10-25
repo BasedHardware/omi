@@ -299,7 +299,6 @@ def test_real_process_segment_two_independent_job_responses(independent_job_pipe
     store = StrictFirestore()
     barrier = threading.Barrier(2)
     pipeline.get_syncing_file_temporal_signed_url = lambda path: path
-    pipeline.schedule_syncing_temporal_file_deletion = lambda path: None
     pipeline.get_prerecorded_service = lambda language: ('test', None, 'test')
     pipeline.prerecorded = lambda *a, **kw: ([{}], 'en')
     pipeline.postprocess_words = lambda *a: [
