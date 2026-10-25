@@ -123,6 +123,16 @@ class LivePreviewController extends ChangeNotifier {
   int get droppedPacketsForTesting => _droppedPackets;
   int get queuedPacketsForTesting => _queue.length;
 
+  String? _lastNotRequested;
+
+  /// Reports a client-side refusal once per capture and reason.
+  void clientRefused(String reasonWireName, {required bool midSession}) {
+    final key = '$reasonWireName/$midSession';
+    if (_lastNotRequested == key) return;
+    _lastNotRequested = key;
+    telemetry.notRequested(reasonWireName, midSession: midSession);
+  }
+
   /// Whether this client may declare `local_preview=enabled` (kill switch).
   Future<bool> requestAllowed() => _requestAllowed();
 
@@ -200,6 +210,7 @@ class LivePreviewController extends ChangeNotifier {
     _stopEngine();
     _lines.clear();
     _lastResultAt = null;
+    _lastNotRequested = null;
     if (hadState) notifyListeners();
   }
 

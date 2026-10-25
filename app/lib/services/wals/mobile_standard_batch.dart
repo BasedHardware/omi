@@ -54,6 +54,11 @@ class MobileStandardBatch {
   /// arriving now are refused (today's WAL path) only until it is ready.
   bool get warmingUp => !_closed && _serverAllowed && !_ready && _initializing;
 
+  /// The client stopped honouring a local-preview grant (a per-session gate
+  /// flipped). Ordinary Standard batch rules, including visibility, apply
+  /// again; the authorization and its expiry are unchanged.
+  void dropLocalPreview() => _localPreview = false;
+
   /// Authorization is connection-scoped and expires. Reconnect obtains a
   /// fresh integration inventory and cohort decision from the server.
   void authorize(bool allowed, {bool localPreview = false}) {

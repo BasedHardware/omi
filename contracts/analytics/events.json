@@ -4606,6 +4606,39 @@
         "live-preview"
       ],
       "correlation": null
+    },
+    {
+      "id": "livePreviewNotRequested",
+      "wire_name": "Live Preview Not Requested",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "kill_switch",
+            "device_unsupported",
+            "codec_unsupported",
+            "auto_sync_off",
+            "transcribe_later",
+            "custom_stt",
+            "kept_on_phone",
+            "onboarding",
+            "no_journal"
+          ]
+        },
+        "midSession": {
+          "type": "bool",
+          "wire_name": "mid_session"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
     }
   ],
 "transport_dispositions": {

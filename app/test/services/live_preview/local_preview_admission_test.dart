@@ -4,6 +4,8 @@ import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/live_preview/live_preview_telemetry.dart';
 import 'package:omi/services/live_preview/local_preview_admission.dart';
 
+import 'package:omi/utils/analytics/registry/events.g.dart';
+
 import '../../support/live_preview_fakes.dart';
 
 void main() {
@@ -149,6 +151,7 @@ void main() {
     route(3);
     expect(sent, [1, 3]);
   });
+
   test('a timed-out or overflowed hold is a refusal latched for that socket', () {
     admission.socketPublished(declared: true, send: send);
     route(1);
@@ -169,5 +172,56 @@ void main() {
     admission.socketPublished(declared: true, send: send);
     expect(admission.verdict(granted: true, socketDeclared: true, send: send), true,
         reason: 'the latch is per socket; a replacement starts clean');
+  });
+
+  test('a mid-session client refusal hides the preview and blocks re-grants on that socket', () {
+    admission.socketPublished(declared: true, send: send);
+    expect(admission.verdict(granted: true, socketDeclared: true, send: send), true);
+    expect(admission.refuseForSocket(send: send), true);
+    expect(admission.admitted, false);
+    expect(preview.phase, LivePreviewPhase.inactive);
+    expect(admission.verdict(granted: true, socketDeclared: true, send: send), false);
+    route(7);
+    expect(sent, [7], reason: 'streams like any other socket');
+  });
+
+  group('client gates mirror the batch route', () {
+    LocalPreviewClientRefusal? gate({
+      bool omiPendant = true,
+      bool opusCodec = true,
+      bool autoSync = true,
+      bool batchMode = false,
+      bool customStt = false,
+      bool keptOnPhone = false,
+      bool onboarding = false,
+      bool journal = true,
+    }) =>
+        localPreviewClientRefusal(
+          omiPendant: omiPendant,
+          opusCodec: opusCodec,
+          autoSyncOfflineRecordings: autoSync,
+          batchModeEnabled: batchMode,
+          customStt: customStt,
+          keptOnPhone: keptOnPhone,
+          onboarding: onboarding,
+          journalInstalled: journal,
+        );
+
+    test('every per-session refusal has its own closed reason', () {
+      expect(gate(), isNull);
+      expect(gate(omiPendant: false), LocalPreviewClientRefusal.deviceUnsupported);
+      expect(gate(opusCodec: false), LocalPreviewClientRefusal.codecUnsupported);
+      expect(gate(autoSync: false), LocalPreviewClientRefusal.autoSyncOff);
+      expect(gate(batchMode: true), LocalPreviewClientRefusal.transcribeLater);
+      expect(gate(customStt: true), LocalPreviewClientRefusal.customStt);
+      expect(gate(keptOnPhone: true), LocalPreviewClientRefusal.keptOnPhone);
+      expect(gate(onboarding: true), LocalPreviewClientRefusal.onboarding);
+      expect(gate(journal: false), LocalPreviewClientRefusal.noJournal);
+    });
+
+    test('reasons match the registered telemetry enum', () {
+      expect(LocalPreviewClientRefusal.values.map((r) => r.wireName),
+          LivePreviewNotRequestedReason.values.map((r) => r.wireName));
+    });
   });
 }

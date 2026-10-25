@@ -16,6 +16,17 @@ The server grants it on `service_status` `ready` / `mobile_batch_admission` with
 socket-scoped: close, reconnect and account change clear it until re-granted,
 and it rides `MobileStandardBatch.authorize` (same two-minute expiry).
 
+A client asks only when its routing can journal pendant audio: an Omi pendant
+on an Opus codec, auto-sync on, no Transcribe Later, no custom STT, not kept on
+the phone, no onboarding, and a batch journal installed. Otherwise it does not
+declare `local_preview` and reports `Live Preview Not Requested` (closed
+reason). Phone-mic capture therefore never asks (PCM, not journaled) and keeps
+today's cloud transcript. If one of these flips while admitted, the grant is
+dropped for the rest of that socket (preview hides, today's cloud view
+returns, no later grant on it re-admits). A hold that times out or overflows
+latches the socket as refused too. Transient refusals (disk, journal failure)
+keep the WAL+socket carve-out below.
+
 ## Routing
 
 While admitted, `MobileStandardBatch.eligible` ignores transcript visibility and
@@ -39,9 +50,6 @@ WAL stays unconfirmed and the ordinary recovery drain uploads it through
 `test/services/live_preview/local_preview_routing_test.dart`).
 
 Known gaps:
-- Phone-mic capture is not in the batch route: its audio still streams to the
-  socket (and opens the deferred cloud stream). The preview still runs from
-  `phoneMicAudioTap`; the surface keeps showing it while an engine runs.
 - Android's native background streamer (`OmiBackgroundAudioStreamer.kt`) owns
   pendant audio only while the Flutter engine is absent or not foreground-ready,
   and has no batch journal. It never declares local preview (pinned by

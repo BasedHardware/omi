@@ -18,10 +18,15 @@ import 'package:omi/services/wals/wal.dart';
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
 import '../../support/live_preview_fakes.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 
 class _Vad implements MobileBatchVad {
+  static bool fail = false;
   @override
-  Future<double> probability(List<int> opus) async => 0;
+  Future<double> probability(List<int> opus) async {
+    if (fail) throw StateError('model failure');
+    return 0;
+  }
 
   @override
   Future<void> close() async {}
@@ -53,9 +58,10 @@ void main() {
   late CaptureReplayWorld world;
   Completer<void>? vadGate;
 
+  late List<RegisteredEvent> telemetry;
   LivePreviewController preview({bool allowed = true}) => LivePreviewController(
         engine: engine,
-        telemetry: LivePreviewTelemetry(emit: (_) {}),
+        telemetry: LivePreviewTelemetry(emit: telemetry.add),
         platform: LivePreviewPlatform.ios,
         osMajor: 26,
         decodeOpus: (opus) => Int16List(opus.length * 4),
@@ -63,14 +69,18 @@ void main() {
         feedChunkBytes: 640,
       );
 
-  Future<void> boot({LivePreviewController? livePreview}) async {
+  Future<void> boot({
+    LivePreviewController? livePreview,
+    BleAudioCodec codec = BleAudioCodec.opus,
+    DeviceType type = DeviceType.omi,
+    Map<String, Object> prefs = const {},
+  }) async {
     world = await CaptureReplayWorld.boot(
-        tempDir: directory, pendantCodec: BleAudioCodec.opus, initialPrefs: {'uid': 'owner'});
+        tempDir: directory, pendantCodec: codec, initialPrefs: {'uid': 'owner', ...prefs});
     world.deviceConnection = ScriptedDeviceConnection();
     world.controller.installMobileStandardBatch(lane);
     if (livePreview != null) world.controller.installLivePreview(livePreview);
-    await world.controller
-        .streamDeviceRecording(device: BtDevice(id: 'omi', name: 'Omi', type: DeviceType.omi, rssi: -40));
+    await world.controller.streamDeviceRecording(device: BtDevice(id: 'omi', name: 'Omi', type: type, rssi: -40));
     await world.settle();
   }
 
@@ -91,6 +101,8 @@ void main() {
         now: DateTime.now);
     engine = FakeLivePreviewEngine();
     vadGate = null;
+    telemetry = [];
+    _Vad.fail = false;
   });
 
   tearDown(() async {
@@ -130,20 +142,71 @@ void main() {
     expect(world.socket!.sentBinary, isEmpty);
     expect(world.wal.syncs.phone.testFrames.length, 1, reason: 'journaled frames never enter the safety WAL');
 
-    // A frame the journal refuses (here: auto-sync off is a realtime consumer)
-    // falls through to WAL + socket exactly as today.
-    SharedPreferencesUtil().autoSyncOfflineRecordings = false;
+    // A transient refusal (the journal's model fails) falls through to WAL +
+    // socket exactly as today, and the grant stands.
+    _Vad.fail = true;
+    world.deviceConnection!.emitAudio(value: 10);
+    await world.settle();
+    await lane.pendingInference;
     world.deviceConnection!.emitAudio(value: 9);
     await world.settle();
     await buffer.pending;
+    expect(world.controller.localPreviewAdmitted, true);
     expect(world.socket!.sentBinary.single, List.filled(80, 9));
     expect(world.wal.syncs.phone.testFrames.last.payload, List.filled(80, 9));
-    expect(_frames(File('${directory.path}/${published.single.filePath}')), [List.filled(80, 7), List.filled(80, 8)]);
+    expect(_frames(File('${directory.path}/${published.single.filePath}')),
+        [List.filled(80, 7), List.filled(80, 8), List.filled(80, 10)]);
 
     // The preview received a decoded copy of every pendant packet it saw.
     expect(engine.fed, isNotEmpty);
     expect(world.controller.segments, isEmpty, reason: 'preview text never enters capture segments');
   });
+
+  test('a per-session gate flipping mid-session drops the grant for the rest of the socket', () async {
+    final live = preview();
+    await boot(livePreview: live);
+    world.socket!.emitServerMessage(_admitted);
+    await lane.pendingInitialization;
+    await world.settle();
+    expect(world.controller.localPreviewAdmitted, true);
+    state.capturePageOpened();
+    SharedPreferencesUtil().autoSyncOfflineRecordings = false;
+    world.deviceConnection!.emitAudio(value: 5);
+    await world.settle();
+    expect(world.controller.localPreviewAdmitted, false, reason: 'the preview hides; today\'s cloud view returns');
+    expect(live.phase, LivePreviewPhase.inactive);
+    expect(lane.localPreview, false);
+    expect(world.socket!.sentBinary.single, List.filled(80, 5));
+    final refused = telemetry.whereType<LivePreviewNotRequested>().single.properties;
+    expect(refused, {'reason': 'auto_sync_off', 'mid_session': true});
+    // A renewed grant on the same socket never re-admits it.
+    SharedPreferencesUtil().autoSyncOfflineRecordings = true;
+    world.socket!.emitServerMessage(_admitted.replaceFirst('"ready"', '"mobile_batch_admission"'));
+    await world.settle();
+    expect(world.controller.localPreviewAdmitted, false);
+  });
+
+  for (final (name, codec, type, prefs, reason) in [
+    ('not an Omi pendant', BleAudioCodec.opus, DeviceType.friendPendant, <String, Object>{}, 'device_unsupported'),
+    ('not an Opus codec', BleAudioCodec.pcm16, DeviceType.omi, <String, Object>{}, 'codec_unsupported'),
+    (
+      'auto-sync off',
+      BleAudioCodec.opus,
+      DeviceType.omi,
+      <String, Object>{'autoSyncOfflineRecordings': false},
+      'auto_sync_off'
+    ),
+  ]) {
+    test('$name: local_preview is not requested and the reason is reported', () async {
+      await boot(livePreview: preview(), codec: codec, type: type, prefs: prefs);
+      expect(world.localPreviewRequests.last, false);
+      expect(
+          telemetry.whereType<LivePreviewNotRequested>().single.properties, {'reason': reason, 'mid_session': false});
+      world.deviceConnection!.emitAudio(value: 2);
+      await world.settle();
+      expect(world.socket!.sentBinary, isNotEmpty, reason: 'today\'s streaming, no hold');
+    });
+  }
 
   test('socket close revokes admission until the server grants it again', () async {
     final live = preview();

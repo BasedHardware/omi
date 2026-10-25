@@ -1711,12 +1711,15 @@ class CaptureController extends ChangeNotifier
       effectiveConfig = null;
     }
 
-    // The on-device preview replaces the cloud live transcript only on the
-    // ordinary Omi STT path; the server decides admission (batch lane etc.).
-    final localPreview = effectiveConfig == null &&
-        deviceOnboardingProvider?.isOnboardingActive != true &&
-        await previewAllowed.catchError((Object _) => true);
+    // Ask for the on-device preview only when this capture's routing can
+    // journal pendant audio; the server decides admission (batch lane etc.).
+    final allowed = await previewAllowed.catchError((Object _) => true);
     if (!_captureSessionIsCurrent(sessionToken) || _deviceIdentityStale(deviceRevision)) return null;
+    final refusal = allowed
+        ? _localPreviewRefusal(codec, customStt: effectiveConfig != null)
+        : LocalPreviewClientRefusal.killSwitch;
+    final localPreview = _localPreview.preview != null && refusal == null;
+    if (refusal != null) _localPreview.preview?.clientRefused(refusal.wireName, midSession: false);
     _localPreview.language = language;
 
     if (_fenceUplinkForSync()) return null;
@@ -2141,6 +2144,8 @@ class CaptureController extends ChangeNotifier
           _commandBytes.add(payload);
         }
 
+        _checkLocalPreviewGate(codec);
+
         // Batch routing happens before either ordinary WAL or WS ownership.
         // A visibility switch never replays previously batched frames live.
         if (blePayload != null && _mobileStandardBatch != null) {
@@ -2206,6 +2211,29 @@ class CaptureController extends ChangeNotifier
     _bleBytesStream = lifetime.takeSubscription(_bleBytesStream, subscription);
     notifyListeners();
     return subscription != null;
+  }
+
+  LocalPreviewClientRefusal? _localPreviewRefusal(BleAudioCodec codec, {required bool customStt}) =>
+      localPreviewClientRefusal(
+        omiPendant: _recordingDevice?.type == DeviceType.omi,
+        opusCodec: codec.isOpusSupported(),
+        autoSyncOfflineRecordings: _preferences.autoSyncOfflineRecordings,
+        batchModeEnabled: _preferences.batchModeEnabled,
+        customStt: customStt,
+        keptOnPhone: OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+        onboarding: deviceOnboardingProvider?.isOnboardingActive == true,
+        journalInstalled: _mobileStandardBatch != null,
+      );
+
+  /// A per-session gate flipped while admitted: this socket streams like any
+  /// other from now on, so the preview hides and today's cloud view returns.
+  void _checkLocalPreviewGate(BleAudioCodec codec) {
+    if (!_localPreview.admitted) return;
+    final refusal = _localPreviewRefusal(codec, customStt: _socket?.customSttMode == true);
+    if (refusal == null) return;
+    _localPreview.preview?.clientRefused(refusal.wireName, midSession: true);
+    _localPreview.refuseForSocket(send: _sendPendantToSocket);
+    _mobileStandardBatch?.dropLocalPreview();
   }
 
   void _sendPendantToSocket(HeldPendantFrame frame) {

@@ -3113,3 +3113,27 @@ final class LivePreviewSessionEnded extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"engine": engine.wireName, "preview_words": previewWords, "preview_audio_ms": previewAudioMs, "dropped_audio_ms": droppedAudioMs};
 }
+
+enum LivePreviewNotRequestedReason {
+  killSwitch("kill_switch"),
+  deviceUnsupported("device_unsupported"),
+  codecUnsupported("codec_unsupported"),
+  autoSyncOff("auto_sync_off"),
+  transcribeLater("transcribe_later"),
+  customStt("custom_stt"),
+  keptOnPhone("kept_on_phone"),
+  onboarding("onboarding"),
+  noJournal("no_journal");
+  const LivePreviewNotRequestedReason(this.wireName);
+  final String wireName;
+}
+
+final class LivePreviewNotRequested extends RegisteredEvent {
+  const LivePreviewNotRequested({required this.reason, required this.midSession});
+  final LivePreviewNotRequestedReason reason;
+  final bool midSession;
+  @override
+  String get wireName => "Live Preview Not Requested";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "mid_session": midSession};
+}

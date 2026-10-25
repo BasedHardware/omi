@@ -33,6 +33,50 @@ class HeldPendantFrame {
   final WalFrame? positioned;
 }
 
+/// Why this client does not ask for local preview on a socket: per-session
+/// stable conditions under which its routing could not journal pendant audio,
+/// so an admitted session would stream to the cloud anyway. Closed set.
+enum LocalPreviewClientRefusal {
+  killSwitch('kill_switch'),
+  deviceUnsupported('device_unsupported'),
+  codecUnsupported('codec_unsupported'),
+  autoSyncOff('auto_sync_off'),
+  transcribeLater('transcribe_later'),
+  customStt('custom_stt'),
+  keptOnPhone('kept_on_phone'),
+  onboarding('onboarding'),
+  noJournal('no_journal');
+
+  const LocalPreviewClientRefusal(this.wireName);
+  final String wireName;
+}
+
+/// Mirrors MobileStandardBatch's ordinary refusals (route() and the
+/// realtime-consumer clauses): an Omi pendant on an Opus codec, auto-sync on,
+/// no Transcribe Later, no custom STT, not kept on the phone, no onboarding,
+/// and a batch journal installed. Transient refusals (disk, journal failure)
+/// are not here; they keep the WAL+socket carve-out.
+LocalPreviewClientRefusal? localPreviewClientRefusal({
+  required bool omiPendant,
+  required bool opusCodec,
+  required bool autoSyncOfflineRecordings,
+  required bool batchModeEnabled,
+  required bool customStt,
+  required bool keptOnPhone,
+  required bool onboarding,
+  required bool journalInstalled,
+}) {
+  if (!omiPendant) return LocalPreviewClientRefusal.deviceUnsupported;
+  if (!opusCodec) return LocalPreviewClientRefusal.codecUnsupported;
+  if (!journalInstalled) return LocalPreviewClientRefusal.noJournal;
+  if (batchModeEnabled) return LocalPreviewClientRefusal.transcribeLater;
+  if (!autoSyncOfflineRecordings) return LocalPreviewClientRefusal.autoSyncOff;
+  if (customStt) return LocalPreviewClientRefusal.customStt;
+  if (keptOnPhone) return LocalPreviewClientRefusal.keptOnPhone;
+  if (onboarding) return LocalPreviewClientRefusal.onboarding;
+  return null;
+}
+
 /// Capture's socket-scoped local-preview state: whether the server admitted
 /// this socket, and which pendant frames must not reach it yet.
 class LocalPreviewAdmission {
@@ -61,8 +105,10 @@ class LocalPreviewAdmission {
   bool admitted = false;
 
   /// This socket is settled as refused (hold timed out or overflowed and its
-  /// frames already streamed): a later grant on the same socket never admits it.
+  /// frames already streamed, or a client gate flipped mid-session): a later
+  /// grant on the same socket never admits it.
   bool _refusedForSocket = false;
+  bool get refusedForSocketForTesting => _refusedForSocket;
   DateTime? _verdictPendingSince;
   String language = 'multi';
   BleAudioCodec pendantCodec = BleAudioCodec.opus;
@@ -122,6 +168,19 @@ class LocalPreviewAdmission {
     }
     if (effective != admitted) _set(effective);
     return effective;
+  }
+
+  /// A client gate flipped to refusing mid-session (auto-sync turned off,
+  /// Transcribe Later, kept on the phone…): this socket now streams like any
+  /// other, so the preview hides and no later grant on it re-admits. Returns
+  /// whether an admission was dropped.
+  bool refuseForSocket({required void Function(HeldPendantFrame frame) send}) {
+    _refusedForSocket = true;
+    _verdictPendingSince = null;
+    _flush(send);
+    if (!admitted) return false;
+    _set(false);
+    return true;
   }
 
   /// Socket closed or reconnecting: lines are kept for a quick re-grant. Held

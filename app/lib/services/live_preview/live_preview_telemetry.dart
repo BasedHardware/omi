@@ -21,6 +21,15 @@ class LivePreviewTelemetry {
     ));
   }
 
+  /// The client did not ask for local preview (or stopped honouring a grant
+  /// mid-session) because its routing could not journal pendant audio.
+  void notRequested(String reasonWireName, {required bool midSession}) {
+    _emit(LivePreviewNotRequested(
+      reason: LivePreviewNotRequestedReason.values.firstWhere((value) => value.wireName == reasonWireName),
+      midSession: midSession,
+    ));
+  }
+
   void firstWord(LivePreviewEngineKind engine, {required int latencyMs}) {
     _emit(LivePreviewFirstWord(engine: LivePreviewFirstWordEngine.values.byName(engine.name), latencyMs: latencyMs));
   }

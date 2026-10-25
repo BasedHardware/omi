@@ -2,12 +2,13 @@
   "id": "live-preview",
   "kind": "question",
   "owner": "Mobile capture",
-  "question": "For batch-lane mobile sessions admitted to the on-device live preview, which engine runs and why not, by platform, OS major and release build; how long until the first preview word; and how many preview words and audio seconds each session rendered or dropped?",
+  "question": "For batch-lane mobile sessions admitted to the on-device live preview, which engine runs and why not, why a client did not ask for local preview (per-session gates its routing cannot journal around), by platform, OS major and release build; how long until the first preview word; and how many preview words and audio seconds each session rendered or dropped?",
   "query": "contracts/analytics/consumers/live-preview-presence.sql",
   "events": [
     "livePreviewEngineSelected",
     "livePreviewFirstWord",
-    "livePreviewSessionEnded"
+    "livePreviewSessionEnded",
+    "livePreviewNotRequested"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [
