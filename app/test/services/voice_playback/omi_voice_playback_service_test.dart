@@ -145,6 +145,28 @@ void main() {
     await flush();
   }
 
+  test('retired cleanup cannot stop a replacement response after a native stop settles', () async {
+    SharedPreferencesUtil().voiceResponseMode = 2;
+    final stopped = Completer<void>();
+    var holdStop = false;
+    var fallbackStops = 0;
+    service.debugHooks = VoicePlaybackDebugHooks(
+      probeOutput: () async => const VoicePlaybackOutputSnapshot(
+          headphonesConnected: true, checkFailed: false, route: VoiceReplyPlaybackOutputRoute.bluetooth),
+      stopPlayback: () => holdStop ? stopped.future : Future.value(),
+      stopSpeak: () async => fallbackStops++,
+    );
+    await service.beginResponse(messageId: 'old');
+    holdStop = true;
+    final cleanup = service.interruptResponse(messageId: 'old', source: VoiceReplyPlaybackInterruptSource.streamError);
+    await pumpEventQueue();
+    holdStop = false;
+    await service.beginResponse(messageId: 'replacement');
+    stopped.complete();
+    await cleanup;
+    expect(fallbackStops, 0, reason: 'old cleanup cannot stop fallback belonging to a newer response');
+  });
+
   test('mode off emits skipped once and does not probe output', () async {
     SharedPreferencesUtil().voiceResponseMode = 0;
     await service.beginResponse(messageId: 'off');

@@ -296,7 +296,7 @@ class OmiVoicePlaybackService {
       );
     }
 
-    await _clearInFlightState();
+    await _clearInFlightState(canContinue: stillCurrent);
     if (!stillCurrent()) return;
     final continuing = _lifecycleOpen && _activeMessageId == messageId;
     _activeMessageId = messageId;
@@ -402,16 +402,20 @@ class OmiVoicePlaybackService {
 
   /// Immediately cancel all synthesis + playback.
   Future<void> interrupt({VoiceReplyPlaybackInterruptSource source = VoiceReplyPlaybackInterruptSource.none}) async {
-    _beginAttemptSeq++;
+    final attempt = ++_beginAttemptSeq;
+    bool stillCurrent() => attempt == _beginAttemptSeq;
     if (_lifecycleOpen) {
       _lifecycleToken++;
       _emit(outcome: VoiceReplyPlaybackOutcome.interrupted, interruptSource: source);
     }
     await _cancelPreview();
+    if (!stillCurrent()) return;
     _activeMessageId = null;
     _spoken = 0;
-    await _clearInFlightState();
+    await _clearInFlightState(canContinue: stillCurrent);
+    if (!stillCurrent()) return;
     await _stopFallback();
+    if (!stillCurrent()) return;
     await _deactivateSession();
   }
 
@@ -454,11 +458,14 @@ class OmiVoicePlaybackService {
   // Internals
   // ---------------------------------------------------------------------------
 
-  Future<void> _clearInFlightState() async {
+  Future<void> _clearInFlightState({bool Function()? canContinue}) async {
+    bool current() => canContinue?.call() ?? true;
+    if (!current()) return;
     _synthesisQueue.clear();
     final request = _activeSynthesisRequest;
     _activeSynthesisRequest = null;
     await request?.cancel();
+    if (!current()) return;
     final sources = <ProgressiveTtsAudioSource>{
       if (_activeAudioSource != null) _activeAudioSource!,
       for (final chunk in _audioQueue)
@@ -471,6 +478,7 @@ class OmiVoicePlaybackService {
     if (debugCompletion != null && !debugCompletion.isCompleted) debugCompletion.complete();
     for (final source in sources) {
       await source.cancel();
+      if (!current()) return;
     }
     _audioQueue.clear();
     _synthesizing = false;
