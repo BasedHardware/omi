@@ -420,23 +420,30 @@ def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = Fal
         return docs[0].to_dict()['enqueued_at'] if docs else None
     # The uncommitted-age proxy must measure the oldest real commitment: walk a
     # bounded prefix of the FIFO and skip allowance policy holds. Early return
-    # keeps the healthy case a one-document read.
-    docs = (
-        query.where('merge_pending', '==', True).order_by('enqueued_at').limit(OLDEST_POLICY_HOLD_SCAN_LIMIT).stream()
+    # keeps the healthy case a one-document read; a sentinel row beyond the
+    # bound (limit + 1) distinguishes truncation from a FIFO that happens to be
+    # exactly as long as the bound.
+    docs = iter(
+        query.where('merge_pending', '==', True)
+        .order_by('enqueued_at')
+        .limit(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)
+        .stream()
     )
     oldest_hold: float | None = None
     scanned = 0
     for doc in docs:
         scanned += 1
+        if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT:
+            break  # the sentinel row exists: the scan was truncated
         job = doc.to_dict()
         if is_allowance_policy_hold(job):
             oldest_hold = oldest_hold if oldest_hold is not None else job['enqueued_at']
             continue
         return job['enqueued_at']
-    if scanned >= OLDEST_POLICY_HOLD_SCAN_LIMIT and oldest_hold is not None:
-        # The bound truncated the FIFO with holds in every scanned row: an
-        # unmeasured commitment may exist beyond it, so fail toward tripping on
-        # the oldest hold's age instead of publishing a false fresh zero.
+    if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT and oldest_hold is not None:
+        # An unmeasured commitment may exist beyond the bound, so fail toward
+        # tripping on the oldest hold's age instead of publishing a false fresh
+        # zero.
         return oldest_hold
     return None
 

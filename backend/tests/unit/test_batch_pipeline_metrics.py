@@ -303,7 +303,7 @@ def test_firestore_oldest_walks_past_policy_holds():
             return self
 
         def limit(self, count):
-            assert count == 500
+            assert count == 501  # scan bound plus the truncation sentinel row
             return self
 
         def stream(self):
@@ -336,10 +336,14 @@ def test_firestore_oldest_walks_past_policy_holds():
 
     from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT
 
-    # Review r1 P1: a scan truncated at the bound with holds in every row must
-    # fail toward tripping on the oldest hold's age - a fresh zero could bless a
-    # ramp while a real commitment sits unmeasured just past the bound.
-    truncated = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT)])
+    # Review r1/r2 P1s: a scan truncated at the bound with holds in every row
+    # must fail toward tripping on the oldest hold's age - a fresh zero could
+    # bless a ramp while a real commitment sits unmeasured just past the bound.
+    # A FIFO that is exactly as long as the bound, or shorter, is not
+    # truncated: zero is truthful.
+    truncated = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)])
     assert oldest(truncated, 'omi', 2) == 0.0
+    exactly_bound = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT)])
+    assert oldest(exactly_bound, 'omi', 2) is None
     just_short = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT - 1)])
-    assert oldest(just_short, 'omi', 2) is None  # whole FIFO is holds: zero is truthful
+    assert oldest(just_short, 'omi', 2) is None
