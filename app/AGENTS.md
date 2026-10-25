@@ -102,7 +102,9 @@ make mobile-verify ARGS="fast --all"                   # full hermetic journey s
 
 Native: `ruby ios/test/batch_audio_energy_test.rb`; [phone/BLE replay](../scripts/dev-harness/IPHONE_HARNESS.md).
 
-Before shipping UI changes, run `bash app/tool/perf_gate.sh`. Red means regression or missing evidence: fix the cause, never raise budgets. [Perf guide](integration_test/perf/README.md).
+### Performance
+UI: `bash app/tool/perf_gate.sh` ([guide](integration_test/perf/README.md)); red blocks shipping.
+Heavy: `bash app/tool/perf_device_run.sh` ([never-uninstall guide](tool/perf/README.md)).
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
