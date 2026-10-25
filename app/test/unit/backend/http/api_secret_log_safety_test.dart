@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/phone_calls.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
@@ -140,8 +141,8 @@ void main() {
     });
     try {
       final logs = await _captureLogs(() async => expect(
-          await isAppSetupCompleted('http://${vendor.address.host}:${vendor.port}/plugin/status?omi_token=$_secret'),
-          isTrue));
+          await getAppSetupStatus('http://${vendor.address.host}:${vendor.port}/plugin/status?omi_token=$_secret'),
+          isA<ApiSuccess<AppSetupStatus>>().having((result) => result.data, 'status', AppSetupStatus.completed)));
       expect(authorization, isNull);
       expect(logs, isNot(contains(_secret)));
     } finally {
