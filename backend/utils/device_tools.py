@@ -326,7 +326,7 @@ def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: 
             # marker means a late submission is rejected rather than left in
             # Redis for the remainder of its TTL.
             await run_blocking(db_executor, clear_device_tool_inflight, uid, call_id)
-        if name == 'search_contacts' and isinstance(result, dict):
+        if name == 'search_contacts' and result.get('ok'):
             try:
                 from utils.llm.user_voice import record_contact_handles_for_user_voice
 

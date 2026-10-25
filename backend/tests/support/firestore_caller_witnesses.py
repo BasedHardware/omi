@@ -399,6 +399,12 @@ def _run_goal_context(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -
     trial(capture, llm_goals._get_goal_context, 'u1', 'title')
 
 
+def _run_user_voice_conversations(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    from utils.llm import user_voice
+
+    trial(capture, user_voice._load_user_conversations_and_messages, 'u1')
+
+
 def _run_daily_summary_generation(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, notifications_utils, 'try_acquire_daily_summary_lock', lambda uid, date_str: True)
     _stub(
@@ -680,6 +686,14 @@ WITNESSES: dict[str, CallerWitness] = {
             ('goal-context',),
             1,
             _run_goal_context,
+        ),
+        CallerWitness(
+            'utils/llm/user_voice.py:_load_user_conversations_and_messages:database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            ('goal-context',),
+            1,
+            _run_user_voice_conversations,
         ),
         CallerWitness(
             'utils/other/daily_recap.py:generate:database.conversations.get_conversations',

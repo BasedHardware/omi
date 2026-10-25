@@ -141,23 +141,27 @@ def _load_user_voice_settings(uid: str, *, firestore_client: Any = None) -> Dict
     if uid in _MEMORY_OPT_IN and isinstance(_MEMORY_OPT_IN[uid], Mapping):
         return dict(_MEMORY_OPT_IN[uid])
 
-    client = firestore_client
-    if client is None:
+    if firestore_client is not None:
         try:
-            from database._client import get_firestore_client
-
-            client = get_firestore_client()
-        except Exception:
-            client = None
-
-    if client is not None:
-        try:
-            snap = client.collection('users').document(uid).get()
-            doc = snap.to_dict() if getattr(snap, 'exists', False) else {}
-            if isinstance(doc, Mapping):
-                return dict(doc)
+            col_fn = getattr(firestore_client, 'collection', None)
+            if callable(col_fn):
+                doc_ref = getattr(col_fn('users'), 'document')(uid)
+                snap = getattr(doc_ref, 'get')()
+                doc = snap.to_dict() if getattr(snap, 'exists', False) else {}
+                if isinstance(doc, Mapping):
+                    return dict(doc)
         except Exception as exc:
             logger.debug('Could not read user_voice settings uid=%s err=%s', uid, type(exc).__name__)
+        return {}
+
+    try:
+        from database import users as users_db
+
+        doc = users_db.get_user_profile(uid)
+        if doc:
+            return dict(doc)
+    except Exception as exc:
+        logger.debug('Could not read user_voice settings uid=%s err=%s', uid, type(exc).__name__)
 
     return {}
 
@@ -176,9 +180,13 @@ def _load_user_conversations_and_messages(
     try:
         from database import conversations as conversations_db
 
-        loaded_convs = conversations_db.get_conversations(uid, limit=limit_conversations)
-        if isinstance(loaded_convs, list):
-            conversations = loaded_convs
+        loaded_convs = conversations_db.get_conversations(
+            uid=uid,
+            limit=limit_conversations,
+            statuses=['completed'],
+            include_discarded=False,
+        )
+        conversations = list(loaded_convs or [])
     except Exception as exc:
         logger.debug('Could not load conversations for user_voice uid=%s err=%s', uid, type(exc).__name__)
 
@@ -186,8 +194,7 @@ def _load_user_conversations_and_messages(
         from database import chat as chat_db
 
         loaded_msgs = chat_db.get_messages(uid, limit=limit_messages)
-        if isinstance(loaded_msgs, list):
-            messages = loaded_msgs
+        messages = list(loaded_msgs or [])
     except Exception as exc:
         logger.debug('Could not load chat messages for user_voice uid=%s err=%s', uid, type(exc).__name__)
 
@@ -195,8 +202,7 @@ def _load_user_conversations_and_messages(
         from database import users as users_db
 
         loaded_people = users_db.get_people(uid)
-        if isinstance(loaded_people, list):
-            people = loaded_people
+        people = list(loaded_people or [])
     except Exception as exc:
         logger.debug('Could not load people for user_voice uid=%s err=%s', uid, type(exc).__name__)
 
@@ -279,7 +285,10 @@ def set_user_voice_enabled(
                 if person_id
                 else {'user_voice_enabled': bool(enabled)}
             )
-            firestore_client.collection('users').document(uid).set(update, merge=True)
+            col_fn = getattr(firestore_client, 'collection', None)
+            if callable(col_fn):
+                doc_ref = getattr(col_fn('users'), 'document')(uid)
+                getattr(doc_ref, 'set')(update, merge=True)
         except Exception as exc:
             logger.warning('Could not persist user_voice opt-in uid=%s err=%s', uid, type(exc).__name__)
 
@@ -1032,7 +1041,7 @@ def polish_draft_in_user_voice(text: str, profile: Optional[UserVoiceProfile]) -
 
     Runs in pure Python with no model calls before the compose sheet opens.
     """
-    if not isinstance(text, str) or not text.strip() or profile is None or profile.sample_count <= 0:
+    if not text or not text.strip() or profile is None or profile.sample_count <= 0:
         return text
 
     out = text.strip()
@@ -1124,10 +1133,10 @@ def apply_user_voice_to_proposed_message(
     firestore_client: Any = None,
 ) -> str:
     """Resolve the recipient's cached/built voice profile and polish ``text`` in-place."""
-    if not isinstance(text, str) or not text:
+    if not text:
         return text
 
-    recipient = to[0].strip() if isinstance(to, (list, tuple)) and to and isinstance(to[0], str) else None
+    recipient = to[0].strip() if isinstance(to, (list, tuple)) and to and to[0] else None
     if not person_name and recipient:
         mapped_name = _CONTACT_HANDLE_TO_PERSON.get((uid, _normalize_person_key(recipient)))
         if mapped_name:
