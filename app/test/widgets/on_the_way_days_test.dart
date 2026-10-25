@@ -252,4 +252,17 @@ void main() {
     expect(find.byKey(const Key('on_the_way_day_2026-10-18')), findsNothing);
     expect(find.textContaining('on the way'), findsNothing);
   });
+
+  testWidgets('grouped chunks with gaps display only positive audio duration in summary, day, and row', (tester) async {
+    await _pump(tester, [
+      _wal(DateTime(2026, 10, 18, 8, 0), 5, WalStatus.uploaded),
+      _wal(DateTime(2026, 10, 18, 8, 1), 5, WalStatus.uploaded),
+      _wal(DateTime(2026, 10, 18, 8, 2), 5, WalStatus.uploaded),
+    ]);
+
+    expect(find.text('1 recording · 15s on the way'), findsOneWidget);
+    expect(_headerLine(tester, '2026-10-18'), '1 recording · 15s');
+    expect(_row('8:00 AM · 15s'), findsOneWidget);
+    expect(find.textContaining('2m 5s'), findsNothing);
+  });
 }
