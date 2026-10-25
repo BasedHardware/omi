@@ -97,6 +97,7 @@ if [[ "$PLATFORM" == ios && "$SIMULATOR" != 1 ]]; then
   # Update the exact DEV bundle in place; never uninstall or remove its data.
   xcrun devicectl device install app --device "$DEVICE" --timeout 90 "$BINARY" > "$OUT_DIR/install.log" 2>&1
   CANARY_NAME="omi-heavy-preserve-$(uuidgen).txt"
+  printf '%s\n' "$CANARY_NAME" > "$OUT_DIR/preservation-canary-name.txt"
   printf '%s\n' 'Synthetic heavy-profile sandbox preservation canary.' > "$OUT_DIR/preservation-canary.txt"
   xcrun devicectl device copy to --device "$DEVICE" --source "$OUT_DIR/preservation-canary.txt" \
     --domain-type appDataContainer --domain-identifier "$BUNDLE_ID" \

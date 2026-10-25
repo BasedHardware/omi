@@ -9,9 +9,11 @@ Only the still-connected, VM-attested harness PID may be terminated; keep its
 app/data. Use SIGKILL for that PID because the debugger can intercept SIGTERM
 and leave the process stopped. A successful request is recorded separately
 from the synthetic canary's evidence of installation/data retention.
-Each physical iOS attempt must read back a unique synthetic preservation canary
+Each completed physical iOS attempt must read back a unique synthetic preservation canary
 written by this run. Never enumerate or read existing app data. Missing canary
-proof stops the batch, including after failed attempts. Android retention still
+proof stops the batch, including after failed attempts. Cancellation may stop
+before that check; such an attempt is never a receipt and needs an explicit
+owner-approved check later. Android retention still
 needs qualification on the dedicated hardware.
 
 Run from a prepared product task worktree on a fleet Mac:
@@ -29,8 +31,8 @@ awake; restore its Auto-Lock setting when releasing the device. Never use a
 production account or the production app for this benchmark.
 
 The runner enters an Aqua Terminal session for signing and VM discovery. The
-launching app needs macOS Local Network permission or USB discovery fallback,
-and the DEV app needs the phone's local-network permission. The caller waits for the owned worker and its terminal
+launching app needs macOS Local Network permission or USB discovery fallback.
+The caller waits for the owned worker and its terminal
 result. Interrupting the caller cancels the worker's process group. A killed
 headless caller is also observed by the Aqua worker. Only one benchmark may own
 this worktree's build output at a time.
@@ -49,7 +51,7 @@ route. The runner records the actual Aqua session and changes no permissions.
 waiter is the workspace's canonical `wait_for.sh`, resolved from
 `OMI_ROLLOUT_BIN` or `OMI_WORKSPACE_ROOT/infra/rollout/bin`. On a relocated host,
 set `OMI_HEAVY_BIN` and `OMI_PERF_WAITER` explicitly. If the GUI waiter is not
-installed, run the command directly in Aqua iTerm. No signing identities, key
+installed, run the command directly in the approved Aqua terminal. No signing identities, key
 ACLs, production build settings, schedulers or permissions are changed by it.
 
 ## Receipts and comparison
@@ -120,6 +122,8 @@ accepted profile baseline.
 | Giant CPU receipt | The VM may return its entire AOT function table, including unused entries. Keep sampled stacks and their referenced functions; do not attribute unused functions or post-run serialization to the measured flows. |
 | App says tests passed but transport failed | Require the driver receipt and the host variance result as well. Test output, artifact identity and acceptance are separate checks. |
 | Scenario assertions pass but engine frame count is zero | One qualification run lost frame callbacks for three flows; native foreground loss was suspected, not proven. Reset only the exact DEV bundle before each attempt and activate it before the scenario handshake. Require resumed state and nonempty frames. Only tagged foreground/no-frame failures retry, at most twice. Every rejected attempt remains under `attempts/`; valid slow runs and variance failures never retry. |
+| Native app-active getter and Flutter lifecycle both stay inactive | Stop after the bounded retries. A system alert is one possible cause, not a diagnosis. Do not invent resumed events, capture a personal device's screen, tap dialogs or alter permissions. Ask the owner to clear the blocker, then requalify. The overnight device run was paused on this evidence. |
+| Runner is cancelled during startup | The attempted measurement has no acceptance receipt. Retain all artifacts and `preservation-canary-name.txt`; a cancelled attempt may lack its post-run canary check. Later owner-approved checks may read only that exact synthetic file, never enumerate the app container. |
 | Foreground guard rejects a phone that is unlocked | Flutter's TestPlatformDispatcher starts with an empty initial lifecycle value. The harness reads the actual native buffered state once when binding state is null, then retains live lifecycle events as authoritative. It never invents a resumed event. Receipts record both values. Profile failure formatting can lose exception text, so retry reasons travel as structured reportData. |
 
 ## Android and an always-on nightly host

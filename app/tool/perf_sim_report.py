@@ -35,7 +35,8 @@ def validate(report):
     idle = report.get('idle_preflight_frames')
     if type(idle) is not int or not 0 <= idle <= 3:
         raise ValueError('missing or failed idle-frame preflight')
-    if report.get('pacing') != 'fixed-real-time/v1' or report.get('foreground_before_measurement') is not True:
+    if (report.get('pacing') != 'fixed-real-time/v1' or report.get('foreground_before_measurement') is not True
+            or report.get('native_foreground_before_measurement') is not True):
         raise ValueError('fixed pacing and foreground qualification are required')
     if not isinstance(report.get('timeline_enabled'), bool):
         raise ValueError('timeline recording mode is required')

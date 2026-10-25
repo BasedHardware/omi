@@ -97,6 +97,19 @@ void main() {
     const simulatorQualification = bool.fromEnvironment('PERF_SIM_QUALIFICATION');
     expect(kProfileMode || (kDebugMode && simulatorQualification), isTrue,
         reason: 'Profile required; debug simulator runs must opt into qualification only');
+    final resumed = await _awaitCondition(() => binding.lifecycleState == AppLifecycleState.resumed,
+        timeout: const Duration(seconds: 15));
+    final nativeActive = await FlutterForegroundTask.isAppOnForeground;
+    final foregroundSnapshot = {
+      'binding': binding.lifecycleState?.name,
+      'native_buffered': ui.PlatformDispatcher.instance.initialLifecycleState,
+      'native_app_active': nativeActive,
+    };
+    binding.reportData = {...?binding.reportData, 'heavy_foreground': foregroundSnapshot};
+    debugPrint('HEAVY_FOREGROUND ${jsonEncode(foregroundSnapshot)}');
+    if (!resumed || !nativeActive) _rejectMeasurement(binding, 'not_resumed', scenario: 'preflight');
+    expect(resumed && nativeActive, isTrue,
+        reason: 'HEAVY_FOREGROUND_REJECTED: DEV app must be natively active and resumed before fixture I/O');
     final storage = await isolateHeavyStorage();
     debugPrint('HEAVY_STAGE storage isolated');
 
@@ -142,17 +155,6 @@ void main() {
 
     const timelineEnabled = bool.fromEnvironment('PERF_HEAVY_TIMELINE');
     if (timelineEnabled) await binding.enableTimeline(streams: const ['Dart', 'GC']);
-    final resumed = await _awaitCondition(() => binding.lifecycleState == AppLifecycleState.resumed,
-        timeout: const Duration(seconds: 15));
-    final foregroundSnapshot = {
-      'binding': binding.lifecycleState?.name,
-      'native_buffered': ui.PlatformDispatcher.instance.initialLifecycleState,
-      'native_app_active': await FlutterForegroundTask.isAppOnForeground,
-    };
-    binding.reportData = {...?binding.reportData, 'heavy_foreground': foregroundSnapshot};
-    debugPrint('HEAVY_FOREGROUND ${jsonEncode(foregroundSnapshot)}');
-    if (!resumed) _rejectMeasurement(binding, 'not_resumed', scenario: 'preflight');
-    expect(resumed, isTrue, reason: 'HEAVY_FOREGROUND_REJECTED: DEV app must be resumed before measurement');
     await (() async {
       // 4. Cold start: shell mount → Home request → empty server page → cache
       //    decode of the full seeded history → grouped list rendered → settled.
@@ -255,6 +257,7 @@ void main() {
       'timeline_enabled': timelineEnabled,
       'storage_isolated': true,
       'foreground_before_measurement': resumed,
+      'native_foreground_before_measurement': nativeActive,
       'flavor': 'dev',
       'scenario_order': collector.windowOrder,
       'dataset': {

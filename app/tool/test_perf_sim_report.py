@@ -19,6 +19,7 @@ def receipt(mode='profile'):
     return {'schema': 'omi-mobile-perf-sim/v2', 'complete': True, 'frame_policy': 'framework-requested/v1',
             'idle_preflight_frames': 0,
             'pacing': 'fixed-real-time/v1', 'foreground_before_measurement': True,
+            'native_foreground_before_measurement': True,
             'storage_isolated': True, 'build_mode': mode,
             'timeline_enabled': False,
             'acceptance_eligible': mode == 'profile', 'dataset': dict(reporter.HEAVY_DATASET),
@@ -40,7 +41,7 @@ class ReportTests(unittest.TestCase):
 
     def test_empty_or_incomplete_evidence_rejected(self):
         for change in ({'complete': False}, {'scenarios': {}}, {'storage_isolated': False},
-                       {'idle_preflight_frames': 240}):
+                       {'idle_preflight_frames': 240}, {'native_foreground_before_measurement': False}):
             value = receipt()
             value.update(change)
             with self.assertRaises(ValueError):
