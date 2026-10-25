@@ -37,9 +37,10 @@ static bool download_and_install_firmware();
 // Callback for OTA Control characteristic
 class OTAControlCallback : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) override {
-        std::string value = pCharacteristic->getValue();
-        if (value.length() > 0) {
-            ota_handle_command((uint8_t *)value.data(), value.length());
+        String value = pCharacteristic->getValue();
+        std::string value_str = value.c_str();
+        if (value_str.length() > 0) {
+            ota_handle_command((uint8_t *)value_str.c_str(), value.length());
         }
     }
 
