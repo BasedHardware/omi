@@ -370,6 +370,9 @@ class Projector:
         self.handoff = threading.Lock()
         # Resume point of the held-partial scan; a short page wraps it.
         self.held_after: str | None = None
+        # Upload dedupe of the held-partial pass in flight; spans budget stops
+        # and wraps only when the scan's cursor does.
+        self.held_pass_seen: set[tuple[str, str]] = set()
 
     def request_drain(self, owner_id: str) -> None:
         with self.handoff:
@@ -622,23 +625,68 @@ class Projector:
             record_speech_steps(binding, accounting['source'], steps, times, self.clock())
         return result
 
-    def sweep_held(self, limit: int = HELD_PARTIAL_PAGE) -> dict[str, int]:
-        """Bounded page of held units; one partial attempt per upload."""
-        counts = {'partial': 0, 'waiting': 0, 'error': 0}
-        page = held_candidates(self.store.client, self.store.store.namespace, limit, after_id=self.held_after)
-        self.held_after = page[-1][0] if len(page) >= limit else None
-        seen = set()
-        for _, job in page:
+    def sweep_held(
+        self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None
+    ) -> dict[str, int]:
+        """Pages of held units chained into one bounded pass; one partial attempt per upload.
+
+        A ``deadline`` (a ``time.monotonic`` instant) or ``max_pages`` chains
+        full pages back to back — checked only between pages, so a pass
+        overruns its deadline by at most one page — while neither bound keeps
+        the legacy single-page contract. ``units`` counts held documents
+        examined; ``reads`` is what the caller should charge its read budget:
+        one read per examined document plus, per attempted upload, 5 reads per
+        sibling and 7 (the code-derived worst case of prepare_accounting plus
+        the complete_partial transaction, which walk every sibling), floored
+        at the benchmark's measured per-attempt worst case.
+        ``more`` marks a pass stopped on a full page or a failed fetch with the
+        cursor kept, so the caller can resume it without waiting out its
+        interval. The upload dedupe spans the whole pass — across budget stops
+        too — and resets only when a short page wraps the cursor.
+        """
+        counts = {'partial': 0, 'waiting': 0, 'error': 0, 'units': 0, 'reads': 0, 'more': 0}
+        pages = 0
+        while True:
             try:
-                binding = normalized_binding(job['projection_binding'])
-                if (binding.owner_id, binding.content_id) in seen:
-                    continue
-                seen.add((binding.owner_id, binding.content_id))
-                counts['partial' if self.complete_held(binding) is not None else 'waiting'] += 1
+                page = held_candidates(self.store.client, self.store.store.namespace, limit, after_id=self.held_after)
             except Exception as error:
-                counts['error'] += 1
-                logger.warning('event=batch_held_partial outcome=retry exception_type=%s', error_type(error))
-        return counts
+                # A failed fetch bills nothing but must not lose the pages the
+                # pass already served: end the segment resumable, not by raise.
+                counts['more'] = 1
+                logger.warning(
+                    'event=batch_held_partial action=fetch outcome=retry exception_type=%s', error_type(error)
+                )
+                return counts
+            full = len(page) >= limit
+            self.held_after = page[-1][0] if full else None
+            counts['units'] += len(page)
+            counts['reads'] += len(page)
+            counts['more'] = 1 if full else 0
+            pages += 1
+            for _, job in page:
+                try:
+                    binding = normalized_binding(job['projection_binding'])
+                    if (binding.owner_id, binding.content_id) in self.held_pass_seen:
+                        continue
+                    self.held_pass_seen.add((binding.owner_id, binding.content_id))
+                    # 5 reads per sibling and 7 more per attempt bound both
+                    # accounting passes; the floor keeps a one-segment upload
+                    # at the benchmark's measured per-attempt worst case.
+                    counts['reads'] += max(16, 5 * len(binding.segment_ids) + 7)
+                    counts['partial' if self.complete_held(binding) is not None else 'waiting'] += 1
+                except Exception as error:
+                    counts['error'] += 1
+                    logger.warning('event=batch_held_partial outcome=retry exception_type=%s', error_type(error))
+            if not full:
+                # The scan wrapped: the pass is complete and the next one starts fresh.
+                self.held_pass_seen = set()
+                return counts
+            if deadline is None and max_pages is None:
+                return counts
+            if deadline is not None and time.monotonic() >= deadline:
+                return counts
+            if max_pages is not None and pages >= max_pages:
+                return counts
 
     def assign_record_silence(self, item, binding, session, *, hint=None):
         incoming = {
