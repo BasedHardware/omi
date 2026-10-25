@@ -390,7 +390,12 @@ def locate(
     all_sync = True
     for segment in contributors:
         scope = segment.get('speaker_id_scope')
-        is_sync_scope = isinstance(scope, str) and scope.startswith('sync:') and len(scope) > len('sync:')
+        # Both paths time ASR against the uploaded file, unlike live streams.
+        is_sync_scope = (
+            isinstance(scope, str)
+            and scope.startswith(('sync:', 'final:batch:'))
+            and scope not in ('sync:', 'final:batch:')
+        )
         if not is_sync_scope and not saved_sync_window(segment, origin):
             all_sync = False
             break

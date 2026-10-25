@@ -6,6 +6,7 @@ Encrypted embeddings bound repeat work; missing audio abstains and manual receip
 from __future__ import annotations
 
 from config.transcription_final_pass import authoritative_for
+from config.batch_conversation_speakers import enabled as batch_speakers_enabled, has_batch_authority
 from config.refactor_modes import serving_for
 from utils.speakers import processing as speaker_evidence
 
@@ -39,7 +40,7 @@ from utils.conversations.audio_placement import (
     prepare_audio_coverage,
     text_window_refusal,
 )
-from utils.conversations.speaker_grouping_shadow import compare_and_select
+from utils.conversations.speaker_grouping_shadow import compare_and_select, provider_key
 from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
 from utils.metrics import (
     OMI_AUDIO_PLACEMENT_TOTAL,
@@ -809,8 +810,8 @@ def apply_speaker_resolution(
         if (
             segment.audio_source is None
             and origin is not None
-            and segment_scope.startswith('sync:')
-            and len(segment_scope) > len('sync:')
+            and segment_scope.startswith(('sync:', 'final:batch:'))
+            and segment_scope not in ('sync:', 'final:batch:')
             and segment.audio_alignment != 'unplaced'
             and math.isfinite(segment.start)
             and math.isfinite(segment.end)
@@ -934,12 +935,11 @@ def resolve_speakers_for_processing(
                     'event=conversation_speaker_resolution outcome=manual_receipt_failed exception_type=%s',
                     type(error).__name__,
                 )
-        # Legacy batch authority survives rollback; serve requires verified centroids.
-        batch_record = any(
-            (segment.speaker_id_scope or '').startswith('final:batch:') for segment in conversation.transcript_segments
-        )
-        # refactor: superseded by utils.speakers when SPEAKER_EVIDENCE_MODE=serve
-        if batch_record and not serving_for('SPEAKER_EVIDENCE_MODE', uid):
+        # Batch authority survives admission rollback and subsequent resolution.
+        batch_record = has_batch_authority(conversation.transcript_segments)
+        batch_resolution = batch_speakers_enabled(conversation.transcript_segments)
+        # The kill switch also stops linking/naming when speaker evidence serves.
+        if batch_record and not batch_resolution:
             resolver_reason('batch_authoritative')
             # Legacy owner-safe abstention; manual receipts still win below.
             trusted = _capture_trusted(conversation.transcript_segments)
@@ -953,8 +953,8 @@ def resolve_speakers_for_processing(
                         if segment.speaker_match_source != 'batch_abstention'
                     ]
                 )
-        # refactor: superseded by per-window evidence when SPEAKER_EVIDENCE_MODE=serve
-        final_record = (batch_record and not serving_for('SPEAKER_EVIDENCE_MODE', uid)) or (
+        # Other final-pass authorities retain their existing bypass.
+        final_record = (batch_record and not batch_resolution) or (
             not batch_record
             and authoritative_for(uid)
             and all(
@@ -1208,6 +1208,7 @@ def _resolve(
 ) -> None:
     began = time.monotonic()
     segments = conversation.transcript_segments
+    batch_resolution = batch_speakers_enabled(segments)
     input_ids = len({s.speaker_id for s in segments if s.speaker_id != OMI_SPEAKER_ID_SENTINEL})
     if not conversation.private_cloud_sync_enabled or not speaker_embedding_configured():
         resolver_reason('no_audio')
@@ -1339,6 +1340,20 @@ def _resolve(
 
     pending = [s for s in segments if needs_embedding(s)]
     abstained = set(invalid_text_ids)
+    provider_keys = (
+        {s.id: key for s in segments if s.id and (key := provider_key(s)) is not None} if batch_resolution else {}
+    )
+    if batch_resolution:
+        abstained.update(
+            s.id
+            for s in segments
+            if s.id
+            and (
+                s.id not in provider_keys
+                or s.speaker_match_source == 'batch_abstention'
+                or (s.speaker or '').startswith('BATCH_UNASSIGNED_')
+            )
+        )
     if embeddable:
         # One missing provider window does not invalidate other proven windows.
         # It must never borrow the nearest voice or a bare legacy cache entry.
@@ -1474,6 +1489,15 @@ def _resolve(
         voiceprints=voiceprints,
         embedding_seconds=score_durations,
         abstained_segment_ids=abstained,
+        **(
+            {
+                'grouping': 'batch_authoritative',
+                'provider_keys': provider_keys,
+                'grouping_deadline': min(deadline, time.monotonic() + 2.0),
+            }
+            if batch_resolution
+            else {}
+        ),
     )
     if resolution is None:
         reason, fields = _no_embeddings_diagnostics(
@@ -1491,16 +1515,20 @@ def _resolve(
         _without_resolution(conversation, 'no_embeddings', reason=reason, diagnostics=fields)
         return
 
-    resolution = compare_and_select(
-        uid,
-        conversation,
-        resolution,
-        vectors,
-        manual_speakers=manual_speakers,
-        voiceprints=voiceprints,
-        embedding_seconds=score_durations,
-        abstained_segment_ids=abstained,
-        receipt=receipt,
+    resolution = (
+        resolution
+        if batch_resolution
+        else compare_and_select(
+            uid,
+            conversation,
+            resolution,
+            vectors,
+            manual_speakers=manual_speakers,
+            voiceprints=voiceprints,
+            embedding_seconds=score_durations,
+            abstained_segment_ids=abstained,
+            receipt=receipt,
+        )
     )
 
     try:
