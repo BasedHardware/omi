@@ -37,6 +37,15 @@ def _parse_kv(body):
 
 @pytest.fixture(scope="module")
 def modules():
+    # The suggestion tests assert the real sanitize_suggestion_dict coercion, so the
+    # canonical contract module must be loaded before the empty-path `models` stub
+    # takes over sys.modules; otherwise the fresh goals.py exec cannot import it in
+    # a per-file pytest process (CI's BACKEND_PYTEST_FILE_ISOLATION mode).
+    goal_model_mod = load_module_fresh(
+        "models.goal",
+        os.path.join(str(BACKEND_DIR), "models", "goal.py"),
+    )
+
     generated_compute_mod = ModuleType("utils.generated_compute")
     generated_compute_mod.generated_compute_allowed = lambda *a, **kw: True
     generated_compute_mod.generated_compute_scoped = lambda fn: fn
@@ -99,6 +108,7 @@ def modules():
         "utils.conversations": _empty_pkg("utils.conversations"),
         "database": _empty_pkg("database"),
         "models": _empty_pkg("models"),
+        "models.goal": goal_model_mod,
         "routers": _empty_pkg("routers"),
         "utils.generated_compute": generated_compute_mod,
         "database.goals": goals_db_mod,

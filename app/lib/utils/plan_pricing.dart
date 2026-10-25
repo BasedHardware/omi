@@ -1,5 +1,10 @@
 import 'package:collection/collection.dart';
 
+/// The backend formats Stripe minor units using the actual currency. Older
+/// backends only offered USD and omit this additive field.
+String planBillingTotal(Map<String, dynamic> plan) =>
+    plan['billing_total'] as String? ?? '\$${(plan['unit_amount'] as num) / 100}';
+
 /// Months saved by a tier's annual price, derived from the tier's own prices.
 ///
 /// Discounts differ per tier — legacy Neo saves 2 months while Plus and
@@ -62,6 +67,7 @@ int? _annualMonthsFree(List<Map<String, dynamic>> plans) {
 (double, double)? _monthlyAndYearly(List<Map<String, dynamic>> plans) {
   final monthly = plans.firstWhereOrNull((p) => p['interval'] == 'month');
   final yearly = plans.firstWhereOrNull((p) => p['interval'] == 'year');
+  if ((monthly?['currency'] ?? 'usd') != (yearly?['currency'] ?? 'usd')) return null;
   final monthlyAmount = (monthly?['unit_amount'] as num?)?.toDouble();
   final yearlyAmount = (yearly?['unit_amount'] as num?)?.toDouble();
   if (monthlyAmount == null || yearlyAmount == null || monthlyAmount <= 0) return null;

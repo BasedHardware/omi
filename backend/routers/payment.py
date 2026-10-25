@@ -28,6 +28,13 @@ from utils.subscription_state_machine import (
     transition,
     schedule_transition,
 )
+from utils.billing_currency import (
+    BillingCurrencyUnavailable,
+    management_binding,
+    price_for_currency,
+    subscription_currency,
+)
+from utils.storefront_copy import format_money
 from utils.billing_flags import webhook_ledger_enabled
 from utils.stripe_webhook_ledger import dispatch_with_ledger, RetryableBillingSkip
 from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
@@ -226,7 +233,9 @@ class PricingOption(BaseModel):
     subtitle: Optional[str] = None  # e.g. "2000 questions per month"
     eyebrow: Optional[str] = None  # e.g. "Starter", "Most popular"
     interval: str  # "month" or "year"
-    unit_amount: int  # amount in cents
+    unit_amount: int  # Stripe minor units (whole yen for JPY)
+    currency: str = 'usd'
+    billing_total: Optional[str] = None
     is_active: bool = False  # Added for active status
 
 
@@ -445,6 +454,7 @@ def get_available_plans_endpoint(
     uid: str = Depends(auth.get_current_user_uid_no_byok_validation),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+    x_billing_currency: Optional[str] = Header(None, alias='X-Omi-Billing-Currency'),
 ):
     """Get available subscription plans with their price IDs and billing intervals."""
     try:
@@ -452,17 +462,23 @@ def get_available_plans_endpoint(
         current_subscription = users_db.get_user_subscription(uid)
         current_price_id = None
         scheduled_price_id = None
+        billing_currency = None
 
-        # Only mark plans as active if user has a paid plan that's actually active AND not scheduled for cancellation
+        # Read currency for current paid subscriptions, including pending cancellation.
         if (
             current_subscription
             and is_paid_plan(current_subscription.plan)
             and current_subscription.status == SubscriptionStatus.active
             and current_subscription.stripe_subscription_id
-            and not current_subscription.cancel_at_period_end
+            and current_subscription.stripe_subscription_id.startswith('sub_')
+            and (
+                not current_subscription.current_period_end
+                or current_subscription.current_period_end > int(time.time())
+            )
         ):
             try:
                 stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
+                billing_currency = subscription_currency(stripe_sub)
                 if stripe_sub and stripe_sub['items']['data']:
                     current_price_id = stripe_sub['items']['data'][0]['price']['id']
 
@@ -488,8 +504,14 @@ def get_available_plans_endpoint(
 
             except Exception as e:
                 logger.error(f"Error retrieving current subscription: {sanitize(str(e))}")
+                raise HTTPException(status_code=503, detail="Could not verify your billing currency. Please try again.")
         else:
             logger.info(f"No active paid subscription found for user {uid}")
+
+        # Older installed sheets hardcode USD in the annual confirmation. Do
+        # not offer them JPY targets until they advertise currency-safe rendering.
+        if billing_currency and billing_currency != 'usd' and x_billing_currency != '1':
+            raise HTTPException(status_code=409, detail="Please update Omi to change plans in your billing currency.")
 
         # Version-gate the new Operator + Architect catalog. Mobile and older
         # desktop builds see the pre-rollout plan shape. Then legacy-filter so
@@ -521,24 +543,29 @@ def get_available_plans_endpoint(
         valid_subscription = users_db.get_user_valid_subscription(uid)
         current_plan = valid_subscription.plan if valid_subscription else PlanType.basic
         pricing_options: List[PricingOption] = []
+        active_price_ids = {current_price_id, scheduled_price_id}
+        if current_subscription and current_subscription.cancel_at_period_end:
+            active_price_ids.clear()
         for definition in filter_plans_for_user(all_definitions, current_plan, platform=x_app_platform):
             monthly_price_id = definition["monthly_price_id"]
             annual_price_id = definition["annual_price_id"]
             if monthly_price_id:
                 try:
-                    monthly_price = stripe.Price.retrieve(monthly_price_id)
+                    monthly_price = price_for_currency(stripe.Price.retrieve(monthly_price_id), billing_currency)
                     pricing_options.append(
                         PricingOption(
                             id=monthly_price.id,
                             plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Monthly',
-                            price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
+                            price_string=f"{format_money(monthly_price.unit_amount, monthly_price.currency)}/mo",
+                            currency=monthly_price.currency,
+                            billing_total=format_money(monthly_price.unit_amount, monthly_price.currency),
                             description=definition.get("description"),
                             subtitle=definition.get("subtitle"),
                             eyebrow=definition.get("eyebrow"),
                             interval=monthly_price.recurring.interval,
                             unit_amount=monthly_price.unit_amount,
-                            is_active=current_price_id == monthly_price.id or scheduled_price_id == monthly_price.id,
+                            is_active=monthly_price.id in active_price_ids,
                         )
                     )
                 except Exception as e:
@@ -548,19 +575,21 @@ def get_available_plans_endpoint(
                     )
             if annual_price_id:
                 try:
-                    annual_price = stripe.Price.retrieve(annual_price_id)
+                    annual_price = price_for_currency(stripe.Price.retrieve(annual_price_id), billing_currency)
                     pricing_options.append(
                         PricingOption(
                             id=annual_price.id,
                             plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Annual',
-                            price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
+                            price_string=f"{format_money(annual_price.unit_amount // 12, annual_price.currency)}/mo",
+                            currency=annual_price.currency,
+                            billing_total=format_money(annual_price.unit_amount, annual_price.currency),
                             description=f'{definition.get("description", "")} {definition["annual_description"]}'.strip(),
                             subtitle=definition.get("subtitle"),
                             eyebrow=definition.get("eyebrow"),
                             interval=annual_price.recurring.interval,
                             unit_amount=annual_price.unit_amount,
-                            is_active=current_price_id == annual_price.id or scheduled_price_id == annual_price.id,
+                            is_active=annual_price.id in active_price_ids,
                         )
                     )
                 except Exception as e:
@@ -570,10 +599,15 @@ def get_available_plans_endpoint(
                     )
 
         if not pricing_options:
-            raise HTTPException(status_code=500, detail="Price configuration not found")
+            raise HTTPException(
+                status_code=409 if billing_currency else 500,
+                detail="No plans are available in your billing currency. Please contact support.",
+            )
 
         return AvailablePlansResponse(plans=pricing_options)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching available plans: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Failed to fetch available plans")
@@ -659,11 +693,16 @@ def create_checkout_session_endpoint(
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
-    _validate_price_id(request.price_id)
-    # Check if user can make a new payment
-    can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
-    if not can_pay:
-        raise HTTPException(status_code=400, detail=reason)
+    # Retained currency prices are management-only; ordinary targets keep the
+    # existing purchase and eligibility checks before promotion-code lookup.
+    currency_binding = management_binding(request.price_id)
+    management_only = currency_binding is not None and not is_purchasable_price_id(request.price_id)
+    if not management_only:
+        _validate_price_id(request.price_id)
+        # Check if user can make a new payment
+        can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
+        if not can_pay:
+            raise HTTPException(status_code=400, detail=reason)
 
     # Validate promotion code early — reject invalid codes before any subscription changes
     resolved_checkout_promo_id = None
@@ -672,6 +711,22 @@ def create_checkout_session_endpoint(
         if not promo_list.data:
             raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
         resolved_checkout_promo_id = promo_list.data[0].id
+
+    # Only the exact current JPY price may reactivate; never open new Checkout.
+    if management_only and currency_binding is not None:
+        current = users_db.get_user_subscription(uid)
+        if current and current.stripe_subscription_id and current.stripe_subscription_id.startswith('sub_'):
+            try:
+                snapshot = stripe.Subscription.retrieve(current.stripe_subscription_id).to_dict()
+            except stripe.error.StripeError as error:
+                logger.warning(f"Could not verify subscription for reactivation: {sanitize(str(error))}")
+                raise HTTPException(status_code=503, detail="Could not verify your subscription. Please try again.")
+            current_price = snapshot['items']['data'][0]['price']['id']
+            if current_price == request.price_id and subscription_currency(snapshot) == currency_binding[2]:
+                reactivation = _try_reactivate_subscription(uid, request.price_id)
+                if reactivation:
+                    return reactivation
+        raise HTTPException(status_code=400, detail="This price is only available to manage an existing subscription.")
 
     # Try to reactivate canceled subscription (Scenario A)
     reactivation_result = _try_reactivate_subscription(uid, request.price_id)
@@ -762,7 +817,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     - Same plan, different interval (e.g. monthly→annual): scheduled via SubscriptionSchedule,
       takes effect at end of current billing period.
     """
-    _validate_price_id(request.price_id)
+    currency_binding = management_binding(request.price_id)
+    if currency_binding is None:
+        _validate_price_id(request.price_id)
     current_subscription = users_db.get_user_subscription(uid)
 
     if not current_subscription or not current_subscription.stripe_subscription_id:
@@ -800,7 +857,38 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
         target_plan = get_plan_type_from_price_id(request.price_id)
         target_price = stripe.Price.retrieve(request.price_id)
-        target_interval = target_price.recurring.interval  # "month" or "year"
+        target_recurring = target_price.recurring
+        if target_recurring is None:
+            raise HTTPException(status_code=409, detail="This plan price is not a recurring subscription.")
+        target_interval = target_recurring.interval  # "month" or "year"
+        try:
+            currency = subscription_currency(stripe_sub)
+            if target_price.currency != currency:
+                raise BillingCurrencyUnavailable(
+                    'Please reopen Plans & Billing to select a price in your billing currency.'
+                )
+            if currency_binding is not None:
+                plan, interval, expected_currency = currency_binding
+                if stripe_sub.get('status') not in ('active', 'trialing'):
+                    raise BillingCurrencyUnavailable('An active subscription is required to change this plan.')
+                base_id = next(
+                    (
+                        definition['monthly_price_id' if interval == 'month' else 'annual_price_id']
+                        for definition in get_paid_plan_definitions()
+                        if definition['plan_type'] == plan
+                    ),
+                    None,
+                )
+                if not base_id or expected_currency != currency:
+                    raise BillingCurrencyUnavailable('This price is not available for your subscription.')
+                offered = price_for_currency(stripe.Price.retrieve(base_id), currency)
+                if offered.id != request.price_id:
+                    raise BillingCurrencyUnavailable(
+                        'This price is no longer available. Please reopen Plans & Billing.'
+                    )
+        except BillingCurrencyUnavailable as error:
+            raise HTTPException(status_code=409, detail=str(error))
+
         current_plan = get_plan_type_from_price_id(current_price_id)
 
         desktop_change_error = desktop_to_consumer_plan_change_error(current_plan, target_plan)
