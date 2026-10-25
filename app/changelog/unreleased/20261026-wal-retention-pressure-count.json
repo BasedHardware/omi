@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "WAL retention-pressure accounting fix only (synced copies with unknown sync age no longer count as pending); no store-build behavior change"
+}
