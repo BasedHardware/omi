@@ -212,12 +212,12 @@ def test_unsupported_top_language_is_never_parakeet_even_with_high_p_supported()
     assert not lid.LanguageDecision('pt', 0.97, 'self_lid', None).parakeet_safe
 
 
-def test_batch_intake_is_shadow_only_even_at_full_enforcement(monkeypatch):
+def test_batch_intake_enforces_the_self_gate_since_the_worker_accepts_self_lid(monkeypatch):
     monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
     wire = Wire(monkeypatch, vendor=('en', 0.99), self_gate=gate_body('ar', 0.0))
     decision = lid.resolve_language('multi', wav(), surface='batch')
-    assert decision.evidence == 'audio_lid'
-    assert len(wire.vendor_calls) == 1 and len(wire.gate_calls) == 1
+    assert decision.evidence == 'self_lid'
+    assert len(wire.vendor_calls) == 0 and len(wire.gate_calls) == 1
 
 
 @pytest.mark.parametrize('raw,value', [(None, 0), ('0', 0), ('5', 5), ('25', 25), ('100', 100), ('150', 100),
