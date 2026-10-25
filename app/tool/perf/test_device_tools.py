@@ -38,6 +38,7 @@ class DeviceToolsTests(unittest.TestCase):
             spec = root / 'launch.json'
             spec.write_text(json.dumps({'out': str(root), 'env': {}, 'parent_pid': os.getpid(),
                                          'parent_start': 'a different process incarnation',
+                                         'platform': 'ios',
                                          'launch_expires_at': time.time() + 300}))
             self.assertEqual(runner.worker(spec), 1)
             self.assertEqual((root / 'runner-done.txt').read_text(), 'PERF_DONE exit=1\n')

@@ -93,6 +93,13 @@ def worker(spec_path):
         if (time.time() > spec['launch_expires_at'] or
                 process_start(spec['parent_pid']) != spec['parent_start']):
             raise ValueError('expired launch or original caller no longer owns this process ID')
+        if spec['platform'] == 'ios' and sys.platform == 'darwin':
+            session = subprocess.run(['launchctl', 'managername'], check=True, capture_output=True,
+                                     text=True, timeout=5).stdout.strip()
+            (out / 'aqua-session.json').write_text(json.dumps({
+                'session': session, 'terminal': os.environ.get('TERM_PROGRAM')}) + '\n')
+            if session != 'Aqua':
+                raise ValueError('iOS signing requires the approved Aqua session')
         if sys.platform == 'darwin' and spec['parent_pid'] != os.getpid():
             # An Aqua worker must not outlive a killed headless caller.
             queue = select.kqueue()
@@ -162,6 +169,7 @@ def run(args):
                 parent_pid=os.getpid(),
                 parent_start=process_start(os.getpid()), launch_expires_at=time.time() + 300,
                 device=args.device, platform=args.platform, runs=args.runs, timeline=args.timeline,
+                aqua_app=args.aqua_app,
                 baseline=str(Path(args.baseline).expanduser().resolve()) if args.baseline else None,
                 accept_baseline=args.accept_baseline,
                 env={key: os.environ[key] for key in ENV_KEYS if key in os.environ})
@@ -184,26 +192,27 @@ def run(args):
         return worker(spec_path)
     session = subprocess.run(['launchctl', 'managername'], check=True, capture_output=True,
                              text=True, timeout=5).stdout.strip()
-    if session == 'Aqua' and os.environ.get('TERM_PROGRAM') == 'iTerm.app':
+    terminal_program = {'iTerm': 'iTerm.app', 'Terminal': 'Apple_Terminal'}[args.aqua_app]
+    if session == 'Aqua' and os.environ.get('TERM_PROGRAM') == terminal_program:
         return worker(spec_path)
     if not waiter.is_file() or not os.access(waiter, os.X_OK):
-        raise ValueError('Aqua launch needs canonical wait_for.sh: set OMI_PERF_WAITER, or run directly in Aqua iTerm')
+        raise ValueError('Aqua launch needs canonical wait_for.sh: set OMI_PERF_WAITER, or run directly in the approved GUI terminal')
     command = shlex.join([sys.executable, '-I', str(Path(__file__).resolve()), '--worker', str(spec_path)])
     try:
         try:
+            launch = ('tell application "iTerm" to create window with default profile command (item 1 of argv)'
+                      if args.aqua_app == 'iTerm' else
+                      'tell application "Terminal" to do script (item 1 of argv)')
             subprocess.run(['osascript', '-e', 'on run argv', '-e',
-                            'tell application "iTerm" to create window with default profile command (item 1 of argv)',
-                            '-e', 'end run', command], check=True, timeout=30)
+                            launch, '-e', 'end run',
+                            command if args.aqua_app == 'iTerm' else 'exec ' + command], check=True, timeout=30)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             if not (out / 'worker-pid.txt').is_file():
-                script = out / 'launch.command'
-                script.write_text('#!/bin/bash\nexec ' + command + '\n')
-                script.chmod(0o700)
-                print('iTerm AppleEvent did not acknowledge; opening the owned command file in iTerm.', flush=True)
-                subprocess.run(['open', '-a', 'iTerm', str(script)], check=True, timeout=30)
+                raise RuntimeError(f'{args.aqua_app} did not acknowledge launch; check Automation permission. '
+                                   'Use --aqua-app Terminal only when that fallback is approved.')
         launched = wait(waiter, out / 'worker-pid.txt', '^[0-9]+$', 'LAUNCH_FAILED', '90s')
         if launched:
-            raise RuntimeError('iTerm worker did not acknowledge launch; inspect the new iTerm window')
+            raise RuntimeError(f'{args.aqua_app} worker did not acknowledge launch; inspect the approved GUI terminal')
         result = wait(waiter, out / 'runner-done.txt', 'PERF_DONE exit=0', 'PERF_DONE exit=[1-9]', '2h')
         if result in (0, 1):
             return int((out / 'runner-done.txt').read_text().split('=')[1])
@@ -227,6 +236,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--device', help='approved physical device; defaults to the sole supported connected device')
     parser.add_argument('--platform', choices=('ios', 'android'), default='ios' if sys.platform == 'darwin' else 'android')
+    parser.add_argument('--aqua-app', choices=('iTerm', 'Terminal'), default='Terminal',
+                        help='approved GUI terminal; Terminal may need Local Network permission or slow USB fallback')
     parser.add_argument('--runs', type=int, default=3)
     parser.add_argument('--out')
     default_root = os.environ.get('OMI_PERF_ARTIFACT_ROOT')

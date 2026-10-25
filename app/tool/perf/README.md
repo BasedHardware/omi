@@ -14,12 +14,17 @@ there are multiple phones. Keep the approved phone connected, unlocked and
 awake; restore its Auto-Lock setting when releasing the device. Never use a
 production account or the production app for this benchmark.
 
-The runner enters an Aqua iTerm session for signing and VM discovery. iTerm
-needs macOS Local Network permission, and the DEV app needs the phone's local
-network permission. The caller waits for the owned worker and its terminal
+The runner enters an Aqua Terminal session for signing and VM discovery. The
+launching app needs macOS Local Network permission or USB discovery fallback,
+and the DEV app needs the phone's local-network permission. The caller waits for the owned worker and its terminal
 result. Interrupting the caller cancels the worker's process group. A killed
 headless caller is also observed by the Aqua worker. Only one benchmark may own
 this worktree's build output at a time.
+
+Use `--aqua-app iTerm` when that route is approved and configured. iTerm needs Automation permission
+for the controlling app; Terminal needs Local Network permission or accepts a
+2–3 minute USB discovery fallback per launch. Choose only an owner-approved
+route. The runner records the actual Aqua session and changes no permissions.
 
 `omi-heavy` supplies the concurrency gate and `nice -n 19` priority. The GUI
 waiter is the workspace's canonical `wait_for.sh`, resolved from
@@ -84,7 +89,7 @@ accepted profile baseline.
 | --- | --- |
 | `errSecInternalComponent` from codesign | Check `launchctl managername`. A Background session cannot use the GUI keychain like Aqua. Launch through approved iTerm; allow an actual owner-approved signing prompt. Preserve the existing identity/team. Never switch to ad-hoc signing or alter key ACLs. |
 | UDP 5353 `No route to host`, VM service not discovered | Check the launching app's Local Network permission. On the qualification host, Terminal was absent from the permission list while iTerm was granted. Use iTerm. USB log discovery sometimes recovers after 2–3 minutes; the warning itself is not a result. Each driver launch is capped at 14 minutes. |
-| iTerm AppleScript times out before a worker PID appears | The runner opens an owned local `.command` file with iTerm as a fallback. An atomic claim prevents a delayed AppleEvent and fallback from starting two device jobs or overwriting each other's result. No TCC setting is changed. If neither launch acknowledges, stop and inspect the recorded launch rather than starting another unowned job. |
+| iTerm AppleScript times out before a worker PID appears | The controlling app may need Automation permission. A command-file fallback was tried during qualification and stopped at an iTerm modal open-file warning, so unattended command-file fallback is not used. An atomic claim and caller identity/expiry checks reject duplicate or stale delayed launches. Use the approved `--aqua-app Terminal` route, or arrange permission/modal handling with the owner. Never alter TCC or blindly dismiss a warning. |
 | iOS simulator profile build refused | Flutter 3.44.5 forbids AOT profile/release on iOS simulators. Use physical iOS for acceptance. The lower runner's `--simulator-qualification` is debug only, with invocation-only simulator overrides. |
 | Heavy slot seems occupied forever | Inspect ownership and liveness with the workspace/host tools. An orphan Android emulator once retained a slot after its owner died. CPU/RSS alone is not permission to kill it. Ask its owner/lead before stopping it; never reset shared locks or kill another lane. |
 | Home missing a provider / ServiceManager not initialized | Compose the existing production shell once, with real Conversation/Sync/LocalRecordings/People providers and the WAL ledger. Supply inert Device/PhoneCall/native boundaries explicitly. Do not initialize real hardware/account services to make a synthetic fixture pass. |

@@ -24,12 +24,14 @@ Do not compare different phones, refresh rates, thermal states or host loads.
 The [runner guide](../../tool/perf/README.md) covers device selection, comparison
 and qualification failures. On macOS, signing needs the GUI login session. If
 `launchctl managername` says `Background` and codesign returns
-`errSecInternalComponent`, use an approved Aqua iTerm session as described in
+`errSecInternalComponent`, use an approved Aqua terminal session as described in
 [local-code-signing.md](../../../desktop/macos/docs/local-code-signing.md).
 Do not replace the signing identity, use ad-hoc signing or alter key ACLs to
 work around it. Flutter discovery needs the launching app's Local Network
 permission on the Mac and the DEV app's local-network permission on the phone.
-The qualification host grants iTerm; Terminal was absent from its permission list.
+The qualification host grants iTerm Local Network, but its Automation/modal
+path needs owner attention. The approved overnight route uses Aqua Terminal
+and accepts USB discovery fallback; no permission settings are changed.
 USB log discovery may recover slowly after a multicast denial; that warning is
 not a completed measurement. Keep Auto-Lock at Never for the approved session
 if no harness wake plugin is installed, then restore the owner's setting.
