@@ -4366,6 +4366,18 @@ export interface RecordLlmUsageBucketRequest {
   total_tokens?: number;
 }
 
+export interface RedeemCodeRequest {
+  code: string;
+}
+
+export interface RedeemCodeResponse {
+  amount_off?: number | null;
+  applies_at?: number | null;
+  currency?: string | null;
+  percent_off?: number | null;
+  status: string;
+}
+
 export interface ReferralClaimRequest {
   code: string;
 }
@@ -6849,6 +6861,8 @@ export interface OmiApiSchemas {
   "Recommendation": Recommendation;
   "RecommendationSubjectKind": RecommendationSubjectKind;
   "RecordLlmUsageBucketRequest": RecordLlmUsageBucketRequest;
+  "RedeemCodeRequest": RedeemCodeRequest;
+  "RedeemCodeResponse": RedeemCodeResponse;
   "ReferralClaimRequest": ReferralClaimRequest;
   "ReferralClaimResponse": ReferralClaimResponse;
   "ReferralLinkResponse": ReferralLinkResponse;
@@ -10187,6 +10201,16 @@ export interface OmiApiPaths {
       responses: {
         "200": unknown;
         "401": void;
+      };
+    };
+  };
+  "/v1/payments/redeem-code": {
+    post: {
+      operationId: "redeem_code_endpoint_v1_payments_redeem_code_post";
+      responses: {
+        "200": RedeemCodeResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
@@ -18383,6 +18407,27 @@ export async function get_overage_info_endpoint_v1_payments_overage_info_get(hea
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function redeem_code_endpoint_v1_payments_redeem_code_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RedeemCodeRequest, init?: OmiApiClientInit): Promise<RedeemCodeResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/payments/redeem-code`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_retention_offer_endpoint_v1_payments_retention_offer_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<RetentionOfferResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/payments/retention-offer`;
@@ -22906,4 +22951,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 527 client methods generated.
+// Total: 528 client methods generated.
