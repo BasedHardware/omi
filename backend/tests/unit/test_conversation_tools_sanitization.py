@@ -139,6 +139,19 @@ _transcript_search_mod.search_chat_transcript_chunks = MagicMock(return_value=_C
 _fallback_mod = _mod("utils.observability.fallback")
 _fallback_mod.record_fallback = MagicMock()
 
+
+def _ensure_metrics():
+    if "utils.metrics" in sys.modules:
+        return
+    try:
+        import utils.metrics  # noqa: F401
+    except ImportError:
+        _m = _mod("utils.metrics")
+        _m.OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL = MagicMock()
+
+
+_ensure_metrics()
+
 # Stub utils.retrieval.chat_scope
 _chat_scope_mod = _mod("utils.retrieval.chat_scope")
 _chat_scope_mod.apply_chat_scope_dates = lambda scope, s, e: (s, e, None)
