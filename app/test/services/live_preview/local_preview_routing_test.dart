@@ -295,6 +295,35 @@ void main() {
     expect((await world.walCounts())[WalStatus.synced], 1);
   });
 
+  test('WAL refused (storage blocked) during the pre-verdict hold: frames reach the socket, in order', () async {
+    await boot(livePreview: preview());
+    world.deviceConnection!.emitAudio(value: 1); // WAL-accepted: held
+    await world.settle();
+    expect(world.socket!.sentBinary, isEmpty);
+    world.wal.syncs.phone.debugRefusePendantFrames = true;
+    world.deviceConnection!.emitAudio(value: 2); // WAL refused: no custody, so never held
+    await world.settle();
+    expect(world.socket!.sentBinary, [List.filled(80, 1), List.filled(80, 2)]);
+    expect(world.wal.syncs.phone.testFrames.map((frame) => frame.payload.first), [1]);
+  });
+
+  test('WAL refused during journal warm-up: the frame reaches the socket instead of vanishing', () async {
+    vadGate = Completer<void>();
+    await boot(livePreview: preview());
+    world.socket!.emitServerMessage(_admitted);
+    await world.settle();
+    expect(lane.warmingUp, true);
+    world.deviceConnection!.emitAudio(value: 3); // warm-up, WAL kept it: off the socket
+    await world.settle();
+    world.wal.syncs.phone.debugRefusePendantFrames = true;
+    world.deviceConnection!.emitAudio(value: 4); // warm-up, WAL refused: to the socket
+    await world.settle();
+    expect(world.socket!.sentBinary, [List.filled(80, 4)]);
+    expect(world.wal.syncs.phone.testFrames.map((frame) => frame.payload.first), [3]);
+    vadGate!.complete();
+    await lane.pendingInitialization;
+  });
+
   test('a server without local_preview keeps today: visible frames stream, no preview', () async {
     final live = preview();
     await boot(livePreview: live);

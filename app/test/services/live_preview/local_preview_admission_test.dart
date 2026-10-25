@@ -15,10 +15,11 @@ void main() {
   late List<LocalPreviewVerdictReport> reports;
   late LivePreviewController preview;
 
-  HeldPendantFrame frame(int value) => HeldPendantFrame([value]);
+  HeldPendantFrame frame(int value, {bool walAccepted = true}) => HeldPendantFrame([value], null, walAccepted);
   void send(HeldPendantFrame frame) => sent.add(frame.payload.single);
-  void route(int value, {bool declared = true, bool warmingUp = false}) =>
-      admission.routePendant(frame(value), socketDeclared: declared, journalWarmingUp: warmingUp, send: send);
+  void route(int value, {bool declared = true, bool warmingUp = false, bool walAccepted = true}) =>
+      admission.routePendant(frame(value, walAccepted: walAccepted),
+          socketDeclared: declared, journalWarmingUp: warmingUp, send: send);
 
   setUp(() {
     clock = DateTime.utc(2026, 10, 26);
@@ -305,6 +306,33 @@ void main() {
     test('verdict outcomes match the registered telemetry enum', () {
       expect(LocalPreviewVerdictOutcome.values.map((v) => v.wireName),
           LivePreviewVerdictVerdict.values.map((v) => v.wireName));
+    });
+  });
+
+  group('custody-confirmed routing', () {
+    test('a frame the WAL refused is never held: held frames first, then it, in order', () {
+      admission.socketPublished(declared: true, send: send);
+      route(1);
+      route(2);
+      route(3, walAccepted: false);
+      expect(sent, [1, 2, 3]);
+      expect(admission.heldFramesForTesting, 0);
+    });
+
+    test('a frame the WAL refused is never suppressed by journal warm-up', () {
+      admission.socketPublished(declared: true, send: send);
+      admission.verdict(granted: true, socketDeclared: true, send: send);
+      route(1, warmingUp: true);
+      route(2, warmingUp: true, walAccepted: false);
+      expect(sent, [2]);
+    });
+
+    test('a grant drops only WAL-accepted held frames; anything else still reaches the socket', () {
+      admission.socketPublished(declared: true, send: send);
+      route(1);
+      route(2);
+      admission.verdict(granted: true, socketDeclared: true, send: send);
+      expect(sent, isEmpty, reason: 'every held frame was WAL-accepted');
     });
   });
 }

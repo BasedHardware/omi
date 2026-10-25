@@ -2185,10 +2185,16 @@ class CaptureController extends ChangeNotifier
 
         // Process bytes through audio source and feed to WAL
         WalFrame? positionedFrame;
+        // Confirmed custody: only frames the safety WAL actually kept may be
+        // held off the socket by the local-preview paths.
+        var walAccepted = false;
         if (_isWalSupported) {
+          final phone = _wal.getSyncs().phone;
+          walAccepted = frames.isNotEmpty && phone is LocalWalSyncImpl;
           for (final frame in frames) {
-            final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
+            final positioned = phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
             if (frames.length == 1) positionedFrame = positioned;
+            if (phone is LocalWalSyncImpl && !phone.lastFrameAccepted) walAccepted = false;
           }
         }
 
@@ -2196,7 +2202,8 @@ class CaptureController extends ChangeNotifier
         if (_socket?.state == SocketServiceState.connected &&
             !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
           _localPreview.routePendant(
-            HeldPendantFrame(blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot, positionedFrame),
+            HeldPendantFrame(
+                blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot, positionedFrame, walAccepted),
             socketDeclared: _socket?.localPreview == true,
             journalWarmingUp: _mobileStandardBatch?.warmingUp ?? false,
             send: _sendPendantToSocket,

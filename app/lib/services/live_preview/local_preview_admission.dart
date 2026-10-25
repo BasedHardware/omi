@@ -27,10 +27,14 @@ class AudioTapListeners {
 /// One pendant frame bound for the socket: its payload and, when the safety WAL
 /// positioned it, the evidence frame that carries the same bytes.
 class HeldPendantFrame {
-  const HeldPendantFrame(this.payload, [this.positioned]);
+  const HeldPendantFrame(this.payload, [this.positioned, this.walAccepted = false]);
 
   final List<int> payload;
   final WalFrame? positioned;
+
+  /// The safety WAL actually accepted this frame. Only such frames may ever be
+  /// kept off the socket; anything else goes to the socket at once.
+  final bool walAccepted;
 }
 
 /// Why this client does not ask for local preview on a socket: per-session
@@ -236,7 +240,10 @@ class LocalPreviewAdmission {
     _report(effective ? LocalPreviewVerdictOutcome.granted : LocalPreviewVerdictOutcome.refused);
     _verdictPendingSince = null;
     if (effective) {
+      // Only frames the safety WAL holds may be dropped from the socket path.
+      final unconfirmed = _held.where((frame) => !frame.walAccepted).toList();
       _held.clear();
+      unconfirmed.forEach(send);
     } else {
       _flush(send);
     }
@@ -276,15 +283,21 @@ class LocalPreviewAdmission {
     preview?.endCapture();
   }
 
-  /// Routes one pendant frame for a connected socket. Every frame has already
-  /// gone to the safety WAL; this decides only whether it reaches the socket
-  /// now, later (held in memory until a refusal) or never (admitted).
+  /// Routes one pendant frame for a connected socket. A frame the safety WAL
+  /// accepted may reach the socket now, later (held until a refusal) or never
+  /// (admitted, warm-up). A frame the WAL refused (storage blocked, buffer
+  /// full) always goes to the socket now, after any held frames: custody first.
   void routePendant(
     HeldPendantFrame frame, {
     required bool socketDeclared,
     required bool journalWarmingUp,
     required void Function(HeldPendantFrame frame) send,
   }) {
+    if (!frame.walAccepted) {
+      _flush(send);
+      send(frame);
+      return;
+    }
     if (socketDeclared && _holdingForVerdict()) {
       if (_held.length < maxHeldFrames) {
         _firstHeldAt ??= now();

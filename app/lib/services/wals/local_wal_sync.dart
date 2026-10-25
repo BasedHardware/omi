@@ -319,6 +319,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
 
+  /// Whether the most recent [onFrameCaptured] kept the frame (false when a
+  /// storage-blocked pendant buffer was full and the frame was dropped).
+  /// Reporting only; capture behaviour is unchanged.
+  bool get lastFrameAccepted => _lastFrameAccepted;
+  bool _lastFrameAccepted = true;
+
+  /// Test seam: take the existing storage-blocked refusal branch.
+  @visibleForTesting
+  bool debugRefusePendantFrames = false;
+
   @visibleForTesting
   List<bool> get testFrameSynced => _frameSynced;
 
@@ -1840,10 +1850,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     int? liveEpoch;
     int? liveRingId;
     if (_isPendantFrame(frame)) {
-      if ((_pendantBlockedByStorage || (_retentionRisk != null && _retentionRisk!.reason != 'count_cap')) &&
-          _countPendantBuffered() >= _maxPendantBufferedFrames) {
+      if (debugRefusePendantFrames ||
+          ((_pendantBlockedByStorage || (_retentionRisk != null && _retentionRisk!.reason != 'count_cap')) &&
+              _countPendantBuffered() >= _maxPendantBufferedFrames)) {
         _backlogTelemetry.pendantFrameDropped(
             retentionReason: _retentionRisk?.reason, storageWriteBlocked: _pendantBlockedByStorage);
+        _lastFrameAccepted = false;
         return frame;
       }
       final counter = _packetCounterOf(frame);
@@ -1873,6 +1885,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     );
     _frames.add(positioned);
     _frameSynced.add(false);
+    _lastFrameAccepted = true;
     return positioned;
   }
 
