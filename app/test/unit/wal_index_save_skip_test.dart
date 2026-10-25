@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -211,5 +212,31 @@ void main() {
     sync.clearUserData();
     await sync.persistRetryMetadata(wal);
     expect(persists, 4, reason: 'a session boundary always writes (retired records become durable)');
+  });
+  test('a skipped save waits for the matching in-flight write and writes itself if that write fails', () async {
+    var persists = 0;
+    Completer<void>? gate;
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: (items) async {
+      persists++;
+      final g = gate;
+      gate = null;
+      if (g != null) await g.future;
+    });
+    final wal = _diskWal(1);
+    sync.testWals = [wal];
+
+    final firstGate = gate = Completer<void>();
+    final first = sync.persistRetryMetadata(wal);
+    var secondDone = false;
+    final second = sync.persistRetryMetadata(wal).then((_) => secondDone = true);
+    await Future<void>.delayed(Duration.zero);
+    expect(persists, 1);
+    expect(secondDone, isFalse, reason: 'an identical snapshot is not durable until the in-flight write lands');
+
+    firstGate.completeError(const SocketException('disk full'));
+    await expectLater(first, throwsA(isA<SocketException>()));
+    await second;
+    expect(persists, 2, reason: 'the waiting save writes its own snapshot after the matching write failed');
+    expect(secondDone, isTrue);
   });
 }
