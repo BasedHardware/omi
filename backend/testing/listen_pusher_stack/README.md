@@ -92,9 +92,13 @@ Scenarios:
 7. a session closes during the deferred pending-finalization window; the real
    recovery path from #9960 enqueues one opaque Cloud Tasks task, then a real
    worker retry preserves `processing` until it completes the same job;
-8. a worker exhausting its two-attempt test budget atomically dead-letters the
-   job with `terminal_outcome=failure` and marks the still-current conversation
-   `failed`/`discarded`, while a later duplicate delivery is fenced;
+8. a worker exhausting its two-attempt test budget is granted exactly one
+   delayed requeue (the row parks with a reset budget, `budget_requeue_count=1`,
+   and no early task); once the park is due, the reconciler dispatches the
+   requeued generation, and that life's exhaustion atomically dead-letters the
+   job with `terminal_outcome=failure`, `budget_requeue_count=1`, and the
+   still-current conversation closed with `finalization_status=dead_letter`,
+   while later duplicate deliveries of both generations are fenced;
 9. an integration failure after processing retries only durable fanout, never
    re-runs completed conversation processing.
 10. in `RECORDING_SESSION_MODE=enforce`, one operation-scoped `completed`
