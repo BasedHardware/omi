@@ -1032,11 +1032,14 @@ class PipelineWorker:
                     }
                     if silence is not None:
                         payload.update(silence)
-                    record_unit_diarization(
-                        'silence' if state['silence'] else 'skipped_single' if (single or short) else 'diarized',
-                        diarization.get('turns') if isinstance(diarization, dict) else None,
-                        flight_batching=self.config.flight_batching,
-                    )
+                    # Shadow units are synthetic idle-time traffic; they must not
+                    # skew the production parity distributions.
+                    if not item.shadow:
+                        record_unit_diarization(
+                            'silence' if state['silence'] else 'skipped_single' if (single or short) else 'diarized',
+                            diarization.get('turns') if isinstance(diarization, dict) else None,
+                            flight_batching=self.config.flight_batching,
+                        )
                     if not item.shadow and cap_dispatch_enabled(item.owner_id, 'batch'):
                         payload['cap_dispatch'] = {
                             'omi_funded_accepted_provider_audio_seconds': state.get('cap_provider_audio_seconds', 0),
