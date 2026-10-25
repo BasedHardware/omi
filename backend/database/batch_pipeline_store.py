@@ -393,8 +393,9 @@ def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -
 
 
 # Bounded FIFO prefix the uncommitted-age proxy walks past policy holds. A
-# hold population beyond it leaves no measurable commitment in the scan and the
-# proxy reads 0; the custody track owns retiring the holds themselves.
+# hold population that fills the entire prefix fails the proxy toward tripping
+# on the oldest hold's age (an unmeasured commitment may sit beyond the bound);
+# retiring the holds themselves stays with the custody track.
 OLDEST_POLICY_HOLD_SCAN_LIMIT = 500
 
 
@@ -423,10 +424,20 @@ def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = Fal
     docs = (
         query.where('merge_pending', '==', True).order_by('enqueued_at').limit(OLDEST_POLICY_HOLD_SCAN_LIMIT).stream()
     )
+    oldest_hold: float | None = None
+    scanned = 0
     for doc in docs:
+        scanned += 1
         job = doc.to_dict()
-        if not is_allowance_policy_hold(job):
-            return job['enqueued_at']
+        if is_allowance_policy_hold(job):
+            oldest_hold = oldest_hold if oldest_hold is not None else job['enqueued_at']
+            continue
+        return job['enqueued_at']
+    if scanned >= OLDEST_POLICY_HOLD_SCAN_LIMIT and oldest_hold is not None:
+        # The bound truncated the FIFO with holds in every scanned row: an
+        # unmeasured commitment may exist beyond it, so fail toward tripping on
+        # the oldest hold's age instead of publishing a false fresh zero.
+        return oldest_hold
     return None
 
 

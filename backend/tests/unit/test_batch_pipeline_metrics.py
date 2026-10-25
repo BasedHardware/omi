@@ -331,5 +331,15 @@ def test_firestore_oldest_walks_past_policy_holds():
     commitment = {'merge_pending': True, 'enqueued_at': 2.0}
     rows = [Doc(held), Doc(dict(held)), Doc(commitment)]
     assert oldest(Client(rows), 'omi', 2) == 2.0  # skips the hold prefix, early-returns the commitment
-    assert oldest(Client([Doc(dict(held))]), 'omi', 2) is None  # only holds: nothing measurable
+    assert oldest(Client([Doc(dict(held))]), 'omi', 2) is None  # only holds, FIFO exhausted: nothing measurable
     assert oldest(Client([]), 'omi', 2) is None
+
+    from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT
+
+    # Review r1 P1: a scan truncated at the bound with holds in every row must
+    # fail toward tripping on the oldest hold's age - a fresh zero could bless a
+    # ramp while a real commitment sits unmeasured just past the bound.
+    truncated = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT)])
+    assert oldest(truncated, 'omi', 2) == 0.0
+    just_short = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT - 1)])
+    assert oldest(just_short, 'omi', 2) is None  # whole FIFO is holds: zero is truthful

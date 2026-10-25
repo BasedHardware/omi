@@ -163,7 +163,9 @@ A fresh `omi_batch_pipeline_oldest_age_seconds > 1800` emits **TRIP**,
 measures from enqueue, skipping durable allowance policy holds
 (`compute_decision` outcome=held reason=allowance_exhausted; 131 such holds
 kept this proxy tripped permanently on 2026-10-25) within a bounded 500-row
-FIFO prefix. It still includes legitimate deep queues; it cannot identify new
+FIFO prefix; a prefix filled entirely by holds fails toward tripping on the
+oldest hold's age rather than a fresh zero. It still includes legitimate deep
+queues; it cannot identify new
 jobs or prove a projection wedge. Retry age is
 logged, not another rollback condition. Usable readings without that trip are
 **PARTIAL**, never a claim of complete batch safety.
