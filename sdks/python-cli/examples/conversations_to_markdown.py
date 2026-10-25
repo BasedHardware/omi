@@ -56,11 +56,8 @@ def format_timestamp(seconds: float | int | None) -> str:
     if seconds is None:
         return "00:00"
     total_seconds = int(seconds)
-    hours = total_seconds // 3600
     minutes = (total_seconds % 3600) // 60
     secs = total_seconds % 60
-    if hours > 0:
-        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
     return f"{minutes:02d}:{secs:02d}"
 
 
@@ -201,7 +198,7 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
             if text:
                 lines.append(f"> **[{start_time}] {speaker_label_text}:** {text}")
                 lines.append(">")
-        if lines[-1] == ">":
+        if lines and lines[-1] == ">":
             lines.pop()
         lines.append("")
 
