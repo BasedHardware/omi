@@ -1,0 +1,284 @@
+"""Bounded, encrypted vector-only enrollment from explicit speaker receipts.
+
+No IO. The database layer owns consent, source/deletion fences and atomic writes.
+Only newly measured, segment-bound Omi-v2 evidence can enter this pool.
+"""
+
+import base64
+import hashlib
+import json
+import math
+import os
+import struct
+from datetime import datetime, timezone
+from typing import Any, Mapping
+
+import numpy as np
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+from utils.encryption import derive_key
+from utils.speaker_learning_policy import authorized_teaching_segments, segment_group, winning_receipt_decision
+
+POOL_FIELD = 'speaker_auto_enroll_pool'
+MODEL = 'wespeaker-voxceleb-resnet34-LM:v2'
+DIM = 256
+MAX_CONTRIBUTIONS = 5
+MAX_AGE_SECONDS = 90 * 86400
+HALF_LIFE_SECONDS = 30 * 86400
+MIN_SECONDS = 10.0
+MAX_DISTANCE = 0.35
+OWNER_DISTANCE = 0.50
+
+
+def enabled() -> bool:
+    return os.getenv('SPEAKER_AUTO_ENROLL_ENABLED', 'true').lower() not in {'0', 'false', 'off', 'no'}
+
+
+def retained(user: Mapping[str, Any]) -> bool:
+    return (
+        bool(user)
+        and user.get('private_cloud_sync_enabled', True) is True
+        and user.get('save_other_voice_profiles', True) is True
+    )
+
+
+def audio_allowed(user: Mapping, embedding: Any, expected_privacy_version: Any) -> bool:
+    """The verified-audio fallback enforces the same owner/retention authority."""
+    owner, incoming = unit(user.get('speaker_embedding')), unit(embedding)
+    return (
+        retained(user)
+        and user.get('speaker_auto_enroll_privacy_version', 0) == expected_privacy_version
+        and owner is not None
+        and incoming is not None
+        and 1 - owner @ incoming > OWNER_DISTANCE
+    )
+
+
+def unit(value: Any) -> Any:
+    try:
+        v = np.asarray(value, dtype=np.float64)
+        if v.shape != (DIM,) or not np.isfinite(v).all() or np.linalg.norm(v) < 1e-8:
+            return None
+        return v / np.linalg.norm(v)
+    except (ValueError, TypeError):
+        return None
+
+
+def binding(segment: Mapping[str, Any]) -> str:
+    # Identity labels change when a user tags; acoustic coordinates must not.
+    # Resolution rewrites speaker scopes after embedding. The immutable segment
+    # id and acoustic coordinates survive that rewrite; identity scope does not.
+    fields = ('id', 'start', 'end', 'audio_capture_start', 'audio_capture_end')
+    return hashlib.sha256(json.dumps([segment.get(k) for k in fields], separators=(',', ':')).encode()).hexdigest()
+
+
+def evidence_bindings(segments: Any, keys: Mapping, placements: Mapping) -> dict:
+    result = {}
+    for segment in segments:
+        data = segment.model_dump(mode='json')
+        placement = placements.get(segment.id)
+        if segment.id in keys and placement is not None and placement.window is not None:
+            low, high = placement.window
+            if high - low > 10:
+                center = (low + high) / 2
+                low, high = center - 5, center + 5
+            result[keys[segment.id]] = {'binding': binding(data), 'window': [low, high]}
+    return result
+
+
+def accepted_bindings(bindings: Mapping, cache: Mapping, before: Mapping, prior: Mapping) -> dict:
+    """Do not retroactively grant enrollment authority to an old measured cache."""
+    return {
+        key: value
+        for key, value in bindings.items()
+        if key in cache
+        and (
+            cache[key] is not before.get(key)
+            or (
+                prior.get(key, {}).get('binding') == value['binding']
+                and prior.get(key, {}).get('window') == value['window']
+            )
+        )
+    }
+
+
+def decode_evidence(data: bytes | None) -> dict:
+    """Read only bounded, model-stamped evidence; old unbound caches abstain."""
+    if not data or len(data) > 2 * 1024 * 1024 or len(data) < 4:
+        return {}
+    try:
+        size = struct.unpack('>I', data[:4])[0]
+        if size > 512 * 1024:
+            return {}
+        h = json.loads(data[4 : 4 + size])
+        ids = h['ids']
+        if h.get('v') != 1 or h.get('enrollment_model') != MODEL or h['dim'] != DIM or len(ids) > 2000:
+            return {}
+        vectors = np.frombuffer(data[4 + size :], dtype='<f2').reshape(len(ids), DIM)
+        return {
+            key: {**h['enrollment_bindings'][key], 'seconds': h['evidence_seconds'][key], 'vector': vectors[i]}
+            for i, key in enumerate(ids)
+            if key in h.get('enrollment_bindings', {}) and key in h.get('evidence_seconds', {})
+        }
+    except (ValueError, TypeError, KeyError, AttributeError, struct.error):
+        return {}
+
+
+def candidate(conversation: Mapping, person_id: str, requested: Any, evidence: Mapping, owner: Any) -> Any:
+    """One explicit acoustic voice, disjoint measured speech and owner exclusion."""
+    owner = unit(owner)
+    if owner is None:
+        return None
+    all_segments = conversation.get('transcript_segments') or []
+    receipt = conversation.get('manual_speaker_assignments') or {}
+    authorized = [
+        s
+        for s in authorized_teaching_segments(conversation, person_id)
+        if (winning_receipt_decision(receipt, s) or {}).get('source') != 'carried'
+    ]
+    groups = {segment_group(s) for s in authorized if s.get('id') in set(requested or [])}
+    if len(groups) != 1:
+        return None
+    selected = [s for s in authorized if segment_group(s) in groups]
+    authorized_ids = {s.get('id') for s in authorized}
+    rows = []
+    for segment in selected:
+        matches = [e for e in evidence.values() if e.get('binding') == binding(segment)]
+        if len(matches) != 1:
+            continue
+        e = matches[0]
+        try:
+            low, high = (float(x) for x in e['window'])
+            seconds = float(e['seconds'])
+            start, end = float(segment['start']), float(segment['end'])
+            if not all(math.isfinite(x) for x in (low, high, seconds, start, end)):
+                continue
+            # A partial/nominal duration cannot stand in for a full measured clip.
+            if high <= low or high - low > 10.01 or seconds < high - low - 0.02 or seconds > 10.01:
+                continue
+            if any(
+                (segment_group(other) != segment_group(segment) or other.get('id') not in authorized_ids)
+                and other.get('speaker_id_scope') == segment.get('speaker_id_scope')
+                and float(other.get('start', 0)) < end
+                and float(other.get('end', 0)) > start
+                for other in all_segments
+            ):
+                continue
+            v = unit(e['vector'])
+            if v is None or 1 - v @ owner <= OWNER_DISTANCE:
+                return None
+            rows.append((low, high, segment['id'], v))
+        except (ValueError, TypeError, KeyError):
+            continue
+    rows.sort(key=lambda r: (r[0], r[1], r[2]))
+    vectors, ids, weights = [], [], []
+    covered_end = -math.inf
+    for low, high, sid, vector in rows:
+        # Do not fractionally reuse a vector whose PCM overlaps an earlier clip.
+        if low < covered_end:
+            continue
+        covered_end = high
+        vectors.append(vector)
+        ids.append(sid)
+        weights.append(high - low)
+        if sum(weights) >= 30:
+            break
+    if sum(weights) < MIN_SECONDS:
+        return None
+    if any(1 - a @ b > MAX_DISTANCE for i, a in enumerate(vectors) for b in vectors[i + 1 :]):
+        return None
+    pooled = unit(np.average(vectors, axis=0, weights=weights))
+    return {'vector': pooled.tolist(), 'segment_ids': ids, 'seconds': sum(weights), 'model': MODEL}
+
+
+def _aad(uid: str, person_id: str) -> bytes:
+    return json.dumps(['speaker-auto-enroll', 1, uid, person_id], separators=(',', ':')).encode()
+
+
+def seal(uid: str, person_id: str, entries: list) -> str:
+    nonce = os.urandom(12)
+    payload = json.dumps({'v': 1, 'model': MODEL, 'entries': entries}, separators=(',', ':'), allow_nan=False).encode()
+    return base64.b64encode(nonce + AESGCM(derive_key(uid)).encrypt(nonce, payload, _aad(uid, person_id))).decode()
+
+
+def open_pool(uid: str, person_id: str, blob: Any) -> list:
+    if not isinstance(blob, str) or len(blob) > 128 * 1024:
+        return []
+    try:
+        raw = base64.b64decode(blob, validate=True)
+        value = json.loads(AESGCM(derive_key(uid)).decrypt(raw[:12], raw[12:], _aad(uid, person_id)))
+        if value.get('v') != 1 or value.get('model') != MODEL or len(value['entries']) > MAX_CONTRIBUTIONS:
+            return []
+        return value['entries']
+    except Exception:
+        # Authentication failure never returns ciphertext or a partial profile.
+        return []
+
+
+def active(entries: list, now: float) -> list:
+    return [
+        e
+        for e in entries
+        if isinstance(e, dict)
+        and isinstance(e.get('at'), (int, float))
+        and 0 <= now - e['at'] <= MAX_AGE_SECONDS
+        and unit(e.get('vector')) is not None
+    ]
+
+
+def vector(entries: list, now: float) -> Any:
+    entries = active(entries, now)
+    if not entries:
+        return None
+    v = unit(
+        np.average(
+            [unit(e['vector']) for e in entries],
+            axis=0,
+            weights=[2 ** (-(now - e['at']) / HALF_LIFE_SECONDS) for e in entries],
+        )
+    )
+    return v.tolist() if v is not None else None
+
+
+def refresh(entries: list, contribution: dict, now: float) -> Any:
+    entries = active(entries, now)
+    incoming = unit(contribution.get('vector'))
+    if incoming is None or any(1 - incoming @ unit(e['vector']) > MAX_DISTANCE for e in entries):
+        return None
+    # Retry does not extend the source's lifetime or amplify its vote.
+    existing = next((e for e in entries if e.get('conversation_id') == contribution['conversation_id']), None)
+    at = existing['at'] if existing else now
+    kept = [e for e in entries if e.get('conversation_id') != contribution['conversation_id']]
+    return sorted([*kept, {**contribution, 'at': at}], key=lambda e: e['at'])[-MAX_CONTRIBUTIONS:]
+
+
+def retract(uid: str, pid: str, blob: Any, conversations: Any, segments: Any = None) -> dict:
+    entries = open_pool(uid, pid, blob)
+    kept = [
+        e
+        for e in entries
+        if e.get('conversation_id') not in conversations
+        or (segments is not None and not set(segments).intersection(e.get('segment_ids') or []))
+    ]
+    return {POOL_FIELD: seal(uid, pid, kept)} if kept != entries else {}
+
+
+def legacy_voiceprint(person: Mapping) -> Any:
+    embedding, version = person.get('speaker_embedding'), person.get('speech_samples_version')
+    if embedding and person.get('speech_samples') and isinstance(version, int) and version >= 3:
+        return embedding
+    return None
+
+
+def usable(uid: str, person: Mapping, allowed: bool) -> Any:
+    if not allowed or not enabled() or person.get('is_dismissed'):
+        return None
+    enrolled = vector(
+        open_pool(uid, person.get('id') or '', person.get(POOL_FIELD)), datetime.now(timezone.utc).timestamp()
+    )
+    legacy = legacy_voiceprint(person)
+    if enrolled is not None and legacy is not None:
+        trusted = unit(legacy)
+        if trusted is None or 1 - trusted @ unit(enrolled) > MAX_DISTANCE:
+            return None  # A later independent audio enrollment must not be shadowed by stale vectors.
+    return enrolled

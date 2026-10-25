@@ -16,6 +16,7 @@ import struct
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import numpy as np
 from fastapi.websockets import WebSocketDisconnect
 from google.cloud.firestore_v1._helpers import encode_dict
 from google.cloud.firestore_v1.types import Document
@@ -27,6 +28,7 @@ from database import conversations as db
 from database import speaker_assignment_effects as assignment_effects
 from database import speaker_learning_jobs as ledger
 from database import users as users_db
+from database import speaker_auto_enroll as auto_enroll_db
 from utils import speaker_learning_jobs as jobs
 from tests.unit.fixtures.strict_firestore_transaction import (
     StrictFirestoreCollection,
@@ -302,6 +304,9 @@ def test_coordinator_cycle_and_restart_retry_preserve_rate(world):
 
 
 def test_live_24k_job_teaches_at_persisted_rate(pool_world, monkeypatch):
+    # This is the legacy rollback's sample-rate contract; strict Omi-v2 owner
+    # publication is exercised below with full-dimensional voice fixtures.
+    monkeypatch.setenv('SPEAKER_AUTO_ENROLL_ENABLED', 'false')
     rate = 24000
     pcm = b'\x01\x00' * (rate * 60)
     pool_world.store.rows[pool.CONV_PATH] = pool.conversation(
@@ -332,6 +337,51 @@ def test_live_24k_job_teaches_at_persisted_rate(pool_world, monkeypatch):
         jobs._execute_job(pool.UID, pool.CONV, dict(target='person', person_id=pool.PERSON, segment_ids=['s0']))
     )
     assert legacy == 'uncovered_audio'
+
+
+@pytest.mark.parametrize('case', ['valid', 'owner', 'missing_owner', 'sync_off', 'privacy_race'])
+def test_real_audio_fallback_obeys_strict_owner_and_retention_guards(pool_world, monkeypatch, case):
+    owner = [1.0, *([0.0] * 255)]
+    other = [0.0, 1.0, *([0.0] * 254)]
+    user = pool_world.store.rows[('users', pool.UID)]
+    user.update(private_cloud_sync_enabled=True, speaker_embedding=owner)
+    if case == 'missing_owner':
+        user.pop('speaker_embedding')
+    elif case == 'sync_off':
+        user['private_cloud_sync_enabled'] = False
+    pool_world.store.rows[pool.CONV_PATH] = pool.conversation(
+        [pool.seg('s0', 0, 12)],
+        receipt=pool.receipt_segments(['s0']),
+        private_cloud_sync_enabled=True,
+    )
+    monkeypatch.setattr(jobs, 'enroll', lambda *args: None)
+    monkeypatch.setattr(auto_enroll_db, 'get_firestore_client', lambda: pool_world.store)
+    monkeypatch.setattr(jobs, 'extract_speaker_samples', pool.teaching.extract_speaker_samples)
+
+    def embed(*args):
+        if case == 'privacy_race':
+            user[auto_enroll_db.PRIVACY_VERSION] = 1
+        return np.asarray([owner if case == 'owner' else other], dtype=np.float32)
+
+    monkeypatch.setattr(pool.teaching, 'extract_embedding_from_bytes', embed)
+    outcome = asyncio.run(
+        jobs._execute_job(
+            pool.UID,
+            pool.CONV,
+            dict(target='person', person_id=pool.PERSON, segment_ids=['s0']),
+        )
+    )
+    expected = {
+        'valid': 'stored',
+        'owner': 'rejected_embedding',
+        'missing_owner': 'rejected_embedding',
+        'sync_off': 'disabled',
+        'privacy_race': 'stale_assignment',
+    }
+    assert outcome == expected[case]
+    assert bool(pool_world.store.rows[pool.PERSON_PATH].get('speaker_embedding')) is (case == 'valid')
+    if case == 'privacy_race':
+        assert pool_world.deleted == pool_world.uploads
 
 
 def test_pusher_speaker_request_forwards_live_sample_rate(monkeypatch):

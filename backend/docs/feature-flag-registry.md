@@ -478,6 +478,7 @@ and an explicit empty literal renders as `''`.
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | keep | — | dazheng |
 | `SONIOX_IDLE_CLOSE_SECONDS` | Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 60 s with no client frames; 0 or off is the kill switch | backend | env | open | — | — | — | — | keep | keep | — | backend |
+| `SPEAKER_AUTO_ENROLL_ENABLED` | Default on; explicit speaker tags teach an encrypted vector-only roster for retained private-cloud sync users | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `SPEAKER_IDENTITY_REPAIR_ENABLED` | Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `STALE_IN_PROGRESS_RECOVERY_ENABLED` | Incident stop for reconnect stale in-progress recovery; default on | backend | env | open | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | — | keep | keep | — | backend listen |
 | `STT_CAP_FINALIZE_FORWARD_ENABLED` | Default on; preserve provider-specific finalize arguments through the funded STT cap proxy | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -902,6 +903,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR` — Treatment-arm rolling-hour close cap for the uid-hash idle cohort; unset keeps the global value; zero or negative keeps the global value (fail: open)
 - `SONIOX_IDLE_COHORT_PERCENT` — Percent of uids (salted hash soniox-idle-close) running the treatment Soniox idle values; default 0 is the cohort kill switch (fail: closed)
 - `SONIOX_IDLE_COHORT_REARM_SECONDS` — Treatment-arm re-arm seconds for the uid-hash idle cohort; unset keeps the global value; floored at 5 s (fail: open)
+- `SPEAKER_AUTO_ENROLL_ENABLED` — Default on; explicit speaker tags teach an encrypted vector-only roster for retained private-cloud sync users (fail: closed)
 - `SPEAKER_EVIDENCE_MODE` — off/shadow/serve; default shadow records ranked speaker evidence without changing labels (fail: closed)
 - `SPEAKER_EVIDENCE_MODE_SERVE_PERCENT` — Default zero; deterministic percentage cohort for speaker evidence projection (fail: closed)
 - `SPEAKER_EVIDENCE_MODE_SERVE_UID_SHA256S` — Default empty; SHA256 digests for the explicit speaker evidence serve cohort (fail: closed)

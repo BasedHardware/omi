@@ -17,6 +17,7 @@ from database import speaker_learning_jobs as learning_jobs
 from utils.observability.fallback import record_fallback
 from utils.owner_voice_evidence import retract_owner_contributions
 from utils.person_evidence import person_updates_for_assignment
+from utils.speakers import auto_enroll
 
 
 @dataclass
@@ -104,6 +105,17 @@ def persist_assignment_effects(
         source_conversation_ids=donor_ids,
     )
     owner_update = retract_owner_contributions(user_doc, donor_ids, resolved, now)
+    # Retraction is mandatory even when new enrollment/use is killed off.
+    for pid, doc in docs.items():
+        change = auto_enroll.retract(
+            uid,
+            pid,
+            (doc or {}).get(auto_enroll.POOL_FIELD),
+            [conversation_id, *donor_ids],
+            resolved,
+        )
+        if change:
+            updates.setdefault(pid, {}).update(change)
     if bookkeeping.enabled:
         bookkeeping.involved = True
         projected_docs = {pid: {**(doc or {}), **updates.get(pid, {})} for pid, doc in docs.items()}

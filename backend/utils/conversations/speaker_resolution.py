@@ -91,6 +91,8 @@ from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_em
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
 from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.voiceprints import usable_person_voiceprint
+from utils.speakers import auto_enroll
+from database import speaker_auto_enroll as auto_enroll_db
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +134,11 @@ def _max_new_embeddings() -> int:
 CacheEntries = Dict[str, Tuple[float, np.ndarray]]
 
 
-def encode_cache(entries: CacheEntries, evidence_seconds: Optional[Mapping[str, float]] = None) -> bytes:
+def encode_cache(
+    entries: CacheEntries,
+    evidence_seconds: Optional[Mapping[str, float]] = None,
+    enrollment_bindings: Optional[Mapping] = None,
+) -> bytes:
     ids = list(entries)
     optional_header = {}
     try:
@@ -151,6 +157,11 @@ def encode_cache(entries: CacheEntries, evidence_seconds: Optional[Mapping[str, 
             'ids': ids,
             'durations': [round(entries[i][0], 3) for i in ids],
             'dim': int(entries[ids[0]][1].size) if ids else 0,
+            **(
+                {'enrollment_model': auto_enroll.MODEL, 'enrollment_bindings': enrollment_bindings}
+                if enrollment_bindings is not None
+                else {}
+            ),
         }
     ).encode()
     matrix = np.vstack([entries[i][1].reshape(1, -1) for i in ids]).astype('<f2').tobytes() if ids else b''
@@ -220,6 +231,7 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
         return prints
     try:
         people = users_db.get_people(uid)
+        enrollment_allowed = any(p.get(auto_enroll.POOL_FIELD) for p in people or []) and auto_enroll_db.allowed(uid)
         reuse_people_for_spellings(uid, people)
     except Exception as error:
         logger.warning(
@@ -227,7 +239,11 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
         )
         return prints
     for person in people or []:
-        embedding = validated_embedding(usable_person_voiceprint(person))
+        embedding = validated_embedding(
+            usable_person_voiceprint(person, uid=uid, auto_enroll_allowed=True)
+            if enrollment_allowed
+            else usable_person_voiceprint(person)
+        )
         if (
             embedding is not None
             and person.get('id')
@@ -1271,7 +1287,10 @@ def _resolve(
             placements[segment.id] = place_segment(segment, mapping, index)
 
     clip_seconds: Dict[str, float] = {}
-    cache = decode_cache(download_speaker_embedding_cache(uid, conversation.id), clip_seconds)
+    cache_data = download_speaker_embedding_cache(uid, conversation.id)
+    cache = decode_cache(cache_data, clip_seconds)
+    cache_snapshot = dict(cache)
+    prior_enrollment = auto_enroll.decode_evidence(cache_data)
     keys: Dict[str, str] = {}
     for segment in segments:
         if not segment.id or segment.id in invalid_text_ids:
@@ -1429,7 +1448,13 @@ def _resolve(
         _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
         return
     if new_embeddings or stale:
-        upload_speaker_embedding_cache(uid, conversation.id, encode_cache(cache, clip_seconds))
+        bindings = auto_enroll.evidence_bindings(segments, keys, placements)
+        bindings = auto_enroll.accepted_bindings(bindings, cache, cache_snapshot, prior_enrollment)
+        upload_speaker_embedding_cache(
+            uid,
+            conversation.id,
+            encode_cache(cache, clip_seconds, bindings),
+        )
 
     vectors = {
         segment.id: cache[keys[segment.id]][1]

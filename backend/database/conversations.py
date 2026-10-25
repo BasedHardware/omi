@@ -2359,6 +2359,9 @@ def delete_conversation(uid, conversation_id):
     the account-deletion wipe, which walks *existing* documents and never sees a deleted parent.
     Children are enumerated live, so a subcollection added later is purged too.
     """
+    from database.speaker_auto_enroll import retract_conversation
+
+    retract_conversation(uid, conversation_id, firestore_client=db)
     try:
         # A deleted capture must not stay listed as a member of its event.
         leave_capture_group(uid, conversation_id, sticky=False, close=True, firestore_client=db)

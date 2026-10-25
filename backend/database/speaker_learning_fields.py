@@ -11,7 +11,25 @@ def project_person_learning(*args, **kwargs):
     # models/database tree import database.users without the job ledger's dependencies.
     from database.speaker_learning_jobs import project_person_learning as project
 
-    return project(*args, **kwargs)
+    data = project(*args, **kwargs)
+    if data and data.get('speaker_auto_enroll_pool'):
+        from database.speaker_auto_enroll import allowed
+        from utils.speakers.auto_enroll import usable
+
+        uid = args[0] if args else kwargs['uid']
+        cache = kwargs.get('projection_cache')
+        key = ('auto_enroll_allowed', uid)
+        can_use = cache.get(key) if cache is not None else None
+        if can_use is None:
+            can_use = allowed(uid, firestore_client=kwargs.get('firestore_client'))
+            if cache is not None:
+                cache[key] = can_use
+        if usable(uid, data, can_use) is not None:
+            # Public Person accepts explicit readiness when no raw embedding is
+            # present. Keep the encrypted pool for internal voiceprint consumers.
+            data = {k: v for k, v in data.items() if k != 'speaker_embedding'}
+            data.update(voice_readiness='ready', voice_learning_state='learned')
+    return data
 
 
 def speech_sample_source(conversation_id: str, segment_ids: list, generation: Optional[int]) -> dict:

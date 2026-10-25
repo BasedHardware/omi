@@ -6,6 +6,16 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Explicit tags teach retained speaker voices
+
+Manual speaker receipts and their durable jobs can enroll a vector-only voice
+before the verified-audio teaching fallback. `SPEAKER_AUTO_ENROLL_ENABLED`
+defaults on; false disables publication and reuse of this pool. Private-cloud
+sync retention and `save_other_voice_profiles` are required at execution and
+transactional publication. Sync-off tags do not create a durable roster.
+Corrections, deletion and privacy opt-out still retract with the switch off.
+See [quality, privacy and release contract](runbooks/speaker-auto-enroll.md).
+
 ## Durable audio outbox (default on)
 
 Consented raw capture and pusher PCM require immutable media plus a

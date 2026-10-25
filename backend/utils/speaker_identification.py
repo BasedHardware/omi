@@ -45,6 +45,8 @@ from utils.speaker_audio import legacy_speaker_clip_pcm
 from utils.other.audio_chunks import AudioChunkReadSession
 from utils.speaker_tag_prompts.clips import v2_relevant_timestamps
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
+from database import speaker_auto_enroll as auto_enroll_db
+from utils.speakers import auto_enroll
 import logging
 
 logger = logging.getLogger(__name__)
@@ -793,6 +795,8 @@ async def extract_speaker_samples(
     conversation_id: str,
     segment_ids: List[str],
     sample_rate: int = 16000,
+    *,
+    require_owner_exclusion: bool = False,
 ) -> str:
     """
     Extract a pooled speech sample for ``person_id`` and store it as their voice profile.
@@ -806,7 +810,16 @@ async def extract_speaker_samples(
     outcome = 'error'
     person: Optional[Dict[str, Any]] = None
     clean_seconds = 0.0
+    enrollment_guard = None
     try:
+        if require_owner_exclusion:
+            enrollment_guard = await run_blocking(db_executor, auto_enroll_db.audio_guard, uid)
+            if not auto_enroll.retained(enrollment_guard):
+                outcome = 'disabled'
+                return outcome
+            if auto_enroll.unit(enrollment_guard.get('speaker_embedding')) is None:
+                outcome = 'rejected_embedding'
+                return outcome
         # The user can turn off saving other people's voices; this is the one choke
         # point every teaching path (tag sheet, tag prompts, live socket) reaches.
         settings = await run_blocking(db_executor, voice_profiles_db.get_voice_profile_settings, uid)
@@ -826,6 +839,9 @@ async def extract_speaker_samples(
         conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation:
             outcome = 'conversation_missing'
+            return outcome
+        if require_owner_exclusion and conversation.get('private_cloud_sync_enabled') is not True:
+            outcome = 'disabled'
             return outcome
 
         # Sample extraction runs live, while the conversation is still processing, so
@@ -1102,6 +1118,13 @@ async def extract_speaker_samples(
         if not embedding_list or not np.isfinite(embedding).all() or not np.any(embedding):
             outcome = 'embedding_failed'
             return outcome
+        if enrollment_guard is not None and not auto_enroll.audio_allowed(
+            enrollment_guard,
+            embedding_list,
+            enrollment_guard.get(auto_enroll_db.PRIVACY_VERSION, 0),
+        ):
+            outcome = 'rejected_embedding'
+            return outcome
         path = await run_blocking(
             storage_executor, upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
         )
@@ -1118,6 +1141,11 @@ async def extract_speaker_samples(
             contributing_ids,
             speech_seconds=clean_seconds,
             expected_receipt_generation=receipt.get('generation', 0),
+            **(
+                {'enrollment_privacy_version': enrollment_guard.get(auto_enroll_db.PRIVACY_VERSION, 0)}
+                if enrollment_guard is not None
+                else {}
+            ),
         )
         if old_samples is None:
             await run_blocking(storage_executor, delete_sample_from_storage, path)
