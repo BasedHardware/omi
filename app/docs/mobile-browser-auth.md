@@ -87,14 +87,21 @@ remaining mobile and web client gaps:
   retry and account/route ownership fences. It does not automatically retry an
   eligibility rejection or alter the desktop referral destination.
 
-Release requires the follow-up mobile AND web changes, plus #21355's web helper
-proxy/client together. As of 2026-10-16, #21355 is open (mergeable, CI green,
-no approval); its review notes that the callback configuration and a real
-provider round trip are not yet demonstrated. Roll out the web helper proxy and
-this client in one coordinated deploy, never this client alone. Verify the
-Firebase/Google/Apple callback configuration in `web/app/docs/firebase-auth.md`
-from #21355 and perform real Google and Apple sign-ins, including on Samsung
-S26 Ultra. Mocked and hermetic tests do not verify production sign-in.
+These recovery changes do not change Firebase's auth domain, provider callback
+URIs or auth-helper proxy, and can be merged independently of #21355. The new
+MCP reauthorization route must be available on the target backend before clients
+using fresh OAuth retries are released; merging code does not deploy that route.
+
+Complete resolution of #21378 also needs #21355's separate web sign-in fix.
+That PR changes the Firebase helper origin: its web client and generated Bun
+proxy are one coordinated release unit, and its exact Google/Apple callback
+settings must be verified before that change is rolled out. Follow the
+`web/app/docs/firebase-auth.md` from #21355, including authorized-domain coverage
+(a configured parent domain can cover its subdomains). Verify Google/Apple
+sign-in, referral return, cancellation and destination preservation in the
+provider-connected integration environment. Simulator/browser acceptance is
+sufficient for code verification; the reporter's Samsung outcome is separate
+release/customer follow-up. Local provider fixtures do not verify live settings.
 The unspecified general Try Again screen still requires the reporter's screen,
 version and integration names; this audit does not invent its cause or close the
 customer incident from code merge.
@@ -118,6 +125,6 @@ Verification checklist:
       preserving unrelated integration fields on a successful commit.
 - [x] Local HTTP OAuth/MCP provider validates PKCE; real isolated Redis checks
       single-use state/replay and enablement, with Firestore emulator persistence.
-- [ ] Real provider configuration and Google/Apple sign-in/referral return remain
-      separate integration checks; the local provider is synthetic, not proof of
-      their console settings or customer recovery.
+- [ ] For #21355 and complete incident resolution, verify real provider
+      configuration and Google/Apple sign-in/referral return. The local MCP
+      provider is synthetic, not proof of those settings or customer recovery.

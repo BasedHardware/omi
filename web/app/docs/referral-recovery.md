@@ -13,12 +13,16 @@ lookup that returns after expiry. A committed server grant may still be observed
 on a later retry; the client never manufactures a trial or changes entitlement.
 The existing backend uses the referral grant transaction as authority.
 
-Deploy these client changes together with #21355's same-origin helper proxy.
-Verify the Firebase authorized domain, exact Google redirect URI and Apple
-Service ID return URL from that PR's firebase-auth.md before claiming completion.
-A real Google return, referral result and cancellation on Samsung S26 Ultra
-remain release acceptance checks. Do not claim the customer's unspecified
-Try Again screen is fixed without identifying/verifying it.
+These post-auth recovery changes preserve Firebase's existing auth domain and
+callback configuration; they can merge independently of #21355. That separate
+PR's auth-domain change and same-origin helper proxy must ship together, after
+verifying authorized-domain coverage, the exact Google redirect URI and Apple's
+Service ID return URL from its firebase-auth.md. Provider-connected sign-in,
+referral return, destination preservation and cancellation still need integration
+verification for that change and the complete incident outcome. A browser or
+simulator is sufficient; the reporter's Samsung result is release/customer
+follow-up, not an extra hardware merge gate. Do not claim the customer's
+unspecified Try Again screen is fixed without identifying/verifying it.
 
 Tests: referrals.test.ts and LoginClient.test.ts cover stalled token/network
 operations, malformed replies, manual retry and a changed account.
