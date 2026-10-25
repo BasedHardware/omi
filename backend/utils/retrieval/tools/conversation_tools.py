@@ -337,8 +337,8 @@ def get_conversations_tool(
         max_transcript_segments = int(max_transcript_segments)
         limit = int(limit)
         offset = int(offset)
-    except (TypeError, ValueError) as e:
-        return f"Error: Invalid numeric parameter format: {e}"
+    except (TypeError, ValueError):
+        return "Error: Invalid numeric parameter format"
 
     if max_transcript_segments != -1:
         max_transcript_segments = min(max_transcript_segments, 1000)
@@ -494,8 +494,8 @@ def search_conversations_tool(
     try:
         max_transcript_segments = int(max_transcript_segments)
         limit = int(limit)
-    except (TypeError, ValueError) as e:
-        return f"Error: Invalid numeric parameter format: {e}"
+    except (TypeError, ValueError):
+        return "Error: Invalid numeric parameter format"
 
     if max_transcript_segments != -1:
         max_transcript_segments = min(max_transcript_segments, 1000)
