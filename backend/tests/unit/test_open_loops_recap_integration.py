@@ -18,9 +18,21 @@ from unittest.mock import Mock
 import pytest
 
 import utils.open_loops.daily as open_loops_daily
+from utils.executors import ExecutorSaturatedError
 from utils.other import notifications as notif
 
 UID = 'u1'
+
+
+async def _dispatch(pass_requests):
+    notif._start_open_loops_passes(pass_requests)
+    await notif._drain_open_loops_passes()
+
+
+async def _bulk_then_drain(users, **kwargs):
+    served = await notif._send_bulk_summary_notification(users, **kwargs)
+    await notif._drain_open_loops_passes()
+    return served
 
 
 @pytest.fixture
@@ -99,7 +111,7 @@ def test_recap_returns_the_pass_request_after_its_own_work(recap_env):
     assert tz_name == 'UTC'
     assert start_utc is not None and end_utc is not None
     # and the dispatcher runs exactly that request
-    asyncio.run(notif._dispatch_open_loops_passes([request]))
+    asyncio.run(_dispatch([request]))
     assert len(recap_env.pass_calls) == 1
 
 
@@ -130,7 +142,7 @@ def test_a_slow_pass_past_its_deadline_is_abandoned_cleanly(recap_env, monkeypat
     monkeypatch.setattr(notif, '_run_open_loops_daily_pass', slow_pass)
     monkeypatch.setattr(notif, 'OPEN_LOOPS_PASS_BUDGET_SECONDS', 0.05)
     began = time.monotonic()
-    asyncio.run(notif._dispatch_open_loops_passes([(UID, recap_env.today, None, None, 'UTC')]))
+    asyncio.run(_dispatch([(UID, recap_env.today, None, None, 'UTC')]))
     assert time.monotonic() - began < 0.25  # did not wait for the sleeping worker
     assert started == [UID]  # the pass did start; its thread is simply abandoned
 
@@ -154,7 +166,7 @@ def test_webhook_delivery_is_never_delayed_by_a_slow_pass(recap_env, monkeypatch
 
     async def flow():
         request = await asyncio.get_running_loop().run_in_executor(None, notif._send_summary_notification, _user_data())
-        await notif._dispatch_open_loops_passes([request])
+        await _dispatch([request])
 
     asyncio.run(flow())
     assert events == ['webhook', 'pass_started']
@@ -167,7 +179,7 @@ def test_a_failing_pass_never_breaks_the_dispatch(recap_env, monkeypatch):
     monkeypatch.setattr(open_loops_daily, 'run_daily_pass', exploding)
     request = notif._send_summary_notification(_user_data())
     assert recap_env.webhook_calls == [UID]  # delivery + webhook unaffected
-    asyncio.run(notif._dispatch_open_loops_passes([request]))  # must not raise
+    asyncio.run(_dispatch([request]))  # must not raise
     assert recap_env.webhook_calls == [UID]
 
 
@@ -177,7 +189,7 @@ def test_a_pass_module_that_cannot_even_import_never_breaks_the_dispatch(recap_e
     take the dispatch down with it."""
     request = notif._send_summary_notification(_user_data())
     monkeypatch.setitem(sys.modules, 'utils.open_loops.daily', None)
-    asyncio.run(notif._dispatch_open_loops_passes([request]))  # must not raise
+    asyncio.run(_dispatch([request]))  # must not raise
     assert recap_env.webhook_calls == [UID]
 
 
@@ -186,9 +198,7 @@ def test_bulk_run_dispatches_passes_without_touching_recap_counters(recap_env):
     recaps complete, and a pass that overruns its budget leaves
     ``timed_out``/abandoned-user accounting untouched."""
     stats = notif.DailySummaryJobStats()
-    served = asyncio.run(
-        notif._send_bulk_summary_notification([_user_data()], deadline=None, stats=stats, target_hour=12)
-    )
+    served = asyncio.run(_bulk_then_drain([_user_data()], deadline=None, stats=stats, target_hour=12))
     assert served is True
     assert stats.attempted == 1 and stats.succeeded == 1
     assert stats.timed_out == 0 and stats.failed == 0
@@ -198,7 +208,7 @@ def test_bulk_run_dispatches_passes_without_touching_recap_counters(recap_env):
 
 def test_bulk_run_drops_passes_once_the_job_budget_is_spent(recap_env, monkeypatch, caplog):
     """Passes never push the job past its deadline: they are dropped loudly
-    (the next tick re-requests the day), and recap accounting is unaffected."""
+    (not retried), and recap accounting is unaffected."""
     import logging
 
     clock = {'now': 1000.0}
@@ -212,9 +222,7 @@ def test_bulk_run_drops_passes_once_the_job_budget_is_spent(recap_env, monkeypat
 
     stats = notif.DailySummaryJobStats()
     with caplog.at_level(logging.INFO, logger='utils.other.notifications'):
-        served = asyncio.run(
-            notif._send_bulk_summary_notification([_user_data()], deadline=1001.0, stats=stats, target_hour=12)
-        )
+        served = asyncio.run(_bulk_then_drain([_user_data()], deadline=1001.0, stats=stats, target_hour=12))
     assert served is True
     assert stats.timed_out == 0 and stats.succeeded == 1  # the recap itself was fine
     assert recap_env.pass_calls == []  # the pass was dropped, not run
@@ -228,3 +236,105 @@ def test_pass_skipped_logs_the_reason(recap_env, monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger='utils.other.notifications'):
         notif._run_open_loops_daily_pass(UID, recap_env.today, None, None, 'UTC')
     assert any('skipped_disabled' in record.message for record in caplog.records)
+
+
+def test_a_slow_pass_never_delays_the_next_batch(recap_env, monkeypatch):
+    """Passes are queued, not awaited, inside the batch loop: batch two's
+    recaps begin while batch one's pass is still running, and the job
+    drains the passes once at the end."""
+    events = []
+
+    def slow_pass(uid, date_str, start_utc, end_utc, tz_name):
+        events.append(f'pass_started:{uid}')
+        time.sleep(0.3)
+        events.append(f'pass_done:{uid}')
+
+    real_send = notif._send_summary_notification
+
+    def tracked_send(user_data):
+        events.append(f'recap:{user_data[0]}')
+        return real_send(user_data)
+
+    monkeypatch.setattr(notif, '_run_open_loops_daily_pass', slow_pass)
+    monkeypatch.setattr(notif, '_send_summary_notification', tracked_send)
+    monkeypatch.setattr(notif, '_BATCH_SIZE', 1)
+    users = [('u1',) + _user_data()[1:], ('u2',) + _user_data()[1:]]
+    stats = notif.DailySummaryJobStats()
+    served = asyncio.run(_bulk_then_drain(users, deadline=None, stats=stats, target_hour=12))
+    assert served is True and stats.succeeded == 2
+    assert events.index('recap:u2') < events.index('pass_done:u1')  # batch two did not wait
+    assert 'pass_done:u1' in events and 'pass_done:u2' in events  # drained once at the end
+
+
+def test_a_saturated_pass_executor_is_counted_and_never_raises(recap_env, monkeypatch):
+    fallbacks = []
+
+    def saturated(*args, **kwargs):
+        raise ExecutorSaturatedError('full')
+
+    monkeypatch.setattr(notif, 'run_blocking', saturated)
+    monkeypatch.setattr(notif, '_record_daily_summary_fallback', lambda **kw: fallbacks.append(kw))
+    asyncio.run(_dispatch([(UID, recap_env.today, None, None, 'UTC')]))
+    assert fallbacks == [
+        {'from_mode': 'open_loops_daily_pass', 'to_mode': 'skipped', 'reason': 'capacity_full', 'outcome': 'degraded'}
+    ]
+
+
+def test_a_large_group_queues_for_slots_instead_of_saturating(recap_env, monkeypatch):
+    """More passes than the executor's workers + queue all run: they wait for a
+    slot, and each pass's budget starts only once it holds one."""
+    peak = {'now': 0, 'max': 0}
+    lock = __import__('threading').Lock()
+
+    def pass_fn(uid, date_str, start_utc, end_utc, tz_name):
+        with lock:
+            peak['now'] += 1
+            peak['max'] = max(peak['max'], peak['now'])
+        time.sleep(0.01)
+        with lock:
+            peak['now'] -= 1
+
+    monkeypatch.setattr(notif, '_run_open_loops_daily_pass', pass_fn)
+    monkeypatch.setattr(notif, 'OPEN_LOOPS_PASS_BUDGET_SECONDS', 0.5)
+    fallbacks = []
+    monkeypatch.setattr(notif, '_record_daily_summary_fallback', lambda **kw: fallbacks.append(kw))
+    requests = [(f'u{i}', recap_env.today, None, None, 'UTC') for i in range(100)]
+    asyncio.run(_dispatch(requests))
+    assert fallbacks == []  # nothing saturated, timed out or was dropped
+    assert peak['max'] <= notif.OPEN_LOOPS_PASS_CONCURRENCY
+
+
+def test_the_job_drain_cancels_and_counts_what_misses_its_budget(recap_env, monkeypatch):
+    def slow_pass(uid, date_str, start_utc, end_utc, tz_name):
+        time.sleep(0.2)
+
+    monkeypatch.setattr(notif, '_run_open_loops_daily_pass', slow_pass)
+    fallbacks = []
+    monkeypatch.setattr(notif, '_record_daily_summary_fallback', lambda **kw: fallbacks.append(kw))
+
+    async def flow():
+        notif._start_open_loops_passes([(f'u{i}', recap_env.today, None, None, 'UTC') for i in range(8)])
+        began = time.monotonic()
+        await notif._drain_open_loops_passes(0.05)
+        return time.monotonic() - began
+
+    assert asyncio.run(flow()) < 0.15
+    assert fallbacks == [
+        {'from_mode': 'open_loops_daily_pass', 'to_mode': 'skipped', 'reason': 'timeout', 'outcome': 'degraded'}
+    ]
+
+
+def test_send_daily_summary_notification_drains_once_after_all_cohorts(monkeypatch):
+    order = []
+
+    async def cohorts():
+        order.append('cohorts')
+        return notif.DailySummaryCronOutcome(ok=True, error_text=None, complete=True)
+
+    async def drain(budget_seconds=None):
+        order.append('drain')
+
+    monkeypatch.setattr(notif, '_send_daily_summary_cohorts', cohorts)
+    monkeypatch.setattr(notif, '_drain_open_loops_passes', drain)
+    assert asyncio.run(notif.send_daily_summary_notification()).ok
+    assert order == ['cohorts', 'drain']

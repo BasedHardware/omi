@@ -354,6 +354,13 @@ DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_WEBHOOK_BUDGET_
 # toward DAILY_SUMMARY_MAX_ABANDONED_USERS — recap metrics and ordering are
 # untouched by everything below this line.
 OPEN_LOOPS_PASS_BUDGET_SECONDS = _env_float('OPEN_LOOPS_PASS_BUDGET_SECONDS', 45.0)
+# Passes admitted to open_loops_executor at once (its worker count), so a
+# large hour group queues here instead of tripping the executor's bounded
+# queue; the per-pass budget starts only once a pass holds a slot.
+OPEN_LOOPS_PASS_CONCURRENCY = 4
+# One drain per job, after every cohort: whatever has not finished by then is
+# cancelled and counted. Keeps the job well inside its 15-minute tick.
+OPEN_LOOPS_DRAIN_BUDGET_SECONDS = _env_float('OPEN_LOOPS_DRAIN_BUDGET_SECONDS', 240.0)
 # Rendered-character budget for the conversation material fed to the summary
 # prompt. ~360k chars is roughly 90k tokens, comfortably inside the 272k-token
 # model limit even alongside the prompt scaffolding and the user's memories.
@@ -499,6 +506,14 @@ async def start_cron_job() -> None:
 
 
 async def send_daily_summary_notification() -> DailySummaryCronOutcome:
+    """Run the due cohorts, then drain their open-loops passes once."""
+    try:
+        return await _send_daily_summary_cohorts()
+    finally:
+        await _drain_open_loops_passes()
+
+
+async def _send_daily_summary_cohorts() -> DailySummaryCronOutcome:
     """Resume the original due cohort before selecting the current local hours.
 
     A cursor without its UTC selection instant only reorders *today's* query;
@@ -942,7 +957,7 @@ def _run_open_loops_daily_pass(uid, date_str, start_date_utc, end_date_utc, tz_n
 
     One structured call per user per local day, dispatched only after the
     recap's own work for that user fully finished (see
-    ``_dispatch_open_loops_passes``): it reuses the recap's conversation
+    ``_start_open_loops_passes``): it reuses the recap's conversation
     render, updates the loop store and stores the day's Review cards (not
     served in this PR). Its own guards — ``OPEN_LOOPS_ENABLED``, the per-day
     claim/cards marker and the no-signal cost check — decide whether the model
@@ -969,37 +984,67 @@ def _run_open_loops_daily_pass(uid, date_str, start_date_utc, end_date_utc, tz_n
         logger.error('open_loops_daily_pass_failed uid=%s date=%s error=%s', uid, date_str, error, exc_info=error)
 
 
-async def _dispatch_open_loops_passes(pass_requests: List[Tuple[Any, ...]]) -> None:
-    """Run the day's open-loops passes off the recap critical path.
+@dataclass
+class _OpenLoopPassQueue:
+    loop: Any
+    slots: asyncio.Semaphore
+    tasks: List['asyncio.Task[None]'] = field(default_factory=list)
+
+
+_open_loop_pass_queue: Optional[_OpenLoopPassQueue] = None
+
+
+def _current_open_loop_pass_queue() -> _OpenLoopPassQueue:
+    global _open_loop_pass_queue
+    loop = asyncio.get_running_loop()
+    if _open_loop_pass_queue is None or _open_loop_pass_queue.loop is not loop:
+        _open_loop_pass_queue = _OpenLoopPassQueue(loop=loop, slots=asyncio.Semaphore(OPEN_LOOPS_PASS_CONCURRENCY))
+    return _open_loop_pass_queue
+
+
+def _is_executor_saturated(error: BaseException) -> bool:
+    # Imported lazily: import-isolation harnesses stub utils.executors.
+    try:
+        from utils.executors import ExecutorSaturatedError
+    except ImportError:
+        return False
+    return isinstance(error, ExecutorSaturatedError)
+
+
+def _start_open_loops_passes(pass_requests: List[Tuple[Any, ...]]) -> List['asyncio.Task[None]']:
+    """Queue the day's open-loops passes off the recap critical path; returns their tasks.
 
     Each request is ``(uid, date_str, start_utc, end_utc, tz_name)`` returned
     by ``_send_summary_notification`` after that user's recap work — summary,
-    push, backfill and webhook — completed. The pass runs on the dedicated
-    ``open_loops_executor`` under ``OPEN_LOOPS_PASS_BUDGET_SECONDS``: past the
-    deadline the coroutine abandons the worker (a thread cannot be cancelled)
-    and moves on, exactly like a timed-out recap worker — but nothing here
-    ever touches a recap recipient metric, ``counters.timed_out``,
+    push, backfill and webhook — completed. Nothing here is awaited by the
+    recap loop: passes wait for one of ``OPEN_LOOPS_PASS_CONCURRENCY`` slots,
+    then run on ``open_loops_executor`` under ``OPEN_LOOPS_PASS_BUDGET_SECONDS``
+    (past it the coroutine abandons the worker; a thread cannot be cancelled).
+    ``_drain_open_loops_passes`` settles them once per job. Nothing here ever
+    touches a recap recipient metric, ``counters.timed_out``,
     ``DAILY_SUMMARY_MAX_ABANDONED_USERS`` or user ordering. The pass's own
     per-day claim bounds what an abandoned worker can spend.
     """
     if not pass_requests:
-        return
+        return []
+    queue = _current_open_loop_pass_queue()
 
     async def one_pass(request: Tuple[Any, ...]) -> None:
         uid, date_str, start_date_utc, end_date_utc, tz_name = request
         try:
-            await asyncio.wait_for(
-                run_blocking(
-                    open_loops_executor,
-                    _run_open_loops_daily_pass,
-                    uid,
-                    date_str,
-                    start_date_utc,
-                    end_date_utc,
-                    tz_name,
-                ),
-                timeout=OPEN_LOOPS_PASS_BUDGET_SECONDS,
-            )
+            async with queue.slots:
+                await asyncio.wait_for(
+                    run_blocking(
+                        open_loops_executor,
+                        _run_open_loops_daily_pass,
+                        uid,
+                        date_str,
+                        start_date_utc,
+                        end_date_utc,
+                        tz_name,
+                    ),
+                    timeout=OPEN_LOOPS_PASS_BUDGET_SECONDS,
+                )
         except (asyncio.TimeoutError, TimeoutError):
             logger.error(
                 'open_loops_daily_pass_abandoned uid=%s date=%s budget_seconds=%s',
@@ -1008,9 +1053,45 @@ async def _dispatch_open_loops_passes(pass_requests: List[Tuple[Any, ...]]) -> N
                 OPEN_LOOPS_PASS_BUDGET_SECONDS,
             )
         except Exception as error:
-            logger.error('open_loops_daily_pass_dispatch_failed uid=%s date=%s error=%s', uid, date_str, error)
+            if _is_executor_saturated(error):
+                # Only reachable if something else fills the executor. The user's
+                # loops stay in the store and the next day's pass sees them.
+                _record_daily_summary_fallback(
+                    from_mode='open_loops_daily_pass', to_mode='skipped', reason='capacity_full', outcome='degraded'
+                )
+                logger.error('open_loops_daily_pass_dropped uid=%s date=%s reason=executor_saturated', uid, date_str)
+            else:
+                logger.error('open_loops_daily_pass_dispatch_failed uid=%s date=%s error=%s', uid, date_str, error)
 
-    await asyncio.gather(*(one_pass(request) for request in pass_requests))
+    tasks = [asyncio.ensure_future(one_pass(request)) for request in pass_requests]
+    queue.tasks.extend(tasks)
+    return tasks
+
+
+async def _drain_open_loops_passes(budget_seconds: Optional[float] = None) -> None:
+    """Wait once for every queued pass; cancel and count what misses the budget."""
+    global _open_loop_pass_queue
+    queue = _open_loop_pass_queue
+    if queue is None or queue.loop is not asyncio.get_running_loop():
+        return
+    _open_loop_pass_queue = None
+    if not queue.tasks:
+        return
+    budget = OPEN_LOOPS_DRAIN_BUDGET_SECONDS if budget_seconds is None else budget_seconds
+    _done, pending = await asyncio.wait(queue.tasks, timeout=budget)
+    if pending:
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        _record_daily_summary_fallback(
+            from_mode='open_loops_daily_pass', to_mode='skipped', reason='timeout', outcome='degraded'
+        )
+        logger.error(
+            'open_loops_daily_passes_dropped reason=drain_budget count=%d queued=%d budget_seconds=%s',
+            len(pending),
+            len(queue.tasks),
+            budget,
+        )
 
 
 def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str, str, Any, Any, Optional[str]]]:
@@ -1019,7 +1100,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str
     The recap's own steps — generation, push, backfill walk, webhook — all
     complete (or raise) inside this function. The open-loops daily pass is
     deliberately NOT among them: it runs on its own executor and budget after
-    this worker finishes (see ``_dispatch_open_loops_passes``), so a slow pass
+    this worker finishes (see ``_start_open_loops_passes``), so a slow pass
     can never delay the webhook, spend the user's 90 s recap budget or defer
     another user's recap. The return value carries
     ``(uid, date_str, start_utc, end_utc, tz_name)`` only when the pass should
@@ -1251,14 +1332,18 @@ async def _send_bulk_summary_notification(
 
         # Open-loops passes for the users whose recaps just completed — after
         # the batch barrier, so recap ordering and metrics are already
-        # settled. Runs on the dedicated executor under its own budget and is
-        # dropped loudly (never counted against recap metrics) once the job
-        # budget is spent; the next tick re-requests the pass for a day whose
-        # cards document is still absent.
+        # settled. Queued, not awaited: the next batch runs while they do, and
+        # send_daily_summary_notification drains them once after every cohort.
+        # Past the job deadline they are dropped loudly and not retried (the
+        # next tick serves a different local hour); the user's loops stay in
+        # the store for the next day's pass.
         pass_requests = [result for result in results if not isinstance(result, BaseException) and result is not None]
         if pass_requests and (deadline is None or monotonic() < deadline):
-            await _dispatch_open_loops_passes(pass_requests)
+            _start_open_loops_passes(pass_requests)
         elif pass_requests:
+            _record_daily_summary_fallback(
+                from_mode='open_loops_daily_pass', to_mode='skipped', reason='timeout', outcome='degraded'
+            )
             logger.info(
                 'open_loops_daily_passes_dropped reason=job_budget count=%d hour=%s',
                 len(pass_requests),
