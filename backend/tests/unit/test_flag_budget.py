@@ -10,13 +10,16 @@ Each allowlist entry is one of:
 
 - ``{"seeded": "2026-10-25"}``: present when the budget was set;
 - ``{"replaces": "OLD_NAME"}``: takes the slot of a name removed from the
-  surface (the budget holds);
+  surface in the same change (the budget holds);
 - ``{"owner": ..., "review_by": "YYYY-MM-DD"}``: an explicit exception above the
   budget. It fails once ``review_by`` has passed: renew it or delete the flag.
 
-``budget`` must equal the number of seeded + replacement entries, so removing a
-name lowers the budget in the same change, and it can never exceed
-``SEED_BUDGET``. Names read only through helpers (``serving_for``, kill-switch
+A name that leaves the surface moves to the append-only ``retired`` ledger as
+``{"on": "YYYY-MM-DD", "replaced_by": "NEW" | null}``. A replacement is valid
+only when the retired entry names it, so a slot given up in an earlier change
+(``replaced_by: null``) cannot be reclaimed later. ``budget`` must equal the
+number of seeded + replacement entries, so a removal without a replacement
+lowers the budget in the same change, and it can never exceed ``SEED_BUDGET``. Names read only through helpers (``serving_for``, kill-switch
 registry lookups) or computed at runtime are not counted; the batch-stage env
 ratchet covers dynamic reads under ``utils/batch_pipeline``.
 
@@ -90,10 +93,19 @@ def unlisted(read: dict[str, list[str]], names: dict[str, dict]) -> list[str]:
 
 def problems(read: dict[str, list[str]], data: dict, today: datetime.date) -> list[str]:
     names: dict[str, dict] = data['names']
+    retired: dict[str, dict] = data.get('retired', {})
     out = unlisted(read, names)
     for name in sorted(set(names) - set(read)):
-        out.append(f'{name} is no longer read in scope: delete its entry and lower "budget" in the same change')
-    replaced: dict[str, str] = {}
+        out.append(
+            f'{name} is no longer read in scope: move it to "retired" as {{"on": "YYYY-MM-DD", "replaced_by": null}} '
+            f'and lower "budget", or name its replacement, in the same change'
+        )
+    for old, entry in sorted(retired.items()):
+        if old in names or old in read:
+            out.append(f'{old} is retired but still on the surface')
+        new = entry.get('replaced_by')
+        if new is not None and names.get(new, {}).get('replaces') != old and new not in retired:
+            out.append(f'retired {old} names replacement {new}, which has no {{"replaces": "{old}"}} entry')
     slots = 0
     for name, entry in sorted(names.items()):
         if 'seeded' in entry:
@@ -103,9 +115,11 @@ def problems(read: dict[str, list[str]], data: dict, today: datetime.date) -> li
             old = entry['replaces']
             if old in names or old in read:
                 out.append(f'{name} replaces {old}, which is still on the surface')
-            if old in replaced:
-                out.append(f'{name} and {replaced[old]} both replace {old}')
-            replaced[old] = name
+            elif retired.get(old, {}).get('replaced_by') != name:
+                out.append(
+                    f'{name} replaces {old}, but "retired" does not record {old} as replaced_by {name}; '
+                    f'a slot can only transfer in the change that removes the old name'
+                )
         else:
             owner = str(entry.get('owner', '')).strip()
             try:
@@ -148,11 +162,12 @@ def test_budget_file_declares_scope_and_count():
     data = _load()
     assert tuple(data['scope']) == SCOPE
     assert data['count'] == len(data['names'])
+    assert isinstance(data['retired'], dict)
 
 
-def _data(**names):
+def _data(retired=None, **names):
     slots = sum(1 for entry in names.values() if 'seeded' in entry or 'replaces' in entry)
-    return {'budget': slots, 'names': names}
+    return {'budget': slots, 'names': names, 'retired': retired or {}}
 
 
 SEEDED = {'seeded': '2026-10-25'}
@@ -165,7 +180,31 @@ def test_new_name_fails_unless_owned_or_swapped():
     owned = {'owner': 'batch record lane', 'review_by': '2026-11-15'}
     assert problems(read, _data(A=SEEDED, ZZ_FAKE=owned), TODAY) == []
     swapped = {'ZZ_FAKE': ['y.py']}
-    assert problems(swapped, _data(ZZ_FAKE={'replaces': 'A'}), TODAY) == []
+    ledger = {'A': {'on': '2026-10-26', 'replaced_by': 'ZZ_FAKE'}}
+    assert problems(swapped, _data(retired=ledger, ZZ_FAKE={'replaces': 'A'}), TODAY) == []
+
+
+def test_a_slot_retired_earlier_cannot_be_reclaimed():
+    # Luna r1 P2: after A left with no replacement (budget lowered), a later change may not add
+    # {"replaces": "A"} and raise the budget back.
+    read = {'B': ['x.py'], 'NEW': ['y.py']}
+    ledger = {'A': {'on': '2026-10-26', 'replaced_by': None}}
+    found = problems(read, _data(retired=ledger, B=SEEDED, NEW={'replaces': 'A'}), TODAY)
+    assert found == [
+        'NEW replaces A, but "retired" does not record A as replaced_by NEW; '
+        'a slot can only transfer in the change that removes the old name'
+    ]
+    unrecorded = problems(read, _data(B=SEEDED, NEW={'replaces': 'A'}), TODAY)
+    assert unrecorded and 'does not record A' in unrecorded[0]
+
+
+def test_retired_ledger_stays_consistent():
+    read = {'A': ['x.py']}
+    assert problems(read, _data(retired={'A': {'on': '2026-10-26', 'replaced_by': None}}, A=SEEDED), TODAY)[0] == (
+        'A is retired but still on the surface'
+    )
+    dangling = problems({}, _data(retired={'A': {'on': '2026-10-26', 'replaced_by': 'GONE'}}), TODAY)
+    assert dangling == ['retired A names replacement GONE, which has no {"replaces": "A"} entry']
 
 
 def test_removal_must_lower_the_budget():
@@ -207,10 +246,14 @@ def test_scanner_resolves_aliases_and_module_constants(tmp_path):
         'a = os.getenv("ZZ_FAKE")\n'
         'b = env.get(FLAG)\n'
         'c = os.environ["ZZ_SUBSCRIPT"]\n'
+        'd = os.getenv(key="ZZ_KEYWORD")\n'
+        'e = env.get(key="ZZ_KEYWORD_GET", default="")\n'
     )
     assert scan(tmp_path) == {
         'ZZ_CONST': ['utils/sync/probe.py'],
         'ZZ_FAKE': ['utils/sync/probe.py'],
+        'ZZ_KEYWORD': ['utils/sync/probe.py'],
+        'ZZ_KEYWORD_GET': ['utils/sync/probe.py'],
         'ZZ_SUBSCRIPT': ['utils/sync/probe.py'],
     }
 

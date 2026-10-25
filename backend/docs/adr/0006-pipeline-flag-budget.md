@@ -20,12 +20,17 @@ combinations had ever run together.
   sync and policy packages (scope listed in the JSON) and compares them with
   `config/flag_budget.json`.
 - The budget is today's count: **170 names**. A new name fails CI unless:
-  - another name leaves the surface in the same change and the new entry says
-    `{"replaces": "<OLD>"}` (the budget holds); or
+  - another name leaves the surface in the same change, the new entry says
+    `{"replaces": "<OLD>"}`, and the old name's `retired` entry records
+    `"replaced_by": "<NEW>"` (the budget holds); or
   - the entry carries an `owner` and a `review_by` date (an explicit exception).
     It fails again once `review_by` passes: renew it with a reason or delete the flag.
-- Removing a name deletes its entry and lowers `budget` in the same change.
+- Removing a name moves it to the append-only `retired` ledger
+  (`{"on": date, "replaced_by": null}`) and lowers `budget` in the same change.
+  A slot given up that way cannot be reclaimed by a later `replaces`.
   `budget` can never exceed the seeded 170.
+- Literal names in positional and `key=` keyword form are both counted
+  (`config/policy/guard.py:env_reads`).
 - Changed-file CI selects the test for any scoped path
   (`scripts/select_backend_unit_tests.py:FLAG_BUDGET_PREFIXES`).
 
@@ -42,4 +47,7 @@ combinations had ever run together.
 ## Implemented in
 
 `backend/config/flag_budget.json`, `backend/tests/unit/test_flag_budget.py`,
-`backend/scripts/select_backend_unit_tests.py`.
+`backend/scripts/select_backend_unit_tests.py`, `backend/config/policy/guard.py:env_reads`.
+Residual: the ledger is append-only by convention; rewriting a dated `retired`
+entry is visible in review but not machine-checked (that would need the base
+branch's copy of the file).

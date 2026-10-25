@@ -192,5 +192,6 @@
     "VAD_CACHE_TTL_SECONDS": {"seeded": "2026-10-25"},
     "VAD_GATE_AUDIO_CAPTURE_DIR": {"seeded": "2026-10-25"},
     "VAD_GATE_MODE": {"seeded": "2026-10-25"}
-  }
+  },
+  "retired": {}
 }
