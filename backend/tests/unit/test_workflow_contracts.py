@@ -975,6 +975,33 @@ def test_gcp_diarizer_batch_deploys_dedicated_release_like_the_runbook():
     assert "rollout_timeout=900s" in verify_step["run"]
 
 
+def test_gcp_diarizer_verify_rollout_asserts_the_digest_helm_deploys():
+    """Promotion deploys verify the promoted digest, not only freshly built ones.
+
+    bramp2 (2026-10-25) found Verify rollout asserting against steps.build only,
+    while Helm deploys steps.build || steps.promote, so an image_digest
+    promotion skipped the exact deployed-digest check entirely. EXPECTED_DIGEST
+    must stay the same selection Helm deploys for batch-pipeline-worker.
+    """
+    workflow_path = BACKEND_DIR.parent / ".github/workflows/gcp_diarizer.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["deploy"]["steps"]
+
+    verify_step = next(step for step in steps if step.get("name") == "Verify rollout")
+    assert (
+        verify_step["env"]["EXPECTED_DIGEST"]
+        == "${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}"
+    )
+    # The message must be right for both paths: it reports what was expected, not what was built.
+    assert "not the expected digest" in verify_step["run"]
+    assert "not the built digest" not in verify_step["run"]
+
+    # The expression Helm deploys for batch-pipeline-worker is exactly the one
+    # Verify rollout asserts, so the two selections cannot drift apart again.
+    helm_step = next(step for step in steps if "Helm" in step.get("name", ""))
+    assert f'"image.digest={verify_step["env"]["EXPECTED_DIGEST"]}"' in helm_step["run"]
+
+
 def test_firestore_readiness_gate_covers_every_backend_image_shipment():
     """Every backend-source image push/deploy needs the shared immutable gate."""
     policy = _workflow_policy()
