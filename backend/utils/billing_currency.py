@@ -58,7 +58,7 @@ def price_for_currency(price: stripe.Price, currency: str | None) -> stripe.Pric
                 and target.livemode == price.livemode
                 and recurring is not None
                 and recurring.interval == base_recurring.interval
-                and recurring.get('interval_count', 1) == 1
+                and recurring.interval_count == 1
                 and target_resolved
                 and target_resolved['plan_id'] == resolved['plan_id']
                 and target_resolved['entitlement_version'] == resolved['entitlement_version']
