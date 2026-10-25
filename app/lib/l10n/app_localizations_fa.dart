@@ -12243,12 +12243,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'اتصال را بررسی کنید';
 
   @override
-  String get forYou => 'برای شما';
-
-  @override
-  String get stopThese => 'توقف این موارد';
-
-  @override
   String get dismiss => 'رد کردن';
 
   @override

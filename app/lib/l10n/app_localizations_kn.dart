@@ -12285,12 +12285,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ';
 
   @override
-  String get forYou => 'ನಿಮಗಾಗಿ';
-
-  @override
-  String get stopThese => 'ಇವುಗಳನ್ನು ನಿಲ್ಲಿಸಿ';
-
-  @override
   String get dismiss => 'ಮರೆಮಾಡಿ';
 
   @override

@@ -222,7 +222,6 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
 
   const [conv, setConv] = useState<ServerConversation | null>(null)
   useEffect(() => {
-    if (conv?.id === id) window.omi?.proactivityTargetRendered?.({ kind: 'conversation', id })
   }, [conv, id])
   const [local, setLocal] = useState<LocalDisplay | null>(null)
   const [error, setError] = useState<string | null>(null)

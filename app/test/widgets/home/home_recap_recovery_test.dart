@@ -9,7 +9,6 @@ import 'package:omi/pages/conversations/widgets/daily_recap_recovery_action.dart
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/services/recap_events.dart';
 import 'package:omi/ui/ui.dart';
-import '../../helpers/proactivity_fakes.dart';
 
 final recap = DailySummary(
     id: 'recovered',
@@ -21,9 +20,6 @@ final recap = DailySummary(
 typedef Page = ({List<DailySummary> items, bool ok});
 
 Future<void> pump(WidgetTester tester, RecentRecapsLoader load, {bool recover = false}) async {
-  final h = OutcomeHarness();
-  addTearDown(h.outbox.dispose);
-  await h.bind();
   await tester.pumpWidget(MaterialApp(
     theme: buildOmiTheme(),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -37,7 +33,7 @@ Future<void> pump(WidgetTester tester, RecentRecapsLoader load, {bool recover = 
           create: (_) async => ApiSuccess(recap),
           onCreated: (_) async {},
         ),
-      HomeDailyRecaps(load: load, outbox: h.outbox, loadFeed: (_) async => ApiSuccess(feedResponse(enabled: false))),
+      HomeDailyRecaps(load: load),
     ]))),
   ));
   await tester.pump();

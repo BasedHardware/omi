@@ -1656,24 +1656,6 @@ routes:
         state: active
   - route_type: http
     method: POST
-    path: /v1/commitment-followup-jobs/run
-    policy:
-      review_status: reviewed
-      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
-      byok: not_applicable
-      rate_limit:
-        policy_name: none
-        key_subject: none
-        enforcement: none
-        placement: none
-      timeout_class: default_method
-      surface: internal_task
-      visibility: internal
-      data_domain: action_items
-      deprecation:
-        state: active
-  - route_type: http
-    method: POST
     path: /v1/conversation-finalization-jobs/run
     policy:
       review_status: reviewed
@@ -4041,7 +4023,7 @@ routes:
       visibility: first_party
       data_domain: user_profile
       deprecation:
-        state: active
+        state: deprecated
       owner: backend
   - route_type: http
     method: POST
@@ -4063,7 +4045,7 @@ routes:
       visibility: first_party
       data_domain: user_profile
       deprecation:
-        state: active
+        state: deprecated
       owner: backend
   - route_type: http
     method: GET

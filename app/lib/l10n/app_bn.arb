@@ -11203,8 +11203,6 @@
     "playbackAudioUnavailable": "অডিও উপলব্ধ নয়",
     "playbackAudioLoadFailed": "অডিও লোড করা যায়নি",
     "playbackAudioNetworkFailed": "সংযোগ পরীক্ষা করুন",
-    "forYou": "আপনার জন্য",
-    "stopThese": "এগুলো বন্ধ করুন",
     "dismiss": "সরিয়ে দিন",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

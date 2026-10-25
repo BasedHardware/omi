@@ -12275,12 +12275,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Pārbaudiet savienojumu';
 
   @override
-  String get forYou => 'Jums';
-
-  @override
-  String get stopThese => 'Apturēt šos';
-
-  @override
   String get dismiss => 'Paslēpt';
 
   @override

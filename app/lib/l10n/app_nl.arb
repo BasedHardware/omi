@@ -3780,8 +3780,6 @@
     "playbackAudioUnavailable": "Audio niet beschikbaar",
     "playbackAudioLoadFailed": "Audio kon niet worden geladen",
     "playbackAudioNetworkFailed": "Controleer verbinding",
-    "forYou": "Voor jou",
-    "stopThese": "Deze stoppen",
     "dismiss": "Verbergen",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

@@ -3815,8 +3815,6 @@
     "playbackAudioUnavailable": "Audio indisponible",
     "playbackAudioLoadFailed": "Impossible de charger l'audio",
     "playbackAudioNetworkFailed": "Vérifiez la connexion",
-    "forYou": "Pour vous",
-    "stopThese": "Ne plus recevoir ceci",
     "dismiss": "Masquer",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

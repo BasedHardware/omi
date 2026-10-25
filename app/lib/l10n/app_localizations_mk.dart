@@ -12308,12 +12308,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Проверете ја врската';
 
   @override
-  String get forYou => 'За вас';
-
-  @override
-  String get stopThese => 'Запри ги овие';
-
-  @override
   String get dismiss => 'Сокриј';
 
   @override

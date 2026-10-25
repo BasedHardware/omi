@@ -3780,8 +3780,6 @@
     "playbackAudioUnavailable": "Lyd ikke tilgjengelig",
     "playbackAudioLoadFailed": "Kunne ikke laste lyden",
     "playbackAudioNetworkFailed": "Sjekk tilkoblingen",
-    "forYou": "For deg",
-    "stopThese": "Stopp disse",
     "dismiss": "Avvis",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

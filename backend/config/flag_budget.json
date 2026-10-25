@@ -19,8 +19,8 @@
     "config/policy": "policy snapshot (E1) owner"
   },
   "seed_review_by": "2026-11-15",
-  "budget": 170,
-  "count": 171,
+  "budget": 169,
+  "count": 170,
   "names": {
     "BATCH_PIPELINE_API_URL": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS": {"seeded": "2026-10-25"},
@@ -95,7 +95,6 @@
     "LISTEN_LIVE_TAIL_CATCHUP_RATE": {"seeded": "2026-10-25"},
     "LISTEN_NONWINDOW_REPLAY_SETTLE_ENABLED": {"seeded": "2026-10-25"},
     "LISTEN_REPLAY_PREFIX_MARGIN_SECONDS": {"seeded": "2026-10-25"},
-    "MENTOR_PIPELINE": {"seeded": "2026-10-25"},
     "MIN_EMBEDDING_AUDIO_DURATION": {"seeded": "2026-10-25"},
     "MOBILE_STANDARD_BATCH_ENABLED": {"seeded": "2026-10-25"},
     "MOBILE_STANDARD_BATCH_PERCENT": {"seeded": "2026-10-25"},
@@ -194,5 +193,10 @@
     "VAD_GATE_AUDIO_CAPTURE_DIR": {"seeded": "2026-10-25"},
     "VAD_GATE_MODE": {"seeded": "2026-10-25"}
   },
-  "retired": {}
+  "retired": {
+    "MENTOR_PIPELINE": {
+      "on": "2026-10-26",
+      "replaced_by": null
+    }
+  }
 }

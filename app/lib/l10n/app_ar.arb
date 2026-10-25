@@ -3780,8 +3780,6 @@
     "playbackAudioUnavailable": "الصوت غير متوفر",
     "playbackAudioLoadFailed": "تعذر تحميل الصوت",
     "playbackAudioNetworkFailed": "تحقق من الاتصال",
-    "forYou": "من أجلك",
-    "stopThese": "إيقاف هذه",
     "dismiss": "تجاهل",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

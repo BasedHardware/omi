@@ -12284,12 +12284,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Sprawdź połączenie';
 
   @override
-  String get forYou => 'Dla Ciebie';
-
-  @override
-  String get stopThese => 'Zatrzymaj te';
-
-  @override
   String get dismiss => 'Ukryj';
 
   @override

@@ -11203,8 +11203,6 @@
     "playbackAudioUnavailable": "Zvok ni na voljo",
     "playbackAudioLoadFailed": "Zvoka ni bilo mogoče naložiti",
     "playbackAudioNetworkFailed": "Preverite povezavo",
-    "forYou": "Za vas",
-    "stopThese": "Ustavi te",
     "dismiss": "Skrij",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

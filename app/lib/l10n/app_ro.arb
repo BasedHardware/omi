@@ -3780,8 +3780,6 @@
     "playbackAudioUnavailable": "Audio indisponibil",
     "playbackAudioLoadFailed": "Audio nu a putut fi încărcat",
     "playbackAudioNetworkFailed": "Verificați conexiunea",
-    "forYou": "Pentru tine",
-    "stopThese": "Oprește acestea",
     "dismiss": "Ascunde",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

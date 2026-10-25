@@ -12276,12 +12276,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Preverite povezavo';
 
   @override
-  String get forYou => 'Za vas';
-
-  @override
-  String get stopThese => 'Ustavi te';
-
-  @override
   String get dismiss => 'Skrij';
 
   @override

@@ -3876,8 +3876,6 @@
     "playbackAudioUnavailable": "A hang nem érhető el",
     "playbackAudioLoadFailed": "A hang nem tölthető be",
     "playbackAudioNetworkFailed": "Ellenőrizze a kapcsolatot",
-    "forYou": "Önnek",
-    "stopThese": "Ezek leállítása",
     "dismiss": "Elrejtés",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",

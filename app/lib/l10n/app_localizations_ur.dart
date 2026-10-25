@@ -12261,12 +12261,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'کنکشن چیک کریں';
 
   @override
-  String get forYou => 'آپ کے لیے';
-
-  @override
-  String get stopThese => 'یہ روکیں';
-
-  @override
   String get dismiss => 'چھپائیں';
 
   @override

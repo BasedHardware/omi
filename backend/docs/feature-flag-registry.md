@@ -542,9 +542,6 @@ and an explicit empty literal renders as `''`.
 | `BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT` | Exact verified service-account email allowed for batch worker RPC; empty denies all requests | backend | env | closed | '' (cloud_run/backend, cloud_run/backend-sync-backfill, gke/backend-listen); batch-pipeline-worker@{compute_project}.iam.gserviceaccount.com (cloud_run/backend-integration); declared (cloud_run/backend-sync) | '' (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen); batch-pipeline-worker@{compute_project}.iam.gserviceaccount.com (cloud_run/backend-integration) | '' (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync-backfill, gke/backend-listen); batch-pipeline-worker@based-hardware.iam.gserviceaccount.com (cloud_run/backend-sync); batch-pipeline-worker@{compute_project}.iam.gserviceaccount.com (cloud_run/backend-integration) | — | keep | keep | — | dazheng |
 | `BILLING_WEBHOOK_LEDGER_ENABLED` | Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint | backend | env | closed | — | — | — | — | pending | keep | — | dazheng |
 | `CLOUD_LIVE_STT_MODE` | Cloud live STT policy: stream default (today), when_watched forces #21481 demand routing on, off opens no cloud streaming STT session (vendor or Parakeet window) while audio is still received and persisted; BYOK custom STT never suppressed; invalid values fail safe to stream | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
-| `COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
-| `COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
-| `COMMITMENT_FOLLOWUP_TASKS_QUEUE` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `DIARIZATION_V2_ENABLED` | Enable the separate batch-only diarizer app; default false; startup loads models before readiness | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `DREAM_AGENT_CANARY_UID` | Dedicated synthetic UID in dream-canary- namespace; unset disables canary | backend | env | closed | — | — | dream-canary-prod-01 | — | pending | keep | — | dazheng |
 | `DREAM_AGENT_CONCURRENCY` | Parallel Dream workers and shared reserved slots; derived default 334 at 2M TPM and 12k expected tokens; bounded 1 to 512 | backend | env | closed | — | — | 8 | — | pending | keep | — | dazheng |
@@ -787,9 +784,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_PERCENT` — Continuation serve cohort percentage; default zero (fail: closed)
 - `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_UID_SHA256S` — Continuation digest serve cohort; default empty (fail: closed)
 - `CLOUD_LIVE_STT_MODE` — Cloud live STT policy: stream default (today), when_watched forces #21481 demand routing on, off opens no cloud streaming STT session (vendor or Parakeet window) while audio is still received and persisted; BYOK custom STT never suppressed; invalid values fail safe to stream (fail: closed)
-- `COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL` — One-shot commitment due callback transport; absent disables scheduling (fail: closed)
-- `COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA` — One-shot commitment due callback transport; absent disables scheduling (fail: closed)
-- `COMMITMENT_FOLLOWUP_TASKS_QUEUE` — One-shot commitment due callback transport; absent disables scheduling (fail: closed)
 - `CONVERSATION_KNOWN_SPELLINGS` — Default-on grounded spelling hints from Dream vocabulary and active People for conversation summaries, action items and memories; false disables hints and source reads; bounded to 60 terms and 1500 characters (fail: open)
 - `CONVERSATION_NOTES_AGENT_ENABLED` — Default on unless false/off/0; conversations over 1500 words, or 300+ words with calendar, call-screen or multi-source evidence, get agentic notes (read-only owner tools, terminal submit_notes, <=15 lookups, ~2 cent cap) on the conv-structure lane; off returns every conversation to the one-shot notes call (fail: open)
 - `CONVERSATION_NOTES_AGENT_PERCENT` — Stable conversation-hash percentage of eligible conversations that get agentic notes; unset means 100, unreadable means 0 (fail: closed)
@@ -1114,6 +1108,9 @@ admission.
 | `MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED` | 2026-10-08 | Graduated on behavior |
 | `MEETING_RECEIPT_RECONCILER_ENABLED` | 2026-10-08 | Never-run code removed |
 | `MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED` | 2026-10-08 | Never-run code removed |
+| `COMMITMENT_FOLLOWUP_TASKS_QUEUE` | 2026-10-26 | Commitment follow-up producer deleted |
+| `COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL` | 2026-10-26 | Commitment follow-up producer deleted |
+| `COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA` | 2026-10-26 | Commitment follow-up producer deleted |
 | `MENTOR_GATE_DEBOUNCE_ENABLED` | 2026-10-08 | Graduated on behavior |
 | `MENTOR_GATE_PROMPT_CACHE_ENABLED` | 2026-10-08 | Graduated on behavior |
 | `OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED` | 2026-10-08 | Graduated on behavior |

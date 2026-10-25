@@ -843,18 +843,13 @@ before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
 utterances before longer ones.
 
-Realtime mentor dispatch validates `MENTOR_PIPELINE=cohort` locally before
-running `process_mentor_notification`, the shared paid/opt-in, buffering and
-debounce admission. Only when admission returns conversation messages does the
-cohort resolve the independent PostHog flag: `proactivity_v2` true dispatches the v2 mentor;
-false, unknown or a flag error dispatches nothing (fail closed) — the legacy
-mentor lane was deleted after v2 reached 100%. Any other env value invokes
-neither path. The shared bounded flag cache, failure diagnostics and rollback
-latency are defined in the
-[proactivity v2 contract](proactivity_v2/CONTRACT.md#enablement-prerequisites).
+The realtime mentor producer (v2 `conversation_mentor_v2`) was deleted on
+2026-10-26; no realtime batch dispatches mentor evaluation anymore. The
+remaining feed/outcome HTTP surface and its compatibility state are defined in
+the [proactivity v2 contract](proactivity_v2/CONTRACT.md).
 
 Live episodes (`utils/episodes/live.py`, kill switch `EPISODES_ENABLED`) see the
-same realtime batches after the paywall check and before mentor admission. They
+same realtime batches after the paywall check. They
 buffer final segments per user in process and, when a moment ends (a pause of
 45 seconds, 600 words, or a move to another conversation), schedule one tracked
 background update. The update first requires the client-capability marker

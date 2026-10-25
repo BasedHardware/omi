@@ -12298,12 +12298,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'కనెక్షన్‌ను తనిఖీ చేయండి';
 
   @override
-  String get forYou => 'మీ కోసం';
-
-  @override
-  String get stopThese => 'వీటిని ఆపండి';
-
-  @override
   String get dismiss => 'దాచు';
 
   @override

@@ -12348,12 +12348,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Suriin ang Koneksyon';
 
   @override
-  String get forYou => 'Para Sa Iyo';
-
-  @override
-  String get stopThese => 'Itigil Ang Mga Ito';
-
-  @override
   String get dismiss => 'Isara';
 
   @override
