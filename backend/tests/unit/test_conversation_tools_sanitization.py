@@ -74,6 +74,7 @@ for _p in [
     "models",
     "utils",
     "utils.conversations",
+    "utils.observability",
     "utils.retrieval",
     "utils.retrieval.tools",
 ]:
@@ -133,6 +134,10 @@ _transcript_search_mod.chat_transcript_coverage_note = MagicMock(return_value="T
 _transcript_search_mod.chat_transcript_excerpts = MagicMock(return_value={})
 _transcript_search_mod.merge_chat_conversation_ids = MagicMock(return_value=[])
 _transcript_search_mod.search_chat_transcript_chunks = MagicMock(return_value=_ChatTranscriptSearch([], False))
+
+# Stub utils.observability.fallback
+_fallback_mod = _mod("utils.observability.fallback")
+_fallback_mod.record_fallback = MagicMock()
 
 # Stub utils.retrieval.chat_scope
 _chat_scope_mod = _mod("utils.retrieval.chat_scope")
