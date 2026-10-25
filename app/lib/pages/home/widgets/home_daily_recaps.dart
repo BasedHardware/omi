@@ -42,7 +42,6 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
   final _forYouKey = GlobalKey<HomeForYouState>();
   List<DailySummary> _recaps = [];
   bool _loading = true;
-  bool _loadFailed = false;
 
   StreamSubscription<String>? _deletions;
   StreamSubscription<void>? _arrivals;
@@ -94,11 +93,10 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
       if (result.ok) ActivitySeen.instance.observe(ActivitySeen.recapArrivals(items));
       setState(() {
         if (result.ok) _recaps = items;
-        _loadFailed = !result.ok;
         _loading = false;
       });
     } catch (_) {
-      if (mounted && generation == _generation) setState(() => _loadFailed = true);
+      // Silent on Home: the finally clears loading; the next refresh retries.
     } finally {
       if (mounted && generation == _generation) setState(() => _loading = false);
     }
@@ -116,12 +114,9 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
       );
 
   Widget _buildRecaps(BuildContext context) {
-    if (!_loading && _recaps.isEmpty) {
-      return _loadFailed
-          ? OmiErrorState(
-              title: context.l10n.dailyRecaps, message: context.l10n.somethingWentWrong, onRetry: _refreshRecaps)
-          : const SizedBox.shrink();
-    }
+    // A failed read shows nothing on Home (David, 2026-10-25): no error card at the top of the
+    // feed. The next refresh (pull, resume, shared arrival) retries.
+    if (!_loading && _recaps.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -155,16 +150,6 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
             ),
           ),
         ),
-        if (_loadFailed && !_loading)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-            child: Row(children: [
-              Expanded(
-                  child: Text(context.l10n.somethingWentWrong,
-                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
-              OmiButton.tertiary(label: context.l10n.tryAgain, onPressed: _refreshRecaps),
-            ]),
-          ),
       ],
     );
   }

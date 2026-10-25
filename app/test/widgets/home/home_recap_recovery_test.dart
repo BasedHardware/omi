@@ -77,15 +77,15 @@ void main() {
     expect(find.text(recap.headline), findsOneWidget);
   });
 
-  testWidgets('a Home recap read failure offers retry instead of disappearing', (tester) async {
+  testWidgets('a Home recap read failure shows nothing and the next refresh recovers', (tester) async {
     var reads = 0;
-    await pump(tester, () async => reads++ == 0 ? (items: <DailySummary>[], ok: false) : (items: [recap], ok: true));
+    await pump(tester, () async => reads++ == 0 ? (items: <DailySummary>[], ok: false) : (items: [recap], ok: true),
+        recover: true);
     await tester.pumpAndSettle();
-    expect(find.byType(OmiErrorState), findsOneWidget);
-    await tester.tap(find.text('Try Again'));
-    await tester.pumpAndSettle();
-    expect(find.text(recap.headline), findsOneWidget);
     expect(find.byType(OmiErrorState), findsNothing);
+    expect(find.text('Daily Recaps'), findsNothing);
+    await recover(tester);
+    expect(find.text(recap.headline), findsOneWidget);
   });
 
   testWidgets('shared arrivals refresh Home while a late read cannot resurrect a deleted recap', (tester) async {
