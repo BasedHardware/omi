@@ -29,6 +29,7 @@ from utils.batch_pipeline.capacity import PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.language_metrics import ROUTES as LANGUAGE_ROUTES
 from utils.batch_pipeline.correctness_metrics import TRANSITIONS, DURATION, LABELS
+from utils.batch_pipeline.gpu_skip_metrics import register_on as register_gpu_skip_counters
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.leader import PUMP_RECOVERY, LeaderLease
 from utils.batch_pipeline.pump import Pump
@@ -109,6 +110,7 @@ def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -
     registry.register(TRANSITIONS)
     registry.register(DURATION)
     registry.register(LABELS)
+    register_gpu_skip_counters(registry)  # diarization decisions + per-unit FP32-parity counters
     for collector in shadow_parity_collectors():  # A2 shadow only; empty (no jobstore import) otherwise
         registry.register(collector)
 
