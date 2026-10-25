@@ -95,6 +95,8 @@ backend/
 
 ## Service Map
 
+[Plugin transport](docs/plugin-transport.md).
+
 ```
 Shared: Firestore, Redis
 
