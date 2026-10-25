@@ -175,7 +175,29 @@ class CaptureController extends ChangeNotifier
       onChanged: () {
         if (!_captureControllerDisposed) notifyListeners();
       },
-      schedule: (delay, callback) => _scheduling.once(delay, callback));
+      schedule: (delay, callback) => _scheduling.once(delay, callback))
+    ..mayBeVolatile = _walMayHoldOnlyInMemory;
+
+  /// Local-preview custody probe: true while the safety WAL may still hold
+  /// this frame only in memory (anything but the production WAL: assume so).
+  bool _walMayHoldOnlyInMemory(HeldPendantFrame frame) {
+    final positioned = frame.positioned;
+    final phone = _wal.getSyncs().phone;
+    if (positioned == null || phone is! LocalWalSyncImpl) return true;
+    return phone.mayHoldOnlyInMemory(positioned);
+  }
+
+  /// Account change with no open socket: the WAL cleanup that follows drops
+  /// its in-memory tail, so frames this router kept off the socket are
+  /// written to the batch journal for the OLD owner (recovered and uploaded
+  /// through the ordinary sync path when that owner is back).
+  bool _preserveSuppressedForAccountChange(List<HeldPendantFrame> frames) =>
+      _mobileStandardBatch?.preserveForOwner(
+        [for (final frame in frames) (frame.payload, frame.capturedAt ?? _now())],
+        codec: _localPreview.pendantCodec,
+        recordingSessionId: activeRecordingId,
+      ) ??
+      false;
   LivePreviewController? get livePreview => _localPreview.preview;
   bool get localPreviewAdmitted => _localPreview.admitted;
 
@@ -2204,9 +2226,8 @@ class CaptureController extends ChangeNotifier
             !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
           _localPreview.routePendant(
             HeldPendantFrame(
-                blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot, positionedFrame, walAccepted),
+                blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot, positionedFrame, walAccepted, _now()),
             socketDeclared: _socket?.localPreview == true,
-            journalWarmingUp: _mobileStandardBatch?.warmingUp ?? false,
             send: _sendPendantToSocket,
           );
         }
@@ -2690,7 +2711,7 @@ class CaptureController extends ChangeNotifier
   void clearUserData() {
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
-    _localPreview.end(send: _openSocketSender);
+    _localPreview.end(send: _openSocketSender, preserveForAccountChange: _preserveSuppressedForAccountChange);
     _captureEvidenceIdentity.reset();
     segments = [];
     photos = [];

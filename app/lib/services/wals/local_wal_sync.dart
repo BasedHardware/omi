@@ -325,6 +325,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   bool get lastFrameAccepted => _lastFrameAccepted;
   bool _lastFrameAccepted = true;
 
+  /// Whether [frame] (as returned by [onFrameCaptured]) may still exist only
+  /// in memory: still in the capture buffer, or chunked into a WAL not yet
+  /// flushed to disk. Read-only; used by the local-preview custody copies.
+  bool mayHoldOnlyInMemory(WalFrame frame) =>
+      _wals.any((wal) => wal.storage == WalStorage.mem) || _frames.any((buffered) => identical(buffered, frame));
+
   /// Test seam: take the existing storage-blocked refusal branch.
   @visibleForTesting
   bool debugRefusePendantFrames = false;

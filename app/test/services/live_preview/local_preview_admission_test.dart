@@ -20,9 +20,8 @@ void main() {
 
   HeldPendantFrame frame(int value, {bool walAccepted = true}) => HeldPendantFrame([value], null, walAccepted);
   void send(HeldPendantFrame frame) => sent.add(frame.payload.single);
-  void route(int value, {bool declared = true, bool warmingUp = false, bool walAccepted = true}) =>
-      admission.routePendant(frame(value, walAccepted: walAccepted),
-          socketDeclared: declared, journalWarmingUp: warmingUp, send: send);
+  void route(int value, {bool declared = true, bool walAccepted = true}) =>
+      admission.routePendant(frame(value, walAccepted: walAccepted), socketDeclared: declared, send: send);
 
   setUp(() {
     clock = DateTime.utc(2026, 10, 26);
@@ -153,18 +152,11 @@ void main() {
     expect(sent, isEmpty);
   });
 
-  test('journal warm-up holds only an admitted socket; a refused one streams', () {
-    admission.socketPublished(declared: true, send: send);
-    admission.verdict(granted: false, socketDeclared: true, send: send);
-    route(1, warmingUp: true);
-    expect(sent, [1], reason: 'never on a non-admitted session');
+  test('journal warm-up never suppresses: a refused-by-journal frame reaches even an admitted socket', () {
     admission.socketPublished(declared: true, send: send);
     admission.verdict(granted: true, socketDeclared: true, send: send);
-    route(2, warmingUp: true);
+    route(1); // the router only sees frames the journal refused (warm-up, transient)
     expect(sent, [1]);
-    expect(admission.heldFramesForTesting, 0, reason: 'warm-up keeps no memory copy');
-    route(3);
-    expect(sent, [1, 3]);
   });
 
   test('a timed-out or overflowed hold is a refusal latched for that socket', () {
@@ -331,14 +323,6 @@ void main() {
       expect(admission.heldFramesForTesting, 0);
     });
 
-    test('a frame the WAL refused is never suppressed by journal warm-up', () {
-      admission.socketPublished(declared: true, send: send);
-      admission.verdict(granted: true, socketDeclared: true, send: send);
-      route(1, warmingUp: true);
-      route(2, warmingUp: true, walAccepted: false);
-      expect(sent, [2]);
-    });
-
     test('a grant drops only WAL-accepted held frames; anything else still reaches the socket', () {
       admission.socketPublished(declared: true, send: send);
       route(1);
@@ -348,7 +332,7 @@ void main() {
     });
   });
 
-  test('capture end / account change sends held frames to a still-open, ungranted socket first', () {
+  test('capture end sends held frames to a still-open, ungranted socket first', () {
     admission.socketPublished(declared: true, send: send);
     route(1);
     route(2);
@@ -358,15 +342,69 @@ void main() {
 
     sent.clear();
     admission.socketPublished(declared: true, send: send);
-    admission.verdict(granted: true, socketDeclared: true, send: send);
-    route(3, warmingUp: true);
-    admission.end(send: send);
-    expect(sent, isEmpty, reason: 'a granted socket never receives them');
-
-    admission.socketPublished(declared: true, send: send);
     route(4);
     admission.end();
-    expect(sent, isEmpty, reason: 'no open socket: nothing to send to');
+    expect(sent, isEmpty, reason: 'no open socket and no account change: the WAL finalizes them');
+  });
+
+  group('granted frames stay recoverable until the WAL makes them durable', () {
+    test('copies are kept after a grant and sent to the open socket at end, even when admitted', () {
+      admission.socketPublished(declared: true, send: send);
+      route(1);
+      route(2);
+      admission.verdict(granted: true, socketDeclared: true, send: send);
+      expect(sent, isEmpty);
+      expect(admission.notYetDurableForTesting, 2);
+      admission.end(send: send);
+      expect(sent, [1, 2]);
+      expect(admission.notYetDurableForTesting, 0);
+    });
+
+    test('copies are released, oldest first, once the WAL reports them durable', () {
+      final volatile = <int>{1, 2};
+      admission.mayBeVolatile = (frame) => volatile.contains(frame.payload.single);
+      admission.socketPublished(declared: true, send: send);
+      route(1);
+      route(2);
+      admission.verdict(granted: true, socketDeclared: true, send: send);
+      volatile.remove(1);
+      clock = clock.add(const Duration(seconds: 6));
+      route(3, declared: false); // any routing pass prunes (at most every 5 s)
+      expect(admission.notYetDurableForTesting, 1);
+      volatile.clear();
+      admission.end(send: send);
+      expect(sent, [3], reason: 'durable copies are not resent');
+    });
+
+    test('account change with no socket preserves the copies and any held frames for the old owner', () {
+      final preserved = <List<int>>[];
+      admission.socketPublished(declared: true, send: send);
+      route(1);
+      admission.verdict(granted: true, socketDeclared: true, send: send);
+      admission.revoke(); // socket closed
+      admission.socketPublished(declared: true, send: send);
+      route(2); // held on the replacement socket, which then closes
+      admission.revoke();
+      admission.end(preserveForAccountChange: (frames) {
+        preserved.addAll(frames.map((frame) => frame.payload));
+        return true;
+      });
+      expect(preserved, [
+        [1],
+        [2]
+      ]);
+      expect(sent, isEmpty);
+    });
+
+    test('a plain stop with no socket does not preserve (the WAL finalizes its tail)', () {
+      admission.socketPublished(declared: true, send: send);
+      route(1);
+      admission.verdict(granted: true, socketDeclared: true, send: send);
+      admission.revoke();
+      admission.end();
+      expect(sent, isEmpty);
+      expect(admission.notYetDurableForTesting, 0);
+    });
   });
 
   group('verdict deadline is latched by a timer', () {

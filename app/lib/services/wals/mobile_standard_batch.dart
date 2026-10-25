@@ -44,6 +44,7 @@ class MobileStandardBatch {
   int vadAudioSamples = 0;
 
   bool _localPreview = false;
+  bool _bufferReady = false;
 
   /// The current authorization is a local-preview grant: the phone renders an
   /// on-device preview, so every pendant frame is journaled whether or not the
@@ -53,6 +54,30 @@ class MobileStandardBatch {
   /// Authorized, but the journal is still loading its model/disk check. Frames
   /// arriving now are refused (today's WAL path) only until it is ready.
   bool get warmingUp => !_closed && _serverAllowed && !_ready && _initializing;
+
+  /// Account change: frames the local-preview router kept off the socket and
+  /// the safety WAL had not yet made durable are written to this journal for
+  /// the current (old) owner, regardless of authorization, before the account
+  /// cleanup clears the WAL's memory. Synchronous; the sealed file is
+  /// recovered and uploaded through sync when that owner is back. Returns
+  /// whether every frame was written.
+  bool preserveForOwner(
+    List<(List<int>, DateTime)> frames, {
+    required BleAudioCodec codec,
+    String? recordingSessionId,
+  }) {
+    // Only the journal files are needed, not the VAD: works during warm-up.
+    if (_closed || !_bufferReady || buffer.failed || frames.isEmpty) return false;
+    buffer.seal();
+    var all = true;
+    for (final (payload, capturedAt) in frames) {
+      all = buffer.append(payload,
+              uid: ownerUid(), codec: codec, now: capturedAt, recordingSessionId: recordingSessionId) &&
+          all;
+    }
+    buffer.seal();
+    return all;
+  }
 
   /// The client stopped honouring a local-preview grant (a per-session gate
   /// flipped). Ordinary Standard batch rules, including visibility, apply
@@ -74,6 +99,7 @@ class MobileStandardBatch {
     _initializing = true;
     try {
       await buffer.initialize();
+      _bufferReady = true;
       final bytes = await freeDiskBytes();
       if (bytes == null || bytes < 512 * 1024 * 1024 || _closed) return;
       await _inference;

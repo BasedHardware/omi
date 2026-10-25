@@ -41,13 +41,19 @@ to the socket in order before any newer frame, so non-admitted sessions keep
 their whole live transcript; a grant drops the copy; overflow stops holding and
 flushes. Socket close before a verdict keeps the copy for the replacement
 socket, resolved against its verdict (a replacement that did not declare local
-preview is a refusal); only capture end or an account change discards it. The
-journal's first-use warm-up also keeps frames off the socket, only on an
-admitted socket. Frames that never reach a socket (warm-up, held then granted)
-stay in the safety WAL; an admitted session gets no ConversationEvent, so that
-WAL stays unconfirmed and the ordinary recovery drain uploads it through
+preview is a refusal). The batch journal's first-use warm-up never keeps
+frames off the socket: a frame it refuses goes to WAL and socket (the
+never-lose carve-out; the server counts the deferred stream it opens). Only
+WAL-accepted frames are ever held. Granted held frames never reach a socket:
+they stay in the safety WAL; an admitted session gets no ConversationEvent, so
+that WAL stays unconfirmed and the ordinary recovery drain uploads it through
 `/v2/sync-local-files` to the batch record (covered by
-`test/services/live_preview/local_preview_routing_test.dart`).
+`test/services/live_preview/local_preview_routing_test.dart`). Until the WAL
+reports them durable (`LocalWalSyncImpl.mayHoldOnlyInMemory`) the router keeps
+a bounded copy: at capture end the copies (and any held frames of an ungranted
+socket) go to an open socket first; on an account change with no socket they
+are written to the batch journal for the old owner, because the account
+cleanup (unchanged from main) discards the WAL's in-memory tail.
 
 Known gaps:
 - Android's native background streamer (`OmiBackgroundAudioStreamer.kt`) owns

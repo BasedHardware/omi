@@ -275,14 +275,15 @@ void main() {
     world.socket!.emitServerMessage(_admitted);
     await world.settle();
     expect(lane.warmingUp, true);
-    world.deviceConnection!.emitAudio(value: 2); // journal still warming up
+    world.deviceConnection!.emitAudio(value: 2); // journal still warming up: to the socket too
     await world.settle();
     vadGate!.complete();
     await lane.pendingInitialization;
     world.deviceConnection!.emitAudio(value: 3); // journaled
     await world.settle();
     await buffer.pending;
-    expect(world.socket!.sentBinary, isEmpty, reason: 'nothing opens the deferred cloud stream');
+    expect(world.socket!.sentBinary, [List.filled(80, 2)],
+        reason: 'warm-up is never suppressed; the granted pre-verdict frame 1 never reaches the socket');
     expect(world.wal.syncs.phone.testFrames.map((frame) => frame.payload.first), [1, 2]);
 
     await world.wal.syncs.phone.finalizeCurrentSession();
@@ -307,19 +308,42 @@ void main() {
     expect(world.wal.syncs.phone.testFrames.map((frame) => frame.payload.first), [1]);
   });
 
-  test('WAL refused during journal warm-up: the frame reaches the socket instead of vanishing', () async {
+  test('account change during admitted warm-up, socket open: every suppressed frame reaches the socket', () async {
     vadGate = Completer<void>();
     await boot(livePreview: preview());
-    world.socket!.emitServerMessage(_admitted);
+    world.deviceConnection!.emitAudio(value: 1); // held pre-verdict
+    await world.settle();
+    world.socket!.emitServerMessage(_admitted); // granted: kept as a copy until durable
     await world.settle();
     expect(lane.warmingUp, true);
-    world.deviceConnection!.emitAudio(value: 3); // warm-up, WAL kept it: off the socket
+    world.deviceConnection!.emitAudio(value: 2); // warm-up: straight to the socket
     await world.settle();
-    world.wal.syncs.phone.debugRefusePendantFrames = true;
-    world.deviceConnection!.emitAudio(value: 4); // warm-up, WAL refused: to the socket
+    expect(world.socket!.sentBinary, [List.filled(80, 2)]);
+    final socket = world.socket!;
+    world.controller.clearUserData();
+    expect(socket.sentBinary, [List.filled(80, 2), List.filled(80, 1)],
+        reason: 'the not-yet-durable copy goes out before the WAL cleanup drops its memory');
+    vadGate!.complete();
+    await lane.pendingInitialization;
+  });
+
+  test('account change during admitted warm-up, socket closed: suppressed frames are journaled for the old owner',
+      () async {
+    vadGate = Completer<void>();
+    await boot(livePreview: preview());
+    world.deviceConnection!.emitAudio(value: 1); // held pre-verdict
     await world.settle();
-    expect(world.socket!.sentBinary, [List.filled(80, 4)]);
-    expect(world.wal.syncs.phone.testFrames.map((frame) => frame.payload.first), [3]);
+    world.socket!.emitServerMessage(_admitted); // granted: copy kept until the WAL is durable
+    await world.settle();
+    await pumpEventQueue(); // the journal's files are ready; its model is still loading
+    expect(lane.warmingUp, true);
+    world.socket!.emitClose(1006);
+    await world.settle();
+    world.controller.clearUserData();
+    await buffer.pending;
+    final journaled = [for (final wal in published) ..._frames(File('${directory.path}/${wal.filePath}'))];
+    expect(journaled, [List.filled(80, 1)], reason: 'durable for the old owner although the WAL tail is cleared');
+    expect(published.single.ownerUid, 'owner');
     vadGate!.complete();
     await lane.pendingInitialization;
   });

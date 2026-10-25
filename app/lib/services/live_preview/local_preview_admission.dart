@@ -29,10 +29,13 @@ class AudioTapListeners {
 /// One pendant frame bound for the socket: its payload and, when the safety WAL
 /// positioned it, the evidence frame that carries the same bytes.
 class HeldPendantFrame {
-  const HeldPendantFrame(this.payload, [this.positioned, this.walAccepted = false]);
+  const HeldPendantFrame(this.payload, [this.positioned, this.walAccepted = false, this.capturedAt]);
 
   final List<int> payload;
   final WalFrame? positioned;
+
+  /// When capture saw the frame (journal timestamps if it must be preserved).
+  final DateTime? capturedAt;
 
   /// The safety WAL actually accepted this frame. Only such frames may ever be
   /// kept off the socket; anything else goes to the socket at once.
@@ -281,8 +284,10 @@ class LocalPreviewAdmission {
     _report(effective ? LocalPreviewVerdictOutcome.granted : LocalPreviewVerdictOutcome.refused);
     _verdictPendingSince = null;
     if (effective) {
-      // Only frames the safety WAL holds may be dropped from the socket path.
+      // Only frames the safety WAL holds may be dropped from the socket path,
+      // and they stay copied here until the WAL has made them durable.
       final unconfirmed = _held.where((frame) => !frame.walAccepted).toList();
+      _keepUntilDurable(_held.where((frame) => frame.walAccepted));
       _held.clear();
       unconfirmed.forEach(send);
     } else {
@@ -323,27 +328,79 @@ class LocalPreviewAdmission {
   /// (LocalWalSyncImpl.clearUserData), so the WAL cannot be relied on for them.
   /// Without an open socket they are dropped like any frame captured while the
   /// socket is down.
-  void end({void Function(HeldPendantFrame frame)? send}) {
+  ///
+  /// Copies of granted frames the WAL has not yet made durable go first: to
+  /// the open socket (granted or not), or, on an account change with no socket
+  /// ([preserveForAccountChange]), into a durable store for the old owner,
+  /// because the account cleanup discards the WAL's in-memory tail.
+  void end({
+    void Function(HeldPendantFrame frame)? send,
+    bool Function(List<HeldPendantFrame> frames)? preserveForAccountChange,
+  }) {
     _cancelDeadline();
     _socketSend = null;
     _report(LocalPreviewVerdictOutcome.socketClosed);
-    if (send != null && !admitted) _flush(send);
+    _pruneDurable(force: true);
+    final pending = [..._notYetDurable, if (!admitted) ..._held];
+    _notYetDurable.clear();
+    if (send != null) {
+      pending.forEach(send);
+    } else if (preserveForAccountChange != null && pending.isNotEmpty) {
+      if (!preserveForAccountChange(pending)) {
+        Logger.warning('[LivePreview] ${pending.length} suppressed frames could not be preserved at account change');
+      }
+    }
     admitted = false;
     _verdictPendingSince = null;
     _held.clear();
     preview?.endCapture();
   }
 
+  /// Copies of WAL-accepted frames this router kept off the socket after a
+  /// grant, oldest first, until the safety WAL reports them durable (no longer
+  /// only in memory). Bounded: past it the oldest copies are released (their
+  /// WAL copy remains; only the account-change exposure returns for them).
+  final List<HeldPendantFrame> _notYetDurable = [];
+  static const maxNotYetDurable = 3000;
+  int get notYetDurableForTesting => _notYetDurable.length;
+
+  /// Whether the WAL may still hold [frame] only in memory. Null keeps copies
+  /// until [end] (conservative).
+  bool Function(HeldPendantFrame frame)? mayBeVolatile;
+  DateTime? _lastPrune;
+
+  void _keepUntilDurable(Iterable<HeldPendantFrame> frames) {
+    _notYetDurable.addAll(frames);
+    final excess = _notYetDurable.length - maxNotYetDurable;
+    if (excess > 0) _notYetDurable.removeRange(0, excess);
+  }
+
+  void _pruneDurable({bool force = false}) {
+    final probe = mayBeVolatile;
+    if (probe == null || _notYetDurable.isEmpty) return;
+    final at = now();
+    if (!force && _lastPrune != null && at.difference(_lastPrune!) < const Duration(seconds: 5)) return;
+    _lastPrune = at;
+    // Oldest first: once one may still be volatile, newer ones may be too.
+    var durable = 0;
+    while (durable < _notYetDurable.length && !probe(_notYetDurable[durable])) {
+      durable++;
+    }
+    if (durable > 0) _notYetDurable.removeRange(0, durable);
+  }
+
   /// Routes one pendant frame for a connected socket. A frame the safety WAL
-  /// accepted may reach the socket now, later (held until a refusal) or never
-  /// (admitted, warm-up). A frame the WAL refused (storage blocked, buffer
-  /// full) always goes to the socket now, after any held frames: custody first.
+  /// accepted may reach the socket now or later (held until a refusal; kept
+  /// as a copy until durable after a grant). A frame the WAL refused (storage
+  /// blocked, buffer full) always goes to the socket now, after any held
+  /// frames: custody first. Frames the batch journal refused while it warms up
+  /// are NOT suppressed: they go to the socket (the never-lose carve-out).
   void routePendant(
     HeldPendantFrame frame, {
     required bool socketDeclared,
-    required bool journalWarmingUp,
     required void Function(HeldPendantFrame frame) send,
   }) {
+    _pruneDurable();
     if (!frame.walAccepted) {
       _flush(send);
       send(frame);
@@ -362,12 +419,6 @@ class LocalPreviewAdmission {
       _report(LocalPreviewVerdictOutcome.overflow);
       _verdictPendingSince = null;
       _refusedForSocket = true;
-    }
-    if (socketDeclared && admitted && journalWarmingUp) {
-      // Admitted only, so never a cloud-transcript loss: the frame is in the
-      // WAL and the batch path; it must just not open the cloud stream.
-      assert(_held.isEmpty);
-      return;
     }
     _flush(send);
     send(frame);
