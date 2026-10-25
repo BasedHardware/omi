@@ -24,7 +24,9 @@ heuristics.
 
 The lead deploys the backend image to the roles running conversation processing
 and enrichment (Cloud Run backend, backend-sync, backend-sync-backfill and
-backend-integration). No GPU, pusher or listen change is required by this fix.
+backend-integration), plus Pusher. Pusher's legacy finalizer uses the same
+resolver and must retain the constraints on a subsequent live finalization.
+No GPU model or listen change is required by this fix.
 Verify each traffic-bearing revision's release SHA; then verify the current batch
 cohort's cross-unit speaker counts, named-owner/person attribution, manual edits,
 abstentions and enrichment latency before expanding batch admission. Existing
