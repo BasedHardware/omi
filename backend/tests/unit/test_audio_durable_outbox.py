@@ -567,15 +567,18 @@ async def test_reconnect_recovers_receipts_after_pusher_process_state_is_lost(re
 
 
 @pytest.mark.asyncio
-async def test_real_pending_conversation_overflow_keeps_every_receipt_after_projection_failure(remote, monkeypatch):
+async def test_real_queue_backpressure_keeps_every_receipt_after_projection_failure(remote, monkeypatch):
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
     monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
-    interval = 0.123456
-    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', interval)
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', MagicMock(side_effect=OSError('projection unavailable')))
+    # A slow worker tick makes the queue fill deterministically: all six
+    # windows commit before the projector's first drain, so the fourth put
+    # observes a full queue instead of racing a 1 ms consumer.
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 1.0)
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 1000000)
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_BATCH_MAX_AGE', 1000000)
-    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', MagicMock(side_effect=OSError('projection unavailable')))
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_QUEUE_MAX_SIZE', 3)
     stages = []
     real_would_drop = pusher.record_would_drop
 
@@ -584,70 +587,29 @@ async def test_real_pending_conversation_overflow_keeps_every_receipt_after_proj
         real_would_drop(stage)
 
     monkeypatch.setattr(pusher, 'record_would_drop', observe)
+    # One window per conversation across more conversations than the shared
+    # queue bound: with window-level references the durable queue is the
+    # producer-facing backpressure stage (the pending-map overflow the
+    # per-message flow reached now sits behind it defensively), and every
+    # receipt must still survive a failing projection.
+    payloads = [struct.pack('<h', value) * 160 for value in range(6)]
     frames = []
-    payloads = [struct.pack('<h', value) * 160 for value in range(21)]
     for index, pcm in enumerate(payloads):
         frames += [
             struct.pack('<I', 103) + f'conversation-{index}'.encode(),
             struct.pack('<Id', 101, 1000 + index) + pcm,
         ]
     sock = Socket(frames)
-    first_archived = asyncio.Event()
-    first_pending = asyncio.Event()
-    all_archived = asyncio.Event()
-    real_wait = pusher.wait_for_event
-    real_send = sock.send_bytes
-    real_receive = sock.receive_bytes
-    private_waits = 0
-    receipt_count = 0
-    received = 0
-
-    async def controlled_wait(event, seconds):
-        nonlocal private_waits
-        if seconds != interval or private_waits >= 2:
-            return await real_wait(event, seconds)
-        if private_waits == 0:
-            await first_archived.wait()
-        else:
-            first_pending.set()
-            await all_archived.wait()
-        private_waits += 1
-        await asyncio.sleep(0)
-
-    async def observe_receipt(data):
-        nonlocal receipt_count
-        await real_send(data)
-        if struct.unpack('<I', data[:4])[0] == 203:
-            receipt_count += 1
-            if receipt_count == 1:
-                first_archived.set()
-            if receipt_count == 21:
-                all_archived.set()
-
-    async def hold_rollover_until_first_pending():
-        nonlocal received
-        if received == 2:
-            await first_pending.wait()
-        frame = await real_receive()
-        received += 1
-        return frame
-
-    # First retain one pending conversation, then deliver twenty more before
-    # the next worker tick. Explicit latches exercise pending overflow without
-    # racing the ordinary conversation-close flush or the queue's own cap.
-    monkeypatch.setattr(pusher, 'wait_for_event', controlled_wait)
-    monkeypatch.setattr(sock, 'send_bytes', observe_receipt)
-    monkeypatch.setattr(sock, 'receive_bytes', hold_rollover_until_first_pending)
     await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_timeline=2, audio_custody=1)
     receipts = [
         AudioReceipt(**json.loads(frame[4:])['receipt'])
         for frame in sock.sent
         if struct.unpack('<I', frame[:4])[0] == 203
     ]
-    assert 'pending_refs' in stages
-    assert [receipt.conversation_id for receipt in receipts] == [f'conversation-{index}' for index in range(21)]
+    assert 'pusher_queue' in stages
+    assert [receipt.conversation_id for receipt in receipts] == [f'conversation-{index}' for index in range(6)]
     assert [read_pcm('owner', receipt) for receipt in receipts] == payloads
-    assert pusher.upload_audio_chunks_batch.call_count == 21
+    assert pusher.upload_audio_chunks_batch.call_count >= 1
 
 
 @pytest.mark.asyncio
@@ -668,9 +630,11 @@ async def test_pusher_projects_verified_receipts_in_capture_order(remote, monkey
     frames.extend(struct.pack('<Id', 101, 1000 + i * 0.01) + pcm for i, pcm in enumerate(payloads))
     sock = Socket(frames)
     await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_timeline=2, audio_custody=1)
-    assert [chunk['data'] for chunk in uploaded] == payloads
-    assert [chunk['span']['samples'] for chunk in uploaded] == [160, 160]
-    assert len(sock.sent) == 3  # Timeline negotiation, then two custody receipts.
+    # One window: both messages commit as one custody pair and project as one
+    # contiguous span covering exactly their samples.
+    assert [chunk['data'] for chunk in uploaded] == [b''.join(payloads)]
+    assert [chunk['span']['samples'] for chunk in uploaded] == [320]
+    assert len(sock.sent) == 2  # Timeline negotiation, then one window receipt.
 
 
 @pytest.mark.asyncio
@@ -695,7 +659,8 @@ async def test_legacy_arrival_jitter_keeps_one_spanless_projection_and_exact_rec
     await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
     assert len(uploaded) == 1 and uploaded[0] == [{'data': b''.join(payloads), 'timestamp': 1000}]
     receipts = [AudioReceipt(**json.loads(frame[4:])['receipt']) for frame in sock.sent]
-    assert [read_pcm('owner', receipt) for receipt in receipts] == payloads
+    # One window receipt covers the accepted stream; jitter cannot split it.
+    assert [read_pcm('owner', receipt) for receipt in receipts] == [b''.join(payloads)]
     assert all(remote.blob(receipt.path).metadata['clock_source'] == 'arrival_estimate' for receipt in receipts)
     # Estimated clocks never fabricate positioned raw fallback or duplicate
     # the legacy projection. Originals still recover by pinned receipts.
@@ -710,9 +675,11 @@ async def test_pusher_upload_failure_never_audio_acknowledges(remote, monkeypatc
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
     monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
-    monkeypatch.setattr(pusher, 'commit_pcm', MagicMock(side_effect=OSError('archive unavailable')))
+    monkeypatch.setattr(pusher, 'commit_pcm_window', MagicMock(side_effect=OSError('archive unavailable')))
     sock = Socket([struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + b'\x01\x00'])
     await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    # The window's only boundary is shutdown; the tail commit fails there and
+    # the producer still never sees an ack — and gets the 1011 replay signal.
     assert not sock.sent and sock.close_code == 1011
 
 
@@ -753,7 +720,7 @@ async def test_outbox_is_the_sole_custody_kill_and_legacy_live_applies_after_rol
 
 
 @pytest.mark.asyncio
-async def test_v2_projection_trims_replays_while_custody_keeps_every_original(remote, monkeypatch):
+async def test_v2_projection_trims_replays_and_custody_windows_hold_the_accepted_stream(remote, monkeypatch):
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
     monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
@@ -768,14 +735,18 @@ async def test_v2_projection_trims_replays_while_custody_keeps_every_original(re
     ]
     sock = Socket(frames)
     await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_timeline=2, audio_custody=1)
-    assert [chunk['data'] for chunk in projected] == [first, replay[16000:]]
-    assert [chunk['timestamp'] for chunk in projected] == [1000, 1001]
+    # The conflicting replay overlap is trimmed before acceptance, and the
+    # window commits exactly the accepted stream: first, then the replay's
+    # verified-new tail; the exact duplicate replays nothing. Projection and
+    # custody therefore carry identical bytes from one window receipt.
+    assert [chunk['data'] for chunk in projected] == [first + replay[16000:]]
+    assert [chunk['timestamp'] for chunk in projected] == [1000]
     receipts = [
         AudioReceipt(**json.loads(frame[4:])['receipt'])
         for frame in sock.sent
         if struct.unpack('<I', frame[:4])[0] == 203
     ]
-    assert [read_pcm('owner', receipt) for receipt in receipts] == [first, replay, first]
+    assert [read_pcm('owner', receipt) for receipt in receipts] == [first + replay[16000:]]
 
 
 def _legacy_chunk(remote, start, pcm, name=None, *, is_batch=True):
@@ -898,3 +869,92 @@ def test_persisted_fingerprinted_audio_file_survives_precise_source_aliases(remo
         validate_sources([old_file], replaced)
     with pytest.raises(RuntimeError, match='source manifest changed'):
         validate_sources([old_file], [chunk for chunk in chunks if not chunk['path'].startswith('chunks/')])
+
+
+def _window_harness(remote, monkeypatch, *, chunk_duration=60):
+    """Common pusher-harness setup for window-commit tests."""
+    monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
+    monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
+    monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', MagicMock(side_effect=OSError('projection unavailable')))
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 0.001)
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', chunk_duration)
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_BATCH_MAX_AGE', 0.001)
+
+
+def _audio_frames(conversation, payloads, start=1000.0, step=0.01):
+    frames = [struct.pack('<I', 103) + conversation.encode()]
+    frames.extend(struct.pack('<Id', 101, start + index * step) + pcm for index, pcm in enumerate(payloads))
+    return frames
+
+
+def _sent_receipts(sock):
+    return [AudioReceipt(**json.loads(frame[4:])['receipt']) for frame in sock.sent]
+
+
+@pytest.mark.asyncio
+async def test_window_batches_messages_into_one_custody_pair(remote, monkeypatch):
+    _window_harness(remote, monkeypatch)
+    payloads = [struct.pack('<160h', *[n] * 160) for n in range(50)]
+    sock = Socket(_audio_frames('conversation', payloads))
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    receipts = _sent_receipts(sock)
+    assert len(receipts) == 1, 'one custody pair for the whole window, committed at shutdown'
+    assert read_pcm('owner', receipts[0]) == b''.join(payloads)
+    assert receipts[0].samples == sum(len(pcm) // 2 for pcm in payloads)
+    manifest = json.loads(remote.blob(receipts[0].manifest_path).data)
+    assert len(manifest['frames']) == 50, 'every message stays a pinned frame checkpoint'
+    media = [name for name in remote.blobs if name.startswith('raw-live/')]
+    manifests = [name for name in remote.blobs if name.startswith('audio-outbox/')]
+    assert len(media) == 1 and len(manifests) == 1
+
+
+@pytest.mark.asyncio
+async def test_conversation_switch_commits_the_old_conversations_window(remote, monkeypatch):
+    _window_harness(remote, monkeypatch)
+    first = [struct.pack('<160h', *[1] * 160) for _ in range(3)]
+    second = [struct.pack('<160h', *[2] * 160) for _ in range(2)]
+    frames = (
+        _audio_frames('conversation-a', first)
+        + [struct.pack('<I', 103) + b'conversation-b']
+        + [struct.pack('<Id', 101, 2000 + n * 0.01) + pcm for n, pcm in enumerate(second)]
+    )
+    sock = Socket(frames)
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    receipts = _sent_receipts(sock)
+    assert [receipt.conversation_id for receipt in receipts] == ['conversation-a', 'conversation-b']
+    assert read_pcm('owner', receipts[0]) == b''.join(first)
+    assert read_pcm('owner', receipts[1]) == b''.join(second)
+
+
+@pytest.mark.asyncio
+async def test_shutdown_commit_failure_never_acks_the_uncommitted_window(remote, monkeypatch):
+    _window_harness(remote, monkeypatch)
+    monkeypatch.setattr(pusher, 'commit_pcm_window', MagicMock(side_effect=OSError('storage unavailable')))
+    stages = []
+    real_failure = pusher.record_failure
+    real_would_drop = pusher.record_would_drop
+    monkeypatch.setattr(pusher, 'record_failure', lambda stage: (stages.append(stage), real_failure(stage)))
+    monkeypatch.setattr(pusher, 'record_would_drop', lambda stage: (stages.append(stage), real_would_drop(stage)))
+    payloads = [struct.pack('<160h', *[n] * 160) for n in range(10)]
+    sock = Socket(_audio_frames('conversation', payloads))
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    assert sock.sent == [], 'a window that never committed must never be acknowledged'
+    assert 'window_tail' in stages
+    media = [name for name in remote.blobs if name.startswith('raw-live/')]
+    assert media == [], 'no custody object without a receipt'
+
+
+@pytest.mark.asyncio
+async def test_midstream_commit_failure_fails_closed_without_acks(remote, monkeypatch):
+    _window_harness(remote, monkeypatch, chunk_duration=0)
+    failing = MagicMock(side_effect=OSError('storage unavailable'))
+    monkeypatch.setattr(pusher, 'commit_pcm_window', failing)
+    payloads = [struct.pack('<160h', *[n] * 160) for n in range(3)]
+    sock = Socket(_audio_frames('conversation', payloads))
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    assert failing.call_count >= 1, 'the mid-session boundary attempted the commit'
+    assert sock.sent == [], 'nothing acknowledged that is not committed'
+    assert sock.close_code == 1011, 'the session fails closed instead of streaming on'
+    media = [name for name in remote.blobs if name.startswith('raw-live/')]
+    assert media == []
