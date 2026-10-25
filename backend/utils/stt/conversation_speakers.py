@@ -209,10 +209,11 @@ def resolve_conversation_speakers(
     Returns None when no segment could be embedded: there is no voice evidence
     to resolve with, and the caller keeps capture's ids.
     """
-    if grouping not in ('incumbent', 'provider_strict', 'provider_cannot_link', 'owner_link'):
+    batch = grouping == 'batch_authoritative'
+    if grouping not in ('incumbent', 'provider_strict', 'provider_cannot_link', 'owner_link', 'batch_authoritative'):
         raise ValueError('unknown grouping')
     if grouping != 'incumbent':
-        if len(segments) > 256 or not provider_keys:
+        if (not batch and len(segments) > 256) or not provider_keys:
             raise ValueError('grouping input limit or missing provenance')
         if not 0 < cross_scope_threshold <= AHC_THRESHOLD:
             raise ValueError('invalid cross-scope threshold')
@@ -262,15 +263,22 @@ def resolve_conversation_speakers(
         elif _seg(segment, 'id') in vectors:
             if grouping != 'incumbent' and _seg(segment, 'id') not in (provider_keys or {}):
                 raise ValueError('missing provider provenance')
-            if grouping in ('provider_strict', 'owner_link'):
+            if grouping in ('provider_strict', 'owner_link', 'batch_authoritative'):
                 key = ('provider', repr((provider_keys or {})[_seg(segment, 'id')]))
             else:
                 key = ('segment', _seg(segment, 'id'))
             unit_segments[unit_for(key, None)].append(segment)
 
+    # Batch complexity is bounded by upload-label groups, not ASR sentences.
+    if batch and len(unit_segments) > 1024:
+        raise ValueError('batch grouping input limit')
     unit_vector: Dict[int, np.ndarray] = {}
     for index, members in enumerate(unit_segments):
-        embedded = [vectors[_seg(s, 'id')] for s in members if _seg(s, 'id') in vectors]
+        embedded = [
+            vectors[_seg(s, 'id')] * (max((embedding_seconds or {}).get(_seg(s, 'id'), 0.0), 0.0) if batch else 1.0)
+            for s in members
+            if _seg(s, 'id') in vectors
+        ]
         pooled = _unit_vector(np.mean(embedded, axis=0)) if embedded else None
         if pooled is not None:
             unit_vector[index] = pooled
@@ -302,7 +310,11 @@ def resolve_conversation_speakers(
             for i in a.members + b.members
             for s in unit_segments[i]
         }
-        return cross_scope_threshold if grouping == 'provider_cannot_link' and len(scopes) > 1 else AHC_THRESHOLD
+        return (
+            cross_scope_threshold
+            if grouping in ('provider_cannot_link', 'batch_authoritative') and len(scopes) > 1
+            else AHC_THRESHOLD
+        )
 
     embedded_units = sorted(unit_vector)
     clusters: List[_Cluster] = []
@@ -330,7 +342,16 @@ def resolve_conversation_speakers(
         return sum(_duration(s) for i in cluster.members for s in unit_segments[i])
 
     def centroid(cluster: _Cluster) -> Optional[np.ndarray]:
-        weighted = [unit_vector[i] * max(talk(_Cluster([i])), 1e-3) for i in cluster.members if i in unit_vector]
+        def weight(index):
+            if batch:
+                return sum(
+                    max((embedding_seconds or {}).get(_seg(s, 'id'), 0.0), 0.0)
+                    for s in unit_segments[index]
+                    if _seg(s, 'id') in vectors
+                )
+            return max(talk(_Cluster([index])), 1e-3)
+
+        weighted = [unit_vector[i] * weight(i) for i in cluster.members if i in unit_vector]
         return _unit_vector(np.sum(weighted, axis=0)) if weighted else None
 
     # Cannot-link: split any cluster holding two labeled identities around them.
@@ -413,6 +434,7 @@ def resolve_conversation_speakers(
     voice_identity: Dict[int, Identity] = {}
     distances = {}
     decisions = {}
+    batch_centroids = {}
     score_seconds: Dict[int, Optional[float]] = {}
     for index, cluster in enumerate(clusters):
         evidence_ids = [_seg(s, 'id') for i in cluster.members for s in unit_segments[i] if _seg(s, 'id') in vectors]
@@ -437,13 +459,23 @@ def resolve_conversation_speakers(
         vector = centroid(cluster)
         if vector is None or not prints or evidence < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS:
             continue
-        distances[index] = {key: _cosine(vector, p) for key, p in prints.items()}
-        decisions[index] = select_speaker_match(distances[index], threshold=VOICE_MATCH_THRESHOLD)
-    decisions = arbitrate_owner_matches(
-        distances,
-        decisions,
-        owner_reserved=any(OWNER_IDENTITY in identities_of(cluster) for cluster in clusters),
-    )
+        distances[index] = {
+            key: _cosine(vector, p) for key, p in prints.items() if not batch or vector.shape == p.shape
+        }
+        if batch:
+            # Incompatible enrollment is no comparison, not a voice rejection.
+            if distances[index]:
+                batch_centroids[index] = {'embedding': vector, 'evidence_seconds': evidence}
+        else:
+            decisions[index] = select_speaker_match(distances[index], threshold=VOICE_MATCH_THRESHOLD)
+    owner_reserved = any(OWNER_IDENTITY in identities_of(cluster) for cluster in clusters)
+    if batch:
+        # Shared calibrated name policy, applied only after acoustic grouping.
+        from utils.conversations.final_pass_assignment import name_centroids
+
+        decisions = name_centroids(batch_centroids, prints, owner_reserved=owner_reserved)
+    else:
+        decisions = arbitrate_owner_matches(distances, decisions, owner_reserved=owner_reserved)
     for index, decision in decisions.items():
         if decision.accepted:
             matched = decision.person_id
@@ -465,7 +497,7 @@ def resolve_conversation_speakers(
     score_members = {index: [index] for index in range(len(clusters))}
     for index in range(len(clusters)):
         token = cluster_token(index)
-        if token is None:
+        if token is None or batch:
             keep.append(index)
         elif token in merged and compatible(clusters[merged[token]], clusters[index]):
             clusters[merged[token]].extend(clusters[index])
@@ -639,6 +671,7 @@ def resolve_conversation_speakers(
         input_speaker_ids=len({int(_seg(s, 'speaker_id')) for s in all_eligible}),
         coverage=_coverage(all_eligible, vectors, manual_speakers, abstained),
         stats={
+            **({'batch_authoritative': True} if batch else {}),
             'voices': len(members_of),
             'eligible_segments': len(eligible),
             'owner_contended': sum(decision.owner_contended for decision in decisions.values()),

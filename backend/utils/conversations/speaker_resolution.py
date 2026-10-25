@@ -6,6 +6,11 @@ Encrypted embeddings bound repeat work; missing audio abstains and manual receip
 from __future__ import annotations
 
 from config.transcription_final_pass import authoritative_for
+from config.batch_conversation_speakers import (
+    BATCH_CONVERSATION_SCOPE,
+    enabled as batch_speakers_enabled,
+    has_batch_authority,
+)
 from config.refactor_modes import serving_for
 from utils.speakers import processing as speaker_evidence
 
@@ -40,6 +45,11 @@ from utils.conversations.audio_placement import (
     text_window_refusal,
 )
 from utils.conversations.speaker_grouping_shadow import compare_and_select
+from utils.conversations.speaker_resolution_inputs import (
+    manual_speakers as _manual_speakers,
+    measured_embedding_seconds,
+    batch_provider_keys,
+)
 from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
 from utils.metrics import (
     OMI_AUDIO_PLACEMENT_TOTAL,
@@ -225,27 +235,6 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
         ):
             prints[person['id']] = embedding.reshape(-1)
     return prints
-
-
-def _manual_speakers(receipt: Mapping[str, Any]) -> Dict[int, Identity]:
-    """Receipt speaker entries as identities; a key labeled neither owner nor person stays its own voice."""
-    speakers: Dict[int, Identity] = {}
-    for key, entry in (receipt.get('speakers') or {}).items():
-        try:
-            speaker_id = int(key)
-        except (TypeError, ValueError):
-            continue
-        if not isinstance(entry, Mapping):
-            continue
-        if entry.get('is_user'):
-            speakers[speaker_id] = Identity(is_user=True, person_id=None)
-        elif entry.get('person_id'):
-            speakers[speaker_id] = Identity(is_user=False, person_id=str(entry['person_id']))
-        else:
-            speakers[speaker_id] = Identity(is_user=False, person_id=None, anonymous_key=speaker_id)
-    for speaker_id in manual_rejected_speakers(receipt):
-        speakers[speaker_id] = Identity(is_user=False, person_id=None, anonymous_key=speaker_id)
-    return speakers
 
 
 @dataclass
@@ -778,8 +767,9 @@ def apply_speaker_resolution(
     *,
     owner_voiceprint_available: bool,
     contradicted_segment_ids: Optional[set[str]] = None,
+    scope: Optional[str] = None,
 ) -> None:
-    scope = f'conversation:{conversation.id}'
+    scope = scope or f'conversation:{conversation.id}'
     origin = _started_at(conversation)
     contradicted = contradicted_segment_ids or set()
     preserved_voices = {
@@ -809,8 +799,9 @@ def apply_speaker_resolution(
         if (
             segment.audio_source is None
             and origin is not None
-            and segment_scope.startswith('sync:')
-            and len(segment_scope) > len('sync:')
+            and segment_scope.startswith(('sync:', 'final:batch:'))
+            and not segment_scope.startswith(BATCH_CONVERSATION_SCOPE)
+            and segment_scope not in ('sync:', 'final:batch:')
             and segment.audio_alignment != 'unplaced'
             and math.isfinite(segment.start)
             and math.isfinite(segment.end)
@@ -934,12 +925,13 @@ def resolve_speakers_for_processing(
                     'event=conversation_speaker_resolution outcome=manual_receipt_failed exception_type=%s',
                     type(error).__name__,
                 )
-        # Legacy batch authority survives rollback; serve requires verified centroids.
-        batch_record = any(
-            (segment.speaker_id_scope or '').startswith('final:batch:') for segment in conversation.transcript_segments
+        # Batch authority survives admission rollback and subsequent resolution.
+        batch_record = has_batch_authority(conversation.transcript_segments)
+        batch_resolution = conversation.private_cloud_sync_enabled and batch_speakers_enabled(
+            conversation.transcript_segments
         )
-        # refactor: superseded by utils.speakers when SPEAKER_EVIDENCE_MODE=serve
-        if batch_record and not serving_for('SPEAKER_EVIDENCE_MODE', uid):
+        # The kill switch also stops linking/naming when speaker evidence serves.
+        if batch_record and not batch_resolution:
             resolver_reason('batch_authoritative')
             # Legacy owner-safe abstention; manual receipts still win below.
             trusted = _capture_trusted(conversation.transcript_segments)
@@ -953,8 +945,8 @@ def resolve_speakers_for_processing(
                         if segment.speaker_match_source != 'batch_abstention'
                     ]
                 )
-        # refactor: superseded by per-window evidence when SPEAKER_EVIDENCE_MODE=serve
-        final_record = (batch_record and not serving_for('SPEAKER_EVIDENCE_MODE', uid)) or (
+        # Other final-pass authorities retain their existing bypass.
+        final_record = (batch_record and not batch_resolution) or (
             not batch_record
             and authoritative_for(uid)
             and all(
@@ -1208,6 +1200,7 @@ def _resolve(
 ) -> None:
     began = time.monotonic()
     segments = conversation.transcript_segments
+    batch_resolution = conversation.private_cloud_sync_enabled and batch_speakers_enabled(segments)
     input_ids = len({s.speaker_id for s in segments if s.speaker_id != OMI_SPEAKER_ID_SENTINEL})
     if not conversation.private_cloud_sync_enabled or not speaker_embedding_configured():
         resolver_reason('no_audio')
@@ -1286,7 +1279,9 @@ def _resolve(
         placement = placements.get(segment.id)
         if placement is not None and placement.reason == 'capture_span' and placement.window is not None:
             scope = segment.speaker_id_scope or ''
-            historical = scope == f'conversation:{conversation.id}' or scope.startswith('legacy-conversation:')
+            historical = scope == f'conversation:{conversation.id}' or scope.startswith(
+                ('legacy-conversation:', BATCH_CONVERSATION_SCOPE)
+            )
             cached = cache.get(segment.id)
             if (
                 historical
@@ -1331,7 +1326,10 @@ def _resolve(
         scope = segment.speaker_id_scope or ''
         if (
             segment.id
-            and (scope == f'conversation:{conversation.id}' or scope.startswith('legacy-conversation:'))
+            and (
+                scope == f'conversation:{conversation.id}'
+                or scope.startswith(('legacy-conversation:', BATCH_CONVERSATION_SCOPE))
+            )
             and cache_hit(segment.id)
         ):
             return False
@@ -1339,6 +1337,18 @@ def _resolve(
 
     pending = [s for s in segments if needs_embedding(s)]
     abstained = set(invalid_text_ids)
+    provider_keys = batch_provider_keys(segments) if batch_resolution else {}
+    if batch_resolution:
+        abstained.update(
+            s.id
+            for s in segments
+            if s.id
+            and (
+                s.id not in provider_keys
+                or s.speaker_match_source == 'batch_abstention'
+                or (s.speaker or '').startswith('BATCH_UNASSIGNED_')
+            )
+        )
     if embeddable:
         # One missing provider window does not invalidate other proven windows.
         # It must never borrow the nearest voice or a bare legacy cache entry.
@@ -1367,7 +1377,10 @@ def _resolve(
             return (
                 segment.audio_capture_start is None
                 and segment.audio_capture_end is None
-                and (scope == f'conversation:{conversation.id}' or scope.startswith('legacy-conversation:'))
+                and (
+                    scope == f'conversation:{conversation.id}'
+                    or scope.startswith(('legacy-conversation:', BATCH_CONVERSATION_SCOPE))
+                )
                 and segment.id in cache
                 and not needs_embedding(segment)
             )
@@ -1426,34 +1439,7 @@ def _resolve(
     # Evidence duration is identity policy, independent of score instrumentation.
     # Older v1 entries remain useful for grouping; without clip metadata they
     # contribute no claimed owner evidence until new verified audio is embedded.
-    score_durations = {}
-    covered_windows = []
-    for segment in segments:
-        sid = segment.id
-        if sid not in vectors:
-            continue
-        key = keys.get(sid, sid)
-        seconds = clip_seconds.get(key, 0.0)
-        if not math.isfinite(seconds) or seconds < 0:
-            seconds = 0.0
-        seconds = min(seconds, _duration(segment), MAX_CLIP_SECONDS)
-        window = placements[sid].window if sid in placements else None
-        if window is not None:
-            low, high = window
-            if high - low > MAX_CLIP_SECONDS:
-                center = (low + high) / 2
-                low, high = center - MAX_CLIP_SECONDS / 2, center + MAX_CLIP_SECONDS / 2
-            fresh = [(low, high)]
-            for used_low, used_high in covered_windows:
-                fresh = [
-                    part
-                    for a, b in fresh
-                    for part in ((a, min(b, used_low)), (max(a, used_high), b))
-                    if part[1] > part[0]
-                ]
-            seconds = min(seconds, sum(b - a for a, b in fresh))
-            covered_windows.append((low, high))
-        score_durations[sid] = seconds
+    score_durations = measured_embedding_seconds(segments, vectors, keys, clip_seconds, placements, MAX_CLIP_SECONDS)
     owner_diagnostics.resolver_counts(
         attempted=diagnostics.attempted,
         successful=new_embeddings,
@@ -1474,6 +1460,9 @@ def _resolve(
         voiceprints=voiceprints,
         embedding_seconds=score_durations,
         abstained_segment_ids=abstained,
+        grouping='batch_authoritative' if batch_resolution else 'incumbent',
+        provider_keys=provider_keys if batch_resolution else None,
+        grouping_deadline=min(deadline, time.monotonic() + 2.0) if batch_resolution else float('inf'),
     )
     if resolution is None:
         reason, fields = _no_embeddings_diagnostics(
@@ -1491,16 +1480,20 @@ def _resolve(
         _without_resolution(conversation, 'no_embeddings', reason=reason, diagnostics=fields)
         return
 
-    resolution = compare_and_select(
-        uid,
-        conversation,
-        resolution,
-        vectors,
-        manual_speakers=manual_speakers,
-        voiceprints=voiceprints,
-        embedding_seconds=score_durations,
-        abstained_segment_ids=abstained,
-        receipt=receipt,
+    resolution = (
+        resolution
+        if batch_resolution
+        else compare_and_select(
+            uid,
+            conversation,
+            resolution,
+            vectors,
+            manual_speakers=manual_speakers,
+            voiceprints=voiceprints,
+            embedding_seconds=score_durations,
+            abstained_segment_ids=abstained,
+            receipt=receipt,
+        )
     )
 
     try:
@@ -1517,6 +1510,7 @@ def _resolve(
         resolution.voice_identity_statuses,
         owner_voiceprint_available=resolution.owner_voiceprint_available,
         contradicted_segment_ids=resolution.contradicted_segment_ids,
+        scope=f'{BATCH_CONVERSATION_SCOPE}{conversation.id}' if batch_resolution else None,
     )
     owner_diagnostics.resolver_counts(coverage=resolution.coverage)
     if resolution.coverage >= MIN_RESOLVED_COVERAGE:
