@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-jpy-annual-offers.png",
+      "platform": "mobile-ios",
+      "description": "Japanese iOS simulator: synthetic annual JPY offers and whole-yen billing totals; production PlansSheet with injected catalog.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-jpy-monthly-selection.png",
+      "platform": "mobile-ios",
+      "description": "Japanese iOS simulator: Monthly and Unlimited selected, showing 4,800 JPY from the synthetic offer.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-jpy-plan-confirmation.png",
+      "platform": "mobile-ios",
+      "description": "Japanese iOS simulator: Continue opens confirmation for the exact selected synthetic Unlimited offer, 4,800 JPY; no payment confirmed here.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

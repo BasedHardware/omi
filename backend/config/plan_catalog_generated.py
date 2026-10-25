@@ -29,8 +29,8 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = '92a8140d796926c205e6546624439b4c67609d69f471f5eeb89e63c4619f9419'
-CATALOG_REVISION: Final = 10
+CATALOG_SHA256: Final = '24a9b9a4f77df6605c1e53ff78694621919ccdba13d4523754f1332aebbc5a0c'
+CATALOG_REVISION: Final = 11
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
  'price_amount': 'stripe_live',
@@ -78,6 +78,23 @@ LADDER_V1_PRICE_BINDINGS: Final[dict[str, Any]] = {'ladder_v1_plus_month': {'pla
                               'interval': 'year',
                               'env_var': 'LADDER_V1_ARCHITECT_YEAR_PRICE_ID'}}
 LADDER_V1_STRIPE_PRICES: Final[list[str]] = []
+MANAGEMENT_CURRENCY_PRICES: Final[dict[str, Any]] = {'price_1ULq6b1F8wnoWYvwtchjjNqq': {'price_id': 'price_1ULq6b1F8wnoWYvwtchjjNqq',
+                                    'plan_id': 'plus',
+                                    'interval': 'month',
+                                    'currency': 'jpy'},
+ 'price_1ULq7H1F8wnoWYvwC1poOtd5': {'price_id': 'price_1ULq7H1F8wnoWYvwC1poOtd5',
+                                    'plan_id': 'plus',
+                                    'interval': 'year',
+                                    'currency': 'jpy'},
+ 'price_1ULq501F8wnoWYvwwN56CHzO': {'price_id': 'price_1ULq501F8wnoWYvwwN56CHzO',
+                                    'plan_id': 'unlimited_v2',
+                                    'interval': 'month',
+                                    'currency': 'jpy'},
+ 'price_1ULq5e1F8wnoWYvwQT8XQ4Uw': {'price_id': 'price_1ULq5e1F8wnoWYvwQT8XQ4Uw',
+                                    'plan_id': 'unlimited_v2',
+                                    'interval': 'year',
+                                    'currency': 'jpy'}}
+
 RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'price_1RrxXL1F8wnoWYvwIddzR902': 'legacy',
  'price_1RrxXL1F8wnoWYvw3kDbWmjs': 'legacy',
  'price_1RtJPm1F8wnoWYvwhVJ38kLb': 'legacy',
@@ -447,6 +464,7 @@ __all__ = [
     'LADDER_V1_STRIPE_PRICES',
     'LADDER_V1_PRICE_BINDINGS',
     'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS',
+    'MANAGEMENT_CURRENCY_PRICES',
     'BILLING_ENV_VAR_PLAN_TYPES',
     'CATALOG_AUTHORITY',
     'CATALOG_REVISION',

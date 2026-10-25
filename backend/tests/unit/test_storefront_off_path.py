@@ -51,6 +51,7 @@ def test_v1_response_bytes_do_not_change_with_storefront_flag(
 
     def retrieve(identifier):
         row = MagicMock()
+        row.currency = 'usd'
         row.id = identifier
         row.unit_amount = 1900 if identifier.endswith('month') else 19000
         row.recurring.interval = 'month' if identifier.endswith('month') else 'year'
@@ -58,7 +59,10 @@ def test_v1_response_bytes_do_not_change_with_storefront_flag(
 
     monkeypatch.setattr(stripe.Price, 'retrieve', retrieve)
     stripe_sub = MagicMock()
-    stripe_sub.to_dict.return_value = {'items': {'data': [{'price': {'id': f'price_{plan.upper()}_month'}}]}}
+    stripe_sub.to_dict.return_value = {
+        'currency': 'usd',
+        'items': {'data': [{'price': {'id': f'price_{plan.upper()}_month'}}]},
+    }
     monkeypatch.setattr(stripe.Subscription, 'retrieve', lambda identifier: stripe_sub)
     headers = {'X-App-Platform': platform, 'X-App-Version': '99.0.0'}
     monkeypatch.delenv('STOREFRONT_LADDER_V1_ENABLED', raising=False)

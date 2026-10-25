@@ -110,3 +110,32 @@ rule anywhere.
   `build_single_plan_storefront`, served by `backend/routers/storefront.py`
 - Upgrade guard: `backend/utils/subscription.py` → `desktop_to_consumer_plan_change_error`
 - Continue button: `app/lib/utils/plan_pricing.dart` → `shouldShowPlanContinueButton`
+
+
+## Existing subscriptions billed in JPY
+
+The recognition ledger alone never makes a retained price purchasable.
+`management_currency_prices` in the canonical catalog explicitly permits the
+existing JPY Plus/Unlimited prices for managing an existing JPY subscription.
+The resolver checks Stripe currency, active state, interval, mode and entitlement
+version against the currently configured plan. It does not convert an amount,
+create a Price, offer ladder-v1 entitlements through a legacy Price, or enable
+new Checkout for a retained price. The exact current JPY price may reactivate
+its own pending cancellation without opening another subscription.
+
+The v1 sheet advertises `X-Omi-Billing-Currency: 1` once it can render the
+additive `currency` and `billing_total` fields through the generated wire DTO.
+Older sheets must update before receiving non-USD offers: their annual summary
+hardcodes USD. A stale USD target is rejected before schedule release or any
+plan/entitlement write. Stripe remains the source of amounts; production price
+availability and the affected account need an authorized read after deployment.
+
+Verification checklist: currency-aware catalog → selected exact ID → immediate
+change and paid invoice; annual schedule keeps JPY in both phases; stale USD,
+inactive/wrong-mode offers and payment decline preserve the paid subscription;
+exact-price reactivation creates no additional subscription. The opt-in sandbox
+runner is `backend/tests/integration/billing/test_jpy_plan_changes_stripe.py`;
+its module docstring gives the explicit provider-test command. Unit and mobile
+regressions cover the installed-client contract separately. Backend deployment
+must precede enabling the currency-aware mobile release. No production Stripe
+catalog mutation is included in the code change.
