@@ -290,3 +290,142 @@ def test_claim_stamps_a_fallback_snapshot_on_a_batch_row_without_one(rows):
     claim = _claim(rows, now=10)
     assert state_rows[KEY]['first_summary_policy_source'] == 'fallback'
     assert claim.payload['first_summary_policy'] == state_rows[KEY]['first_summary_policy']
+
+
+def _install_paged_due_query(state_rows, monkeypatch):
+    """Fake Firestore collection that enforces <=100 per-page limits and keyset start_after cursors."""
+    from types import SimpleNamespace
+
+    stream_calls: list[tuple[int, tuple | None]] = []
+
+    class _Query:
+        def __init__(self, max_due=None, orders=(), page_limit=100, cursor=None):
+            self._max_due = max_due
+            self._orders = orders
+            self._limit = page_limit
+            self._cursor = cursor
+
+        def where(self, field, op, value):
+            assert (field, op) == ('due_at', '<=')
+            return _Query(value, self._orders, self._limit, self._cursor)
+
+        def order_by(self, field):
+            return _Query(self._max_due, (*self._orders, field), self._limit, self._cursor)
+
+        def limit(self, count):
+            assert 1 <= count <= 100
+            return _Query(self._max_due, self._orders, count, self._cursor)
+
+        def start_after(self, cursor):
+            assert isinstance(cursor, dict)
+            doc_ref = cursor['__name__']
+            doc_id = getattr(doc_ref, 'id', doc_ref)
+            return _Query(self._max_due, self._orders, self._limit, (cursor['due_at'], doc_id))
+
+        def stream(self):
+            assert self._orders == ('due_at', '__name__')
+            stream_calls.append((self._limit, self._cursor))
+            items = [
+                (doc_id, dict(row))
+                for doc_id, row in state_rows.items()
+                if row.get('due_at') is not None and row['due_at'] <= self._max_due
+            ]
+            items.sort(key=lambda item: (item[1]['due_at'], item[0]))
+            if self._cursor is not None:
+                items = [item for item in items if (item[1]['due_at'], item[0]) > self._cursor]
+            page = items[: self._limit]
+            return [SimpleNamespace(id=doc_id, to_dict=lambda r=row: dict(r)) for doc_id, row in page]
+
+    class _Collection(_Query):
+        def document(self, doc_id):
+            return SimpleNamespace(id=doc_id)
+
+    monkeypatch.setattr(
+        reprocess,
+        'get_firestore_client',
+        lambda: SimpleNamespace(collection=lambda name: _Collection() if name == reprocess.COLLECTION else None),
+    )
+    return stream_calls
+
+
+def test_pl002_live_lease_prefix_cannot_hide_runnable_work(rows, monkeypatch):
+    state_rows, _tasks = rows
+    stream_calls = _install_paged_due_query(state_rows, monkeypatch)
+    t0 = 1000.0
+    for i in range(101):
+        cid = f'leased-{i}'
+        queued = outbox.enqueue(
+            reprocess.key('u', cid), 'u', {'conversation_id': cid, 'language': 'en'}, t0 - 200 + i, now=t0
+        )
+        assert isinstance(outbox.claim_key(queued.row_id, queued.wake_token, 120.0, now=t0), Claim)
+    valid = outbox.enqueue(
+        reprocess.key('u', 'runnable'), 'u', {'conversation_id': 'runnable', 'language': 'en'}, t0, now=t0
+    )
+
+    claims = outbox.claim(1, 120.0, now=t0 + 1)
+    assert [claim.row_id for claim in claims] == [valid.row_id]
+    assert len(stream_calls) >= 2
+    assert outbox.ack(claims[0], 'done', now=t0 + 2)
+    assert outbox.claim(1, 120.0, now=t0 + 3) == []
+
+
+def test_pl002_retired_privacy_prefix_cannot_consume_the_claim_budget(rows, monkeypatch):
+    from database.outbox_firestore import FirestoreOutbox
+
+    state_rows, _tasks = rows
+    stream_calls = _install_paged_due_query(state_rows, monkeypatch)
+    t0 = 1000.0
+    blocked: set[tuple[str, str]] = set()
+    injected = FirestoreOutbox(
+        OutboxKind.ENRICHMENT,
+        privacy_blocked=lambda owner_id, payload: (owner_id, payload['conversation_id']) in blocked,
+        create_wake=lambda *_args: None,
+    )
+    for i in range(101):
+        cid = f'deleted-{i}'
+        injected.enqueue(reprocess.key('u', cid), 'u', {'conversation_id': cid, 'language': 'en'}, t0 - 200 + i, now=t0)
+        blocked.add(('u', cid))
+    valid = injected.enqueue(
+        reprocess.key('u', 'runnable'), 'u', {'conversation_id': 'runnable', 'language': 'en'}, t0, now=t0
+    )
+
+    claims = injected.claim(1, 120.0, now=t0)
+    assert [claim.row_id for claim in claims] == [valid.row_id]
+    assert len(stream_calls) >= 2
+    assert set(state_rows) == {valid.row_id}
+    assert injected.ack(claims[0], 'done', now=t0 + 1)
+    assert injected.claim(1, 120.0, now=t0 + 2) == []
+
+
+def test_pl003_explicit_backlog_budget_is_not_silently_capped_at_100(rows, monkeypatch):
+    state_rows, _tasks = rows
+    stream_calls = _install_paged_due_query(state_rows, monkeypatch)
+    t0 = 1000.0
+    expected = {
+        outbox.enqueue(
+            reprocess.key('u', f'due-{i:03}'),
+            'u',
+            {'conversation_id': f'due-{i:03}', 'language': 'en'},
+            t0 - 200 + i,
+            now=t0,
+        ).row_id
+        for i in range(125)
+    }
+    future = outbox.enqueue(
+        reprocess.key('u', 'future'),
+        'u',
+        {'conversation_id': 'future', 'language': 'en'},
+        t0 + 500,
+        now=t0,
+    )
+
+    claims = outbox.claim(125, 120.0, now=t0)
+    assert len(claims) == 125
+    assert {claim.row_id for claim in claims} == expected
+    assert all(claim.attempt == 1 for claim in claims)
+    assert len(stream_calls) == 2
+    assert outbox.claim(125, 120.0, now=t0 + 1) == []
+    for claim in claims:
+        assert outbox.ack(claim, 'done', now=t0 + 2)
+    assert outbox.claim(125, 120.0, now=t0 + 499) == []
+    assert [claim.row_id for claim in outbox.claim(125, 120.0, now=t0 + 500)] == [future.row_id]
