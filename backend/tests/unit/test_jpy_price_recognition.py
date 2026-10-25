@@ -178,3 +178,119 @@ def test_jpy_fixture_omits_mrr_cents(monkeypatch):
     assert properties['currency'] == 'jpy'
     assert properties['price_id'] == price_id
     assert 'mrr_cents' not in properties
+
+
+def test_jpy_available_plans_endpoint_returns_jpy_catalog(monkeypatch):
+    """JPY subscribers must receive JPY price IDs and yen pricing strings."""
+    from fastapi import HTTPException
+    from models.users import PlanType, Subscription, SubscriptionStatus
+
+    uid = "test-jpy-user"
+    jpy_sub_id = "sub_jpy_123"
+    current_jpy_price = "price_1ULq6b1F8wnoWYvwtchjjNqq"
+
+    user_sub = Subscription(
+        plan=PlanType.plus,
+        status=SubscriptionStatus.active,
+        stripe_subscription_id=jpy_sub_id,
+        cancel_at_period_end=False,
+    )
+
+    stripe_sub_obj = {
+        "id": jpy_sub_id,
+        "currency": "jpy",
+        "items": {
+            "data": [
+                {
+                    "id": "si_123",
+                    "price": {"id": current_jpy_price, "currency": "jpy", "unit_amount": 1500},
+                }
+            ]
+        },
+    }
+
+    mock_prices = {
+        "price_1ULq6b1F8wnoWYvwtchjjNqq": type("Price", (), {"id": "price_1ULq6b1F8wnoWYvwtchjjNqq", "unit_amount": 1500, "currency": "jpy", "recurring": type("R", (), {"interval": "month"})()})(),
+        "price_1ULq7H1F8wnoWYvwC1poOtd5": type("Price", (), {"id": "price_1ULq7H1F8wnoWYvwC1poOtd5", "unit_amount": 15000, "currency": "jpy", "recurring": type("R", (), {"interval": "year"})()})(),
+        "price_1ULq501F8wnoWYvwwN56CHzO": type("Price", (), {"id": "price_1ULq501F8wnoWYvwwN56CHzO", "unit_amount": 4800, "currency": "jpy", "recurring": type("R", (), {"interval": "month"})()})(),
+        "price_1ULq5e1F8wnoWYvwQT8XQ4Uw": type("Price", (), {"id": "price_1ULq5e1F8wnoWYvwQT8XQ4Uw", "unit_amount": 48000, "currency": "jpy", "recurring": type("R", (), {"interval": "year"})()})(),
+    }
+
+    monkeypatch.setattr(payment.users_db, "get_user_subscription", lambda u: user_sub)
+    monkeypatch.setattr(payment.users_db, "get_user_valid_subscription", lambda u: user_sub)
+    monkeypatch.setattr(payment.stripe.Subscription, "retrieve", lambda sid: _StripeSubscription(stripe_sub_obj))
+    monkeypatch.setattr(payment.stripe.SubscriptionSchedule, "list", lambda **kwargs: type("Schedules", (), {"data": []})())
+    monkeypatch.setattr(payment.stripe.Price, "retrieve", lambda pid: mock_prices[pid])
+
+    resp = payment.get_available_plans_endpoint(
+        uid=uid,
+        x_app_platform="ios",
+        x_app_version="1.0.0",
+    )
+
+    plan_ids = [p.id for p in resp.plans]
+    assert "price_1ULq6b1F8wnoWYvwtchjjNqq" in plan_ids
+    assert "price_1ULq501F8wnoWYvwwN56CHzO" in plan_ids
+
+    for p in resp.plans:
+        assert p.price_string.startswith("¥"), f"Expected ¥ in price_string, got {p.price_string}"
+        if p.id == current_jpy_price:
+            assert p.is_active is True
+
+
+def test_upgrade_subscription_rejects_currency_mismatch(monkeypatch):
+    """Attempting to upgrade/change between USD and JPY prices must raise HTTP 400."""
+    from fastapi import HTTPException
+    from models.users import PlanType, Subscription, SubscriptionStatus
+
+    uid = "test-jpy-user"
+    user_sub = Subscription(
+        plan=PlanType.plus,
+        status=SubscriptionStatus.active,
+        stripe_subscription_id="sub_jpy_123",
+        cancel_at_period_end=False,
+    )
+
+    stripe_sub_obj = {
+        "id": "sub_jpy_123",
+        "currency": "jpy",
+        "items": [
+            {
+                "id": "si_123",
+                "price": {"id": "price_1ULq6b1F8wnoWYvwtchjjNqq", "currency": "jpy", "unit_amount": 1500},
+            }
+        ],
+    }
+    # Wrap in items.data structure
+    stripe_sub_obj = {
+        "id": "sub_jpy_123",
+        "currency": "jpy",
+        "items": {
+            "data": [
+                {
+                    "id": "si_123",
+                    "price": {"id": "price_1ULq6b1F8wnoWYvwtchjjNqq", "currency": "jpy", "unit_amount": 1500},
+                }
+            ]
+        },
+    }
+
+    usd_target_price = type("Price", (), {
+        "id": "price_usd_unlimited",
+        "currency": "usd",
+        "recurring": type("R", (), {"interval": "month"})(),
+    })()
+
+    monkeypatch.setattr(payment, "_validate_price_id", lambda pid: None)
+    monkeypatch.setattr(payment.users_db, "get_user_subscription", lambda u: user_sub)
+    monkeypatch.setattr(payment.stripe.Subscription, "retrieve", lambda sid: _StripeSubscription(stripe_sub_obj))
+    monkeypatch.setattr(payment, "get_plan_type_from_price_id", lambda pid: PlanType.unlimited_v2 if "unlimited" in pid else PlanType.plus)
+    monkeypatch.setattr(payment.stripe.Price, "retrieve", lambda pid: usd_target_price)
+
+    req = payment.UpgradeSubscriptionRequest(price_id="price_usd_unlimited")
+
+    with pytest.raises(HTTPException) as exc_info:
+        payment.upgrade_subscription_endpoint(req, uid=uid)
+
+    assert exc_info.value.status_code == 400
+    assert "currency USD, which does not match your current subscription currency (JPY)" in exc_info.value.detail
