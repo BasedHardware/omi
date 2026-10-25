@@ -288,6 +288,11 @@ class Stack:
         return {'X-Omi-Sync-Stack-Control': self.control_token}
 
     def _start(self, name: str, command: list[str], *, role: str | None = None) -> Child:
+        if sys.platform == 'darwin' and command[1:3] == ['-m', 'uvicorn']:
+            # Darwin uvloop can use a different clock epoch than Python's
+            # monotonic request stamp, expiring absolute handler budgets at
+            # once. Match that stamp locally; Linux CI keeps production's loop.
+            command = [*command, '--loop', 'asyncio']
         if name in self.children:
             raise StackFailure(f'{name} is already running')
         log_path = self.logs_dir / f'{name}.log'

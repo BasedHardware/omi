@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 def _phase_enabled(phase: str) -> bool:
+    # LIVE controls legacy admission after AUDIO_DURABLE_OUTBOX_ENABLED=false;
+    # the default-on custody path deliberately uses its own sole kill switch.
     # LIVE and READ default on: the raw Opus archive must exist wherever the
     # kill switch is not explicitly disabled. A default-off fleet phase would
     # leave the as-captured ruling unimplemented on every service that has not

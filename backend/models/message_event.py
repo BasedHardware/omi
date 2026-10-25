@@ -21,6 +21,18 @@ class MessageEvent(BaseModel):
         return j
 
 
+class AudioCustodyEvent(MessageEvent):
+    """Audio-only immutable custody, independent of transcript coverage.
+
+    An absent/unknown source mapping never authorizes release of a device WAL.
+    """
+
+    capture_root: str
+    channel: str
+    frames: List[dict]
+    receipt: dict
+
+
 class ConversationEvent(MessageEvent):
     memory: Conversation
     messages: Optional[List[Message]] = []

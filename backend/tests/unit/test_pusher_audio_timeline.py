@@ -108,6 +108,9 @@ RATE = 16000
 
 @pytest.fixture
 def env(monkeypatch):
+    # Preserve timeline v2's historical emergency-rollback contract. The
+    # default durable path is exercised by test_audio_durable_outbox.py.
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     uploads = []
 
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
