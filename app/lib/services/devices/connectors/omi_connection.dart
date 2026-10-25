@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -22,6 +23,7 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
   static const String settingsMicGainCharacteristicUuid = '19b10012-e8f2-537e-4f6c-d104768a1214';
   static const String settingsChargingStatusCharacteristicUuid = '19b10013-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsDeviceNameCharacteristicUuid = '19b10014-e8f2-537e-4f6c-d104768a1214';
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
@@ -1243,6 +1245,51 @@ class OmiDeviceConnection extends DeviceConnection {
     }
   }
 
+  static List<int> truncateUtf8ToBytes(String str, int maxBytes) {
+    final encoded = utf8.encode(str);
+    if (encoded.length <= maxBytes) return encoded;
+    for (int i = maxBytes; i > 0; i--) {
+      if ((encoded[i] & 0xC0) != 0x80) {
+        return encoded.sublist(0, i);
+      }
+    }
+    return [];
+  }
+
+  @override
+  Future<bool> performSetDeviceName(String name) async {
+    try {
+      final bytes = truncateUtf8ToBytes(name.trim(), 25);
+      if (bytes.isEmpty) return false;
+      await transport.writeCharacteristic(
+        settingsServiceUuid,
+        settingsDeviceNameCharacteristicUuid,
+        bytes,
+      );
+      return true;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error setting device name: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<String?> performGetDeviceName() async {
+    try {
+      final value = await transport.readCharacteristic(
+        settingsServiceUuid,
+        settingsDeviceNameCharacteristicUuid,
+      );
+      if (value.isNotEmpty) {
+        return utf8.decode(value, allowMalformed: true).trim();
+      }
+      return null;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error getting device name: $e');
+      return null;
+    }
+  }
+
   /// Null means the charging state is unknown; it must not create a charge edge.
   Future<bool?> readChargingStatus() async {
     try {
@@ -1361,6 +1408,16 @@ class OmiDeviceConnection extends DeviceConnection {
         }
       } catch (e) {
         Logger.debug('OmiDeviceConnection: Error reading serial number: $e');
+      }
+
+      // Read custom onboard device name if supported
+      try {
+        final devName = await performGetDeviceName();
+        if (devName != null && devName.isNotEmpty) {
+          deviceInfo['deviceName'] = devName;
+        }
+      } catch (e) {
+        Logger.debug('OmiDeviceConnection: Error reading device name: $e');
       }
 
       // Check if device has image streaming capability (for OpenGlass/OmiGlass detection)

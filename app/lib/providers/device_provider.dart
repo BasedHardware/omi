@@ -484,6 +484,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final saved = await SharedPreferencesUtil().saveDeviceAlias(targetId, normalized);
     if (!saved) return false;
 
+    // If the device is actively connected, persist onboard the hardware over BLE
+    final activeConn = (_admittedLink?.$1.device.id == targetId) ? _admittedLink?.$1 : null;
+    if (activeConn != null) {
+      try {
+        await activeConn.setDeviceName(normalized);
+      } catch (e) {
+        Logger.debug('DeviceProvider: Error persisting device name to hardware: $e');
+      }
+    }
+
     if (connectedDevice?.id == targetId) {
       connectedDevice = connectedDevice!.copyWith(name: normalized);
     }
