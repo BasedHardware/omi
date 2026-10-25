@@ -14,7 +14,9 @@ from tests.unit.test_batch_pipeline_worker import item
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup, legacy_dependencies, row  # noqa: F401
 from tests.unit.test_batch_pipeline_terminal_empty import terminal_setup
-from utils.batch_pipeline.contracts import FailedWork, RecoveryWork, vad_receipt
+from utils.batch_pipeline.contracts import FailedWork, RecoveryWork, ValidationFailureWork, vad_receipt
+from tests.unit.test_batch_pipeline_flight import FakeFlight
+from utils.stt import local_vad
 from utils.batch_pipeline.quarantine_recovery import transcribe
 from utils.batch_pipeline.recovery_disposition import terminal_empty_payload, MultilingualEmpty
 from utils.batch_pipeline.scheduler import Scheduler
@@ -257,6 +259,22 @@ async def test_worker_to_pump_to_scheduler_persists_bound_receipt():
     assert job['state'] == 'quarantined' and job['recovery_state'] == 'held'
     assert job['worker_vad_receipt'] == vad_receipt(work.audio_uri, 64000, 2)
     assert job['measured_held_vad_speech_seconds'] == 2
+
+
+def test_language_blocked_fast_path_records_strict_positive_vad_before_state_exists(monkeypatch):
+    monkeypatch.setattr(local_vad, 'offline_pcm_speech_segments', lambda _: [{'start': 0.5, 'end': 2.5}])
+    worker = make_worker(
+        decode=lambda _: np.zeros(64000, dtype=np.float32),
+        vad=Mock(side_effect=AssertionError('language blocked must skip GPU VAD')),
+        retry=Mock(side_effect=AssertionError('language blocked must skip Parakeet')),
+    )
+    worker.language_of = lambda _: 'vi'
+    worker.flight = FakeFlight()
+    result = worker.process_batch([item('blocked', 4)])[0]
+    assert isinstance(result, ValidationFailureWork) and result.reason == 'unsupported_language'
+    assert result.measured_held_vad_speech_seconds == 2
+    assert result.worker_vad_receipt == vad_receipt(item('blocked', 4).audio_uri, 64000, 2)
+    worker.words.transcribe_batch.assert_not_called()
 
 
 @pytest.mark.parametrize('measured', [True, -1, float('nan'), float('inf'), 5])

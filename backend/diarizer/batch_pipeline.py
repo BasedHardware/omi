@@ -18,7 +18,8 @@ import numpy as np
 from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
 from config.prerecorded_language import language_class
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
-from utils.batch_pipeline.worker_silence import inspect_worker_silence
+from utils.batch_pipeline.worker_silence import inspect_worker_silence, inspect_worker_vad
+from utils.batch_pipeline.recovery_disposition import silence_payload
 from diarizer.batch_pipeline_context import LeftContextIndex, capture_stream, starts_in_speech, empty_retry_audio
 from config.batch_pipeline_empty_asr import safety_net_enabled
 from config.batch_pipeline import (
@@ -559,7 +560,15 @@ class PipelineWorker:
         held_reasons = {}
         recovery_records = []
         silence_records = []
+        strict_measurements = {}
         shapes = {item.segment_id: {'samples': -1, 'vad_spans': -1, 'windows': -1, 'asr_words': 0} for item in items}
+
+        def inspect_silence(item, samples):
+            if not safety_net_enabled():
+                return inspect_worker_silence(item, samples)
+            duration, spans = inspect_worker_vad(item, samples)
+            strict_measurements[item.segment_id] = sum(span['end'] - span['start'] for span in spans)
+            return None if spans else silence_payload(duration)
 
         def admission(required):
             # Bounded hold reason per requested segment: None is an allow, ''
@@ -588,9 +597,9 @@ class PipelineWorker:
                 self.counts['failed'] += 1
                 reason = exc.reason if isinstance(exc, BatchValidationError) else 'unclassified'
                 state = states.get(item.segment_id, {})
-                measured_vad = state.get('speech_seconds')
+                measured_vad = state.get('speech_seconds', strict_measurements.get(item.segment_id))
                 receipt = (
-                    vad_receipt(item.audio_uri, len(state['samples']), measured_vad)
+                    vad_receipt(item.audio_uri, shapes[item.segment_id]['samples'], measured_vad)
                     if measured_vad is not None
                     else None
                 )
@@ -740,7 +749,7 @@ class PipelineWorker:
                         # unavailable evidence falls back to the serial VAD call.
                         strict_failed = False
                         try:
-                            silence = inspect_worker_silence(item, samples)
+                            silence = inspect_silence(item, samples)
                         except Exception:
                             silence = None
                             strict_failed = True
@@ -771,7 +780,7 @@ class PipelineWorker:
                             # in production). Only independent strict VAD can establish
                             # silence; malformed/unavailable evidence stays held.
                             try:
-                                silence = inspect_worker_silence(item, samples)
+                                silence = inspect_silence(item, samples)
                             except Exception:
                                 pass
                             if silence is None:
@@ -1047,7 +1056,7 @@ class PipelineWorker:
                         and worker_silence_disposition_enabled()
                     ):
                         try:
-                            silence = inspect_worker_silence(item, state['samples'])
+                            silence = inspect_silence(item, state['samples'])
                         except Exception:
                             # Unavailable/invalid strict VAD is never silence. Keep
                             # the original empty-ASR quarantine and recovery route.

@@ -16,6 +16,10 @@ VARIANTS = {
     'serial': ('burst_owner_serial_sequencer', {}),
     'widened': ('burst_owner_serial_sequencer', {'per_owner_concurrency': 32}),
     'steady': ('mixed_fleet_steady', {}),
+    'steady_rollback': (
+        'mixed_fleet_steady',
+        {'overrides': {'flags': {'BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED': 'false'}}},
+    ),
     'exhaustion': ('provider_exhaustion_window', {'overrides': {'flags': PASS_DISPATCH}}),
     'exhaustion_dispatch_loop': ('provider_exhaustion_window', {}),
     # Diagnostic counterfactual only; the exhaustion baseline uses shipping defaults.
@@ -24,6 +28,10 @@ VARIANTS = {
         {'overrides': {'flags': {**PASS_DISPATCH, 'BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE': '1'}}},
     ),
     'stale': ('stale_finalize_targets', {}),
+    'stale_rollback': (
+        'stale_finalize_targets',
+        {'overrides': {'flags': {'BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED': 'false'}}},
+    ),
     # Strict merge order (head wait off) isolates what the purge alone prevents.
     'stale_no_purge': (
         'stale_finalize_targets',
@@ -54,13 +62,16 @@ def test_burst_owner_drains_serially_and_breaches_the_15_minute_obligation(sampl
     assert widened['sim']['accept_to_projection_max_seconds'] < 15 * 60
 
 
-def test_mixed_fleet_steady_passes_every_gate(samples):
+def test_mixed_fleet_retains_empty_speech_instead_of_claiming_a_clean_gate(samples):
     sample = samples['steady']
-    assert sample['verdict'] == 'GATE_PASS'
-    assert sample['sim']['completion_rate'] == 1.0
-    assert sample['sim']['job_states'] == {'committed': sample['admissions']}
+    assert sample['verdict'] == 'GATE_FAIL unrecovered_quarantine'
+    assert sample['unrecovered_quarantines'] == sample['sim']['recovery_states']['failed_held'] > 0
+    assert sample['sim']['job_states']['quarantined'] > 0
     assert sample['sim']['accept_to_projection_p95_seconds'] < 120
     assert sample['sim']['max_paid_calls_per_segment'] <= 1
+    # The same modeled empty answers used to become terminal completion.
+    rollback = samples['steady_rollback']
+    assert rollback['verdict'] == 'GATE_PASS' and rollback['sim']['completion_rate'] == 1.0
 
 
 def test_bounded_recovery_clears_exhaustion_tail_without_hiding_unrecovered_audio(samples):
@@ -77,7 +88,10 @@ def test_bounded_recovery_clears_exhaustion_tail_without_hiding_unrecovered_audi
     assert former['quarantine_projection_p95_seconds'] > 300
     assert former['verdict'] == 'GATE_FAIL quarantine_projection_p95_over_5m'
     assert former['sim']['paid_fallback_calls'] == sim['paid_fallback_calls']
-    assert former['sim']['recovery_states'] == sim['recovery_states']
+    # Dispatch order assigns the provider's seeded empty draws to different
+    # units. Every outcome remains accounted for; none can disappear as silence.
+    assert set(former['sim']['recovery_states']) <= {'recovered', 'failed_held'}
+    assert sum(former['sim']['recovery_states'].values()) == former['sim']['paid_fallback_calls']
     assert former['sim']['max_paid_calls_per_segment'] == 1
     # Every quarantine spent exactly one paid call (the durable intent is never reissued).
     assert sim['paid_fallback_calls'] == sample['quarantine_projection_cohort_count']
@@ -100,14 +114,16 @@ def test_recovery_dispatch_loop_shortens_the_quarantine_tail_without_extra_paid_
 def test_stale_finalize_targets_are_neither_failures_nor_paid(samples):
     sample = samples['stale']
     sim = sample['sim']
-    assert sample['verdict'] == 'GATE_PASS'
+    assert sample['verdict'] == 'GATE_FAIL unrecovered_quarantine'
+    assert sample['unrecovered_quarantines'] == sim['recovery_states']['failed_held'] > 0
+    assert samples['stale_rollback']['verdict'] == 'GATE_PASS'
     assert sim['excluded_uploads'].get('deleted_target', 0) > 0
     assert sim['paid_fallback_calls_on_excluded_segments'] == 0
     assert sim['paid_fallback_calls_after_privacy_fence'] == 0
     # Duplicate uploads and duplicate worker/recovery deliveries never double-spend or double-commit.
     assert sim['counters']['duplicate_uploads_deduplicated'] > 0
     assert sim['max_paid_calls_per_segment'] <= 1
-    assert sample['errors'] == 0 and sim['completion_rate'] == 1.0
+    assert sample['errors'] == 0
 
 
 def test_without_the_purge_a_fenced_head_blocks_the_owners_ordered_merge(samples):
