@@ -92,6 +92,15 @@ class MobilePerformanceTelemetry extends NavigatorObserver {
     _refreshLag();
   }
 
+  /// Lifecycle mapping for [setForeground]: only `resumed` renders
+  /// user-visible frames. iOS delivers inactive → hidden → paused and can
+  /// throttle or suspend Dart timers before `paused` arrives, so a watchdog
+  /// that only stops on `paused` scores the whole throttled background gap as
+  /// multi-second UI stalls on whatever surface was last on top. Every
+  /// non-resumed state stops frame observation and the stall watchdog;
+  /// `resumed` restarts them.
+  void onLifecycleState(AppLifecycleState state) => setForeground(state == AppLifecycleState.resumed);
+
   /// The Home shell switches tabs without a route change.
   void setHomeTab(int tab) {
     if (tab == _homeTab) return;

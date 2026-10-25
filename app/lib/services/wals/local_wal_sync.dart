@@ -235,6 +235,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _admissionReservations.clear();
     _liveProofPendingWalIds.clear();
     _pendantBlockedByStorage = false;
+    _lastPersistedIndexFingerprint = null;
     heldRevision.value++;
   }
 
@@ -1146,13 +1147,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         blockedCount: 0,
         reason: 'count_cap',
       );
+      // Once per episode, as documented above: the flush timer re-evaluates
+      // every few seconds while the cap stays engaged, and per-block counts
+      // already arrive with wal_admission_blocked.
+      DebugLogManager.logEvent('wal_admission_pressure', {
+        'policy': 'admission_count_cap',
+        'cap': maxRetainedCaptureWalCount,
+        'retained_count': retained,
+        'blocked_count': _admissionBlockedCount,
+      });
     }
-    DebugLogManager.logEvent('wal_admission_pressure', {
-      'policy': 'admission_count_cap',
-      'cap': maxRetainedCaptureWalCount,
-      'retained_count': retained,
-      'blocked_count': _admissionBlockedCount,
-    });
     return retained - maxRetainedCaptureWalCount;
   }
 
@@ -1351,6 +1355,19 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @visibleForTesting
   Future<int> enforceRetentionPolicyForTesting() => _evaluateRetentionPressure();
 
+  /// Fingerprint of the last snapshot this session persisted (or started
+  /// persisting). Null after load or a failed write, so the next save always
+  /// writes. The periodic flush saves unconditionally; with a
+  /// multi-thousand-entry index an unchanged snapshot must not pay the
+  /// whole-index encode and write again.
+  int? _lastPersistedIndexFingerprint;
+
+  /// The index write currently on disk-bound flight and the fingerprint it
+  /// carries. A save that skips on a matching fingerprint waits for it, so it
+  /// never reports durable before the bytes it relies on are written.
+  Future<void>? _indexWriteInFlight;
+  int? _indexWriteInFlightFingerprint;
+
   Future<bool> _saveWalsToFile(int generation) async {
     if (!_isCurrent(generation)) return false;
     // The save rewrites the whole index from memory, so every durable bucket
@@ -1359,17 +1376,54 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // recordings from disk on the next save.
     final snapshot = [..._retiredWals, ..._foreignWals, ..._wals].where((w) => w.storage != WalStorage.mem).toList();
     final confirmedKeys = snapshot.where((w) => w.storage == WalStorage.disk).map(_durableKey).toList();
-    Logger.debug('Saving WALs to file');
-    if (_persistWalsOverride != null) {
-      await _persistWalsOverride!(snapshot);
-      _confirmedDurableWalKeys.addAll(confirmedKeys);
-      return true;
+    final fingerprint = Wal.persistedIndexFingerprint(snapshot);
+    if (_lastPersistedIndexFingerprint == fingerprint) {
+      // Nothing persisted changed since the last write: skip the encode. If
+      // that write is still in flight, wait for it; durable means on disk.
+      final pending = _indexWriteInFlightFingerprint == fingerprint ? _indexWriteInFlight : null;
+      var written = true;
+      if (pending != null) {
+        try {
+          await pending;
+        } catch (_) {
+          written = false; // The matching write failed: write this snapshot ourselves.
+        }
+      }
+      if (written && _lastPersistedIndexFingerprint == fingerprint) {
+        _confirmedDurableWalKeys.addAll(confirmedKeys);
+        return true;
+      }
+      if (!_isCurrent(generation)) return false;
     }
-    if (!await WalFileManager.saveWals(snapshot)) {
-      throw StateError('WAL index save reported failure');
+    // Record before awaiting: saves can overlap (flush timer during a drain),
+    // and an older snapshot resolving last must not regress the fingerprint a
+    // newer save already recorded.
+    _lastPersistedIndexFingerprint = fingerprint;
+    final write = _writeIndex(snapshot);
+    _indexWriteInFlight = write;
+    _indexWriteInFlightFingerprint = fingerprint;
+    try {
+      await write;
+    } catch (_) {
+      if (_lastPersistedIndexFingerprint == fingerprint) _lastPersistedIndexFingerprint = null;
+      rethrow;
+    } finally {
+      if (identical(_indexWriteInFlight, write)) {
+        _indexWriteInFlight = null;
+        _indexWriteInFlightFingerprint = null;
+      }
     }
     _confirmedDurableWalKeys.addAll(confirmedKeys);
     return true;
+  }
+
+  Future<void> _writeIndex(List<Wal> snapshot) async {
+    Logger.debug('Saving WALs to file');
+    if (_persistWalsOverride != null) {
+      await _persistWalsOverride!(snapshot);
+    } else if (!await WalFileManager.saveWals(snapshot)) {
+      throw StateError('WAL index save reported failure');
+    }
   }
 
   String _durableKey(Wal wal) => '${wal.id}|${wal.filePath ?? wal.getFileName()}';

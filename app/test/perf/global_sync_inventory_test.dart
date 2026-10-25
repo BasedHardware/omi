@@ -120,6 +120,48 @@ void main() {
     expect(syncs.inventoryReads, afterExplicitRefresh, reason: 'logout cancels queued work');
   });
 
+  testWidgets('a completion burst costs one inventory refresh, and progress still advances', (tester) async {
+    final wals = List<Wal>.generate(40, (i) {
+      return Wal(
+          timerStart: 1700000000 + i,
+          codec: BleAudioCodec.opus,
+          seconds: 30,
+          status: WalStatus.miss,
+          storage: WalStorage.disk);
+    });
+    final syncs = _Syncs(wals);
+    final provider = SyncProvider(walService: _WalService(syncs), uploadGate: _gate(), startBackgroundSync: false);
+    addTearDown(provider.dispose);
+    await provider.initialized;
+    late Future<void> sync;
+    sync = provider.syncWals();
+    await tester.pump();
+    expect(syncs.entered.isCompleted, isTrue);
+    var notifications = 0;
+    provider.addListener(() => notifications++);
+    syncs.inventoryReads = notifications = 0;
+
+    // A reconcile pass over a large backlog delivers one completion per
+    // recording fragment, then a single pass-end update.
+    for (final wal in wals) {
+      wal.status = WalStatus.synced; // the completion flipped it before the callback
+      provider.onWalSynced(wal);
+      await tester.pump(const Duration(milliseconds: 2));
+    }
+    provider.onWalUpdated();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(syncs.inventoryReads, 1, reason: 'N synced WALs must not cost N full inventory reads');
+    expect(notifications, lessThanOrEqualTo(4),
+        reason: 'one coalesced refresh publishes at most loading, completion and inventory');
+    expect(provider.processedWalsCount, wals.length, reason: 'per-completion progress accounting survives coalescing');
+    expect(provider.syncState.progress, greaterThan(0));
+
+    syncs.finished.complete(null);
+    await sync;
+    await tester.pump(const Duration(milliseconds: 100));
+  });
+
   for (final semantics in [false, true]) {
     testWidgets('WAL event bursts coalesce before inventory work semantics=$semantics', (tester) async {
       final handle = semantics ? tester.ensureSemantics() : null;
