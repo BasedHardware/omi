@@ -87,12 +87,17 @@ class LocalPreviewAdmission {
   }
 
   /// A new socket replaced the old one; its grant is pending if it asked.
-  void socketPublished({required bool declared}) {
+  /// Frames still held from an unresolved earlier socket carry over and are
+  /// resolved against this socket's verdict; a socket that did not ask is a
+  /// refusal, so they are [send] to it now, before any newer frame.
+  void socketPublished({required bool declared, required void Function(HeldPendantFrame frame) send}) {
     if (admitted) _set(false);
-    // Frames held for a replaced socket cannot reach it; the WAL keeps them,
-    // exactly as for any frame captured while a socket is down.
-    _held.clear();
-    _verdictPendingSince = declared ? now() : null;
+    if (declared) {
+      _verdictPendingSince = now();
+    } else {
+      _verdictPendingSince = null;
+      _flush(send);
+    }
   }
 
   /// `ready` / `mobile_batch_admission`. Returns the effective grant: only a
@@ -115,14 +120,15 @@ class LocalPreviewAdmission {
   }
 
   /// Socket closed or reconnecting: lines are kept for a quick re-grant. Held
-  /// frames have no socket to go to; the safety WAL already has them.
+  /// frames stay queued for the replacement socket's verdict (bounded); only
+  /// capture end or an account change discards them.
   void revoke() {
     _verdictPendingSince = null;
-    _held.clear();
     _set(false);
   }
 
-  /// Capture ended (stop, account change, dispose): the preview is dropped.
+  /// Capture ended (stop, account change, dispose): the preview and any held
+  /// frames are dropped (the safety WAL has every one).
   void end() {
     admitted = false;
     _verdictPendingSince = null;

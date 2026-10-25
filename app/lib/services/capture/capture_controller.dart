@@ -1760,7 +1760,7 @@ class CaptureController extends ChangeNotifier
     }
     if (!identical(_socket, socket)) {
       _socket = socket;
-      _localPreview.socketPublished(declared: socket.localPreview);
+      _localPreview.socketPublished(declared: socket.localPreview, send: _sendPendantToSocket);
       _socket?.subscribe(this, this);
       _transcriptServiceReady = true;
       _beginWedgeSession(socket);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -49,6 +50,7 @@ void main() {
   late List<Wal> published;
   late FakeLivePreviewEngine engine;
   late CaptureReplayWorld world;
+  Completer<void>? vadGate;
 
   LivePreviewController preview({bool allowed = true}) => LivePreviewController(
         engine: engine,
@@ -78,12 +80,16 @@ void main() {
     buffer = MobileBatchBuffer(directory: directory, publish: (wal) async => published.add(wal));
     lane = MobileStandardBatch(
         buffer: buffer,
-        loadVad: () async => _Vad(),
+        loadVad: () async {
+          await vadGate?.future;
+          return _Vad();
+        },
         freeDiskBytes: () async => 1 << 40,
         visibility: state,
         ownerUid: () => 'owner',
         now: DateTime.now);
     engine = FakeLivePreviewEngine();
+    vadGate = null;
   });
 
   tearDown(() async {
@@ -167,6 +173,28 @@ void main() {
     expect(world.socket!.sentBinary, [List.filled(80, 1), List.filled(80, 2), List.filled(80, 3)]);
     expect(world.wal.syncs.phone.testFrames.map((frame) => frame.payload.first), [1, 2, 3]);
     expect(live.phase, LivePreviewPhase.inactive);
+  });
+
+  test('socket close before the verdict: held frames are replayed to the replacement socket on refusal', () async {
+    await boot(livePreview: preview());
+    final first = world.socket!;
+    world.deviceConnection!.emitAudio(value: 1);
+    world.deviceConnection!.emitAudio(value: 2);
+    await world.settle();
+    first.emitClose(1006);
+    await world.settle();
+    await world.elapse(const Duration(seconds: 16));
+    final second = world.socket!;
+    expect(second, isNot(same(first)));
+    expect(world.localPreviewRequests.last, true);
+    world.deviceConnection!.emitAudio(value: 3);
+    await world.settle();
+    expect(first.sentBinary, isEmpty);
+    expect(second.sentBinary, isEmpty);
+    second.emitServerMessage(_batchOnly);
+    await world.settle();
+    expect(second.sentBinary, [List.filled(80, 1), List.filled(80, 2), List.filled(80, 3)],
+        reason: 'live-transcript continuity across the reconnect, oldest first');
   });
 
   test('a server without local_preview keeps today: visible frames stream, no preview', () async {

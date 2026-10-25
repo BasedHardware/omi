@@ -32,14 +32,14 @@ void main() {
   tearDown(() => preview.dispose());
 
   test('a socket that did not declare local preview streams every frame at once', () {
-    admission.socketPublished(declared: false);
+    admission.socketPublished(declared: false, send: send);
     route(1, declared: false);
     route(2, declared: false);
     expect(sent, [1, 2]);
   });
 
   test('refusal: held frames reach the socket in order before any newer frame', () {
-    admission.socketPublished(declared: true);
+    admission.socketPublished(declared: true, send: send);
     route(1);
     route(2);
     route(3);
@@ -54,7 +54,7 @@ void main() {
   });
 
   test('a grant to a socket that did not ask, or with no preview, is a refusal too', () {
-    admission.socketPublished(declared: true);
+    admission.socketPublished(declared: true, send: send);
     route(1);
     admission.preview = null;
     expect(admission.verdict(granted: true, socketDeclared: true, send: send), false);
@@ -62,7 +62,7 @@ void main() {
   });
 
   test('grant: the memory copy is dropped and nothing reaches the socket', () {
-    admission.socketPublished(declared: true);
+    admission.socketPublished(declared: true, send: send);
     route(1);
     route(2);
     expect(admission.verdict(granted: true, socketDeclared: true, send: send), true);
@@ -73,7 +73,7 @@ void main() {
   });
 
   test('overflow stops holding: flush in order, then stream', () {
-    admission.socketPublished(declared: true);
+    admission.socketPublished(declared: true, send: send);
     for (var i = 0; i < LocalPreviewAdmission.maxHeldFrames; i++) {
       route(i);
     }
@@ -90,32 +90,58 @@ void main() {
   });
 
   test('a verdict that never arrives is a refusal after the hold window', () {
-    admission.socketPublished(declared: true);
+    admission.socketPublished(declared: true, send: send);
     route(1);
     clock = clock.add(LocalPreviewAdmission.verdictHold);
     route(2);
     expect(sent, [1, 2]);
   });
 
-  test('socket close or replacement drops the memory copy (the WAL keeps it)', () {
-    admission.socketPublished(declared: true);
+  test('socket close before the verdict: held frames carry over to the replacement socket', () {
+    admission.socketPublished(declared: true, send: send);
+    route(1);
+    route(2);
+    admission.revoke(); // closed before any verdict
+    expect(admission.heldFramesForTesting, 2);
+    admission.socketPublished(declared: true, send: send);
+    route(3);
+    expect(sent, isEmpty);
+    admission.verdict(granted: false, socketDeclared: true, send: send);
+    expect(sent, [1, 2, 3], reason: 'resolved against the replacement socket, oldest first');
+  });
+
+  test('a replacement socket that did not ask is a refusal: held frames go to it first', () {
+    admission.socketPublished(declared: true, send: send);
     route(1);
     admission.revoke();
+    admission.socketPublished(declared: false, send: send);
+    expect(sent, [1]);
+    route(2, declared: false);
+    expect(sent, [1, 2]);
+  });
+
+  test('a grant on the replacement socket drops the carried copy; capture end always does', () {
+    admission.socketPublished(declared: true, send: send);
+    route(1);
+    admission.revoke();
+    admission.socketPublished(declared: true, send: send);
+    admission.verdict(granted: true, socketDeclared: true, send: send);
     expect(admission.heldFramesForTesting, 0);
-    admission.socketPublished(declared: true);
+    expect(sent, isEmpty);
+    admission.socketPublished(declared: true, send: send);
     route(2);
-    admission.socketPublished(declared: false);
+    admission.end();
     expect(admission.heldFramesForTesting, 0);
-    route(3, declared: false);
-    expect(sent, [3]);
+    admission.socketPublished(declared: false, send: send);
+    expect(sent, isEmpty);
   });
 
   test('journal warm-up holds only an admitted socket; a refused one streams', () {
-    admission.socketPublished(declared: true);
+    admission.socketPublished(declared: true, send: send);
     admission.verdict(granted: false, socketDeclared: true, send: send);
     route(1, warmingUp: true);
     expect(sent, [1], reason: 'never on a non-admitted session');
-    admission.socketPublished(declared: true);
+    admission.socketPublished(declared: true, send: send);
     admission.verdict(granted: true, socketDeclared: true, send: send);
     route(2, warmingUp: true);
     expect(sent, [1]);
