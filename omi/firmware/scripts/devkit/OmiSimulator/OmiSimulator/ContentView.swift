@@ -9,18 +9,18 @@ import SwiftUI
 import AVFoundation
 
 struct ContentView: View {
-    
+
     @State var audioEngine = AVAudioEngine()
     @ObservedObject var bleManager = BLEManager()
-   
+
     @State var recording = false
     var body: some View {
         // TODO: switches to choose between possible audio formats
         // and publish those on the proper characteristic
-        
+
         VStack {
             Text("Omi simulator")
-            
+
             Button() {
                 if recording {
                     stopRecording()
@@ -37,61 +37,57 @@ struct ContentView: View {
             setupAudio()
         }
     }
-    
+
     func setupAudio() {
         let friendFormat = AVAudioFormat.init(commonFormat: .pcmFormatInt16, sampleRate: 8000.0, channels: 1, interleaved: true)
 
         let input = audioEngine.inputNode
         let bus = 0
         let inputFormat = input.inputFormat(forBus: bus)
-        
+
         let formatConverter =  AVAudioConverter(from:inputFormat, to: friendFormat!)
-        
+
         input.installTap(onBus: bus, bufferSize: 160, format: inputFormat) { (buffer, time) in
             // Note: implementation may choose other size that requested (and in fact it does) -> need to split later before sending over BLE
 
             if !recording {
                 return
             }
-            
+
             if let formatConverter {
                 let ratio = friendFormat!.sampleRate / buffer.format.sampleRate
                 let pcmBuffer = AVAudioPCMBuffer(pcmFormat: friendFormat!, frameCapacity: AVAudioFrameCount(Double(buffer.frameLength) * ratio))
                 var error: NSError? = nil
-                
+
                 let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
                     outStatus.pointee = AVAudioConverterInputStatus.haveData
                     return buffer
                 }
-                
+
                 formatConverter.convert(to: pcmBuffer!, error: &error, withInputFrom: inputBlock)
-                
+
                 if error != nil {
                     print(error!.localizedDescription)
                 }
                 else {
-                    var dataLeft = pcmBuffer!.dataInt()
-                    
-                    // TODO: this is ugly, must implement proper background sending
-                    while !dataLeft.isEmpty {
-                        let block = dataLeft.prefix(160)
-                        bleManager.writeAudio(block)
-                        usleep(7_000)
-                        dataLeft = dataLeft.dropFirst(160)
+                    let data = pcmBuffer!.dataInt()
+
+                    Task {
+                        await AudioSender.shared.enqueue(data, bleManager: bleManager)
                     }
                 }
             }
         }
-        
+
         //run the engine
         audioEngine.prepare()
         try! audioEngine.start()
     }
-    
+
     func startRecording() {
         recording = true
     }
-    
+
     func stopRecording() {
         recording = false
     }
@@ -108,4 +104,41 @@ extension AVAudioPCMBuffer {
 
 #Preview {
     ContentView()
+}
+
+actor AudioSender {
+    static let shared = AudioSender()
+
+    private var queue: [Data] = []
+    private var isSending = false
+
+    func enqueue(_ data: Data, bleManager: BLEManager) async {
+        queue.append(data)
+        if !isSending {
+            isSending = true
+            Task {
+                await processQueue(bleManager: bleManager)
+            }
+        }
+    }
+
+    private func processQueue(bleManager: BLEManager) async {
+        while true {
+            let data: Data? = queue.isEmpty ? nil : queue.removeFirst()
+            guard let data = data else {
+                isSending = false
+                break
+            }
+
+            var dataLeft = data
+            while !dataLeft.isEmpty {
+                let block = dataLeft.prefix(160)
+                await MainActor.run {
+                    bleManager.writeAudio(block)
+                }
+                try? await Task.sleep(nanoseconds: 7_000_000)
+                dataLeft = dataLeft.dropFirst(160)
+            }
+        }
+    }
 }
