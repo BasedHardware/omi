@@ -751,7 +751,36 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
 
     _isLoadingWals = false;
+    _publishSyncedCompletions(generation);
     notifyListeners();
+  }
+
+  /// Post-refresh publication for sync completions, once per coalesced refresh
+  /// instead of once per finished WAL. Every producer of [onWalSynced] follows
+  /// it with [onWalUpdated] in the same operation, so the trailing refresh
+  /// always sees the burst's final state.
+  void _publishSyncedCompletions(int generation) {
+    if (!_isCurrent(generation)) return;
+    // Keep finished recordings in the batch until all of it is done. Removing
+    // each one as it finished shrank the total while "processed" stayed at
+    // zero, so the card read "Processing 0/5914 · 0%" for the whole drain.
+    if (_trackedServerJobWalIds.isNotEmpty &&
+        !_allWals.any((w) => w.status == WalStatus.uploaded && _trackedServerJobWalIds.contains(w.id))) {
+      _trackedServerJobWalIds.clear();
+    }
+    if (_totalWalsToProcess > 0) {
+      // If device download created new WALs, total grows dynamically
+      final currentMissing = _allWals.where((w) => w.status == WalStatus.miss).length;
+      final newTotal = _walsProcessedCount + currentMissing;
+      if (newTotal > _totalWalsToProcess) {
+        _totalWalsToProcess = newTotal;
+      }
+    }
+    if (_syncState.isSyncing) {
+      _updateSyncState(_syncState.toSyncing(progress: walBasedProgress), generation);
+    } else if (_totalWalsToProcess > 0 && uploadedWals.isNotEmpty) {
+      notifyListeners();
+    }
   }
 
   /// Enumerate offline recordings directly from the device, then refresh the
@@ -1204,40 +1233,20 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   @override
-  void onWalSynced(Wal wal, {ServerConversation? conversation}) async {
+  void onWalSynced(Wal wal, {ServerConversation? conversation}) {
     final generation = _admittedWorkGeneration;
     if (!_isCurrent(generation)) return;
-    await _refreshWals(generation);
-    if (!_isCurrent(generation)) return;
-
-    // Keep finished recordings in the batch until all of it is done. Removing
-    // each one as it finished shrank the total while "processed" stayed at
-    // zero, so the card read "Processing 0/5914 · 0%" for the whole drain.
-    if (_trackedServerJobWalIds.isNotEmpty &&
-        !_allWals.any((w) => w.status == WalStatus.uploaded && _trackedServerJobWalIds.contains(w.id))) {
-      _trackedServerJobWalIds.clear();
-    }
+    // Completions arrive once per recording fragment — a reconcile pass over a
+    // large backlog delivers dozens within a second. The per-event work here is
+    // O(1); the inventory refresh and its publications ride the same coalesced
+    // window as [onWalUpdated] (see [_publishSyncedCompletions]), so a burst
+    // costs one refresh and still publishes the final state.
     if (wal.status == WalStatus.uploaded || wal.status == WalStatus.synced) {
       _captureWedgeMonitor.onUploadCompleted();
     }
-
-    // Update progress based on WALs synced if we're currently syncing
-    if (_totalWalsToProcess > 0) {
-      _walsProcessedCount++;
-      // If device download created new WALs, total grows dynamically
-      final currentMissing = _allWals.where((w) => w.status == WalStatus.miss).length;
-      final newTotal = _walsProcessedCount + currentMissing;
-      if (newTotal > _totalWalsToProcess) {
-        _totalWalsToProcess = newTotal;
-      }
-    }
-
-    if (_syncState.isSyncing) {
-      final walProgress = walBasedProgress;
-      _updateSyncState(_syncState.toSyncing(progress: walProgress), generation);
-    } else if (_totalWalsToProcess > 0 && uploadedWals.isNotEmpty) {
-      notifyListeners();
-    }
+    if (_totalWalsToProcess > 0) _walsProcessedCount++;
+    _walUpdatePending = true;
+    _scheduleWalUpdate();
   }
 
   @override
