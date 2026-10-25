@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Background agent status dots stay still while progress and results continue to update."
+  ]
+}
