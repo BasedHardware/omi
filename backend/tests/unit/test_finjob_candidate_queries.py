@@ -127,6 +127,12 @@ def byok(doc_id, **data):
 def fixed_clock_and_default_off(monkeypatch):
     monkeypatch.setattr(jobs, '_now', lambda: NOW)
     monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    for lifecycle_env in (
+        'LIFECYCLE_V2_MODE',
+        'LIFECYCLE_V2_MODE_SERVE_PERCENT',
+        'LIFECYCLE_V2_MODE_SERVE_UID_SHA256S',
+    ):
+        monkeypatch.delenv(lifecycle_env, raising=False)
     monkeypatch.setenv('HOSTNAME', 'wq13-unit-host')
 
 
@@ -169,6 +175,49 @@ def test_in_progress_pushes_inclusive_cutoff_before_pagination(monkeypatch, on):
         assert not result['exhausted']
         assert client.queries[0].filters == (('status', '==', 'in_progress'),)
         assert client.queries[0].orders == ()
+
+
+@pytest.mark.parametrize(
+    ('mode_env', 'extra_env'),
+    [
+        ({'LIFECYCLE_V2_MODE': 'serve'}, {}),
+        ({'LIFECYCLE_V2_MODE': 'shadow'}, {'LIFECYCLE_V2_MODE_SERVE_PERCENT': '5'}),
+        ({'LIFECYCLE_V2_MODE': 'shadow'}, {'LIFECYCLE_V2_MODE_SERVE_UID_SHA256S': 'a' * 64}),
+    ],
+    ids=['serve', 'shadow-cohort-percent', 'shadow-cohort-digests'],
+)
+def test_in_progress_pushdown_withheld_while_lifecycle_v2_cohort_configured(monkeypatch, mode_env, extra_env):
+    # A v2-serving uid can hold a missing finished_at with a stale
+    # last_speech_at; the admission fence (speech_clock) accepts that row, so
+    # this status-only catch-all must not push finished_at into the query
+    # while any serve cohort can exist.
+    enable(monkeypatch)
+    for env, value in {**mode_env, **extra_env}.items():
+        monkeypatch.setenv(env, value)
+    rows = [conversation('missing'), conversation('z-stale', finished_at=CUTOFF)]
+    client = Client(rows)
+    result = jobs.scan_in_progress_conversations(
+        finished_before=CUTOFF, max_scan=100, page_size=100, firestore_client=client
+    )
+    assert [r['conversation_id'] for r in result['rows']] == ['missing', 'z-stale']
+    assert result['exhausted']
+    assert client.queries[0].filters == (('status', '==', 'in_progress'),)
+    assert client.queries[0].orders == ()
+
+
+def test_in_progress_pushdown_active_while_lifecycle_v2_dormant_or_off(monkeypatch):
+    # Dormant shadow (mode unset, percent 0, no digests) serves no uid, so
+    # speech_clock stays on legacy finished_at and the pushdown remains
+    # admission-equivalent. Explicit off behaves the same way.
+    enable(monkeypatch)
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'off')
+    rows = [conversation('missing'), conversation('z-stale', finished_at=CUTOFF)]
+    client = Client(rows)
+    result = jobs.scan_in_progress_conversations(
+        finished_before=CUTOFF, max_scan=100, page_size=100, firestore_client=client
+    )
+    assert [r['conversation_id'] for r in result['rows']] == ['z-stale']
+    assert client.queries[0].filters == (('status', '==', 'in_progress'), ('finished_at', '<=', CUTOFF))
 
 
 def test_in_progress_no_cutoff_retains_status_scan_even_on(monkeypatch):

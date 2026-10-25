@@ -50,9 +50,18 @@ write helpers, or new work-queue writes were changed.
   activity while updating bookkeeping. An `updated_at` age predicate would miss
   old abandoned sessions after reclaim; requiring a dedicated activity field
   would miss legacy jobs. The safe pushed-down predicate is active status.
-- In-progress recovery already refuses missing/non-datetime `finished_at` and
-  fresh rows, so pushing that exact age cutoff is safe for admission. Scan-window
-  counters now describe the narrower candidate window when enabled.
+- In-progress recovery refuses rows whose staleness clock is fresh, and since
+  upstream e756385d462 the admission fence clocks v2-serving uids by
+  `speech_clock` (`last_speech_at or finished_at`), with v2 serving suppressing
+  legacy `finished_at` writes. A raw `finished_at` pushdown is therefore
+  admission-equivalent only while no uid can serve lifecycle v2. The candidate
+  gate withholds the pushdown whenever a v2 serve cohort can exist
+  (`LIFECYCLE_V2_MODE=serve` or a configured shadow cohort, via
+  `cohort_configured`), keeping this status-only scan the
+  `finished_at`-agnostic catch-all for those rows. Dormant shadow (the flag's
+  documented default: percent 0, no digests) and explicit off keep the
+  pushdown. Scan-window counters now describe the narrower candidate window
+  when enabled.
 
 Firestore's documented inequality/existence behavior:
 https://firebase.google.com/docs/firestore/query-data/queries#orderBy_and_existence

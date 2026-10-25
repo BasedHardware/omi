@@ -20,6 +20,8 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.firestore_read_levers import lever_enabled
 from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
+from config.occasion_conversations import LIFECYCLE_V2_MODE_ENV
+from config.refactor_modes import cohort_configured
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -2132,11 +2134,26 @@ def scan_in_progress_conversations(
     predicates and cursor behavior regardless of the candidate-query lever.
     Lease and admission guards remain transactional.
 
+    The pushdown is admission-equivalent only while no uid can serve lifecycle
+    v2: ``recovery_admission_refusal`` clocks v2-serving uids by
+    ``last_speech_at or finished_at`` (``speech_clock``), and v2 serving
+    suppresses legacy ``finished_at`` writes, so a v2-serving uid can hold a
+    missing or fresh ``finished_at`` with a stale ``last_speech_at``. Such a row
+    must stay reachable by this status-only catch-all (it is the only
+    ``finished_at``-agnostic recovery owner), so while any v2 serve cohort can
+    exist (``LIFECYCLE_V2_MODE=serve`` or a configured shadow cohort) the
+    candidate shape is withheld and the status-only scan runs.
+
     Returns ``{'rows', 'scanned', 'resume_after_path', 'exhausted'}`` where each
     row is ``{'uid', 'conversation_id', 'path', 'data'}``.
     """
     client = _client(firestore_client)
-    candidate_queries = content_due_before is None and _candidate_queries_enabled() and finished_before is not None
+    candidate_queries = (
+        content_due_before is None
+        and _candidate_queries_enabled()
+        and finished_before is not None
+        and not cohort_configured(LIFECYCLE_V2_MODE_ENV)
+    )
     if finished_before is not None and finished_before.tzinfo is None:
         finished_before = finished_before.replace(tzinfo=timezone.utc)
     page_size = max(1, min(page_size, 100))
