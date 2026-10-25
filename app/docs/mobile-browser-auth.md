@@ -98,3 +98,26 @@ S26 Ultra. Mocked and hermetic tests do not verify production sign-in.
 The unspecified general Try Again screen still requires the reporter's screen,
 version and integration names; this audit does not invent its cause or close the
 customer incident from code merge.
+
+## MCP retry and callback commit ownership
+
+An explicit retry uses the existing registration and requests a fresh single-use
+OAuth state and PKCE verifier. Verifier rotation updates only that nested field,
+so a callback finishing during provider discovery cannot have its tokens erased.
+The callback exchanges its code and discovers tools outside Firestore, then
+atomically compares the app owner and verifier before committing credentials,
+tools and approval. A newer retry, changed owner or deleted registration retires
+that callback: it returns 409 and cannot enable the app or replace newer tokens.
+Successful current callbacks retain the existing automatic enable behavior.
+
+Verification checklist:
+
+- [x] Held token-exchange and tool-discovery callbacks cannot overwrite a newer
+      completed authorization; only the current callback enables the app.
+- [x] Strict transaction tests reject changed owner/verifier and missing records,
+      preserving unrelated integration fields on a successful commit.
+- [x] Local HTTP OAuth/MCP provider validates PKCE; real isolated Redis checks
+      single-use state/replay and enablement, with Firestore emulator persistence.
+- [ ] Real provider configuration and Google/Apple sign-in/referral return remain
+      separate integration checks; the local provider is synthetic, not proof of
+      their console settings or customer recovery.

@@ -53,6 +53,7 @@ from database.apps import (
     add_app_to_db,
     update_app_in_db,
     set_mcp_code_verifier,
+    complete_mcp_oauth_authorization,
     delete_app_from_db,
     update_app_visibility_in_db,
     get_personas_by_username_db,
@@ -2172,17 +2173,22 @@ async def mcp_oauth_callback(code: str, state: str):
     # Use the resolved URL from the first tool (discover_mcp_tools stores the working URL)
     resolved_url = tools[0].endpoint if tools else server_url
 
-    # Update app with tokens and tools
-    update_dict = {
-        'id': app_id,
-        'status': 'approved',
-        'external_integration': {
-            'mcp_server_url': resolved_url,
-            'mcp_oauth_tokens': oauth_tokens,
-        },
-        'chat_tools': _serialize_chat_tools_for_firestore(tools),
-    }
-    await run_blocking(db_executor, update_app_in_db, update_dict)
+    # A newer retry can rotate PKCE while exchange/discovery is in flight.
+    # Compare and commit atomically; a stale callback must not approve or enable.
+    committed = await run_blocking(
+        db_executor,
+        complete_mcp_oauth_authorization,
+        app_id,
+        uid,
+        oauth_tokens,
+        resolved_url,
+        _serialize_chat_tools_for_firestore(tools),
+    )
+    if not committed:
+        return HTMLResponse(
+            '<html><body><h1>Authorization superseded</h1><p>Return to the app and finish the latest connection attempt.</p></body></html>',
+            status_code=409,
+        )
     await run_blocking(db_executor, delete_app_cache_by_id, app_id)
 
     # Auto-enable the app for the user
