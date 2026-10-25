@@ -1958,6 +1958,15 @@ def resolve_transcription_allowance(
         # unlimited; resolved first so the paywall cannot contradict that snapshot.
         if is_marketplace_reviewer(uid):
             return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'marketplace_reviewer', limit_seconds=None)
+        # The fixed non-human release-probe identity exercises the full terminal
+        # desktop path (utils/release_probe.py gate convention). Its Free-plan
+        # account never buys a plan or BYOK keys, so once live STT cap-dispatch
+        # admission covers the whole fleet the strict desktop trial paywall
+        # holds every probe packet and the pusher prod canary finalization
+        # probe times out with zero transcripts (run 40190728003). Resolved
+        # before the paywall for the same reason as marketplace reviewers.
+        if uid == RELEASE_PROBE_UID:
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'release_probe', limit_seconds=None)
         # A Deepgram BYOK request is exempt from the trial paywall, as it is
         # from the quota: the user pays Deepgram directly. strict: a paywall
         # lookup failure must not open a billed socket for a paywalled account,
