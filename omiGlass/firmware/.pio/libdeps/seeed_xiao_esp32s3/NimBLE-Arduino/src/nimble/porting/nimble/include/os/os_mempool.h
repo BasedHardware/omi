@@ -24,11 +24,11 @@
  *   @{
  */
 
-
 #ifndef _OS_MEMPOOL_H_
 #define _OS_MEMPOOL_H_
 
 #include <stdbool.h>
+
 #include "os.h"
 #include "queue.h"
 
@@ -45,11 +45,6 @@ extern "C" {
 struct os_memblock {
     SLIST_ENTRY(os_memblock) mb_next;
 };
-
-/* XXX: Change this structure so that we keep the first address in the pool? */
-/* XXX: add memory debug structure and associated code */
-/* XXX: Change how I coded the SLIST_HEAD here. It should be named:
-   SLIST_HEAD(,os_memblock) mp_head; */
 
 /**
  * Memory pool
@@ -68,7 +63,7 @@ struct os_mempool {
     /** Address of memory buffer used by pool */
     uint32_t mp_membuf_addr;
     STAILQ_ENTRY(os_mempool) mp_list;
-    SLIST_HEAD(,os_memblock);
+    SLIST_HEAD(, os_memblock) mp_head;
     /** Name for memory block */
     const char *name;
 };
@@ -77,7 +72,7 @@ struct os_mempool {
  * Indicates an extended mempool.  Address can be safely cast to
  * (struct os_mempool_ext *).
  */
-#define OS_MEMPOOL_F_EXT        0x01
+#define OS_MEMPOOL_F_EXT 0x01
 
 struct os_mempool_ext;
 
@@ -99,8 +94,7 @@ struct os_mempool_ext;
  *                                  returned if the block was not successfully
  *                                  released back to its pool.
  */
-typedef os_error_t os_mempool_put_fn(struct os_mempool_ext *ome, void *data,
-                                     void *arg);
+typedef os_error_t os_mempool_put_fn(struct os_mempool_ext *ome, void *data, void *arg);
 
 struct os_mempool_ext {
     struct os_mempool mpe_mp;
@@ -139,8 +133,7 @@ struct os_mempool_info {
  * @return The next memory pool in the list to get information about, or NULL
  *         when at the last memory pool.
  */
-struct os_mempool *os_mempool_info_get_next(struct os_mempool *,
-                                            struct os_mempool_info *);
+struct os_mempool *os_mempool_info_get_next(struct os_mempool *, struct os_mempool_info *);
 
 /*
  * To calculate size of the memory buffer needed for the pool. NOTE: This size
@@ -164,11 +157,10 @@ typedef __uint128_t os_membuf_t;
 #else
 #error "Unhandled `OS_ALIGNMENT` for `os_membuf_t`"
 #endif /* OS_ALIGNMENT == * */
-#define OS_MEMPOOL_SIZE(n,blksize)      ((((blksize) + ((OS_ALIGNMENT)-1)) / (OS_ALIGNMENT)) * (n))
+#define OS_MEMPOOL_SIZE(n, blksize) ((((blksize) + ((OS_ALIGNMENT) - 1)) / (OS_ALIGNMENT)) * (n))
 
 /** Calculates the number of bytes required to initialize a memory pool. */
-#define OS_MEMPOOL_BYTES(n,blksize)     \
-    (sizeof (os_membuf_t) * OS_MEMPOOL_SIZE((n), (blksize)))
+#define OS_MEMPOOL_BYTES(n, blksize) (sizeof(os_membuf_t) * OS_MEMPOOL_SIZE((n), (blksize)))
 
 #if SOC_ESP_NIMBLE_CONTROLLER
 /**
@@ -182,8 +174,8 @@ typedef __uint128_t os_membuf_t;
  *
  * @return os_error_t
  */
-os_error_t r_os_mempool_init(struct os_mempool *mp, uint16_t blocks,
-                           uint32_t block_size, void *membuf, const char *name);
+os_error_t
+r_os_mempool_init(struct os_mempool *mp, uint16_t blocks, uint32_t block_size, void *membuf, const char *name);
 #define os_mempool_init r_os_mempool_init
 /**
  * Initializes an extended memory pool.  Extended attributes (e.g., callbacks)
@@ -198,8 +190,8 @@ os_error_t r_os_mempool_init(struct os_mempool *mp, uint16_t blocks,
  *
  * @return os_error_t
  */
-os_error_t r_os_mempool_ext_init(struct os_mempool_ext *mpe, uint16_t blocks,
-                               uint32_t block_size, void *membuf, const char *name);
+os_error_t
+r_os_mempool_ext_init(struct os_mempool_ext *mpe, uint16_t blocks, uint32_t block_size, void *membuf, const char *name);
 #define os_mempool_ext_init r_os_mempool_ext_init
 /**
  * Removes the specified mempool from the list of initialized mempools.
@@ -213,7 +205,6 @@ os_error_t r_os_mempool_ext_init(struct os_mempool_ext *mpe, uint16_t blocks,
 os_error_t r_os_mempool_unregister(struct os_mempool *mp);
 #define os_mempool_unregister r_os_mempool_unregister
 
-
 /**
  * Clears a memory pool.
  *
@@ -223,7 +214,6 @@ os_error_t r_os_mempool_unregister(struct os_mempool *mp);
  */
 os_error_t r_os_mempool_clear(struct os_mempool *mp);
 #define os_mempool_clear r_os_mempool_clear
-
 
 /**
  * Performs an integrity check of the specified mempool.  This function
@@ -238,7 +228,6 @@ os_error_t r_os_mempool_clear(struct os_mempool *mp);
 bool r_os_mempool_is_sane(const struct os_mempool *mp);
 #define os_mempool_is_sane r_os_mempool_is_sane
 
-
 /**
  * Checks if a memory block was allocated from the specified mempool.
  *
@@ -250,7 +239,6 @@ bool r_os_mempool_is_sane(const struct os_mempool *mp);
  */
 int r_os_memblock_from(const struct os_mempool *mp, const void *block_addr);
 #define os_memblock_from r_os_memblock_from
-
 
 /**
  * Get a memory block from a memory pool
@@ -273,7 +261,6 @@ void *r_os_memblock_get(struct os_mempool *mp);
  */
 os_error_t r_os_memblock_put_from_cb(struct os_mempool *mp, void *block_addr);
 #define os_memblock_put_from_cb r_os_memblock_put_from_cb
-
 
 /**
  * Puts the memory block back into the pool
@@ -298,8 +285,7 @@ os_error_t r_os_memblock_put(struct os_mempool *mp, void *block_addr);
  *
  * @return os_error_t
  */
-os_error_t os_mempool_init(struct os_mempool *mp, uint16_t blocks,
-                           uint32_t block_size, void *membuf, const char *name);
+os_error_t os_mempool_init(struct os_mempool *mp, uint16_t blocks, uint32_t block_size, void *membuf, const char *name);
 
 /**
  * Initializes an extended memory pool.  Extended attributes (e.g., callbacks)
@@ -314,8 +300,8 @@ os_error_t os_mempool_init(struct os_mempool *mp, uint16_t blocks,
  *
  * @return os_error_t
  */
-os_error_t os_mempool_ext_init(struct os_mempool_ext *mpe, uint16_t blocks,
-                               uint32_t block_size, void *membuf, const char *name);
+os_error_t
+os_mempool_ext_init(struct os_mempool_ext *mpe, uint16_t blocks, uint32_t block_size, void *membuf, const char *name);
 
 /**
  * Removes the specified mempool from the list of initialized mempools.
@@ -405,8 +391,7 @@ os_error_t os_memblock_put(struct os_mempool *mp, void *block_addr);
 }
 #endif
 
-#endif  /* _OS_MEMPOOL_H_ */
-
+#endif /* _OS_MEMPOOL_H_ */
 
 /**
  *   @} OSMempool
