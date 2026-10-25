@@ -10926,7 +10926,6 @@
     "captureStarting": "Nagsisimula…",
     "capturePhoneStorageFull": "Puno na ang storage ng telepono",
     "captureStorageAlmostFull": "Halos puno na ang storage",
-    "capturePendantDisconnectedDetail": "Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.",
     "participantsSummaryUncounted": "{name} at iba pa",
     "deviceOnboardingVoiceReplyTitle": "Pakinggan ang mga sagot ni Omi",
     "deviceOnboardingVoiceReplySample": "Nakuha ko. Magsisimula ang susunod mong meeting sa loob ng dalawampung minuto.",
@@ -11204,7 +11203,6 @@
     "playbackAudioUnavailable": "Hindi Magagamit ang Audio",
     "playbackAudioLoadFailed": "Hindi Ma-load ang Audio",
     "playbackAudioNetworkFailed": "Suriin ang Koneksyon",
-    "capturePendantDisconnectedShort": "Kusang kokonekta muli ang Omi",
     "forYou": "Para Sa Iyo",
     "stopThese": "Itigil Ang Mga Ito",
     "dismiss": "Isara",
@@ -11816,6 +11814,11 @@
     "episodeSoFar": "Sa ngayon",
     "episodeUpdatedJustNow": "Na-update ngayon lang · buong tala kapag natapos",
     "episodeUpdatedMinutesAgo": "Na-update {minutes} min ang nakalipas · buong tala kapag natapos",
+    "episodeNotesUnavailable": "Hindi nag-a-update ang mga live na tala. Tingnan muna ang transcript.",
+    "episodeCaptureFor": "Nagre-record · {duration}",
+    "episodePrevious": "Nakaraang episode",
+    "captureChunksPending": "Mga nakabinbing chunk: {pending}",
+    "episodeOpenPrevious": "Buksan ang Nakaraang Episode",
     "episodeNotesSoon": "Lalabas ang mga tala pagkatapos ng unang ilang minuto ng usapan.",
     "episodeOpenAll": "Buksan Lahat",
     "episodeWrapUpNow": "Tapusin Ngayon",
@@ -11851,5 +11854,6 @@
     "recapInTheBackground": "Sa background",
     "retentionOfferAccept": "Manatili nang may {percent}% diskwento",
     "retentionOfferBody": "Manatili at magbayad ng {price} kada buwan sa susunod na {months} buwan.",
-    "retentionOfferApplied": "Tapos na. {percent}% diskwento sa susunod na {months} buwan."
+    "retentionOfferApplied": "Tapos na. {percent}% diskwento sa susunod na {months} buwan.",
+    "othersSpeakerLabel": "Iba pa"
 }

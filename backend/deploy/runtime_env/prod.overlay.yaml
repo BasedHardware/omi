@@ -55,6 +55,9 @@ overlay:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '0'
+          value: '0'
+        AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
+          value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
@@ -74,7 +77,7 @@ overlay:
         STT_ROUTING_MODE:
           value: 'on'
         STT_ROUTING_ON_PERCENT:
-          value: '90'
+          value: '100'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
           value: '100'
         PARAKEET_WINDOW_MAX_SESSIONS:
@@ -199,10 +202,6 @@ overlay:
           config_map:
             name: prod-omi-backend-config
             key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
-        SERVICE_ACCOUNT_JSON:
-          secret:
-            name: prod-omi-backend-secrets
-            key: SERVICE_ACCOUNT_JSON
         OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
           value: 'true'
           category: rollout
@@ -229,6 +228,9 @@ overlay:
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+          value: '0'
+          value: '0'
+        AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
@@ -473,6 +475,9 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
+            value: '0'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
@@ -786,6 +791,9 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
+            value: '0'
             value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
@@ -1136,6 +1144,9 @@ overlay:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '0'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
+            value: '0'
+            value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
             category: rollout
@@ -1480,6 +1491,9 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
+            value: '0'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me

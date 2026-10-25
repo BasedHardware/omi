@@ -3503,7 +3503,6 @@
     "captureStarting": "Startet…",
     "capturePhoneStorageFull": "Telefonspeicher voll",
     "captureStorageAlmostFull": "Speicher fast voll",
-    "capturePendantDisconnectedDetail": "Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher.",
     "participantsSummaryUncounted": "{name} und weitere",
     "deviceOnboardingVoiceReplyTitle": "Omis Antworten anhören",
     "deviceOnboardingVoiceReplySample": "Alles klar. Dein nächstes Meeting beginnt in zwanzig Minuten.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "Audio nicht verfügbar",
     "playbackAudioLoadFailed": "Audio konnte nicht geladen werden",
     "playbackAudioNetworkFailed": "Verbindung prüfen",
-    "capturePendantDisconnectedShort": "Omi verbindet sich von selbst neu",
     "forYou": "Für dich",
     "stopThese": "Diese stoppen",
     "dismiss": "Ausblenden",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "Bisher",
     "episodeUpdatedJustNow": "Gerade aktualisiert · vollständige Notizen zum Schluss",
     "episodeUpdatedMinutesAgo": "Vor {minutes} Min. aktualisiert · vollständige Notizen zum Schluss",
+    "episodeNotesUnavailable": "Die laufenden Notizen werden nicht aktualisiert. Sieh dir vorerst das Transkript an.",
+    "episodeCaptureFor": "Aufnahme · {duration}",
+    "episodePrevious": "Vorherige Episode",
+    "captureChunksPending": "Ausstehende Abschnitte: {pending}",
+    "episodeOpenPrevious": "Vorherige Episode öffnen",
     "episodeNotesSoon": "Notizen erscheinen nach den ersten Gesprächsminuten.",
     "episodeOpenAll": "Alles öffnen",
     "episodeWrapUpNow": "Jetzt abschließen",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "Im Hintergrund",
     "retentionOfferAccept": "Bleiben mit {percent}% Rabatt",
     "retentionOfferBody": "Bleib und zahle {price} pro Monat für die nächsten {months} Monate.",
-    "retentionOfferApplied": "Erledigt. {percent}% Rabatt für die nächsten {months} Monate."
+    "retentionOfferApplied": "Erledigt. {percent}% Rabatt für die nächsten {months} Monate.",
+    "othersSpeakerLabel": "Andere"
 }

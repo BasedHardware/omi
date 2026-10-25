@@ -11200,13 +11200,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get captureStorageAlmostFull => 'சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi தானாகவே மீண்டும் இணையும்';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name மற்றும் மற்றவர்கள்';
   }
@@ -14518,6 +14511,26 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable =>
+      'நடப்பு குறிப்புகள் புதுப்பிக்கப்படவில்லை. இப்போதைக்கு உரைப்பதிவைப் பார்க்கவும்.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'பதிவு செய்கிறது · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'முந்தைய பகுதி';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'நிலுவையில் உள்ள துண்டுகள்: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'முந்தைய பகுதியைத் திறக்கவும்';
+
+  @override
   String get episodeNotesSoon => 'பேச்சின் முதல் சில நிமிடங்களுக்குப் பிறகு குறிப்புகள் தோன்றும்.';
 
   @override
@@ -14655,4 +14668,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'முடிந்தது. $percent% தள்ளுபடி, அடுத்த $months மாதங்களுக்கு.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'மற்றவர்கள்';
 }

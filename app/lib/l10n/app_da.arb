@@ -3545,7 +3545,6 @@
     "captureStarting": "Starter…",
     "capturePhoneStorageFull": "Telefonens lager er fuldt",
     "captureStorageAlmostFull": "Lageret er næsten fuldt",
-    "capturePendantDisconnectedDetail": "Dit vedhæng mistede forbindelsen til denne telefon. Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden. Alt optaget før dette er i sikkerhed.",
     "participantsSummaryUncounted": "{name} og andre",
     "deviceOnboardingVoiceReplyTitle": "Hør Omis svar",
     "deviceOnboardingVoiceReplySample": "Det er klaret. Dit næste møde begynder om tyve minutter.",
@@ -3823,7 +3822,6 @@
     "playbackAudioUnavailable": "Lyd ikke tilgængelig",
     "playbackAudioLoadFailed": "Lyden kunne ikke indlæses",
     "playbackAudioNetworkFailed": "Tjek forbindelsen",
-    "capturePendantDisconnectedShort": "Omi genopretter forbindelsen af sig selv",
     "forYou": "Til dig",
     "stopThese": "Stop disse",
     "dismiss": "Afvis",
@@ -4432,6 +4430,11 @@
     "episodeSoFar": "Indtil videre",
     "episodeUpdatedJustNow": "Opdateret lige nu · fulde noter når det slutter",
     "episodeUpdatedMinutesAgo": "Opdateret for {minutes} min. siden · fulde noter når det slutter",
+    "episodeNotesUnavailable": "Løbende noter opdateres ikke. Se transskriptionen indtil videre.",
+    "episodeCaptureFor": "Optager · {duration}",
+    "episodePrevious": "Forrige episode",
+    "captureChunksPending": "Afventende dele: {pending}",
+    "episodeOpenPrevious": "Åbn forrige episode",
     "episodeNotesSoon": "Noterne vises efter de første minutters snak.",
     "episodeOpenAll": "Åbn alle",
     "episodeWrapUpNow": "Afslut nu",
@@ -4467,5 +4470,6 @@
     "recapInTheBackground": "I baggrunden",
     "retentionOfferAccept": "Bliv for {percent}% rabat",
     "retentionOfferBody": "Bliv og betal {price} om måneden de næste {months} måneder.",
-    "retentionOfferApplied": "Færdig. {percent}% rabat de næste {months} måneder."
+    "retentionOfferApplied": "Færdig. {percent}% rabat de næste {months} måneder.",
+    "othersSpeakerLabel": "Andre"
 }

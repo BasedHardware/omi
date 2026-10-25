@@ -92,7 +92,9 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     final topics = named.isEmpty ? EpisodePresentation.topics(episode) : '';
     final peopleNamed = _peopleCount(capture);
     // Paused (or waiting) shows no clock: a time that keeps counting while nothing listens misleads.
-    final status = listening ? l10n.episodeLiveFor(elapsed) : captureStateLabel(l10n, state);
+    final status = listening
+        ? (episode == null ? l10n.episodeCaptureFor : l10n.episodeLiveFor)(elapsed)
+        : captureStateLabel(l10n, state);
     final rest = [
       status,
       if (peopleNamed >= 2) l10n.peopleCount(peopleNamed),
@@ -111,58 +113,60 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
 
     return Padding(
       padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
-      child: Semantics(
-        button: true,
-        liveRegion: true,
-        label: '$title, $rest',
-        onTap: open,
-        excludeSemantics: true,
-        child: Material(
-          key: const Key('home_live_episode_row'),
-          // Outlined, not filled: the one row still happening reads as distinct from finished
-          // ones without a colored tile.
-          color: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: OmiRadius.xlAll, side: BorderSide(color: OmiColors.border)),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: open,
-            child: Padding(
-              padding: const EdgeInsetsDirectional.fromSTEB(14, 14, 10, 14),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      borderRadius: OmiRadius.mdAll,
-                      border: Border.all(color: OmiColors.border),
+      child: CaptureStateAnnouncement(
+        message: listening ? l10n.episodeListeningNow : captureStateLabel(l10n, state),
+        child: Semantics(
+          button: true,
+          label: '$title, $rest',
+          onTap: open,
+          excludeSemantics: true,
+          child: Material(
+            key: const Key('home_live_episode_row'),
+            // Outlined, not filled: the one row still happening reads as distinct from finished
+            // ones without a colored tile.
+            color: Colors.transparent,
+            shape: RoundedRectangleBorder(borderRadius: OmiRadius.xlAll, side: BorderSide(color: OmiColors.border)),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: open,
+              child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(14, 14, 10, 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        borderRadius: OmiRadius.mdAll,
+                        border: Border.all(color: OmiColors.border),
+                      ),
+                      child: OmiBreathingDot(live: listening),
                     ),
-                    child: OmiBreathingDot(live: listening),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: Theme.of(context).textTheme.titleMedium,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          rest,
-                          style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: Theme.of(context).textTheme.titleMedium,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            rest,
+                            style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  Icon(Icons.chevron_right_rounded, color: OmiColors.textDisabled),
-                ],
+                    Icon(Icons.chevron_right_rounded, color: OmiColors.textDisabled),
+                  ],
+                ),
               ),
             ),
           ),

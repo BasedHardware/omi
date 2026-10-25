@@ -268,7 +268,8 @@ async def test_disconnected_conversation_buffer_respects_max_pending_requests():
     assert list(session.pending_conversation_requests.keys()) == ["conv-2", "conv-3"]
 
 
-def test_bounded_audio_and_transcript_buffers():
+def test_emergency_legacy_bounded_audio_and_transcript_buffers(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     session = make_session(config_overrides={"max_segment_buffer_size": 2, "max_audio_buffer_size": 5})
 
     session.transcript_send([{"id": "seg-1"}, {"id": "seg-2"}, {"id": "seg-3"}])
@@ -284,6 +285,34 @@ def test_bounded_audio_and_transcript_buffers():
     session.audio_bytes_send(b"123456789", received_at=3.0)
     assert b"".join(run.data for run in session.audio_runs) == b"56789"
     assert session.audio_total_size == 5
+
+
+def test_default_audio_pressure_retains_prefix_and_unacknowledged_input(monkeypatch):
+    monkeypatch.delenv('AUDIO_DURABLE_OUTBOX_ENABLED', raising=False)
+    session = make_session(config_overrides={'max_audio_buffer_size': 5})
+    session.audio_bytes_send(b'abc', received_at=1)
+    with pytest.raises(pusher_session.AudioBackpressure) as error:
+        session.audio_bytes_send(b'def', received_at=2)
+    assert error.value.pending == b'def'
+    assert [run.data for run in session.audio_runs] == [b'abc']
+    assert session.audio_total_size == 3
+
+
+@pytest.mark.anyio
+async def test_audio_socket_send_cannot_clear_pcm_before_archive_barrier(monkeypatch):
+    monkeypatch.delenv('AUDIO_DURABLE_OUTBOX_ENABLED', raising=False)
+    ws = FakePusherWebSocket()
+
+    async def refused():
+        raise OSError('durable storage unavailable')
+
+    session = make_session(ws=ws, deps_overrides={'ensure_audio_durable': refused})
+    await session.connect()
+    session.audio_bytes_send(b'abcd', received_at=1)
+    with pytest.raises(OSError):
+        await session._audio_bytes_flush()
+    assert not ws.sent
+    assert [run.data for run in session.audio_runs] == [b'abcd']
 
 
 @pytest.mark.anyio

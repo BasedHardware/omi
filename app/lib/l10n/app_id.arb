@@ -3538,7 +3538,6 @@
     "captureStarting": "Memulai…",
     "capturePhoneStorageFull": "Penyimpanan ponsel penuh",
     "captureStorageAlmostFull": "Penyimpanan hampir penuh",
-    "capturePendantDisconnectedDetail": "Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.",
     "participantsSummaryUncounted": "{name} dan lainnya",
     "deviceOnboardingVoiceReplyTitle": "Dengarkan jawaban Omi",
     "deviceOnboardingVoiceReplySample": "Baik. Rapat Anda berikutnya dimulai dua puluh menit lagi.",
@@ -3816,7 +3815,6 @@
     "playbackAudioUnavailable": "Audio Tidak Tersedia",
     "playbackAudioLoadFailed": "Audio Tidak Dapat Dimuat",
     "playbackAudioNetworkFailed": "Periksa Koneksi",
-    "capturePendantDisconnectedShort": "Omi akan menyambung kembali sendiri",
     "forYou": "Untuk Anda",
     "stopThese": "Hentikan Ini",
     "dismiss": "Tutup",
@@ -4425,6 +4423,11 @@
     "episodeSoFar": "Sejauh ini",
     "episodeUpdatedJustNow": "Baru diperbarui · catatan lengkap saat selesai",
     "episodeUpdatedMinutesAgo": "Diperbarui {minutes} mnt lalu · catatan lengkap saat selesai",
+    "episodeNotesUnavailable": "Catatan langsung tidak diperbarui. Lihat transkrip untuk sementara.",
+    "episodeCaptureFor": "Merekam · {duration}",
+    "episodePrevious": "Episode sebelumnya",
+    "captureChunksPending": "Bagian tertunda: {pending}",
+    "episodeOpenPrevious": "Buka Episode Sebelumnya",
     "episodeNotesSoon": "Catatan muncul setelah beberapa menit pertama percakapan.",
     "episodeOpenAll": "Buka Semua",
     "episodeWrapUpNow": "Selesaikan Sekarang",
@@ -4460,5 +4463,6 @@
     "recapInTheBackground": "Di latar belakang",
     "retentionOfferAccept": "Tetap dengan diskon {percent}%",
     "retentionOfferBody": "Tetap dan bayar {price} per bulan selama {months} bulan ke depan.",
-    "retentionOfferApplied": "Selesai. Diskon {percent}% untuk {months} bulan ke depan."
+    "retentionOfferApplied": "Selesai. Diskon {percent}% untuk {months} bulan ke depan.",
+    "othersSpeakerLabel": "Lainnya"
 }

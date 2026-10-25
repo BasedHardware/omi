@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:http/http.dart' as http;
 
@@ -11,6 +12,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/services/chat_video_sampler.dart';
 import 'package:omi/services/device_tools/device_tool_dispatcher.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/other/string_utils.dart';
 import 'package:path/path.dart' as p;
 
@@ -56,6 +58,25 @@ class ChatPageContext {
   }
 }
 
+const messageHistoryBackgroundParseBytes = 64 * 1024;
+
+List<ServerMessage> decodeMessageHistory(String body) => (jsonDecode(body) as List<dynamic>)
+    .map((message) => ServerMessage.fromGeneratedWireJson(message as Map<String, dynamic>))
+    .toList();
+
+@visibleForTesting
+List<ServerMessage> Function(String) messageHistoryDecoder = decodeMessageHistory;
+
+Future<List<ServerMessage>> parseMessageHistory(String body) {
+  final decoder = messageHistoryDecoder;
+  return offUiIsolate(
+    () => decoder(body),
+    size: body.length,
+    threshold: messageHistoryBackgroundParseBytes,
+    debugName: 'message_history_parse',
+  );
+}
+
 Future<List<ServerMessage>> getMessagesServer({
   String? appId,
   bool dropdownSelected = false,
@@ -73,9 +94,7 @@ Future<List<ServerMessage>> getMessagesServer({
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var messages = (jsonDecode(body) as List<dynamic>)
-        .map((message) => ServerMessage.fromGeneratedWireJson(message as Map<String, dynamic>))
-        .toList();
+    var messages = await parseMessageHistory(body);
     if (messages.isEmpty) {
       return [];
     }

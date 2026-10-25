@@ -11172,13 +11172,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get captureStorageAlmostFull => 'Spațiul e aproape plin';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi se va reconecta singur';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name și alții';
   }
@@ -14482,6 +14475,25 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Notițele live nu se actualizează. Consultați transcrierea deocamdată.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Înregistrare · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episodul anterior';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Fragmente în așteptare: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Deschide episodul anterior';
+
+  @override
   String get episodeNotesSoon => 'Notițele apar după primele minute de conversație.';
 
   @override
@@ -14618,4 +14630,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Gata. $percent% reducere în următoarele $months luni.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Alții';
 }

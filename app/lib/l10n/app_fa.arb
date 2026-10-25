@@ -10926,7 +10926,6 @@
     "captureStarting": "در حال شروع…",
     "capturePhoneStorageFull": "حافظه تلفن پر است",
     "captureStorageAlmostFull": "حافظه تقریباً پر است",
-    "capturePendantDisconnectedDetail": "آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.",
     "participantsSummaryUncounted": "{name} و دیگران",
     "deviceOnboardingVoiceReplyTitle": "پاسخ‌های Omi را بشنوید",
     "deviceOnboardingVoiceReplySample": "انجام شد. جلسه بعدی شما بیست دقیقه دیگر شروع می‌شود.",
@@ -11204,7 +11203,6 @@
     "playbackAudioUnavailable": "صدا در دسترس نیست",
     "playbackAudioLoadFailed": "بارگیری صدا ممکن نشد",
     "playbackAudioNetworkFailed": "اتصال را بررسی کنید",
-    "capturePendantDisconnectedShort": "Omi خودش دوباره وصل می‌شود",
     "forYou": "برای شما",
     "stopThese": "توقف این موارد",
     "dismiss": "رد کردن",
@@ -11816,6 +11814,11 @@
     "episodeSoFar": "تا اینجا",
     "episodeUpdatedJustNow": "همین حالا به‌روز شد · یادداشت کامل در پایان",
     "episodeUpdatedMinutesAgo": "{minutes} دقیقه پیش به‌روز شد · یادداشت کامل در پایان",
+    "episodeNotesUnavailable": "یادداشت‌های زنده به‌روز نمی‌شوند. فعلاً متن پیاده‌شده را ببینید.",
+    "episodeCaptureFor": "در حال ضبط · {duration}",
+    "episodePrevious": "قسمت قبلی",
+    "captureChunksPending": "قطعه‌های در انتظار: {pending}",
+    "episodeOpenPrevious": "باز کردن قسمت قبلی",
     "episodeNotesSoon": "یادداشت‌ها پس از چند دقیقهٔ اول گفت‌وگو نمایش داده می‌شوند.",
     "episodeOpenAll": "باز کردن همه",
     "episodeWrapUpNow": "اکنون جمع‌بندی کن",
@@ -11851,5 +11854,6 @@
     "recapInTheBackground": "در پس‌زمینه",
     "retentionOfferAccept": "با {percent}% تخفیف بمانید",
     "retentionOfferBody": "بمانید و ماهانه {price} بپردازید، برای {months} ماه آینده.",
-    "retentionOfferApplied": "انجام شد. {percent}% تخفیف برای {months} ماه آینده."
+    "retentionOfferApplied": "انجام شد. {percent}% تخفیف برای {months} ماه آینده.",
+    "othersSpeakerLabel": "دیگران"
 }

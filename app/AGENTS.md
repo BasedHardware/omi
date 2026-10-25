@@ -1,7 +1,8 @@
-# App (Flutter) — Operational Playbook
+# App (Flutter)
 
-Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
-UI rules: [docs/ux-contract.md](docs/ux-contract.md).
+UI: [contract](docs/ux-contract.md).
+
+Speakers: `SpeakerNames`/`DiarizationLabel` (`lib/ui/format/`); `EpisodePresentation.participants` counts names.
 
 ## Build Bootstrap
 
@@ -101,7 +102,7 @@ make mobile-verify ARGS="fast --all"                   # full hermetic journey s
 
 Native: `ruby ios/test/batch_audio_energy_test.rb`; [phone/BLE replay](../scripts/dev-harness/IPHONE_HARNESS.md).
 
-CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
+Before shipping UI changes, run `bash app/tool/perf_gate.sh`. Red means regression or missing evidence: fix the cause, never raise budgets. [Perf guide](integration_test/perf/README.md).
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable

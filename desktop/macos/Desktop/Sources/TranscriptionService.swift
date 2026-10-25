@@ -454,6 +454,16 @@ class TranscriptionService: @unchecked Sendable {
     return [URLQueryItem(name: "screen_evidence", value: "enabled")]
   }
 
+  /// The desktop detector owns meeting boundaries, including its quiet resume hold.
+  /// Cover input-only sustain and the resume window with margin, while a dropped
+  /// socket must not leave a backend conversation open for the four-hour maximum.
+  /// Normal desktop socket close still finalizes immediately; ambient retains the 120s default.
+  static func conversationLifetimeQueryItems(role: MeetingConversationBoundaryPolicy.Role) -> [URLQueryItem] {
+    role == .meeting
+      ? [URLQueryItem(name: "conversation_timeout", value: String(Int(MeetingDetectionTiming.conversationTimeout)))]
+      : []
+  }
+
   private func connectToBackend(authHeader: String) {
     let base = Self.pythonBackendBaseURL
       .replacingOccurrences(of: "https://", with: "wss://")
@@ -481,6 +491,7 @@ class TranscriptionService: @unchecked Sendable {
         items.append(URLQueryItem(name: "client_conversation_id", value: clientConversationId))
       }
       items.append(URLQueryItem(name: "conversation_role", value: conversationRole.rawValue))
+      items += Self.conversationLifetimeQueryItems(role: conversationRole)
       items += Self.screenEvidenceQueryItems(
         role: conversationRole, screenshotsEnabled: MeetingNoteScreenshotsFeature.isEnabled)
       queryItems = items

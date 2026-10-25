@@ -11033,13 +11033,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get captureStorageAlmostFull => 'האחסון כמעט מלא';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi יתחבר מחדש מעצמו';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name ואחרים';
   }
@@ -14317,6 +14310,25 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'ההערות בזמן אמת אינן מתעדכנות. בינתיים אפשר לצפות בתמלול.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'הקלטה · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'הפרק הקודם';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'מקטעים ממתינים: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'פתח את הפרק הקודם';
+
+  @override
   String get episodeNotesSoon => 'ההערות יופיעו אחרי הדקות הראשונות של השיחה.';
 
   @override
@@ -14453,4 +14465,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'בוצע. $percent% הנחה ב-$months החודשים הבאים.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'אחרים';
 }

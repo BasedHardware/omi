@@ -11121,13 +11121,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get captureStorageAlmostFull => 'Lagringen er nesten full';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Anhenget mistet forbindelsen til denne telefonen. Omi kobler til igjen av seg selv når anhenget er på og i nærheten. Alt som ble tatt opp før dette, er trygt.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi kobler til igjen av seg selv';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name og andre';
   }
@@ -14424,6 +14417,25 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Løpende notater oppdateres ikke. Se transkripsjonen foreløpig.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Tar opp · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Forrige episode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Ventende deler: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Åpne forrige episode';
+
+  @override
   String get episodeNotesSoon => 'Notatene vises etter de første minuttene av samtalen.';
 
   @override
@@ -14560,4 +14572,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Ferdig. $percent % rabatt de neste $months månedene.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Andre';
 }

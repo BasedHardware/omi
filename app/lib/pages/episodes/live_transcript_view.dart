@@ -97,9 +97,10 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
             const HeldAudioLiveBanner(),
             if (provider.localSttFailure case final failure?)
               LocalSttRecoveryNotice(
-                  failure: failure,
-                  onRetry: provider.retryLocalTranscription,
-                  onSetup: () => routeToPage(context, const TranscriptionSettingsPage())),
+                failure: failure,
+                onRetry: provider.retryLocalTranscription,
+                onSetup: () => routeToPage(context, const TranscriptionSettingsPage()),
+              ),
             _buildUnsyncedWalIndicator(provider),
             Expanded(
               child: provider.segments.isEmpty && provider.photos.isEmpty
@@ -174,7 +175,8 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       // list, while its old delegate still has the previous itemCount. Keep one
       // membership snapshot for that delegate, its names and decorations.
       _timelineSegments = List<TranscriptSegment>.of(provider.segments);
-      _timelineNames = SpeakerNames.forSegments(_timelineSegments!, people: people, l10n: context.l10n);
+      _timelineNames =
+          SpeakerNames.forSegments(_timelineSegments!, people: people, l10n: context.l10n, deferShortVoices: true);
       _timelineDecorations = LiveTranscriptDecorations.of(widget.episode, conversationId, _timelineSegments!);
       _timelinePhotos = List<ConversationPhoto>.from(provider.photos)
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
@@ -617,10 +619,10 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     final seconds = totalSeconds % 60;
     final label = minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';
 
-    // Queued-recordings count ("pending X/Y"): only meaningful once there is a
-    // queue — a single unsynced recording is already named by the duration line.
+    // Count only missing chunks. The session total includes already synced chunks and
+    // is not a queue length or a count of server transcription jobs.
     final backlog = provider.sessionTranscriptionBacklogCounts;
-    final showBacklogCount = backlog.total >= 2 && backlog.pending >= 1;
+    final showBacklogCount = backlog.pending >= 1;
 
     // The indicator names the worst outcome across the session's WALs so it
     // can say what happens next, instead of always claiming a healthy local
@@ -678,12 +680,11 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
               ],
             ],
           ),
-          // How many queued recordings are still waiting for transcription out
-          // of the session's total, so a drain after an outage reads as progress.
+          // Missing phone WAL chunks; the session total also includes already synced audio.
           if (showBacklogCount) ...[
             const SizedBox(height: 4),
             Text(
-              context.l10n.transcriptionsPendingFraction(backlog.pending, backlog.total),
+              context.l10n.captureChunksPending(backlog.pending),
               style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
             ),
           ],

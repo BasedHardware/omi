@@ -14,6 +14,7 @@ from llm_gateway.gateway.accounting import rate_card_for
 
 from utils.conversations import notes_agent_tools as tools
 from utils.conversations.screen_people_leads import screen_people_leads
+from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
 from utils.llm import conversation_processing as notes
 from utils.llm import notes_agent as agent
 from utils.llm import notes_agent_policy as policy
@@ -23,6 +24,7 @@ from utils.llm import shaped_agent
 from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.llm.notes_output_contract import check_notes, nested_bullet_count, repair_notes
+from utils.llm.notes_identity import NotesIdentity
 
 FIXTURE = Path(__file__).parent / 'fixtures' / 'notes_agent' / 'weekly_sync_replay.json'
 OWNER = 'synthetic-owner'
@@ -530,6 +532,7 @@ def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
     monkeypatch.setattr(serving, 'langchain_complete', fake_complete)
     monkeypatch.setattr(serving, 'isolated_notes_model', isolated)
     monkeypatch.setattr(serving, 'owner_profile', lambda uid: 'Founder of a hardware startup.')
+    monkeypatch.setattr(tools, 'gather_prior_meetings', lambda *args, **kwargs: [])
     monkeypatch.setattr(tools.calendar_db, 'get_meetings_in_time_range', lambda *a, **k: [])
     monkeypatch.setattr(tools.screen_activity_db, 'get_screen_activity', lambda *a, **k: [])
     monkeypatch.setattr(tools, 'load_people_documents', lambda uid: [{'id': 'p1', 'name': 'Maya Okafor'}])
@@ -544,6 +547,7 @@ def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
         task_intelligence_capture=False,
         existing_action_items=[{'description': 'Follow up on Quorbi pilot pricing'}],
         screen_frames=(frame,),
+        roster=MeetingRoster((RosterEntry('Maya Okafor', None, None, 'human', 'screen_activity'),), None, False),
         rich_context_enabled=False,
     )
     assert structured.title.startswith('Maya Okafor')
@@ -733,3 +737,103 @@ def test_v2_retains_one_shot_fallback_when_no_usable_submission_exists():
     )
     result = run_agent(complete, budget, contract_v2=True)
     assert result.submission is None and 'salvaged_submission' not in result.repairs
+
+
+@pytest.mark.parametrize('contract_v2', [False, True])
+@pytest.mark.parametrize('enabled', [False, True])
+def test_people_only_speaker_binding_is_rejected_then_sanitized_at_budget_exhaustion(contract_v2, enabled, monkeypatch):
+    monkeypatch.setenv('SPEAKER_IDENTITY_REPAIR_ENABLED', 'on' if enabled else 'off')
+    repairs = []
+    monkeypatch.setattr(agent, 'record_identity_repair', lambda: repairs.append(True))
+    bad = submission(
+        title='Michael Liebmann: agents',
+        overview='Michael Liebmann proposed agents.',
+        participants=[
+            {'name': 'Michael Liebmann', 'speaker': 'c1', 'evidence_kind': 'people', 'evidence': 'People match'}
+        ],
+        sections=[{'heading': 'Agents', 'body_markdown': '- Michael proposed an agent.'}],
+    )
+
+    async def complete(messages, tool_choice):
+        return agent.CompletionTurn(tool_calls=[call(prompt.SUBMIT, bad)])
+
+    result = run_agent(
+        complete,
+        policy.NotesAgentBudget(max_turns=2, min_tool_calls=0, max_tool_calls=2),
+        words=20,
+        contract_v2=contract_v2,
+        identity=NotesIdentity(speaker_names=(('c1', None),)),
+    )
+    if not enabled:
+        assert result.submission is not None
+        assert result.submission['participants'][0]['name'] == 'Michael Liebmann'
+        assert result.submission['overview'] == bad['overview']
+        assert result.rejections == []
+        assert repairs == []
+        return
+    assert any('Unsupported speaker identity' in rejection for rejection in result.rejections)
+    assert result.submission is not None
+    assert result.submission['participants'] == []
+    assert 'Michael' not in str(result.submission)
+    assert repairs == [True]
+
+
+def test_people_only_binding_cannot_escape_through_salvaged_submission():
+    turns = []
+
+    async def complete(messages, tool_choice):
+        turns.append(messages)
+        if len(turns) > 1:
+            raise TimeoutError('synthetic deadline')
+        return agent.CompletionTurn(
+            tool_calls=[
+                call(
+                    prompt.SUBMIT,
+                    submission(
+                        title='Michael Liebmann: agents',
+                        overview='Michael proposed agents.',
+                        participants=[{'name': 'Michael Liebmann', 'speaker': 'c1', 'evidence': 'People match'}],
+                        sections=[{'heading': 'Agents', 'body_markdown': '- Michael proposed agents.'}],
+                    ),
+                )
+            ]
+        )
+
+    result = run_agent(
+        complete,
+        policy.NotesAgentBudget(max_turns=2, min_tool_calls=0, max_tool_calls=2),
+        words=20,
+        contract_v2=True,
+        identity=NotesIdentity(),
+    )
+    assert 'salvaged_submission' in result.repairs
+    assert 'Michael' not in str(result.submission)
+
+
+def test_people_lookup_never_authorizes_identity_but_overlapping_calendar_does(toolbox, monkeypatch):
+    box, _ = toolbox
+    box.identity = NotesIdentity()
+    found = run(box.call('search_people', {'query': 'Maya'}))
+    assert json.loads(found.content)['people'][0]['name'] == 'Maya Okafor'
+    assert box.identity == NotesIdentity()
+    assert not box.identity.supported('Maya Okafor')
+    meetings = [
+        {
+            'start_time': START - timedelta(days=1),
+            'end_time': START - timedelta(days=1) + timedelta(minutes=30),
+            'participants': [{'name': 'Historical Person'}],
+        },
+        {'start_time': START, 'end_time': START + timedelta(minutes=30), 'participants': [{'name': 'Maya Okafor'}]},
+    ]
+    monkeypatch.setattr(tools.calendar_db, 'get_meetings_in_time_range', lambda *a, **kw: meetings)
+    run(box.call('get_calendar', {}))
+    assert box.identity.supported('Maya Okafor')
+    assert not box.identity.supported('Historical Person')
+
+
+def test_call_window_identity_requires_a_sighting_during_this_conversation():
+    during = screen_people_leads(CALL_ROWS, started_at=START, finished_at=START + timedelta(minutes=30))
+    assert during[0]['call_seen_during_conversation']
+    earlier = [{**CALL_ROWS[0], 'timestamp': (START - timedelta(minutes=2)).isoformat()}]
+    before = screen_people_leads(earlier, started_at=START, finished_at=START + timedelta(minutes=30))
+    assert not before[0].get('call_seen_during_conversation')

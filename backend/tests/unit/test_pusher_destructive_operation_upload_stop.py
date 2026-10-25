@@ -67,6 +67,7 @@ def _audio_frame(conversation: str = 'conversation') -> bytes:
 
 @pytest.fixture
 def runtime(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
     monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)

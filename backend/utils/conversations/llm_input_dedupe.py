@@ -86,6 +86,7 @@ def implementation_digest(feature: str) -> str:
         'llm/notes_lengths.py',
         'llm/notes_effort.py',
         'llm/notes_output_contract.py',
+        'llm/notes_identity.py',
         'llm/output_language.py',
         'llm/speaker_evidence_prompt.py',
         'llm/notes_short_clip.py',

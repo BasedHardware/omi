@@ -11169,13 +11169,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get captureStorageAlmostFull => 'స్టోరేజ్ దాదాపు నిండింది';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name మరియు ఇతరులు';
   }
@@ -14479,6 +14472,25 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'ప్రస్తుత గమనికలు నవీకరించబడటం లేదు. ప్రస్తుతానికి లిప్యంతరీకరణను చూడండి.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'రికార్డింగ్ · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'మునుపటి ఎపిసోడ్';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'పెండింగ్‌లో ఉన్న భాగాలు: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'మునుపటి ఎపిసోడ్‌ను తెరవండి';
+
+  @override
   String get episodeNotesSoon => 'మాటల మొదటి కొన్ని నిమిషాల తర్వాత నోట్స్ కనిపిస్తాయి.';
 
   @override
@@ -14616,4 +14628,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'పూర్తైంది. $percent% తగ్గింపు, తదుపరి $months నెలలు.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'ఇతరులు';
 }

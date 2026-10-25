@@ -78,6 +78,19 @@ PUSHER_QUEUE_DROPS = Counter(
     ['queue'],
 )
 
+# Alert selectors must exist before the first loss, including emergency rollback.
+for _pusher_queue in (
+    'speaker_sample',
+    'transcript',
+    'audio_bytes',
+    'private_cloud',
+    'private_cloud_buffer',
+    'private_cloud_pending',
+    'audio_app_buffer',
+    'audio_webhook_buffer',
+):
+    PUSHER_QUEUE_DROPS.labels(queue=_pusher_queue).inc(0)
+
 PUSHER_QUEUE_DROPPED_BYTES = Counter(
     'pusher_queue_dropped_bytes_total',
     'Pusher queue bytes dropped by bounded queue name',
@@ -273,6 +286,19 @@ OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL = Counter(
     'omi_audio_timeline_chunks_written_total',
     'Successful audio chunk upload completions, by span metadata presence; an idempotent retry can complete the same object more than once',
     ['reason'],
+)
+# GCS-4: all-zero private-cloud runs skipped at enqueue. Readers zero-fill
+# gaps between objects with the same bytes, so an all-zero run stored as its
+# own object is audio-identical to the gap it would leave behind.
+PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL = Counter(
+    'pusher_silent_run_flushes_skipped_total',
+    'All-zero private-cloud runs not enqueued; their bytes are reproduced by gap fill on read',
+)
+# GCS-3b: span uploads that skipped the replay-reconcile listing because the
+# session ledger showed no replay for that conversation.
+PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL = Counter(
+    'pusher_reconcile_lists_skipped_total',
+    'Private-cloud span uploads that skipped the per-flush replay-reconcile listing',
 )
 OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL = Counter(
     'omi_listen_pusher_audio_discarded_bytes_total',
@@ -1079,13 +1105,13 @@ OMI_STT_PROVIDER_CIRCUIT_OPEN = Gauge(
 # (connection_lost, send_failed, ...) or the connect-failure reason that
 # reached the threshold. error_class uses the shared live-reason vocabulary;
 # 'untyped' covers trips whose caller could not name a cause. Re-arming an
-# already-open breaker does not count. The gauge above shows state; this
-# counter answers WHY it tripped (P34 2026-10-21: Parakeet selection breakers
-# tripped on 2-10 of 40 listen pods per 10m with the cause unlogged).
+# already-open breaker does not count. reason groups the bounded cause into
+# auth/quota/5xx/latency/no_text/connect, with capacity/unknown kept explicit.
+# The gauge shows current state; this counter shows why it tripped.
 OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL = Counter(
     'omi_stt_provider_circuit_trip_total',
     'STT provider breaker transitions into open by bounded cause (serve-death or connect-failure reason)',
-    ['provider', 'kind', 'error_class'],
+    ['provider', 'kind', 'error_class', 'reason'],
 )
 
 # Per-provider live-STT connection attempts on every connect path (legacy order
@@ -1373,6 +1399,20 @@ OMI_SUBSCRIPTION_EVENTS = Counter(
     'deliveries, which Stripe may retry, so treat these as an operational trend '
     'signal rather than a billing-grade figure; Stripe remains source of truth.',
     ['event', 'plan', 'interval', 'reason'],
+)
+
+OMI_NEW_BUYER_CHECKOUT_REJECTED = Counter(
+    'omi_new_buyer_checkout_rejected_total',
+    'Single-plan guard outcomes on checkout-session for a buyer with no '
+    'current paid subscription posting a price outside the Omi Pro '
+    "(unlimited_v2) catalog, by reason and the target price's plan. Reasons: "
+    "`non_omi_pro_price` counts rejections on explicitly non-desktop platforms "
+    '(mobile/web); `unknown_platform_allowed` counts legacy prices ALLOWED '
+    'because the platform header is missing/unknown (pre-ruling behaviour '
+    'retained for those callers — an allowance count, not a rejection; do not '
+    'sum reasons blindly). The closed label surfaces and zero-initialization '
+    'live next to the recorder in utils.subscription.',
+    ['reason', 'plan'],
 )
 
 

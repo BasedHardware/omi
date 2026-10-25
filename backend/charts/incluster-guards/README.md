@@ -1,7 +1,9 @@
 # In-cluster safety guards
 
-This independent Helm release replaces the **Parakeet** laptop rollback loop.
-It does not modify any serving pod template or deploy the Parakeet chart.
+This independent Helm release provides **Parakeet** and Cloud Run **batch**
+rollback Jobs. See [BATCH.md](BATCH.md) for dedicated WIF, env-preserving rollback,
+and the aggregate producer required before replacing the P90 laptop owner.
+It does not modify the Parakeet serving pod template or deploy its chart.
 The lead deploys after review; developing/testing this chart requires no cloud credentials.
 
 ## Deployment and kill switch
@@ -94,11 +96,11 @@ PR #23425's floor/workload-only changes are included in this proposal.
 The mutable, nonsecret state ConfigMap is created by Helm. The Job may only
 get/patch that exact ConfigMap, using a resourceVersion test. It records verdicts
 in data and annotations, last observation time, and the blind/arming state.
-There are no cluster permissions, secrets, pod/exec, GCP identity annotations,
-or cloud API calls. RBAC cannot constrain *fields* of an HPA patch; the patch
+The Parakeet Job has no cluster permissions, secrets, pod/exec, GCP identity
+annotations, or cloud API calls. RBAC cannot constrain *fields* of an HPA patch; the patch
 builder and its behavioral tests enforce that narrower application boundary.
 
-## Batch v1 coverage and blockers
+## Batch queue observer coverage and blockers
 
 Available worker metrics (`utils/batch_pipeline/metrics.py`, also allowed by
 `deploy/cloud_run_gmp_sync.yaml`) are oldest admitted uncommitted age, retry age,
@@ -121,8 +123,9 @@ There is no exported metric for **new projection obligations >15m**, pinned
 object custody loss, or VAD-proven unrecovered speech. Those P90 signals require
 Firestore/GCS metadata readers and serving-revision/ramp clocks. No such readers,
 permissions or invented metrics are introduced here. **Keep the P90 safety owner
-running** until those gaps have a separately reviewed implementation. No Cloud
-Run env or revision is read in v1.
+running** until those gaps have a verified aggregate producer. The separate
+[batch rollback Job](BATCH.md) reads serving Cloud Run revisions and consumes
+trusted P90 aggregates without customer metadata access.
 
 Every reading emits JSON `batch_safety` / `parakeet_guard` records without IDs,
 workload env, event messages, or HTTP bodies. A batch TRIP/BLIND or Parakeet
@@ -169,43 +172,22 @@ No GPU requests/tolerations; required node affinity rejects GKE accelerator
 nodes as well as named Parakeet/batch pools. Non-root, read-only filesystem,
 dropped capabilities, and bounded CPU/memory keep the Job small.
 
-## Future Cloud Run rollback: specific approval required
+## Cloud Run rollback: approved scoped identity
 
-`batch.cloudRunRollbackEnabled=false` is reserved and fails Helm rendering if
-set true in v1. It cannot silently become a no-op or install broad credentials.
-The follow-up implementation must verify **each traffic-serving revision and its
-percentage**, preserve unrelated env/image/traffic, set only
-`BATCH_PIPELINE_PERCENT=0` across `backend`, `backend-sync`,
-`backend-sync-backfill`, `backend-integration` in `us-central1`, and leave admitted
-custody/recovery obligations intact. It must use fresh first-write/all-serving
-clocks and a full P90 lookback after the new serving state. Updating the newest
-service template alone is insufficient.
-
-Proposed **lead/David access ask**, not applied by this PR. These bindings apply
-Google's [GKE service-account impersonation procedure](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/workload-identity)
-and [Cloud Run permission definitions](https://docs.cloud.google.com/run/docs/reference/iam/permissions);
-service updates also require the documented [runtime service-account permission](https://docs.cloud.google.com/run/docs/configuring/services/environment-variables):
-
-1. A GSA `omi-incluster-guards@based-hardware.iam.gserviceaccount.com` and
-   `roles/iam.workloadIdentityUser` on that GSA for
-   `serviceAccount:based-hardware.svc.id.goog[prod-omi-backend/prod-omi-incluster-guards]`.
-   Annotate only that KSA with
-   `iam.gke.io/gcp-service-account=omi-incluster-guards@based-hardware.iam.gserviceaccount.com`.
-2. A custom `projects/based-hardware/roles/omiBatchAdmissionGuard` with
-   `run.services.get`, `run.services.update`, `run.revisions.get`, bound to that
-   GSA on each of those four regional Cloud Run services. Reads alone need
-   `run.services.get` and `run.revisions.get`; Kubernetes RBAC grants neither.
-3. `run.operations.get` in a separate custom role bound at project scope for
-   waiting for asynchronous updates. `roles/iam.serviceAccountUser` on each
-   actual runtime service account referenced by those services if the update
-   requires `iam.serviceAccounts.actAs`. Resolve those identities at review time;
-   do not guess them or grant project-wide Service Account User.
-4. Separate, explicitly scoped Firestore/GCS **metadata-only** read approval if
-   the missing P90 safety signals cannot first be exported to Prometheus.
-
-These grants alone do not make the rollback implementation safe or complete.
-No binding, SA creation, WI annotation, IAM write, or production call is made
-while developing this chart.
+Production keeps `batch.enabled: false` (see `prod_omi_incluster_guards_values.yaml`)
+until the deployer RBAC for the `-batch` objects is approved (access change,
+David) and g2's trusted producer exists; `batch.cloudRunRollbackEnabled` stays
+true there so re-enabling needs only the `batch.enabled` flip. Development
+leaves the writer off entirely.
+The dedicated KSA/GSA, four service-level `roles/run.developer` bindings,
+runtime-SA actAs if required, and exact-KSA WIF binding are described in
+[BATCH.md](BATCH.md). David approved that resource-scoped role on 2026-10-24.
+No project-wide operations role is needed: the guard polls service readbacks.
+The lead applies IAM and deploys; developing this chart applies neither.
+Disabling removes the batch resources including its state ConfigMap, leaving the
+Parakeet guard. Save state before removal; use dry run to stop writes while
+retaining pending rollback intent. Retain P90 until the
+trusted aggregate producer and real alert delivery have been verified.
 
 ## Local verification
 

@@ -591,7 +591,6 @@ def _drive_process_segment(
     from utils.conversations import lifecycle
 
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', signed_url_impl or (lambda _path: 'file://x'))
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
     monkeypatch.setattr(pipeline, 'prerecorded', prerecorded_impl or (lambda *args, **kwargs: (['w'], 'en')))
     monkeypatch.setattr(pipeline, 'postprocess_words', lambda *args, **kwargs: _segments(texts))

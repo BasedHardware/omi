@@ -3503,7 +3503,6 @@
     "captureStarting": "Se pornește…",
     "capturePhoneStorageFull": "Spațiul telefonului e plin",
     "captureStorageAlmostFull": "Spațiul e aproape plin",
-    "capturePendantDisconnectedDetail": "Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.",
     "participantsSummaryUncounted": "{name} și alții",
     "deviceOnboardingVoiceReplyTitle": "Ascultă răspunsurile Omi",
     "deviceOnboardingVoiceReplySample": "Am înțeles. Următoarea întâlnire începe peste douăzeci de minute.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "Audio indisponibil",
     "playbackAudioLoadFailed": "Audio nu a putut fi încărcat",
     "playbackAudioNetworkFailed": "Verificați conexiunea",
-    "capturePendantDisconnectedShort": "Omi se va reconecta singur",
     "forYou": "Pentru tine",
     "stopThese": "Oprește acestea",
     "dismiss": "Ascunde",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "Până acum",
     "episodeUpdatedJustNow": "Actualizat acum · notițe complete la final",
     "episodeUpdatedMinutesAgo": "Actualizat acum {minutes} min · notițe complete la final",
+    "episodeNotesUnavailable": "Notițele live nu se actualizează. Consultați transcrierea deocamdată.",
+    "episodeCaptureFor": "Înregistrare · {duration}",
+    "episodePrevious": "Episodul anterior",
+    "captureChunksPending": "Fragmente în așteptare: {pending}",
+    "episodeOpenPrevious": "Deschide episodul anterior",
     "episodeNotesSoon": "Notițele apar după primele minute de conversație.",
     "episodeOpenAll": "Deschide tot",
     "episodeWrapUpNow": "Încheie acum",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "În fundal",
     "retentionOfferAccept": "Rămâi cu {percent}% reducere",
     "retentionOfferBody": "Rămâi și plătești {price} pe lună în următoarele {months} luni.",
-    "retentionOfferApplied": "Gata. {percent}% reducere în următoarele {months} luni."
+    "retentionOfferApplied": "Gata. {percent}% reducere în următoarele {months} luni.",
+    "othersSpeakerLabel": "Alții"
 }

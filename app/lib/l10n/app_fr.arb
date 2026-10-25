@@ -3538,7 +3538,6 @@
     "captureStarting": "Démarrage…",
     "capturePhoneStorageFull": "Stockage du téléphone plein",
     "captureStorageAlmostFull": "Stockage presque plein",
-    "capturePendantDisconnectedDetail": "Votre pendentif a perdu la connexion avec ce téléphone. Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité. Tout ce qui a été enregistré avant est en sécurité.",
     "participantsSummaryUncounted": "{name} et d'autres",
     "deviceOnboardingVoiceReplyTitle": "Écoutez les réponses d’Omi",
     "deviceOnboardingVoiceReplySample": "C’est noté. Votre prochaine réunion commence dans vingt minutes.",
@@ -3816,7 +3815,6 @@
     "playbackAudioUnavailable": "Audio indisponible",
     "playbackAudioLoadFailed": "Impossible de charger l'audio",
     "playbackAudioNetworkFailed": "Vérifiez la connexion",
-    "capturePendantDisconnectedShort": "Omi se reconnectera tout seul",
     "forYou": "Pour vous",
     "stopThese": "Ne plus recevoir ceci",
     "dismiss": "Masquer",
@@ -4425,6 +4423,11 @@
     "episodeSoFar": "Jusqu'ici",
     "episodeUpdatedJustNow": "Mis à jour à l'instant · notes complètes à la fin",
     "episodeUpdatedMinutesAgo": "Mis à jour il y a {minutes} min · notes complètes à la fin",
+    "episodeNotesUnavailable": "Les notes en direct ne se mettent pas à jour. Consultez la transcription pour le moment.",
+    "episodeCaptureFor": "Enregistrement · {duration}",
+    "episodePrevious": "Épisode précédent",
+    "captureChunksPending": "Fragments en attente: {pending}",
+    "episodeOpenPrevious": "Ouvrir l’épisode précédent",
     "episodeNotesSoon": "Les notes apparaissent après les premières minutes de conversation.",
     "episodeOpenAll": "Tout ouvrir",
     "episodeWrapUpNow": "Terminer maintenant",
@@ -4460,5 +4463,6 @@
     "recapInTheBackground": "En arrière-plan",
     "retentionOfferAccept": "Rester avec {percent} % de réduction",
     "retentionOfferBody": "Restez et payez {price} par mois pendant les {months} prochains mois.",
-    "retentionOfferApplied": "C'est fait. {percent} % de réduction pendant les {months} prochains mois."
+    "retentionOfferApplied": "C'est fait. {percent} % de réduction pendant les {months} prochains mois.",
+    "othersSpeakerLabel": "Autres"
 }

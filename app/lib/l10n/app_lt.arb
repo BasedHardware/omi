@@ -3503,7 +3503,6 @@
     "captureStarting": "Paleidžiama…",
     "capturePhoneStorageFull": "Telefono atmintis pilna",
     "captureStorageAlmostFull": "Atmintis beveik pilna",
-    "capturePendantDisconnectedDetail": "Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.",
     "participantsSummaryUncounted": "{name} ir kiti",
     "deviceOnboardingVoiceReplyTitle": "Klausykitės „Omi“ atsakymų",
     "deviceOnboardingVoiceReplySample": "Supratau. Kitas jūsų susitikimas prasidės po dvidešimties minučių.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "Garsas nepasiekiamas",
     "playbackAudioLoadFailed": "Nepavyko įkelti garso",
     "playbackAudioNetworkFailed": "Patikrinkite ryšį",
-    "capturePendantDisconnectedShort": "Omi pats vėl prisijungs",
     "forYou": "Jums",
     "stopThese": "Sustabdyti šiuos",
     "dismiss": "Slėpti",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "Kol kas",
     "episodeUpdatedJustNow": "Atnaujinta ką tik · pilni užrašai pabaigoje",
     "episodeUpdatedMinutesAgo": "Atnaujinta prieš {minutes} min. · pilni užrašai pabaigoje",
+    "episodeNotesUnavailable": "Einamosios pastabos neatnaujinamos. Kol kas peržiūrėkite transkripciją.",
+    "episodeCaptureFor": "Įrašoma · {duration}",
+    "episodePrevious": "Ankstesnis epizodas",
+    "captureChunksPending": "Laukiančios dalys: {pending}",
+    "episodeOpenPrevious": "Atidaryti ankstesnį epizodą",
     "episodeNotesSoon": "Užrašai atsiranda po pirmųjų pokalbio minučių.",
     "episodeOpenAll": "Atidaryti viską",
     "episodeWrapUpNow": "Užbaigti dabar",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "Fone",
     "retentionOfferAccept": "Likti su {percent}% nuolaida",
     "retentionOfferBody": "Likite ir mokėkite {price} per mėnesį ateinančius {months} mėnesius.",
-    "retentionOfferApplied": "Atlikta. {percent}% nuolaida ateinančius {months} mėnesius."
+    "retentionOfferApplied": "Atlikta. {percent}% nuolaida ateinančius {months} mėnesius.",
+    "othersSpeakerLabel": "Kiti"
 }

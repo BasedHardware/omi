@@ -10926,7 +10926,6 @@
     "captureStarting": "Се стартува…",
     "capturePhoneStorageFull": "Меморијата на телефонот е полна",
     "captureStorageAlmostFull": "Меморијата е речиси полна",
-    "capturePendantDisconnectedDetail": "Приврзокот ја изгуби врската со овој телефон. Omi ќе се поврзе повторно сам кога приврзокот е вклучен и во близина. Сè што е снимено досега е безбедно.",
     "participantsSummaryUncounted": "{name} и други",
     "deviceOnboardingVoiceReplyTitle": "Слушнете ги одговорите на Omi",
     "deviceOnboardingVoiceReplySample": "Разбрано. Вашиот следен состанок започнува за дваесет минути.",
@@ -11204,7 +11203,6 @@
     "playbackAudioUnavailable": "Аудиото не е достапно",
     "playbackAudioLoadFailed": "Аудиото не можеше да се вчита",
     "playbackAudioNetworkFailed": "Проверете ја врската",
-    "capturePendantDisconnectedShort": "Omi ќе се поврзе повторно сам",
     "forYou": "За вас",
     "stopThese": "Запри ги овие",
     "dismiss": "Сокриј",
@@ -11816,6 +11814,11 @@
     "episodeSoFar": "Досега",
     "episodeUpdatedJustNow": "Ажурирано сега · целосни белешки на крајот",
     "episodeUpdatedMinutesAgo": "Ажурирано пред {minutes} мин · целосни белешки на крајот",
+    "episodeNotesUnavailable": "Тековните белешки не се ажурираат. Засега погледнете го транскриптот.",
+    "episodeCaptureFor": "Снимање · {duration}",
+    "episodePrevious": "Претходна епизода",
+    "captureChunksPending": "Делови на чекање: {pending}",
+    "episodeOpenPrevious": "Отвори ја претходната епизода",
     "episodeNotesSoon": "Белешките се појавуваат по првите минути разговор.",
     "episodeOpenAll": "Отвори сè",
     "episodeWrapUpNow": "Заврши сега",
@@ -11851,5 +11854,6 @@
     "recapInTheBackground": "Во позадина",
     "retentionOfferAccept": "Остани со {percent}% попуст",
     "retentionOfferBody": "Остани и плаќај {price} месечно во следните {months} месеци.",
-    "retentionOfferApplied": "Готово. {percent}% попуст за следните {months} месеци."
+    "retentionOfferApplied": "Готово. {percent}% попуст за следните {months} месеци.",
+    "othersSpeakerLabel": "Други"
 }

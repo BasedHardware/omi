@@ -7099,6 +7099,18 @@
             ],
             "title": "Coverage"
           },
+          "lifetime": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifetime"
+          },
           "origin": {
             "anyOf": [
               {
@@ -7109,6 +7121,17 @@
               }
             ],
             "title": "Origin"
+          },
+          "proof": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proof"
           },
           "reason": {
             "anyOf": [
@@ -15655,6 +15678,16 @@
             "type": "boolean"
           },
           "episode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Episode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_closed_episode": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/Episode"
@@ -26513,7 +26546,7 @@
             "default": "other"
           },
           "emoji": {
-            "default": "🧠",
+            "default": "",
             "title": "Emoji",
             "type": "string"
           },
@@ -30364,7 +30397,7 @@
             "default": "other"
           },
           "emoji": {
-            "default": "🧠",
+            "default": "💬",
             "title": "Emoji",
             "type": "string"
           },
@@ -30927,6 +30960,28 @@
               }
             ],
             "title": "Speaker Id"
+          },
+          "speaker_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Key"
+          },
+          "speaker_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Label"
           },
           "speaker_name": {
             "anyOf": [
@@ -32570,7 +32625,7 @@
             "description": "A category for this conversation"
           },
           "emoji": {
-            "default": "🧠",
+            "default": "💬",
             "description": "An emoji to represent the conversation",
             "title": "Emoji",
             "type": "string"
@@ -38517,6 +38572,28 @@
               }
             ],
             "title": "Speaker Id"
+          },
+          "speaker_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Key"
+          },
+          "speaker_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Label"
           },
           "start": {
             "anyOf": [
@@ -55676,6 +55753,111 @@
         ]
       }
     },
+    "/v1/episodes/{episode_id}": {
+      "get": {
+        "operationId": "get_episode_v1_episodes__episode_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "episode_id",
+            "required": true,
+            "schema": {
+              "title": "Episode Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Episode"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Episode",
+        "tags": [
+          "episodes"
+        ]
+      }
+    },
     "/v1/episodes/{episode_id}/items/{item_id}/dismiss": {
       "post": {
         "operationId": "dismiss_episode_item_v1_episodes__episode_id__items__item_id__dismiss_post",
@@ -64922,19 +65104,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },

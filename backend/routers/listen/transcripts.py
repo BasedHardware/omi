@@ -42,6 +42,7 @@ from models.transcript_segment import (
 from routers.listen.contracts import persisted_started_seconds
 from utils.app_integrations import trigger_realtime_integrations
 from utils.audio_timeline import UNPLACED_SEGMENT_OFFSET
+from utils.episodes import live as episode_live
 from utils.conversations.factory import deserialize_conversation
 from utils.metrics import (
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
@@ -275,6 +276,12 @@ class TranscriptProcessor:
             raise RuntimeError('Legacy unplaced transcript persistence returned no receipt')
         self.current_session_segments[str(segment.id)] = segment.speech_profile_processed
         if is_current:
+            # This recovery path bypasses _deliver_live_updates and its pusher
+            # integrations. Retained speech still owes the episode activity/notes.
+            if self.host.user_has_credits:
+                await episode_live.on_realtime_segments(
+                    self.host.request.uid, [segment.model_dump()], owner, self.host.request.source
+                )
             await self._deliver_segments([item.model_dump() for item in result[1]])
 
     def _queue_v2_photos(self, photos: List[ConversationPhoto]) -> None:
@@ -455,6 +462,14 @@ class TranscriptProcessor:
         updated: List[TranscriptSegment] = []
         removed: List[str] = []
         if segments:
+            # The client may retire its WAL after a transcript/coverage ACK.
+            # Never commit that transcript while its final audio copy is only
+            # in this pod. A refused barrier leaves the normal persistence
+            # retry path and source custody intact.
+            receiver = getattr(self.host, 'receiver', None)
+            archive = getattr(receiver, 'raw_archive', None)
+            if archive is not None and archive.durable:
+                await archive.ensure_durable()
             # Preserve unmerged speech until the transaction reads the current receipt.
             # Apply live identity to the fresh copy as well: the merge compares
             # speaker_match_source, and a recognized persisted word has
@@ -1471,11 +1486,14 @@ class TranscriptProcessor:
         """
         speaker = self.host.speakers
         observer = getattr(speaker, 'observe_segment', None)
+        ordinal_tracker = getattr(self.host, 'speaker_ordinal_tracker', None)
         if observer is not None:
             observed = queue_from_raw if queue_from_raw is not None else [s.model_dump() for s in segments]
             for raw in observed:
                 if raw.get('speaker_id') is not None:
                     observer(raw['speaker_id'], raw.get('speaker_id_scope') or '', raw.get('id') or '')
+                    if ordinal_tracker is not None:
+                        ordinal_tracker.observe(raw)
         for segment in segments:
             segment_id = cast(str, segment.id)
             if queue_from_raw is None:

@@ -108,6 +108,7 @@ final class JourneyHermeticBoot {
     WidgetTester tester, {
     required Widget page,
     List<SingleChildWidget> providers = const [],
+    Widget Function(Widget page)? appBuilder,
   }) async {
     await tester.pumpWidget(
       MultiProvider(
@@ -125,13 +126,14 @@ final class JourneyHermeticBoot {
           ChangeNotifierProvider(create: (_) => VoiceRecorderProvider()),
           ...providers,
         ],
-        child: MaterialApp(
-          navigatorKey: globalNavigatorKey,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: const [Locale('en')],
-          theme: ThemeData(brightness: Brightness.dark, useMaterial3: false),
-          home: page,
-        ),
+        child: appBuilder?.call(page) ??
+            MaterialApp(
+              navigatorKey: globalNavigatorKey,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: const [Locale('en')],
+              theme: ThemeData(brightness: Brightness.dark, useMaterial3: false),
+              home: page,
+            ),
       ),
     );
     await tester.pump();

@@ -3503,7 +3503,6 @@
     "captureStarting": "Стартиране…",
     "capturePhoneStorageFull": "Паметта на телефона е пълна",
     "captureStorageAlmostFull": "Паметта е почти пълна",
-    "capturePendantDisconnectedDetail": "Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.",
     "participantsSummaryUncounted": "{name} и други",
     "deviceOnboardingVoiceReplyTitle": "Чуйте отговорите на Omi",
     "deviceOnboardingVoiceReplySample": "Готово. Следващата ви среща започва след двадесет минути.",
@@ -3781,7 +3780,6 @@
     "playbackAudioUnavailable": "Аудиото е недостъпно",
     "playbackAudioLoadFailed": "Аудиото не можа да се зареди",
     "playbackAudioNetworkFailed": "Проверете връзката",
-    "capturePendantDisconnectedShort": "Omi ще се свърже отново сам",
     "forYou": "За вас",
     "stopThese": "Спри тези",
     "dismiss": "Скрий",
@@ -4390,6 +4388,11 @@
     "episodeSoFar": "Досега",
     "episodeUpdatedJustNow": "Обновено току-що · пълни бележки накрая",
     "episodeUpdatedMinutesAgo": "Обновено преди {minutes} мин · пълни бележки накрая",
+    "episodeNotesUnavailable": "Текущите бележки не се обновяват. Засега вижте транскрипцията.",
+    "episodeCaptureFor": "Записване · {duration}",
+    "episodePrevious": "Предишен епизод",
+    "captureChunksPending": "Чакащи фрагменти: {pending}",
+    "episodeOpenPrevious": "Отворете предишния епизод",
     "episodeNotesSoon": "Бележките се появяват след първите минути разговор.",
     "episodeOpenAll": "Отвори всичко",
     "episodeWrapUpNow": "Приключи сега",
@@ -4425,5 +4428,6 @@
     "recapInTheBackground": "На заден план",
     "retentionOfferAccept": "Остани с {percent}% отстъпка",
     "retentionOfferBody": "Остани и плащай {price} на месец за следващите {months} месеца.",
-    "retentionOfferApplied": "Готово. {percent}% отстъпка за следващите {months} месеца."
+    "retentionOfferApplied": "Готово. {percent}% отстъпка за следващите {months} месеца.",
+    "othersSpeakerLabel": "Други"
 }
