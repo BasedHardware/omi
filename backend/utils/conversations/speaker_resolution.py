@@ -10,6 +10,7 @@ from config.batch_conversation_speakers import (
     BATCH_CONVERSATION_SCOPE,
     enabled as batch_speakers_enabled,
     has_batch_authority,
+    sync_off_enabled,
 )
 from config.refactor_modes import serving_for
 from utils.speakers import processing as speaker_evidence
@@ -23,7 +24,6 @@ import os
 import struct
 import time
 from dataclasses import dataclass
-from datetime import timezone
 from typing import Any, Dict, List, Mapping, Optional, Tuple, cast
 
 import config.speaker_match_scores as match_scores
@@ -49,6 +49,8 @@ from utils.conversations.speaker_resolution_inputs import (
     manual_speakers as _manual_speakers,
     measured_embedding_seconds,
     batch_provider_keys,
+    started_at as _started_at,
+    manifest_span_load as _manifest_span_load,
 )
 from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
 from utils.metrics import (
@@ -88,6 +90,7 @@ from utils.stt.conversation_speakers import (
 )
 from utils.stt.owner_profile import load_owner_embedding, validated_embedding
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
+from utils.conversations.sync_off_speakers import resolve_sync_off
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
 from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.voiceprints import usable_person_voiceprint
@@ -181,24 +184,8 @@ def decode_cache(data: Optional[bytes], evidence_seconds: Optional[Dict[str, flo
 # --- inputs ------------------------------------------------------------------
 
 
-def _started_at(conversation: Conversation) -> Optional[float]:
-    moment = conversation.started_at or conversation.created_at
-    if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=timezone.utc)
-    return moment.timestamp()
-
-
 def _duration(segment: TranscriptSegment) -> float:
     return max(0.0, float(segment.end) - float(segment.start))
-
-
-def _manifest_span_load(audio_file: Any) -> int:
-    count = 0
-    for key in ('chunk_spans', 'chunk_timestamps'):
-        value = audio_file.get(key) if isinstance(audio_file, Mapping) else getattr(audio_file, key, None)
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-            count = max(count, len(value))
-    return count
 
 
 def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True) -> Dict[str, np.ndarray]:
@@ -927,7 +914,7 @@ def resolve_speakers_for_processing(
                 )
         # Batch authority survives admission rollback and subsequent resolution.
         batch_record = has_batch_authority(conversation.transcript_segments)
-        batch_resolution = conversation.private_cloud_sync_enabled and batch_speakers_enabled(
+        batch_resolution = (conversation.private_cloud_sync_enabled or sync_off_enabled()) and batch_speakers_enabled(
             conversation.transcript_segments
         )
         # The kill switch also stops linking/naming when speaker evidence serves.
@@ -1200,6 +1187,11 @@ def _resolve(
 ) -> None:
     began = time.monotonic()
     segments = conversation.transcript_segments
+    if not conversation.private_cloud_sync_enabled and sync_off_enabled() and batch_speakers_enabled(segments):
+        resolve_sync_off(
+            uid, conversation, receipt, deadline, load_voiceprints_for_resolution, apply_speaker_resolution
+        )
+        return
     batch_resolution = conversation.private_cloud_sync_enabled and batch_speakers_enabled(segments)
     input_ids = len({s.speaker_id for s in segments if s.speaker_id != OMI_SPEAKER_ID_SENTINEL})
     if not conversation.private_cloud_sync_enabled or not speaker_embedding_configured():

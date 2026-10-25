@@ -1374,11 +1374,12 @@ def test_manual_gap_receipt_does_not_turn_gap_into_acoustic_evidence(monkeypatch
 
 
 @pytest.mark.parametrize('evidence_mode', ['off', 'serve'])
-def test_sync_off_batch_preserves_incumbent_path_and_gap_participant_policy(monkeypatch, evidence_mode):
+def test_sync_off_kill_switch_preserves_incumbent_path_and_gap_participant_policy(monkeypatch, evidence_mode):
     from unittest.mock import Mock
     from utils.speakers import processing as evidence_processing
 
     monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', evidence_mode)
+    monkeypatch.setenv('BATCH_SYNC_OFF_CENTROIDS_ENABLED', 'false')
     monkeypatch.setattr(evidence_processing, '_roster', lambda *_: [])
     monkeypatch.setattr(evidence_processing.storage, 'store_evidence', lambda *a, **kw: None)
     resolver = Mock()

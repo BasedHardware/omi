@@ -22,8 +22,15 @@ from google.api_core.exceptions import NotFound
 
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline import leaf_timings
+from utils.batch_pipeline import voice_centroids
 from utils.batch_pipeline.source_audio import MAGIC as RECORD_MAGIC, materialize, read_reference
-from utils.batch_pipeline.upload_policy import UPLOAD_CHUNK_BYTES, UPLOAD_TIMEOUT, UPLOAD_RETRY_SECONDS, UploadStream
+from utils.batch_pipeline.upload_policy import (
+    UPLOAD_CHUNK_BYTES,
+    UPLOAD_TIMEOUT,
+    UPLOAD_RETRY_SECONDS,
+    UPLOAD_PENDING_SECONDS,
+    UploadStream,
+)
 
 AUDIO_LIMIT = 7200 * 32000 + 4096
 RESULT_LIMIT = 8 * 1024 * 1024
@@ -86,8 +93,14 @@ class ArtifactStore:
             'kind': kind,
             'protection': context.level,
             'privacy_generation': context.generation,
-            'audio_uri': item.audio_uri if kind == 'results' else '',
+            'audio_uri': item.audio_uri if kind in {'results', 'voice_evidence'} else '',
         }
+        if kind == 'voice_evidence':
+            identity.update(
+                schema=voice_centroids.SCHEMA,
+                space=voice_centroids.SPACE,
+                expires_at=voice_centroids.deadline(item.capture_at),
+            )
         if item.shadow:
             identity['shadow'] = True
         return json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()
@@ -143,6 +156,8 @@ class ArtifactStore:
         generation = int(blob.generation)
         try:
             self._unchanged(item, context)
+            if kind == 'voice_evidence' and time.time() >= voice_centroids.deadline(item.capture_at):
+                raise PermissionError('voice evidence expired during upload')
         except Exception:
             blob.delete(if_generation_match=generation, timeout=30, retry=None)
             raise
@@ -186,6 +201,22 @@ class ArtifactStore:
         )
         self._unchanged(item, context)
         return body
+
+    def persist_voice_evidence(self, item: WorkItem, payload: dict) -> str:
+        if item.shadow or time.time() + UPLOAD_PENDING_SECONDS >= voice_centroids.deadline(item.capture_at):
+            raise PermissionError('voice evidence unavailable')
+        body = voice_centroids.encode(payload)
+        if payload['capture_at'] != item.capture_at:
+            raise ValueError('voice capture binding mismatch')
+        return self._write(item, 'voice_evidence', body, voice_centroids.MAX_BYTES)
+
+    def load_voice_evidence(self, item: WorkItem, uri: str) -> dict:
+        if time.time() >= voice_centroids.deadline(item.capture_at):
+            raise PermissionError('voice evidence expired')
+        payload = voice_centroids.decode(self._read(item, uri, 'voice_evidence', voice_centroids.MAX_BYTES))
+        if payload['capture_at'] != item.capture_at or time.time() >= payload['expires_at']:
+            raise PermissionError('voice evidence expired or unbound')
+        return payload
 
     def stage_audio(self, item: WorkItem, wav: bytes) -> str:
         """Admission calls this before enqueue; audio AAD excludes its own URI."""

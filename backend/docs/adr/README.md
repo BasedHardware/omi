@@ -13,7 +13,7 @@ silent permission.
 | [0001](0001-trip-floors-t2-t3-t5.md) | Batch ramp trip floors for T2, T3 and T5 | Accepted | 2026-11-01 |
 | [0002](0002-unknown-vad-freezes.md) | Unknown VAD freezes the ramp; measured loss rolls back | Accepted | 2026-11-01 |
 | [0003](0003-retire-flag-is-preview-preference.md) | The 25% live-STT retire flag is a preview preference shift | Accepted | 2026-11-01 |
-| [0004](0004-sync-off-speaker-centroids.md) | Speaker evidence for sync-off batch units | Proposed | 2026-10-27 |
+| [0004](0004-sync-off-speaker-centroids.md) | Speaker evidence for sync-off batch units | Accepted | 2026-10-27 |
 | [0005](0005-rulings-live-in-adrs.md) | Ratified rulings live in ADRs, not in scripts | Accepted | 2026-11-15 |
 | [0006](0006-pipeline-flag-budget.md) | A CI flag budget for the pipeline env surface | Accepted | 2026-11-15 |
 
