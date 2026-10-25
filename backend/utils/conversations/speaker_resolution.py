@@ -44,10 +44,11 @@ from utils.conversations.audio_placement import (
     prepare_audio_coverage,
     text_window_refusal,
 )
-from utils.conversations.speaker_grouping_shadow import compare_and_select, batch_provider_keys
+from utils.conversations.speaker_grouping_shadow import compare_and_select
 from utils.conversations.speaker_resolution_inputs import (
     manual_speakers as _manual_speakers,
     measured_embedding_seconds,
+    batch_provider_keys,
 )
 from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
 from utils.metrics import (

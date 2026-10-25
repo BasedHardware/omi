@@ -14,7 +14,7 @@ from tests.unit.test_conversation_speaker_resolution_stage import (
     env,
 )
 from utils.conversations import speaker_resolution as stage
-from utils.conversations.speaker_grouping_shadow import batch_provider_keys
+from utils.conversations.speaker_resolution_inputs import batch_provider_keys
 from utils.stt.conversation_speakers import resolve_conversation_speakers
 
 

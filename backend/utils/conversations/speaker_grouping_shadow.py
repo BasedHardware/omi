@@ -20,7 +20,6 @@ import numpy as np
 from prometheus_client import Counter, REGISTRY
 
 from config.speaker_grouping import VARIANTS, configuration
-from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE
 from utils.log_sanitizer import sanitize
 from utils.manual_speaker_assignments import (
     apply_manual_assignments,
@@ -108,52 +107,6 @@ def provider_key(segment: TranscriptSegment) -> tuple[str, int] | None:
     ):
         return None
     return (f'{segment.stt_provider or "unknown"}\0{scope}', segment.speaker_id)
-
-
-def batch_provider_keys(segments: list[TranscriptSegment]) -> dict[str, tuple[str, int]]:
-    """Retain a prior conversation partition when optional unit markers disappear.
-
-    Every original must-link stays inside one prior group. Distinct prior groups
-    become cannot-links, a conservative strengthening of the original graph.
-    Use that snapshot for the entire affected scope, never mix partial unit
-    markers with a snapshot that could split one of its already resolved voices.
-    """
-    snapshots = {
-        s.speaker_id_scope
-        for s in segments
-        if (s.speaker_id_scope or '').startswith(BATCH_CONVERSATION_SCOPE)
-        and (
-            s.provider_speaker is None
-            or ((s.provider_speaker or {}).get('scope') or '').startswith(BATCH_CONVERSATION_SCOPE)
-        )
-    }
-    if snapshots:
-        record_fallback(
-            component='other',
-            from_mode='batch_unit_partition',
-            to_mode='persisted_batch_partition',
-            reason='other',
-            outcome='degraded',
-            log=logger,
-        )
-    keys = {}
-    for segment in segments:
-        key = provider_key(segment)
-        if segment.speaker_id_scope in snapshots:
-            # Explicitly contradicted/redistributed text must still abstain.
-            if segment.provider_speaker is not None and key is None:
-                continue
-            if (
-                segment.id
-                and segment.speaker_id is not None
-                and segment.speaker_id >= 0
-                and segment.speaker_id != OMI_SPEAKER_ID_SENTINEL
-                and not segment._speaker_id_synthesized  # pyright: ignore[reportPrivateUsage]
-            ):
-                keys[segment.id] = (f'batch-prior\0{segment.speaker_id_scope}', segment.speaker_id)
-        elif segment.id and key is not None:
-            keys[segment.id] = key
-    return keys
 
 
 def decisions_for(

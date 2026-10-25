@@ -1,10 +1,16 @@
-"""Pure receipt and measured-audio inputs for conversation speaker resolution."""
+"""Receipt, measured-audio and authoritative-partition inputs for conversation speaker resolution."""
 
 import math
+import logging
 from typing import Any, Dict, Mapping
 
+from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE
+from models.transcript_segment import TranscriptSegment
+from utils.conversations.speaker_grouping_shadow import provider_key
+from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import manual_rejected_speakers
 from utils.stt.conversation_speakers import Identity
+from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
 
 
 def manual_speakers(receipt: Mapping[str, Any]) -> Dict[int, Identity]:
@@ -59,3 +65,52 @@ def measured_embedding_seconds(segments, vectors, keys, clip_seconds, placements
             covered_windows.append((low, high))
         durations[sid] = seconds
     return durations
+
+
+logger = logging.getLogger(__name__)
+
+
+def batch_provider_keys(segments: list[TranscriptSegment]) -> dict[str, tuple[str, int]]:
+    """Retain a prior conversation partition when optional unit markers disappear.
+
+    Every original must-link stays inside one prior group. Distinct prior groups
+    become cannot-links, a conservative strengthening of the original graph.
+    Use that snapshot for the entire affected scope, never mix partial unit
+    markers with a snapshot that could split one of its already resolved voices.
+    """
+    snapshots = {
+        s.speaker_id_scope
+        for s in segments
+        if (s.speaker_id_scope or '').startswith(BATCH_CONVERSATION_SCOPE)
+        and (
+            s.provider_speaker is None
+            or ((s.provider_speaker or {}).get('scope') or '').startswith(BATCH_CONVERSATION_SCOPE)
+        )
+    }
+    if snapshots:
+        record_fallback(
+            component='other',
+            from_mode='batch_unit_partition',
+            to_mode='persisted_batch_partition',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+    keys = {}
+    for segment in segments:
+        key = provider_key(segment)
+        if segment.speaker_id_scope in snapshots:
+            # Explicitly contradicted/redistributed text must still abstain.
+            if segment.provider_speaker is not None and key is None:
+                continue
+            if (
+                segment.id
+                and segment.speaker_id is not None
+                and segment.speaker_id >= 0
+                and segment.speaker_id != OMI_SPEAKER_ID_SENTINEL
+                and not segment._speaker_id_synthesized  # pyright: ignore[reportPrivateUsage]
+            ):
+                keys[segment.id] = ('batch-prior\0' + (segment.speaker_id_scope or ''), segment.speaker_id)
+        elif segment.id and key is not None:
+            keys[segment.id] = key
+    return keys
