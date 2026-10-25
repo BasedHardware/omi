@@ -232,6 +232,17 @@ def upsert_app_to_db(app_data: Dict[str, Any]) -> None:
     app_ref.set(app_data, merge=True)
 
 
+def set_mcp_code_verifier(app_id: str, code_verifier: str) -> None:
+    """Rotate only the pending PKCE verifier of an MCP app.
+
+    A field-path update leaves every other stored OAuth value (for example tokens a
+    concurrent callback has just saved) untouched, unlike replacing the token map.
+    """
+    db.collection(apps_collection).document(app_id).update(
+        {'external_integration.mcp_oauth_tokens.code_verifier': code_verifier}
+    )
+
+
 def update_app_in_db(app_data: Dict[str, Any]) -> None:
     app_id = app_data.get('id')
     if not app_id:

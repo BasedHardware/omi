@@ -122,8 +122,14 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
     final cached = _registrations[(uid, url)];
     if (cached != null) {
       // An explicit retry on the URL the registration was made for reuses it. Its first
-      // authorization state is single-use and expires, so the retry asks for a fresh one.
-      await _continueRegistration(attempt, cached, freshAuthorization: true);
+      // authorization state is single-use and expires, so the retry asks for a fresh one,
+      // holding the button so a second press cannot rotate the authorization it is opening.
+      setState(() => _isLoading = true);
+      try {
+        await _continueRegistration(attempt, cached, freshAuthorization: true);
+      } finally {
+        if (mounted && identical(_attempt, attempt)) setState(() => _isLoading = false);
+      }
       return;
     }
     final key = (uid, url);
@@ -171,7 +177,16 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
       await _navigateToAppDetail(registration.appId, attempt);
       return;
     }
-    final authUrl = freshAuthorization ? await widget.authorizeServer(registration.appId) : registration.authUrl;
+    String? authUrl = registration.authUrl;
+    if (freshAuthorization) {
+      try {
+        // The same bound as registration: authorization is a server-side mutation, so a short
+        // probe deadline would release the button while it can still rotate the verifier.
+        authUrl = await widget.authorizeServer(registration.appId).timeout(const Duration(seconds: 45));
+      } catch (_) {
+        authUrl = null;
+      }
+    }
     if (!_owns(attempt)) return;
     if (authUrl == null || !await launchIntegrationOAuth(() async => authUrl, isCurrent: () => _owns(attempt))) {
       if (mounted && _owns(attempt)) _showError(context.l10n.mcpConnectionFailed);

@@ -8,6 +8,7 @@ No live services: Redis, Firestore and provider discovery are in-memory fakes.
 """
 
 import asyncio
+import copy
 import os
 from urllib.parse import parse_qs, urlsplit
 
@@ -67,10 +68,16 @@ def route(monkeypatch):
         state['updates'].append(update)
         state['app'] = {**state['app'], **update}
 
+    def _set_verifier(app_id, verifier):
+        # Field-path semantics: only the nested verifier changes.
+        state['updates'].append({'code_verifier': verifier})
+        state['app']['external_integration']['mcp_oauth_tokens']['code_verifier'] = verifier
+
     monkeypatch.setattr(apps_router, 'run_blocking', _passthrough)
     monkeypatch.setattr(apps_router, 'get_app_by_id_db', lambda _app_id: state['app'])
     monkeypatch.setattr(apps_router, 'discover_oauth_metadata', _discover)
     monkeypatch.setattr(apps_router, 'update_app_in_db', _update)
+    monkeypatch.setattr(apps_router, 'set_mcp_code_verifier', _set_verifier)
     monkeypatch.setattr(apps_router, 'delete_app_cache_by_id', lambda app_id: state['cache_cleared'].append(app_id))
     state['redis'] = redis
     return state
@@ -126,3 +133,42 @@ def test_unavailable_provider_metadata_issues_no_state(route):
     assert error.value.status_code == 502
     assert route['updates'] == [] and route['redis'].store == {}
     assert route['app']['external_integration']['mcp_oauth_tokens']['code_verifier'] == 'original-verifier'
+
+
+def test_a_retry_never_erases_tokens_a_callback_saved_during_discovery(route, monkeypatch):
+    """Reviewer reproduction: the callback commits tokens while the retry awaits discovery."""
+
+    async def scenario():
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        async def discover(_url):
+            entered.set()
+            await release.wait()
+            return route['meta']
+
+        async def exchange(*_args, **_kwargs):
+            return {'access_token': 'synthetic-access', 'refresh_token': 'synthetic-refresh', 'expires_in': 3600}
+
+        async def tools(*_args, **_kwargs):
+            return []
+
+        # Real Firestore reads return independent snapshots, not shared mutable dicts.
+        monkeypatch.setattr(apps_router, 'get_app_by_id_db', lambda _id: copy.deepcopy(route['app']))
+        monkeypatch.setattr(apps_router, 'discover_oauth_metadata', discover)
+        monkeypatch.setattr(apps_router, 'consume_mcp_oauth_state', lambda _state: ('app-1', 'owner'))
+        monkeypatch.setattr(apps_router, 'exchange_oauth_code', exchange)
+        monkeypatch.setattr(apps_router, 'discover_mcp_tools', tools)
+        monkeypatch.setattr(apps_router, 'enable_app', lambda *_args: None)
+
+        retry = asyncio.create_task(apps_router.authorize_mcp_server('app-1', uid='owner'))
+        await entered.wait()
+        callback = await apps_router.mcp_oauth_callback(code='synthetic-code', state='synthetic-state')
+        assert callback.status_code == 200
+        release.set()
+        assert (await retry)['auth_url'].startswith('https://auth.example.test/authorize?')
+        tokens = route['app']['external_integration']['mcp_oauth_tokens']
+        assert route['app']['status'] == 'approved'
+        assert tokens.get('access_token') == 'synthetic-access'
+        assert tokens.get('refresh_token') == 'synthetic-refresh'
+
+    asyncio.run(scenario())

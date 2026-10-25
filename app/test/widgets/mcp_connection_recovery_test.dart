@@ -499,9 +499,51 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(browser.launches, hasLength(2), reason: 'never falls back to the consumed URL');
+    expect(tester.widget<OmiButton>(find.widgetWithText(OmiButton, 'Connect')).onPressed, isNotNull,
+        reason: 'a failed authorization releases Connect for another retry');
     expect(reauthorized, ['server-a', 'server-a']);
     await tester.pumpWidget(const SizedBox());
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a slow fresh authorization holds Connect so a second press cannot rotate it', (tester) async {
+    final authorization = Completer<String?>();
+    var authorizations = 0;
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: const [Locale('en')],
+      home: AddMcpServerPage(
+        addServer: (name, url, {description}) async =>
+            {'app_id': 'synthetic-app', 'requires_oauth': true, 'auth_url': 'https://provider.test/initial'},
+        authorizeServer: (_) {
+          authorizations++;
+          return authorization.future;
+        },
+        appDetailsLoader: (_) async => {'status': 'pending_mcp_auth'},
+        probeTimeout: const Duration(milliseconds: 100),
+        waitTimeout: const Duration(milliseconds: 300),
+      ),
+    ));
+    await tester.enterText(find.byType(TextFormField).at(0), 'Synthetic MCP');
+    await tester.enterText(find.byType(TextFormField).at(2), 'https://mcp.example.test/mcp');
+    await tester.pump();
+    final connect = find.widgetWithText(OmiButton, 'Connect');
+    await tester.tap(connect);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(connect);
+    await tester.pump();
+    expect(authorizations, 1);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(connect);
+    await tester.pump();
+    final observed = authorizations;
+    authorization.complete(null);
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+    expect(observed, 1, reason: 'a slow authorization must disable Connect until it settles');
   });
 
   testWidgets('malformed MCP creation never claims success and releases the button', (tester) async {

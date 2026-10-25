@@ -50,6 +50,7 @@ from database.apps import (
     get_app_by_id_db,
     add_app_to_db,
     update_app_in_db,
+    set_mcp_code_verifier,
     delete_app_from_db,
     update_app_visibility_in_db,
     get_personas_by_username_db,
@@ -2223,11 +2224,9 @@ async def authorize_mcp_server(app_id: str, uid: str = Depends(auth.get_current_
         logger.error(f'[MCP OAuth] Failed to store state in Redis: {type(e).__name__}')
         raise HTTPException(status_code=500, detail='Failed to initialize OAuth flow')
     code_verifier, code_challenge = generate_pkce_pair()
-    update_dict = {
-        'id': app_id,
-        'external_integration': {**ext, 'mcp_oauth_tokens': {**tokens, 'code_verifier': code_verifier}},
-    }
-    await run_blocking(db_executor, update_app_in_db, update_dict)
+    # Only the verifier changes: the app record read above may be stale by now (a callback
+    # can save tokens while discovery runs), so never write the token map back from it.
+    await run_blocking(db_executor, set_mcp_code_verifier, app_id, code_verifier)
     await run_blocking(db_executor, delete_app_cache_by_id, app_id)
     auth_url = build_authorization_url(
         oauth_meta['authorization_endpoint'],
