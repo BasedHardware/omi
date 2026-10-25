@@ -229,6 +229,44 @@ def test_source_replacement_during_build_is_rejected():
         validate_sources(files, original[:1])
 
 
+def test_pre_projection_stamp_survives_raw_entries_under_colliding_keys():
+    from utils.other.playback_identity import resolve_sources
+
+    stamped = chunks()
+    af = {'chunk_timestamps': [1000, 1005], 'source_fingerprint': source_fingerprint(stamped)}
+    whole_pack = dict(
+        path='raw-live/u/c/1000.000.opus',
+        timestamp=1000,
+        generation='9',
+        size=8192,
+        span={'start': 1000, 'samples': 80000, 'sample_rate': 16000},
+        raw_end=1005,
+        pcm_sha256='p',
+    )
+    split_fragment = {**whole_pack, 'path': 'raw-live/u/c/1005.000.opus', 'timestamp': 1005, 'raw_source_start': 1005}
+    projected = [dict(stamped[0]), whole_pack, dict(stamped[1]), split_fragment]
+    resolved = resolve_sources(af, projected)
+    assert [chunk['path'] for chunk in resolved] == ['chunks/u/c/1000.pcm', 'chunks/u/c/1005.pcm']
+
+
+def test_pre_projection_stamp_still_refuses_when_encoded_core_changed():
+    from utils.other.playback_identity import validate_sources
+
+    stamped = chunks()
+    af = {'chunk_timestamps': [1000, 1005], 'source_fingerprint': source_fingerprint(stamped)}
+    whole_pack = dict(
+        path='raw-live/u/c/1000.000.opus',
+        timestamp=1000,
+        generation='9',
+        size=8192,
+        raw_end=1005,
+        pcm_sha256='p',
+    )
+    drifted = [deepcopy(stamped[0]), {**stamped[1], 'generation': '8'}, whole_pack]
+    with pytest.raises(RuntimeError, match='source manifest changed'):
+        validate_sources([af], drifted)
+
+
 def test_initial_generation_calls_join_the_chosen_durable_id(monkeypatch, caplog):
     monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
     caplog.set_level('INFO', logger=metrics.__name__)
