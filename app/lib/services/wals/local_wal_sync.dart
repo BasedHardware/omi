@@ -1780,7 +1780,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     int? liveEpoch;
     int? liveRingId;
     if (_isPendantFrame(frame)) {
-      if ((_retentionRisk != null || _pendantBlockedByStorage) &&
+      if ((_pendantBlockedByStorage || (_retentionRisk != null && _retentionRisk!.reason != 'count_cap')) &&
           _countPendantBuffered() >= _maxPendantBufferedFrames) {
         _pendantDroppedWhileBlocked++;
         DebugLogManager.logWarning('LocalWalSync: pendant frame dropped, storage admission blocked', {

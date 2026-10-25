@@ -196,13 +196,16 @@ class WalFileManager {
   }
 
   static Future<String> _encodeIndex(List<Wal> wals) {
-    final jsonData = {
-      'version': 1,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-      'wals': wals.map((wal) => wal.toJson()).toList(),
-    };
-    return offUiIsolate(() => jsonEncode(jsonData),
-        size: wals.length, threshold: backgroundEncodeThreshold, debugName: 'wal_index_encode');
+    // Copy WAL objects into the worker before expanding them into thousands
+    // of JSON maps. Encoding alone leaves that allocation work on the UI.
+    return offUiIsolate(() {
+      final jsonData = {
+        'version': 1,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'wals': wals.map((wal) => wal.toJson()).toList(),
+      };
+      return jsonEncode(jsonData);
+    }, size: wals.length, threshold: backgroundEncodeThreshold, debugName: 'wal_index_encode');
   }
 
   static Future<void> _recordWrite(File file) async {
