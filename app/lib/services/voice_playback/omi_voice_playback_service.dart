@@ -402,12 +402,15 @@ class OmiVoicePlaybackService {
 
   /// Immediately cancel all synthesis + playback.
   Future<void> interrupt({VoiceReplyPlaybackInterruptSource source = VoiceReplyPlaybackInterruptSource.none}) async {
-    final attempt = ++_beginAttemptSeq;
-    bool stillCurrent() => attempt == _beginAttemptSeq;
+    _beginAttemptSeq++;
     if (_lifecycleOpen) {
       _lifecycleToken++;
       _emit(outcome: VoiceReplyPlaybackOutcome.interrupted, interruptSource: source);
     }
+    // A begin attempt can be skipped without taking playback ownership. Only
+    // an admitted replacement lifecycle retires cleanup of this response.
+    final owner = _lifecycleToken;
+    bool stillCurrent() => owner == _lifecycleToken;
     await _cancelPreview();
     if (!stillCurrent()) return;
     _activeMessageId = null;
