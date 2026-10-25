@@ -13,10 +13,17 @@ A loop is one checkable follow-up the owner may later be asked about. Kinds:
 
 Task-aware dedupe: a loop that matches an open task is *linked*
 (``linked_task_id``), never dropped — the card then asks about the task
-("Did you send Tyler the Stably bullets?") instead of duplicating it. The
-first version matches on normalized tokens plus a containment heuristic
-(``find_task_match``); that one function is the seam a Jev-based matcher
-replaces later without touching any caller.
+("Did you send Tyler the Stably bullets?") instead of duplicating it. Links
+come in two strengths: ``task_link='model'`` (the model asserted the task as
+the loop's origin via ``from_task_id`` — a strong link; the card renders the
+task's own description, and Done completes the task) and ``task_link=
+'heuristic'`` (``find_task_match`` token overlap — ask-only; Done resolves
+the loop but never completes the task). ``find_task_match`` is the documented
+seam a Jev-based matcher replaces later without touching any caller.
+
+Terminal loops (resolved/dropped/expired) never come back: they are excluded
+from update matching and merging, and the same follow-up can open a NEW loop
+only after ``REMENTION_COOLDOWN_DAYS`` without signal.
 """
 
 from __future__ import annotations
@@ -62,10 +69,28 @@ SNOOZE_DAYS = 2
 DAILY_CARD_SLOTS = 3
 MIN_SURFACE_VALUE = 3
 
-# Token-overlap score at which a loop and a task (or two loops) are the same
-# follow-up. max(Jaccard, containment) so a short paraphrase inside a longer
-# task description still matches.
-MATCH_THRESHOLD = 0.6
+# Token-overlap thresholds. Both parts (Jaccard AND containment) must pass —
+# max() alone let "Tyler send deck" match "send deck to investors" (shared
+# short wording inside a different task) and wrongly complete that task.
+# Task matching is the looser pair: the loop is asking about the same work.
+TASK_MATCH_JACCARD_MIN = 0.6
+TASK_MATCH_CONTAINMENT_MIN = 0.8
+# Loop-to-loop merging is stricter still: merging rewrites the loop store, so
+# "Tyler send deck" and "Tyler send invoice" (two thirds shared) stay two loops.
+LOOP_MERGE_JACCARD_MIN = 0.7
+LOOP_MERGE_CONTAINMENT_MIN = 0.8
+
+# A terminal loop's follow-up can open a NEW loop only this many days after
+# the terminal day; within the window a re-mention is ignored (never revived).
+# The sweep deletes terminal docs after TERMINAL_RETENTION_DAYS, so in the
+# daily-pass flow the cool-off and the doc's lifetime end together.
+REMENTION_COOLDOWN_DAYS = 14
+
+# Defensive caps on the daily pass's model output (the prompt asks for far
+# less): a runaway response cannot flood the store or the cards document.
+MODEL_LOOPS_CAP = 40
+LOOP_TEXT_MAX_CHARS = 160
+DUE_MAX_CHARS = 40
 
 _WORD_RE = re.compile(r'[a-z0-9]+')
 _FUNCTION_WORDS = frozenset(
@@ -116,16 +141,18 @@ def significant_tokens(*values: Any) -> frozenset[str]:
     return frozenset(t for t in tokens if len(t) > 2 and t not in _FUNCTION_WORDS)
 
 
-def token_similarity(a: frozenset[str], b: frozenset[str]) -> float:
-    """max(Jaccard, containment) over significant tokens.
+def similarity_parts(a: frozenset[str], b: frozenset[str]) -> tuple[float, float]:
+    """``(jaccard, containment)`` over significant tokens.
 
     Containment matters because a loop's "send the vendor write-up" is often a
     short restatement of a longer task title; Jaccard alone would miss it.
+    Callers combine the two parts with the AND rules the threshold constants
+    document — a single loose max() is what let the wrong task complete.
     """
     if not a or not b:
-        return 0.0
+        return 0.0, 0.0
     shared = len(a & b)
-    return max(shared / len(a | b), shared / min(len(a), len(b)))
+    return shared / len(a | b), shared / min(len(a), len(b))
 
 
 def _as_date(value: Any) -> Optional[date]:
@@ -247,6 +274,11 @@ def merge_loop(existing: Mapping[str, Any], incoming: Mapping[str, Any]) -> dict
     merged['source_conversation_ids'] = ids[:10]
     if incoming.get('linked_task_id'):
         merged['linked_task_id'] = incoming['linked_task_id']
+        # Strength travels with the link: a model-asserted task link keeps
+        # task_link='model' (and its render fields) across the merge.
+        for field in ('task_link', 'linked_task_title', 'linked_task_created_at'):
+            if incoming.get(field):
+                merged[field] = incoming[field]
     incoming_history = [e for e in (incoming.get('history') or []) if isinstance(e, Mapping)]
     merged['history'] = (list(existing.get('history') or []) + incoming_history)[-10:]
     return merged
@@ -255,33 +287,106 @@ def merge_loop(existing: Mapping[str, Any], incoming: Mapping[str, Any]) -> dict
 def find_task_match(loop: Mapping[str, Any], tasks: Sequence[Mapping[str, Any]]) -> Optional[Mapping[str, Any]]:
     """The open task this loop is asking about, or None.
 
-    First-version heuristic (documented seam): significant-token overlap of the
-    loop's who+what against each task title, scored ``max(Jaccard,
-    containment)``; the best task wins at ``MATCH_THRESHOLD``. A Jev-based
-    matcher later replaces this function only.
+    First-version heuristic (documented seam — the single function a Jev-based
+    matcher replaces): significant-token overlap of the loop's who+what against
+    each task title, requiring **both** Jaccard ≥ ``TASK_MATCH_JACCARD_MIN``
+    and containment ≥ ``TASK_MATCH_CONTAINMENT_MIN``; the best task wins. When
+    both sides name a ``who`` it must be the same person: "Tyler: send deck"
+    never links to "send deck to investors" — that false link is what completed
+    the wrong task in review.
     """
     loop_tokens = significant_tokens(loop.get('who'), loop.get('what'))
     if not loop_tokens:
         return None
+    loop_who = normalize_text(loop.get('who'))
     best: Optional[Mapping[str, Any]] = None
-    best_score = 0.0
+    best_key: tuple[float, float] = (0.0, 0.0)
     for task in tasks:
-        score = token_similarity(loop_tokens, significant_tokens(task.get('title') or task.get('description')))
-        if score > best_score:
-            best, best_score = task, score
-    return best if best_score >= MATCH_THRESHOLD else None
+        task_who = normalize_text(task.get('who'))
+        if loop_who and task_who and loop_who != task_who:
+            continue
+        jaccard, containment = similarity_parts(
+            loop_tokens, significant_tokens(task.get('title') or task.get('description'))
+        )
+        if jaccard < TASK_MATCH_JACCARD_MIN or containment < TASK_MATCH_CONTAINMENT_MIN:
+            continue
+        if (jaccard, containment) > best_key:
+            best, best_key = task, (jaccard, containment)
+    return best
+
+
+def text_names_task(text: Any, title: Any) -> bool:
+    """Whether a rendered card's text names the task by its significant tokens.
+
+    The Done-completion gate: only an answer to a card that actually carried
+    the task's own description may complete that task.
+    """
+    title_tokens = significant_tokens(title)
+    if not title_tokens:
+        return False
+    text_tokens = significant_tokens(text)
+    return len(title_tokens & text_tokens) / len(title_tokens) >= TASK_MATCH_CONTAINMENT_MIN
+
+
+def _same_or_absent_who(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
+    who_a = normalize_text(a.get('who'))
+    who_b = normalize_text(b.get('who'))
+    return not who_a or not who_b or who_a == who_b
 
 
 def loops_match(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
-    """Whether two loops are the same follow-up in different wording."""
+    """Whether two loops are the same follow-up in different wording.
+
+    Same normalized ``who`` is required whenever both name one (a deliverable
+    from Tyler is not a deliverable from Ann), and the token overlap must pass
+    both merge thresholds — stricter than the task-match pair because a merge
+    rewrites the store while a task link only annotates a card.
+    """
     if a.get('stable_key') and a.get('stable_key') == b.get('stable_key'):
         return True
-    return (
-        token_similarity(
-            significant_tokens(a.get('who'), a.get('what')), significant_tokens(b.get('who'), b.get('what'))
-        )
-        >= MATCH_THRESHOLD
+    if not _same_or_absent_who(a, b):
+        return False
+    jaccard, containment = similarity_parts(
+        significant_tokens(a.get('who'), a.get('what')), significant_tokens(b.get('who'), b.get('what'))
     )
+    return jaccard >= LOOP_MERGE_JACCARD_MIN and containment >= LOOP_MERGE_CONTAINMENT_MIN
+
+
+def remention_blocked(
+    existing: Iterable[Mapping[str, Any]],
+    *,
+    kind: Any,
+    who: Any,
+    what: Any,
+    today: date,
+    linked_task_id: Any = None,
+) -> bool:
+    """Whether a terminal loop closed this same follow-up too recently.
+
+    A dropped/resolved/expired loop is never revived. Within
+    ``REMENTION_COOLDOWN_DAYS`` of its terminal day, a re-mention of the same
+    follow-up (same stable identity, same task link, or a ``loops_match`` hit)
+    opens nothing at all; after the cool-off it may open a NEW loop with fresh
+    history (by then the sweep has deleted the terminal document).
+    """
+    key = stable_key(kind, who, what)
+    task_loop_id = f'task-{linked_task_id}' if linked_task_id else None
+    candidate = {'kind': kind, 'who': who, 'what': what}
+    for loop in existing:
+        if loop.get('status') not in TERMINAL_STATUSES:
+            continue
+        same = (
+            str(loop.get('id')) == key
+            or (task_loop_id is not None and str(loop.get('id')) == task_loop_id)
+            or str(loop.get('stable_key') or '') == key
+            or loops_match(candidate, loop)
+        )
+        if not same:
+            continue
+        ended = terminal_day(loop)
+        if ended is not None and (today - ended).days < REMENTION_COOLDOWN_DAYS:
+            return True
+    return False
 
 
 def merge_duplicates(loops: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -290,11 +395,14 @@ def merge_duplicates(loops: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]
     Blind-label evidence (KB D31): a stand-in dedupe that dropped wanted cards
     whenever a matching task existed was wrong 7/12 times — so here the match
     *merges* and the task link always survives.
+
+    A terminal loop never merges with anything: merging would pull it back
+    into a survivor that can still surface, and a closed loop must stay closed.
     """
     survivors: list[dict[str, Any]] = []
     for loop in loops:
         duplicate = next((s for s in survivors if s.get('id') != loop.get('id') and loops_match(s, loop)), None)
-        if duplicate is None:
+        if duplicate is None or duplicate.get('status') in TERMINAL_STATUSES or loop.get('status') in TERMINAL_STATUSES:
             survivors.append(dict(loop))
             continue
         if loop.get('linked_task_id') and not duplicate.get('linked_task_id'):
@@ -398,12 +506,24 @@ def mark_surfaced(loop: Mapping[str, Any], day: date) -> dict[str, Any]:
 
 
 def card_view(loop: Mapping[str, Any]) -> dict[str, Any]:
-    """The field names ``utils.open_loops.card.build_card`` renders from."""
+    """The field names ``utils.open_loops.card.build_card`` renders from.
+
+    A strong (model-asserted) task link renders the task's own description in
+    the card — "Did you send Tyler the bullets for the Stably write-up? (your
+    task from Thu)" — so a Done answer is evidence about the task itself. A
+    heuristic-only link stays ask-only: the card keeps the loop's wording and
+    Done resolves the loop without completing the task.
+    """
     view = dict(loop)
     view['due'] = loop.get('by_when')
     view['title'] = loop.get('source_title') or 'conversation'
     if loop.get('source_started_at'):
         view['started_at'] = loop.get('source_started_at')
-    if loop.get('linked_task_id') and not view.get('what'):
-        view['related_task'] = {'title': loop.get('linked_task_title')}
+    task_title = loop.get('linked_task_title')
+    if loop.get('linked_task_id') and task_title:
+        if loop.get('task_link') == 'model':
+            view['what'] = task_title
+            view['related_task'] = {'title': task_title, 'opened_on': loop.get('linked_task_created_at')}
+        elif not view.get('what'):
+            view['related_task'] = {'title': task_title}
     return view

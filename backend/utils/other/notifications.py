@@ -21,7 +21,7 @@ from database.redis_db import release_daily_summary_lock, try_acquire_daily_summ
 from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.summary_selection import select_primary_summary
-from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.executors import db_executor, open_loops_executor, postprocess_executor, run_blocking
 from utils.conversations.relevance_content import exclude_from_derived
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from config.refactor_modes import serving_for
@@ -347,6 +347,13 @@ DAILY_SUMMARY_USER_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_USER_BUDGET_SECOND
 # and can abort the rest of the hour group. A developer webhook must never be able to
 # cost anyone else their recap, so it is bounded well inside the budget it now shares.
 DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS', 20.0)
+# The open-loops daily pass runs AFTER the recap's own work (push, backfill,
+# webhook) is fully done, on its own executor under this deadline. It is a
+# separate budget on purpose: a slow or failing pass must never spend the
+# user's recap budget, delay the webhook, mark a recipient timed_out or count
+# toward DAILY_SUMMARY_MAX_ABANDONED_USERS — recap metrics and ordering are
+# untouched by everything below this line.
+OPEN_LOOPS_PASS_BUDGET_SECONDS = _env_float('OPEN_LOOPS_PASS_BUDGET_SECONDS', 45.0)
 # Rendered-character budget for the conversation material fed to the summary
 # prompt. ~360k chars is roughly 90k tokens, comfortably inside the 272k-token
 # model limit even alongside the prompt scaffolding and the user's memories.
@@ -933,15 +940,16 @@ def _backfill_recent_daily_summaries(uid, display_date, tz_name: Optional[str]) 
 def _run_open_loops_daily_pass(uid, date_str, start_date_utc, end_date_utc, tz_name) -> None:
     """The open-loops daily pass as a sibling step of the recap (fail-open).
 
-    One structured call per user per local day, after the recap itself: it
-    reuses the recap's conversation render, updates the loop store and stores
-    the day's Review cards (not served in this PR). Its own guards —
-    ``OPEN_LOOPS_ENABLED``, the per-day cards marker and the no-signal cost
-    check — decide whether the model call happens at all. A user whose recap
-    was budget-declined spends nothing here either; a locked day belongs to
-    the worker that holds the lock, and that worker runs the pass. Every
-    failure is contained — including the pass module's own import — the
-    recap must never notice this step.
+    One structured call per user per local day, dispatched only after the
+    recap's own work for that user fully finished (see
+    ``_dispatch_open_loops_passes``): it reuses the recap's conversation
+    render, updates the loop store and stores the day's Review cards (not
+    served in this PR). Its own guards — ``OPEN_LOOPS_ENABLED``, the per-day
+    claim/cards marker and the no-signal cost check — decide whether the model
+    call happens at all. A user whose recap was budget-declined spends nothing
+    here either; a locked day belongs to the worker that holds the lock, and
+    that worker runs the pass. Every failure is contained — including the pass
+    module's own import — the recap must never notice this step.
     """
     try:
         from utils.open_loops.daily import run_daily_pass
@@ -961,7 +969,62 @@ def _run_open_loops_daily_pass(uid, date_str, start_date_utc, end_date_utc, tz_n
         logger.error('open_loops_daily_pass_failed uid=%s date=%s error=%s', uid, date_str, error, exc_info=error)
 
 
-def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
+async def _dispatch_open_loops_passes(pass_requests: List[Tuple[Any, ...]]) -> None:
+    """Run the day's open-loops passes off the recap critical path.
+
+    Each request is ``(uid, date_str, start_utc, end_utc, tz_name)`` returned
+    by ``_send_summary_notification`` after that user's recap work — summary,
+    push, backfill and webhook — completed. The pass runs on the dedicated
+    ``open_loops_executor`` under ``OPEN_LOOPS_PASS_BUDGET_SECONDS``: past the
+    deadline the coroutine abandons the worker (a thread cannot be cancelled)
+    and moves on, exactly like a timed-out recap worker — but nothing here
+    ever touches a recap recipient metric, ``counters.timed_out``,
+    ``DAILY_SUMMARY_MAX_ABANDONED_USERS`` or user ordering. The pass's own
+    per-day claim bounds what an abandoned worker can spend.
+    """
+    if not pass_requests:
+        return
+
+    async def one_pass(request: Tuple[Any, ...]) -> None:
+        uid, date_str, start_date_utc, end_date_utc, tz_name = request
+        try:
+            await asyncio.wait_for(
+                run_blocking(
+                    open_loops_executor,
+                    _run_open_loops_daily_pass,
+                    uid,
+                    date_str,
+                    start_date_utc,
+                    end_date_utc,
+                    tz_name,
+                ),
+                timeout=OPEN_LOOPS_PASS_BUDGET_SECONDS,
+            )
+        except (asyncio.TimeoutError, TimeoutError):
+            logger.error(
+                'open_loops_daily_pass_abandoned uid=%s date=%s budget_seconds=%s',
+                uid,
+                date_str,
+                OPEN_LOOPS_PASS_BUDGET_SECONDS,
+            )
+        except Exception as error:
+            logger.error('open_loops_daily_pass_dispatch_failed uid=%s date=%s error=%s', uid, date_str, error)
+
+    await asyncio.gather(*(one_pass(request) for request in pass_requests))
+
+
+def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str, str, Any, Any, Optional[str]]]:
+    """One user's recap work. Returns the open-loops pass request, or None.
+
+    The recap's own steps — generation, push, backfill walk, webhook — all
+    complete (or raise) inside this function. The open-loops daily pass is
+    deliberately NOT among them: it runs on its own executor and budget after
+    this worker finishes (see ``_dispatch_open_loops_passes``), so a slow pass
+    can never delay the webhook, spend the user's 90 s recap budget or defer
+    another user's recap. The return value carries
+    ``(uid, date_str, start_utc, end_utc, tz_name)`` only when the pass should
+    run — never for a day another worker owns or a budget already declined.
+    """
     if not serving_for('CALLS_RECAP_MODE', user_data[0]) and not generated_compute_allowed(
         user_data[0], 'daily_summary'
     ):
@@ -1043,15 +1106,16 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         # Deferred to the end of this user's work. See _deliver_day_summary_webhook.
         pending_webhook = summary_data
 
+    # Sibling step intent: the open-loops daily pass for this user's local
+    # day. Only the *request* is produced here, after the recap's own outcome
+    # is settled — the coordinator dispatches it off the recap budget once
+    # this worker's push, backfill and webhook have all finished. Never for a
+    # day another worker owns or a budget already declined.
+    pass_request: Optional[Tuple[str, str, Any, Any, Optional[str]]] = None
+    if declined not in (_DECLINE_LOCKED, _DECLINE_USAGE_BUDGET):
+        pass_request = (uid, date_str, start_date_utc, end_date_utc, user_tz_name)
+
     try:
-
-        # Sibling step: the open-loops daily pass for this user's local day.
-        # Runs after the recap's own outcome is settled, before the backfill
-        # walk (which covers *past* days the pass must never touch), and never
-        # for a day another worker owns or a budget already declined.
-        if declined not in (_DECLINE_LOCKED, _DECLINE_USAGE_BUDGET):
-            _run_open_loops_daily_pass(uid, date_str, start_date_utc, end_date_utc, user_tz_name)
-
         # Backfill only for owners who are actually still recording. Dropping the FCM-token filter in
         # get_users_for_daily_summary_indexed widened this fan-out to every user in the timezone, and an
         # unconditional 7-day walk would spend 7 lock writes + 7 by-date reads + 7 conversation queries
@@ -1066,7 +1130,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         # earlier days most need walking back — so `_DECLINE_NOTHING_TO_SUMMARIZE` is deliberately
         # absent from this set.
         if declined in (_DECLINE_LOCKED, _DECLINE_NO_CONVERSATIONS):
-            return
+            return pass_request
 
         _backfill_recent_daily_summaries(uid, display_date, user_tz_name)
     finally:
@@ -1076,6 +1140,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         # exists to stop -- just moved to a different exit.
         if pending_webhook is not None:
             _deliver_day_summary_webhook(uid, pending_webhook)
+    return pass_request
 
 
 async def _send_bulk_summary_notification(
@@ -1183,6 +1248,22 @@ async def _send_bulk_summary_notification(
                 )
             else:
                 counters.succeeded += 1
+
+        # Open-loops passes for the users whose recaps just completed — after
+        # the batch barrier, so recap ordering and metrics are already
+        # settled. Runs on the dedicated executor under its own budget and is
+        # dropped loudly (never counted against recap metrics) once the job
+        # budget is spent; the next tick re-requests the pass for a day whose
+        # cards document is still absent.
+        pass_requests = [result for result in results if not isinstance(result, BaseException) and result is not None]
+        if pass_requests and (deadline is None or monotonic() < deadline):
+            await _dispatch_open_loops_passes(pass_requests)
+        elif pass_requests:
+            logger.info(
+                'open_loops_daily_passes_dropped reason=job_budget count=%d hour=%s',
+                len(pass_requests),
+                target_hour,
+            )
 
         if cursor_key and i + _BATCH_SIZE < len(users):
             await _checkpoint(

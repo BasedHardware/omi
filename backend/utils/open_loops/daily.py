@@ -1,11 +1,15 @@
 """The open-loops daily pass: one structured call per user per local day.
 
 A sibling step of the daily recap job: when the recap cohort processes a
-user's completed local day, this pass runs after the recap itself (see
-``utils.other.notifications._run_open_loops_daily_pass``). It renders the day
-exactly as the recap does (same deserializer, renderer and char budget, so
-the shared bytes lead the prompt for cache reuse), then makes exactly one
-model call (feature key ``open_loop_daily``, usage-tracked) that:
+user's completed local day, this pass is dispatched after the recap's own
+work is fully done — push, backfill and webhook — onto a dedicated executor
+with its own deadline (see ``utils.other.notifications``), so a slow pass can
+never spend recap budget, delay the webhook or defer another user's recap.
+It renders the day with the recap's own deserializer, char budget and
+renderer — the same *view* of the day, though not a byte-identical shared
+prompt prefix (the recap's system prompt and eligibility filter differ, so
+no prompt-cache prefix is actually shared) — then makes exactly one model
+call (feature key ``open_loop_daily``, usage-tracked) that:
 
 1. decides statuses for carried loops, open tasks and today's extractions —
    only loops with signal come back;
@@ -13,19 +17,26 @@ model call (feature key ``open_loop_daily``, usage-tracked) that:
 3. proposes up to three ranked surface candidates with a 1–5 value score.
 
 Deterministic post-processing owns everything the UI depends on: task-aware
-dedupe (link, never drop), loop-to-loop dedupe (merge, task-linked survivor
-wins), the two-day re-ask cooldown, snoozes, expiry and the three-slot /
-value-≥3 ranking. Cards render through ``utils.open_loops.card`` and persist
-per local day; nothing is served to clients in this PR — PR 3 adds the Review
-source and the mobile UI through ``utils.open_loops.service``.
+dedupe (link, never drop; only a model-asserted ``from_task_id`` link is
+strong enough for Done to complete a task), loop-to-loop dedupe (merge,
+task-linked survivor wins), the two-day re-ask cooldown, snoozes, expiry and
+the three-slot / value-≥3 ranking. Terminal loops never come back: they are
+excluded from update matching and merging, and their follow-up can open a
+NEW loop only after ``store.REMENTION_COOLDOWN_DAYS``. Cards render through
+``utils.open_loops.card`` and persist per local day; nothing is served to
+clients in this PR — PR 3 adds the Review source and the mobile UI through
+``utils.open_loops.service``.
 
-Fail-open contract: this pass may raise; the recap sibling step catches every
+Fail-open contract: this pass may raise; the dispatcher catches every
 failure, logs it and moves on. A day whose pass failed simply has no cards.
 
 Cost guards: ``OPEN_LOOPS_ENABLED`` off skips the pass and writes nothing; a
-user with no extractions that day and no open loops skips the model call; the
-cards document for the day doubles as the once-per-day marker, so retried
-recap ticks never double-spend.
+user with no extractions and no open loops, or with no conversations and no
+due-soon loop, skips the model call; an atomic per-day claim
+(``database.open_loops.claim_daily_pass``) is taken **before** the model
+call, so retried recap ticks, abandoned threads and the locked-retry path
+never double-spend — and the per-day cards document still marks the day as
+run.
 """
 
 from __future__ import annotations
@@ -56,6 +67,7 @@ logger = logging.getLogger(__name__)
 RAN = 'ran'
 SKIPPED_DISABLED = 'skipped_disabled'
 SKIPPED_ALREADY_RAN = 'skipped_already_ran'
+SKIPPED_CLAIMED = 'skipped_claimed'
 SKIPPED_NO_SIGNAL = 'skipped_no_signal'
 
 # The model may decide exactly these statuses (the offline-validated set).
@@ -195,22 +207,29 @@ def ingest_model_loops(
     Returns ``(loop_writes, absorbed_ids, model_id_map)``. Deterministic rules,
     model proposals only:
 
+    - Terminal loops (resolved/dropped/expired) are never update targets: a
+      ``loop_id`` or similarity hit against one is ignored, and the same
+      follow-up can open a NEW loop only after
+      ``store.REMENTION_COOLDOWN_DAYS`` — a re-mentioned dropped item never
+      revives the dropped loop.
     - A carried ``loop_id``, a stable-key hit, or a token-similarity duplicate
       updates or merges into one loop — never a second document.
     - A loop from an open task (``from_task_id``) keeps the ``task-<id>``
-      identity the prompt defines; ``linked_task_id`` records the link.
-    - A loop matching an open task is linked, never dropped (task-aware
-      dedupe; see ``store.find_task_match`` for the documented Jev seam).
+      identity the prompt defines; ``linked_task_id`` records the link and
+      ``task_link='model'`` its strength (Done may complete the task).
+    - A loop matching an open task is linked (``task_link='heuristic'``),
+      never dropped (task-aware dedupe; see ``store.find_task_match`` for the
+      documented Jev seam).
     - History and ``last_activity_at`` move only on a status decision, and
       only the decidable status vocabulary is accepted.
     - ``absorbed_ids`` are store documents a merge retired; the caller deletes
       them so the store never grows duplicates.
     """
-    by_id = {str(loop.get('id')): dict(loop) for loop in existing}
+    by_id = {str(loop.get('id')): dict(loop) for loop in existing if store.is_open(loop)}
     updates: Dict[str, Dict[str, Any]] = {}
     model_id_map: Dict[str, str] = {}
 
-    for entry in model_loops:
+    for entry in model_loops[: store.MODEL_LOOPS_CAP]:
         if not isinstance(entry, Mapping):
             continue
         status = entry.get('status')
@@ -220,8 +239,8 @@ def ingest_model_loops(
         kind = entry.get('kind') if entry.get('kind') in store.LOOP_KINDS else None
         if kind is None:
             kind = 'own_commitment' if task_id else 'owed_to_user'
-        who = str(entry.get('who') or '').strip() or None
-        what = str(entry.get('what') or '').strip()
+        who = str(entry.get('who') or '').strip()[: store.LOOP_TEXT_MAX_CHARS] or None
+        what = str(entry.get('what') or '').strip()[: store.LOOP_TEXT_MAX_CHARS]
         if not what and not task_id:
             continue
 
@@ -248,6 +267,10 @@ def ingest_model_loops(
                     break
 
         if target is None:
+            if store.remention_blocked(existing, kind=kind, who=who, what=what, today=today, linked_task_id=task_id):
+                # The same follow-up a terminal loop closed too recently:
+                # ignored, and the terminal loop is left exactly as it is.
+                continue
             loop_id = f'task-{task_id}' if task_id else key
             target = {'id': loop_id, 'stable_key': key, 'created_at': _iso(now), 'times_surfaced': 0, 'history': []}
         else:
@@ -261,16 +284,18 @@ def ingest_model_loops(
         loop['kind'] = kind
         loop['stable_key'] = key
         if entry.get('due'):
-            loop['by_when'] = entry.get('due')
+            loop['by_when'] = str(entry.get('due'))[: store.DUE_MAX_CHARS]
         if entry.get('evidence'):
             loop['evidence'] = str(entry['evidence'])[:200]
         if entry.get('work_related') is not None:
             loop['work_related'] = bool(entry['work_related'])
         if task_id:
             loop['linked_task_id'] = task_id
+            loop['task_link'] = 'model'
             task = next((t for t in tasks if str(t.get('task_id')) == task_id), None)
             if task is not None:
-                loop['linked_task_title'] = task.get('title')
+                loop['linked_task_title'] = str(task.get('title') or '')[: store.LOOP_TEXT_MAX_CHARS] or None
+                loop['linked_task_created_at'] = _iso(task.get('created_at'))
         loop.update(_source_fields(entry, conversation_meta, target))
         if loop.get('status') != status:
             loop = store.append_history(loop, today, status, str(entry.get('evidence') or ''))
@@ -302,7 +327,12 @@ def ingest_model_loops(
 
 
 def _link_tasks(loops: List[Dict[str, Any]], tasks: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
-    """Task-aware dedupe: link matching open loops to their task, never drop."""
+    """Task-aware dedupe: link matching open loops to their task, never drop.
+
+    These links are heuristic (``find_task_match`` token overlap) — ask-only:
+    the card keeps the loop's wording and a Done answer resolves the loop
+    without completing the task.
+    """
     for loop in loops:
         if loop.get('linked_task_id') or loop.get('status') in store.TERMINAL_STATUSES:
             continue
@@ -310,6 +340,7 @@ def _link_tasks(loops: List[Dict[str, Any]], tasks: Sequence[Mapping[str, Any]])
         if match is not None:
             loop['linked_task_id'] = str(match.get('task_id'))
             loop['linked_task_title'] = match.get('title')
+            loop['task_link'] = 'heuristic'
     return loops
 
 
@@ -350,8 +381,9 @@ def run_daily_pass(
 
     ``start_utc``/``end_utc`` are the local day's UTC bounds, as the recap
     computes them. Returns ``RAN`` or a ``SKIPPED_*`` reason; raises on
-    infrastructure/model failure — the recap sibling step owns the fail-open
-    catch.
+    infrastructure/model failure — the dispatching sibling step owns the
+    fail-open catch, and a raised pass releases its claim so the day may
+    retry exactly once.
     """
     if not open_loops_enabled():
         return SKIPPED_DISABLED
@@ -380,9 +412,58 @@ def run_daily_pass(
     loops = [expired_by_id.get(str(loop.get('id')), loop) for loop in loops if str(loop.get('id')) not in set(deletes)]
 
     open_loops = [loop for loop in loops if store.is_open(loop)]
+    due_soon_any = any(loop.get('status') == 'due_soon' for loop in open_loops)
     if not extraction_entries and not open_loops:
         return SKIPPED_NO_SIGNAL
+    if not rows and not due_soon_any:
+        # No conversations today and nothing due: don't pay the daily call
+        # just to re-stale carried loops.
+        return SKIPPED_NO_SIGNAL
 
+    # The spend guard: atomically claim the day before the model call, so a
+    # retried tick, an abandoned worker or the recap's locked-retry path can
+    # never double-pay for this local day.
+    if not open_loops_db.claim_daily_pass(uid, date_str, now=now, firestore_client=firestore_client):
+        return SKIPPED_CLAIMED
+
+    try:
+        return _run_claimed_pass(
+            uid,
+            date_str=date_str,
+            tz=tz,
+            rows=rows,
+            extraction_entries=extraction_entries,
+            loops=loops,
+            open_loops=open_loops,
+            today=today,
+            now=now,
+            firestore_client=firestore_client,
+            llm=llm,
+            polisher=polisher,
+        )
+    except Exception:
+        # Release for exactly one bounded retry (see claim_daily_pass); the
+        # cards document stays absent, so the day is still marked unrun.
+        open_loops_db.mark_daily_pass_failed(uid, date_str, firestore_client=firestore_client)
+        raise
+
+
+def _run_claimed_pass(
+    uid: str,
+    *,
+    date_str: str,
+    tz: Optional[str],
+    rows: Sequence[Mapping[str, Any]],
+    extraction_entries: List[Dict[str, Any]],
+    loops: List[Dict[str, Any]],
+    open_loops: List[Dict[str, Any]],
+    today: date,
+    now: datetime,
+    firestore_client: Any,
+    llm: Optional[Any],
+    polisher: Optional[Callable],
+) -> str:
+    """The claimed (already paid-for-once) pass: prompt, one model call, writes."""
     carried = sorted(open_loops, key=store.carried_relevance)[: store.CARRIED_LOOPS_PROMPT_CAP]
     carried_views = [store.carried_view(loop, today) for loop in carried]
     tasks = open_tasks_view(uid, today)
@@ -423,6 +504,10 @@ def run_daily_pass(
     model_loops: List[Any] = list(raw_loops) if isinstance(raw_loops, list) else []
     raw_surface = parsed.get('surface')
     surface_entries: List[Any] = list(raw_surface) if isinstance(raw_surface, list) else []
+    # Defensive output caps: the prompt asks for ≤3 surface entries and a
+    # short loop list; a runaway response cannot flood the store or cards.
+    model_loops = model_loops[: store.MODEL_LOOPS_CAP]
+    surface_entries = surface_entries[: store.DAILY_CARD_SLOTS]
 
     writes, absorbed, model_id_map = ingest_model_loops(
         model_loops,
@@ -475,6 +560,7 @@ def run_daily_pass(
     for loop in writes:
         open_loops_db.upsert_loop(uid, loop, firestore_client=firestore_client)
     open_loops_db.set_cards(uid, date_str, cards, firestore_client=firestore_client)
+    open_loops_db.mark_daily_pass_ran(uid, date_str, firestore_client=firestore_client)
     logger.info(
         'open_loops_daily_pass uid=%s date=%s loops_written=%d cards=%d',
         uid,

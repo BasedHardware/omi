@@ -30,26 +30,44 @@ served yet; Review surfacing and the mobile UI arrive in PR 3.
 - `store.py` — pure domain rules: stable-key identity (normalized
   who+what+kind), expiry windows (no signal: 7 days default, own_commitment
   10, owed_to_user 14; terminal docs deleted after 14 more days; open-store
-  cap 60), loop/task matching (token max(Jaccard, containment) ≥ 0.6 — the
+  cap 60), loop/task matching (token overlap requiring **both** Jaccard ≥ 0.6
+  and containment ≥ 0.8, and the same `who` when both sides name one — the
   documented seam a Jev-based matcher replaces via `find_task_match`),
-  duplicate merging (a task-linked survivor beats a plain one — a matching
-  task is linked, never dropped), the two-day re-ask cooldown (re-armed by
-  due_soon), snoozes, and the slot ranking (value ≥ 3, due_soon first, work
-  first, at most 3).
+  duplicate merging (same normalized `who`, Jaccard ≥ 0.7 **and** containment
+  ≥ 0.8; a task-linked survivor beats a plain one; a matching task is linked,
+  never dropped), terminal-loop protection (resolved/dropped/expired loops
+  never update, merge or revive; the same follow-up opens a new loop only
+  after `REMENTION_COOLDOWN_DAYS` = 14), the two-day re-ask cooldown
+  (re-armed by due_soon), snoozes, and the slot ranking (value ≥ 3, due_soon
+  first, work first, at most 3).
 - `daily.py` — the daily pass: one structured call per user per local day
-  (feature key `open_loop_daily`, gpt-6-luna, usage-tracked), run as a
-  fail-open sibling step of the daily recap job
-  (`utils/other/notifications._run_open_loops_daily_pass`). The day is
-  rendered exactly as the recap renders it (same deserializer, char budget
-  and renderer) and leads the prompt; the JSON state (extractions, ≤20
-  carried loops, ≤40 open tasks, the day's recap) follows. The model proposes
-  statuses/resolutions/rankings; deterministic post-processing decides. The
-  per-day cards document is the once-per-day marker; `OPEN_LOOPS_ENABLED`
-  off or a no-signal day (no extractions and no open loops) spends nothing.
-- `service.py` — the PR 3 Review source functions: `list_pending_cards` and
-  `answer_card` (done → resolved + linked-task completion through the
-  action-item update path; remind → snooze +2d; drop → dropped + negative
-  example kept on the loop). No route serves them yet.
+  (feature key `open_loop_daily`, gpt-6-luna, usage-tracked), fail-open and
+  **off the recap critical path**: the recap worker finishes summary, push,
+  backfill and webhook first and only returns a pass request, which the
+  coordinator dispatches onto the dedicated `open_loops_executor` under
+  `OPEN_LOOPS_PASS_BUDGET_SECONDS` (45 s) — a slow or failing pass never
+  spends recap budget, delays the webhook or counts toward recap
+  timeouts/abandoned users (`utils/other/notifications`). The day is rendered
+  with the recap's own deserializer, char budget and renderer — the same view
+  of the day, not a byte-shared prompt prefix — and leads the prompt; the
+  JSON state (extractions, ≤20 carried loops, ≤40 open tasks, the day's
+  recap) follows. The model proposes statuses/resolutions/rankings;
+  deterministic post-processing decides, with defensive caps on the model
+  output (`MODEL_LOOPS_CAP`, ≤3 surface entries). Before the model call an
+  atomic per-day claim (`open_loop_claims`, create-if-absent, ≤2 attempts)
+  makes retried ticks, abandoned workers and the locked-retry path pay at
+  most once; the per-day cards document still marks the day as run.
+  `OPEN_LOOPS_ENABLED` off or a no-signal day (no extractions and no open
+  loops, or no conversations and nothing due soon) spends nothing.
+- `service.py` — the PR 3 Review source functions: `list_pending_cards`
+  (defaults to the recap's most recently completed local day — the recap's
+  noon-split rule) and `answer_card` (done → resolved, plus task completion
+  **only** through a strong link — `task_link='model'` (the model asserted
+  `from_task_id`) and the answered card's text actually naming the task; the
+  completion goes through the app's own path, `mark_action_item_completed` +
+  reminder reconciliation #5085. Heuristic links stay ask-only: Done resolves
+  the loop, never the task; remind → snooze +2d in the user's timezone; drop
+  → dropped + negative example kept on the loop). No route serves them yet.
 
 ## Storage contract
 
@@ -85,6 +103,10 @@ Write semantics from conversation processing:
 - `users/{uid}/open_loop_cards/{date}` — the local day's surfaced cards
   (state pending|done|remind|dropped), same protection. Its existence — even
   with an empty list — marks the pass as run for that day.
+- `users/{uid}/open_loop_claims/{date}` — the plain, tiny spend guard for the
+  pass: claimed atomically (create-if-absent) before the model call, `state`
+  claimed|ran|failed, `attempts` ≤ 2 (one genuine retry after a failure; a
+  stale claim from an abandoned worker may be taken over after 10 minutes).
 
 The daily pass skips merge-donor conversations (`sync_merged_into`), locked
 and discarded rows, and rows the recap's own eligibility rule excludes from
@@ -108,8 +130,11 @@ meetings currently extract none.
 `test_open_loops_card.py` (card writer cases),
 `test_open_loops_store.py` (identity, expiry, dedupe, cooldown, ranking,
 encrypted store roundtrip),
-`test_open_loops_daily.py` (pass guards, ingestion, linking, slots),
-`test_open_loops_service.py` (answer transitions incl. task completion),
-`test_open_loops_recap_integration.py` (sibling step, fail-open),
+`test_open_loops_daily.py` (pass guards, ingestion, linking, slots, claims,
+terminal-loop cool-off),
+`test_open_loops_service.py` (answer transitions incl. strong-link-only task
+completion),
+`test_open_loops_recap_integration.py` (post-recap dispatch, pass budget,
+fail-open),
 `test_open_loops_replay.py` (70-day synthetic replay: bounded store, resolved
 loops stop surfacing).

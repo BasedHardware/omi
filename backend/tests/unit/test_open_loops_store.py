@@ -55,6 +55,132 @@ def test_find_task_match_links_paraphrase_and_containment():
     assert store.find_task_match({'who': 'Ann', 'what': 'book the dentist'}, tasks) is None
 
 
+def test_find_task_match_requires_both_thresholds_and_a_compatible_who():
+    """The wrong-task completion blocker: "Tyler: send deck" must not link to
+    "send deck to investors" — both Jaccard AND containment must pass, and a
+    who named on both sides must agree."""
+    tasks = [{'task_id': 't-inv', 'title': 'send deck to investors'}]
+    # jaccard({tyler,send,deck},{send,deck,investors}) = 0.5 < 0.6: no link
+    assert store.find_task_match({'who': 'Tyler', 'what': 'send deck'}, tasks) is None
+    # an unattributed short restatement still links by containment — but only
+    # ever as an ask-only heuristic link (Done never completes from it)
+    assert store.find_task_match({'who': None, 'what': 'send deck'}, tasks)['task_id'] == 't-inv'
+    # when both sides name a who, it must be the same person
+    assert (
+        store.find_task_match(
+            {'who': 'Tyler', 'what': 'send deck'}, [{'task_id': 't-ann', 'who': 'Ann', 'title': 'send deck'}]
+        )
+        is None
+    )
+    # the same deliverable, same person, still links
+    assert (
+        store.find_task_match(
+            {'who': 'Tyler', 'what': 'send deck'}, [{'task_id': 't-tyler', 'title': 'send deck to Tyler'}]
+        )['task_id']
+        == 't-tyler'
+    )
+
+
+def test_loops_match_requires_same_who_and_stricter_overlap():
+    # "Tyler send deck" vs "Tyler send invoice": two-thirds shared is not a merge
+    assert not store.loops_match({'who': 'Tyler', 'what': 'send deck'}, {'who': 'Tyler', 'what': 'send invoice'})
+    # a deliverable from Tyler is not a deliverable from Ann
+    assert not store.loops_match({'who': 'Tyler', 'what': 'send deck'}, {'who': 'Ann', 'what': 'send deck'})
+    # same person, same deliverable in different wording still merges
+    assert store.loops_match(
+        {'who': 'Maya', 'what': 'send the vendor write-up'}, {'who': 'Maya', 'what': 'send the vendor write-up please'}
+    )
+    # who absent on one side stays linkable
+    assert store.loops_match(
+        {'who': None, 'what': 'send the vendor write-up'}, {'who': 'Maya', 'what': 'send the vendor write-up'}
+    )
+
+
+def test_merge_duplicates_never_merges_a_terminal_loop():
+    """A closed loop must stay closed: even an exact-wording duplicate writes
+    alongside it, never into it."""
+    dropped = _loop(id='ol-dropped', status='dropped', who='Tyler', what='send deck')
+    fresh = _loop(id='ol-fresh', status='opened', who='Tyler', what='send deck')
+    merged = store.merge_duplicates([dropped, fresh])
+    assert [loop['id'] for loop in merged] == ['ol-dropped', 'ol-fresh']
+    assert [loop['status'] for loop in merged] == ['dropped', 'opened']
+
+
+def test_remention_blocked_only_within_the_cooldown():
+    dropped_recent = _loop(
+        status='dropped',
+        history=[{'date': (TODAY - timedelta(days=3)).isoformat(), 'status': 'dropped', 'evidence': ''}],
+    )
+    assert store.remention_blocked(
+        [dropped_recent], kind='owed_to_user', who='Maya', what='send the vendor write-up', today=TODAY
+    )
+    # same follow-up after the cool-off is free to open a NEW loop
+    dropped_old = _loop(
+        status='dropped',
+        history=[{'date': (TODAY - timedelta(days=20)).isoformat(), 'status': 'dropped', 'evidence': ''}],
+    )
+    assert not store.remention_blocked(
+        [dropped_old], kind='owed_to_user', who='Maya', what='send the vendor write-up', today=TODAY
+    )
+    # an open loop never blocks anything, whatever the wording
+    open_loop = _loop()
+    assert not store.remention_blocked(
+        [open_loop], kind='owed_to_user', who='Maya', what='send the vendor write-up', today=TODAY
+    )
+    # a different follow-up is never blocked by a terminal one
+    assert not store.remention_blocked(
+        [dropped_recent], kind='owed_to_user', who='Ann', what='book the dentist', today=TODAY
+    )
+
+
+def test_text_names_task_gates_completion_on_the_card_text():
+    title = 'send Tyler the bullets for the Stably write-up'
+    assert store.text_names_task('Did you send Tyler the bullets for the Stably write-up? (your task from Thu)', title)
+    assert not store.text_names_task('Did you follow up with Tyler?', title)
+    assert not store.text_names_task('', title)
+
+
+def test_card_view_renders_the_task_only_for_strong_links():
+    strong = _loop(
+        linked_task_id='task-9',
+        task_link='model',
+        linked_task_title='send Tyler the bullets',
+        linked_task_created_at='2026-10-22T09:00:00+00:00',
+    )
+    view = store.card_view(strong)
+    assert view['what'] == 'send Tyler the bullets'  # the task's own description
+    assert view['related_task']['opened_on'] == '2026-10-22T09:00:00+00:00'
+    heuristic = _loop(linked_task_id='task-9', task_link='heuristic', linked_task_title='send deck to investors')
+    view = store.card_view(heuristic)
+    assert view['what'] == 'send the vendor write-up'  # the loop's wording, not the task's
+    assert 'related_task' not in view
+
+
+def test_claim_daily_pass_is_atomic_and_bounds_retries():
+    fake = FakeFirestore()
+    uid, day = 'u1', '2026-10-26'
+    # fresh: exactly one of two concurrent claims wins (create-if-absent)
+    results = [open_loops_db.claim_daily_pass(uid, day, now=NOW, firestore_client=fake) for _ in range(2)]
+    assert results == [True, False]
+    # a live claim blocks the retry path too
+    assert not open_loops_db.claim_daily_pass(uid, day, now=NOW + timedelta(minutes=5), firestore_client=fake)
+    # a failed day releases for exactly one more attempt
+    open_loops_db.mark_daily_pass_failed(uid, day, firestore_client=fake)
+    assert open_loops_db.claim_daily_pass(uid, day, now=NOW + timedelta(minutes=6), firestore_client=fake)
+    # ... and after the second attempt fails, the day is spent
+    open_loops_db.mark_daily_pass_failed(uid, day, firestore_client=fake)
+    assert not open_loops_db.claim_daily_pass(uid, day, now=NOW + timedelta(minutes=7), firestore_client=fake)
+    # a stale claim (abandoned worker) may be taken over once
+    stale_fake = FakeFirestore()
+    stale_fake.collection('users').document(uid).collection('open_loop_claims').document(day).set(
+        {'date': day, 'state': 'claimed', 'attempts': 1, 'updated_at': (NOW - timedelta(hours=1)).isoformat()}
+    )
+    assert open_loops_db.claim_daily_pass(uid, day, now=NOW, firestore_client=stale_fake)
+    # a ran day never pays again
+    open_loops_db.mark_daily_pass_ran(uid, day, firestore_client=fake)
+    assert not open_loops_db.claim_daily_pass(uid, day, now=NOW + timedelta(hours=2), firestore_client=fake)
+
+
 def test_merge_duplicates_prefers_the_task_linked_survivor():
     plain = _loop(what='send the vendor write-up')
     linked = _loop(id='task-9', linked_task_id='9', what='send the vendor write-up', times_surfaced=2)

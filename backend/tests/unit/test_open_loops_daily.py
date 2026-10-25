@@ -167,10 +167,20 @@ def test_no_extractions_and_no_open_loops_skips_the_model_call(pass_env):
     )  # nothing written, a later tick may retry
 
 
-def test_open_loops_alone_still_justify_a_pass(pass_env):
-    """Cost guard: no extractions but open loops carried — the pass still runs."""
+def test_stale_loops_without_conversations_skip_the_model_call(pass_env):
+    """Cost guard: no conversations that day and nothing due soon — don't pay
+    the daily call just to re-stale carried loops."""
     pass_env.rows.clear()
-    _seed_loops(pass_env, [_loop()])
+    _seed_loops(pass_env, [_loop(status='stale')])
+    llm = FakeLLM()
+    assert _run(pass_env, llm) == daily.SKIPPED_NO_SIGNAL
+    assert llm.messages is None
+    assert get_cards_doc(UID, DATE_STR, firestore_client=pass_env.fake) is None
+
+
+def test_due_soon_loop_without_conversations_still_justifies_a_pass(pass_env):
+    pass_env.rows.clear()
+    _seed_loops(pass_env, [_loop(status='due_soon')])
     assert _run(pass_env, FakeLLM(_model_says_maya_due_soon())) == daily.RAN
     assert get_cards(UID, DATE_STR, firestore_client=pass_env.fake) is not None
 
@@ -181,7 +191,7 @@ def test_prompt_reuses_the_recap_render_and_carries_the_state(pass_env):
     _run(pass_env, llm)
     system, user = llm.messages[0]['content'], llm.messages[1]['content']
     assert system == OPEN_LOOPS_DAILY_RULES
-    # the recap-style conversation render leads, for prompt-cache reuse
+    # the recap-style conversation render leads the user message
     assert user.index('Pricing sync') < user.index('INPUT (JSON):')
     payload = json.loads(user.split('INPUT (JSON):\n', 1)[1])
     assert payload['date'] == DATE_STR and payload['user_timezone'] == 'UTC'
@@ -257,7 +267,7 @@ def test_new_loop_gets_the_stable_key_identity_and_source_meta():
     assert id_map['maya-vendor-writeup'] == loop['id']
 
 
-def test_task_loop_uses_the_task_identity_and_links():
+def test_task_loop_uses_the_task_identity_and_links_strongly():
     entry = {
         'loop_id': 'task-7',
         'from_task_id': '7',
@@ -270,12 +280,58 @@ def test_task_loop_uses_the_task_identity_and_links():
         'evidence': 'no mention since Oct 20',
         'source_conversation_ids': [],
     }
-    tasks = [{'task_id': '7', 'title': 'Review the pull request'}]
+    tasks = [{'task_id': '7', 'title': 'Review the pull request', 'created_at': NOW - timedelta(days=4)}]
     writes, _, id_map = daily.ingest_model_loops([entry], [], tasks, today=TODAY, conversation_meta={}, now=NOW)
     loop = writes[0]
     assert loop['id'] == 'task-7' and loop['linked_task_id'] == '7'
+    assert loop['task_link'] == 'model'  # explicit from_task_id: a strong link
+    assert loop['linked_task_title'] == 'Review the pull request'
+    assert loop['linked_task_created_at']
     assert loop['kind'] == 'own_commitment'
     assert id_map['task-7'] == 'task-7'
+
+
+def test_heuristic_task_link_is_marked_ask_only(pass_env):
+    """No from_task_id: the link comes from find_task_match and is ask-only —
+    Done resolves the loop but must not complete the task."""
+    pass_env.tasks[:] = [
+        {'id': 't9', 'description': 'Send Maya the vendor write-up brief', 'created_at': NOW, 'completed': False}
+    ]
+    payload = {
+        'loops': [
+            {
+                'loop_id': 'fresh-1',
+                'kind': 'own_commitment',
+                'who': None,
+                'what': 'send Maya the vendor write-up brief',
+                'status': 'stale',
+                'due': None,
+                'work_related': True,
+                'evidence': 'no mention since Oct 20',
+                'source_conversation_ids': ['c1'],
+            }
+        ],
+        'surface': [{'loop_id': 'fresh-1', 'why_now': 'stale', 'value': 4}],
+    }
+    assert _run(pass_env, FakeLLM(payload)) == daily.RAN
+    loops = get_loops(UID, firestore_client=pass_env.fake)
+    matching = [l for l in loops if 'vendor write-up' in str(l.get('what'))]
+    assert len(matching) == 1
+    assert matching[0]['linked_task_id'] == 't9'
+    assert matching[0]['task_link'] == 'heuristic'  # ask-only strength
+    # linked, not dropped: the card still exists and asks about it
+    cards = get_cards(UID, DATE_STR, firestore_client=pass_env.fake)
+    assert cards and cards[0]['loop_id'] == matching[0]['id']
+
+
+def test_tyler_send_deck_does_not_link_to_send_deck_to_investors():
+    """The review-blocker case: a who-scoped loop must not link (let alone
+    complete) a differently-scoped task that merely shares its wording."""
+    tasks = [{'task_id': 't-inv', 'title': 'send deck to investors'}]
+    assert store.find_task_match({'who': 'Tyler', 'what': 'send deck'}, tasks) is None
+    # and the same-who paraphrase still links
+    tasks.append({'task_id': 't-tyler', 'title': 'send deck to Tyler'})
+    assert store.find_task_match({'who': 'Tyler', 'what': 'send deck'}, tasks)['task_id'] == 't-tyler'
 
 
 def test_duplicate_wording_merges_and_reports_the_absorbed_doc():
@@ -397,13 +453,125 @@ def test_resolved_loop_is_closed_and_never_surfaces(pass_env):
     assert get_cards(UID, DATE_STR, firestore_client=pass_env.fake) == []
 
 
-def test_model_failure_raises_and_leaves_the_day_unmarked(pass_env):
+def test_model_failure_raises_releases_the_claim_and_retries_once(pass_env):
+    import database.open_loops as open_loops_db
+
     _seed_loops(pass_env, [_loop()])
     llm = FakeLLM(error=RuntimeError('gateway down'))
     with pytest.raises(RuntimeError):
         _run(pass_env, llm)
-    # no cards marker: the next recap tick may retry the pass
+    # no cards marker: the day is still unrun, and the failed claim releases
+    # for exactly one bounded retry
     assert get_cards_doc(UID, DATE_STR, firestore_client=pass_env.fake) is None
+    claim = open_loops_db._claim_ref(UID, DATE_STR, pass_env.fake).get().to_dict()
+    assert claim['state'] == 'failed'
+    # retry one: the day may pay once more, and this time it works
+    assert _run(pass_env, FakeLLM(_model_says_maya_due_soon())) == daily.RAN
+    claim = open_loops_db._claim_ref(UID, DATE_STR, pass_env.fake).get().to_dict()
+    assert claim['state'] == 'ran' and claim['attempts'] == 2
+    # retry two is refused even after another failure: the day's attempts are spent
+    open_loops_db.mark_daily_pass_failed(UID, DATE_STR, firestore_client=pass_env.fake)
+    assert not open_loops_db.claim_daily_pass(UID, DATE_STR, now=NOW, firestore_client=pass_env.fake)
+
+
+def test_concurrent_runs_make_exactly_one_model_call(pass_env):
+    """Double-spend guard: the per-day claim is taken atomically BEFORE the
+    model call, so two workers racing one local day pay exactly once."""
+    import threading
+
+    _seed_loops(pass_env, [_loop()])
+    invoke_count = []
+    invoke_lock = threading.Lock()
+
+    class SlowLLM:
+        def invoke(self, messages):
+            with invoke_lock:
+                invoke_count.append(1)
+            import time
+
+            time.sleep(0.2)
+            return SimpleNamespace(content=json.dumps({'loops': [], 'surface': []}))
+
+    outcomes = []
+    threads = [threading.Thread(target=lambda: outcomes.append(_run(pass_env, SlowLLM()))) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(outcomes) == [daily.RAN, daily.SKIPPED_CLAIMED]
+    assert len(invoke_count) == 1  # exactly one model call for the day
+
+
+def test_a_ran_day_never_pays_again(pass_env):
+    _seed_loops(pass_env, [_loop()])
+    assert _run(pass_env, FakeLLM(_model_says_maya_due_soon())) == daily.RAN
+    llm = FakeLLM(_model_says_maya_due_soon())
+    assert _run(pass_env, llm) == daily.SKIPPED_ALREADY_RAN
+    assert llm.messages is None
+
+
+def test_runaway_model_output_is_capped(pass_env):
+    """Defense in depth: a runaway response cannot flood the store or cards."""
+    runaway = {
+        'loops': [
+            {
+                'loop_id': f'slug-{i}',
+                'kind': 'owed_to_user',
+                'who': 'Maya',
+                'what': f'deliverable number {i} ' + 'x' * 500,
+                'status': 'opened',
+                'due': 'y' * 200,
+                'work_related': True,
+                'evidence': 'runaway',
+                'source_conversation_ids': ['c1'],
+            }
+            for i in range(store.MODEL_LOOPS_CAP + 30)
+        ],
+        'surface': [{'loop_id': f'slug-{i}', 'why_now': 'x', 'value': 5} for i in range(10)],
+    }
+    assert _run(pass_env, FakeLLM(runaway)) == daily.RAN
+    loops = get_loops(UID, firestore_client=pass_env.fake)
+    assert len(loops) <= store.MODEL_LOOPS_CAP
+    assert all(len(loop['what']) <= store.LOOP_TEXT_MAX_CHARS for loop in loops)
+    assert all(len(str(loop.get('by_when') or '')) <= store.DUE_MAX_CHARS for loop in loops)
+    cards = get_cards(UID, DATE_STR, firestore_client=pass_env.fake)
+    assert len(cards) <= store.DAILY_CARD_SLOTS
+
+
+def test_dropped_loop_is_never_revived_by_a_remention(pass_env):
+    """A re-mentioned dropped item never revives the dropped loop; within the
+    cool-off it opens nothing at all."""
+    dropped = _loop(status='dropped', history=[{'date': DATE_STR, 'status': 'dropped', 'evidence': ''}])
+    _seed_loops(pass_env, [dropped])
+    payload = _model_says_maya_due_soon()
+    payload['loops'][0]['loop_id'] = dropped['id']  # the model re-proposes the dropped loop
+    payload['loops'][0]['status'] = 'opened'
+    assert _run(pass_env, FakeLLM(payload)) == daily.RAN
+    loops = get_loops(UID, firestore_client=pass_env.fake)
+    assert [loop['status'] for loop in loops] == ['dropped']  # unchanged, not reopened
+    assert get_cards(UID, DATE_STR, firestore_client=pass_env.fake) == []
+
+
+def test_remention_after_the_cooldown_opens_a_new_loop(pass_env):
+    from database.open_loops import delete_loops
+
+    old_day = (TODAY - timedelta(days=20)).isoformat()
+    dropped = _loop(
+        status='dropped',
+        history=[{'date': old_day, 'status': 'dropped', 'evidence': ''}],
+        last_activity_at=f'{old_day}T09:00:00+00:00',
+    )
+    _seed_loops(pass_env, [dropped])
+    # the real flow's sweep deletes a terminal doc past retention first
+    delete_loops(UID, [dropped['id']], firestore_client=pass_env.fake)
+    payload = _model_says_maya_due_soon()
+    payload['loops'][0]['loop_id'] = 'fresh-mention'
+    payload['loops'][0]['status'] = 'opened'
+    assert _run(pass_env, FakeLLM(payload)) == daily.RAN
+    loops = get_loops(UID, firestore_client=pass_env.fake)
+    assert len(loops) == 1
+    assert loops[0]['status'] == 'opened'
+    assert loops[0]['history'][-1]['status'] == 'opened'  # fresh history, no dropped past
 
 
 def test_merge_donor_locked_and_discarded_rows_never_contribute():

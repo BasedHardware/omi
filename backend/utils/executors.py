@@ -214,6 +214,14 @@ quiet_replay_executor = MonitoredThreadPoolExecutor(
     name="quiet_replay", max_workers=16, max_queue_size=16, thread_name_prefix="quiet-replay"
 )
 
+# Open-loops daily pass: one structured LLM call per user per local day,
+# dispatched by the recap job only after a user's recap work (push, backfill,
+# webhook) is fully done. Off postprocess so a slow pass can never hold or
+# delay a recap worker, and off llm so it cannot starve user-facing generation.
+open_loops_executor = MonitoredThreadPoolExecutor(
+    name="open_loops", max_workers=4, max_queue_size=64, thread_name_prefix="openloops"
+)
+
 _ALL_EXECUTORS = [
     quiet_replay_executor,
     critical_executor,
@@ -226,6 +234,7 @@ _ALL_EXECUTORS = [
     storage_executor,
     speaker_tag_verify_executor,
     cimd_executor,
+    open_loops_executor,
 ]
 
 # refactor: superseded by bounded lifecycle pools when LIFECYCLE_V2_MODE=serve

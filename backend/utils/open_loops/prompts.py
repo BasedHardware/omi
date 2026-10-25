@@ -3,9 +3,10 @@
 ``OPEN_LOOPS_DAILY_RULES`` is the daily pass's system prompt. It is adapted
 from the offline-validated merged daily prompt (agent-briefs open-loops-1026,
 2026-10-26): the day's conversations arrive as the recap renderer's text (the
-same render the recap call itself uses, placed first so a shared prompt-cache
-prefix can hit), and the structured state (extractions, carried loops, open
-tasks, day summary) follows as JSON.
+same renderer and char budget the recap call uses, so the model sees the same
+view of the day — not a byte-identical shared prompt prefix, since the recap's
+system prompt and eligibility filter differ), and the structured state
+(extractions, carried loops, open tasks, day summary) follows as JSON.
 """
 
 OPEN_LOOP_EXTRACTION_RULES = '''OPEN LOOP EXTRACTION RULES (fields delegated_by_user, commitments_by_others, observed_issue_or_blocker)
