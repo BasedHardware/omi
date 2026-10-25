@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/services/live_preview/live_preview_controller.dart';
@@ -13,6 +15,7 @@ void main() {
   late LocalPreviewAdmission admission;
   late List<int> sent;
   late List<LocalPreviewVerdictReport> reports;
+  late List<(Duration, void Function())> deadlines;
   late LivePreviewController preview;
 
   HeldPendantFrame frame(int value, {bool walAccepted = true}) => HeldPendantFrame([value], null, walAccepted);
@@ -25,7 +28,16 @@ void main() {
     clock = DateTime.utc(2026, 10, 26);
     sent = [];
     reports = [];
-    admission = LocalPreviewAdmission(now: () => clock, onChanged: () {}, onVerdictReport: reports.add);
+    deadlines = [];
+    admission = LocalPreviewAdmission(
+      now: () => clock,
+      onChanged: () {},
+      onVerdictReport: reports.add,
+      schedule: (delay, callback) {
+        deadlines.add((delay, callback));
+        return Timer(const Duration(days: 1), () {});
+      },
+    );
     preview = LivePreviewController(
       engine: FakeLivePreviewEngine(),
       telemetry: LivePreviewTelemetry(emit: (_) {}),
@@ -355,5 +367,42 @@ void main() {
     route(4);
     admission.end();
     expect(sent, isEmpty, reason: 'no open socket: nothing to send to');
+  });
+
+  group('verdict deadline is latched by a timer', () {
+    test('a quiet interval: the deadline fires, replays held frames, and a later grant is a refusal', () {
+      admission.socketPublished(declared: true, send: send);
+      expect(deadlines.single.$1, LocalPreviewAdmission.verdictHold);
+      route(1);
+      route(2);
+      clock = clock.add(LocalPreviewAdmission.verdictHold);
+      deadlines.single.$2(); // no frame arrives; the timer fires
+      expect(sent, [1, 2], reason: 'held frames replayed at the deadline');
+      expect(admission.verdict(granted: true, socketDeclared: true, send: send), false);
+      expect(admission.admitted, false);
+      expect(reports.single.outcome, LocalPreviewVerdictOutcome.timeout);
+      expect(reports.single.holdTimeoutReplayed, true);
+    });
+
+    test('a grant after the deadline with the timer not yet run is a refusal too', () {
+      admission.socketPublished(declared: true, send: send);
+      route(1);
+      clock = clock.add(const Duration(seconds: 11));
+      expect(admission.verdict(granted: true, socketDeclared: true, send: send), false);
+      expect(sent, [1]);
+      expect(reports.single.outcome, LocalPreviewVerdictOutcome.timeout);
+      deadlines.single.$2(); // a late timer callback changes nothing
+      expect(sent, [1]);
+      expect(reports, hasLength(1));
+    });
+
+    test('an in-time grant cancels the deadline', () {
+      admission.socketPublished(declared: true, send: send);
+      clock = clock.add(const Duration(seconds: 3));
+      expect(admission.verdict(granted: true, socketDeclared: true, send: send), true);
+      deadlines.single.$2();
+      expect(admission.admitted, true);
+      expect(reports.single.outcome, LocalPreviewVerdictOutcome.granted);
+    });
   });
 }

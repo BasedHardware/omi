@@ -174,7 +174,8 @@ class CaptureController extends ChangeNotifier
       now: _now,
       onChanged: () {
         if (!_captureControllerDisposed) notifyListeners();
-      });
+      },
+      schedule: (delay, callback) => _scheduling.once(delay, callback));
   LivePreviewController? get livePreview => _localPreview.preview;
   bool get localPreviewAdmitted => _localPreview.admitted;
 
