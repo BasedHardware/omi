@@ -149,6 +149,11 @@ class TestPerplexityAndWebToolsResilience(unittest.TestCase):
         formatted_str = _format_perplexity_response(res_str_choice)
         self.assertIn("Web Search Results", formatted_str)
 
+        # Message with content=None does not render literal "None" string
+        res_none_content = {"choices": [{"message": {"content": None}}]}
+        formatted_none_content = _format_perplexity_response(res_none_content)
+        self.assertNotIn("None", formatted_none_content)
+
     def test_fetch_url_tool_guards(self):
         """Test fetch_url_tool input validation guards against empty, None, and whitespace URLs."""
         loop = asyncio.new_event_loop()
