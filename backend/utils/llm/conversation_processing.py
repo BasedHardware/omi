@@ -526,7 +526,8 @@ def _get_shaped_conversation_notes(
     )
     if agent_payload is not None:
         validated_agent_output = _notes_output_schema(uid, agent=True).model_validate(agent_payload)
-        capture_into_sink(validated_agent_output, open_loop_out)
+        # The agent's submit tool does not request open-loop fields yet: leave the
+        # sink untouched so a reprocess keeps earlier extractions instead of nulling them.
         return _finish_shaped_notes(
             validated_agent_output.to_structured(),
             prefix,

@@ -524,6 +524,16 @@ def scrub_open_loop_fields(data: Any) -> Any:
     issue kind becomes null rather than failing the extraction. Shared by the
     flag-gated subclasses of StructuredExtraction and NotesOutput.
     """
+    if isinstance(data, dict):
+        data = dict(data)
+        for field in _OPEN_LOOP_LIST_FIELDS:
+            value = data.get(field)
+            # A model that answers with one object or a word instead of an array must
+            # not cost the whole note: wrap a lone object, drop anything else.
+            if isinstance(value, dict):
+                data[field] = [value]
+            elif value is not None and not isinstance(value, list):
+                data[field] = []
     data = _keep_usable_content(data, _OPEN_LOOP_LIST_FIELDS)
     if not isinstance(data, dict):
         return data

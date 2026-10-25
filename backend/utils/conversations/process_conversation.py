@@ -2775,7 +2775,8 @@ def process_conversation(
         # Server-only derived field, deliberately outside the client wire
         # model, like RELEVANCE_DECISION_FIELD below. None is a fresh parse
         # that found nothing; it clears a stale prior value on reprocess.
-        payload[OPEN_LOOP_EXTRACTIONS_FIELD] = open_loop_sink['extractions']
+        # Content excluded from derived consumers must not seed open loops either.
+        payload[OPEN_LOOP_EXTRACTIONS_FIELD] = None if content_excluded else open_loop_sink['extractions']
 
     if not dedupe_enabled() and not is_initial_creation:
         # Rollback keeps generating normally; clear server-only checkpoints in

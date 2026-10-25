@@ -85,6 +85,16 @@ def test_one_unusable_entry_does_not_cost_the_note():
     assert parsed.commitments_by_others == []
 
 
+def test_a_non_list_open_loop_field_never_costs_the_note():
+    # A lone object is wrapped; a word or number is dropped. Either way the note survives.
+    for model in (OpenLoopStructuredExtraction, OpenLoopNotesOutput, OpenLoopAgentNotesSubmission):
+        parsed = model.model_validate(
+            {**_NOTE, 'delegated_by_user': dict(_DELEGATED[0]), 'commitments_by_others': 'none'}
+        )
+        assert [item.who for item in parsed.delegated_by_user] == ['Maya']
+        assert parsed.commitments_by_others == []
+
+
 def test_out_of_vocabulary_issue_kind_becomes_null_not_a_failure():
     payload = {**_NOTE, 'observed_issue_or_blocker': {'kind': 'vibe', 'what': 'something'}}
     parsed = OpenLoopStructuredExtraction.model_validate(payload)
