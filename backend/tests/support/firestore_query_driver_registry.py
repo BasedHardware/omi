@@ -182,6 +182,8 @@ BODY_DIGEST = {
     'database.smart_merge.absorb_conversation': 'facd30a0fd6c743eae3e6d24a601568f035c3ae5b67182f18c78ed10c65cfdd5',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
+    # Open-loop store: whole-subcollection stream by document id, filtered in Python.
+    'database.open_loops.get_loops': 'f4d9bd449d4e45fbe81ce42d21c7f80d026dcb56369cf95cded23374b6828e2e',
     'database.memory_ledger._append_commit_transaction': 'a30c4549844f8f10865249fc2c4444476c92a4d901191c69d2bac89a657ee7a8',
     'database.memory_ledger._append_commit_with_builder_transaction': '56a25d5b0c29b9ba6b58ddc4fe5e5fe83a78b54cdf5964b92f3c54e83aef01a3',
     'database.memory_ledger._assert_legacy_commit_privacy_fences': '59596ea3da66dd82e55c7a08ad949ee894ba1a4fe7714f79ced320955ed22959',
@@ -3089,6 +3091,17 @@ _add(
         'reference (expires_at checked in Python, not as a Firestore filter); '
         'cron-invoked via the admin purge endpoint, not a serving query path.',
         body_digest='8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
+    )
+)
+
+_add(
+    SkipEntry(
+        'database.open_loops.get_loops',
+        reason='Open-loop daily pass streams the whole per-user open_loops '
+        'subcollection by document id only (no filters, no order — expiry, '
+        'retention and the open cap keep it small by contract); decode and '
+        'status filtering happen in Python, not as Firestore filters.',
+        body_digest=BODY_DIGEST['database.open_loops.get_loops'],
     )
 )
 

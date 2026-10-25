@@ -1,18 +1,22 @@
-# Open loops (PR 1: extraction + card writer)
+# Open loops (PR 1: extraction + card writer; PR 2: daily pass + loop store)
 
 Open loops are follow-ups the account owner may later be asked about ("did it
 happen?"): what the owner delegated, what others committed to the owner, the
 owner's own commitments going stale, plus one narrow observed work defect or
-errand blocker. This PR extracts them in the existing notes call, persists
-them server-only, and provides the deterministic review-card writer. The
-daily pass, loop store with expiry, task-aware dedupe and Review surfacing
-arrive in later PRs.
+errand blocker. PR 1 extracts them in the existing notes call, persists them
+server-only, and provides the deterministic review-card writer. PR 2 adds the
+per-user loop store with expiry, the daily pass over the recap job,
+task-aware dedupe and deterministic ranking — the cards are stored but not
+served yet; Review surfacing and the mobile UI arrive in PR 3.
 
 ## Modules
 
 - `prompts.py` — `OPEN_LOOP_EXTRACTION_RULES`, appended to the one-shot notes
   instructions while `OPEN_LOOPS_ENABLED` is on (default on; `config/open_loops.py`).
-  The rules never touch the action-item rules.
+  The rules never touch the action-item rules. `OPEN_LOOPS_DAILY_RULES` is the
+  daily pass's system prompt, adapted from the offline-validated merged daily
+  prompt (2026-10-26 blind labels: 94% right items, 47% unreadable without
+  context, stand-in dedupe wrongly dropped 7/12 wanted cards, 2–3 slots/day).
 - `extraction.py` — the mutable sink contract plus the persistable payload
   shape; `capture_into_sink` is the only writer.
 - `card.py` — `build_card` (deterministic template, no model) and
@@ -23,8 +27,33 @@ arrive in later PRs.
   from, and why now ("due Monday", "no follow-up since Tue"); question +
   context stay within ~180 characters, with no internal jargon and no
   relationship/medical/legal inference. Any polish failure keeps the template.
+- `store.py` — pure domain rules: stable-key identity (normalized
+  who+what+kind), expiry windows (no signal: 7 days default, own_commitment
+  10, owed_to_user 14; terminal docs deleted after 14 more days; open-store
+  cap 60), loop/task matching (token max(Jaccard, containment) ≥ 0.6 — the
+  documented seam a Jev-based matcher replaces via `find_task_match`),
+  duplicate merging (a task-linked survivor beats a plain one — a matching
+  task is linked, never dropped), the two-day re-ask cooldown (re-armed by
+  due_soon), snoozes, and the slot ranking (value ≥ 3, due_soon first, work
+  first, at most 3).
+- `daily.py` — the daily pass: one structured call per user per local day
+  (feature key `open_loop_daily`, gpt-6-luna, usage-tracked), run as a
+  fail-open sibling step of the daily recap job
+  (`utils/other/notifications._run_open_loops_daily_pass`). The day is
+  rendered exactly as the recap renders it (same deserializer, char budget
+  and renderer) and leads the prompt; the JSON state (extractions, ≤20
+  carried loops, ≤40 open tasks, the day's recap) follows. The model proposes
+  statuses/resolutions/rankings; deterministic post-processing decides. The
+  per-day cards document is the once-per-day marker; `OPEN_LOOPS_ENABLED`
+  off or a no-signal day (no extractions and no open loops) spends nothing.
+- `service.py` — the PR 3 Review source functions: `list_pending_cards` and
+  `answer_card` (done → resolved + linked-task completion through the
+  action-item update path; remind → snooze +2d; drop → dropped + negative
+  example kept on the loop). No route serves them yet.
 
 ## Storage contract
+
+### Extractions (PR 1)
 
 The extractions persist as `open_loop_extractions` on the conversation
 document — a top-level server-only field like `relevance_decision`, never on
@@ -44,6 +73,23 @@ Write semantics from conversation processing:
 - Dedupe reuse, quiet-minimum, or the switch off → the field is omitted, so a
   Firestore merge keeps any previously stored value.
 
+### Loop store + cards (PR 2)
+
+- `users/{uid}/open_loops/{loop_id}` — one document per loop; the whole loop
+  dict is one derived JSON blob, zlib-compressed and AES-encrypted for every
+  user (conversation quotes ride the enhanced-protection shape
+  unconditionally), plus a plain `status`/`last_activity_at` triage mirror.
+  Loop ids are stable keys (`ol-<hash>`), or `task-<task_id>` for task-linked
+  loops. The collection is streamed whole and filtered in code — no queries,
+  no new indexes; expiry, terminal retention and the open cap keep it small.
+- `users/{uid}/open_loop_cards/{date}` — the local day's surfaced cards
+  (state pending|done|remind|dropped), same protection. Its existence — even
+  with an empty list — marks the pass as run for that day.
+
+The daily pass skips merge-donor conversations (`sync_merged_into`), locked
+and discarded rows, and rows the recap's own eligibility rule excludes from
+derived consumers.
+
 ## Schema placement
 
 The fields live on subclasses (`OpenLoopNotesOutput`,
@@ -59,4 +105,11 @@ meetings currently extract none.
 `tests/unit/test_open_loops_schema.py` (parsing/back-compat),
 `test_open_loops_prompt_gating.py` (kill switch),
 `test_open_loops_persistence.py` (write shape, server-only wire),
-`test_open_loops_card.py` (card writer cases).
+`test_open_loops_card.py` (card writer cases),
+`test_open_loops_store.py` (identity, expiry, dedupe, cooldown, ranking,
+encrypted store roundtrip),
+`test_open_loops_daily.py` (pass guards, ingestion, linking, slots),
+`test_open_loops_service.py` (answer transitions incl. task completion),
+`test_open_loops_recap_integration.py` (sibling step, fail-open),
+`test_open_loops_replay.py` (70-day synthetic replay: bounded store, resolved
+loops stop surfacing).

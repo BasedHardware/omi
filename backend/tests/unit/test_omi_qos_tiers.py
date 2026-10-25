@@ -336,6 +336,7 @@ class TestModelQosProfiles:
             'conv_structure',
             'conv_app_result',
             'daily_summary',
+            'open_loop_daily',
             'external_structure',
             'memories',
             'x_memory_extraction_flex',

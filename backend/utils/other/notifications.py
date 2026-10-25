@@ -86,6 +86,9 @@ def _display_date_for_now(tz_name: Optional[str], at: Optional[datetime] = None)
 # queries on holes it cannot fill.
 _DECLINE_LOCKED = 'locked'
 _DECLINE_NO_CONVERSATIONS = 'no_conversations'
+# daily_recap.generate's budget decline; a budget-declined recap spends no
+# sibling-step tokens either.
+_DECLINE_USAGE_BUDGET = 'usage_budget_exhausted'
 # The window held conversations, but none this job may summarize (all ``is_locked``, none
 # carried transcript content, or nothing carried summary body content — titles alone).
 # Distinct from ``no_conversations`` because the owner *was*
@@ -927,6 +930,37 @@ def _backfill_recent_daily_summaries(uid, display_date, tz_name: Optional[str]) 
             generated += 1
 
 
+def _run_open_loops_daily_pass(uid, date_str, start_date_utc, end_date_utc, tz_name) -> None:
+    """The open-loops daily pass as a sibling step of the recap (fail-open).
+
+    One structured call per user per local day, after the recap itself: it
+    reuses the recap's conversation render, updates the loop store and stores
+    the day's Review cards (not served in this PR). Its own guards —
+    ``OPEN_LOOPS_ENABLED``, the per-day cards marker and the no-signal cost
+    check — decide whether the model call happens at all. A user whose recap
+    was budget-declined spends nothing here either; a locked day belongs to
+    the worker that holds the lock, and that worker runs the pass. Every
+    failure is contained — including the pass module's own import — the
+    recap must never notice this step.
+    """
+    try:
+        from utils.open_loops.daily import run_daily_pass
+
+        outcome = run_daily_pass(uid, date_str=date_str, start_utc=start_date_utc, end_utc=end_date_utc, tz=tz_name)
+        if outcome != 'ran':
+            logger.info('open_loops_daily_pass_skipped uid=%s date=%s reason=%s', uid, date_str, outcome)
+    except Exception as error:
+        # Fail-open, and counted: a skipped pass day is a degrade the owner
+        # never sees, not a silent drop.
+        try:
+            _record_daily_summary_fallback(
+                from_mode='open_loops_daily_pass', to_mode='skipped', reason='error', outcome='degraded'
+            )
+        except Exception:
+            logger.exception('open_loops_daily_pass_fallback_metric_failed')
+        logger.error('open_loops_daily_pass_failed uid=%s date=%s error=%s', uid, date_str, error, exc_info=error)
+
+
 def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     if not serving_for('CALLS_RECAP_MODE', user_data[0]) and not generated_compute_allowed(
         user_data[0], 'daily_summary'
@@ -1010,6 +1044,13 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         pending_webhook = summary_data
 
     try:
+
+        # Sibling step: the open-loops daily pass for this user's local day.
+        # Runs after the recap's own outcome is settled, before the backfill
+        # walk (which covers *past* days the pass must never touch), and never
+        # for a day another worker owns or a budget already declined.
+        if declined not in (_DECLINE_LOCKED, _DECLINE_USAGE_BUDGET):
+            _run_open_loops_daily_pass(uid, date_str, start_date_utc, end_date_utc, user_tz_name)
 
         # Backfill only for owners who are actually still recording. Dropping the FCM-token filter in
         # get_users_for_daily_summary_indexed widened this fan-out to every user in the timezone, and an

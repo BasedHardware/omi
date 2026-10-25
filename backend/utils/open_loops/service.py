@@ -1,0 +1,127 @@
+"""Review-source service functions for open-loop cards.
+
+PR 3 (Review source + mobile UI) calls these; nothing in this PR serves them
+over HTTP. Both functions work on the per-local-day cards document the daily
+pass wrote (``users/{uid}/open_loop_cards/{date}``) and apply the owner's
+answer to the underlying loop:
+
+- ``done``  → loop resolved; a task-linked loop also completes the task
+  through the existing action-item update path.
+- ``remind`` → loop snoozed two days (``snoozed_until``), status unchanged.
+- ``drop``  → loop dropped, and the card is kept on the loop as a negative
+  example future ranking can learn from.
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
+import database.action_items as action_items_db
+import database.open_loops as open_loops_db
+from utils.open_loops import store
+from utils.open_loops.daily import local_today
+
+logger = logging.getLogger(__name__)
+
+CARD_ACTIONS = ('done', 'remind', 'drop')
+CARD_STATE_BY_ACTION = {'done': 'done', 'remind': 'remind', 'drop': 'dropped'}
+PENDING_STATE = 'pending'
+
+
+def _local_date_str(tz: Optional[str], now: Optional[datetime], date_str: Optional[str]) -> str:
+    return date_str or local_today(tz, now).isoformat()
+
+
+def list_pending_cards(
+    uid: str,
+    *,
+    limit: int = 3,
+    date_str: Optional[str] = None,
+    tz: Optional[str] = None,
+    now: Optional[datetime] = None,
+    firestore_client: Any = None,
+) -> List[Dict[str, Any]]:
+    """The day's unanswered cards, in the order the pass ranked them.
+
+    Only the local day named by ``date_str`` (default: today in ``tz``) is
+    listed; older pending cards age out with the day, and their loops either
+    re-surface after the cooldown or expire.
+    """
+    cards = open_loops_db.get_cards(uid, _local_date_str(tz, now, date_str), firestore_client=firestore_client)
+    if not cards:
+        return []
+    return [card for card in cards if card.get('state') == PENDING_STATE][: max(0, limit)]
+
+
+def answer_card(
+    uid: str,
+    card_id: str,
+    action: str,
+    *,
+    date_str: Optional[str] = None,
+    tz: Optional[str] = None,
+    now: Optional[datetime] = None,
+    firestore_client: Any = None,
+) -> Optional[Dict[str, Any]]:
+    """Apply one owner answer (done|remind|drop) to a pending card.
+
+    Returns the updated card, or None when the day/cards/card is missing, the
+    card was already answered, or the action is unknown. Task completion is
+    best-effort: a failing task update never rolls back the loop transition,
+    it logs — the next daily pass re-raises the still-open task anyway.
+    """
+    if action not in CARD_ACTIONS:
+        return None
+    moment = now or store.now_utc()
+    day = _local_date_str(tz, now, date_str)
+    cards = open_loops_db.get_cards(uid, day, firestore_client=firestore_client)
+    if cards is None:
+        return None
+    position = next((i for i, c in enumerate(cards) if str(c.get('id')) == str(card_id)), None)
+    if position is None or cards[position].get('state') != PENDING_STATE:
+        return None
+    card = cards[position]
+
+    loops = open_loops_db.get_loops(uid, firestore_client=firestore_client)
+    loop = next((l for l in loops if str(l.get('id')) == str(card.get('loop_id'))), None)
+    if loop is not None:
+        open_loops_db.upsert_loop(
+            uid, _apply_answer_to_loop(uid, loop, card, action, moment), firestore_client=firestore_client
+        )
+
+    card = {**card, 'state': CARD_STATE_BY_ACTION[action], 'answered_at': moment.isoformat()}
+    cards[position] = card
+    open_loops_db.set_cards(uid, day, cards, firestore_client=firestore_client)
+    return card
+
+
+def _apply_answer_to_loop(
+    uid: str, loop: Dict[str, Any], card: Dict[str, Any], action: str, moment: datetime
+) -> Dict[str, Any]:
+    today = local_today(None, moment)
+    if action == 'done':
+        loop = store.append_history(loop, today, 'resolved', 'owner answered done')
+        loop['last_activity_at'] = moment.isoformat()
+        linked_task_id = loop.get('linked_task_id')
+        if linked_task_id:
+            try:
+                action_items_db.update_action_item(uid, str(linked_task_id), {'completed': True})
+            except Exception as error:
+                logger.error(
+                    'open_loop_card_task_completion_failed loop_id=%s task_id=%s error=%s',
+                    loop.get('id'),
+                    linked_task_id,
+                    error,
+                )
+        return loop
+    if action == 'remind':
+        loop['snoozed_until'] = (today + timedelta(days=store.SNOOZE_DAYS)).isoformat()
+        return loop
+    # drop: terminal, and the card stays as a negative example for ranking.
+    negative = {'date': today.isoformat(), 'question': card.get('question'), 'value': card.get('value')}
+    loop = store.append_history(loop, today, 'dropped', 'owner dropped the card')
+    loop['last_activity_at'] = moment.isoformat()
+    loop['negative_examples'] = (list(loop.get('negative_examples') or []) + [negative])[-3:]
+    return loop
