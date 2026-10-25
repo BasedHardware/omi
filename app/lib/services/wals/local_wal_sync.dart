@@ -1121,10 +1121,18 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   // Foreign-owner audio is another account's: it never counts as this account's pressure.
+  // Pending means not yet acknowledged by the backend — exactly status !=
+  // synced. A synced status is set only by backend acknowledgement (job
+  // resolution, upload fast-path, capture-committed receipt, transcript
+  // coverage) or by delivery of every frame over a connected socket. A synced
+  // WAL with syncedAt == 0 (a transport-only streamed copy, or a record synced
+  // before the field existed) is acknowledged but of unknown age: unknown age
+  // protects deletion — _removeExpiredSyncedCopies never touches syncedAt == 0
+  // — and must not manufacture retention pressure.
   int get _pendingDiskWalCount => [
         ..._retiredWals,
         ..._wals,
-      ].where((wal) => wal.storage == WalStorage.disk && (wal.status != WalStatus.synced || wal.syncedAt == 0)).length;
+      ].where((wal) => wal.storage == WalStorage.disk && wal.status != WalStatus.synced).length;
 
   /// Surfaces the bounded-retention pressure once per cap-engagement event.
   /// Pending (unsynced) copies are never evicted and admission is not refused
@@ -1302,7 +1310,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// copy redundant. Records with an unknown sync time (syncedAt == 0: synced
   /// before the field existed, or a live-streamed copy whose status came from
   /// transport-only socket sends rather than a server acknowledgement) are
-  /// deliberately never removed.
+  /// deliberately never removed. Unknown age also stops mattering for the
+  /// retention-pressure count once the status is synced —
+  /// [_pendingDiskWalCount] counts acknowledgement, not age — so it delays
+  /// deletion without keeping the count cap engaged.
   ///
   /// Best-effort and quiet: a record whose file delete fails stays for the
   /// next hook. Returns the number of local copies removed.
