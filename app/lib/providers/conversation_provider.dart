@@ -822,6 +822,8 @@ class ConversationProvider extends ChangeNotifier {
     // and its shimmer before a new query can claim the search loading state.
     _searchRequestGeneration++;
     _isLoadingConversationSearch = false;
+    isFetchingConversations = false;
+    selectedSpeakerId = null;
     previousQuery = "";
     currentSearchPage = 0;
     totalSearchPages = 0;

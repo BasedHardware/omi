@@ -181,6 +181,31 @@ void main() {
   });
 
   for (final serverOk in [true, false]) {
+    test('full fetch releases an invalidated non-shimmer search: server=$serverOk', () async {
+      final search = Completer<ConversationSearchResult>();
+      final provider = ConversationProvider(
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: serverOk),
+        conversationCacheLoader: () async => [],
+        conversationSearchResultFetcher:
+            (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) => search.future,
+        isSignedIn: () => true,
+      );
+      addTearDown(provider.dispose);
+      final searching = provider.searchConversations('old');
+      expect(provider.isFetchingConversations, isTrue);
+      expect(await provider.fetchConversations(), serverOk);
+      expect(provider.isFetchingConversations, isFalse);
+      expect(provider.isLoadingConversations, isFalse);
+      search.complete(ConversationSearchResult(
+        items: [_row('stale-search')],
+        currentPage: 1,
+        totalPages: 1,
+        outcome: ConversationSearchResultOutcome.success,
+      ));
+      await searching;
+      expect(provider.searchedConversations, isEmpty);
+    });
+
     for (final searchFinishesFirst in [true, false]) {
       test('cache restore preserves a newer search: server=$serverOk searchFirst=$searchFinishesFirst', () async {
         final entered = Completer<void>();
@@ -229,4 +254,19 @@ void main() {
       });
     }
   }
+
+  test('a full-fetch search reset cannot retain a speaker and hide its fetched rows', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: [_row('server-history')], ok: true),
+      conversationCacheLoader: () async => [],
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.selectedSpeakerId = 'previous-speaker';
+    provider.previousQuery = 'previous-query';
+    expect(await provider.fetchConversations(), isTrue);
+    expect(provider.groupedConversations.values.expand((rows) => rows).single.id, 'server-history');
+    expect(provider.hasActiveSearch, isFalse);
+    expect(provider.selectedSpeakerId, isNull);
+  });
 }
