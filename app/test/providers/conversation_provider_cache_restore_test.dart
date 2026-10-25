@@ -1,0 +1,163 @@
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/providers/conversation_provider.dart';
+
+ServerConversation _row(String id,
+        {String title = 'Cached', ConversationStatus status = ConversationStatus.completed}) =>
+    ServerConversation(
+        id: id,
+        createdAt: DateTime.utc(2026, 10, 20),
+        structured: Structured(title, 'Synthetic summary'),
+        status: status);
+
+void main() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({'uid': 'fixture-owner'});
+    await SharedPreferencesUtil.init(mirrorNativeAuthToken: false);
+  });
+
+  for (final serverOk in [true, false]) {
+    test('async cache fallback for server ok=$serverOk preserves concurrent live rows and filters', () async {
+      final entered = Completer<void>();
+      final cache = Completer<List<ServerConversation>>();
+      final provider = ConversationProvider(
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: serverOk),
+        conversationCacheLoader: () {
+          entered.complete();
+          return cache.future;
+        },
+        isSignedIn: () => true,
+      );
+      addTearDown(provider.dispose);
+      final pending = provider.fetchConversations();
+      await entered.future;
+      await provider.addConversation(_row('same', title: 'Live'));
+      provider.memoriesToDelete['deleted'] = _row('deleted');
+      provider.addProcessingConversation(_row('processing', status: ConversationStatus.processing));
+      cache.complete([_row('same'), _row('cached-only'), _row('deleted'), _row('processing')]);
+      expect(await pending, serverOk);
+      expect(provider.conversations.map((row) => row.id), ['same', 'cached-only']);
+      expect(provider.conversations.first.structured.title, 'Live');
+      expect(provider.isLoadingConversations, isFalse);
+    });
+  }
+
+  test('sign-out and owner switch reject cache completions', () async {
+    for (final changeOwner in [false, true]) {
+      final entered = Completer<void>();
+      final cache = Completer<List<ServerConversation>>();
+      var signedIn = true;
+      final provider = ConversationProvider(
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+        conversationCacheLoader: () {
+          entered.complete();
+          return cache.future;
+        },
+        isSignedIn: () => signedIn,
+      );
+      final pending = provider.fetchConversations();
+      await entered.future;
+      if (changeOwner) {
+        SharedPreferencesUtil().uid = 'another-fixture-owner';
+      } else {
+        signedIn = false;
+      }
+      cache.complete([_row('old-account')]);
+      expect(await pending, isFalse);
+      expect(provider.conversations, isEmpty);
+      provider.dispose();
+    }
+  });
+
+  test('clear invalidates a cache restore', () async {
+    final entered = Completer<void>();
+    final cache = Completer<List<ServerConversation>>();
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      conversationCacheLoader: () {
+        entered.complete();
+        return cache.future;
+      },
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    final pending = provider.fetchConversations();
+    await entered.future;
+    provider.clearUserData();
+    cache.complete([_row('old-account')]);
+    expect(await pending, isFalse);
+    expect(provider.conversations, isEmpty);
+    expect(provider.groupedConversations, isEmpty);
+  });
+
+  test('stale restore cannot overwrite or clear loading for a newer fetch', () async {
+    final entered = Completer<void>();
+    final cache = Completer<List<ServerConversation>>();
+    final newerPage = Completer<({List<ServerConversation> items, bool ok})>();
+    var calls = 0;
+    final provider = ConversationProvider(
+      conversationListFetcher: () =>
+          ++calls == 1 ? Future.value((items: <ServerConversation>[], ok: true)) : newerPage.future,
+      conversationCacheLoader: () {
+        entered.complete();
+        return cache.future;
+      },
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    final older = provider.fetchConversations();
+    await entered.future;
+    final newer = provider.fetchConversations();
+    cache.complete([_row('stale')]);
+    expect(await older, isFalse);
+    expect(provider.isLoadingConversations, isTrue);
+    newerPage.complete((items: [_row('fresh')], ok: true));
+    expect(await newer, isTrue);
+    expect(provider.conversations.map((row) => row.id), ['fresh']);
+  });
+
+  test('dispose during decode cannot notify or restore afterwards', () async {
+    final entered = Completer<void>();
+    final cache = Completer<List<ServerConversation>>();
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      conversationCacheLoader: () {
+        entered.complete();
+        return cache.future;
+      },
+      isSignedIn: () => true,
+    );
+    final pending = provider.fetchConversations();
+    await entered.future;
+    provider.dispose();
+    cache.complete([_row('late')]);
+    expect(await pending, isFalse);
+    expect(provider.conversations, isEmpty);
+  });
+
+  test('local phone rows remain newer than a matching cached object', () async {
+    final entered = Completer<void>();
+    final cache = Completer<List<ServerConversation>>();
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      conversationCacheLoader: () {
+        entered.complete();
+        return cache.future;
+      },
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.upsertConversation(_row('ondevice-local', title: 'Local latest'));
+    final pending = provider.fetchConversations();
+    await entered.future;
+    cache.complete([_row('ondevice-local', title: 'Stale cache'), _row('history')]);
+    expect(await pending, isTrue);
+    expect(provider.conversations.firstWhere((row) => row.id == 'ondevice-local').structured.title, 'Local latest');
+  });
+}

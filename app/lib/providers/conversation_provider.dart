@@ -48,6 +48,7 @@ typedef ConversationSearchResultFetcher = Future<ConversationSearchResult> Funct
   String? speakerId,
 });
 typedef ConversationDetailsFetcher = Future<ServerConversation?> Function(String conversationId);
+typedef ConversationCacheLoader = Future<List<ServerConversation>> Function();
 
 /// Day-bucket key for a conversation timestamp, in the viewer's **local** timezone.
 ///
@@ -170,6 +171,7 @@ class ConversationProvider extends ChangeNotifier {
   final DailySummariesChecker? _dailySummariesChecker;
   final ConversationSearchResultFetcher _conversationSearchResultFetcher;
   final bool Function() _isSignedIn;
+  final ConversationCacheLoader _conversationCacheLoader;
   final ConversationApi? _conversationApi;
   ApiViewState<List<ServerConversation>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   final Map<String, ApiViewState<ServerConversation>> _typedDetailStates = {};
@@ -197,6 +199,7 @@ class ConversationProvider extends ChangeNotifier {
     ConversationSearchResultFetcher? conversationSearchResultFetcher,
     bool Function()? isSignedIn,
     ConversationApi? conversationApi,
+    ConversationCacheLoader? conversationCacheLoader,
   })  : _conversationListFetcher = conversationListFetcher,
         _conversationLifecycleFetcher = conversationLifecycleFetcher ??
             (conversationApi == null
@@ -224,6 +227,7 @@ class ConversationProvider extends ChangeNotifier {
                     );
                   }),
         _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn,
+        _conversationCacheLoader = conversationCacheLoader ?? (() => SharedPreferencesUtil().loadCachedConversations()),
         _conversationApi = conversationApi {
     _setupMergeListener();
     _loadSettings();
@@ -824,16 +828,10 @@ class ConversationProvider extends ChangeNotifier {
       // so the list self-heals without the user having to pull-to-refresh.
       conversationsLoadFailed = true;
       if (conversations.isEmpty && selectedFolderId == null) {
-        final activeProcessingIds = processingConversations
-            .where((conversation) => _isActiveProcessingStatus(conversation.status))
-            .map((conversation) => conversation.id)
-            .toSet();
-        conversations = _filterPendingDeletes(SharedPreferencesUtil().cachedConversations)
-            .where(
-              (conversation) =>
-                  !activeProcessingIds.contains(conversation.id) && _matchesActiveConversationFilters(conversation),
-            )
-            .toList();
+        if (!await _restoreCacheForFetch(generation, fetchRevision)) {
+          if (_conversationLoadingRevision == fetchRevision) setLoadingConversations(false);
+          return false;
+        }
       }
       if (searchedConversations.isEmpty) {
         searchedConversations = conversations;
@@ -913,16 +911,10 @@ class ConversationProvider extends ChangeNotifier {
       ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     // Only use cache when no folder filter is applied
     if (conversations.isEmpty && selectedFolderId == null) {
-      final activeProcessingIds = processingConversations
-          .where((conversation) => _isActiveProcessingStatus(conversation.status))
-          .map((conversation) => conversation.id)
-          .toSet();
-      conversations = _filterPendingDeletes(SharedPreferencesUtil().cachedConversations)
-          .where(
-            (conversation) =>
-                !activeProcessingIds.contains(conversation.id) && _matchesActiveConversationFilters(conversation),
-          )
-          .toList();
+      if (!await _restoreCacheForFetch(generation, fetchRevision)) {
+        if (_conversationLoadingRevision == fetchRevision) setLoadingConversations(false);
+        return false;
+      }
     } else if (selectedFolderId == null) {
       // Only cache when viewing all folders
       unawaited(SharedPreferencesUtil().cacheConversations(conversations).catchError((Object e) {
@@ -960,6 +952,36 @@ class ConversationProvider extends ChangeNotifier {
     // this loading state as its serialization guard.
     setLoadingConversations(false);
     notifyListeners();
+    return true;
+  }
+
+  Future<bool> _restoreCacheForFetch(int generation, int fetchRevision) async {
+    final ownerUid = SharedPreferencesUtil().uid;
+    final cached = await _conversationCacheLoader();
+    if (generation != _sessionGeneration ||
+        fetchRevision != _conversationFetchRevision ||
+        !_isSignedIn() ||
+        SharedPreferencesUtil().uid != ownerUid) return false;
+    final activeProcessingIds = processingConversations
+        .where((conversation) => _isActiveProcessingStatus(conversation.status))
+        .map((conversation) => conversation.id)
+        .toSet();
+    bool visible(ServerConversation conversation) =>
+        !activeProcessingIds.contains(conversation.id) &&
+        !memoriesToDelete.containsKey(conversation.id) &&
+        _matchesActiveConversationFilters(conversation);
+    // The fallback starts with an empty list. Rows delivered during decode
+    // (including local phone rows) win over older cached objects with that ID.
+    final restored = <String, ServerConversation>{
+      for (final conversation in cached)
+        if (visible(conversation)) conversation.id: conversation,
+      for (final conversation in conversations)
+        if (visible(conversation)) conversation.id: conversation,
+      for (final conversation in _phoneOnlyConversations.values)
+        if (visible(conversation)) conversation.id: conversation,
+    };
+    conversations = restored.values.toList()
+      ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     return true;
   }
 
@@ -1758,6 +1780,9 @@ class ConversationProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _sessionGeneration++;
+    _conversationFetchRevision++;
+    _conversationLoadingRevision++;
     _cancelPendingDeleteTimers();
     _refreshDebounceTimer?.cancel();
     _initialFetchRetryTimer?.cancel();
