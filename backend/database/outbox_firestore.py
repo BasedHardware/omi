@@ -267,12 +267,24 @@ class FirestoreEnrichmentOutbox:
         A pull claim was not delivered by a wake, so ``Claim.wake_token`` is '' (contract (a)).
         """
         claims: list[Claim] = []
-        for row_id, row in _outbox().due_rows(now=now, limit=n * 4, client=self._bound_client):
-            claimed = self.claim_key(row_id, row['task_token'], lease_seconds, now=now)
-            if isinstance(claimed, Claim):
-                claims.append(dataclasses.replace(claimed, wake_token=''))
-                if len(claims) >= n:
-                    break
+        outbox = _outbox()
+        while len(claims) < n:
+            needed = n - len(claims)
+            candidates = outbox.due_rows(now=now, limit=max(needed * 4, 100), client=self._bound_client)
+            if not candidates:
+                break
+            retired_or_claimed = 0
+            for row_id, row in candidates:
+                claimed = self.claim_key(row_id, row['task_token'], lease_seconds, now=now)
+                if isinstance(claimed, Claim):
+                    claims.append(dataclasses.replace(claimed, wake_token=''))
+                    retired_or_claimed += 1
+                    if len(claims) >= n:
+                        break
+                elif claimed is Outcome.DISCARDED:
+                    retired_or_claimed += 1
+            if retired_or_claimed == 0:
+                break
         return claims
 
     def heartbeat(self, claim: Claim, lease_seconds: float, *, now: float) -> bool:

@@ -878,18 +878,33 @@ def sweep(
 
 def due_rows(*, now: float, limit: int, client: Any = None) -> list[tuple[str, Row]]:
     """Pull mode: up to ``limit`` due, unleased, awake rows as ``(document_id, row)`` (single-field index)."""
-    query = (
+    if limit <= 0:
+        return []
+    base_query = (
         (client or get_firestore_client())
         .collection(COLLECTION)
         .where('due_at', '<=', now)
         .order_by('due_at')
-        .limit(max(1, min(100, limit)))
     )
-    rows = []
-    for snapshot in query.stream():
-        row = snapshot.to_dict() or {}
-        if not row.get('dormant') and row.get('lease_until', 0) <= now and row.get('task_token'):
-            rows.append((snapshot.id, row))
+    rows: list[tuple[str, Row]] = []
+    page_size = 100
+    cursor = None
+    while len(rows) < limit:
+        q = base_query.limit(page_size)
+        if cursor is not None and hasattr(q, 'start_after'):
+            q = q.start_after(cursor)
+        snapshots = list(q.stream())
+        if not snapshots:
+            break
+        for snapshot in snapshots:
+            row = snapshot.to_dict() or {}
+            if not row.get('dormant') and row.get('lease_until', 0) <= now and row.get('task_token'):
+                rows.append((snapshot.id, row))
+                if len(rows) >= limit:
+                    break
+        cursor = snapshots[-1]
+        if len(snapshots) < page_size:
+            break
     return rows
 
 
