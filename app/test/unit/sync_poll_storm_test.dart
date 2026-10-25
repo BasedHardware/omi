@@ -29,6 +29,17 @@ class _Listener implements IWalSyncListener {
   void onWalSynced(Wal wal, {ServerConversation? conversation}) {}
 }
 
+class _CountingPoller extends SyncJobPoller {
+  _CountingPoller({required DateTime Function() clock}) : super(clock: clock);
+  int attempts = 0;
+
+  @override
+  Future<SyncJobFetch> fetch(String jobId, Future<SyncJobFetch> Function(String) fetcher) {
+    attempts++;
+    return super.fetch(jobId, fetcher);
+  }
+}
+
 Wal pending(int i) => Wal(
     timerStart: 1700000000 + i,
     codec: BleAudioCodec.opus,
@@ -140,6 +151,43 @@ void main() {
     }
     expect(requests, lessThanOrEqualTo(18), reason: 'baseline makes 50 x 5 = 250 requests in 50 seconds');
     expect(sync.testWals.every((wal) => wal.status == WalStatus.uploaded), isTrue);
+  });
+
+  test('large reconcile backlog visits only one due batch and eventually acknowledges every job', () async {
+    final poller = _CountingPoller(clock: () => now);
+    var requests = 0;
+    var maxActive = 0;
+    var active = 0;
+    final sync = LocalWalSyncImpl(
+      _Listener(),
+      now: () => now,
+      jobPoller: poller,
+      persistWals: (_) async {},
+      jobStatusFetcher: (id) async {
+        requests++;
+        active++;
+        if (active > maxActive) maxActive = active;
+        await Future<void>.delayed(Duration.zero);
+        active--;
+        return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'completed'));
+      },
+    );
+    sync.testWals = List.generate(127, pending);
+    for (var pass = 0; pass < 8; pass++) {
+      final before = poller.attempts;
+      await sync.reconcileUploadedWals();
+      expect(poller.attempts - before, lessThanOrEqualTo(SyncJobPoller.maxRequestsPerMinute));
+      final after = poller.attempts;
+      await sync.reconcileUploadedWals();
+      expect(poller.attempts, after, reason: 'budget-denied jobs never enter fetch or emit transient diagnostics');
+      now = now.add(const Duration(minutes: 1));
+    }
+    expect(requests, 127);
+    expect(poller.attempts, requests);
+    expect(maxActive, 1);
+    expect(sync.testWals, hasLength(127));
+    expect(sync.testWals.map((wal) => wal.status), everyElement(WalStatus.synced));
+    expect(sync.testWals.map((wal) => wal.syncedAt), everyElement(greaterThan(0)));
   });
 
   test('127 restored uploads recover without deleting audio or letting a queued job starve siblings', () async {

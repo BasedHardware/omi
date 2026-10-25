@@ -184,6 +184,19 @@ class SyncJobPoller {
     if (deadline.isAfter(_nextPoll[jobId] ?? DateTime(1970))) _nextPoll[jobId] = deadline;
   }
 
+  /// A bounded batch of jobs this pass can actually poll. Skipping locally
+  /// deferred jobs avoids thousands of no-op futures and misleading transient
+  /// diagnostics while preserving the ordering and backoff used by [fetch].
+  List<String> dueForPass(Iterable<String> jobs, {Map<String, int>? uploadedAtSeconds}) {
+    final now = _clock();
+    _requests.removeWhere((time) => !time.isAfter(now.subtract(const Duration(minutes: 1))));
+    if (_limiter.isLimited || _requests.length >= maxRequestsPerMinute) return const [];
+    return ordered(jobs, uploadedAtSeconds: uploadedAtSeconds)
+        .where((id) => !_inFlight.contains(id) && !now.isBefore(_nextPoll[id] ?? DateTime(1970)))
+        .take(maxRequestsPerMinute - _requests.length)
+        .toList();
+  }
+
   Future<SyncJobFetch> fetch(String jobId, Future<SyncJobFetch> Function(String) fetcher) async {
     _loadMissing();
     final now = _clock();
