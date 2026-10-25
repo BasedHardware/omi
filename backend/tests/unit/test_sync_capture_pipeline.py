@@ -68,7 +68,7 @@ def pipeline():
         lifecycle.ingest_sync_conversation = lambda uid, row, **kw: intake(store, row, **kw)
         # The episodes intake attach is fail-open; the harness stand-in skips like a
         # user whose app never called the episodes API. The wiring test spies on it.
-        module.attach_synced_at_intake = lambda uid, cid, row: 'skipped_no_client'
+        module.schedule_synced_intake_attach = lambda uid, cid, row: None
         yield module, store
 
 
@@ -855,7 +855,7 @@ def test_process_segment_attaches_the_landed_row_to_the_live_episode(pipeline, m
     )
     monkeypatch.setattr(
         module,
-        'attach_synced_at_intake',
+        'schedule_synced_intake_attach',
         lambda uid, cid, row: attached.append((uid, cid, dict(row))) or 'joined',
     )
     response = {'new_memories': set(), 'updated_memories': set()}

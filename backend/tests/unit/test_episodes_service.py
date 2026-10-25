@@ -1226,6 +1226,27 @@ def test_a_sync_clip_joins_the_live_episode_at_intake_and_the_finalize_hook_stay
     assert service.attach_synced_intake(UID, 'c-wal', _wal_row(), collaborators=c) == 'attached'
 
 
+def test_intake_attach_skips_discarded_rows_and_merge_donors():
+    store = StrictFirestore()
+    _attach(store, 'c-live', minutes=0)
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=2), store=store)
+    for extra in ({'discarded': True}, {'deleted': True}, {'sync_merged_into': 'c-other'}):
+        assert service.attach_synced_intake(UID, 'c-wal', _wal_row(**extra), collaborators=c) == 'skipped_discarded'
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['conversation_ids'] == ['c-live']
+
+
+def test_a_sync_merge_donor_member_is_repointed_to_the_survivor_at_intake():
+    store = StrictFirestore()
+    _attach(store, 'c-live', minutes=0)
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=2), store=store)
+    assert service.attach_synced_intake(UID, 'c-donor', _wal_row('c-donor'), collaborators=c) == 'joined'
+    # A later segment folds the donor into the canonical row: the member follows the survivor.
+    survivor = _wal_row('c-survivor', sync_merged_from=['c-donor'])
+    assert service.attach_synced_intake(UID, 'c-survivor', survivor, collaborators=c) == 'attached'
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['conversation_ids'] == ['c-live', 'c-survivor']
+
+
 def test_intake_attach_respects_the_gates_and_an_existing_episode_ownership(monkeypatch):
     store = StrictFirestore()
     _attach(store, 'c-live', minutes=0)

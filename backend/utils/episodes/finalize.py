@@ -54,6 +54,19 @@ def attach_synced_at_intake(uid: str, conversation_id: str, row: Mapping[str, An
         return 'error'
 
 
+def schedule_synced_intake_attach(uid: str, conversation_id: str, row: Mapping[str, Any] | None) -> None:
+    """Run the intake episode join on the episode pool; sync intake never waits on Firestore for it."""
+    if not episodes_enabled_for(uid) or not conversation_id:
+        return
+    snapshot = dict(row) if isinstance(row, Mapping) else {}
+    try:
+        submit_with_context(
+            lifecycle_executor(uid, episode=True), attach_synced_at_intake, uid, conversation_id, snapshot
+        )
+    except Exception as error:
+        logger.warning('event=episode_sync_intake_attach outcome=error exception_type=%s', type(error).__name__)
+
+
 def close_now(uid: str, conversation_id: str, trigger: ProcessingTrigger, source: Any = None) -> str:
     """Close the conversation's live episode now. Blocking; never raises."""
     if not episodes_enabled_for(uid):

@@ -915,6 +915,10 @@ def attach_synced_intake(
     try:
         if not client_gate.client_seen_cached(uid):
             return 'skipped_no_client'
+        if row.get('discarded') or row.get('deleted') or row.get('sync_merged_into'):
+            # A discarded fragment or a merge donor never joins (the finalize path's rule).
+            return 'skipped_discarded'
+        _repoint_sync_donors(uid, conversation_id, row, c)
         owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
         if owner is not None:
             return 'attached' if policy.is_live(owner) else 'no_episode'
@@ -922,6 +926,22 @@ def attach_synced_intake(
     except Exception as error:
         logger.warning('event=episode_sync_intake_attach outcome=error exception_type=%s', type(error).__name__)
         return 'error'
+
+
+def _repoint_sync_donors(uid: str, survivor_id: str, row: Mapping[str, Any], c: Collaborators) -> None:
+    """Sync intake merged earlier clips into this one: live-episode members follow the survivor.
+
+    Clips join at intake, so a donor can already be a member when a later
+    segment folds it into the canonical row (``sync_merged_from``). Same
+    repoint as a smart-merge donor, so Home never keeps a dead member.
+    """
+    donors = [str(d) for d in (row.get('sync_merged_from') or []) if d and str(d) != survivor_id]
+    for donor_id in donors:
+        episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
+        if episode is None or not policy.is_live(episode):
+            return
+        if donor_id in (episode.get('conversation_ids') or []):
+            _repoint_absorbed(uid, episode, donor_id, survivor_id, c)
 
 
 def _on_finalized(
