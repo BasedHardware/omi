@@ -236,7 +236,7 @@ class ArtifactStore:
         # The caller obtains the shortened deadline from the registered,
         # privacy-fenced unit receipt; it is mandatory even for direct reads.
         due = min(voice_centroids.deadline(item.capture_at), expires_at)
-        if not isinstance(expires_at, (int, float)) or not 0 < expires_at <= voice_centroids.deadline(item.capture_at):
+        if not 0 < expires_at <= voice_centroids.deadline(item.capture_at):
             raise ValueError('registered voice evidence deadline required')
         if time.time() >= due:
             raise PermissionError('voice evidence expired')

@@ -3,7 +3,6 @@
 from dataclasses import replace
 import hashlib
 import logging
-import os
 import time
 
 from fastapi import HTTPException
