@@ -78,6 +78,38 @@ def text(value: Optional[Any]) -> Optional[str]:
     return strip_surrogates(value)
 
 
+def extract_transcript(item: dict) -> Optional[str]:
+    """Extract transcript text from conversation item, handling top-level string or segments arrays."""
+    transcript_val = item.get("transcript")
+    if isinstance(transcript_val, str) and transcript_val.strip():
+        return strip_surrogates(transcript_val.strip())
+
+    segments = item.get("transcript_segments") or item.get("segments") or item.get("transcripts")
+    if isinstance(segments, list):
+        parts: List[str] = []
+        for seg in segments:
+            if isinstance(seg, dict):
+                raw_speaker = seg.get("speaker") if seg.get("speaker") is not None else seg.get("speaker_label")
+                if isinstance(raw_speaker, int):
+                    speaker = f"Speaker {raw_speaker}"
+                elif raw_speaker is not None and str(raw_speaker).strip():
+                    speaker = str(raw_speaker).strip()
+                else:
+                    speaker = ""
+                content = str(seg.get("text") or seg.get("content") or "").strip()
+                if content:
+                    if speaker:
+                        parts.append(f"{speaker}: {content}")
+                    else:
+                        parts.append(content)
+            elif isinstance(seg, str) and seg.strip():
+                parts.append(seg.strip())
+        if parts:
+            return strip_surrogates("\n".join(parts))
+
+    return text(transcript_val)
+
+
 def rows_from(pages: Sequence[str]) -> List[Tuple]:
     """Parse one or more exported JSON pages and return rows ready for INSERT."""
     rows: List[Tuple] = []
@@ -116,7 +148,7 @@ def rows_from(pages: Sequence[str]) -> List[Tuple]:
                     utc_stamp(item.get("started_at")),
                     utc_stamp(item.get("created_at")),
                     utc_stamp(item.get("updated_at")),
-                    text(item.get("transcript")),
+                    extract_transcript(item),
                     strip_surrogates(json.dumps(item, ensure_ascii=False)),
                 )
             )
