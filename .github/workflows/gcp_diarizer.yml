@@ -281,7 +281,7 @@ jobs:
           DEPLOY_NAMESPACE: ${{ vars.ENV }}-omi-backend
           DEPLOY_ENV: ${{ vars.ENV }}
           TARGET_RELEASE: ${{ steps.target.outputs.release_name }}
-          EXPECTED_DIGEST: ${{ steps.build.outputs.image_digest }}
+          EXPECTED_DIGEST: ${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}
         run: |
           rollout_timeout=600s
           if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
@@ -298,7 +298,7 @@ jobs:
             deployed_image="$(kubectl -n "$DEPLOY_NAMESPACE" get "deploy/$TARGET_RELEASE" --request-timeout=30s \
               -o jsonpath='{.spec.template.spec.containers[0].image}')"
             if [[ "$deployed_image" != *"@$EXPECTED_DIGEST" ]]; then
-              echo "::error::deploy/$TARGET_RELEASE rolled out $deployed_image, not the built digest $EXPECTED_DIGEST"
+              echo "::error::deploy/$TARGET_RELEASE rolled out $deployed_image, not the expected digest $EXPECTED_DIGEST"
               exit 1
             fi
             echo "deploy/$TARGET_RELEASE is ready on $EXPECTED_DIGEST"
