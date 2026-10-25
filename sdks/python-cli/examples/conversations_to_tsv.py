@@ -69,19 +69,25 @@ def extract_transcript(item: Dict[str, Any]) -> str:
     if isinstance(transcript_val, str) and transcript_val.strip():
         return transcript_val
 
-    # Support segment/transcripts arrays
-    segments = item.get("segments") or item.get("transcripts")
+    # Support transcript_segments / segments / transcripts arrays
+    segments = item.get("transcript_segments") or item.get("segments") or item.get("transcripts")
     if isinstance(segments, list):
         parts: List[str] = []
         for seg in segments:
             if isinstance(seg, dict):
-                speaker = seg.get("speaker") or seg.get("speaker_label")
-                text = seg.get("text") or seg.get("content") or ""
+                raw_speaker = seg.get("speaker") if seg.get("speaker") is not None else seg.get("speaker_label")
+                if isinstance(raw_speaker, int):
+                    speaker = f"Speaker {raw_speaker}"
+                elif raw_speaker is not None and str(raw_speaker).strip():
+                    speaker = str(raw_speaker).strip()
+                else:
+                    speaker = ""
+                text = str(seg.get("text") or seg.get("content") or "").strip()
                 if text:
                     if speaker:
                         parts.append(f"{speaker}: {text}")
                     else:
-                        parts.append(str(text))
+                        parts.append(text)
             elif isinstance(seg, str) and seg.strip():
                 parts.append(seg.strip())
         if parts:
