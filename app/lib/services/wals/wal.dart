@@ -519,6 +519,72 @@ class Wal {
 
   static List<Wal> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Wal.fromJson(e)).toList();
 
+  /// Cheap change signal over exactly the fields [toJson] persists, so a save
+  /// whose snapshot did not change can skip re-encoding the whole index. Every
+  /// scalar and enum field mixes its value; string fields mix their content
+  /// hash; the three replaced-never-mutated object fields
+  /// ([onDeviceConversation], [onDevicePreparedUpload], [geolocation]) mix
+  /// instance identity. Runtime-only fields (isSyncing, transfer progress) are
+  /// deliberately absent, like [toJson] itself. A new persisted field must be
+  /// added here together with toJson, or its changes could be skipped.
+  int get persistentFingerprint {
+    var h = timerStart;
+    h = _mixFingerprint(h, codec.index);
+    h = _mixFingerprint(h, channel);
+    h = _mixFingerprint(h, sampleRate);
+    h = _mixFingerprint(h, status.index);
+    h = _mixFingerprint(h, storage.index);
+    h = _mixFingerprint(h, onDeviceOnly ? 1 : 0);
+    h = _mixFingerprint(h, holdForUser ? 1 : 0);
+    h = _mixFingerprint(h, deviceType?.index ?? -1);
+    h = _mixFingerprint(h, identityHashCode(onDeviceConversation));
+    h = _mixFingerprint(h, identityHashCode(onDevicePreparedUpload));
+    h = _mixFingerprint(h, onDeviceUploadFailure?.hashCode ?? 0);
+    h = _mixFingerprint(h, capturedOnDeviceOnly == null ? -1 : (capturedOnDeviceOnly! ? 1 : 0));
+    h = _mixFingerprint(h, filePath?.hashCode ?? 0);
+    h = _mixFingerprint(h, seconds);
+    h = _mixFingerprint(h, device.hashCode);
+    h = _mixFingerprint(h, deviceModel?.hashCode ?? 0);
+    h = _mixFingerprint(h, storageOffset);
+    h = _mixFingerprint(h, storageTotalBytes);
+    h = _mixFingerprint(h, fileNum);
+    h = _mixFingerprint(h, totalFrames);
+    h = _mixFingerprint(h, frameSize);
+    h = _mixFingerprint(h, syncedFrameOffset);
+    h = _mixFingerprint(h, originalStorage?.index ?? -1);
+    h = _mixFingerprint(h, conversationId?.hashCode ?? 0);
+    h = _mixFingerprint(h, recordingSessionId?.hashCode ?? 0);
+    h = _mixFingerprint(h, ownerUid?.hashCode ?? 0);
+    h = _mixFingerprint(h, captureRoot?.hashCode ?? 0);
+    h = _mixFingerprint(h, sourceFrameStart ?? -1);
+    h = _mixFingerprint(h, sourceClockEpoch ?? -1);
+    h = _mixFingerprint(h, liveRingId ?? -1);
+    h = _mixFingerprint(h, liveOrdinalStart ?? -1);
+    h = _mixFingerprint(h, liveOrdinalEnd ?? -1);
+    h = _mixFingerprint(h, identityHashCode(geolocation));
+    h = _mixFingerprint(h, retryCount);
+    h = _mixFingerprint(h, lastRetryAt);
+    h = _mixFingerprint(h, jobId?.hashCode ?? 0);
+    h = _mixFingerprint(h, uploadedAt);
+    h = _mixFingerprint(h, syncedAt);
+    h = _mixFingerprint(h, keptForTranscriptRecovery ? 1 : 0);
+    h = _mixFingerprint(h, clockRun?.hashCode ?? 0);
+    return h;
+  }
+
+  /// Order-sensitive fingerprint of a persisted index snapshot, so a caller
+  /// that rewrites the index can tell an unchanged snapshot from a changed one
+  /// without re-encoding it.
+  static int persistedIndexFingerprint(List<Wal> wals) {
+    var h = wals.length;
+    for (final wal in wals) {
+      h = _mixFingerprint(h, wal.persistentFingerprint);
+    }
+    return h;
+  }
+
+  static int _mixFingerprint(int h, int v) => (h * 31 + v) & 0x3FFFFFFF;
+
   getFileName() {
     return getFileNameByTimeStarts(timerStart, clockRun: clockRun);
   }

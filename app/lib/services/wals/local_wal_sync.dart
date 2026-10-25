@@ -235,6 +235,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _admissionReservations.clear();
     _liveProofPendingWalIds.clear();
     _pendantBlockedByStorage = false;
+    _lastPersistedIndexFingerprint = null;
     heldRevision.value++;
   }
 
@@ -1146,13 +1147,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         blockedCount: 0,
         reason: 'count_cap',
       );
+      // Once per episode, as documented above: the flush timer re-evaluates
+      // every few seconds while the cap stays engaged, and per-block counts
+      // already arrive with wal_admission_blocked.
+      DebugLogManager.logEvent('wal_admission_pressure', {
+        'policy': 'admission_count_cap',
+        'cap': maxRetainedCaptureWalCount,
+        'retained_count': retained,
+        'blocked_count': _admissionBlockedCount,
+      });
     }
-    DebugLogManager.logEvent('wal_admission_pressure', {
-      'policy': 'admission_count_cap',
-      'cap': maxRetainedCaptureWalCount,
-      'retained_count': retained,
-      'blocked_count': _admissionBlockedCount,
-    });
     return retained - maxRetainedCaptureWalCount;
   }
 
@@ -1351,6 +1355,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @visibleForTesting
   Future<int> enforceRetentionPolicyForTesting() => _evaluateRetentionPressure();
 
+  /// Fingerprint of the last snapshot this session persisted (or started
+  /// persisting). Null after load or a failed write, so the next save always
+  /// writes. The periodic flush saves unconditionally; with a
+  /// multi-thousand-entry index an unchanged snapshot must not pay the
+  /// whole-index encode and write again.
+  int? _lastPersistedIndexFingerprint;
+
   Future<bool> _saveWalsToFile(int generation) async {
     if (!_isCurrent(generation)) return false;
     // The save rewrites the whole index from memory, so every durable bucket
@@ -1359,14 +1370,30 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // recordings from disk on the next save.
     final snapshot = [..._retiredWals, ..._foreignWals, ..._wals].where((w) => w.storage != WalStorage.mem).toList();
     final confirmedKeys = snapshot.where((w) => w.storage == WalStorage.disk).map(_durableKey).toList();
-    Logger.debug('Saving WALs to file');
-    if (_persistWalsOverride != null) {
-      await _persistWalsOverride!(snapshot);
+    final fingerprint = Wal.persistedIndexFingerprint(snapshot);
+    if (_lastPersistedIndexFingerprint == fingerprint) {
+      // Nothing persisted changed since the last write: skip the encode. Keys
+      // are unchanged too; re-adding is idempotent and keeps this path
+      // identical to a completed save.
       _confirmedDurableWalKeys.addAll(confirmedKeys);
       return true;
     }
-    if (!await WalFileManager.saveWals(snapshot)) {
-      throw StateError('WAL index save reported failure');
+    // Record before awaiting: saves can overlap (flush timer during a drain),
+    // and an older snapshot resolving last must not regress the fingerprint a
+    // newer save already recorded.
+    _lastPersistedIndexFingerprint = fingerprint;
+    try {
+      Logger.debug('Saving WALs to file');
+      if (_persistWalsOverride != null) {
+        await _persistWalsOverride!(snapshot);
+      } else {
+        if (!await WalFileManager.saveWals(snapshot)) {
+          throw StateError('WAL index save reported failure');
+        }
+      }
+    } catch (_) {
+      if (_lastPersistedIndexFingerprint == fingerprint) _lastPersistedIndexFingerprint = null;
+      rethrow;
     }
     _confirmedDurableWalKeys.addAll(confirmedKeys);
     return true;
