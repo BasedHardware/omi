@@ -120,16 +120,6 @@ def load_and_deduplicate(
                 # Use content hash if ID is missing
                 mem_id = f"anon-{hash(json.dumps(item, sort_keys=True))}"
 
-            # Category filtering
-            item_cat = str(item.get("category") or "").strip().lower()
-            if categories and item_cat not in categories:
-                continue
-
-            # Privacy filtering
-            vis = str(item.get("visibility") or "").strip().lower()
-            if not include_private and vis == "private":
-                continue
-
             if mem_id in dedup_map:
                 # Retain the newest record by updated_at or created_at
                 existing = dedup_map[mem_id]
@@ -138,13 +128,27 @@ def load_and_deduplicate(
                 if new_dt and old_dt:
                     if new_dt > old_dt:
                         dedup_map[mem_id] = item
-                else:
+                elif new_dt and not old_dt:
+                    dedup_map[mem_id] = item
+                elif not old_dt:
                     dedup_map[mem_id] = item
             else:
                 dedup_map[mem_id] = item
                 ordered_ids.append(mem_id)
 
-    return [dedup_map[m_id] for m_id in ordered_ids]
+    # Apply category and privacy filters to the winning deduplicated records
+    filtered_items: List[Dict[str, Any]] = []
+    for m_id in ordered_ids:
+        item = dedup_map[m_id]
+        item_cat = str(item.get("category") or "").strip().lower()
+        if categories and item_cat not in categories:
+            continue
+        vis = str(item.get("visibility") or "").strip().lower()
+        if not include_private and vis == "private":
+            continue
+        filtered_items.append(item)
+
+    return filtered_items
 
 
 def format_as_jsonl(memories: Iterable[Dict[str, Any]], schema_mode: str = "raw") -> str:
