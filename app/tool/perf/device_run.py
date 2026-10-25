@@ -12,6 +12,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 
 APP = Path(__file__).resolve().parents[2]
 REPO = APP.parent
@@ -65,9 +66,21 @@ def interrupted(signum, frame):
     raise KeyboardInterrupt
 
 
+def process_start(pid):
+    return subprocess.run(['ps', '-p', str(pid), '-o', 'lstart='], check=True,
+                          capture_output=True, text=True, timeout=5,
+                          env={**os.environ, 'LC_ALL': 'C', 'TZ': 'UTC'}).stdout.strip()
+
+
 def worker(spec_path):
     spec = json.loads(Path(spec_path).read_text())
     out = Path(spec['out'])
+    try:
+        (out / 'worker-claim').mkdir()
+    except FileExistsError:
+        # A timed-out AppleEvent may arrive after the command-file fallback.
+        # Only the first worker may write PID/result files or touch the device.
+        return 0
     (out / 'worker-pid.txt').write_text(str(os.getpid()) + '\n')
     os.environ.update(spec['env'])
     signal.signal(signal.SIGTERM, interrupted)
@@ -77,6 +90,9 @@ def worker(spec_path):
     completed = threading.Event()
     try:
         os.kill(spec['parent_pid'], 0)
+        if (time.time() > spec['launch_expires_at'] or
+                process_start(spec['parent_pid']) != spec['parent_start']):
+            raise ValueError('expired launch or original caller no longer owns this process ID')
         if sys.platform == 'darwin' and spec['parent_pid'] != os.getpid():
             # An Aqua worker must not outlive a killed headless caller.
             queue = select.kqueue()
@@ -144,6 +160,7 @@ def run(args):
     waiter = Path(os.environ.get('OMI_PERF_WAITER', str(rollout / 'wait_for.sh')))
     spec = dict(out=str(out), artifact_root=str(artifact_root), heavy=str(heavy),
                 parent_pid=os.getpid(),
+                parent_start=process_start(os.getpid()), launch_expires_at=time.time() + 300,
                 device=args.device, platform=args.platform, runs=args.runs, timeline=args.timeline,
                 baseline=str(Path(args.baseline).expanduser().resolve()) if args.baseline else None,
                 accept_baseline=args.accept_baseline,
@@ -172,10 +189,18 @@ def run(args):
     if not waiter.is_file() or not os.access(waiter, os.X_OK):
         raise ValueError('Aqua launch needs canonical wait_for.sh: set OMI_PERF_WAITER, or run directly in Aqua iTerm')
     command = shlex.join([sys.executable, '-I', str(Path(__file__).resolve()), '--worker', str(spec_path)])
-    subprocess.run(['osascript', '-e', 'on run argv', '-e',
-                    'tell application "iTerm" to create window with default profile command (item 1 of argv)',
-                    '-e', 'end run', command], check=True, timeout=30)
     try:
+        try:
+            subprocess.run(['osascript', '-e', 'on run argv', '-e',
+                            'tell application "iTerm" to create window with default profile command (item 1 of argv)',
+                            '-e', 'end run', command], check=True, timeout=30)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            if not (out / 'worker-pid.txt').is_file():
+                script = out / 'launch.command'
+                script.write_text('#!/bin/bash\nexec ' + command + '\n')
+                script.chmod(0o700)
+                print('iTerm AppleEvent did not acknowledge; opening the owned command file in iTerm.', flush=True)
+                subprocess.run(['open', '-a', 'iTerm', str(script)], check=True, timeout=30)
         launched = wait(waiter, out / 'worker-pid.txt', '^[0-9]+$', 'LAUNCH_FAILED', '90s')
         if launched:
             raise RuntimeError('iTerm worker did not acknowledge launch; inspect the new iTerm window')

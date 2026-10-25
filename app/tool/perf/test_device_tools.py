@@ -1,8 +1,11 @@
 import importlib.util
+import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 
@@ -29,6 +32,28 @@ def summary():
 
 
 class DeviceToolsTests(unittest.TestCase):
+    def test_stale_gui_request_cannot_start_a_device_job(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            spec = root / 'launch.json'
+            spec.write_text(json.dumps({'out': str(root), 'env': {}, 'parent_pid': os.getpid(),
+                                         'parent_start': 'a different process incarnation',
+                                         'launch_expires_at': time.time() + 300}))
+            self.assertEqual(runner.worker(spec), 1)
+            self.assertEqual((root / 'runner-done.txt').read_text(), 'PERF_DONE exit=1\n')
+            self.assertFalse((root / 'child-pgid.txt').exists())
+
+    def test_delayed_aqua_launch_cannot_clobber_the_first_worker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'worker-claim').mkdir()
+            (root / 'worker-pid.txt').write_text('first-worker\n')
+            spec = root / 'launch.json'
+            spec.write_text(json.dumps({'out': str(root)}))
+            self.assertEqual(runner.worker(spec), 0)
+            self.assertEqual((root / 'worker-pid.txt').read_text(), 'first-worker\n')
+            self.assertFalse((root / 'runner-done.txt').exists())
+
     def test_autodetect_ignores_simulator_desktop_and_unsupported(self):
         devices = [{'id': 'sim', 'targetPlatform': 'ios', 'emulator': True},
                    {'id': 'mac', 'targetPlatform': 'darwin', 'emulator': False},
