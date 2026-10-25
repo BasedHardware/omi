@@ -202,7 +202,9 @@ void main() {
     await _tapVisible(tester, find.widgetWithText(PlanOptionCard, 'Unlimited Monthly'));
     expect(_selected(tester, 'Unlimited Monthly'), isTrue);
     await _tapVisible(tester, find.byKey(const ValueKey('plans_sheet_upgrade_button')));
-    await tester.pumpAndSettle();
+    // Continue stays busy while its confirmation is open, so its spinner
+    // intentionally keeps scheduling frames. Pump the dialog transition only.
+    await tester.pump(const Duration(milliseconds: 400));
     final l10n = AppLocalizations.of(tester.element(find.byType(PlansSheet)));
     expect(find.text(l10n.confirmPlanChange), findsOneWidget,
         reason: 'fresh JPY offer must not require a matching USD ID in the usage catalog');
