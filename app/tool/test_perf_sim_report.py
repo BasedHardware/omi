@@ -16,7 +16,8 @@ def receipt(mode='profile'):
     for metrics in scenarios.values():
         metrics.update(start_vm_us=1, end_vm_us=2)
     scenarios['cold_start']['restored_from_cache'] = True
-    return {'schema': 'omi-mobile-perf-sim/v2', 'complete': True, 'frame_policy': 'benchmarkLive',
+    return {'schema': 'omi-mobile-perf-sim/v2', 'complete': True, 'frame_policy': 'framework-requested/v1',
+            'idle_preflight_frames': 0,
             'pacing': 'fixed-real-time/v1', 'foreground_before_measurement': True,
             'storage_isolated': True, 'build_mode': mode,
             'timeline_enabled': False,
@@ -38,7 +39,8 @@ class ReportTests(unittest.TestCase):
         self.addCleanup(output.__exit__, None, None, None)
 
     def test_empty_or_incomplete_evidence_rejected(self):
-        for change in ({'complete': False}, {'scenarios': {}}, {'storage_isolated': False}):
+        for change in ({'complete': False}, {'scenarios': {}}, {'storage_isolated': False},
+                       {'idle_preflight_frames': 240}):
             value = receipt()
             value.update(change)
             with self.assertRaises(ValueError):

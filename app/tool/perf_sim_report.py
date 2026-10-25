@@ -30,8 +30,11 @@ HEAVY_DATASET = {'conversations': 2000, 'detail_segments': 120, 'wals': 6500,
 def validate(report):
     if report.get("schema") != "omi-mobile-perf-sim/v2" or report.get("complete") is not True:
         raise ValueError("incomplete or unknown heavy-profile report")
-    if report.get('frame_policy') != 'benchmarkLive':
-        raise ValueError('benchmarkLive frame policy is required')
+    if report.get('frame_policy') != 'framework-requested/v1':
+        raise ValueError('framework-requested frame policy is required')
+    idle = report.get('idle_preflight_frames')
+    if type(idle) is not int or not 0 <= idle <= 3:
+        raise ValueError('missing or failed idle-frame preflight')
     if report.get('pacing') != 'fixed-real-time/v1' or report.get('foreground_before_measurement') is not True:
         raise ValueError('fixed pacing and foreground qualification are required')
     if not isinstance(report.get('timeline_enabled'), bool):

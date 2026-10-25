@@ -49,6 +49,14 @@ with the WAL service active. Cold start means shell/cache initialization, not
 native process/Firebase/onboarding startup. Lifecycle transitions are delivered
 through the binding; this does not claim OS suspension/resume coverage.
 
+Before those windows, a quiet blank widget verifies that the test framework is
+not generating continuous idle frames. Flutter3.44.5's live binding requests
+another engine frame after every draw even under benchmarkLive. The harness
+suppresses that test-only tail while preserving genuine framework requests.
+An idle-frame probe and nonempty scenario frames guard both directions. The
+native buffered initial lifecycle state initializes the test dispatcher only
+when its state is absent; live lifecycle events remain authoritative.
+
 Each `receipt-N.json` reports engine build/raster/total p50/p90/p99 in
 microseconds, frames over 16/32/100 ms, worst total frame and frame count.
 Timings drain before the next window because the engine batches callbacks.

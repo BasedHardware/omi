@@ -10,9 +10,11 @@ import 'dart:ui' show FramePhase;
 /// engine reports real frame timings, so numbers are comparable across builds
 /// on the same physical device, not across machines (documented in the README).
 class HeavyFrameCollector {
-  HeavyFrameCollector() {
+  HeavyFrameCollector({this.onEmptyWindow}) {
     SchedulerBinding.instance.addTimingsCallback(_onTimings);
   }
+
+  final void Function(String scenario)? onEmptyWindow;
 
   void dispose() {
     SchedulerBinding.instance.removeTimingsCallback(_onTimings);
@@ -52,7 +54,10 @@ class HeavyFrameCollector {
     // The caller awaits a real settle before calling end(), so only a short
     // synchronous drain window remains.
     final frames = List<FrameTiming>.of(_pending);
-    if (frames.isEmpty) throw StateError('HEAVY_NO_ENGINE_FRAMES: $name; check native foreground state');
+    if (frames.isEmpty) {
+      onEmptyWindow?.call(name);
+      throw StateError('HEAVY_NO_ENGINE_FRAMES: $name; check native foreground state');
+    }
     _windows[name] = frames;
     _wall[name] = DateTime.now().difference(openedAt);
     _current = null;

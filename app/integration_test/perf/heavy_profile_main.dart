@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:ui' as ui;
+import 'heavy_binding.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -73,14 +75,14 @@ import 'production_shell.dart';
 /// comparable across builds on the same physical device only. Simulator debug
 /// is explicitly marked as scenario qualification, never profile acceptance.
 void main() {
-  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.benchmarkLive;
+  final binding = HeavyProfileBinding();
   final hostReady = Completer<void>();
   developer.registerExtension('ext.omi.heavy.start', (method, parameters) async {
     if (!hostReady.isCompleted) hostReady.complete();
     return developer.ServiceExtensionResponse.result('{"started":true}');
   });
-  final collector = HeavyFrameCollector();
+  final collector = HeavyFrameCollector(
+      onEmptyWindow: (scenario) => _rejectMeasurement(binding, 'no_engine_frames', scenario: scenario));
   final fixture = HeavyFixtureServer();
   final results = <String, Map<String, Object?>>{};
   late WalService walService;
@@ -88,6 +90,10 @@ void main() {
   testWidgets('heavy_profile_scenarios', (tester) async {
     Env.init(const _HeavyEnv());
     await hostReady.future.timeout(const Duration(seconds: 30));
+    final lifecycleSnapshot = _readNativeInitialLifecycle(binding);
+    binding.reportData = {...?binding.reportData, 'heavy_lifecycle': lifecycleSnapshot};
+    debugPrint('HEAVY_LIFECYCLE ${jsonEncode(lifecycleSnapshot)}');
+    final idleFrames = await _verifyIdleScheduling(tester, binding);
     const simulatorQualification = bool.fromEnvironment('PERF_SIM_QUALIFICATION');
     expect(kProfileMode || (kDebugMode && simulatorQualification), isTrue,
         reason: 'Profile required; debug simulator runs must opt into qualification only');
@@ -138,6 +144,7 @@ void main() {
     if (timelineEnabled) await binding.enableTimeline(streams: const ['Dart', 'GC']);
     final resumed = await _awaitCondition(() => binding.lifecycleState == AppLifecycleState.resumed,
         timeout: const Duration(seconds: 15));
+    if (!resumed) _rejectMeasurement(binding, 'not_resumed', scenario: 'preflight');
     expect(resumed, isTrue, reason: 'HEAVY_FOREGROUND_REJECTED: DEV app must be resumed before measurement');
     await (() async {
       // 4. Cold start: shell mount → Home request → empty server page → cache
@@ -233,7 +240,8 @@ void main() {
     // 9. Receipt: engine frame statistics per scenario.
     final receipt = <String, Object?>{
       'schema': 'omi-mobile-perf-sim/v2',
-      'frame_policy': 'benchmarkLive',
+      'frame_policy': 'framework-requested/v1',
+      'idle_preflight_frames': idleFrames,
       'pacing': 'fixed-real-time/v1',
       'build_mode': kProfileMode ? 'profile' : 'debug',
       'acceptance_eligible': kProfileMode && !simulatorQualification && !timelineEnabled,
@@ -277,6 +285,47 @@ void main() {
     expect(results['cold_start']!['restored_from_cache'], isTrue,
         reason: 'Home must restore the seeded history from the conversations cache');
   }, timeout: const Timeout(Duration(minutes: 12)));
+}
+
+Map<String, Object?> _readNativeInitialLifecycle(IntegrationTestWidgetsFlutterBinding binding) {
+  final before = binding.lifecycleState?.name;
+  // TestPlatformDispatcher deliberately defaults its initial state to ''. Use
+  // the actual embedder buffer once, rather than inventing a resumed event.
+  // Subsequent real lifecycle events remain authoritative.
+  final native = ui.PlatformDispatcher.instance.initialLifecycleState;
+  if (binding.lifecycleState == null && native.isNotEmpty) {
+    binding.platformDispatcher.initialLifecycleStateTestValue = native;
+    binding.readTestInitialLifecycleStateFromNativeWindow();
+  }
+  return {'binding_before': before, 'native_buffered': native, 'binding_after_read': binding.lifecycleState?.name};
+}
+
+Future<int> _verifyIdleScheduling(WidgetTester tester, HeavyProfileBinding binding) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  await _idle(const Duration(milliseconds: 1200));
+  var frames = 0;
+  void count(List<ui.FrameTiming> timings) => frames += timings.length;
+  binding.addTimingsCallback(count);
+  try {
+    await _idle(const Duration(seconds: 2));
+  } finally {
+    binding.removeTimingsCallback(count);
+  }
+  debugPrint('HEAVY_IDLE_PREFLIGHT frames=$frames');
+  expect(frames, lessThanOrEqualTo(3), reason: 'Idle test-framework frames must not dilute real UI percentiles');
+  return frames;
+}
+
+void _rejectMeasurement(IntegrationTestWidgetsFlutterBinding binding, String reason, {required String scenario}) {
+  binding.reportData = {
+    ...?binding.reportData,
+    'heavy_measurement_rejection': {
+      'kind': 'foreground_or_frames',
+      'reason': reason,
+      'scenario': scenario,
+      'binding_lifecycle': binding.lifecycleState?.name,
+    }
+  };
 }
 
 class _LoopbackOnly extends HttpOverrides {

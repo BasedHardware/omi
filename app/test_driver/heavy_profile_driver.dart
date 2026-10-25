@@ -111,12 +111,9 @@ Future<void> main() async {
     if (!passed) {
       final details = response.formattedFailureDetails;
       stderr.writeln(details);
-      if (!response.allTestsPassed &&
-          (details.contains('HEAVY_FOREGROUND_REJECTED') || details.contains('HEAVY_NO_ENGINE_FRAMES'))) {
-        await File('$output/measurement-rejected.json').writeAsString(jsonEncode({
-          'kind': 'foreground_or_frames',
-          'failure': details,
-        }));
+      final rejection = data['heavy_measurement_rejection'];
+      if (!response.allTestsPassed && rejection is Map && rejection['kind'] == 'foreground_or_frames') {
+        await File('$output/measurement-rejected.json').writeAsString(jsonEncode(rejection));
       }
       if (truncated) stderr.writeln('Timeline exceeded the bounded event budget');
       exitCode = 1;

@@ -22,7 +22,7 @@ comparison = module('compare')
 
 def summary():
     return {'accepted_baseline': True, 'variance_pass': True, 'build_mode': 'profile',
-            'dataset': {'wals': 6500}, 'frame_policy': 'benchmarkLive',
+            'dataset': {'wals': 6500}, 'frame_policy': 'framework-requested/v1',
             'pacing': 'fixed-real-time/v1', 'timeline_enabled': False,
             'identity': {'device_id': 'fixture-device', 'platform': 'ios',
                          'flutter_revision': 'fixture-sdk', 'harness_sha256': 'fixture-harness'},
