@@ -777,6 +777,11 @@ def upload_audio_chunk(
             blob.upload_from_string(payload, content_type='application/octet-stream', if_generation_match=0)
         except PreconditionFailed:
             if _stored_chunk_matches(blob, uid, protection_level, upload_data):
+                # The committed generation already holds these exact bytes; an
+                # object written before SYNC admission may still lack the span
+                # metadata this session wanted, so repair it in place instead
+                # of leaving a legacy-marked rendition behind a no-op.
+                _backfill_chunk_metadata(blob)
                 del upload_data
                 return path
             # Genuinely different bytes: keep the historical update-in-place
@@ -785,6 +790,26 @@ def upload_audio_chunk(
 
     del upload_data
     return path
+
+
+def _backfill_chunk_metadata(blob) -> None:
+    """Patch this writer's metadata onto a pre-existing identical chunk object.
+
+    Best-effort by design: the bytes are already proven identical, so a failed
+    patch leaves the object exactly as this change's baseline would have.
+    """
+    wanted = blob.metadata or {}
+    if not wanted:
+        return
+    try:
+        blob.reload(timeout=10, retry=None)
+        current = blob.metadata or {}
+        missing = {key: value for key, value in wanted.items() if current.get(key) != value}
+        if missing:
+            blob.metadata = {**current, **missing}
+            blob.patch(retry=None, timeout=10)
+    except Exception:
+        return
 
 
 def _stored_chunk_matches(blob, uid: str, protection_level: str, plain_payload: bytes) -> bool:

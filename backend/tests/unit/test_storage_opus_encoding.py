@@ -278,6 +278,42 @@ class TestUploadOpusEncoding:
         assert path.endswith('.opus')
         assert attempts == [0, None], 'divergent bytes fall back to an unpinned overwrite'
 
+    @patch.object(storage_mod, 'users_db')
+    def test_identical_retry_backfills_span_metadata_on_legacy_object(self, mock_users_db):
+        """An identical retry against a pre-admission object repairs its span metadata in place."""
+        _, mock_blob = self._setup_mock_bucket()
+        recorded = {}
+
+        def upload(data, **kwargs):
+            if 'payload' not in recorded:
+                recorded['payload'] = data
+                raise storage_mod.PreconditionFailed('generation precondition failed')
+            recorded['overwrite'] = True
+
+        mock_blob.upload_from_string.side_effect = upload
+        mock_blob.download_as_bytes.side_effect = lambda: recorded['payload']
+
+        # The stored generation predates SYNC admission: reload surfaces its
+        # metadata, which carries no span keys.
+        def reload(**kwargs):
+            mock_blob.metadata = {'legacy': '1'}
+
+        mock_blob.reload.side_effect = reload
+
+        path = storage_mod.upload_audio_chunk(
+            chunk_data=b'\x00' * 640,
+            uid='test-uid',
+            conversation_id='conv-1',
+            timestamp=1234567890.123,
+            data_protection_level='standard',
+        )
+
+        assert path.endswith('.opus')
+        assert 'overwrite' not in recorded
+        mock_blob.patch.assert_called_once()
+        patched = mock_blob.patch.call_args_list[0]
+        assert mock_blob.metadata.get('v2_start') is not None or 'start' in str(mock_blob.metadata)
+
 
 class TestListAudioChunksExtensions:
     """Tests for list_audio_chunks with all extension types."""
