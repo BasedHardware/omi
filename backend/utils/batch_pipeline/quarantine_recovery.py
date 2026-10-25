@@ -31,6 +31,7 @@ from config.batch_pipeline import (
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_policy import load_stage_policy, refresh_disabled_recovery
 from config.policy import RecoveryPolicy, kill_switch
+from config.batch_pipeline_empty_asr import safety_net_enabled, terminal_empty_allowed
 from config.stt_provider_policy import HELD_RECOVERY_SECOND_PROVIDER
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
@@ -259,7 +260,7 @@ class QuarantineRecovery:
             pass
         if outcome in ('words', 'empty'):
             metered(record_accepted, owner_id, SECOND_PROVIDER, item.duration_seconds)
-        if outcome == 'empty' and policy.terminal_empty_disposition:
+        if outcome == 'empty' and policy.terminal_empty_disposition and terminal_empty_allowed(empty.spans):
             # Two independent multilingual recognizers found no words.
             evidence = LANGUAGE_GUARD_EMPTY_EVIDENCE if guarded else TWO_PROVIDER_EMPTY_EVIDENCE
             return terminal_empty_payload(empty.duration, empty.spans, evidence)
@@ -298,7 +299,7 @@ class QuarantineRecovery:
             byok = admitted_as_byok(job)
             if byok:
                 record_decision(DispatchPath.QUARANTINE, True, DispatchReason.BYOK)
-            disposition = empty_asr_disposition_enabled()
+            disposition = empty_asr_disposition_enabled() or (safety_net_enabled() and self.stt is transcribe)
             if (
                 not disposition
                 and not byok
@@ -306,10 +307,11 @@ class QuarantineRecovery:
             ):
                 return 'held'
             audio = self.artifacts.fetch_audio(item)
-            local_payload, inspection_failure = None, None
+            local_payload, inspection_failure, measured_vad = None, None, None
             if disposition:
                 try:
                     _, duration, spans = inspect_audio(item, audio)
+                    measured_vad = sum(span['end'] - span['start'] for span in spans)
                     if not spans:
                         local_payload = silence_payload(duration)
                 except RecoveryFailure as error:
@@ -326,8 +328,10 @@ class QuarantineRecovery:
                 return 'held'
             # Existing guard-owned custody must drain safely even after the
             # new-admission guard is rolled back.
-            multilingual = policy.speech_empty_multilingual or (
-                (job.get('worker_failure') or {}).get('reason') == 'unsupported_language'
+            multilingual = (
+                safety_net_enabled()
+                or policy.speech_empty_multilingual
+                or ((job.get('worker_failure') or {}).get('reason') == 'unsupported_language')
             )
             if not self.protocol.start(
                 segment_id, token, self.clock(), provider='modulate' if multilingual else 'legacy_sync'
@@ -369,7 +373,8 @@ class QuarantineRecovery:
                 )
                 if multilingual and isinstance(error, MultilingualEmpty):
                     empty = error
-                    if policy.terminal_empty_disposition and padded_empty(job):
+                    measured_vad = sum(span['end'] - span['start'] for span in error.spans)
+                    if policy.terminal_empty_disposition and padded_empty(job) and terminal_empty_allowed(error.spans):
                         payload = terminal_empty_payload(error.duration, error.spans)
                         failure = None
             else:
@@ -392,7 +397,9 @@ class QuarantineRecovery:
                         failure = None
             # Log outside the exception handler: logger failures must not chain a private exception.
             if failure:
-                if not self.protocol.settle(segment_id, token, self.clock(), failure=failure):
+                if not self.protocol.settle(
+                    segment_id, token, self.clock(), failure=failure, measured_held_vad_speech_seconds=measured_vad
+                ):
                     return 'held'
                 log_failure(failure)
                 return 'failed_held'

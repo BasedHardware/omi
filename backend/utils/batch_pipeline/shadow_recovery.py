@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from config.batch_pipeline_shadow import shadow_percent
 from config.policy import RecoveryPolicy
+from config.batch_pipeline_empty_asr import terminal_empty_allowed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.recovery_disposition import inspect_audio, MultilingualEmpty, padded_empty
@@ -36,7 +37,7 @@ def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspec
                 outcome = 'recovered' if payload.get('words') else 'failed_held'
             except MultilingualEmpty as empty:
                 outcome = 'failed_held'
-                if policy.terminal_empty_disposition and padded_empty(job):
+                if policy.terminal_empty_disposition and padded_empty(job) and terminal_empty_allowed(empty.spans):
                     outcome = 'empty'
                 elif second_provider_eligible(job, empty):
                     if not repository.paid(segment, 'deepgram'):
@@ -46,7 +47,11 @@ def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspec
                             payload = second_stt(item, audio, empty)
                             outcome = 'recovered' if payload.get('words') else 'failed_held'
                         except MultilingualEmpty:
-                            outcome = 'empty' if policy.terminal_empty_disposition else 'failed_held'
+                            outcome = (
+                                'empty'
+                                if policy.terminal_empty_disposition and terminal_empty_allowed(empty.spans)
+                                else 'failed_held'
+                            )
                         except BatchPrivacyBlocked:
                             raise
                         except Exception:

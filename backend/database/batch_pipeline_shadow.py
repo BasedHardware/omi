@@ -278,6 +278,7 @@ class ShadowStore:
             if job.get('shadow') is not True or job.get('state') != 'running':
                 return False
             evidence_fields = {}
+            evidence_fields['measured_held_vad_speech_seconds'] = evidence.measured_held_vad_speech_seconds
             if isinstance(evidence, RecoveryWork) and evidence.padded_retry:
                 evidence_fields['worker_empty_evidence'] = {'padded_retry': evidence.padded_retry, 'version': 1}
             tx.put('shadow_jobs', segment, {**job, **evidence_fields, 'state': 'recovery_ready'})

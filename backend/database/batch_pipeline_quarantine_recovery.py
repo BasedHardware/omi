@@ -223,7 +223,17 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
-    def settle(self, segment_id, token, now, result_uri=None, *, outcome="success", failure=None):
+    def settle(
+        self,
+        segment_id,
+        token,
+        now,
+        result_uri=None,
+        *,
+        outcome="success",
+        failure=None,
+        measured_held_vad_speech_seconds=None,
+    ):
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
             existing = tx.get('results', segment_id)
@@ -237,6 +247,11 @@ class RecoveryStore:
                 return False, 0
             if result_uri is None:
                 job.update(recovery_state='failed_held')
+                from utils.batch_pipeline.contracts import validate_measured_vad
+
+                measured = validate_measured_vad(measured_held_vad_speech_seconds, job['duration_seconds'])
+                if measured is not None or 'measured_held_vad_speech_seconds' not in job:
+                    job['measured_held_vad_speech_seconds'] = measured
                 if failure:
                     from utils.batch_pipeline.recovery_disposition import STAGES, REASONS
 
