@@ -2,6 +2,8 @@
 
 from config.refactor_modes import default_on
 
+BATCH_CONVERSATION_SPEAKERS_ENV = 'BATCH_CONVERSATION_SPEAKERS_ENABLED'
+
 
 def has_batch_authority(segments) -> bool:
     # Resolution changes public scopes; the original partition survives in the
@@ -14,4 +16,4 @@ def has_batch_authority(segments) -> bool:
 
 
 def enabled(segments) -> bool:
-    return has_batch_authority(segments) and default_on('BATCH_CONVERSATION_SPEAKERS_ENABLED')
+    return has_batch_authority(segments) and default_on(BATCH_CONVERSATION_SPEAKERS_ENV)
