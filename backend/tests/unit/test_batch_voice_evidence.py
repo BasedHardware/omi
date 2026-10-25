@@ -43,7 +43,7 @@ def payload(capture, seconds=2):
 
 
 def state(level='enhanced'):
-    capture = time.time() - 10
+    capture = float(int(time.time()) - 10)
     client = StrictFirestore(
         {('users', UID): {'data_protection_level': level}, ('users', UID, 'conversations', CID): {'id': CID}}
     )
@@ -60,7 +60,7 @@ def state(level='enhanced'):
     return store, artifacts, objects, capture
 
 
-def persist(store, artifacts, capture, unit='unit0', seconds=2):
+def persist(store, artifacts, capture, unit='unit0', seconds=2, *, upload=True):
     item = WorkItem(unit, UID, capture, 'gs://synthetic/audio#123', 10, Priority.FRESH, privacy_generation=0)
     store.client.rows[(NS + '_jobs', unit)] = {
         **asdict(item),
@@ -70,9 +70,33 @@ def persist(store, artifacts, capture, unit='unit0', seconds=2):
     store.client.rows[(NS + '_results', unit)] = {
         'projection_parts': {'0': {'conversation_id': CID, 'speaker_scope': f'final:batch:{unit}'}},
     }
+    if not upload:
+        return item, None
     uri = artifacts.persist_voice_evidence(item, payload(capture, seconds))
     db.publish(store, item, uri, CID)
     return item, uri
+
+
+def test_conversation_deleted_during_upload_discards_exact_generation(monkeypatch):
+    store, artifacts, objects, capture = state()
+    item, _ = persist(store, artifacts, capture, upload=False)
+    projection_store = SimpleNamespace(
+        store=store, ref=lambda table, key: store.client.collection(NS + '_' + table).document(key)
+    )
+    projector = SimpleNamespace(
+        store=projection_store,
+        load_result=lambda *a: {'diarization': {'turns': [{'speaker': 'SPEAKER_00', 'start': 0, 'end': 8}]}},
+        fetch_audio=lambda item: audio_unit(item.capture_at, b'\x01\x00' * (10 * 16000)).wav,
+    )
+    store.client.rows[(NS + '_results', item.segment_id)]['result'] = {'result_uri': 'synthetic-result'}
+    objects.after_upload = lambda: store.client.rows[('users', UID, 'conversations', CID)].update(deleted=True)
+    monkeypatch.setattr(evidence, 'artifacts_for', lambda store: artifacts)
+    monkeypatch.setattr(evidence, 'speaker_embedding_configured', lambda: True)
+    monkeypatch.setattr(evidence, 'extract_embedding_from_bytes', lambda *a, **kw: VECTOR)
+    evidence.prepare(projector, item, SimpleNamespace(private_cloud_sync_enabled=False), CID)
+    assert objects.uploads == 1 and not objects.objects
+    assert 'voice_evidence' not in store.client.rows[(NS + '_jobs', item.segment_id)]
+    assert any(path[0] == NS + '_artifacts' for path in store.client.rows)
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
@@ -196,12 +220,17 @@ def fixture_conversation(units):
     )
 
 
-def test_sync_off_four_unit_naming_reuses_policy_without_audio_cache(monkeypatch):
+@pytest.mark.parametrize('evidence_mode', ['off', 'serve'])
+@pytest.mark.parametrize('identity', ['user', 'synthetic-person'])
+def test_sync_off_four_unit_naming_reuses_policy_without_audio_cache(monkeypatch, evidence_mode, identity):
     store, artifacts, objects, capture = state()
     units = [f'unit{i}' for i in range(4)]
     for i, unit in enumerate(units):
         persist(store, artifacts, capture + i, unit)
     conversation = fixture_conversation(units)
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', evidence_mode)
+    monkeypatch.setattr(stage.speaker_evidence, '_roster', lambda *a: [])
+    monkeypatch.setattr(stage.speaker_evidence.storage, 'store_evidence', lambda *a, **kw: None)
     monkeypatch.setattr(
         sync_off_speakers,
         'load_vectors',
@@ -209,12 +238,12 @@ def test_sync_off_four_unit_naming_reuses_policy_without_audio_cache(monkeypatch
     )
     monkeypatch.setattr(stage.conversations_db, 'get_manual_speaker_receipt', lambda *a: {})
     monkeypatch.setattr(stage, 'resolution_enabled', lambda: True)
-    monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda uid, **kw: {'user': VECTOR})
+    monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda uid, **kw: {identity: VECTOR})
     monkeypatch.setattr(stage, 'download_speaker_embedding_cache', lambda *a: pytest.fail('no durable cache'))
     monkeypatch.setattr(stage, 'upload_speaker_embedding_cache', lambda *a: pytest.fail('no durable cache'))
     monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', lambda *a, **kw: pytest.fail('no audio_files'))
     stage.resolve_speakers_for_processing(UID, conversation)
-    assert all(s.is_user for s in conversation.transcript_segments)
+    assert all(s.is_user if identity == 'user' else s.person_id == identity for s in conversation.transcript_segments)
     assert len({s.speaker_id for s in conversation.transcript_segments}) == 1
     assert not conversation.audio_files and objects.uploads == 4
     assert all('/voice_evidence/' in name for name in objects.objects)

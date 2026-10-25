@@ -16,7 +16,7 @@ from config.batch_pipeline import (
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.batch_pipeline_staging import reap
-from utils.batch_pipeline.intake import artifacts_for
+from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.live import drain_recordings
 from utils.batch_pipeline.projection import Projector, error_type
 from utils.executors import run_blocking, start_background_task, sync_executor

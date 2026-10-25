@@ -136,3 +136,33 @@ def test_account_delete_revokes_reads_and_erases_registered_voice_object(state, 
     rows = list(store.client.collection(f'{store.namespace}_artifacts').stream())
     # Pending upload tombstone survives until the provider's maximum IO window.
     assert rows and rows[0].to_dict()['erasure_requested']
+
+
+def test_unknown_voice_upload_outcome_remains_scheduled_until_physical_erasure(state, monkeypatch):
+    store, uid, _, _, _ = state
+    item, reference, artifacts, objects = prepare(state, monkeypatch)
+    payload = artifacts.load_voice_evidence(item, reference[1], expires_at=reference[2])
+
+    def lost_reply():
+        raise TimeoutError('synthetic upload acknowledgement loss')
+
+    objects.after_upload = lost_reply
+    with pytest.raises(TimeoutError):
+        artifacts.persist_voice_evidence(item, payload)
+    assert len(objects.objects) == 2
+    rows = list(store.client.collection(f'{store.namespace}_artifacts').stream())
+    assert len(rows) == 2 and any('#' not in row.to_dict()['uri'] for row in rows)
+
+    def erase(owner, uri):
+        assert owner == uid
+        name = uri.split('/', 3)[3].split('#')[0]
+        generation = int(uri.split('#')[1]) if '#' in uri else objects.objects[name][0]
+        objects.blob(name).delete(if_generation_match=generation)
+
+    assert (
+        retention.cleanup_completed_artifacts(
+            store, datetime.fromtimestamp(item.capture_at + 86400, timezone.utc), delete_uri=erase
+        )
+        == 2
+    )
+    assert not objects.objects

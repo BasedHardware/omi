@@ -1188,9 +1188,10 @@ def _resolve(
     began = time.monotonic()
     segments = conversation.transcript_segments
     if not conversation.private_cloud_sync_enabled and sync_off_enabled() and batch_speakers_enabled(segments):
-        resolve_sync_off(
+        resolution = resolve_sync_off(
             uid, conversation, receipt, deadline, load_voiceprints_for_resolution, apply_speaker_resolution
         )
+        resolver_reason('no_vectors' if resolution is None else 'resolved' if resolution.coverage >= 0.9 else 'partial')
         return
     batch_resolution = conversation.private_cloud_sync_enabled and batch_speakers_enabled(segments)
     input_ids = len({s.speaker_id for s in segments if s.speaker_id != OMI_SPEAKER_ID_SENTINEL})

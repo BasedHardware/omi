@@ -8,7 +8,7 @@ import numpy as np
 from config.batch_conversation_speakers import sync_off_enabled
 from database import batch_voice_evidence as storage
 from database.batch_pipeline_store import FirestoreStore
-from utils.batch_pipeline.intake import artifacts_for
+from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline import voice_centroids as schema
 from utils.conversations.speaker_grouping_shadow import provider_key
 from utils.observability.fallback import record_fallback
@@ -67,7 +67,11 @@ def prepare(projector, item, binding, conversation_id):
             return
         artifacts = artifacts_for(store)
         uri = artifacts.persist_voice_evidence(item, payload)
-        storage.publish(store, item, uri, conversation_id)
+        try:
+            storage.publish(store, item, uri, conversation_id)
+        except Exception:
+            artifacts.discard_voice_evidence(item, uri)
+            raise
     except Exception as error:
         unavailable()
         logger.warning('event=batch_voice_evidence outcome=unavailable exception_type=%s', type(error).__name__)

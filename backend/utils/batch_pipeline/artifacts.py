@@ -165,10 +165,7 @@ class ArtifactStore:
             raise ValueError('storage did not return an immutable generation')
         return f'gs://{self.bucket_name}/{name}#{generation}'
 
-    def _read(self, item: WorkItem, uri: str, kind: str, limit: int) -> bytes:
-        context = self.authorize(item)
-        if item.privacy_generation is None or context.generation != item.privacy_generation:
-            raise PermissionError('batch artifacts require the admitted privacy generation')
+    def _reference(self, item: WorkItem, uri: str, kind: str) -> tuple[str, int]:
         parsed = urlsplit(uri)
         prefix = f'{self.owner_prefix(item.owner_id)}{kind}/{item.segment_id}/'
         name = parsed.path.removeprefix('/')
@@ -181,7 +178,13 @@ class ArtifactStore:
             or not re.fullmatch(r'[1-9][0-9]{0,19}', parsed.fragment)
         ):
             raise ValueError('artifact must be an owner/segment-bound generation-pinned staging reference')
-        generation = int(parsed.fragment)
+        return name, int(parsed.fragment)
+
+    def _read(self, item: WorkItem, uri: str, kind: str, limit: int) -> bytes:
+        context = self.authorize(item)
+        if item.privacy_generation is None or context.generation != item.privacy_generation:
+            raise PermissionError('batch artifacts require the admitted privacy generation')
+        name, generation = self._reference(item, uri, kind)
         blob = self.bucket.blob(name, generation=generation)
         leaf_timings.call('download_metadata', blob.reload, if_generation_match=generation, timeout=30, retry=None)
         if not blob.size or not 0 < blob.size <= limit + len(MAGIC) + 28:
@@ -209,6 +212,15 @@ class ArtifactStore:
         if payload['capture_at'] != item.capture_at:
             raise ValueError('voice capture binding mismatch')
         return self._write(item, 'voice_evidence', body, voice_centroids.MAX_BYTES)
+
+    def discard_voice_evidence(self, item: WorkItem, uri: str) -> None:
+        # Erasure must work after revocation; the URI still proves owner, unit,
+        # artifact kind and immutable generation. The outbox covers IO failure.
+        name, generation = self._reference(item, uri, 'voice_evidence')
+        try:
+            self.bucket.blob(name, generation=generation).delete(if_generation_match=generation, timeout=30, retry=None)
+        except NotFound:
+            pass
 
     def load_voice_evidence(self, item: WorkItem, uri: str, *, expires_at: float) -> dict:
         # The caller obtains the shortened deadline from the registered,

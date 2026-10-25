@@ -23,7 +23,8 @@ from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.sync_ledger import LEDGER_RETENTION_DAYS
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.intake import artifacts_for, durable_status, start_response
+from utils.batch_pipeline.intake import durable_status, start_response
+from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.live import OWNER, record_identity
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.executors import db_executor, storage_executor, run_blocking, sync_executor

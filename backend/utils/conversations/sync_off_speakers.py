@@ -1,12 +1,16 @@
 """Apply the existing batch grouping/name policy using expiring vectors only."""
 
 import time
+import logging
 
 from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE
 from models.conversation import ConversationSpeakers
 from utils.batch_pipeline.voice_evidence import load_vectors
 from utils.conversations.speaker_resolution_inputs import batch_provider_keys, manual_speakers
 from utils.stt.conversation_speakers import RESOLUTION_VERSION, resolve_conversation_speakers
+from utils.metrics import OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_sync_off(uid, conversation, receipt, deadline, load_prints, apply):
@@ -46,3 +50,12 @@ def resolve_sync_off(uid, conversation, receipt, deadline, load_prints, apply):
         participant_speaker_ids=result.significant_speaker_ids,
     )
     # Do not export transient centroids to the durable cache/evidence producer.
+    outcome = 'resolved' if result.coverage >= 0.9 else 'partial_cached'
+    OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL.labels(outcome=outcome).inc()
+    logger.info(
+        'event=conversation_speaker_resolution source=sync_off_centroids outcome=%s voices=%d coverage=%.2f',
+        outcome,
+        result.stats['voices'],
+        result.coverage,
+    )
+    return result
