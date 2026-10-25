@@ -44,7 +44,7 @@ from utils.batch_pipeline.diarization_gate import (
     speech_regions,
     unassigned_word_count,
 )
-from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, record_decision
+from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, record_decision, record_unit_diarization
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.language_metrics import record_route
 from utils.batch_pipeline.stage_timings import StageTimings
@@ -1032,6 +1032,11 @@ class PipelineWorker:
                     }
                     if silence is not None:
                         payload.update(silence)
+                    record_unit_diarization(
+                        'silence' if state['silence'] else 'skipped_single' if (single or short) else 'diarized',
+                        diarization.get('turns') if isinstance(diarization, dict) else None,
+                        flight_batching=self.config.flight_batching,
+                    )
                     if not item.shadow and cap_dispatch_enabled(item.owner_id, 'batch'):
                         payload['cap_dispatch'] = {
                             'omi_funded_accepted_provider_audio_seconds': state.get('cap_provider_audio_seconds', 0),
