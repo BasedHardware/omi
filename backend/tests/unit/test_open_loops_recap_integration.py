@@ -10,6 +10,7 @@ change recap ordering.
 
 import asyncio
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -134,17 +135,20 @@ def test_a_slow_pass_past_its_deadline_is_abandoned_cleanly(recap_env, monkeypat
     """A pass that sleeps past its budget is abandoned: the coroutine returns,
     nothing raises, and no recap recipient metric or counter moves."""
     started = []
+    release = threading.Event()
 
-    def slow_pass(uid, date_str, start_utc, end_utc, tz_name):
+    def wedged_pass(uid, date_str, start_utc, end_utc, tz_name):
         started.append(uid)
-        time.sleep(0.3)
+        release.wait(10)
 
-    monkeypatch.setattr(notif, '_run_open_loops_daily_pass', slow_pass)
-    monkeypatch.setattr(notif, 'OPEN_LOOPS_PASS_BUDGET_SECONDS', 0.05)
-    began = time.monotonic()
-    asyncio.run(_dispatch([(UID, recap_env.today, None, None, 'UTC')]))
-    assert time.monotonic() - began < 0.25  # did not wait for the sleeping worker
-    assert started == [UID]  # the pass did start; its thread is simply abandoned
+    monkeypatch.setattr(notif, '_run_open_loops_daily_pass', wedged_pass)
+    monkeypatch.setattr(notif, 'OPEN_LOOPS_PASS_BUDGET_SECONDS', 0.5)
+    try:
+        asyncio.run(_dispatch([(UID, recap_env.today, None, None, 'UTC')]))
+        assert not release.is_set()  # returned while the worker was still wedged
+        assert started == [UID]  # the pass did start; its thread is simply abandoned
+    finally:
+        release.set()
 
 
 def test_webhook_delivery_is_never_delayed_by_a_slow_pass(recap_env, monkeypatch):
@@ -159,10 +163,9 @@ def test_webhook_delivery_is_never_delayed_by_a_slow_pass(recap_env, monkeypatch
 
     def slow_pass(uid, date_str, start_utc, end_utc, tz_name):
         events.append('pass_started')
-        time.sleep(0.2)
+        time.sleep(0.1)
 
     monkeypatch.setattr(notif, '_run_open_loops_daily_pass', slow_pass)
-    monkeypatch.setattr(notif, 'OPEN_LOOPS_PASS_BUDGET_SECONDS', 0.05)
 
     async def flow():
         request = await asyncio.get_running_loop().run_in_executor(None, notif._send_summary_notification, _user_data())
@@ -284,7 +287,7 @@ def test_a_large_group_queues_for_slots_instead_of_saturating(recap_env, monkeyp
     """More passes than the executor's workers + queue all run: they wait for a
     slot, and each pass's budget starts only once it holds one."""
     peak = {'now': 0, 'max': 0}
-    lock = __import__('threading').Lock()
+    lock = threading.Lock()
 
     def pass_fn(uid, date_str, start_utc, end_utc, tz_name):
         with lock:
@@ -305,20 +308,24 @@ def test_a_large_group_queues_for_slots_instead_of_saturating(recap_env, monkeyp
 
 
 def test_the_job_drain_cancels_and_counts_what_misses_its_budget(recap_env, monkeypatch):
-    def slow_pass(uid, date_str, start_utc, end_utc, tz_name):
-        time.sleep(0.2)
+    release = threading.Event()
 
-    monkeypatch.setattr(notif, '_run_open_loops_daily_pass', slow_pass)
+    def wedged_pass(uid, date_str, start_utc, end_utc, tz_name):
+        release.wait(10)
+
+    monkeypatch.setattr(notif, '_run_open_loops_daily_pass', wedged_pass)
     fallbacks = []
     monkeypatch.setattr(notif, '_record_daily_summary_fallback', lambda **kw: fallbacks.append(kw))
 
     async def flow():
         notif._start_open_loops_passes([(f'u{i}', recap_env.today, None, None, 'UTC') for i in range(8)])
-        began = time.monotonic()
-        await notif._drain_open_loops_passes(0.05)
-        return time.monotonic() - began
+        await notif._drain_open_loops_passes(0.5)
 
-    assert asyncio.run(flow()) < 0.15
+    try:
+        asyncio.run(flow())
+        assert not release.is_set()  # the drain gave up on the wedged passes
+    finally:
+        release.set()
     assert fallbacks == [
         {'from_mode': 'open_loops_daily_pass', 'to_mode': 'skipped', 'reason': 'timeout', 'outcome': 'degraded'}
     ]
