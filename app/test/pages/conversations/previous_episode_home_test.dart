@@ -11,7 +11,8 @@ import 'package:omi/providers/episode_provider.dart';
 import '../../support/typed_conversation_screen.dart';
 
 void main() {
-  testWidgets('Home preserves a closed titled episode whose in-progress member is absent from history', (tester) async {
+  testWidgets('Home shows no previous-episode link; the closed episode stays reachable from the live episode page',
+      (tester) async {
     VisibilityDetectorController.instance.updateInterval = Duration.zero;
     tester.view.physicalSize = const Size(800, 1800);
     tester.view.devicePixelRatio = 1;
@@ -42,13 +43,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
     expect(history.conversations, isEmpty);
-    expect(find.byKey(const Key('previous_episode_link')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('previous_episode_link')));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.byKey(const Key('previous_episode_page')), findsOneWidget);
-    expect(find.text('Retained running note'), findsOneWidget);
-    expect(find.byKey(const ValueKey('previous_episode_conversation_still-in-progress')), findsOneWidget);
+    // Home never surfaces an "Open Previous Episode" row (unapproved UI, 2026-10-25); the
+    // link lives only on the live episode page.
+    expect(find.byKey(const Key('previous_episode_link')), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
