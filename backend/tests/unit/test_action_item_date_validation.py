@@ -148,6 +148,9 @@ _SYS_MODULE_NAMES = [
     "utils.llm.meeting_notes_presentation",
     "utils.llm.action_item_normalization",
     "utils.llm.conversation_notes_prompts",
+    "utils.open_loops",
+    "utils.open_loops.extraction",
+    "utils.open_loops.prompts",
     "utils.observability",
     "utils.observability.fallback",
     "models.structured_extraction",
@@ -299,6 +302,12 @@ _load_module_from_file("utils.speaker_display", BACKEND_DIR / "utils" / "speaker
 _load_module_from_file("utils.speakers", BACKEND_DIR / "utils" / "speakers" / "__init__.py")
 _load_module_from_file("utils.speakers.display_metrics", BACKEND_DIR / "utils" / "speakers" / "display_metrics.py")
 _load_module_from_file("utils.speakers.display", BACKEND_DIR / "utils" / "speakers" / "display.py")
+# conversation_processing imports the open-loop extraction seam at module
+# scope; the stubbed utils package has an empty __path__, so load the real
+# stdlib-only modules first.
+_load_module_from_file("utils.open_loops", BACKEND_DIR / "utils" / "open_loops" / "__init__.py")
+_load_module_from_file("utils.open_loops.extraction", BACKEND_DIR / "utils" / "open_loops" / "extraction.py")
+_load_module_from_file("utils.open_loops.prompts", BACKEND_DIR / "utils" / "open_loops" / "prompts.py")
 
 # Stub utils.conversations.render (action_item_tools imports resolve_display_tz, format_local_time)
 _render_stub = _stub_module("utils.conversations.render")

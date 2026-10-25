@@ -33,6 +33,7 @@ from utils.conversations.transcript_hash import (
     transcript_sha256_for_binding,
 )
 from utils.observability.speaker_identification import record_speaker_review
+from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 from models.person_confidence import SOURCE_MANUAL
 from utils.manual_speaker_assignments import (
     LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT,
@@ -370,6 +371,20 @@ def _prepare_conversation_for_write(
     if 'user_corrections' in data and isinstance(data['user_corrections'], list):
         data['user_corrections'] = _protect_json_value(data['user_corrections'], uid, level)
         data['user_corrections_compressed'] = True
+    if OPEN_LOOP_EXTRACTIONS_FIELD in data:
+        # Server-only derived content (quotes from the conversation), so it
+        # rides the same compressed/encrypted-at-rest protection as the other
+        # derived JSON blobs. An explicit null clears a prior value together
+        # with its marker; merge=True would otherwise keep both.
+        open_loops = data.get(OPEN_LOOP_EXTRACTIONS_FIELD)
+        if open_loops:
+            if not isinstance(open_loops, dict):
+                raise ValueError('open_loop_extractions must be an object')
+            data[OPEN_LOOP_EXTRACTIONS_FIELD] = _protect_json_value(open_loops, uid, level)
+            data[OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD] = True
+        else:
+            data[OPEN_LOOP_EXTRACTIONS_FIELD] = None
+            data[OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD] = None
     guard_match_score_size(data)
     return data
 
@@ -578,6 +593,25 @@ def effective_user_title(user_title: Any) -> Optional[str]:
 def _reveal_user_corrections_for_read(data: Dict[str, Any], uid: str) -> None:
     if data.get('user_corrections_compressed'):
         data['user_corrections'] = _reveal_json_value(data.get('user_corrections'), uid, True)
+
+
+def get_open_loop_extractions(uid: str, conversation_data: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Decode the server-only open-loop extractions from one raw conversation document.
+
+    Server-only by construction: the field is outside the Conversation wire
+    model, and this helper (not ``prepare_conversation_for_read``) is the only
+    intended reader. An absent, cleared, or undecodable value is None; a later
+    daily pass treats that as "no extractions", never as an error.
+    """
+    if not conversation_data:
+        return None
+    if not conversation_data.get(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD):
+        return None
+    try:
+        value = _reveal_json_value(conversation_data.get(OPEN_LOOP_EXTRACTIONS_FIELD), uid, True)
+    except (ValueError, TypeError, json.JSONDecodeError, zlib.error):
+        return None
+    return value if isinstance(value, dict) else None
 
 
 def prepare_conversation_for_read(
