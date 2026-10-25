@@ -1164,6 +1164,30 @@ OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL = Counter(
     ['transcription_source', 'client_platform', 'realtime_demand'],
 )
 
+OMI_CLOUD_LIVE_STT_MODE_SESSIONS_TOTAL = Counter(
+    'omi_cloud_live_stt_mode_sessions_total',
+    'Listen sessions by resolved CLOUD_LIVE_STT_MODE and whether the client declared a local on-device preview',
+    ['mode', 'local_preview', 'client_platform'],
+)
+
+OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL = Counter(
+    'omi_cloud_live_stt_saved_seconds_total',
+    'Decoded listen audio seconds that would have been sent to a cloud streaming STT session under stream mode, by mode',
+    ['mode'],
+)
+
+OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL = Counter(
+    'omi_listen_local_preview_sessions_total',
+    'Listen sessions by mobile local-preview lane admission outcome (closed reason set)',
+    ['outcome', 'client_platform'],
+)
+
+OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL = Counter(
+    'omi_listen_deferred_stream_opened_total',
+    'Deferred cloud live STT streams opened because audio reached the socket, by why the stream was deferred',
+    ['deferred_by'],
+)
+
 OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
     'omi_listen_audio_outcome_total',
     'Per-session listen audio outcomes by bounded transcription source, outcome, and client platform',

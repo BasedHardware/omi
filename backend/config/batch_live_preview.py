@@ -63,3 +63,10 @@ def capture_snapshot(capture: dict) -> dict:
             'language',
         )
     }
+
+
+def local_preview_batch_owned(uid: str) -> bool:
+    """The uid's recordings belong to the batch record lane (allowlist or batch percent)."""
+    from config.policy import resolve_batch_policy
+
+    return bool(uid) and resolve_batch_policy(uid).batch_enabled
