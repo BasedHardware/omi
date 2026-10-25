@@ -8,6 +8,7 @@ import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/preferences_quarantine.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -19,7 +20,6 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/capture/capture_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
-import 'package:omi/startup/boot_journal.dart';
 import 'package:omi/env/physical_qualification.dart';
 
 typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
@@ -89,6 +89,7 @@ class SharedPreferencesUtil {
 
   static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _preferences = await SharedPreferences.getInstance();
+    if (!PhysicalQualification.enabled) await PreferenceQuarantine.restoreThenPrune(_preferences!);
     if (!PhysicalQualification.enabled) await _quarantineBootSettings();
     await _migrateAppearanceDefault();
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
@@ -155,6 +156,11 @@ class SharedPreferencesUtil {
     }
   }
 
+  /// Whether a raw stored value is a string list. Not `value is List<String>`: on iOS/macOS (and for
+  /// Android lists in the legacy encoding) a list loaded from disk is `List<Object?>`, which
+  /// `SharedPreferences.get` does not convert, so that test rejects every valid saved list.
+  static bool _isStoredStringList(Object value) => value is List && value.every((item) => item is String);
+
   static Future<void> _quarantineBootSettings() async {
     final prefs = _preferences!;
     final expected = <String, bool Function(Object)>{
@@ -166,7 +172,7 @@ class SharedPreferencesUtil {
       'uid': (value) => value is String,
       'fullName': (value) => value is String,
       'batchModeEnabled': (value) => value is bool,
-      'flash_page_pending_uploads': (value) => value is List<String>,
+      'flash_page_pending_uploads': _isStoredStringList,
       'limitless_wal_migration_v1': (value) => value is bool,
     };
     for (final entry in expected.entries) {
@@ -181,18 +187,7 @@ class SharedPreferencesUtil {
     final prefs = _preferences;
     if (prefs == null || !_quarantinePending.add(key)) return;
     try {
-      final archive = '$key.corrupt-${DateTime.now().microsecondsSinceEpoch}';
-      bool saved = false;
-      if (value is String) saved = await prefs.setString(archive, value);
-      if (value is bool) saved = await prefs.setBool(archive, value);
-      if (value is int) saved = await prefs.setInt(archive, value);
-      if (value is double) saved = await prefs.setDouble(archive, value);
-      if (value is List<String>) saved = await prefs.setStringList(archive, value);
-      if (value is List && value is! List<String>) saved = await prefs.setString(archive, jsonEncode(value));
-      if (saved) await prefs.remove(key);
-      await BootJournal.instance.record('quarantine:$key', saved ? reason : 'copy_failed');
-    } catch (_) {
-      await BootJournal.instance.record('quarantine:$key', 'copy_failed');
+      await PreferenceQuarantine.archive(prefs, key, value, reason: reason);
     } finally {
       _quarantinePending.remove(key);
     }
@@ -1515,9 +1510,13 @@ class SharedPreferencesUtil {
   double getDouble(String key, {double defaultValue = 0.0}) =>
       PhysicalQualification.enabled ? _preferences?.getDouble(key) ?? defaultValue : _readOrDefault(key, defaultValue);
 
-  List<String> getStringList(String key, {List<String> defaultValue = const []}) => PhysicalQualification.enabled
-      ? _preferences?.getStringList(key) ?? defaultValue
-      : _readOrDefault(key, defaultValue);
+  List<String> getStringList(String key, {List<String> defaultValue = const []}) {
+    if (PhysicalQualification.enabled) return _preferences?.getStringList(key) ?? defaultValue;
+    final value = _preferences?.get(key);
+    // A list loaded from disk is List<Object?>, not List<String>; see _isStoredStringList.
+    if (value is List && value is! List<String> && _isStoredStringList(value)) return List<String>.from(value);
+    return _readOrDefault(key, defaultValue);
+  }
 
   Future<bool> saveString(String key, String value) async {
     final changed = key == 'btDevice' && _preferences?.getString(key) != value;
