@@ -293,6 +293,17 @@ def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: 
         # Drop the RunnableConfig LangChain injects; it is not part of the
         # payload the device should receive.
         kwargs.pop('config', None)
+        if name == 'propose_message' and isinstance(kwargs.get('text'), str):
+            try:
+                from utils.llm.user_voice import apply_user_voice_to_proposed_message
+
+                kwargs['text'] = apply_user_voice_to_proposed_message(
+                    uid,
+                    to=kwargs.get('to'),
+                    text=kwargs['text'],
+                )
+            except Exception as error:
+                logger.warning('Could not apply user voice polish uid=%s error_type=%s', uid, type(error).__name__)
         call_id = str(uuid.uuid4())
         request = {
             'call_id': call_id,

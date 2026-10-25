@@ -1,0 +1,48 @@
+[
+  {
+    "id": "casual-friend-alex",
+    "person_id": "person-alex",
+    "person_name": "Alex",
+    "recipient": "+15550101",
+    "history": [
+      "yo are you free around 7",
+      "hey running 5 mins late",
+      "sounds good see u outside",
+      "yo grabbed us a table in the back",
+      "hey can we push dinner to 7:30"
+    ],
+    "real_held_out_line": "hey on my way now see u in 5",
+    "ai_unstyled_draft": "Hey! I am on my way now — see you in 5 minutes! 😊",
+    "voice_seeded_draft": "Hey! on my way now — see u in 5! 😊"
+  },
+  {
+    "id": "formal-colleague-chen",
+    "person_id": "person-chen",
+    "person_name": "Dr. Chen",
+    "recipient": "chen@clinic.org",
+    "history": [
+      "Hello Dr. Chen, thank you for reviewing the updated clinical protocol today.",
+      "Hi Dr. Chen, I have attached the revised budget figures for Thursday.",
+      "Good morning Dr. Chen, please let me know if 2 PM works for our call.",
+      "Hello Dr. Chen, we finalized the slides and sent them to the board."
+    ],
+    "real_held_out_line": "Hello Dr. Chen, I sent over the revised protocol for tomorrow.",
+    "ai_unstyled_draft": "Hello Dr. Chen! I sent over the revised protocol for tomorrow!!",
+    "voice_seeded_draft": "Hello Dr. Chen, I sent over the revised protocol for tomorrow"
+  },
+  {
+    "id": "high-energy-sister-maya",
+    "person_id": "person-maya",
+    "person_name": "Maya",
+    "recipient": "+15550199",
+    "history": [
+      "hey maya cant wait for tonight!",
+      "omg that place looks amazing!",
+      "see you at 8!",
+      "so excited for dinner!"
+    ],
+    "real_held_out_line": "hey maya just parked outside!",
+    "ai_unstyled_draft": "Hello Maya. I have just parked outside.",
+    "voice_seeded_draft": "Hey maya just parked outside."
+  }
+]
