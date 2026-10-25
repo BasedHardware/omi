@@ -1486,11 +1486,14 @@ class TranscriptProcessor:
         """
         speaker = self.host.speakers
         observer = getattr(speaker, 'observe_segment', None)
+        ordinal_tracker = getattr(self.host, 'speaker_ordinal_tracker', None)
         if observer is not None:
             observed = queue_from_raw if queue_from_raw is not None else [s.model_dump() for s in segments]
             for raw in observed:
                 if raw.get('speaker_id') is not None:
                     observer(raw['speaker_id'], raw.get('speaker_id_scope') or '', raw.get('id') or '')
+                    if ordinal_tracker is not None:
+                        ordinal_tracker.observe(raw)
         for segment in segments:
             segment_id = cast(str, segment.id)
             if queue_from_raw is None:

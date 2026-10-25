@@ -6876,3 +6876,15 @@ Unplaced segments still bypass matching. Their capture-placement repair belongs
 to the live timeline lane; this change never invents offsets to obtain evidence.
 No production configuration flip is required or performed. Backend/listen images
 and a Flutter build are required to deliver the corresponding safe changes.
+
+Per-session ordinal churn is exported where the deferral is enforced:
+`omi_live_speaker_ordinals_per_session` (histogram, observed once per listen
+session at teardown by `utils/observability/live_speaker_ordinals.py`) counts the
+distinct unnamed scoped voices that cleared the five-second placed-speech floor,
+with voices the session named excluded; `omi_live_speaker_scope_rotations_total`
+counts scope/epoch rotations over the same sessions. **Watch after listen rolls**:
+`histogram_quantile(0.95, rate(omi_live_speaker_ordinals_per_session_bucket[1h]))`
+and its mean (`_sum/_count`) should fall while rotations per session
+(`rate(omi_live_speaker_scope_rotations_total[1h]) / rate(omi_listen_ws_close_total[1h])`)
+holds — ordinals falling with rotations flat means the deferral is working, not
+that conversations gained fewer speakers.
