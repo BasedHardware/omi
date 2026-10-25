@@ -77,6 +77,12 @@ def create_subscription_checkout_session(
                     'sub_type': 'unlimited',
                 }
             },
+            # Charge in the price's own currency, the one every paywall shows. With the
+            # account's Adaptive Pricing on, a non-US buyer who saw a USD price card was
+            # charged a converted local-currency amount; Google Play rejected Android
+            # release 1504 for that mismatch. It also keeps a promotion code's
+            # minimum_amount evaluated against the USD-authored price (issue #23299).
+            'adaptive_pricing': {'enabled': False},
         }
 
         if trial_period_days:
@@ -84,11 +90,6 @@ def create_subscription_checkout_session(
 
         if promotion_code_id:
             session_params['discounts'] = [{'promotion_code': promotion_code_id}]
-            # Pin presentment to the price's currency. Stripe evaluates a promotion
-            # code's minimum_amount restriction against the checkout's presentment
-            # currency, so Adaptive Pricing's converted total (e.g. EUR) can fall
-            # below a USD-authored minimum and reject a valid code (issue #23299).
-            session_params['adaptive_pricing'] = {'enabled': False}
         else:
             session_params['allow_promotion_codes'] = True
 

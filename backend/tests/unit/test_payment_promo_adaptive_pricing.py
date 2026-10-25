@@ -1,14 +1,17 @@
-"""Promotion-code checkouts pin presentment currency (issue #23299).
+"""Every subscription checkout charges in the price's own currency.
 
-Stripe evaluates a promotion code's ``minimum_amount`` restriction against the
-checkout session's presentment currency. With Adaptive Pricing enabled, the
-converted total for a foreign-currency customer (e.g. EUR 249 for the $269
-Unlimited yearly price) falls below the USD-authored minimum and a valid
-activation code is rejected with "order total is below the minimum amount".
+Stripe Adaptive Pricing is on at the account level. Left on for a session, it
+converts the USD price into the buyer's local currency, so a buyer who saw a
+USD price card in the app was charged a different, converted amount. Google
+Play rejected Android release 1504 for that mismatch between the displayed and
+charged price.
 
-Sessions created with a resolved promotion code must disable Adaptive Pricing
-so the minimum is evaluated against the price's native USD amount. Sessions
-without a promotion code keep Stripe's Adaptive Pricing default.
+It also broke promotion codes (issue #23299): Stripe evaluates a code's
+``minimum_amount`` against the presentment currency, and the converted total
+(e.g. EUR 249 for the $269 Unlimited yearly price) fell below the USD-authored
+minimum.
+
+So every session, with or without a promotion code, disables Adaptive Pricing.
 """
 
 import os
@@ -16,6 +19,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+
+import pytest
 
 os.environ.setdefault("BASE_API_URL", "http://localhost:8080")
 
@@ -26,7 +31,7 @@ import utils.stripe as stripe_utils  # noqa: E402
 STRIPE_UTILS_SOURCE = Path(__file__).resolve().parents[2] / "utils" / "stripe.py"
 
 
-def _captured_session_params(promotion_code_id):
+def _captured_session_params(promotion_code_id, trial_period_days=None, customer_id=None):
     captured = {}
 
     def fake_session_create(**params):
@@ -38,7 +43,9 @@ def _captured_session_params(promotion_code_id):
             uid='uid_1',
             price_id='price_unlimited_yearly',
             idempotency_key='idem_1',
+            customer_id=customer_id,
             promotion_code_id=promotion_code_id,
+            trial_period_days=trial_period_days,
         )
     return captured
 
@@ -51,23 +58,28 @@ def test_promo_checkout_disables_adaptive_pricing():
     assert params['adaptive_pricing'] == {'enabled': False}
 
 
-def test_promo_free_checkout_keeps_adaptive_pricing_default():
-    """Without a promo code the session must not set adaptive_pricing, so
-    Stripe's default (Adaptive Pricing where enabled) still applies."""
-    params = _captured_session_params(promotion_code_id=None)
+@pytest.mark.parametrize(
+    'trial_period_days, customer_id',
+    [(None, None), (7, None), (None, 'cus_existing')],
+    ids=['plain', 'trial', 'returning-customer'],
+)
+def test_promo_free_checkout_disables_adaptive_pricing(trial_period_days, customer_id):
+    """A session without a promo code charges the displayed price's currency too."""
+    params = _captured_session_params(
+        promotion_code_id=None, trial_period_days=trial_period_days, customer_id=customer_id
+    )
 
     assert params['allow_promotion_codes'] is True
-    assert 'adaptive_pricing' not in params
     assert 'discounts' not in params
+    assert params['adaptive_pricing'] == {'enabled': False}
 
 
-def test_adaptive_pricing_pin_is_scoped_to_promo_sessions():
-    """Static contract: the pin lives inside the promotion_code_id branch, so a
-    refactor can never silently widen it to promo-free checkouts."""
+def test_adaptive_pricing_pin_is_unconditional():
+    """Static contract: the pin is in the base session params, not inside a branch,
+    so a refactor cannot scope it back to promo sessions."""
     source = STRIPE_UTILS_SOURCE.read_text(encoding="utf-8")
 
-    branch_start = source.index("if promotion_code_id:")
-    branch_end = source.index("session_params['allow_promotion_codes'] = True", branch_start)
-    promo_branch = source[branch_start:branch_end]
+    base_start = source.index("session_params: Dict[str, Any] = {")
+    base_end = source.index("if trial_period_days:", base_start)
 
-    assert "session_params['adaptive_pricing'] = {'enabled': False}" in promo_branch
+    assert "'adaptive_pricing': {'enabled': False}" in source[base_start:base_end]
