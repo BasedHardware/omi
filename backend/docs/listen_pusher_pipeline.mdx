@@ -5237,6 +5237,35 @@ existing dark revision before dispatching the cohort workflow.
 Policy, storage-parity evidence, bounds, VAD benchmark and lead-owned 5%/12-hour
 ramp: [mobile Standard batch](../../app/docs/mobile-standard-batch.md).
 
+### Mobile local-preview lane (kill switch, default on)
+
+A mobile client that renders its own on-device streaming preview opens
+`/v4/listen` with `local_preview=enabled`. At session start
+(`routers/listen/local_preview.py`) listen admits it when the kill switch
+`LOCAL_PREVIEW_BATCH_ENABLED` is on, the uid is on the batch record lane
+(`resolve_batch_policy(uid).batch_enabled`: batch allowlist or batch percent),
+private cloud sync is on, and the session is not custom STT, multi-channel,
+onboarding or a phone call. The decision is pinned for the session and counted
+in `omi_listen_local_preview_sessions_total{outcome}`.
+
+An admitted session sends `local_preview: true` with `mobile_standard_batch: true`
+on `ready` and every `mobile_batch_admission` renewal, without the cohort or
+integration checks of the Standard batch admission: realtime apps and webhooks
+degrade for these sessions by ruling (David, 2026-10-25). The client then
+journals every pendant frame, visible or not, through the mobile Standard batch
+route above (lossless WAL, `/v2/sync-local-files`, batch record), so the batch
+lane owns the transcript.
+
+Listen defers the cloud stream rather than dropping it. A listen conversation is
+kept alive, finalized and registered for batch only by live segments, so audio
+received with no stream would be deleted as an empty conversation. No provider
+socket opens at session start (no vendor, no Parakeet window leg); the first
+audio that reaches the socket (the journal refused it, e.g. low disk or a journal
+failure) opens today's stream and counts in
+`omi_listen_deferred_stream_opened_total{deferred_by}`. `CLOUD_LIVE_STT_MODE=off`
+uses the same deferral. Setting the kill switch off revokes at the next
+renewal; the client streams again and the stream opens on its first audio.
+
 ### Forward canonical audio archive (default off)
 
 `AUDIO_CANONICAL_PACKING_ENABLED=true` plus `BUCKET_CANONICAL_AUDIO` routes new

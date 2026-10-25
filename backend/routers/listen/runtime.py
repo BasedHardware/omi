@@ -36,6 +36,7 @@ from utils.analytics import billable_transcription_seconds, record_usage
 from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
+from routers.listen.local_preview import renew_local_preview
 from utils.observability.fallback import record_fallback
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 from utils.byok import get_byok_keys
@@ -201,6 +202,8 @@ class ListenSessionRuntime:
         self.translation_language: Optional[str] = None
         self.user_has_credits = True
         self.private_cloud_sync_enabled = False
+        # Mobile local-preview lane, pinned once before STT starts (routers/listen/local_preview.py).
+        self.local_preview_batch = False
         self.has_speech_profile = False
         self.conversation_creation_timeout = request.conversation_timeout
         self.occasion_mode = False
@@ -994,6 +997,11 @@ class ListenSessionRuntime:
         return seconds
 
     async def refresh_mobile_batch_admission(self) -> None:
+        if renew_local_preview(self):
+            # The local-preview lane owns its own admission (batch lane + private
+            # sync, pinned at session start). Integrations degrade by ruling.
+            self.mobile_standard_batch = True
+            return
         if mobile_standard_batch_rollout_enabled():
             await warm_rollout_cohorts(self.request.uid)
         # Conservatively retain live delivery for ANY enabled integration. This
@@ -1114,6 +1122,13 @@ class ListenSessionRuntime:
         if self.use_custom_stt:
             # Custom-STT clients produce their own transcripts; no backend provider serves.
             return MessageServiceStatusEvent(status='ready')
+        if getattr(self.receiver, 'cloud_live_suppressed', False):
+            # Deferred stream: nothing serves yet, so name no provider.
+            return MessageServiceStatusEvent(
+                status='ready',
+                mobile_standard_batch=getattr(self, 'mobile_standard_batch', False),
+                local_preview=True if getattr(self, 'local_preview_batch', False) else None,
+            )
         serving = self.receiver._serving_provider()
         selected = getattr(self.stt_service_selected, 'value', self.stt_service_selected)
         fell_back = bool(serving) and bool(selected) and serving != selected

@@ -24,6 +24,7 @@ from config.cloud_live_stt import OFF, STREAM, resolve_cloud_live_stt_mode, supp
 from config.translation import resolve_ondemand_config
 from routers.listen.contracts import ConversationCaptureOrigin
 from routers.listen.batch_preview import capture_batch_preview
+from routers.listen.local_preview import admit_local_preview
 from routers.listen.demand_routing import attach_live_demand
 from routers.listen.demand_switch import switch_live_demand
 from routers.listen.lane_meter import LiveLaneMeter
@@ -176,6 +177,7 @@ from utils.metrics import (
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
     OMI_CLOUD_LIVE_STT_MODE_SESSIONS_TOTAL,
     OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL,
+    OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL,
     OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL,
     audio_timeline_provider_label,
 )
@@ -856,6 +858,8 @@ class ListenReceiver(ReplayFilterMixin):
                 return
             sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
             if mode == OFF:
+                if not getattr(self, 'cloud_live_suppressed', False):
+                    return  # The deferred stream opened; this audio went to a provider.
                 OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL.labels(mode=mode).inc(decoded_audio_bytes / (sample_rate * 2))
                 return
             # when_watched: hidden seconds (background + foreground-not-visible)
@@ -1316,15 +1320,19 @@ class ListenReceiver(ReplayFilterMixin):
                 ).inc()
             except Exception:
                 pass  # Session telemetry must never interrupt initialization.
-        self.cloud_live_suppressed = suppresses_provider_stream(
-            mode, use_custom_stt=bool(getattr(self.host, 'use_custom_stt', False))
-        )
-        if self.cloud_live_suppressed:
-            # CLOUD_LIVE_STT_MODE=off: audio is received and persisted through the
-            # ordinary pusher path, but no cloud streaming STT session opens —
-            # neither vendor nor the Parakeet window leg. Mirrors the cap-paused
-            # receive/persist shape; custom (BYOK) STT is never suppressed.
-            return True
+        if not getattr(self, '_cloud_live_opening', False):
+            local_preview = admit_local_preview(self.host)
+            off = suppresses_provider_stream(mode, use_custom_stt=bool(getattr(self.host, 'use_custom_stt', False)))
+            # Multi-channel audio never reaches the deferred-open seam in _flush_stt_buffer.
+            self.cloud_live_suppressed = (local_preview or off) and not getattr(self.host, 'is_multi_channel', False)
+            if self.cloud_live_suppressed:
+                # Deferred, never dropped: no cloud streaming STT session opens yet
+                # (neither vendor nor the Parakeet window leg). Live segments are what
+                # keep a listen conversation alive and register it for batch, so the
+                # first audio that reaches the socket opens the stream as usual. A
+                # local-preview phone journals pendant audio for batch and sends none.
+                self._cloud_live_deferred_by = 'local_preview' if local_preview else 'off'
+                return True
         admission = getattr(self, 'cap_admission', None)
         if admission is not None:
             await admission.refresh(force=False)
@@ -1448,6 +1456,26 @@ class ListenReceiver(ReplayFilterMixin):
         if getattr(self, 'cloud_live_suppressed', False):
             return False
         return await switch_live_demand(self, lane)
+
+    async def _open_deferred_stream(self) -> bool:
+        """Audio reached a deferred session: open the provider stream it would have had."""
+
+        self._cloud_live_opening = True
+        try:
+            OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL.labels(
+                deferred_by=getattr(self, '_cloud_live_deferred_by', None) or 'off'
+            ).inc()
+        except Exception:
+            pass  # Telemetry never blocks the stream.
+        self.cloud_live_suppressed = False
+        if not await self.initialize_stt():
+            return False
+        demand = getattr(self, 'live_demand', None)
+        supervisor = getattr(self.host, 'task_supervisor', None)
+        if demand is not None and supervisor is not None:
+            # Session start skipped this task while the stream was deferred.
+            supervisor.create_lifetime_task(demand.run(), name='live_demand_routing')
+        return True
 
     async def _failover_stt_socket(self) -> bool:
         """Serialize monitor/send-path failover so only one replacement is adopted."""
@@ -1963,6 +1991,9 @@ class ListenReceiver(ReplayFilterMixin):
             await hold.notice()
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
+        if buffer and getattr(self, 'cloud_live_suppressed', False):
+            if not await self._open_deferred_stream():
+                return
         admission = getattr(self, 'cap_admission', None)
         if admission is not None and getattr(self, 'cap_paused', False) and admission.allowed(self.host.stt_service):
             if not await self.initialize_stt():
@@ -2355,6 +2386,7 @@ class ListenReceiver(ReplayFilterMixin):
                     MessageServiceStatusEvent(
                         status='mobile_batch_admission',
                         mobile_standard_batch=self.host.mobile_standard_batch,
+                        local_preview=True if getattr(self.host, 'local_preview_batch', False) else None,
                     )
                 )
             if not self.host.state.realtime_demand.observe(payload):

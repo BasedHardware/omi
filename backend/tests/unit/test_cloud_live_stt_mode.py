@@ -1,4 +1,4 @@
-"""CLOUD_LIVE_STT_MODE policy: stream default, when_watched reuse, off suppression."""
+"""CLOUD_LIVE_STT_MODE policy: stream default, when_watched reuse, off deferral."""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -169,7 +169,12 @@ async def test_saved_seconds_by_mode():
 
     off = make_receiver(demand_totals={'background': 100.0, 'foreground': 50.0})
     off._cloud_live_mode = OFF
+    off.cloud_live_suppressed = True
     before = saved_seconds(OFF)
+    ListenReceiver._record_cloud_live_saved_seconds(off, request, 16000 * 2 * 10)
+    assert saved_seconds(OFF) == pytest.approx(before + 10.0)
+    # Once audio opened the deferred stream, that audio went to a provider.
+    off.cloud_live_suppressed = False
     ListenReceiver._record_cloud_live_saved_seconds(off, request, 16000 * 2 * 10)
     assert saved_seconds(OFF) == pytest.approx(before + 10.0)
 
