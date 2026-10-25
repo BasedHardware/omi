@@ -139,3 +139,5 @@ When creating/updating the Omi app, use these URLs:
 - **RHR (Resting Heart Rate)**: Lower is generally better
 - **Sleep Performance**: How well you met your sleep need
 - **Sleep Efficiency**: Time asleep vs time in bed
+
+| WHOOP_TOOLS_SECRET | Shared secret for chat tools auth (/tools/*). Passed via Authorization: Bearer <SECRET> header (preferred) or ?whoop_tools_token=<SECRET> query parameter. Fails closed with 503 if unconfigured. | Yes (for tools) |
