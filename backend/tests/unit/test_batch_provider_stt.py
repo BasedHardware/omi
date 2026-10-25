@@ -892,8 +892,8 @@ async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake,
     monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,sync,batch')
     monkeypatch.setattr(cap_policy, '_BATCH_LANE_READY', True)
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
-    gate = Mock(return_value=False)  # the owner's keyless allowance is exhausted
-    monkeypatch.setattr(admission, 'sync_allowed', gate)
+    gate = Mock(return_value=(False, 'allowance_exhausted'))  # the owner's keyless allowance is exhausted
+    monkeypatch.setattr(admission, 'sync_admission', gate)
     monkeypatch.setattr(admission, 'get_hard_restriction_status', Mock(return_value=(False, None)))
     monkeypatch.setattr(admission, 'is_daily_audio_ceiling_exceeded', Mock(return_value=False))
     monkeypatch.setattr(admission, 'reserve_backfill_speech', Mock(return_value=type('R', (), {'allowed': True})()))
@@ -902,7 +902,11 @@ async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake,
         assert receipt['allowed'] == [lease.item.segment_id]
         gate.assert_not_called()
     else:
-        assert receipt == {'allowed': [], 'retry_after': {lease.item.segment_id: 60}}
+        assert receipt == {
+            'allowed': [],
+            'retry_after': {lease.item.segment_id: 60},
+            'held_reason': {lease.item.segment_id: 'allowance_exhausted'},
+        }
 
 
 # --- a legacy_final_pass_v1 conversation in draining/dark (M3 review; lead ruling b209a5) ---------

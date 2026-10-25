@@ -546,15 +546,22 @@ class PipelineWorker:
         states, windows, failed, results = {}, [], set(), []
         failure_records = []
         held = set()
+        held_reasons = {}
         recovery_records = []
         silence_records = []
         shapes = {item.segment_id: {'samples': -1, 'vad_spans': -1, 'windows': -1, 'asr_words': 0} for item in items}
 
-        def allowed(required):
+        def admission(required):
+            # Bounded hold reason per requested segment: None is an allow, ''
+            # is an unevaluated hold. Missing policy authority is a hold,
+            # never provider permission.
+            if authorize_dispatch is None:
+                return {segment_id: '' for segment_id in required}
             try:
-                return set(authorize_dispatch(required)) if authorize_dispatch is not None else set()
+                decisions = authorize_dispatch(required) or {}
+                return {segment_id: decisions.get(segment_id, '') for segment_id in required}
             except Exception:
-                return set()
+                return {segment_id: '' for segment_id in required}
 
         def accepted(segment_id, seconds):
             record_audio('sync', 'accepted', self.config.words, seconds)
@@ -800,7 +807,12 @@ class PipelineWorker:
                     # Authorization belongs immediately before ASR, after potentially
                     # slow decode/VAD and between successive microbatches. Missing
                     # policy authority is a hold, never provider permission.
-                    held.update(required - allowed(required))
+                    decisions = admission(required)
+                    for segment_id, reason in decisions.items():
+                        if reason is None:
+                            continue
+                        held.add(segment_id)
+                        held_reasons[segment_id] = reason
                     batch = [w for w in batch if w.segment_id not in held]
                 if not batch:
                     continue
@@ -838,7 +850,7 @@ class PipelineWorker:
             for state in states.values():
                 item = state['item']
                 if item.segment_id in held:
-                    results.append(HeldWork(item.segment_id))
+                    results.append(HeldWork(item.segment_id, reason=held_reasons.get(item.segment_id, '')))
                     continue
                 if item.segment_id in failed:
                     continue
@@ -875,12 +887,20 @@ class PipelineWorker:
                             )
                         else:
                             if not item.shadow and cap_dispatch_enabled(item.owner_id, 'batch'):
+                                dispatch_hold = []
+
+                                def recheck():
+                                    reason = admission({item.segment_id}).get(item.segment_id)
+                                    dispatch_hold.clear()
+                                    dispatch_hold.append(reason)
+                                    return reason is None
+
                                 recovered = self.timings.call(
                                     'asr_recovery',
                                     self.recover_words,
                                     state['samples'],
                                     self.config.max_padded_seconds,
-                                    before_dispatch=lambda: item.segment_id in allowed({item.segment_id}),
+                                    before_dispatch=recheck,
                                     after_dispatch=lambda seconds: accepted(item.segment_id, seconds),
                                 )
                                 if recovered is None and (
@@ -893,7 +913,9 @@ class PipelineWorker:
                                     )
                                 ):
                                     held.add(item.segment_id)
-                                    results.append(HeldWork(item.segment_id))
+                                    hold_reason = dispatch_hold[0] if dispatch_hold and dispatch_hold[0] else ''
+                                    held_reasons[item.segment_id] = hold_reason
+                                    results.append(HeldWork(item.segment_id, reason=hold_reason))
                                     continue
                             else:
                                 recovered = self.timings.call(

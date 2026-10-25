@@ -315,6 +315,7 @@ class Pump:
                         receipt = {}
                 permitted = set(receipt.get('allowed') or [])
                 retries = receipt.get('retry_after') or {}
+                held_reason = receipt.get('held_reason') or {}
                 for lease in required:
                     if lease.item.segment_id not in permitted:
                         lost.add(lease.item.segment_id)
@@ -326,6 +327,7 @@ class Pump:
                             lease.token,
                             time.time(),
                             retries.get(lease.item.segment_id, 30),
+                            held_reason=held_reason.get(lease.item.segment_id),
                         )
                 leases = [v for v in leases if v.item.segment_id not in lost]
                 if not leases:
@@ -334,9 +336,22 @@ class Pump:
             if any(cap_dispatch_enabled(v.item.owner_id, 'batch') for v in leases):
 
                 def authorize_dispatch(segments):
+                    """Map each requested segment to its bounded hold reason.
+
+                    ``None`` is an allow; any string, including '' for an
+                    unevaluated unit, is a hold: missing policy authority never
+                    becomes provider permission.
+                    """
                     selected = [v for v in leases if v.item.segment_id in segments]
-                    receipt = self.authorize_compute(selected) if self.authorize_compute is not None else {}
-                    return set(receipt.get('allowed') or [])
+                    receipt = {}
+                    if self.authorize_compute is not None:
+                        try:
+                            receipt = self.authorize_compute(selected) or {}
+                        except Exception:
+                            receipt = {}
+                    permitted = set(receipt.get('allowed') or [])
+                    held = receipt.get('held_reason') or {}
+                    return {segment: (None if segment in permitted else held.get(segment, '')) for segment in segments}
 
                 dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
             try:
@@ -522,6 +537,7 @@ class Pump:
                     lease.token,
                     time.time(),
                     result.retry_after,
+                    held_reason=result.reason or None,
                 )
                 return False
             if isinstance(result, ValidationFailureWork):
