@@ -84,6 +84,11 @@ def create_subscription_checkout_session(
 
         if promotion_code_id:
             session_params['discounts'] = [{'promotion_code': promotion_code_id}]
+            # Pin presentment to the price's currency. Stripe evaluates a promotion
+            # code's minimum_amount restriction against the checkout's presentment
+            # currency, so Adaptive Pricing's converted total (e.g. EUR) can fall
+            # below a USD-authored minimum and reject a valid code (issue #23299).
+            session_params['adaptive_pricing'] = {'enabled': False}
         else:
             session_params['allow_promotion_codes'] = True
 
