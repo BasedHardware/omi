@@ -463,7 +463,9 @@ def resolve_conversation_speakers(
             key: _cosine(vector, p) for key, p in prints.items() if not batch or vector.shape == p.shape
         }
         if batch:
-            batch_centroids[index] = {'embedding': vector, 'evidence_seconds': evidence}
+            # Incompatible enrollment is no comparison, not a voice rejection.
+            if distances[index]:
+                batch_centroids[index] = {'embedding': vector, 'evidence_seconds': evidence}
         else:
             decisions[index] = select_speaker_match(distances[index], threshold=VOICE_MATCH_THRESHOLD)
     owner_reserved = any(OWNER_IDENTITY in identities_of(cluster) for cluster in clusters)

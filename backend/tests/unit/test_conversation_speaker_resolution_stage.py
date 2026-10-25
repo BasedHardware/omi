@@ -1391,3 +1391,26 @@ def test_sync_off_batch_preserves_incumbent_path_and_gap_participant_policy(monk
     resolver.assert_not_called()
     assert [s.model_dump() for s in conv.transcript_segments] == before
     assert conv.speaker_resolution.participant_speaker_ids == [0]
+
+
+@pytest.mark.parametrize('evidence_mode', ['off', 'serve'])
+def test_batch_incompatible_profile_preserves_established_owner_on_cached_reprocess(monkeypatch, env, evidence_mode):
+    from utils.speakers import processing as evidence_processing
+
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', evidence_mode)
+    monkeypatch.setattr(evidence_processing, '_roster', lambda *_: [])
+    monkeypatch.setattr(evidence_processing.storage, 'store_evidence', lambda *a, **kw: None)
+    roster = {'user': VOICES[0]}
+    monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a, **kw: roster)
+    _install_audio(monkeypatch, [0] * 4)
+    conv = _conversation([0] * 4, scopes=[f'final:batch:unit{i}' for i in range(4)])
+    conv.audio_files = [_span_manifest(STARTED.timestamp(), [(STARTED.timestamp(), STARTED.timestamp() + 16)])]
+    stage.resolve_speakers_for_processing('synthetic', conv)
+    assert all(s.is_user for s in conv.transcript_segments)
+    calls = env[1].calls
+    roster['user'] = np.ones(32)  # Cached fixture audio is in the 64-dimensional space.
+    conv = Conversation(**conv.model_dump())
+    stage.resolve_speakers_for_processing('synthetic', conv)
+    assert all(s.is_user and s.speaker_identity_status == 'user' for s in conv.transcript_segments)
+    assert len({s.speaker_id for s in conv.transcript_segments}) == 1
+    assert env[1].calls == calls

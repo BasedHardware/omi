@@ -96,6 +96,7 @@ def test_incompatible_profile_dimensions_do_not_prevent_anonymous_grouping():
     result = resolve(segments, [[1, 0]] * 2, prints={'user': [1, 0, 0]})
     assert len(set(result.speaker_ids.values())) == 1
     assert not result.voice_identities
+    assert set(result.voice_identity_statuses.values()) == {'unknown'}
 
 
 def test_batch_limit_is_groups_not_sentence_count_and_deadline_is_bounded():
