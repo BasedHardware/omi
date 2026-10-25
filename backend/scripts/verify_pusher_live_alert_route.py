@@ -243,6 +243,50 @@ def _referenced_mute_timings(rules: dict[str, dict[str, Any]]) -> tuple[str, ...
     return tuple(sorted(names))
 
 
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+_ALL_DAY_TIMES = frozenset((("00:00", "24:00"),))
+
+
+def _mute_timing_signature(timing: dict[str, Any]) -> tuple:
+    """Order-insensitive mute window, with Grafana's omissions normalized.
+
+    An interval that omits ``weekdays`` or ``times`` covers every day or the
+    whole day respectively — the shape the UI writes for an always-on mute —
+    so it must equal the explicitly enumerated committed form. Anything else
+    (narrower weekdays, business-hours times, a non-UTC location) stays a real
+    difference and fails the drift comparison.
+    """
+
+    intervals = timing.get("time_intervals")
+    items: set[tuple] = set()
+    if isinstance(intervals, list):
+        for interval in intervals:
+            if not isinstance(interval, dict):
+                return ("invalid",)
+            weekdays = interval.get("weekdays")
+            if not isinstance(weekdays, list) or not weekdays:
+                weekdays = list(_WEEKDAYS)
+            times = interval.get("times")
+            normalized_times: set[tuple[str, str]] = set()
+            if isinstance(times, list) and times:
+                for time_range in times:
+                    if isinstance(time_range, dict):
+                        begin = time_range.get("begin_time")
+                        end = time_range.get("end_time")
+                        if isinstance(begin, str) and isinstance(end, str):
+                            normalized_times.add((begin, end))
+            if not normalized_times:
+                normalized_times = set(_ALL_DAY_TIMES)
+            location = interval.get("location")
+            # Grafana falls back to the server time zone when the interval omits
+            # location; both Grafana instances run UTC, so an omitted location is
+            # the same window as an explicit UTC.
+            if not isinstance(location, str) or location.strip() in ("", "UTC"):
+                location = "UTC"
+            items.add((tuple(sorted(weekdays)), tuple(sorted(normalized_times)), location))
+    return tuple(sorted(items))
+
+
 def _ensure_mute_timings(base_url: str, rules: dict[str, dict[str, Any]], token: str) -> None:
     # Grafana rejects a rule whose notification_settings name a mute timing it
     # does not know, and it answers that validation failure with HTTP 500 on
@@ -250,8 +294,10 @@ def _ensure_mute_timings(base_url: str, rules: dict[str, dict[str, Any]], token:
     # import died that way on its first rule (#23590 shipped rules muted by
     # omi-tier-silent, which existed only in prod), every following rule was
     # skipped, and pusher dev qualification went red on label drift. Establish
-    # every referenced timing before the first rule write; never overwrite a
-    # live timing, whose definition predates this file in prod.
+    # every referenced timing before the first rule write. A live timing is
+    # never overwritten (prod's predates this file), but its window must equal
+    # the committed one: a drifted narrower mute would let agent-tier rules
+    # page Telegram outside the intended silence.
     committed = load_committed_mute_timings()
     for name in _referenced_mute_timings(rules):
         if name not in committed:
@@ -259,7 +305,10 @@ def _ensure_mute_timings(base_url: str, rules: dict[str, dict[str, Any]], token:
                 f"alert rules reference mute timing {name} with no committed definition; refusing to import"
             )
         path = f"{MUTE_TIMING_PATH}/{urllib.parse.quote(name, safe='')}"
-        if _request_json(base_url, path, token, allow_missing=True) is not None:
+        live = _request_json(base_url, path, token, allow_missing=True)
+        if live is not None:
+            if not isinstance(live, dict) or _mute_timing_signature(live) != _mute_timing_signature(committed[name]):
+                raise AlertRouteError(f"live mute timing {name} differs from the committed definition")
             continue
         _create_mute_timing(base_url, committed[name], token)
         if _request_json(base_url, path, token, allow_missing=True) is None:

@@ -533,7 +533,10 @@ def test_live_stt_import_upserts_only_allowlisted_rules_and_checks_telegram_rout
         if path == "/api/v1/provisioning/contact-points":
             return contact_points
         if path.startswith(verifier.MUTE_TIMING_PATH + "/"):
-            return {"name": path.rsplit("/", 1)[-1]}
+            return {
+                "name": path.rsplit("/", 1)[-1],
+                "time_intervals": [{"times": [{"begin_time": "00:00", "end_time": "24:00"}]}],
+            }
         uid = path.rsplit("/", 1)[-1]
         if uid in verifier.DATASOURCE_CANARY_UIDS:
             assert [key for key, _ in calls] == list(verifier.DATASOURCE_CANARY_UIDS)
@@ -674,7 +677,10 @@ def test_import_never_overwrites_an_existing_mute_timing(
         if path == "/api/v1/provisioning/contact-points":
             return contact_points
         if path.startswith(verifier.MUTE_TIMING_PATH + "/"):
-            return {"name": path.rsplit("/", 1)[-1]}
+            return {
+                "name": path.rsplit("/", 1)[-1],
+                "time_intervals": [{"times": [{"begin_time": "00:00", "end_time": "24:00"}]}],
+            }
         if path.startswith(verifier.ALERT_RULE_LIST_PATH + "/"):
             return rules[path.rsplit("/", 1)[-1]]
         raise AssertionError(f"unexpected Grafana read path: {path}")
@@ -690,6 +696,60 @@ def test_import_never_overwrites_an_existing_mute_timing(
         lambda _url, uid, _rule, _token, *, exists: None,
     )
     assert verifier._run_live_stt_import("https://monitor.omi.me", "secret") == []
+
+
+def test_import_fails_closed_when_a_live_mute_timing_drifts_from_the_committed_window(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A narrower live mute window would let agent-tier rules page Telegram
+    outside the committed silence; the import names the drift instead of
+    trusting the existing timing blindly (review round 1 finding on #23612)."""
+
+    rules = verifier.load_live_stt_import_rules()
+    name = verifier._referenced_mute_timings(rules)[0]
+    contact_points = [
+        {
+            "name": verifier.TELEGRAM_RECEIVER,
+            "type": "telegram",
+            "disableResolveMessage": False,
+            "settings": {"bottoken": "must-never-be-logged"},
+        }
+    ]
+    business_hours = {
+        "name": name,
+        "time_intervals": [
+            {
+                "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+                "times": [{"begin_time": "09:00", "end_time": "17:00"}],
+                "location": "UTC",
+            }
+        ],
+    }
+
+    def fake_request(_url: str, path: str, _token: str, **_kwargs: object) -> object:
+        if path == verifier.ALERT_RULE_LIST_PATH:
+            return []
+        if path == "/api/v1/provisioning/contact-points":
+            return contact_points
+        if path == f"{verifier.MUTE_TIMING_PATH}/{name}":
+            return business_hours
+        raise AssertionError(f"unexpected Grafana read path: {path}")
+
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_request_json", fake_request)
+    monkeypatch.setitem(
+        verifier._run_live_stt_import.__globals__,
+        "_create_mute_timing",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("a drifted timing must not be recreated")),
+    )
+    monkeypatch.setitem(
+        verifier._run_live_stt_import.__globals__,
+        "_write_rule",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("no rule may be written under a drifted timing")
+        ),
+    )
+    with pytest.raises(verifier.AlertRouteError, match="differs from the committed definition"):
+        verifier._run_live_stt_import("https://monitor.omi.me", "secret")
 
 
 def test_import_fails_closed_when_a_referenced_mute_timing_is_uncommitted(
@@ -1095,7 +1155,10 @@ def test_canary_readback_failure_prevents_business_keep_last_writes(verifier, mo
         if path.endswith('/contact-points'):
             return [{'name': verifier.TELEGRAM_RECEIVER, 'type': 'telegram'}]
         if path.startswith(verifier.MUTE_TIMING_PATH + '/'):
-            return {'name': path.rsplit('/', 1)[-1]}
+            return {
+                'name': path.rsplit('/', 1)[-1],
+                'time_intervals': [{'times': [{'begin_time': '00:00', 'end_time': '24:00'}]}],
+            }
         uid = path.rsplit('/', 1)[-1]
         return broken if uid == verifier.DATASOURCE_CANARY_UIDS[0] else rules[uid]
 
@@ -1120,7 +1183,10 @@ def test_prod_import_reads_canaries_back_before_finalization_rules(verifier, mon
         if path.endswith('/contact-points'):
             return [{'name': verifier.TELEGRAM_RECEIVER, 'type': 'telegram'}]
         if path.startswith(verifier.MUTE_TIMING_PATH + '/'):
-            return {'name': path.rsplit('/', 1)[-1]}
+            return {
+                'name': path.rsplit('/', 1)[-1],
+                'time_intervals': [{'times': [{'begin_time': '00:00', 'end_time': '24:00'}]}],
+            }
         uid = path.rsplit('/', 1)[-1]
         events.append(('read', uid))
         return _with_grafana_assigned_query_defaults(rules[uid])
@@ -1153,7 +1219,10 @@ def test_nondefault_canary_query_readback_stops_before_finalization_rules(verifi
         if path.endswith('/contact-points'):
             return [{'name': verifier.TELEGRAM_RECEIVER, 'type': 'telegram'}]
         if path.startswith(verifier.MUTE_TIMING_PATH + '/'):
-            return {'name': path.rsplit('/', 1)[-1]}
+            return {
+                'name': path.rsplit('/', 1)[-1],
+                'time_intervals': [{'times': [{'begin_time': '00:00', 'end_time': '24:00'}]}],
+            }
         uid = path.rsplit('/', 1)[-1]
         live = _with_grafana_assigned_query_defaults(rules[uid])
         if uid == verifier.DATASOURCE_CANARY_UIDS[0]:
@@ -1233,7 +1302,10 @@ def test_nonproduction_import_never_installs_or_reads_production_canaries(verifi
         if path.endswith('/contact-points'):
             return [{'name': verifier.TELEGRAM_RECEIVER, 'type': 'telegram'}]
         if path.startswith(verifier.MUTE_TIMING_PATH + '/'):
-            return {'name': path.rsplit('/', 1)[-1]}
+            return {
+                'name': path.rsplit('/', 1)[-1],
+                'time_intervals': [{'times': [{'begin_time': '00:00', 'end_time': '24:00'}]}],
+            }
         raise AssertionError('nonproduction must not read production canaries')
 
     monkeypatch.setitem(verifier._run_live_stt_import.__globals__, '_request_json', read)
