@@ -275,19 +275,53 @@ async def test_worker_dispatch_denial_defers_without_quarantining_or_losing_audi
 
     def authorize(leases):
         calls.append([v.item.segment_id for v in leases])
-        return {'allowed': calls[-1] if len(calls) == 1 else []}
+        # Flight admission allows; the dispatch re-check denies with a bounded
+        # reason, exactly like an owner whose allowance exhausted mid-flight.
+        if len(calls) == 1:
+            return {'allowed': calls[-1]}
+        return {'allowed': [], 'retry_after': {}, 'held_reason': {'first': 'allowance_exhausted'}}
 
     class RecheckingWorker:
         def process_batch(self, items, *, authorize_dispatch):
-            assert not authorize_dispatch({v.segment_id for v in items})
-            return [HeldWork(v.segment_id) for v in items]
+            assert authorize_dispatch({v.segment_id for v in items}) == {'first': 'allowance_exhausted'}
+            return [HeldWork(v.segment_id, reason='allowance_exhausted') for v in items]
 
     store, _, pump = setup(RecheckingWorker(), authorize_compute=authorize)
     assert await pump.run_once() == 1
     job = store.rows['jobs', 'first']
     assert job['state'] == 'retry' and job['attempt'] == 0
+    assert job['compute_decision'] == {
+        'reason': 'allowance_exhausted',
+        'outcome': 'held',
+        'at': job['available_at'] - 60,
+    }
     assert ('results', 'first') not in store.rows
     assert calls == [['first'], ['first']]
+
+
+@pytest.mark.asyncio
+async def test_flight_admission_hold_defers_with_the_receipt_reason(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+
+    def authorize(leases):
+        return {
+            'allowed': [],
+            'retry_after': {v.item.segment_id: 3600 for v in leases},
+            'held_reason': {v.item.segment_id: 'allowance_exhausted' for v in leases},
+        }
+
+    store, _, pump = setup(Worker(), authorize_compute=authorize)
+    assert await pump.run_once() == 0
+    job = store.rows['jobs', 'first']
+    assert job['state'] == 'retry' and job['attempt'] == 0
+    assert job['compute_decision'] == {
+        'reason': 'allowance_exhausted',
+        'outcome': 'held',
+        'at': job['available_at'] - 3600,
+    }
+    assert ('results', 'first') not in store.rows
 
 
 @pytest.mark.asyncio
@@ -605,7 +639,7 @@ async def test_admission_refund_error_releases_the_whole_flight(monkeypatch):
     worker = Worker()
     pump = Pump(queue, worker, capacity=lambda: PoolCapacity(time.time(), 8))
 
-    def defer(*args):
+    def defer(*args, **kwargs):
         raise RuntimeError('ambiguous defer')
 
     monkeypatch.setattr(queue, 'defer', defer)

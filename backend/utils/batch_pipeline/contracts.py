@@ -122,6 +122,9 @@ class WorkResult:
 class HeldWork:
     segment_id: str
     retry_after: int = 60
+    # Bounded machine reason from the dispatch-time admission decision; empty
+    # means no policy decision was recorded (unknown holds stay unclassified).
+    reason: str = ''
 
 
 @dataclass(frozen=True)

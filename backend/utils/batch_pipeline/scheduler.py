@@ -522,8 +522,17 @@ class Scheduler:
                     pass
         return bool(outcome)
 
-    def defer(self, segment_id: str, token: str, now: float, retry_after: float = 30) -> bool:
-        """Policy/capacity refusal is waiting, not a provider failure attempt."""
+    def defer(
+        self, segment_id: str, token: str, now: float, retry_after: float = 30, *, held_reason: str | None = None
+    ) -> bool:
+        """Policy/capacity refusal is waiting, not a provider failure attempt.
+
+        ``held_reason`` carries the bounded machine reason from the admission
+        decision that caused the defer; it records the latest decision in the
+        same transaction, so an outside reader can classify the wait without
+        a second round-trip. Refund defers (shutdown, GPU abort) pass none and
+        preserve the previously recorded decision.
+        """
 
         def commit(tx):
             job = tx.get('jobs', segment_id)
@@ -536,6 +545,8 @@ class Scheduler:
                 token='',
                 lease_until=0.0,
             )
+            if held_reason:
+                job['compute_decision'] = {'reason': held_reason, 'outcome': 'held', 'at': now}
             tx.put('jobs', segment_id, job)
             return True
 
