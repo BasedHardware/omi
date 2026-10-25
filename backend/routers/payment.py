@@ -520,19 +520,47 @@ def get_available_plans_endpoint(
         # with only their expired desktop SKU instead of the Omi Pro offer.
         valid_subscription = users_db.get_user_valid_subscription(uid)
         current_plan = valid_subscription.plan if valid_subscription else PlanType.basic
+
+        # Detect subscriber currency so JPY subscribers see matching JPY upgrade/switch prices
+        sub_currency = (stripe_sub.get('currency') or 'usd').lower() if stripe_sub else 'usd'
+        jpy_price_catalog = {
+            'plus': {
+                'month': 'price_1ULq6b1F8wnoWYvwtchjjNqq',
+                'year': 'price_1ULq7H1F8wnoWYvwC1poOtd5',
+            },
+            'unlimited_v2': {
+                'month': 'price_1ULq501F8wnoWYvwwN56CHzO',
+                'year': 'price_1ULq5e1F8wnoWYvwQT8XQ4Uw',
+            },
+        }
+
         pricing_options: List[PricingOption] = []
         for definition in filter_plans_for_user(all_definitions, current_plan, platform=x_app_platform):
-            monthly_price_id = definition["monthly_price_id"]
-            annual_price_id = definition["annual_price_id"]
+            plan_id = definition["plan_id"]
+            if sub_currency == 'jpy':
+                if plan_id not in jpy_price_catalog:
+                    continue
+                monthly_price_id = jpy_price_catalog[plan_id]['month']
+                annual_price_id = jpy_price_catalog[plan_id]['year']
+            else:
+                monthly_price_id = definition["monthly_price_id"]
+                annual_price_id = definition["annual_price_id"]
+
             if monthly_price_id:
                 try:
                     monthly_price = stripe.Price.retrieve(monthly_price_id)
+                    curr = (monthly_price.currency or 'usd').lower()
+                    if curr == 'jpy':
+                        p_str = f"¥{monthly_price.unit_amount:,}/mo"
+                    else:
+                        p_str = f"${monthly_price.unit_amount / 100:.2f}/mo"
+
                     pricing_options.append(
                         PricingOption(
                             id=monthly_price.id,
                             plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Monthly',
-                            price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
+                            price_string=p_str,
                             description=definition.get("description"),
                             subtitle=definition.get("subtitle"),
                             eyebrow=definition.get("eyebrow"),
@@ -549,12 +577,18 @@ def get_available_plans_endpoint(
             if annual_price_id:
                 try:
                     annual_price = stripe.Price.retrieve(annual_price_id)
+                    curr = (annual_price.currency or 'usd').lower()
+                    if curr == 'jpy':
+                        p_str = f"¥{int(annual_price.unit_amount / 12):,}/mo"
+                    else:
+                        p_str = f"${int(annual_price.unit_amount / 100 / 12)}/mo"
+
                     pricing_options.append(
                         PricingOption(
                             id=annual_price.id,
                             plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Annual',
-                            price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
+                            price_string=p_str,
                             description=f'{definition.get("description", "")} {definition["annual_description"]}'.strip(),
                             subtitle=definition.get("subtitle"),
                             eyebrow=definition.get("eyebrow"),
@@ -802,6 +836,15 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         target_price = stripe.Price.retrieve(request.price_id)
         target_interval = target_price.recurring.interval  # "month" or "year"
         current_plan = get_plan_type_from_price_id(current_price_id)
+
+        # Validate currency match between existing subscription and target price
+        current_currency = (stripe_sub.get('currency') or '').lower()
+        target_currency = (target_price.currency or '').lower()
+        if current_currency and target_currency and current_currency != target_currency:
+            raise HTTPException(
+                status_code=400,
+                detail=f"The price specified supports currency {target_currency.upper()}, which does not match your current subscription currency ({current_currency.upper()}).",
+            )
 
         desktop_change_error = desktop_to_consumer_plan_change_error(current_plan, target_plan)
         if desktop_change_error:

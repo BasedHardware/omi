@@ -1272,7 +1272,11 @@ class _PlansSheetState extends State<PlansSheet> {
       saveTag: saveTag,
       isPopular: isPopular,
       title: planData['title'] as String,
-      subtitle: interval == 'year' ? l10n.annualBillingSummary(12, '\$${unitAmount / 100}') : null,
+      subtitle: interval == 'year'
+          ? ((planData['price_string'] as String? ?? '').startsWith('¥')
+              ? l10n.annualBillingSummary(12, '¥$unitAmount')
+              : l10n.annualBillingSummary(12, '\$${unitAmount / 100}'))
+          : null,
       price: planData['price_string'] as String,
       onTap: onTap,
       isActive: isActive && !isCancelled,
