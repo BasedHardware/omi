@@ -22,7 +22,8 @@ class AsanaService {
   }
 
   /// Start OAuth authentication flow (get URL from backend)
-  Future<bool> authenticate() => launchIntegrationOAuth(() => getOAuthUrl('asana'));
+  Future<bool> authenticate({bool Function()? isCurrent}) =>
+      launchIntegrationOAuth(() => getOAuthUrl('asana'), isCurrent: isCurrent);
 
   /// Handle OAuth callback
   Future<bool> handleCallback({String? userGid}) async {

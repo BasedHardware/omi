@@ -410,8 +410,10 @@ String appSetupUrlWithUid(String url, String uid) {
   return '${head.substring(0, queryIndex)}?${[...kept, uidParam].join('&')}$fragment';
 }
 
-Future<bool> isAppSetupCompleted(String? url, {ApiSend? send, String? uid}) async {
-  if (url == null || url.isEmpty) return true;
+enum AppSetupStatus { completed, pending, notRequired }
+
+Future<ApiResult<AppSetupStatus>> getAppSetupStatus(String? url, {ApiSend? send, String? uid}) {
+  if (url == null || url.isEmpty) return Future.value(const ApiSuccess(AppSetupStatus.notRequired));
   final target = Uri.tryParse(url);
   final omi = send == null ? Uri.tryParse(Env.apiBaseUrl ?? '') : null;
   final isOmiOrigin = target != null &&
@@ -428,17 +430,18 @@ Future<bool> isAppSetupCompleted(String? url, {ApiSend? send, String? uid}) asyn
           : (request) => HttpPoolManager.instance.send(() => http.Request(request.method, Uri.parse(request.url)),
               timeout: const Duration(seconds: 15), retries: 0));
   final account = uid ?? SharedPreferencesUtil().uid;
-  final result = await executeApi<bool>(
+  return executeApi(
     canSend: send == null ? () => SharedPreferencesUtil().uid == account : null,
     request: ApiRequest(url: appSetupUrlWithUid(url, account), method: 'GET'),
     send: transport,
     decode: (body) {
       final data = jsonDecode(body);
-      if (data is! Map || data['is_setup_completed'] is! bool) throw const FormatException('Invalid setup status');
-      return data['is_setup_completed'] == true;
+      if (data is! Map || data['is_setup_completed'] is! bool) {
+        throw const FormatException('Invalid setup status');
+      }
+      return data['is_setup_completed'] == true ? AppSetupStatus.completed : AppSetupStatus.pending;
     },
   );
-  return result is ApiSuccess<bool> && result.data;
 }
 
 Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> appData) async {
@@ -805,6 +808,25 @@ Future<bool> migrateAppOwnerId(String oldId, String sourceToken) async {
 
 /// Add an MCP server as a private app with chat tools.
 /// Returns {app_id, requires_oauth, auth_url?, tools_count?, tool_names?}
+/// Fresh OAuth authorization for an existing MCP registration. The original URL's state
+/// is single-use and expires, so an explicit retry needs a new one. Null on any failure.
+Future<String?> authorizeMcpServer(String appId) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/${Uri.encodeComponent(appId)}/mcp/authorize',
+    headers: {},
+    body: '',
+    method: 'POST',
+  );
+  // The body carries a state token; log only the status.
+  Logger.debug('authorizeMcpServer: ${response?.statusCode}');
+  if (response == null || response.statusCode != 200) return null;
+  try {
+    return wire.GeneratedMcpAuthorizeResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).authUrl;
+  } catch (_) {
+    return null;
+  }
+}
+
 Future<Map<String, dynamic>?> addMcpServer(String name, String serverUrl, {String? description}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/mcp',

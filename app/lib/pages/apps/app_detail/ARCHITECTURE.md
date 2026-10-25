@@ -21,3 +21,21 @@ provider signatures intact.
 ## Verification
 
 Run the app-detail and review widget tests, then `bash test.sh`. Exercise `app/e2e/flows/app-detail.yaml` on iOS and verify opening an app, returning to the marketplace, and the disabled/error path.
+
+## Browser authorization and completion
+
+`app_setup_owner.dart` is part of the same app-detail State library. It owns
+bounded detail/setup reads, their identity/generation fences and the completion
+wait. It calls the page's existing install owner only after a successful setup
+verdict following an explicit user action. Setup failure is distinct from pending
+and a missing endpoint; neither browser launch nor an absent endpoint claims a
+connection. The shared `ConnectionWait` never overlaps probes and owns cancellation.
+Initial metadata resolves before opening an app home, so a cached URL is not used
+while a newer server URL is available. Home/settings use the system browser.
+
+Fresh launch grants and connection verdicts have separate owners: every home or
+setup-step click fetches current account-bound details, preserves the signed query,
+then starts the bounded completion owner only after a successful launch. Vendor
+completion probes use their capability, never Omi's Firebase bearer. Integration
+checks in `app_install_flow_test.dart` cover a fresh launch followed by delayed
+completion and exactly one enable, alongside failed refresh and account retirement.

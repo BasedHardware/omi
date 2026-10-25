@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -14,6 +16,7 @@ import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import '../support/test_browser.dart';
 
 class _FakeAppProvider extends AppProvider {
   _FakeAppProvider(this.detail);
@@ -86,15 +89,20 @@ final class _EnvFields implements EnvFields {
 }
 
 void main() {
+  late TestBrowser browser;
   setUpAll(() {
     Env.init(const _EnvFields());
     PlatformManager.initializeForLocalHarness();
   });
 
   setUp(() async {
+    browser = TestBrowser();
+    browser.install();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
+
+  tearDown(() => browser.dispose());
 
   Future<void> settle(WidgetTester tester) async {
     for (var i = 0; i < 10; i++) {
@@ -107,9 +115,11 @@ void main() {
     App app, {
     Future<(bool, String)> Function(String)? enableApp,
     Future<Map<String, dynamic>?> Function(String)? appDetailsLoader,
-    Future<bool> Function(String?)? setupChecker,
+    Future<ApiResult<AppSetupStatus>> Function(String?)? setupChecker,
     AppProvider? appProvider,
     Future<bool> Function(Uri)? launchSetupUrl,
+    Future<App?> Function(String)? detailReader,
+    Duration setupProbeTimeout = const Duration(seconds: 20),
   }) async {
     await tester.pumpWidget(
       MultiProvider(
@@ -126,8 +136,10 @@ void main() {
             preventAutoOpenHomePage: true,
             enableApp: enableApp ?? (_) async => (false, ''),
             appDetailsLoader: appDetailsLoader ?? (_) async => null,
-            setupChecker: setupChecker ?? (_) async => false,
+            setupChecker: setupChecker ?? (_) async => const ApiSuccess(AppSetupStatus.pending),
             launchSetupUrl: launchSetupUrl,
+            detailReader: detailReader,
+            setupProbeTimeout: setupProbeTimeout,
           ),
         ),
       ),
@@ -148,7 +160,7 @@ void main() {
       app,
       setupChecker: (_) async {
         setupChecks++;
-        return true;
+        return const ApiSuccess(AppSetupStatus.completed);
       },
       enableApp: (_) async {
         enableCalls++;
@@ -416,7 +428,7 @@ void main() {
             preventAutoOpenHomePage: preventAutoOpen,
             enableApp: enableApp ?? (_) async => (true, ''),
             appDetailsLoader: (_) async => null,
-            setupChecker: (_) async => false,
+            setupChecker: (_) async => const ApiSuccess(AppSetupStatus.pending),
             openAppHome: (_, app) => opened.add(app.externalIntegration!.appHomeUrl!),
           ),
         ),
@@ -495,6 +507,46 @@ void main() {
       expect(launches, 0);
     });
 
+    testWidgets('a fresh setup grant adopts delayed completion and enables only once', (tester) async {
+      App connectedApp(int grant) => _app(
+            external: true,
+            setupCompletedUrl: 'https://plugin.test/done?uid=u1&omi_token=done.$grant',
+            authSteps: [
+              AuthStep(name: 'Connect pCloud', url: 'https://plugin.test/setup?uid=u1&omi_token=signed.$grant')
+            ],
+          );
+      var reads = 0;
+      var completed = false;
+      var enables = 0;
+      final opened = <Uri>[];
+      final checked = <Uri>[];
+      final provider = _FakeAppProvider(connectedApp(0))..load = () async => connectedApp(++reads);
+      await pumpDetail(tester, connectedApp(0), appProvider: provider, launchSetupUrl: (uri) async {
+        opened.add(uri);
+        return true;
+      }, setupChecker: (url) async {
+        checked.add(Uri.parse(url!));
+        return ApiSuccess(completed ? AppSetupStatus.completed : AppSetupStatus.pending);
+      }, enableApp: (_) async {
+        enables++;
+        return (true, '');
+      });
+      await settle(tester);
+      await tester.ensureVisible(find.text('Connect pCloud'));
+      await tester.tap(find.text('Connect pCloud'));
+      await settle(tester);
+      expect(opened.single.queryParameters['omi_token'], 'signed.2');
+      expect(enables, 0, reason: 'opening authorization is not a connection receipt');
+      completed = true;
+      await tester.pump(const Duration(seconds: 3));
+      await settle(tester);
+      expect(checked.last.queryParameters['omi_token'], 'done.2');
+      expect(enables, 1);
+      await tester.pump(const Duration(seconds: 6));
+      await settle(tester);
+      expect(enables, 1, reason: 'the combined grant and completion owners install exactly once');
+    });
+
     testWidgets('account replacement while refreshing cannot open the previous grant', (tester) async {
       final provider = _FakeAppProvider(setupApp(0));
       var launches = 0;
@@ -512,5 +564,86 @@ void main() {
       await settle(tester);
       expect(launches, 0);
     });
+  });
+
+  testWidgets('marketplace status can complete after authorization and is installed only once', (tester) async {
+    var completed = false;
+    var enables = 0;
+    final app = _app(
+        external: true,
+        setupCompletedUrl: 'https://vendor.test/setup',
+        authSteps: [AuthStep(name: 'Authorize', url: 'https://vendor.test/auth')]);
+    await pumpDetail(tester, app,
+        setupChecker: (_) async => ApiSuccess(completed ? AppSetupStatus.completed : AppSetupStatus.pending),
+        enableApp: (_) async {
+          enables++;
+          return (true, '');
+        });
+    await settle(tester);
+    await tester.tap(find.text('Authorize'));
+    await settle(tester);
+    expect(enables, 0);
+    completed = true;
+    await tester.pump(const Duration(seconds: 3));
+    await settle(tester);
+    expect(enables, 1);
+    expect(app.enabled, isTrue);
+    await tester.pump(const Duration(seconds: 6));
+    expect(enables, 1);
+  });
+
+  testWidgets('a stuck marketplace probe offers retry and ignores its late reply', (tester) async {
+    final pending = Completer<ApiResult<AppSetupStatus>>();
+    final app = _app(
+        external: true,
+        setupCompletedUrl: 'https://vendor.test/setup',
+        authSteps: [AuthStep(name: 'Authorize', url: 'https://vendor.test/auth')]);
+    await pumpDetail(tester, app, setupProbeTimeout: const Duration(seconds: 1), setupChecker: (_) => pending.future);
+    await tester.pump(const Duration(seconds: 2));
+    await settle(tester);
+    expect(find.byKey(const Key('app-setup-retry')), findsOneWidget);
+    pending.complete(const ApiSuccess(AppSetupStatus.completed));
+    await settle(tester);
+    expect(find.byKey(const Key('app-setup-retry')), findsOneWidget);
+    expect(app.enabled, isFalse);
+  });
+
+  testWidgets('leaving setup releases its timers and cannot enable from a late response', (tester) async {
+    var enables = 0;
+    final pending = Completer<ApiResult<AppSetupStatus>>();
+    final app = _app(
+        external: true,
+        setupCompletedUrl: 'https://vendor.test/setup',
+        authSteps: [AuthStep(name: 'Authorize', url: 'https://vendor.test/auth')]);
+    await pumpDetail(tester, app,
+        setupChecker: (_) => pending.future,
+        enableApp: (_) async {
+          enables++;
+          return (true, '');
+        });
+    await tester.pumpWidget(const SizedBox());
+    pending.complete(const ApiSuccess(AppSetupStatus.completed));
+    await tester.pump();
+    expect(enables, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('initial detail failure ends loading, offers retry and drops the expired result', (tester) async {
+    final pending = Completer<App?>();
+    final app = _app();
+    var reads = 0;
+    await pumpDetail(tester, app, setupProbeTimeout: const Duration(seconds: 1), detailReader: (_) {
+      reads++;
+      return reads == 1 ? pending.future : Future.value(app);
+    });
+    await tester.pump(const Duration(seconds: 2));
+    await settle(tester);
+    expect(find.byKey(const Key('app-detail-retry')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('app-detail-retry')));
+    await settle(tester);
+    expect(find.byKey(const Key('app-detail-retry')), findsNothing);
+    pending.complete(_app(external: true));
+    await settle(tester);
+    expect(tester.takeException(), isNull);
   });
 }

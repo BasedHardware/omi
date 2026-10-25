@@ -52,6 +52,8 @@ from database.apps import (
     get_app_by_id_db,
     add_app_to_db,
     update_app_in_db,
+    set_mcp_code_verifier,
+    complete_mcp_oauth_authorization,
     delete_app_from_db,
     update_app_visibility_in_db,
     get_personas_by_username_db,
@@ -216,6 +218,10 @@ class McpAddServerResponse(PydanticBaseModel):
     auth_url: Optional[str] = None
     tools_count: Optional[int] = None
     tool_names: List[str] = Field(default_factory=list)
+
+
+class McpAuthorizeResponse(PydanticBaseModel):
+    auth_url: str
 
 
 class McpRefreshToolsResponse(PydanticBaseModel):
@@ -2167,17 +2173,22 @@ async def mcp_oauth_callback(code: str, state: str):
     # Use the resolved URL from the first tool (discover_mcp_tools stores the working URL)
     resolved_url = tools[0].endpoint if tools else server_url
 
-    # Update app with tokens and tools
-    update_dict = {
-        'id': app_id,
-        'status': 'approved',
-        'external_integration': {
-            'mcp_server_url': resolved_url,
-            'mcp_oauth_tokens': oauth_tokens,
-        },
-        'chat_tools': _serialize_chat_tools_for_firestore(tools),
-    }
-    await run_blocking(db_executor, update_app_in_db, update_dict)
+    # A newer retry can rotate PKCE while exchange/discovery is in flight.
+    # Compare and commit atomically; a stale callback must not approve or enable.
+    committed = await run_blocking(
+        db_executor,
+        complete_mcp_oauth_authorization,
+        app_id,
+        uid,
+        oauth_tokens,
+        resolved_url,
+        _serialize_chat_tools_for_firestore(tools),
+    )
+    if not committed:
+        return HTMLResponse(
+            '<html><body><h1>Authorization superseded</h1><p>Return to the app and finish the latest connection attempt.</p></body></html>',
+            status_code=409,
+        )
     await run_blocking(db_executor, delete_app_cache_by_id, app_id)
 
     # Auto-enable the app for the user
@@ -2204,6 +2215,49 @@ async def mcp_oauth_callback(code: str, state: str):
         <p style="margin-top:24px;color:#666;">You can close this window and return to the app.</p>
     </div></body></html>
     """)
+
+
+@router.post('/v1/apps/{app_id}/mcp/authorize', tags=['v1'], response_model=McpAuthorizeResponse)
+async def authorize_mcp_server(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Issue fresh OAuth authorization for an existing MCP server registration.
+
+    Authorization state is single-use and expires, so retrying a connection needs a new
+    state and PKCE pair for the same registration rather than the original URL. Only the
+    stored code verifier changes; an earlier URL then fails its token exchange.
+    """
+    app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
+    if not app_data:
+        raise HTTPException(status_code=404, detail='App not found')
+    if app_data.get('uid') != uid:
+        raise HTTPException(status_code=403, detail='Not authorized')
+    ext = app_data.get('external_integration') or {}
+    tokens = ext.get('mcp_oauth_tokens') or {}
+    server_url = ext.get('mcp_server_url')
+    if not server_url or not tokens.get('client_id') or not tokens.get('redirect_uri'):
+        raise HTTPException(status_code=422, detail='App is not an OAuth MCP server app')
+
+    oauth_meta = await discover_oauth_metadata(server_url)
+    if not oauth_meta or not oauth_meta.get('authorization_endpoint'):
+        raise HTTPException(status_code=502, detail='MCP server authorization is unavailable')
+    try:
+        state = await run_blocking(db_executor, create_mcp_oauth_state, app_id, uid)
+    except Exception as e:
+        logger.error(f'[MCP OAuth] Failed to store state in Redis: {type(e).__name__}')
+        raise HTTPException(status_code=500, detail='Failed to initialize OAuth flow')
+    code_verifier, code_challenge = generate_pkce_pair()
+    # Only the verifier changes: the app record read above may be stale by now (a callback
+    # can save tokens while discovery runs), so never write the token map back from it.
+    await run_blocking(db_executor, set_mcp_code_verifier, app_id, code_verifier)
+    await run_blocking(db_executor, delete_app_cache_by_id, app_id)
+    auth_url = build_authorization_url(
+        oauth_meta['authorization_endpoint'],
+        tokens['client_id'],
+        tokens['redirect_uri'],
+        state,
+        scopes=oauth_meta.get('scopes_supported'),
+        code_challenge=code_challenge,
+    )
+    return {'auth_url': auth_url}
 
 
 @router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'], response_model=McpRefreshToolsResponse)
