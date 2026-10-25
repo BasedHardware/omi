@@ -13,6 +13,8 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/format/speaker_names.dart';
+import 'package:omi/ui/format/diarization_label.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_meta.dart';
 import 'package:omi/utils/constants.dart';
 
 TranscriptSegment seg(int speakerId, {bool isUser = false, String? personId, String text = 'hi'}) => TranscriptSegment(
@@ -97,6 +99,37 @@ void main() {
     expect(TranscriptSegment.getDisplaySpeakerId(5, segments), 1);
     expect(TranscriptSegment.getDisplaySpeakerId(9, segments), 2);
     expect(TranscriptSegment.getDisplaySpeakerId(11, segments), 3, reason: 'unseen ids number after the known ones');
+  });
+
+  test('raw 378/379 never become labels, including old Review responses', () {
+    final rows = [seg(378), seg(379)];
+    final names = SpeakerNames.forSegments(rows, l10n: en);
+    expect(rows.map(names.forSegment), ['Speaker 1', 'Speaker 2']);
+    expect(SpeakerNames.excerptLabel(isUser: false, speakerLabel: 'Speaker 379', l10n: en), 'Speaker');
+    expect(SpeakerNames.excerptLabel(isUser: false, speakerLabel: 'Speaker B', l10n: en), 'Speaker 2');
+    expect(SpeakerNames.excerptLabel(isUser: false, speakerLabel: 'Others', l10n: en), 'Others');
+    expect(SpeakerNames.excerptLabel(isUser: false, speakerLabel: 'Unknown speaker', l10n: en), 'Speaker');
+    expect(() => '${DiarizationLabel.fromRaw(379)}', throwsUnsupportedError);
+    expect(DiarizationLabel.fromRaw(379).rawForTransport, 379);
+  });
+
+  test('over-split tiny voices collapse, substantial and named voices stay', () {
+    final rows = [seg(378)..end = 30, for (var id = 400; id < 417; id++) seg(id), seg(379, personId: 'ada')];
+    final names = SpeakerNames.forSegments(rows, people: [person('ada', 'Ada')], l10n: en);
+    expect(names.forSegment(rows.first), 'Speaker 1');
+    expect(rows.skip(1).take(17).map(names.forSegment).toSet(), {'Others'});
+    expect(names.forSegment(rows.last), 'Ada');
+  });
+
+  test('resolved over-split headers omit a numeric people count', () {
+    final rows = [seg(0, isUser: true), for (var id = 378; id < 395; id++) seg(id)];
+    final meta = ConversationDetailMeta.participants(rows,
+        you: 'You',
+        speakers:
+            ConversationSpeakers(status: 'resolved', participantSpeakerIds: [for (var id = 378; id < 395; id++) id]));
+    expect(meta.named, ['You']);
+    expect(meta.unnamed, 0);
+    expect(meta.uncounted, isTrue);
   });
 
   group('export (segmentsAsString)', () {

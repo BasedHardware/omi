@@ -386,7 +386,7 @@ def test_empty_speaker_07_is_stored_hashed_and_rendered() -> None:
     assert bound is not None
     assert bound != without_empty
     assert 'Speaker B:' in _render(models)
-    assert 'Speaker 7:' not in _render(_as_models(stored[:1]))
+    assert 'Speaker B:' not in _render(_as_models(stored[:1]))
     assert _late_finalize(stored, without_empty) is None
     assert _late_finalize(stored, bound) == bound
 

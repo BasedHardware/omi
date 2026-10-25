@@ -114,6 +114,9 @@ _SYS_MODULE_NAMES = [
     "utils.committed_capture",
     "utils.capture_evidence",
     "utils.speaker_display",
+    "utils.speakers",
+    "utils.speakers.display_metrics",
+    "utils.speakers.display",
     "utils.notifications",
     "utils.byok",
     "utils.llm",
@@ -293,6 +296,9 @@ _load_module_from_file("utils.capture_evidence", BACKEND_DIR / "utils" / "captur
 # models.transcript_segment imports SpeakerLabeler at module scope; the stubbed
 # utils package has an empty __path__, so load the real stdlib-only module first.
 _load_module_from_file("utils.speaker_display", BACKEND_DIR / "utils" / "speaker_display.py")
+_load_module_from_file("utils.speakers", BACKEND_DIR / "utils" / "speakers" / "__init__.py")
+_load_module_from_file("utils.speakers.display_metrics", BACKEND_DIR / "utils" / "speakers" / "display_metrics.py")
+_load_module_from_file("utils.speakers.display", BACKEND_DIR / "utils" / "speakers" / "display.py")
 
 # Stub utils.conversations.render (action_item_tools imports resolve_display_tz, format_local_time)
 _render_stub = _stub_module("utils.conversations.render")
