@@ -33,6 +33,8 @@ from routers import apps as apps_router
 
 pytestmark = pytest.mark.integration
 
+SYNTHETIC_CALLBACK = 'http://omi.test/v1/apps/mcp/callback'
+
 
 @pytest.fixture
 def local_redis():
@@ -88,13 +90,15 @@ def oauth_provider():
             if parsed.path == '/authorize':
                 query = parse_qs(parsed.query)
                 assert query['client_id'] == ['synthetic-client']
-                assert query['redirect_uri'] == ['http://omi.test/v1/apps/mcp/callback']
+                if query.get('redirect_uri') != [SYNTHETIC_CALLBACK]:
+                    self.send_json(400, {'error': 'invalid_redirect_uri'})
+                    return
                 assert query['code_challenge_method'] == ['S256']
                 code = uuid4().hex
                 state['codes'][code] = query['code_challenge'][0]
                 self.send_response(302)
                 self.send_header(
-                    'Location', query['redirect_uri'][0] + '?' + urlencode({'code': code, 'state': query['state'][0]})
+                    'Location', SYNTHETIC_CALLBACK + '?' + urlencode({'code': code, 'state': query['state'][0]})
                 )
                 self.end_headers()
                 return
@@ -146,6 +150,53 @@ def oauth_provider():
         worker.join(timeout=5)
 
 
+@pytest.mark.parametrize(
+    'redirect_uri',
+    ['https://example.test/other-callback', SYNTHETIC_CALLBACK + '\r\nX-Injected: true'],
+)
+def test_local_provider_rejects_unregistered_redirects(oauth_provider, redirect_uri):
+    provider, _, _ = oauth_provider
+    response = httpx.get(
+        provider['origin'] + '/authorize',
+        params={
+            'client_id': 'synthetic-client',
+            'redirect_uri': redirect_uri,
+            'code_challenge_method': 'S256',
+            'code_challenge': 'synthetic-challenge',
+            'state': 'synthetic-state',
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
+    assert response.json() == {'error': 'invalid_redirect_uri'}
+    assert 'Location' not in response.headers
+    assert not provider['codes']
+
+
+def test_local_provider_encodes_state_in_fixed_callback(oauth_provider):
+    provider, _, _ = oauth_provider
+    state = 'synthetic\r\nX-Injected: true&next=other'
+    response = httpx.get(
+        provider['origin'] + '/authorize',
+        params={
+            'client_id': 'synthetic-client',
+            'redirect_uri': SYNTHETIC_CALLBACK,
+            'code_challenge_method': 'S256',
+            'code_challenge': 'synthetic-challenge',
+            'state': state,
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    location = response.headers['Location']
+    assert location.startswith(SYNTHETIC_CALLBACK + '?')
+    assert '\r' not in location and '\n' not in location
+    assert 'X-Injected' not in response.headers
+    query = parse_qs(urlsplit(location).query)
+    assert query['state'] == [state]
+    assert list(provider['codes']) == query['code']
+
+
 def test_retry_callback_pkce_replay_and_supersession_on_local_services(local_redis, oauth_provider, monkeypatch):
     assert os.environ.get('FIRESTORE_EMULATOR_HOST', '').startswith(('127.0.0.1:', 'localhost:'))
     database = firestore.Client(project='demo-mcp-' + uuid4().hex[:12], credentials=AnonymousCredentials())
@@ -162,7 +213,7 @@ def test_retry_callback_pkce_replay_and_supersession_on_local_services(local_red
                 'setup_completed_url': 'https://example.test/unchanged',
                 'mcp_oauth_tokens': {
                     'client_id': 'synthetic-client',
-                    'redirect_uri': 'http://omi.test/v1/apps/mcp/callback',
+                    'redirect_uri': SYNTHETIC_CALLBACK,
                     'token_endpoint': provider['origin'] + '/token',
                     'code_verifier': 'synthetic-original-verifier',
                 },
