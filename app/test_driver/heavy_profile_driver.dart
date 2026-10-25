@@ -142,12 +142,13 @@ Future<void> main() async {
           device,
           '--pid',
           '$ownedPid',
+          '--kill',
           '--timeout',
           '20'
         ]);
         await File('$output/process-cleanup.json').writeAsString(jsonEncode({
           'pid': ownedPid,
-          'terminated': stopped.exitCode == 0,
+          'sigkill_request_succeeded': stopped.exitCode == 0,
           'uninstall_requested': false,
         }));
         if (stopped.exitCode != 0) throw StateError('Owned DEV process termination failed: ${stopped.stderr}');

@@ -56,6 +56,9 @@ suppresses that test-only tail while preserving genuine framework requests.
 An idle-frame probe and nonempty scenario frames guard both directions. The
 native buffered initial lifecycle state initializes the test dispatcher only
 when its state is absent; live lifecycle events remain authoritative.
+The existing foreground-task plugin also reads UIKit's app-active state for
+diagnostics. That read never overrides Flutter lifecycle state or bypasses the
+resumed-state requirement.
 
 Each `receipt-N.json` reports engine build/raster/total p50/p90/p99 in
 microseconds, frames over 16/32/100 ms, worst total frame and frame count.

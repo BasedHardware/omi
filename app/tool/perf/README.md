@@ -5,7 +5,10 @@ the app by default. An earlier qualification attempt exposed the DEV sandbox
 to that cleanup; pre-existing DEV data could not be ruled out. Every invocation
 must use `--keep-app-running`. The command guard rejects missing/conflicting
 flags, non-DEV flavors and uninstall-first before spawning. Do not bypass it.
-Only the still-connected harness process may be terminated; keep its app/data.
+Only the still-connected, VM-attested harness PID may be terminated; keep its
+app/data. Use SIGKILL for that PID because the debugger can intercept SIGTERM
+and leave the process stopped. A successful request is recorded separately
+from the synthetic canary's evidence of installation/data retention.
 Each physical iOS attempt must read back a unique synthetic preservation canary
 written by this run. Never enumerate or read existing app data. Missing canary
 proof stops the batch, including after failed attempts. Android retention still

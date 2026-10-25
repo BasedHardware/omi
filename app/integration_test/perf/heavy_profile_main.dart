@@ -8,6 +8,7 @@ import 'heavy_binding.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:provider/provider.dart';
 
@@ -63,9 +64,7 @@ import 'production_shell.dart';
 /// Profile-mode heavy-account perf harness (David 2026-10-25: "test perf more
 /// reliably"). Runs on an approved physical phone via `tool/perf_sim_profile.sh`:
 ///
-///   flutter drive --profile --flavor dev \
-///     --driver=test_driver/integration_test_driver.dart \
-///     --target=integration_test/perf/heavy_profile_main.dart -d <UDID>
+///   bash app/tool/perf_device_run.sh --device <UDID> --accept-baseline
 ///
 /// Boundaries (see perf/README.md): the production builder shell with real
 /// providers and real local stores; NOT the full app.main() boot (no Firebase,
@@ -91,6 +90,7 @@ void main() {
     Env.init(const _HeavyEnv());
     await hostReady.future.timeout(const Duration(seconds: 30));
     final lifecycleSnapshot = _readNativeInitialLifecycle(binding);
+    lifecycleSnapshot['native_app_active'] = await FlutterForegroundTask.isAppOnForeground;
     binding.reportData = {...?binding.reportData, 'heavy_lifecycle': lifecycleSnapshot};
     debugPrint('HEAVY_LIFECYCLE ${jsonEncode(lifecycleSnapshot)}');
     final idleFrames = await _verifyIdleScheduling(tester, binding);
@@ -144,6 +144,13 @@ void main() {
     if (timelineEnabled) await binding.enableTimeline(streams: const ['Dart', 'GC']);
     final resumed = await _awaitCondition(() => binding.lifecycleState == AppLifecycleState.resumed,
         timeout: const Duration(seconds: 15));
+    final foregroundSnapshot = {
+      'binding': binding.lifecycleState?.name,
+      'native_buffered': ui.PlatformDispatcher.instance.initialLifecycleState,
+      'native_app_active': await FlutterForegroundTask.isAppOnForeground,
+    };
+    binding.reportData = {...?binding.reportData, 'heavy_foreground': foregroundSnapshot};
+    debugPrint('HEAVY_FOREGROUND ${jsonEncode(foregroundSnapshot)}');
     if (!resumed) _rejectMeasurement(binding, 'not_resumed', scenario: 'preflight');
     expect(resumed, isTrue, reason: 'HEAVY_FOREGROUND_REJECTED: DEV app must be resumed before measurement');
     await (() async {
