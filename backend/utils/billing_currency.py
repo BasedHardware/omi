@@ -31,29 +31,34 @@ def management_binding(price_id: str) -> tuple[PlanType, str, str] | None:
     return None
 
 
-def price_for_currency(price, currency: str | None):
+def price_for_currency(price: stripe.Price, currency: str | None) -> stripe.Price:
     """Resolve an explicit currency variant; never convert or invent an amount."""
     if currency is None or price.currency == currency:
         return price
     resolved = resolve_price_entitlements(price.id)
     if not resolved or resolved['entitlement_version'] != 'legacy':
         raise BillingCurrencyUnavailable('This plan is not available in your subscription currency.')
+    base_recurring = price.recurring
+    if base_recurring is None:
+        raise BillingCurrencyUnavailable('This plan price is not a recurring subscription.')
     for candidate, binding in MANAGEMENT_CURRENCY_PRICES.items():
         if (binding['plan_id'], binding['interval'], binding['currency']) != (
             resolved['plan_id'],
-            price.recurring.interval,
+            base_recurring.interval,
             currency,
         ):
             continue
         if candidate:
             target = stripe.Price.retrieve(candidate)
             target_resolved = resolve_price_entitlements(target.id)
+            recurring = target.recurring
             if (
                 target.active is True
                 and target.currency == currency
                 and target.livemode == price.livemode
-                and target.recurring.interval == price.recurring.interval
-                and target.recurring.get('interval_count', 1) == 1
+                and recurring is not None
+                and recurring.interval == base_recurring.interval
+                and recurring.get('interval_count', 1) == 1
                 and target_resolved
                 and target_resolved['plan_id'] == resolved['plan_id']
                 and target_resolved['entitlement_version'] == resolved['entitlement_version']

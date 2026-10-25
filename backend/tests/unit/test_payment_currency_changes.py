@@ -156,7 +156,8 @@ def test_jpy_variant_is_not_new_checkout_target(case):
 
 
 @pytest.mark.parametrize(
-    'attribute,value', [('active', False), ('currency', 'usd'), ('livemode', False), ('unit_amount', None)]
+    'attribute,value',
+    [('active', False), ('currency', 'usd'), ('livemode', False), ('unit_amount', None), ('recurring', None)],
 )
 def test_invalid_jpy_target_hidden_and_rejected_before_schedule_release(case, attribute, value):
     case['prices'][PRO_MONTH][attribute] = value
@@ -232,3 +233,13 @@ def test_malformed_subscription_currency_refuses_change(case):
     response = case['client'].post('/v1/payments/upgrade-subscription', json={'price_id': PRO_MONTH})
     assert response.status_code == 409
     case['release'].assert_not_called()
+
+
+def test_cancelled_plan_offers_keep_jpy_without_an_active_badge(case):
+    case['obj']['cancel_at_period_end'] = True
+    case['sub'].cancel_at_period_end = True
+    response = case['client'].get('/v1/payments/available-plans')
+    assert response.status_code == 200, response.text
+    rows = response.json()['plans']
+    assert len(rows) == 4
+    assert all(row['currency'] == 'jpy' and not row['is_active'] for row in rows)

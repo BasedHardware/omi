@@ -176,3 +176,30 @@ def test_current_jpy_subscription_reactivates_without_another_subscription(flow)
     assert current.cancel_at_period_end is False
     assert current['items'].data[0].price.id == prices[(PlanType.plus, 'month', 'jpy')].id
     assert len(stripe.Subscription.list(customer=sub.customer, status='active').data) == 1
+
+
+def test_one_time_jpy_price_is_not_a_subscription_offer(flow, monkeypatch):
+    client, sub, prices, writes = flow
+    original = prices[(PlanType.unlimited_v2, 'month', 'jpy')]
+    invalid = stripe.Price.create(product=original.product, currency='jpy', unit_amount=4800)
+    try:
+        monkeypatch.delitem(plan_catalog.MANAGEMENT_CURRENCY_PRICES, original.id)
+        monkeypatch.setitem(
+            plan_catalog.MANAGEMENT_CURRENCY_PRICES,
+            invalid.id,
+            dict(price_id=invalid.id, plan_id='unlimited_v2', interval='month', currency='jpy'),
+        )
+        monkeypatch.setitem(plan_catalog.RECOGNIZED_STRIPE_PRICE_PLAN_TYPES, invalid.id, PlanType.unlimited_v2)
+        monkeypatch.setitem(plan_catalog.RECOGNIZED_STRIPE_PRICE_INTERVALS, invalid.id, 'month')
+        monkeypatch.setitem(plan_catalog.RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS, invalid.id, 'legacy')
+        catalog = client.get('/v1/payments/available-plans')
+        assert catalog.status_code == 200, catalog.text
+        assert invalid.id not in [row['id'] for row in catalog.json()['plans']]
+        response = client.post('/v1/payments/upgrade-subscription', json={'price_id': invalid.id})
+        assert response.status_code == 409, response.text
+        assert (
+            stripe.Subscription.retrieve(sub.id)['items'].data[0].price.id == prices[(PlanType.plus, 'month', 'jpy')].id
+        )
+        assert writes == []
+    finally:
+        stripe.Price.modify(invalid.id, active=False)

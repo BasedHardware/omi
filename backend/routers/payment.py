@@ -543,6 +543,9 @@ def get_available_plans_endpoint(
         valid_subscription = users_db.get_user_valid_subscription(uid)
         current_plan = valid_subscription.plan if valid_subscription else PlanType.basic
         pricing_options: List[PricingOption] = []
+        active_price_ids = {current_price_id, scheduled_price_id}
+        if current_subscription and current_subscription.cancel_at_period_end:
+            active_price_ids.clear()
         for definition in filter_plans_for_user(all_definitions, current_plan, platform=x_app_platform):
             monthly_price_id = definition["monthly_price_id"]
             annual_price_id = definition["annual_price_id"]
@@ -562,7 +565,7 @@ def get_available_plans_endpoint(
                             eyebrow=definition.get("eyebrow"),
                             interval=monthly_price.recurring.interval,
                             unit_amount=monthly_price.unit_amount,
-                            is_active=current_price_id == monthly_price.id or scheduled_price_id == monthly_price.id,
+                            is_active=monthly_price.id in active_price_ids,
                         )
                     )
                 except Exception as e:
@@ -586,7 +589,7 @@ def get_available_plans_endpoint(
                             eyebrow=definition.get("eyebrow"),
                             interval=annual_price.recurring.interval,
                             unit_amount=annual_price.unit_amount,
-                            is_active=current_price_id == annual_price.id or scheduled_price_id == annual_price.id,
+                            is_active=annual_price.id in active_price_ids,
                         )
                     )
                 except Exception as e:
@@ -850,7 +853,10 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
         target_plan = get_plan_type_from_price_id(request.price_id)
         target_price = stripe.Price.retrieve(request.price_id)
-        target_interval = target_price.recurring.interval  # "month" or "year"
+        target_recurring = target_price.recurring
+        if target_recurring is None:
+            raise HTTPException(status_code=409, detail="This plan price is not a recurring subscription.")
+        target_interval = target_recurring.interval  # "month" or "year"
         try:
             currency = subscription_currency(stripe_sub)
             if target_price.currency != currency:
