@@ -335,4 +335,25 @@ void main() {
       expect(sent, isEmpty, reason: 'every held frame was WAL-accepted');
     });
   });
+
+  test('capture end / account change sends held frames to a still-open, ungranted socket first', () {
+    admission.socketPublished(declared: true, send: send);
+    route(1);
+    route(2);
+    admission.end(send: send);
+    expect(sent, [1, 2]);
+    expect(admission.heldFramesForTesting, 0);
+
+    sent.clear();
+    admission.socketPublished(declared: true, send: send);
+    admission.verdict(granted: true, socketDeclared: true, send: send);
+    route(3, warmingUp: true);
+    admission.end(send: send);
+    expect(sent, isEmpty, reason: 'a granted socket never receives them');
+
+    admission.socketPublished(declared: true, send: send);
+    route(4);
+    admission.end();
+    expect(sent, isEmpty, reason: 'no open socket: nothing to send to');
+  });
 }

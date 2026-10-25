@@ -324,6 +324,18 @@ void main() {
     await lane.pendingInitialization;
   });
 
+  test('account change mid-hold sends the held frames to the still-open socket before teardown', () async {
+    await boot(livePreview: preview());
+    world.deviceConnection!.emitAudio(value: 1);
+    world.deviceConnection!.emitAudio(value: 2);
+    await world.settle();
+    final socket = world.socket!;
+    expect(socket.sentBinary, isEmpty);
+    world.controller.clearUserData();
+    expect(socket.sentBinary, [List.filled(80, 1), List.filled(80, 2)],
+        reason: 'the WAL in-memory tail does not survive an account change on main');
+  });
+
   test('a server without local_preview keeps today: visible frames stream, no preview', () async {
     final live = preview();
     await boot(livePreview: live);

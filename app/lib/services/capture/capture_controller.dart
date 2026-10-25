@@ -1204,7 +1204,7 @@ class CaptureController extends ChangeNotifier
   void _rollCaptureSession(String identity) {
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
-    _localPreview.end();
+    _localPreview.end(send: _openSocketSender);
     _captureEvidenceIdentity.reset();
     _sessionOwner?.replaceSession(identity);
   }
@@ -2243,6 +2243,10 @@ class CaptureController extends ChangeNotifier
     _mobileStandardBatch?.dropLocalPreview();
   }
 
+  /// The pendant sender while a transcription socket is still connected.
+  void Function(HeldPendantFrame frame)? get _openSocketSender =>
+      _socket?.state == SocketServiceState.connected ? _sendPendantToSocket : null;
+
   void _sendPendantToSocket(HeldPendantFrame frame) {
     final socketPayload = frame.payload;
     final positionedFrame = frame.positioned;
@@ -2685,7 +2689,7 @@ class CaptureController extends ChangeNotifier
   void clearUserData() {
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
-    _localPreview.end();
+    _localPreview.end(send: _openSocketSender);
     _captureEvidenceIdentity.reset();
     segments = [];
     photos = [];
@@ -2789,7 +2793,7 @@ class CaptureController extends ChangeNotifier
 
   void updateRecordingState(RecordingState state) {
     recordingState = state;
-    if (state == RecordingState.stop) _localPreview.end();
+    if (state == RecordingState.stop) _localPreview.end(send: _openSocketSender);
     if (state == RecordingState.deviceRecord) _reconcileTranscriptionKeepAlive();
     notifyListeners();
   }

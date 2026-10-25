@@ -273,10 +273,15 @@ class LocalPreviewAdmission {
     _set(false);
   }
 
-  /// Capture ended (stop, account change, dispose): the preview and any held
-  /// frames are dropped (the safety WAL has every one).
-  void end() {
+  /// Capture ended (stop, account change, dispose). Held frames of a socket
+  /// that is still open and was not granted are [send] to it first, as on a
+  /// refusal: an account change discards the safety WAL's in-memory tail
+  /// (LocalWalSyncImpl.clearUserData), so the WAL cannot be relied on for them.
+  /// Without an open socket they are dropped like any frame captured while the
+  /// socket is down.
+  void end({void Function(HeldPendantFrame frame)? send}) {
     _report(LocalPreviewVerdictOutcome.socketClosed);
+    if (send != null && !admitted) _flush(send);
     admitted = false;
     _verdictPendingSince = null;
     _held.clear();
