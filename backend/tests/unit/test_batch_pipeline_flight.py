@@ -15,7 +15,7 @@ import pytest
 from config.batch_pipeline_providers import ProviderConfig, provider_config
 from diarizer.batch_pipeline import PipelineWorker
 from diarizer import batch_pipeline_flight as flight
-from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
+from utils.batch_pipeline.contracts import Priority, ValidationFailureWork, WorkItem, WorkResult
 from utils.batch_pipeline.errors import FatalGpuError
 
 RATE = 16000
@@ -255,6 +255,39 @@ def test_silence_skips_packed_diarization():
     results, saved, _ = run(packed, DURATIONS)
     assert {r.outcome for r in results} == {'silence'}
     assert not [c for c in packed.calls if c[0] == 'diarize_many']
+
+
+def test_frozen_unsupported_language_skips_the_packed_segmentation_pass():
+    # A unit whose frozen language the word provider cannot serve can only end
+    # at the language barrier; it must not burn the packed pyannote pass first.
+    packed = FakeFlight()
+    serial_vad_calls = []
+
+    def counted_vad(samples):
+        serial_vad_calls.append(len(samples))
+        return serial_vad(samples)
+
+    worker = PipelineWorker(
+        language_of=lambda work: 'zh' if work.segment_id == 'b' else 'en',
+        decode=lambda work: synthetic_audio(work.duration_seconds, 7),
+        vad=counted_vad,
+        words_providers={'parakeet': Words()},
+        diarizers={'pyannote': serial_diarize},
+        persist=lambda work, payload: 'encrypted-result://' + work.segment_id,
+        flight_models=packed,
+    )
+    results = worker.process_batch([item(k, s) for k, s in DURATIONS.items()])
+    segmented = next(lengths for name, lengths in packed.calls if name == 'segment')
+    assert len(segmented) == 2  # only 'a' and 'c' entered the packed pass
+    assert serial_vad_calls == [int(DURATIONS['b'] * RATE)]  # the blocked unit took serial VAD
+    assert sorted(results, key=lambda r: r.segment_id) == sorted(
+        [
+            WorkResult('a', 'encrypted-result://a', 'success'),
+            ValidationFailureWork('b', 'vad_windows', 'unsupported_language'),
+            WorkResult('c', 'encrypted-result://c', 'success'),
+        ],
+        key=lambda r: r.segment_id,
+    )
 
 
 # ---- real pyannote equivalence (CPU) --------------------------------------------

@@ -652,6 +652,8 @@ class PipelineWorker:
 
         try:
 
+            frozen_languages = {}
+
             def decoded_units():
                 for index, item in enumerate(items):
                     self.counts['items'] += 1
@@ -671,6 +673,10 @@ class PipelineWorker:
                     except Exception as exc:
                         fail(item, exc, 'fetch_decode')
                         continue
+                    try:
+                        frozen_languages[item.segment_id] = self.language_of(item)
+                    except Exception:
+                        frozen_languages[item.segment_id] = None
                     yield item, samples
 
             if self.flight is None:
@@ -680,7 +686,22 @@ class PipelineWorker:
                 # One packed segmentation pass shared by VAD and diarization; a
                 # None feature selects the unchanged serial VAD call for that unit.
                 decoded = list(decoded_units())
-                units = zip(decoded, self._flight_segment(decoded))
+
+                def language_blocked(unit):
+                    if self.config.words != 'parakeet':
+                        return False
+                    return language_class(frozen_languages.get(unit[0].segment_id)) != 'supported'
+
+                eligible = [unit for unit in decoded if not language_blocked(unit)]
+                eligible_ids = {item.segment_id for item, _ in eligible}
+                # A frozen language the word provider cannot serve can only end
+                # at the language barrier; such units never join the packed
+                # segmentation pass and take the serial VAD path instead.
+                flight_features = iter(self._flight_segment(eligible))
+                units = (
+                    (unit, None if unit[0].segment_id not in eligible_ids else next(flight_features))
+                    for unit in decoded
+                )
             for (item, samples), features in units:
                 stage = 'vad_windows'
                 try:
@@ -729,10 +750,8 @@ class PipelineWorker:
                         state['stream'] = self.stream_of(item)
                     except Exception:
                         state['stream'] = None  # No stream identity: no left context.
-                    try:
-                        state['stt_language'] = self.language_of(item)
-                    except Exception:
-                        state['stt_language'] = None
+                    # Resolved once at decode; a second language_of() pop reads None.
+                    state['stt_language'] = frozen_languages.get(item.segment_id)
                     if self.config.words == 'parakeet':
                         # A new-admission rollback cannot revoke the quality
                         # boundary for audio already in this worker's custody.
