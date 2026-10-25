@@ -91,11 +91,6 @@ def modules():
     gh_releases_mod.get_omi_github_releases = MagicMock(return_value=[])
     gh_releases_mod.extract_key_value_pairs = _parse_kv
 
-    # Goal sanitization now lives in its pure canonical model module. Keep
-    # unfaked model leaves importable while retaining explicit conversation fakes.
-    models_pkg = _empty_pkg("models")
-    models_pkg.__path__ = [str(BACKEND_DIR / "models")]
-
     fakes = {
         "utils": _empty_pkg("utils"),
         "utils.llm": _empty_pkg("utils.llm"),
@@ -103,7 +98,7 @@ def modules():
         "utils.wrapped": _empty_pkg("utils.wrapped"),
         "utils.conversations": _empty_pkg("utils.conversations"),
         "database": _empty_pkg("database"),
-        "models": models_pkg,
+        "models": _empty_pkg("models"),
         "routers": _empty_pkg("routers"),
         "utils.generated_compute": generated_compute_mod,
         "database.goals": goals_db_mod,
