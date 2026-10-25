@@ -789,6 +789,44 @@ def _verify_outcome(reason: str) -> str:
     return outcome if outcome in _VERIFY_OUTCOMES else 'error'
 
 
+async def _audio_enrollment_guard(uid: str, required: bool) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    if not required:
+        return None, None
+    guard = await run_blocking(db_executor, auto_enroll_db.audio_guard, uid)
+    if not auto_enroll.retained(guard):
+        return guard, 'disabled'
+    if auto_enroll.unit(guard.get('speaker_embedding')) is None:
+        return guard, 'rejected_embedding'
+    return guard, None
+
+
+def _audio_enrollment_allows(guard: Optional[Dict[str, Any]], embedding: List[float]) -> bool:
+    return guard is None or auto_enroll.audio_allowed(guard, embedding, guard.get(auto_enroll_db.PRIVACY_VERSION, 0))
+
+
+def _audio_enrollment_kwargs(guard: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    return {'enrollment_privacy_version': guard.get(auto_enroll_db.PRIVACY_VERSION, 0)} if guard is not None else {}
+
+
+def _audio_source_retained(required: bool, conversation: Dict[str, Any]) -> bool:
+    return not required or conversation.get('private_cloud_sync_enabled') is True
+
+
+async def _person_sample_embedding(
+    wav_bytes: bytes, guard: Optional[Dict[str, Any]]
+) -> Tuple[Optional[List[float]], str]:
+    try:
+        embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
+    except Exception:
+        return None, 'embedding_failed'
+    embedding_list = embedding.flatten().tolist()
+    if not embedding_list or not np.isfinite(embedding).all() or not np.any(embedding):
+        return None, 'embedding_failed'
+    if not _audio_enrollment_allows(guard, embedding_list):
+        return None, 'rejected_embedding'
+    return embedding_list, 'stored'
+
+
 async def extract_speaker_samples(
     uid: str,
     person_id: str,
@@ -810,16 +848,11 @@ async def extract_speaker_samples(
     outcome = 'error'
     person: Optional[Dict[str, Any]] = None
     clean_seconds = 0.0
-    enrollment_guard = None
     try:
-        if require_owner_exclusion:
-            enrollment_guard = await run_blocking(db_executor, auto_enroll_db.audio_guard, uid)
-            if not auto_enroll.retained(enrollment_guard):
-                outcome = 'disabled'
-                return outcome
-            if auto_enroll.unit(enrollment_guard.get('speaker_embedding')) is None:
-                outcome = 'rejected_embedding'
-                return outcome
+        enrollment_guard, guard_outcome = await _audio_enrollment_guard(uid, require_owner_exclusion)
+        if guard_outcome:
+            outcome = guard_outcome
+            return outcome
         # The user can turn off saving other people's voices; this is the one choke
         # point every teaching path (tag sheet, tag prompts, live socket) reaches.
         settings = await run_blocking(db_executor, voice_profiles_db.get_voice_profile_settings, uid)
@@ -840,7 +873,7 @@ async def extract_speaker_samples(
         if not conversation:
             outcome = 'conversation_missing'
             return outcome
-        if require_owner_exclusion and conversation.get('private_cloud_sync_enabled') is not True:
+        if not _audio_source_retained(require_owner_exclusion, conversation):
             outcome = 'disabled'
             return outcome
 
@@ -1109,21 +1142,9 @@ async def extract_speaker_samples(
 
         # Complete embedding work before replacing anything. A failed provider
         # call leaves the prior profile intact and allows a later retry.
-        try:
-            embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
-        except Exception:
-            outcome = 'embedding_failed'
-            return outcome
-        embedding_list = embedding.flatten().tolist()
-        if not embedding_list or not np.isfinite(embedding).all() or not np.any(embedding):
-            outcome = 'embedding_failed'
-            return outcome
-        if enrollment_guard is not None and not auto_enroll.audio_allowed(
-            enrollment_guard,
-            embedding_list,
-            enrollment_guard.get(auto_enroll_db.PRIVACY_VERSION, 0),
-        ):
-            outcome = 'rejected_embedding'
+        embedding_list, embedding_outcome = await _person_sample_embedding(wav_bytes, enrollment_guard)
+        if embedding_list is None:
+            outcome = embedding_outcome
             return outcome
         path = await run_blocking(
             storage_executor, upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
@@ -1141,11 +1162,7 @@ async def extract_speaker_samples(
             contributing_ids,
             speech_seconds=clean_seconds,
             expected_receipt_generation=receipt.get('generation', 0),
-            **(
-                {'enrollment_privacy_version': enrollment_guard.get(auto_enroll_db.PRIVACY_VERSION, 0)}
-                if enrollment_guard is not None
-                else {}
-            ),
+            **_audio_enrollment_kwargs(enrollment_guard),
         )
         if old_samples is None:
             await run_blocking(storage_executor, delete_sample_from_storage, path)

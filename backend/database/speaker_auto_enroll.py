@@ -8,7 +8,7 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client, run_transactional
 from database.legal_holds import external_write_fence
-from database.speaker_profile_authority import _current_source
+from database.speaker_profile_authority import current_source
 from utils.speakers import auto_enroll as policy
 from utils.stt.voiceprints import usable_person_voiceprint
 
@@ -62,7 +62,7 @@ def publish(
     requested: list,
     evidence: dict,
     expected_updated_at: Any,
-    generation: int,
+    generation: int | None,
     *,
     expected_privacy_version: int = 0,
     firestore_client: Any = None,
@@ -90,7 +90,7 @@ def publish(
                 or raw_source.get('private_cloud_sync_enabled') is not True
             ):
                 return False
-            authorized = _current_source(transaction, user, uid, conversation_id, generation)
+            authorized = current_source(transaction, user, uid, conversation_id, generation)
             if authorized is None:
                 return False
             segments, receipt = authorized
@@ -192,11 +192,18 @@ def retract_conversation(uid: str, conversation_id: str, *, firestore_client: An
         row = source.get(transaction=transaction).to_dict()
         if not row:
             return
+        source_ids = {conversation_id, *(row.get('sync_merged_from') or [])}
+        people = set(row.get(OWNER_INDEX) or [])
+        if len(source_ids) > 1:
+            # Donor cleanup is best-effort upstream. Revoke every immutable
+            # source even if a donor row/index was already removed by an old writer.
+            owner = user.get(transaction=transaction).to_dict() or {}
+            people.update(owner.get(OWNER_INDEX) or [])
         changes = []
-        for pid in row.get(OWNER_INDEX) or []:
+        for pid in sorted(people):
             ref = user.collection('people').document(pid)
             person = ref.get(transaction=transaction).to_dict() or {}
-            change = policy.retract(uid, pid, person.get(policy.POOL_FIELD), [conversation_id])
+            change = policy.retract(uid, pid, person.get(policy.POOL_FIELD), source_ids)
             if change:
                 changes.append((ref, change))
         for ref, change in changes:

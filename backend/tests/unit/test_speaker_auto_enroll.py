@@ -188,6 +188,14 @@ def test_independent_manual_audio_replacement_cannot_be_shadowed_by_old_pool():
     assert usable_person_voiceprint(person, uid=UID, auto_enroll_allowed=True) == replacement
 
 
+def test_retraction_clears_opaque_pool_so_key_recovery_cannot_resurrect_it():
+    blob = p.seal('old-key-owner', PID, [contribution(at=NOW.timestamp())])
+    assert p.open_pool(UID, PID, blob) == []
+    update = p.retract(UID, PID, blob, [CID], ['s0'])
+    assert update[p.POOL_FIELD] != blob
+    assert p.open_pool(UID, PID, update[p.POOL_FIELD]) == []
+
+
 def test_pool_caps_decay_expiration_refresh_and_incompatible_replacement():
     now = NOW.timestamp()
     entries = []
@@ -228,6 +236,22 @@ def test_publication_and_retraction_are_strict_transactions(store):
     db.retract_conversation(UID, CID, firestore_client=store)
     assert p.open_pool(UID, PID, store.rows[person_path][p.POOL_FIELD]) == []
     assert not publish(store)
+
+
+def test_survivor_deletion_retracts_donor_even_after_its_source_index_is_gone(store, monkeypatch):
+    monkeypatch.setenv('SPEAKER_AUTO_ENROLL_ENABLED', 'off')
+    store.rows[('users', UID)][db.OWNER_INDEX] = [PID]
+    store.rows[('users', UID, 'people', PID)][p.POOL_FIELD] = p.seal(
+        UID,
+        PID,
+        [contribution('premerge-donor', NOW.timestamp())],
+    )
+    store.rows[('users', UID, 'conversations', CID)]['sync_merged_from'] = ['premerge-donor']
+    # There was no post-merge tag on the survivor; its own index is empty.
+    # Upstream donor deletion may have failed or removed metadata without this pool.
+    db.retract_conversation(UID, CID, firestore_client=store)
+    assert p.open_pool(UID, PID, store.rows[('users', UID, 'people', PID)][p.POOL_FIELD]) == []
+    assert store.rows[('users', UID, 'conversations', CID)]['deleted'] is True
 
 
 @pytest.mark.parametrize(

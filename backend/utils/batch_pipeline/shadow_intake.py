@@ -16,7 +16,7 @@ from database.batch_pipeline_shadow import ShadowStore
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.intake import artifacts_for
+from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking, start_background_task
 from utils.sync.stage import current_stage

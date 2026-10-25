@@ -22,6 +22,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_wr
 from database.batch_pipeline_shadow_hook import mirror_refresh
 
 from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
+from utils.batch_pipeline.voice_centroids import deadline as voice_deadline, FINALIZED_TTL
 from utils.audio_cleanup_custody import cleanup_hold_reason
 
 ARTIFACT_RETENTION = timedelta(hours=24)
@@ -79,7 +80,7 @@ def register_batch_artifact(
     Caller repeats the privacy guard after storage IO. The pre-upload reference
     remains retryable during any storage/metadata crash, even if the job is gone.
     """
-    if kind not in {'audio', 'result', 'results'}:
+    if kind not in {'audio', 'result', 'results', 'voice_evidence'}:
 
         raise ValueError('unknown artifact kind')
     artifact_id = hashlib.sha256(f'{segment_id}\0{uri}'.encode()).hexdigest()
@@ -98,6 +99,32 @@ def register_batch_artifact(
         if shadow and job.get('owner_key') != privacy_owner_key(uid):
             raise BatchPrivacyBlocked('shadow_artifact_owner')
         binding = job.get('projection_binding') or {}
+        voice_write = kind == 'voice_evidence'
+        projected_ids = []
+        voice_due = None
+        if voice_write:
+            result = (
+                client.collection(f'{namespace}_results').document(segment_id).get(transaction=transaction).to_dict()
+                or {}
+            )
+            receipts = list((result.get('projection_parts') or {}).values()) or [result.get('projection') or {}]
+            projected_ids = [
+                r['conversation_id']
+                for r in receipts
+                if r.get('conversation_id') and (r.get('speaker_scope') or '').startswith('final:batch:')
+            ]
+            if (
+                not projected_ids
+                or binding.get('private_cloud_sync_enabled') is not False
+                or item is None
+                or datetime.now(timezone.utc).timestamp() + UPLOAD_PENDING_SECONDS >= voice_deadline(item.capture_at)
+            ):
+                raise PermissionError('voice evidence requires current sync-off batch projection')
+            voice_due = datetime.fromtimestamp(voice_deadline(item.capture_at), timezone.utc)
+            if result.get('expires_at'):
+                voice_due = min(voice_due, result['expires_at'] - RECEIPT_RETENTION + timedelta(seconds=FINALIZED_TTL))
+            if datetime.now(timezone.utc) + timedelta(seconds=UPLOAD_PENDING_SECONDS) >= voice_due:
+                raise PermissionError('voice evidence upload cannot finish within retention window')
         conversation_ids = [
             value
             for value in (
@@ -106,7 +133,7 @@ def register_batch_artifact(
                 getattr(item, 'conversation_id', None),
             )
             if value
-        ]
+        ] + projected_ids
         assert_batch_write_allowed(
             client, transaction, uid, conversation_ids=conversation_ids, expected_generation=expected_generation
         )
@@ -169,6 +196,7 @@ def register_batch_artifact(
             and not disposition_write
             and not redrive_write
             and not terminal_write
+            and not voice_write
         ):
             raise BatchPrivacyBlocked('result_lease_lost')
         if job and not shadow and job.get('owner_id') != uid:
@@ -190,6 +218,7 @@ def register_batch_artifact(
                     'duration_seconds': getattr(item, 'duration_seconds', None) or job.get('duration_seconds'),
                     'privacy_generation': expected_generation,
                     'write_pending_until': datetime.now(timezone.utc) + timedelta(seconds=UPLOAD_PENDING_SECONDS),
+                    **({'cleanup_after': voice_due} if voice_write else {}),
                     **(
                         {'shadow': True, 'cleanup_after': datetime.now(timezone.utc) + timedelta(hours=1)}
                         if shadow
@@ -238,6 +267,11 @@ def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) 
         touched.extend(('artifacts', artifact.id) for artifact in artifacts)
         for artifact in artifacts:
             metadata = artifact.to_dict() or {}
+            if metadata.get('kind') == 'voice_evidence':
+                if metadata.get('uri'):
+                    due = min(metadata['cleanup_after'], completed_at + timedelta(seconds=FINALIZED_TTL))
+                    transaction.update(artifact.reference, {'cleanup_after': due})
+                continue
             # The native audio artifact is a small reference manifest. Keep its
             # proof through the receipt window so a first late WAL can prove
             # coverage without reprocessing retained audio. GPU results keep
@@ -338,7 +372,7 @@ def cleanup_completed_artifacts(
                 if _flag_invalid_cleanup_receipt(artifact, now, invalid_reason):
                     touched.append(('artifacts', artifact.id))
                 continue
-            if not erasure_requested:
+            if not erasure_requested and data.get('kind') != 'voice_evidence':
                 capture_at, duration = data.get('capture_at'), data.get('duration_seconds')
                 if capture_at is None or duration is None:
                     job = (

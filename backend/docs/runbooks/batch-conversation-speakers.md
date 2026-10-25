@@ -5,10 +5,13 @@ For transcripts with `final:batch:` provenance (including retained
 `provider_speaker` scopes after resolution), `BATCH_CONVERSATION_SPEAKERS_ENABLED`
 defaults on. The existing batch admission cohort determines which new records
 reach this path. No additional account cohort or ASR call is introduced.
-It only runs for conversations with private-cloud sync enabled. Sync-off records
-retain the incumbent anonymous path; temporary voice-vector storage for those
-users requires a separate privacy/retention decision (lead ruling 846abb,
-2026-10-25 10:00Z).
+Retained-audio conversations use the existing audio/cache path. For sync-off
+records, [ADR-0004](../adr/0004-sync-off-speaker-centroids.md) approves temporary
+encrypted centroids under the additional default-on
+`BATCH_SYNC_OFF_CENTROIDS_ENABLED` kill switch. The
+[retention contract](../batch-voice-evidence-retention.md) defines their hard TTL,
+scheduled/account erasure and bounded extraction before audio cleanup. Expired
+or unavailable evidence leaves anonymous labels; no `audio_files` is required.
 
 The resolver reads only verified, generation-pinned audio windows and reuses its
 encrypted Omi-v2 embedding cache. It pools measured evidence within each original

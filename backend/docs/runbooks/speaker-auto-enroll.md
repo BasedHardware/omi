@@ -40,7 +40,10 @@ Publication re-reads the current receipt, transcript, person version, settings,
 conversation deletion intent and account/deletion gates inside one Firestore
 transaction. A correction retracts intersecting vector contributions in the
 same transaction as the new assignment. Conversation deletion fences further
-publication and retracts its contributions before hard cleanup. Person/account
+publication and retracts its contributions before hard cleanup. Survivor deletion
+also retracts every `sync_merged_from` donor through the bounded owner index,
+so a best-effort donor cleanup failure cannot leave a voice contribution behind.
+Person/account
 deletion removes the owning documents. Privacy opt-out removes indexed pools
 and updates person versions in the same transaction as the setting change.
 

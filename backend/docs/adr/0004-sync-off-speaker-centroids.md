@@ -1,15 +1,15 @@
 # 0004. Speaker evidence for sync-off batch units
 
-- Status: **Proposed** — pending the product owner's privacy/retention decision. No decision is recorded here.
+- Status: **Accepted** — David approved option 2 on 2026-10-25 ~14:45Z.
 - Date: 2026-10-25
 - Deciders: product owner (David). Split from the retained-audio fix by lead ruling `846abb` (10:00Z).
-- Owner: the lead, for the decision; the batch speakers lane (qualfix) for the design
+- Owner: lead for rollout; qualfix2 for implementation and qualification
 - Review by: 2026-10-27 (decision requested by 2026-10-26)
 
 ## Context
 
 Batch diarizes conversation-sized units separately. Cross-unit linking and owner
-naming (#23581, in review) reuse retained private-cloud audio, so they work only
+naming (#23581, merged and deployed 13:42Z) reuse retained private-cloud audio, so they work only
 for users with private-cloud sync on. For sync-off users, unit audio is ephemeral
 and cleaned up after processing, and their unit speakers stay anonymous. Linking
 them later needs some speaker evidence to outlive the audio. Voice embeddings are
@@ -33,8 +33,12 @@ permission to keep voice vectors.
 
 ## Decision
 
-None yet. Until a decision, sync-off behaviour is unchanged (option 1 in effect,
-not ratified).
+Option 2. Approval source: David's 2026-10-25 ~14:45Z instruction, recorded in
+the rollout brief `swarm/briefs/qualfix2-syncoff-centroids.md` and anx card
+`qualfix-sync-off-centroid-decision`. Implement in a separate PR with CI and a
+Luna privacy review; hand off unmerged. No production writes or deploy grant.
+The existing parent kill switch and default-on `BATCH_SYNC_OFF_CENTROIDS_ENABLED`
+sub-switch bound the existing admitted cohort.
 
 ## Consequences
 
@@ -43,6 +47,19 @@ not ratified).
   qualification must prove refusal after expiry and physical cleanup; legal-hold
   policy must be resolved first.
 
+Temporary vectors follow the approved hard TTL, including pending or failed
+processing. The audio incident-preservation hold applies to recoverable audio,
+not this optional derived evidence; it cannot extend vector retention. Existing
+batch cleanup has no separate legal-hold extension for this artifact. Account,
+conversation deletion and privacy-generation revocation remain authoritative.
+There is no new legal-hold override or configurable extension of the vector TTL.
+Creation also requires verified bucket metadata with soft delete disabled and no
+retention/default event hold; unknown or unreadable metadata abstains. The lead
+qualifies the existing bucket and runtime read permission before rollout. This
+PR makes no bucket or IAM changes.
+
 ## Implemented in
 
-Nothing. The decision is tracked on anx card `qualfix-sync-off-centroid-decision`.
+`utils/batch_pipeline/voice_centroids.py`, `voice_evidence.py`,
+`database/batch_voice_evidence.py`, and
+[retention and deletion contract](../batch-voice-evidence-retention.md).

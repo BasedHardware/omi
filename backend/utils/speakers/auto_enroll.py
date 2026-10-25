@@ -201,18 +201,28 @@ def seal(uid: str, person_id: str, entries: list) -> str:
     return base64.b64encode(nonce + AESGCM(derive_key(uid)).encrypt(nonce, payload, _aad(uid, person_id))).decode()
 
 
-def open_pool(uid: str, person_id: str, blob: Any) -> list:
+def _open_pool(uid: str, person_id: str, blob: Any) -> list | None:
     if not isinstance(blob, str) or len(blob) > 128 * 1024:
-        return []
+        return None
     try:
         raw = base64.b64decode(blob, validate=True)
         value = json.loads(AESGCM(derive_key(uid)).decrypt(raw[:12], raw[12:], _aad(uid, person_id)))
-        if value.get('v') != 1 or value.get('model') != MODEL or len(value['entries']) > MAX_CONTRIBUTIONS:
-            return []
+        if (
+            value.get('v') != 1
+            or value.get('model') != MODEL
+            or not isinstance(value.get('entries'), list)
+            or len(value['entries']) > MAX_CONTRIBUTIONS
+            or not all(isinstance(e, dict) for e in value['entries'])
+        ):
+            return None
         return value['entries']
     except Exception:
         # Authentication failure never returns ciphertext or a partial profile.
-        return []
+        return None
+
+
+def open_pool(uid: str, person_id: str, blob: Any) -> list:
+    return _open_pool(uid, person_id, blob) or []
 
 
 def active(entries: list, now: float) -> list:
@@ -253,7 +263,11 @@ def refresh(entries: list, contribution: dict, now: float) -> Any:
 
 
 def retract(uid: str, pid: str, blob: Any, conversations: Any, segments: Any = None) -> dict:
-    entries = open_pool(uid, pid, blob)
+    entries = _open_pool(uid, pid, blob)
+    if entries is None:
+        # Never let a temporary key/codec failure preserve opaque source data
+        # that would reappear after a successful deletion when decoding recovers.
+        return {POOL_FIELD: seal(uid, pid, [])} if blob else {}
     kept = [
         e
         for e in entries

@@ -218,7 +218,7 @@ async def redrive_dead(body: RedriveRequest):
 @router.post('/shadow-recover', include_in_schema=False)
 async def shadow_recover(body: RedriveRequest):
     from database.batch_pipeline_shadow import ShadowStore
-    from utils.batch_pipeline.intake import artifacts_for
+    from utils.batch_pipeline.artifact_policy import artifacts_for
     from utils.batch_pipeline.shadow_recovery import recover
 
     store = body.service().store

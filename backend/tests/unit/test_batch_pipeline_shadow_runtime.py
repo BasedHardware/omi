@@ -21,7 +21,7 @@ from utils.batch_pipeline.artifacts import ArtifactStore
 from utils.batch_pipeline.contracts import RecoveryWork, WorkResult, PoolCapacity, WorkItem, FailedWork
 from utils.batch_pipeline.shadow_worker import ShadowRunner
 from routers import batch_pipeline as router
-from utils.batch_pipeline import intake, shadow_recovery
+from utils.batch_pipeline import artifact_policy, shadow_recovery
 from utils.batch_pipeline import retention, shadow_intake
 from utils.batch_pipeline import compute_client
 from utils import cloud_tasks
@@ -240,7 +240,7 @@ async def test_disabled_upload_and_byok_have_no_io(monkeypatch):
 def test_private_http_recovery_writes_only_shadow_state(repository, monkeypatch):
     work = running(repository)
     monkeypatch.setattr(router.WorkerRequest, 'service', lambda self: SimpleNamespace(store=repository.store))
-    monkeypatch.setattr(intake, 'artifacts_for', lambda _: SimpleNamespace(fetch_audio=lambda _: b'audio'))
+    monkeypatch.setattr(artifact_policy, 'artifacts_for', lambda _: SimpleNamespace(fetch_audio=lambda _: b'audio'))
     original = shadow_recovery.recover
     provider = Mock(return_value={'words': [{'word': 'private transcript'}]})
     monkeypatch.setattr(
