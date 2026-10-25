@@ -60,6 +60,29 @@ COMPACTED_UNASSIGNED_WORDS = Counter(
     'Words outside every turn in persisted speech-only diarization results',
 )
 
+WORKER_COUNTERS = (
+    DIARIZATION_DECISIONS,
+    DIARIZATION_AUDIO_SECONDS,
+    COMPACTED_UNASSIGNED_UNITS,
+    COMPACTED_UNASSIGNED_WORDS,
+    UNIT_OUTCOME,
+    UNIT_SPEAKERS,
+    UNIT_TURNS,
+)
+
+
+def register_on(registry) -> None:
+    """Also expose this module's collectors on an explicit registry.
+
+    The dedicated worker serves /metrics from the CollectorRegistry built in
+    diarizer.batch_pipeline_runtime, not the prometheus_client default, so
+    default-registered counters are invisible from worker pods unless they are
+    registered here too (the historical omi_batch_pipeline_diarization_decisions
+    gap and the FP32-parity unit families).
+    """
+    for collector in WORKER_COUNTERS:
+        registry.register(collector)
+
 
 def record_decision(decision: str, *, unit_seconds: float = 0.0, diarized_seconds: float = 0.0) -> None:
     if decision not in DECISIONS:

@@ -392,6 +392,24 @@ def test_record_unit_diarization_swallows_observability_failures():
     record_unit_diarization('diarized', exploding_turns(), flight_batching=False)
 
 
+def test_gpu_skip_counters_register_on_the_worker_explicit_registry():
+    from prometheus_client import CollectorRegistry, generate_latest
+
+    from utils.batch_pipeline import gpu_skip_metrics
+
+    registry = CollectorRegistry()
+    gpu_skip_metrics.register_on(registry)
+    body = generate_latest(registry).decode()
+    for name in (
+        'omi_batch_pipeline_unit_speakers_total',
+        'omi_batch_pipeline_unit_speaker_turns_bucket',
+        'omi_batch_pipeline_unit_diarization_outcome_total',
+        'omi_batch_pipeline_diarization_decisions_total',
+        'omi_batch_pipeline_diarization_audio_seconds_total',
+    ):
+        assert name in body
+
+
 def test_process_batch_counts_diarized_unit_speakers_and_turns():
     before_speakers = _metric('omi_batch_pipeline_unit_speakers_total', {'speakers': '1', 'flight': 'off'})
     before_outcome = _metric('omi_batch_pipeline_unit_diarization_outcome_total', {'outcome': 'diarized'})
