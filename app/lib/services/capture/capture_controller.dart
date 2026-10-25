@@ -77,6 +77,7 @@ import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/services/wals/mobile_standard_batch.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/local_preview_admission.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/enums.dart';
@@ -163,82 +164,23 @@ class CaptureController extends ChangeNotifier
       return;
     }
     _mobileStandardBatch = lane;
-    lane.authorize(_mobileStandardBatchAllowed, localPreview: _localPreviewAdmitted);
+    lane.authorize(_mobileStandardBatchAllowed, localPreview: _localPreview.admitted);
     lifetime.listenTo(lane.visibility, lane.visibilityChanged);
     lifetime.own(lane.close);
   }
 
-  // ---- Mobile local preview (on-device live preview for batch-lane sessions) ----
-  LivePreviewController? _livePreview;
-
-  /// The display-only on-device preview, when this platform offers one. Its
-  /// text is never part of [segments].
-  LivePreviewController? get livePreview => _livePreview;
-
-  /// The server admitted this socket session to the local-preview lane: every
-  /// pendant frame is journaled for batch and the live surface shows the
-  /// on-device preview. Cleared on socket close/reconnect until re-granted.
-  bool _localPreviewAdmitted = false;
-  bool get localPreviewAdmitted => _localPreviewAdmitted;
-
-  /// Set while a socket that declared local_preview waits for the server's
-  /// verdict (`ready` / `mobile_batch_admission`). Pendant frames stay WAL-only
-  /// meanwhile, because any audio reaching an admitted session opens the
-  /// deferred cloud stream. Bounded by [_localPreviewVerdictHold].
-  DateTime? _localPreviewVerdictPendingSince;
-  static const _localPreviewVerdictHold = Duration(seconds: 10);
-  String _livePreviewLanguage = 'multi';
-  BleAudioCodec _livePreviewPendantCodec = BleAudioCodec.opus;
+  // Mobile local preview (lib/services/live_preview/README.md): display-only, never in [segments].
+  late final _localPreview = LocalPreviewAdmission(
+      now: _now,
+      onChanged: () {
+        if (!_captureControllerDisposed) notifyListeners();
+      });
+  LivePreviewController? get livePreview => _localPreview.preview;
+  bool get localPreviewAdmitted => _localPreview.admitted;
 
   void installLivePreview(LivePreviewController preview) {
-    if (_captureControllerDisposed) {
-      preview.dispose();
-      return;
-    }
-    _livePreview = preview;
-    void onPendant(List<int> packet) => preview.onPendantPacket(packet, _livePreviewPendantCodec);
-    addDeviceAudioListener(onPendant);
-    addPhoneMicAudioListener(preview.onPhonePcm);
-    lifetime.own(() {
-      removeDeviceAudioListener(onPendant);
-      removePhoneMicAudioListener(preview.onPhonePcm);
-      if (identical(_livePreview, preview)) _livePreview = null;
-      preview.dispose();
-    });
-  }
-
-  void _setLocalPreviewAdmitted(bool admitted) {
-    final changed = _localPreviewAdmitted != admitted;
-    _localPreviewAdmitted = admitted;
-    if (changed && !_captureControllerDisposed) notifyListeners();
-    final preview = _livePreview;
-    if (preview == null) return;
-    if (admitted) {
-      preview.admit(language: _livePreviewLanguage);
-    } else {
-      preview.revoke();
-    }
-  }
-
-  void _endLivePreviewCapture() {
-    _localPreviewAdmitted = false;
-    _localPreviewVerdictPendingSince = null;
-    _livePreview?.endCapture();
-  }
-
-  /// Pendant frames that must not reach a local-preview socket yet. They still
-  /// go to the ordinary safety WAL, so nothing is lost: the verdict window
-  /// (bounded) and the journal's first-use warm-up.
-  bool _holdPendantAudioFromSocket() {
-    final socket = _socket;
-    if (socket == null || !socket.localPreview) return false;
-    final pendingSince = _localPreviewVerdictPendingSince;
-    if (pendingSince != null) {
-      if (_now().difference(pendingSince) < _localPreviewVerdictHold) return true;
-      _localPreviewVerdictPendingSince = null;
-      return false;
-    }
-    return _localPreviewAdmitted && (_mobileStandardBatch?.warmingUp ?? false);
+    if (_captureControllerDisposed) return preview.dispose();
+    lifetime.own(_localPreview.install(preview, _deviceAudioListeners, _phoneMicAudioListeners));
   }
 
   final CaptureLivenessWatchdog _livenessWatchdog = CaptureLivenessWatchdog();
@@ -304,37 +246,13 @@ class CaptureController extends ChangeNotifier
   void Function(List<int> pcm)? phoneMicAudioTap;
   void Function(List<int> packet)? deviceAudioTap;
 
-  // Additional tap listeners (the live preview). The single slots above stay
-  // onboarding's, unchanged; listeners receive the same snapshot after them.
-  final List<void Function(List<int> pcm)> _phoneMicAudioListeners = [];
-  final List<void Function(List<int> packet)> _deviceAudioListeners = [];
-
+  // Extra tap listeners (the live preview); the slots above stay onboarding's.
+  final _phoneMicAudioListeners = AudioTapListeners();
+  final _deviceAudioListeners = AudioTapListeners();
   void addPhoneMicAudioListener(void Function(List<int> pcm) listener) => _phoneMicAudioListeners.add(listener);
   void removePhoneMicAudioListener(void Function(List<int> pcm) listener) => _phoneMicAudioListeners.remove(listener);
   void addDeviceAudioListener(void Function(List<int> packet) listener) => _deviceAudioListeners.add(listener);
   void removeDeviceAudioListener(void Function(List<int> packet) listener) => _deviceAudioListeners.remove(listener);
-
-  void _emitPhoneMicAudio(List<int> pcm) {
-    phoneMicAudioTap?.call(pcm);
-    for (final listener in List.of(_phoneMicAudioListeners)) {
-      try {
-        listener(pcm);
-      } catch (e) {
-        Logger.debug('[CaptureProvider] phone-mic audio listener failed: $e');
-      }
-    }
-  }
-
-  void _emitDeviceAudio(List<int> packet) {
-    deviceAudioTap?.call(packet);
-    for (final listener in List.of(_deviceAudioListeners)) {
-      try {
-        listener(packet);
-      } catch (e) {
-        Logger.debug('[CaptureProvider] device audio listener failed: $e');
-      }
-    }
-  }
 
   /// Set by a first-run step that explains a short capture itself: holds the generic notice.
   bool suppressShortCaptureNotice = false;
@@ -623,7 +541,7 @@ class CaptureController extends ChangeNotifier
     await _phoneMic.start(
       onByteReceived: (bytes) {
         if (!_admitsCapture(revision)) return;
-        _emitPhoneMicAudio(bytes);
+        _phoneMicAudioListeners.emit(bytes, phoneMicAudioTap);
         _recordingTelemetry.observeAudio(bytes.length);
         if (bytes.isNotEmpty) _livenessWatchdog.observeFrame(_now());
         final frames = _activeSource?.processBytes(bytes) ?? [];
@@ -1286,7 +1204,7 @@ class CaptureController extends ChangeNotifier
   void _rollCaptureSession(String identity) {
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
-    _endLivePreviewCapture();
+    _localPreview.end();
     _captureEvidenceIdentity.reset();
     _sessionOwner?.replaceSession(identity);
   }
@@ -1745,7 +1663,7 @@ class CaptureController extends ChangeNotifier
     final customSttConfig = _preferences.customSttConfig;
     final sessionToken = _sessionOwner?.token;
     // Read the kill switch alongside the STT decision, not after it.
-    final previewAllowed = _livePreview?.requestAllowed() ?? Future.value(false);
+    final previewAllowed = _localPreview.preview?.requestAllowed() ?? Future.value(false);
     final decision = await SttModeResolver.instance.decide(persistedCustomStt: customSttConfig, codec: codec);
     if (!_captureSessionIsCurrent(sessionToken) || _deviceIdentityStale(deviceRevision)) return null;
 
@@ -1799,7 +1717,7 @@ class CaptureController extends ChangeNotifier
         deviceOnboardingProvider?.isOnboardingActive != true &&
         await previewAllowed.catchError((Object _) => true);
     if (!_captureSessionIsCurrent(sessionToken) || _deviceIdentityStale(deviceRevision)) return null;
-    _livePreviewLanguage = language;
+    _localPreview.language = language;
 
     if (_fenceUplinkForSync()) return null;
     final socket = await openConversationSocket(
@@ -1842,8 +1760,7 @@ class CaptureController extends ChangeNotifier
     }
     if (!identical(_socket, socket)) {
       _socket = socket;
-      if (_localPreviewAdmitted) _setLocalPreviewAdmitted(false);
-      _localPreviewVerdictPendingSince = socket.localPreview ? _now() : null;
+      _localPreview.socketPublished(declared: socket.localPreview);
       _socket?.subscribe(this, this);
       _transcriptServiceReady = true;
       _beginWedgeSession(socket);
@@ -2192,14 +2109,14 @@ class CaptureController extends ChangeNotifier
     if (!_admitsCapture(revision)) return false;
     Logger.debug('streamAudioToWs in capture_provider');
     _startMetricsTracking();
-    _livePreviewPendantCodec = codec;
+    _localPreview.pendantCodec = codec;
     final subscription = await _getBleAudioBytesListener(
       deviceId,
       onAudioBytesReceived: (List<int> value) {
         if (_captureControllerDisposed || !_admitsCapture(revision) || _recordingDevice?.id != deviceId) return;
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 3) return;
-        _emitDeviceAudio(snapshot);
+        _deviceAudioListeners.emit(snapshot, deviceAudioTap);
         CaptureContinuityMonitor.instance.onFrameInCustody();
 
         _metrics.addBleBytes(snapshot.length);
@@ -2233,7 +2150,7 @@ class CaptureController extends ChangeNotifier
             realtimeConsumer: OnDeviceTranscriptionController.instance.shouldKeepAudioLocal ||
                 // Command audio is already copied into _commandBytes above; a
                 // local-preview session keeps journaling it like any frame.
-                (_voiceCommandSession != null && !_localPreviewAdmitted) ||
+                (_voiceCommandSession != null && !_localPreview.admitted) ||
                 deviceOnboardingProvider?.isOnboardingActive == true ||
                 _socket?.customSttMode == true ||
                 _preferences.batchModeEnabled ||
@@ -2273,7 +2190,9 @@ class CaptureController extends ChangeNotifier
         // Send WS
         if (_socket?.state == SocketServiceState.connected &&
             !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal &&
-            !_holdPendantAudioFromSocket()) {
+            !_localPreview.holdPendant(
+                socketDeclared: _socket?.localPreview == true,
+                journalWarmingUp: _mobileStandardBatch?.warmingUp ?? false)) {
           final socketPayload = blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot;
           if (positionedFrame?.captureRoot != null && positionedFrame!.payload.length == socketPayload.length) {
             _socket?.sendEvidenceFrame(positionedFrame);
@@ -2727,7 +2646,7 @@ class CaptureController extends ChangeNotifier
   void clearUserData() {
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
-    _endLivePreviewCapture();
+    _localPreview.end();
     _captureEvidenceIdentity.reset();
     segments = [];
     photos = [];
@@ -2831,7 +2750,7 @@ class CaptureController extends ChangeNotifier
 
   void updateRecordingState(RecordingState state) {
     recordingState = state;
-    if (state == RecordingState.stop) _endLivePreviewCapture();
+    if (state == RecordingState.stop) _localPreview.end();
     if (state == RecordingState.deviceRecord) _reconcileTranscriptionKeepAlive();
     notifyListeners();
   }
@@ -2962,7 +2881,7 @@ class CaptureController extends ChangeNotifier
       await _phoneMic.start(
         onByteReceived: (bytes) {
           if (!_admitsCapture(revision)) return;
-          _emitPhoneMicAudio(bytes);
+          _phoneMicAudioListeners.emit(bytes, phoneMicAudioTap);
           _recordingTelemetry.observeAudio(bytes.length);
           if (bytes.isNotEmpty) _livenessWatchdog.observeFrame(_now());
           // Process through AudioSource for frame splitting and sync key generation
@@ -3324,8 +3243,7 @@ class CaptureController extends ChangeNotifier
   void onClosed([int? closeCode]) {
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
-    _localPreviewVerdictPendingSince = null;
-    _setLocalPreviewAdmitted(false);
+    _localPreview.revoke();
     _keepAliveEpoch++;
     _socketCloseQueued = true;
     _transcriptServiceReady = false;
@@ -3796,11 +3714,10 @@ class CaptureController extends ChangeNotifier
       if (event.status == 'ready' || event.status == 'mobile_batch_admission') {
         // Local preview counts only on a socket that asked for it and with a
         // preview model installed; absent/false is today's cloud transcript.
-        final localPreview = event.localPreview && _socket?.localPreview == true && _livePreview != null;
-        _localPreviewVerdictPendingSince = null;
+        final localPreview =
+            _localPreview.verdict(granted: event.localPreview, socketDeclared: _socket?.localPreview == true);
         _mobileStandardBatchAllowed = event.mobileStandardBatch;
         _mobileStandardBatch?.authorize(event.mobileStandardBatch, localPreview: localPreview);
-        if (localPreview != _localPreviewAdmitted) _setLocalPreviewAdmitted(localPreview);
         if (event.status == 'mobile_batch_admission') return;
       }
       // Handle freemium threshold event via status field
