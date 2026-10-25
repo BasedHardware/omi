@@ -936,6 +936,11 @@ class TranscriptProcessor:
                 self, '_legacy_retry_until', 0.0
             ):
                 continue
+            # Revoke cached derived identities before another batch can project
+            # them, including voices which are already mapped and never requeued.
+            refresh_enrollment = getattr(self.host.speakers, 'refresh_enrollment_authority', None)
+            if refresh_enrollment is not None and (self.segment_buffer or self.host.state.speaker_map_dirty):
+                await refresh_enrollment()
             if not self.segment_buffer and not self.photo_buffer:
                 if self.host.state.speaker_map_dirty and time.monotonic() >= self._flush_backoff_until:
                     try:

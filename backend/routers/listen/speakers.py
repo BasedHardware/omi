@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from config.speaker_prior import pinned_speaker_prior_enabled
 from models.transcript_segment import SpeakerIdentityStatus
 from database.firestore_read_metrics import FirestoreReadSite
+from database import speaker_auto_enroll as auto_enroll_db
 from utils.audio import AudioRingBuffer
 from utils.live_speaker_collapse import LiveSpeakerCollapseMonitor
 from utils.live_owner_continuity import OwnerContinuity, FRESH_SECONDS
@@ -30,6 +31,8 @@ from utils.speaker_sample import download_sample_audio
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.manual_speaker_assignments import manual_owner_reserved, manual_rejected_speakers
 from utils.stt.owner_profile import load_owner_embedding, validated_embedding
+from utils.stt.voiceprints import usable_person_voiceprint
+from utils.speakers import auto_enroll
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
 from utils.stt.speaker_match import (
     select_speaker_match,
@@ -555,13 +558,19 @@ class SpeakerMatcher:
             if not await self.named_speakers_allowed():
                 return
             people = await self.host.persistence.call(user_db.get_people, self.host.request.uid)
+            enrollment_allowed = (
+                await self.host.persistence.call(auto_enroll_db.context, self.host.request.uid)
+                if any(p.get(auto_enroll.POOL_FIELD) for p in people)
+                else {}
+            )
             for person in people:
                 if person.get('speech_samples'):
                     person = await maybe_migrate_person_samples(self.host.request.uid, person)
-                stored = person.get('speaker_embedding')
+                enrolled = auto_enroll.usable(self.host.request.uid, person, enrollment_allowed)
+                stored = enrolled or usable_person_voiceprint(person)
                 verified_samples = bool(person.get('speech_samples')) and (person.get('speech_samples_version', 1) >= 3)
                 vector: Optional[Any] = None
-                if verified_samples:
+                if enrolled is not None or verified_samples:
                     if stored:
                         vector = validated_embedding(stored)
                     else:
@@ -574,6 +583,14 @@ class SpeakerMatcher:
                         'embedding': vector,
                         'name': person['name'],
                         'pinned': person.get('pinned') is True,
+                        **(
+                            {
+                                'auto_enrolled': True,
+                                **auto_enroll.cache_authority(self.host.request.uid, person, enrollment_allowed),
+                            }
+                            if enrolled is not None
+                            else {}
+                        ),
                     }
         except Exception as error:
             logger.error('Speaker ID embeddings load failed type=%s', type(error).__name__)
@@ -895,6 +912,24 @@ class SpeakerMatcher:
             return replace(decision, person_id=None)
         return decision
 
+    async def refresh_enrollment_authority(self) -> None:
+        enrolled = {pid: row for pid, row in self.person_embeddings.items() if row.get('auto_enrolled')}
+        if not enrolled:
+            return
+        try:
+            context = await self.host.persistence.call(auto_enroll_db.context, self.host.request.uid)
+        except Exception as error:
+            logger.warning('Speaker ID enrollment authority unavailable type=%s', type(error).__name__)
+            context = {}
+        invalid = {pid for pid, row in enrolled.items() if not auto_enroll.cached_authorized(pid, row, context)}
+        for pid in invalid:
+            self.person_embeddings.pop(pid, None)
+        for voice, (pid, _) in list(self.speaker_to_person.items()):
+            if pid in invalid and self._mapping_origin.get(voice) == 'automatic':
+                self._retract_rejected_voice(voice, self._voice_segments.get(voice))
+                self.host.state.speaker_map_dirty = True
+                self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
+
     async def _final_authority(
         self,
         receipt: Mapping[str, Any],
@@ -914,6 +949,7 @@ class SpeakerMatcher:
             authority, snapshots = await self.continuity.authorize_roster(
                 self._profile_conversation_id or '', rollover_donor=rollover_donor
             )
+            await self.refresh_enrollment_authority()
             if snapshots is not None:
                 current = snapshots.get(self._profile_conversation_id or '')
                 unavailable = current is None
@@ -927,6 +963,7 @@ class SpeakerMatcher:
                     unavailable=unavailable,
                 )
             return FinalSpeakerAuthority(authority, receipt, unavailable=receipt_unavailable)
+        await self.refresh_enrollment_authority()
         return FinalSpeakerAuthority((False, set()), receipt, unavailable=receipt_unavailable)
 
     def _allow_authority_publication(
@@ -961,6 +998,8 @@ class SpeakerMatcher:
                 centroid = mean_embedding([vector for vector, _ in evidence])
             distances = {}
             for person_id, value in self.person_embeddings.items():
+                if value.get('auto_enrolled') and not auto_enroll.enabled():
+                    continue
                 vector = validated_embedding(value.get('embedding'))
                 if vector is not None and vector.size == centroid.size:
                     distances[person_id] = compare_embeddings(centroid, vector)
@@ -1123,6 +1162,8 @@ class SpeakerMatcher:
             centroid = mean_embedding([embedding for embedding, _ in evidence]) if len(evidence) > 1 else query
             distances = {}
             for person_id, value in self.person_embeddings.items():
+                if value.get('auto_enrolled') and not auto_enroll.enabled():
+                    continue
                 vector = validated_embedding(value.get('embedding'))
                 if vector is not None and vector.size == centroid.size:
                     distances[person_id] = compare_embeddings(centroid, vector)

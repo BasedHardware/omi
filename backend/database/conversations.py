@@ -1,4 +1,4 @@
-from database import conversation_visibility_counts, processing_backlog
+from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll
 from utils.conversations import summary_delivery, lifecycle_clocks
 from config.refactor_modes import serving_for, shadow_or_serve
 import copy
@@ -2393,6 +2393,7 @@ def delete_conversation(uid, conversation_id):
     the account-deletion wipe, which walks *existing* documents and never sees a deleted parent.
     Children are enumerated live, so a subcollection added later is purged too.
     """
+    speaker_auto_enroll.retract_conversation(uid, conversation_id, firestore_client=db)
     try:
         # A deleted capture must not stay listed as a member of its event.
         leave_capture_group(uid, conversation_id, sticky=False, close=True, firestore_client=db)

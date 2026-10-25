@@ -94,6 +94,8 @@ from utils.conversations.sync_off_speakers import resolve_sync_off
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
 from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.voiceprints import usable_person_voiceprint
+from utils.speakers import auto_enroll
+from database import speaker_auto_enroll as auto_enroll_db
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +137,11 @@ def _max_new_embeddings() -> int:
 CacheEntries = Dict[str, Tuple[float, np.ndarray]]
 
 
-def encode_cache(entries: CacheEntries, evidence_seconds: Optional[Mapping[str, float]] = None) -> bytes:
+def encode_cache(
+    entries: CacheEntries,
+    evidence_seconds: Optional[Mapping[str, float]] = None,
+    enrollment_bindings: Optional[Mapping] = None,
+) -> bytes:
     ids = list(entries)
     optional_header = {}
     try:
@@ -154,6 +160,15 @@ def encode_cache(entries: CacheEntries, evidence_seconds: Optional[Mapping[str, 
             'ids': ids,
             'durations': [round(entries[i][0], 3) for i in ids],
             'dim': int(entries[ids[0]][1].size) if ids else 0,
+            **(
+                {
+                    'enrollment_model': auto_enroll.MODEL,
+                    'enrollment_binding_version': 2,
+                    'enrollment_bindings': enrollment_bindings,
+                }
+                if enrollment_bindings is not None and ids and all(entries[i][1].size == auto_enroll.DIM for i in ids)
+                else {}
+            ),
         }
     ).encode()
     matrix = np.vstack([entries[i][1].reshape(1, -1) for i in ids]).astype('<f2').tobytes() if ids else b''
@@ -207,6 +222,9 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
         return prints
     try:
         people = users_db.get_people(uid)
+        enrollment_allowed = (
+            auto_enroll_db.context(uid) if any(p.get(auto_enroll.POOL_FIELD) for p in people or []) else {}
+        )
         reuse_people_for_spellings(uid, people)
     except Exception as error:
         logger.warning(
@@ -214,7 +232,11 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
         )
         return prints
     for person in people or []:
-        embedding = validated_embedding(usable_person_voiceprint(person))
+        embedding = validated_embedding(
+            usable_person_voiceprint(person, uid=uid, auto_enroll_allowed=enrollment_allowed)
+            if enrollment_allowed
+            else usable_person_voiceprint(person)
+        )
         if (
             embedding is not None
             and person.get('id')
@@ -249,7 +271,9 @@ def _inward_sample(bound: float, origin: float, *, exclusive_end: bool) -> int:
     return math.floor(offset) if exclusive_end else math.ceil(offset)
 
 
-def _verified_clip(session: AudioChunkReadSession, start: float, end: float) -> Tuple[Optional[bytes], str]:
+def _verified_clip(
+    session: AudioChunkReadSession, start: float, end: float, *, windows: Optional[List[Tuple[float, float]]] = None
+) -> Tuple[Optional[bytes], str]:
     """Assemble at most 15s from the invocation's generation-pinned decoded cache.
 
     No downloads, padding, or interpolation. Only a tolerance-sized leading or
@@ -284,6 +308,8 @@ def _verified_clip(session: AudioChunkReadSession, start: float, end: float) -> 
         last_sample = min(len(pcm) // 2, _inward_sample(stop, chunk_start, exclusive_end=True))
         last_sample = min(last_sample, first_sample + remaining_samples)
         piece = pcm[first_sample * 2 : last_sample * 2]
+        if piece and windows is not None:
+            windows.append((chunk_start + first_sample / SAMPLE_RATE, chunk_start + last_sample / SAMPLE_RATE))
         pieces.append(piece)
         remaining_samples -= len(piece) // 2
         position = stop
@@ -308,6 +334,7 @@ def _embed_missing(
     session: Optional[AudioChunkReadSession] = None,
     diagnostics: Optional[EmbeddingDiagnostics] = None,
     evidence_seconds: Optional[Dict[str, float]] = None,
+    measured_windows: Optional[Dict[str, Tuple[float, float]]] = None,
     max_attempts: Optional[int] = None,
 ) -> Tuple[int, str]:
     """Embed ``pending`` segments from stored audio into ``cache``; returns (count, stop reason)."""
@@ -389,14 +416,16 @@ def _embed_missing(
                         continue
                     if segment.id is not None:
                         base_ids.add(segment.id)
-                yield segment, clip
+                actual_start = chunk_start + max(0, int(round((begin - chunk_start) * SAMPLE_RATE))) / SAMPLE_RATE
+                yield segment, clip, (actual_start, actual_start + len(clip) / (SAMPLE_RATE * 2))
         if session is not None:
             for segment in pending:
                 if segment.id in base_ids:
                     continue
                 if time.monotonic() > deadline or not session.in_budget():
                     return
-                clip, reason = _verified_clip(session, *window_of(segment))
+                windows: List[Tuple[float, float]] = []
+                clip, reason = _verified_clip(session, *window_of(segment), windows=windows)
                 if clip is None:
                     diagnostics.clip_skips += 1
                     if reason == 'clip_too_short':
@@ -404,14 +433,16 @@ def _embed_missing(
                     elif reason == 'chunk_boundary':
                         diagnostics.chunk_boundary += 1
                     continue
-                yield segment, clip
+                if not windows:
+                    continue
+                yield segment, clip, (windows[0][0], windows[-1][1])
 
     with httpx.Client(timeout=EMBED_TIMEOUT_SECONDS) as client:
         if session is not None and time.monotonic() > deadline:
             return embedded, 'budget'
         if session is not None and limit <= 0:
             return embedded, 'max_embeddings'
-        for segment, clip in clips():
+        for segment, clip, measured_window in clips():
             segment_id = segment.id
             if segment_id is None or segment_id in done:
                 continue
@@ -443,6 +474,8 @@ def _embed_missing(
                 except Exception:
                     match_scores.record_failure(logger)
             cache[cache_key] = (_duration(segment), np.asarray(vector, dtype=np.float32).reshape(-1))
+            if measured_windows is not None:
+                measured_windows[segment_id] = measured_window
             done.add(segment_id)
             embedded += 1
     if session is not None and time.monotonic() > deadline:
@@ -1264,7 +1297,10 @@ def _resolve(
             placements[segment.id] = place_segment(segment, mapping, index)
 
     clip_seconds: Dict[str, float] = {}
-    cache = decode_cache(download_speaker_embedding_cache(uid, conversation.id), clip_seconds)
+    cache_data = download_speaker_embedding_cache(uid, conversation.id)
+    cache = decode_cache(cache_data, clip_seconds)
+    cache_snapshot = dict(cache)
+    prior_enrollment = auto_enroll.decode_evidence(cache_data)
     keys: Dict[str, str] = {}
     for segment in segments:
         if not segment.id or segment.id in invalid_text_ids:
@@ -1396,6 +1432,7 @@ def _resolve(
             return
     speaker_evidence.window_abstentions(placements, abstained)
     diagnostics = EmbeddingDiagnostics()
+    measured_windows: Dict[str, Tuple[float, float]] = {}
     new_embeddings, stop = _embed_missing(
         uid,
         conversation,
@@ -1407,6 +1444,7 @@ def _resolve(
         session=read_session,
         diagnostics=diagnostics,
         evidence_seconds=clip_seconds,
+        measured_windows=measured_windows,
         max_attempts=max_embedding_attempts,
     )
     owner_diagnostics.resolver_counts(
@@ -1422,7 +1460,13 @@ def _resolve(
         _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
         return
     if new_embeddings or stale:
-        upload_speaker_embedding_cache(uid, conversation.id, encode_cache(cache, clip_seconds))
+        bindings = auto_enroll.evidence_bindings(segments, keys, placements, measured_windows, prior_enrollment)
+        bindings = auto_enroll.accepted_bindings(bindings, cache, cache_snapshot, prior_enrollment)
+        upload_speaker_embedding_cache(
+            uid,
+            conversation.id,
+            encode_cache(cache, clip_seconds, bindings),
+        )
 
     vectors = {
         segment.id: cache[keys[segment.id]][1]
