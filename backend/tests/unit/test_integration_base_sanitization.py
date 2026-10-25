@@ -171,5 +171,35 @@ class TestIntegrationBaseSanitization(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(secret_leak, err)
 
 
+    def test_resolve_config_uid_configurable_user_id(self):
+        uid, err = integration_base.resolve_config_uid({"configurable": {"user_id": "user_base_1"}})
+        self.assertEqual(uid, "user_base_1")
+        self.assertIsNone(err)
+
+    def test_resolve_config_uid_configurable_uid_alias(self):
+        uid, err = integration_base.resolve_config_uid({"configurable": {"uid": "user_base_2"}})
+        self.assertEqual(uid, "user_base_2")
+        self.assertIsNone(err)
+
+    def test_resolve_config_uid_top_level_user_id(self):
+        uid, err = integration_base.resolve_config_uid({"user_id": "user_base_3"})
+        self.assertEqual(uid, "user_base_3")
+        self.assertIsNone(err)
+
+    def test_resolve_config_uid_top_level_uid(self):
+        uid, err = integration_base.resolve_config_uid({"uid": "user_base_4"})
+        self.assertEqual(uid, "user_base_4")
+        self.assertIsNone(err)
+
+    def test_resolve_config_uid_missing_and_none(self):
+        uid, err = integration_base.resolve_config_uid(None)
+        self.assertIsNone(uid)
+        self.assertEqual(err, "Error: Configuration not available")
+
+        uid2, err2 = integration_base.resolve_config_uid({})
+        self.assertIsNone(uid2)
+        self.assertEqual(err2, "Error: User ID not found in configuration")
+
+
 if __name__ == "__main__":
     unittest.main()

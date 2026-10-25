@@ -28,6 +28,29 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return None
 
 
+def _resolve_uid(config: RunnableConfig | None) -> Optional[str]:
+    """Extract uid or user_id from config (configurable or top-level) with fallback to agent_config_context."""
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        cfg = _agent_config()
+    if not isinstance(cfg, dict):
+        return None
+    try:
+        raw_configurable = cfg.get('configurable')
+        if isinstance(raw_configurable, dict):
+            configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
+            uid = configurable.get('user_id') or configurable.get('uid')
+            if isinstance(uid, str) and uid.strip():
+                return uid.strip()
+    except (KeyError, TypeError):
+        pass
+
+    top_uid = cfg.get('user_id') or cfg.get('uid')
+    if isinstance(top_uid, str) and top_uid.strip():
+        return top_uid.strip()
+    return None
+
+
 def _format_hour(hour: int) -> str:
     """Convert 24-hour format to friendly 12-hour format."""
     if hour == 0:
@@ -82,44 +105,42 @@ def manage_daily_summary_tool(
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
         cfg = _agent_config()
-    if cfg is None:
+    if cfg is None or not isinstance(cfg, dict):
         return "Error: Configuration not available"
 
-    try:
-        raw_configurable = cfg.get('configurable')
-        if isinstance(raw_configurable, dict):
-            configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
-            uid = configurable.get('user_id')
-        else:
-            uid = None
-    except (KeyError, TypeError):
-        return "Error: Configuration not available"
-
+    uid = _resolve_uid(cfg)
     if not uid:
         return "Error: User ID not found"
 
-    action = action.lower().strip()
+    action_str = str(action or "").lower().strip()
 
-    if action == "enable":
+    if action_str == "enable":
         notification_db.set_daily_summary_enabled(uid, True)
         _hour = notification_db.get_daily_summary_hour_local(uid)
         current_hour = 22 if _hour is None else _hour
         hour_str = _format_hour(current_hour)
         return f"Daily summary notifications enabled. You'll receive them at {hour_str}."
 
-    elif action == "disable":
+    elif action_str == "disable":
         notification_db.set_daily_summary_enabled(uid, False)
         return "Daily summary notifications disabled."
 
-    elif action == "set_time":
-        if hour is None:
+    elif action_str == "set_time":
+        if hour is None or (isinstance(hour, str) and not hour.strip()):
             return "Error: Please specify the hour (0-23). Example: 22 for 10 PM, 9 for 9 AM."
 
-        if not (0 <= hour <= 23):
+        try:
+            if isinstance(hour, bool):
+                raise ValueError("Boolean is not a valid hour")
+            parsed_hour = int(float(hour))
+        except (TypeError, ValueError):
             return f"Error: Hour must be between 0 and 23. You provided {hour}."
 
-        notification_db.set_daily_summary_hour_local(uid, hour)
-        hour_str = _format_hour(hour)
+        if not (0 <= parsed_hour <= 23):
+            return f"Error: Hour must be between 0 and 23. You provided {parsed_hour}."
+
+        notification_db.set_daily_summary_hour_local(uid, parsed_hour)
+        hour_str = _format_hour(parsed_hour)
 
         # Also enable if currently disabled
         if not notification_db.get_daily_summary_enabled(uid):
@@ -128,7 +149,7 @@ def manage_daily_summary_tool(
 
         return f"Daily summary time changed to {hour_str}."
 
-    elif action == "get_settings":
+    elif action_str == "get_settings":
         enabled = notification_db.get_daily_summary_enabled(uid)
         _hour = notification_db.get_daily_summary_hour_local(uid)
         current_hour = 22 if _hour is None else _hour

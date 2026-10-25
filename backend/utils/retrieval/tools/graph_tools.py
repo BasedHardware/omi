@@ -31,19 +31,26 @@ def _agent_config() -> Optional[Dict[str, Any]]:
 
 
 def _resolve_uid(config: RunnableConfig | None) -> Optional[str]:
+    """Extract uid or user_id from config (configurable or top-level) with fallback to agent_config_context."""
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
         cfg = _agent_config()
-    if not cfg:
+    if not isinstance(cfg, dict):
         return None
     try:
         raw_configurable = cfg.get('configurable')
         if isinstance(raw_configurable, dict):
             configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
-            return configurable.get('user_id')
-        return None
+            uid = configurable.get('user_id') or configurable.get('uid')
+            if isinstance(uid, str) and uid.strip():
+                return uid.strip()
     except (KeyError, TypeError):
-        return None
+        pass
+
+    top_uid = cfg.get('user_id') or cfg.get('uid')
+    if isinstance(top_uid, str) and top_uid.strip():
+        return top_uid.strip()
+    return None
 
 
 @tool
@@ -69,12 +76,28 @@ def traverse_knowledge_graph_tool(
     """
     logger.info("traverse_knowledge_graph_tool entity=%s hops=%s", entity, hops)
 
+    clean_entity = str(entity or "").strip()
+    if not clean_entity:
+        return "Error: Entity name cannot be empty."
+
+    try:
+        if isinstance(hops, bool):
+            parsed_hops = 1
+        elif hops is not None:
+            parsed_hops = int(float(hops))
+        else:
+            parsed_hops = 1
+    except (TypeError, ValueError):
+        parsed_hops = 1
+
+    parsed_hops = max(1, min(parsed_hops, 2))
+
     uid = _resolve_uid(config)
     if not uid:
         return "Error: User ID not found in configuration"
 
     try:
-        result = traverse_knowledge_graph(uid, entity, hops=hops)
+        result = traverse_knowledge_graph(uid, clean_entity, hops=parsed_hops)
         return format_traversal_result(result)
     except Exception as exc:
         logger.exception("traverse_knowledge_graph_tool failed uid=%s: %s", uid, sanitize(str(exc)))

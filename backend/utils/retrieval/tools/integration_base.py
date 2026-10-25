@@ -19,16 +19,22 @@ def resolve_config_uid(config: Optional[Dict[str, Any]]) -> Tuple[Optional[str],
             config = agent_config_context.get()
         except LookupError:
             config = None
-    if config is None:
+    if config is None or not isinstance(config, dict):
         return None, "Error: Configuration not available"
     try:
-        configurable: Any = config.get('configurable', {})
-        uid = configurable.get('user_id')
+        configurable: Any = config.get('configurable')
+        if isinstance(configurable, dict):
+            uid = configurable.get('user_id') or configurable.get('uid')
+            if isinstance(uid, str) and uid.strip():
+                return uid.strip(), None
     except Exception:
-        return None, "Error: Configuration not available"
-    if not uid:
-        return None, "Error: User ID not found in configuration"
-    return uid, None
+        pass
+
+    top_uid = config.get('user_id') or config.get('uid')
+    if isinstance(top_uid, str) and top_uid.strip():
+        return top_uid.strip(), None
+
+    return None, "Error: User ID not found in configuration"
 
 
 def get_integration_checked(
