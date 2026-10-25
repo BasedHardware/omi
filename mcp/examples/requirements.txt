@@ -41,7 +41,7 @@ frozenlist==1.8.0
 fsspec==2026.2.0
 gepa==0.0.27
 gitdb==4.0.12
-gitpython==3.1.62
+gitpython==3.2.1
 google-auth==2.53.0
 graphene==3.4.3
 graphql-core==3.2.8
