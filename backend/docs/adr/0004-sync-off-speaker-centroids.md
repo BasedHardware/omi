@@ -53,6 +53,10 @@ not this optional derived evidence; it cannot extend vector retention. Existing
 batch cleanup has no separate legal-hold extension for this artifact. Account,
 conversation deletion and privacy-generation revocation remain authoritative.
 There is no new legal-hold override or configurable extension of the vector TTL.
+Creation also requires verified bucket metadata with soft delete disabled and no
+retention/default event hold; unknown or unreadable metadata abstains. The lead
+qualifies the existing bucket and runtime read permission before rollout. This
+PR makes no bucket or IAM changes.
 
 ## Implemented in
 

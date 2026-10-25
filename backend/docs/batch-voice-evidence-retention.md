@@ -44,6 +44,15 @@ and registered artifacts; conversation deletion and protection changes use the
 existing purge and privacy-generation fences. Deletion during IO refuses the
 result and deletes the exact uploaded generation. No bucket, key or IAM change.
 
+Before creating vectors, the runtime reads bucket metadata and requires explicit
+zero-second soft delete, no default event hold, and no retention period. An
+unreadable/unknown policy leaves speakers anonymous and creates no artifact.
+The lead must qualify that policy and runtime metadata-read access before rollout;
+the existing accepted-audio lifecycle audit alone does not check soft delete.
+Processing never changes bucket policy or grants access to bypass this check.
+GCS documents that soft-deleted objects cannot be permanently deleted during
+their retention window ([bucket resource contract](https://docs.cloud.google.com/storage/docs/json_api/v1/buckets)).
+
 `BATCH_SYNC_OFF_CENTROIDS_ENABLED=false` stops creation and consumption while
 existing deadlines and erasure continue. The parent
 `BATCH_CONVERSATION_SPEAKERS_ENABLED=false` also stops both. Both default on;

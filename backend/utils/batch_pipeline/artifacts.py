@@ -211,6 +211,16 @@ class ArtifactStore:
         body = voice_centroids.encode(payload)
         if payload['capture_at'] != item.capture_at:
             raise ValueError('voice capture binding mismatch')
+        # A successful object DELETE is insufficient under GCS soft delete or
+        # bucket holds. Optional derived data must be physically erasable.
+        # Metadata read failure abstains; processing never changes IAM/policy.
+        self.bucket.reload(timeout=30, retry=None)
+        if (
+            self.bucket.soft_delete_policy.retention_duration_seconds != 0
+            or self.bucket.default_event_based_hold
+            or self.bucket.retention_period not in (None, 0)
+        ):
+            raise PermissionError('voice evidence requires verified permanent erasure policy')
         return self._write(item, 'voice_evidence', body, voice_centroids.MAX_BYTES)
 
     def discard_voice_evidence(self, item: WorkItem, uri: str) -> None:

@@ -163,6 +163,29 @@ def test_exclusive_union_measures_once_and_never_embeds_overlap():
     assert [row['seconds'] for row in actual['labels']] == [4, 2]
 
 
+@pytest.mark.parametrize('policy', ['soft_delete', 'unknown_soft_delete', 'hold', 'retention', 'unreadable'])
+def test_voice_creation_refuses_unverified_permanent_deletion_policy(monkeypatch, policy):
+    store, artifacts, objects, capture = state()
+    if policy == 'soft_delete':
+        objects.soft_delete_policy.retention_duration_seconds = 604800
+    elif policy == 'unknown_soft_delete':
+        objects.soft_delete_policy.retention_duration_seconds = None
+    elif policy == 'hold':
+        objects.default_event_based_hold = True
+    elif policy == 'retention':
+        objects.retention_period = 3600
+    else:
+
+        def denied(**kwargs):
+            raise PermissionError('synthetic metadata read denied')
+
+        monkeypatch.setattr(objects, 'reload', denied)
+    with pytest.raises(PermissionError):
+        persist(store, artifacts, capture)
+    assert not objects.objects
+    assert not any(path[0] == NS + '_artifacts' for path in store.client.rows)
+
+
 def test_capture_expiry_and_finalization_shortening_refuse_before_download(monkeypatch):
     store, artifacts, objects, capture = state()
     item, uri = persist(store, artifacts, capture)
