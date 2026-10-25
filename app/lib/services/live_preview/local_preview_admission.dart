@@ -59,6 +59,10 @@ class LocalPreviewAdmission {
 
   LivePreviewController? preview;
   bool admitted = false;
+
+  /// This socket is settled as refused (hold timed out or overflowed and its
+  /// frames already streamed): a later grant on the same socket never admits it.
+  bool _refusedForSocket = false;
   DateTime? _verdictPendingSince;
   String language = 'multi';
   BleAudioCodec pendantCodec = BleAudioCodec.opus;
@@ -92,6 +96,7 @@ class LocalPreviewAdmission {
   /// refusal, so they are [send] to it now, before any newer frame.
   void socketPublished({required bool declared, required void Function(HeldPendantFrame frame) send}) {
     if (admitted) _set(false);
+    _refusedForSocket = !declared;
     if (declared) {
       _verdictPendingSince = now();
     } else {
@@ -108,7 +113,7 @@ class LocalPreviewAdmission {
     required bool socketDeclared,
     required void Function(HeldPendantFrame frame) send,
   }) {
-    final effective = granted && socketDeclared && preview != null;
+    final effective = granted && socketDeclared && preview != null && !_refusedForSocket;
     _verdictPendingSince = null;
     if (effective) {
       _held.clear();
@@ -150,8 +155,10 @@ class LocalPreviewAdmission {
         _held.add(frame);
         return;
       }
-      // Overflow: stop holding, stream everything in order from here on.
+      // Overflow: stop holding, stream everything in order from here on. The
+      // socket is refused for good: a late grant must not claim it.
       _verdictPendingSince = null;
+      _refusedForSocket = true;
     }
     if (socketDeclared && admitted && journalWarmingUp) {
       // Admitted only, so never a cloud-transcript loss: the frame is in the
@@ -167,7 +174,9 @@ class LocalPreviewAdmission {
     final pendingSince = _verdictPendingSince;
     if (pendingSince == null) return false;
     if (now().difference(pendingSince) < verdictHold) return true;
-    _verdictPendingSince = null; // Timed out: treated as a refusal.
+    // Timed out: a refusal for this socket, latched like an overflow.
+    _verdictPendingSince = null;
+    _refusedForSocket = true;
     return false;
   }
 

@@ -149,4 +149,25 @@ void main() {
     route(3);
     expect(sent, [1, 3]);
   });
+  test('a timed-out or overflowed hold is a refusal latched for that socket', () {
+    admission.socketPublished(declared: true, send: send);
+    route(1);
+    clock = clock.add(LocalPreviewAdmission.verdictHold);
+    route(2);
+    expect(sent, [1, 2], reason: 'already streamed to the cloud');
+    expect(admission.verdict(granted: true, socketDeclared: true, send: send), false,
+        reason: 'a late grant must not make this session look admitted');
+    expect(admission.admitted, false);
+
+    sent.clear();
+    admission.socketPublished(declared: true, send: send);
+    for (var i = 0; i <= LocalPreviewAdmission.maxHeldFrames; i++) {
+      route(i);
+    }
+    expect(admission.verdict(granted: true, socketDeclared: true, send: send), false);
+
+    admission.socketPublished(declared: true, send: send);
+    expect(admission.verdict(granted: true, socketDeclared: true, send: send), true,
+        reason: 'the latch is per socket; a replacement starts clean');
+  });
 }
