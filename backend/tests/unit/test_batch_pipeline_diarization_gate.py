@@ -122,7 +122,7 @@ class _Words:
 
     def transcribe_batch(self, samples):
         self.calls.append([len(s) for s in samples])
-        return [[{'word': 'w', 'timestamp': list(self.clocks.pop(0))}] for _ in samples]
+        return [[{'word': 'word', 'timestamp': list(self.clocks.pop(0))}] for _ in samples]
 
 
 def _worker(vad_spans, clocks, *, diarize=None):

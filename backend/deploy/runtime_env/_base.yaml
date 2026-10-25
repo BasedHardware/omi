@@ -1246,6 +1246,7 @@ environment_shared:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
@@ -1622,6 +1623,7 @@ environment_shared:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
@@ -1978,6 +1980,7 @@ environment_shared:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
@@ -2284,6 +2287,7 @@ environment_shared:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:

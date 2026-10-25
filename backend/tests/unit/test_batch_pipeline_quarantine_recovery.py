@@ -23,6 +23,9 @@ from utils.batch_pipeline.scheduler import Scheduler, owner_key
 
 @pytest.fixture
 def setup(monkeypatch):
+    # Existing recovery contract under the explicit safety-net rollback. The
+    # ship-on positive-VAD boundary is exercised in test_batch_pipeline_empty_safety.
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', 'synthetic-owner')

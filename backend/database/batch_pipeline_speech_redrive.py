@@ -9,7 +9,7 @@ from database.batch_pipeline_policy import load_stage_policy, stage_in_transacti
 from database.batch_pipeline_terminal_empty import spent_canary
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
-from utils.batch_pipeline.contracts import WorkResult
+from utils.batch_pipeline.contracts import WorkResult, validate_measured_vad
 from utils.batch_pipeline.recovery_disposition import STAGES, REASONS, padded_skipped
 from utils.batch_pipeline.scheduler import owner_key
 
@@ -131,7 +131,18 @@ class SpeechRedriveStore:
 
         return self.store.run(commit)
 
-    def settle(self, segment_id, token, plan_digest, now, result_uri=None, *, failure=None, outcome="success"):
+    def settle(
+        self,
+        segment_id,
+        token,
+        plan_digest,
+        now,
+        result_uri=None,
+        *,
+        failure=None,
+        outcome="success",
+        measured_held_vad_speech_seconds=None
+    ):
         def commit(tx):
             job, binding = self.checked(tx, segment_id)
             existing = tx.get('results', segment_id)
@@ -169,6 +180,9 @@ class SpeechRedriveStore:
                 if not failure or failure.get('stage') not in STAGES or failure.get('reason') not in REASONS:
                     raise ValueError('closed redrive failure required')
                 marker.update(state='failed_held', settled_at=now, failure=dict(failure))
+                measured = validate_measured_vad(measured_held_vad_speech_seconds, job['duration_seconds'])
+                if measured is not None or 'measured_held_vad_speech_seconds' not in job:
+                    job['measured_held_vad_speech_seconds'] = measured
             tx.put('jobs', segment_id, job)
             return True
 

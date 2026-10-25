@@ -228,7 +228,8 @@ def test_second_provider_fences_never_settle_terminal_empty(setup, monkeypatch, 
 
 
 @pytest.mark.parametrize('change', ['first_only', 'missing_second', 'second_not_empty'])
-def test_two_provider_evidence_rejects_fabrication(change):
+def test_two_provider_evidence_rejects_fabrication(change, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
     payload = terminal_empty_payload(5, [{'start': 0, 'end': 5}], TWO_PROVIDER_EMPTY_EVIDENCE)
     assert result_outcome(payload) == 'no_recoverable_speech'
     evidence = payload['recognition_evidence']

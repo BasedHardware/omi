@@ -16,6 +16,7 @@ from utils.batch_pipeline.contracts import (
     LeasedWork,
     PoolCapacity,
     HeldWork,
+    FailedWork,
     RecoveryWork,
     ValidationFailureWork,
 )
@@ -550,6 +551,8 @@ class Pump:
                         lease.token,
                         time.time(),
                         worker_failure={'stage': result.stage, 'reason': result.reason},
+                        measured_held_vad_speech_seconds=result.measured_held_vad_speech_seconds,
+                        worker_vad_receipt=result.worker_vad_receipt,
                     )
                 )
             if isinstance(result, RecoveryWork):
@@ -565,12 +568,23 @@ class Pump:
                         padded_retry_empty=result.padded_retry_empty,
                         padded_retry=result.padded_retry,
                         worker_failure={'stage': 'assemble_words', 'reason': result.reason},
+                        measured_held_vad_speech_seconds=result.measured_held_vad_speech_seconds,
+                        worker_vad_receipt=result.worker_vad_receipt,
                     )
                 )
-            if result is None:
+            if result is None or isinstance(result, FailedWork):
                 return bool(
                     await self._run_blocking(
-                        'publication', db_executor, self.scheduler.fail, segment, lease.token, time.time()
+                        'publication',
+                        db_executor,
+                        self.scheduler.fail,
+                        segment,
+                        lease.token,
+                        time.time(),
+                        measured_held_vad_speech_seconds=(
+                            result.measured_held_vad_speech_seconds if result is not None else None
+                        ),
+                        worker_vad_receipt=result.worker_vad_receipt if result is not None else None,
                     )
                 )
             return bool(

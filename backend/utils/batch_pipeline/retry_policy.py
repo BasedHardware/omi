@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 def quarantine_job(tx, job: dict, now: float, reason: str) -> None:
+    # Lease expiry/decode failures may never have reached VAD. Keep unknown
+    # explicit so observers cannot mistake absent evidence for measured silence.
+    job.setdefault('measured_held_vad_speech_seconds', None)
     # Serialize pending removal against merge/admission; never invent a result.
     owner = tx.get('owners', job['owner_key'])
     owner['revision'] = owner.get('revision', 0) + 1

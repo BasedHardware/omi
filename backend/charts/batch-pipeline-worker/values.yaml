@@ -49,6 +49,8 @@ worker:
   flightBatchSeconds: 1800
   emptyAsrRecoveryEnabled: false
   emptyAsrDispositionEnabled: false
+  # Kill switch for context retry and positive-VAD custody; ship on.
+  emptyAsrSafetyNetEnabled: true
   headPriorityEnabled: false
   workerSilenceDispositionEnabled: false
   workerValidationDispositionEnabled: true

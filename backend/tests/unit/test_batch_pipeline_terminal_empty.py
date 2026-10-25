@@ -22,6 +22,13 @@ from utils.batch_pipeline.recovery_disposition import terminal_empty_payload, re
 from utils.batch_pipeline.merge import OrderedMerge
 
 
+@pytest.fixture(autouse=True)
+def legacy_terminal_rollback(monkeypatch):
+    # These operator/exhaustion tests describe the explicit rollback path.
+    # Default-on refusal of positive-VAD disposal has its own safety suite.
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
+
+
 def terminal_setup(setup, monkeypatch, legacy_dependencies):
     values = enabled(setup, monkeypatch, legacy_dependencies)
     client, store, binding, artifacts, legacy, alternate, old = values

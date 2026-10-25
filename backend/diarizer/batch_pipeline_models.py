@@ -24,6 +24,7 @@ except ImportError:
     open_dict = None
 
 from config.batch_pipeline_providers import provider_config
+from config.batch_pipeline_empty_asr import safety_net_enabled
 from diarizer.batch_pipeline import (
     PipelineWorker,
     SAMPLE_RATE,
@@ -90,7 +91,7 @@ class ParakeetWords:
         for hypothesis in hypotheses:
             entries = hypothesis.timestamp.get('word', [])
             words = [{'word': w['word'], 'timestamp': [float(w['start']), float(w['end'])]} for w in entries]
-            if hypothesis.text.strip() and not words:
+            if hypothesis.text.strip() and not words and not safety_net_enabled():
                 raise ValueError('Parakeet returned text without word clocks')
             result.append(words)
         return result
