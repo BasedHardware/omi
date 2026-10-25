@@ -193,9 +193,11 @@ void main() {
     return capture;
   }
 
+  var android = false;
+
   Future<void> shoot(WidgetTester tester, String file,
       {required bool light, required Widget home, required CaptureProvider capture}) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    debugDefaultTargetPlatformOverride = android ? TargetPlatform.android : TargetPlatform.iOS;
     tester.view.physicalSize = const Size(393, 852);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -223,7 +225,8 @@ void main() {
           locale: const Locale('en'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          theme: buildOmiTheme(brightness: light ? Brightness.light : Brightness.dark),
+          theme: buildOmiTheme(brightness: light ? Brightness.light : Brightness.dark)
+              .copyWith(platform: android ? TargetPlatform.android : TargetPlatform.iOS),
           builder: (context, child) => DefaultTextStyle.merge(
             style: const TextStyle(fontFamily: 'SF Pro Display'),
             child: child!,
@@ -254,13 +257,14 @@ void main() {
 
   final en = lookupAppLocalizations(const Locale('en'));
   var index = 0;
-  String name(String slug, bool light) =>
-      '${(++index).toString().padLeft(3, '0')}-mobile-ios-$slug-${light ? 'light' : 'dark'}.png';
+  String name(String slug, bool light) => '${(++index).toString().padLeft(3, '0')}-mobile-'
+      '${android ? 'android' : 'ios'}-$slug-${light ? 'light' : 'dark'}.png';
 
-  for (final light in [false, true]) {
-    final theme = light ? 'light' : 'dark';
+  for (final (onAndroid, light) in [(false, false), (false, true), (true, false), (true, true)]) {
+    final theme = '${onAndroid ? 'android' : 'ios'}, ${light ? 'light' : 'dark'}';
 
     testWidgets('streaming preview: provisional words secondary, settled words primary ($theme)', (tester) async {
+      android = onAndroid;
       final (preview, _) = await tester.runAsync(() => previewIn(_State.streaming)) ?? (null, null);
       final capture = captureFor(_State.streaming, preview);
       addTearDown(capture.dispose);
@@ -276,6 +280,7 @@ void main() {
     });
 
     testWidgets('engine starting ($theme)', (tester) async {
+      android = onAndroid;
       final (preview, _) = await tester.runAsync(() => previewIn(_State.starting)) ?? (null, null);
       final capture = captureFor(_State.starting, preview);
       addTearDown(capture.dispose);
@@ -286,6 +291,7 @@ void main() {
     });
 
     testWidgets('engine running, no words yet ($theme)', (tester) async {
+      android = onAndroid;
       final (preview, _) = await tester.runAsync(() => previewIn(_State.listening)) ?? (null, null);
       final capture = captureFor(_State.listening, preview);
       addTearDown(capture.dispose);
@@ -296,6 +302,7 @@ void main() {
     });
 
     testWidgets('no on-device engine: calm Transcribing, no error, no setup action ($theme)', (tester) async {
+      android = onAndroid;
       final (preview, _) = await tester.runAsync(() => previewIn(_State.transcribing)) ?? (null, null);
       final capture = captureFor(_State.transcribing, preview);
       addTearDown(capture.dispose);
@@ -309,6 +316,7 @@ void main() {
     });
 
     testWidgets('not admitted: today\'s cloud transcript, unchanged ($theme)', (tester) async {
+      android = onAndroid;
       final capture = captureFor(_State.cloud, null);
       addTearDown(capture.dispose);
       await shoot(tester, name('cloud-transcript-unchanged', light),
@@ -318,6 +326,7 @@ void main() {
     });
 
     testWidgets('home capture card shows the newest preview line in its last-line slot ($theme)', (tester) async {
+      android = onAndroid;
       final (preview, _) = await tester.runAsync(() => previewIn(_State.streaming)) ?? (null, null);
       final capture = captureFor(_State.streaming, preview);
       addTearDown(capture.dispose);

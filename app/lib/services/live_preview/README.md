@@ -6,11 +6,10 @@ or owns audio, and WAL/batch custody is unchanged.
 
 ## Admission
 
-The iOS client declares `local_preview=enabled` on `/v4/listen` (part of the
+The iOS and Android clients declare `local_preview=enabled` on `/v4/listen` (part of the
 socket reuse key) unless the PostHog kill switch `mobile-local-preview-disabled`
 is true (`LivePreviewGate`; absent/false/offline/error keeps it on). Custom STT,
-onboarding and phone-call sockets never declare it. Android installs no preview
-controller yet, so it never declares it and keeps today's cloud transcript.
+onboarding and phone-call sockets never declare it.
 
 The server grants it on `service_status` `ready` / `mobile_batch_admission` with
 `local_preview: true` and `mobile_standard_batch: true`. The grant is
@@ -43,9 +42,13 @@ Known gaps:
 - Phone-mic capture is not in the batch route: its audio still streams to the
   socket (and opens the deferred cloud stream). The preview still runs from
   `phoneMicAudioTap`; the surface keeps showing it while an engine runs.
-- Android's native background streamer (`OmiBackgroundAudioStreamer.kt`, used
-  without a Flutter engine) does not declare local preview and stays a normal
-  cloud stream.
+- Android's native background streamer (`OmiBackgroundAudioStreamer.kt`) owns
+  pendant audio only while the Flutter engine is absent or not foreground-ready,
+  and has no batch journal. It never declares local preview (pinned by
+  `OmiBackgroundAudioStreamerTest`): a declared, admitted session would receive
+  the audio anyway and open the deferred cloud stream unannounced. Its sessions
+  stay ordinary cloud sessions (today's behaviour, counted by the server as
+  `local_preview=false`). Journaling from native is a follow-up.
 
 ## Engine
 
@@ -63,6 +66,20 @@ a calm "Transcribing…" state; there is never a cloud fallback.
 Pendant packets are copied, the 3-byte header stripped and decoded with a
 preview-only Opus decoder; the tap only enqueues into a bounded queue, and
 overload drops preview audio.
+
+Android (`android/.../livepreview/LivePreviewPlugin.kt`): API 33+
+`createOnDeviceSpeechRecognizer` fed through a pipe (`EXTRA_AUDIO_SOURCE`, PCM16
+16 kHz mono extras, `EXTRA_SEGMENTED_SESSION`), started only when
+`isOnDeviceRecognitionAvailable` and `checkRecognitionSupport` list the language
+as installed (never `triggerModelDownload`). Recognizer calls run on the main
+looper; PCM is written on one background thread behind a bounded queue. The
+recognition service checks the caller's RECORD_AUDIO even for an app-supplied
+audio source, so without it the reason is `speech_permission_denied` (never
+prompted). Android 11-12: `os_too_old`; no on-device service (e.g. no Google
+speech services): `os_engine_unavailable`. Without an OS engine, Omi's already
+downloaded Whisper model (`whisper_flutter_new`) runs as a windowed
+pseudo-stream (4 s windows, one at a time, 30 s bounded buffer, final lines
+only); otherwise none.
 
 ## UI and hand-off
 

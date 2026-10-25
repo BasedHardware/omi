@@ -66,7 +66,9 @@ class LivePreviewController extends ChangeNotifier {
   final LivePreviewEngine _engine;
   final LivePreviewTelemetry telemetry;
   final LivePreviewPlatform platform;
-  final int osMajor;
+
+  /// OS major version for telemetry; Android resolves it after composition.
+  int osMajor;
   final DateTime Function() _now;
   final Duration Function() _conversationGap;
   final List<int> Function(Uint8List opus)? _decodeOpus;
