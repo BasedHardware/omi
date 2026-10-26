@@ -19,6 +19,8 @@ from typing import Annotated, Any, TypeVar, cast
 from fastapi import HTTPException, Query
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
 
+from utils.sync.capture_clock import CaptureTimeWindowError, capture_time_rejection
+
 PositiveLimit = Annotated[int, Query(ge=1, le=1000)]
 CalendarMeetingsLimit = Annotated[int, Query(ge=1, le=100)]
 NonNegativeOffset = Annotated[int, Query(ge=0)]
@@ -101,7 +103,9 @@ def parse_sync_filename_timestamp(path: str) -> int | float:
     Upload filenames are expected to end with _<unix-seconds-or-millis>.bin;
     VAD segment files are named <unix-seconds-or-millis>.wav. The returned
     timestamp is UTC seconds and is safe to pass to fromtimestamp(...,
-    tz=timezone.utc).
+    tz=timezone.utc). Capture times may sit ahead of the server clock within
+    the shared future-skew tolerance (utils.sync.capture_clock); beyond it or
+    before 2024-01-01 the timestamp is implausible and rejected.
     """
     filename = path.split('/')[-1]
     timestamp_part = filename.rsplit('_', 1)[1] if '_' in filename else filename
@@ -123,9 +127,9 @@ def parse_sync_filename_timestamp(path: str) -> int | float:
     except (OSError, OverflowError, ValueError) as e:
         raise ValueError('invalid timestamp') from e
 
-    now = datetime.now(timezone.utc)
-    if timestamp_dt > now or timestamp_dt < datetime(2024, 1, 1, tzinfo=timezone.utc):
-        raise ValueError('invalid timestamp')
+    rejection = capture_time_rejection(timestamp_dt)
+    if rejection is not None:
+        raise CaptureTimeWindowError(rejection)
     return timestamp
 
 

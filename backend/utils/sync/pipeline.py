@@ -177,6 +177,12 @@ from utils.stt.sync_speaker_evidence import collect_speaker_audio
 from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
 from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD, clock_run_from_path, segment_name_prefix
+from utils.sync.capture_clock import (
+    CaptureTimeWindowError,
+    SyncCaptureTimeRejected,
+    capture_time_rejection,
+    clamp_capture_time,
+)
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.recording_intent import user_selected_recording
 from utils.sync.input_limits import (
@@ -255,6 +261,8 @@ from utils.manual_speaker_assignments import manual_owner_reserved
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL, record_conversation_relevance
+from utils.metrics import OMI_SYNC_CAPTURE_TIME_TOTAL
+from utils.observability.reasons import ReasonFamily, SyncCaptureTimeReason, reason_label
 from utils.observability.journeys import record_client_journey_accepted, record_client_journey_terminal
 
 logger = logging.getLogger(__name__)
@@ -1742,10 +1750,14 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             if audio_bytes is not None and not private_cloud_sync_enabled:
                 audio_bytes = None
         shift_to_vad_file_clock(transcript_segments, speech_offset)
-        started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        # Stored times clamp to server now: a phone clock ahead within the
+        # shared skew tolerance must not create future-started conversations.
+        # Identity/lineage math above keeps the raw filename timestamp so
+        # retry anchors stay stable.
+        started_at = datetime.fromtimestamp(clamp_capture_time(timestamp), tz=timezone.utc)
         create_memory = CreateConversation(
             started_at=started_at,
-            finished_at=datetime.fromtimestamp(segment_end_timestamp, tz=timezone.utc),
+            finished_at=datetime.fromtimestamp(clamp_capture_time(segment_end_timestamp), tz=timezone.utc),
             transcript_segments=transcript_segments,
             source=source,
             language=language,
@@ -2166,6 +2178,21 @@ def _cleanup_files(file_paths: Iterable[str]):
             logger.error('event=sync_cleanup outcome=failed exception_type=%s', type(e).__name__)
 
 
+def _record_capture_time_admission(outcome: SyncCaptureTimeReason, ahead_seconds: float = 0.0) -> None:
+    """Count one capture-time admission disposition; log only the notable ones.
+
+    Plain acceptances are counter-only (per-file volume); skew and rejections
+    get a log line so the readback can count and sample both sides.
+    """
+    label = reason_label(ReasonFamily.SYNC_CAPTURE_TIME, outcome, SyncCaptureTimeReason)
+    try:
+        OMI_SYNC_CAPTURE_TIME_TOTAL.labels(outcome=label).inc()
+    except Exception:
+        pass
+    if label != SyncCaptureTimeReason.ACCEPTED.value:
+        logger.info('event=sync_capture_time outcome=%s ahead_seconds=%.1f', label, ahead_seconds)
+
+
 def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     """Like retrieve_file_paths but uses a job-specific directory to avoid concurrency conflicts."""
     directory = f'syncing/{uid}/{job_id}/'
@@ -2181,12 +2208,25 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
             raise HTTPException(status_code=400, detail='Invalid sync file format')
         try:
             timestamp = get_timestamp_from_path(filename)
+        except CaptureTimeWindowError as error:
+            _record_capture_time_admission(error.capture_time_reason)
+            raise SyncCaptureTimeRejected() from error
         except ValueError:
-            raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
+            _record_capture_time_admission(SyncCaptureTimeReason.REJECTED_MALFORMED)
+            raise SyncCaptureTimeRejected()
 
         time_val = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        if time_val > datetime.now(timezone.utc) or time_val < datetime(2024, 1, 1, tzinfo=timezone.utc):
-            raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
+        now = datetime.now(timezone.utc)
+        ahead_seconds = (time_val - now).total_seconds()
+        rejection = capture_time_rejection(time_val, now=now)
+        if rejection is not None:
+            # Defense in depth: the shared parser already enforces this window.
+            _record_capture_time_admission(rejection, ahead_seconds=ahead_seconds)
+            raise SyncCaptureTimeRejected()
+        _record_capture_time_admission(
+            SyncCaptureTimeReason.ACCEPTED_FUTURE_SKEW if ahead_seconds > 0 else SyncCaptureTimeReason.ACCEPTED,
+            ahead_seconds=max(0.0, ahead_seconds),
+        )
 
         path = f"{directory}{filename}"
         try:

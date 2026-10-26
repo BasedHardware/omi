@@ -190,6 +190,7 @@ from utils.sync.pipeline import (
     retrieve_vad_segments,
     SyncConversationPersistenceFenced,
 )
+from utils.sync.capture_clock import INVALID_CAPTURE_TIME_CODE, INVALID_CAPTURE_TIME_DETAIL, SyncCaptureTimeRejected
 from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.sync.rate_limit import (
@@ -1216,7 +1217,16 @@ async def sync_local_files_v2(
         # --- Fast path: save raw files only (< 2s typical) ---
         # Use sync_executor, NOT storage_executor — storage is saturated with
         # background pipeline cleanup/GCS work and would queue the 202 response.
-        paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id)
+        try:
+            paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id)
+        except SyncCaptureTimeRejected:
+            # Typed 400 for implausible capture times (beyond the shared
+            # future-skew tolerance or before 2024). Released clients only see
+            # the status + detail; new clients can act on the code.
+            return JSONResponse(
+                status_code=400,
+                content={'code': INVALID_CAPTURE_TIME_CODE, 'detail': INVALID_CAPTURE_TIME_DETAIL},
+            )
 
         if manifest_claims is not None and not await run_blocking(
             sync_executor, manifest_claims_match_paths, manifest_claims, paths

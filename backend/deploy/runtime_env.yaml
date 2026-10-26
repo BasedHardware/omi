@@ -1201,7 +1201,7 @@ environments:
               value: https://app.posthog.com
             SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
               provisional: true
-              value: '300'
+              value: '600'
               category: rollout
             GCP_LOCATION:
               value: us-central1
@@ -1486,7 +1486,7 @@ environments:
               value: https://app.posthog.com
             SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
               provisional: true
-              value: '300'
+              value: '600'
               category: rollout
             GCP_LOCATION:
               value: us-central1
@@ -3400,7 +3400,7 @@ environments:
               value: https://us.posthog.com
             SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
               provisional: true
-              value: '300'
+              value: '600'
               category: rollout
             GCP_LOCATION:
               value: us-central1
@@ -3771,7 +3771,7 @@ environments:
               value: https://us.posthog.com
             SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
               provisional: true
-              value: '300'
+              value: '600'
               category: rollout
             GCP_LOCATION:
               value: us-central1
