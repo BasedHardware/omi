@@ -89,6 +89,10 @@ class AnalyticsManager {
   static bool get trackingEnabled => _trackingEnabled;
   static final ValueNotifier<bool> _trackingConsent = ValueNotifier(true);
   static ValueListenable<bool> get trackingConsent => _trackingConsent;
+  static final ValueNotifier<String?> _settledIdentity = ValueNotifier(null);
+
+  /// The SDK distinct id once an identity settles; null while one settles or tracking is off.
+  static ValueListenable<String?> get settledIdentity => _settledIdentity;
   static String? get currentIdentity => _boundIdentity;
   static String get appBuild => _globalEventProperties['app_build']?.toString() ?? 'unknown';
   static bool get deviceHealthRecordingEnabled => _trackingEnabled && (!_identityKnown || _boundIdentity != null);
@@ -157,6 +161,7 @@ class AnalyticsManager {
   }
 
   static void _notifyIdentity(String? distinctId, bool enabled) {
+    _settledIdentity.value = enabled ? distinctId : null;
     identityChanged?.call(distinctId, enabled);
   }
 
@@ -334,6 +339,7 @@ class AnalyticsManager {
     _trackingConsent.value = true;
     _clientAppNamespace = 'unknown';
     _settledDistinctId = null;
+    _settledIdentity.value = null;
     _identityEpoch++;
     _boundIdentity = null;
     _identityKnown = false;
