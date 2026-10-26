@@ -552,7 +552,10 @@ resources:
   # Prometheus): working set fleet p50/p99 = 0.68/1.18Gi, worst-pod p99 1.38Gi,
   # fleet max 2.27Gi; CPU fleet p50/p99 = 220/495m, per-pod max 694m; zero
   # container restarts or OOM kills in 30d. Memory request = 1.44x worst-pod
-  # p99, limit = 1.54x fleet max. CPU request 350m packs 4 pods per n4-highmem-2
+  # p99. Memory limit 3Gi keeps the sum of four co-located limits (12Gi) plus
+  # ~0.6Gi of DaemonSet requests under the node's 12.87Gi allocatable, so
+  # correlated spikes cannot reach kubelet node-pressure eviction; the cap is
+  # still 1.32x the 7d fleet max. CPU request 350m packs 4 pods per n4-highmem-2
   # node (4x350m = 1400m of ~1530m allocatable after ~358m of DaemonSet
   # requests; 2 pods at 700m previously) while aggregate p95 usage (4x395m)
   # stays under the node's 1930m allocatable. CPU limit is unchanged, so
@@ -564,7 +567,7 @@ resources:
     memory: 2Gi
   limits:
     cpu: 0.7
-    memory: 3.5Gi
+    memory: 3Gi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
