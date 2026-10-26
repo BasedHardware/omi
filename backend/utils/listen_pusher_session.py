@@ -175,7 +175,6 @@ class ListenPusherSessionDeps:
     random: Callable[[], float] = random.random
     now: Callable[[], float] = time.time
     monotonic: Callable[[], float] = time.monotonic
-    ensure_audio_durable: Optional[Callable[[], Awaitable[None]]] = None
 
 
 class ListenPusherSession:
@@ -383,11 +382,8 @@ class ListenPusherSession:
 
     async def _audio_bytes_flush(self):
         async with self.audio_flush_lock:
-            if audio_outbox_enabled() and self.deps.ensure_audio_durable is not None:
-                # A successful socket send alone never retires the last copy.
-                # This barrier also runs while pusher is disconnected, so its
-                # restart cannot erase the original listen capture.
-                await self.deps.ensure_audio_durable()
+            # Relay delivery never waits for storage. The raw archive retains
+            # the original bytes; only its window checkpoint releases WAL.
             current_conversation_id = self.deps.get_current_conversation_id()
             pusher_ws = self.pusher_ws
             if not (self.pusher_connected and pusher_ws):

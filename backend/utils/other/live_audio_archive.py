@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import uuid
+from collections.abc import Awaitable, Callable
 
 from config.audio_archive import admitted
 from config.audio_outbox import enabled as audio_outbox_enabled
@@ -28,6 +29,10 @@ class LiveAudioArchive:
         self.running: set[int] = set()
         self.frames: dict[int, list[dict]] = {}
         self.sequence: dict[int, int] = {}
+        # Coalesced transcript coverage, never audio bytes. Each snapshot is
+        # cumulative for its conversation and waits for the accepted-frame
+        # checkpoint, including earlier failed/out-of-order commits.
+        self.pending_acks: dict[str, list[tuple[dict[int, int], Callable[[], Awaitable[None]]]]] = {}
         # Session-stable admission: this per-packet path must not re-query the
         # TTL cache. An expiry window would schedule a refresh but miss until
         # it completes, silently dropping archive packets once per TTL. Listen
@@ -185,6 +190,46 @@ class LiveAudioArchive:
                 raise
         finally:
             self.running.discard(id(pack))
+        await self._publish_ready_acks()
+
+    def _checkpoint_pending(self, checkpoint: dict[int, int]) -> bool:
+        for pack, channel in [*((pack, channel) for channel, pack in self.packs.items()), *self.uncommitted.values()]:
+            frames = self.frames.get(id(pack), [])
+            if frames and frames[0]['sequence'] < checkpoint.get(channel, 0):
+                return True
+        return False
+
+    async def defer_ack(self, key: str, publish: Callable[[], Awaitable[None]]) -> None:
+        """Release cumulative coverage only after its original audio commits.
+
+        Keep at most two snapshots for each of 32 conversations. Refusal
+        withholds the optional ACK (the client's WAL remains authoritative),
+        never a captured frame.
+        """
+        if not getattr(self.host, 'private_cloud_sync_enabled', False) or not self.sequence:
+            # No archive obligation is created without storage consent. An
+            # empty checkpoint is not a receipt and must not release WAL via
+            # the coverage ledger (including later HTTP coverage queries).
+            raise RuntimeError('audio custody unavailable; producer remains unacknowledged')
+        if key not in self.pending_acks and len(self.pending_acks) >= 32:
+            raise RuntimeError('audio custody coverage queue full; producer remains unacknowledged')
+        pending = self.pending_acks.setdefault(key, [])
+        entry = (dict(self.sequence), publish)
+        if len(pending) == 2:
+            # Freeze the oldest checkpoint so continuous incoming transcripts
+            # cannot move its goalposts forever. Coalesce only the successor.
+            pending[-1] = entry
+        else:
+            pending.append(entry)
+        await self._publish_ready_acks()
+
+    async def _publish_ready_acks(self) -> None:
+        for key, pending in list(self.pending_acks.items()):
+            while self.pending_acks.get(key) is pending and pending and not self._checkpoint_pending(pending[0][0]):
+                _, publish = pending.pop(0)
+                if not pending:
+                    self.pending_acks.pop(key)
+                await publish()
 
     async def _write(self, pack: CapturePack, channel: int):
         request = self.host.request
@@ -250,12 +295,14 @@ class LiveAudioArchive:
         )
 
     async def ensure_durable(self):
-        """Barrier before transcript commit/ACK; also commits silence-only tails."""
+        """Await already scheduled window commits without flushing active packs.
+
+        Relay sends can retire their PCM copy because the original remains in
+        the archive. Only a complete window receipt releases client custody.
+        """
         async with self.lock:
             if self.durable and (self.failed or any(key not in self.running for key in self.uncommitted)):
                 await self._retry_pending()
-            for channel in list(self.packs):
-                await self.flush(channel)
             if self.inflight:
                 done, pending = await asyncio.wait(tuple(self.inflight), timeout=15)
                 if self.durable:
@@ -272,4 +319,8 @@ class LiveAudioArchive:
                 raise RuntimeError('audio custody still pending; producer remains unacknowledged')
 
     async def close(self):
+        # A real disconnect boundary commits the silence/partial-window tail.
+        async with self.lock:
+            for channel in list(self.packs):
+                await self.flush(channel)
         await self.ensure_durable()

@@ -1081,7 +1081,6 @@ class ListenSessionRuntime:
                 get_byok_keys=get_byok_keys,
                 on_conversation_processed=self.conversations.on_conversation_processed,
                 wait_for_event=wait_for_event,
-                ensure_audio_durable=self.receiver.raw_archive.ensure_durable,
             ),
         )
         self.pusher_close = session.close

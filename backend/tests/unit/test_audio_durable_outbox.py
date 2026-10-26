@@ -10,7 +10,7 @@ from pathlib import Path
 import struct
 import threading
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from starlette.websockets import WebSocketState
@@ -22,7 +22,7 @@ from config.audio_outbox import enabled
 from utils.other import storage, live_audio_archive, audio_outbox
 from utils.other import audio_outbox_metrics
 from utils.other.audio_outbox import AudioReceipt, commit_pcm, read_pcm
-from routers.listen.transcripts import TranscriptProcessor
+from routers.listen import coverage
 from utils.other.live_audio_archive import LiveAudioArchive
 from utils.other.raw_audio import CapturePack, AudioSegment, decode_capture
 from utils.other.raw_audio_read import list_packs, read_pack
@@ -310,20 +310,256 @@ def test_enhanced_receipt_verifies_encrypted_media_and_manifest(remote, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_transcript_write_waits_for_audio_custody_before_any_database_call():
-    persistence = MagicMock()
+async def test_relay_cycles_do_not_flush_active_window_or_read_firestore(remote, monkeypatch):
+    h = host()
+    archive = LiveAudioArchive(h)
+    fence = MagicMock(side_effect=lambda *a: nullcontext())
+    tombstone = MagicMock(return_value=False)
+    protection = MagicMock(return_value='standard')
+    monkeypatch.setattr(storage, 'owner_storage_write_gate', fence)
+    monkeypatch.setattr(storage.conversation_tombstones, 'is_deleted', tombstone)
+    monkeypatch.setattr(storage.users_db, 'get_data_protection_level', protection)
+    pcm = b'\x01\x00' * 16000
+    for second in range(59):
+        await archive.append(pcm, 'conversation', 1000 + second, 16000)
+        await archive.ensure_durable()
+    assert not h.events and not remote.list_blobs('audio-outbox/')
+    fence.assert_not_called()
+    tombstone.assert_not_called()
+    protection.assert_not_called()
+    await archive.append(pcm, 'conversation', 1059, 16000)
+    await archive.ensure_durable()
+    assert len(h.events) == 1 and len(h.events[0].frames) == 60
+    assert len(remote.list_blobs('raw-live/')) == len(remote.list_blobs('audio-outbox/')) == 1
+    assert fence.call_count == 2 and protection.call_count == 1
+    window_tombstone_reads = tombstone.call_count
+    for _ in range(10):
+        await archive.ensure_durable()
+    assert fence.call_count == 2 and tombstone.call_count == window_tombstone_reads
+    assert read_pcm('owner', AudioReceipt(**h.events[0].receipt)) == pcm * 60
 
-    async def unavailable():
-        raise OSError('archive unavailable')
 
-    processor = object.__new__(TranscriptProcessor)
-    processor.host = SimpleNamespace(
-        receiver=SimpleNamespace(raw_archive=SimpleNamespace(durable=True, ensure_durable=unavailable)),
-        persistence=persistence,
+@pytest.mark.asyncio
+async def test_crash_mid_window_leaves_client_wal_unacknowledged(remote, monkeypatch):
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    h = host()
+    archive = LiveAudioArchive(h)
+    h.receiver = SimpleNamespace(raw_archive=archive)
+    ledger = MagicMock()
+
+    async def persist(*args, **kwargs):
+        ledger(*args, **kwargs)
+        return []
+
+    h.persistence = SimpleNamespace(call=persist)
+    await archive.append(b'\x01\x00', 'conversation', 1000, 1)
+    await coverage.publish_committed(
+        h,
+        'conversation',
+        {
+            'proof': coverage.PROOF_KIND,
+            'runs': [{'capture_root': 'source', 'source_frame_start': 0, 'source_frame_end': 1}],
+        },
     )
-    with pytest.raises(OSError):
-        await processor._update_live_conversation(None, [object()], [], None, None)
-    persistence.call.assert_not_called()
+    await archive.ensure_durable()
+    assert not h.events and not remote.list_blobs('audio-outbox/')
+    ledger.assert_not_called()
+    # A process loss discards this object, but has issued no WAL-release ACK.
+    assert archive.pending_acks and archive.packs and not archive.inflight
+
+
+@pytest.mark.asyncio
+async def test_empty_consented_archive_never_publishes_audio_backed_coverage(remote, monkeypatch):
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    h = host()
+    archive = LiveAudioArchive(h)
+    h.receiver = SimpleNamespace(raw_archive=archive)
+    h.persistence = SimpleNamespace(call=AsyncMock(return_value=[]))
+    # A committed transcript proof does not substitute for an audio receipt.
+    await coverage.publish_committed(
+        h,
+        'conversation',
+        {
+            'proof': coverage.PROOF_KIND,
+            'runs': [{'capture_root': 'source', 'source_frame_start': 0, 'source_frame_end': 1}],
+        },
+    )
+    await archive.close()
+    h.persistence.call.assert_not_awaited()
+    assert not h.events and not archive.pending_acks and not archive.sequence
+    assert not remote.list_blobs('raw-live/') and not remote.list_blobs('audio-outbox/')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('consent', [False, None])
+async def test_no_storage_keeps_transcript_receipt_semantics_without_claiming_audio_custody(
+    remote, monkeypatch, consent
+):
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    h = host()
+    if consent is None:
+        del h.private_cloud_sync_enabled
+    else:
+        h.private_cloud_sync_enabled = consent
+    archive = LiveAudioArchive(h)
+    h.receiver = SimpleNamespace(raw_archive=archive)
+    event = coverage.CaptureCommittedEvent(
+        conversation_id='conversation', capture_root='source', source_start=0, source_end=1
+    )
+    h.persistence = SimpleNamespace(call=AsyncMock(return_value=[event]))
+    await archive.append(b'\x01\x00', 'conversation', 1000, 1)
+    # publish_committed is entered only after the durable transcript merge;
+    # the transaction failure/success ordering is covered by the integration
+    # matrix in test_listen_capture_coverage.py, including consent disabled.
+    await coverage.publish_committed(
+        h,
+        'conversation',
+        {
+            'proof': coverage.PROOF_KIND,
+            'runs': [{'capture_root': 'source', 'source_frame_start': 0, 'source_frame_end': 1}],
+        },
+    )
+    await archive.close()
+    h.persistence.call.assert_awaited_once()
+    assert h.events == [event]  # Transcript receipt, never AudioCustodyEvent.
+    assert not archive.pending_acks and not archive.sequence
+    assert not remote.list_blobs('raw-live/') and not remote.list_blobs('audio-outbox/')
+
+
+@pytest.mark.asyncio
+async def test_disconnect_commits_tail_before_coverage_or_audio_ack(remote, monkeypatch):
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    h = host()
+    archive = LiveAudioArchive(h)
+    h.receiver = SimpleNamespace(raw_archive=archive)
+    acknowledged = []
+
+    async def persist(*args, **kwargs):
+        # Both immutable objects exist before coverage enters the ledger.
+        assert len(remote.list_blobs('audio-outbox/')) == len(remote.list_blobs('raw-live/')) == 1
+        acknowledged.append(kwargs)
+        return []
+
+    h.persistence = SimpleNamespace(call=persist)
+    await archive.append(b'\x01\x00', 'conversation', 1000, 1)
+    await coverage.publish_committed(h, 'conversation', {'proof': coverage.PROOF_KIND, 'runs': []})
+    await archive.close()
+    assert len(h.events) == len(acknowledged) == 1
+    assert not archive.pending_acks and not archive.packs and not archive.uncommitted
+    assert read_pcm('owner', AudioReceipt(**h.events[0].receipt)) == b'\x01\x00'
+
+
+@pytest.mark.asyncio
+async def test_later_window_cannot_ack_earlier_failed_window(remote, monkeypatch):
+    archive = LiveAudioArchive(host())
+    real = archive._write
+    release = asyncio.Event()
+    later_committed = asyncio.Event()
+    published = []
+
+    async def blocked(pack, channel):
+        if channel == 0:
+            await release.wait()
+            raise OSError('first window failed')
+        await real(pack, channel)
+        later_committed.set()
+
+    monkeypatch.setattr(archive, '_write', blocked)
+    for channel in range(2):
+        await archive.append(b'\x01\x00', 'conversation', 1000, 1, channel)
+        await archive.flush(channel)
+
+    async def publish():
+        published.append(True)
+
+    await archive.defer_ack('conversation', publish)
+    await later_committed.wait()
+    assert not published
+    tasks = tuple(archive.inflight)
+    release.set()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    assert not published and archive.uncommitted
+    monkeypatch.setattr(archive, '_write', real)
+    await archive.ensure_durable()
+    assert published == [True] and not archive.pending_acks
+
+
+@pytest.mark.asyncio
+async def test_coverage_coalesces_per_conversation_and_queue_refusal_never_acks(remote):
+    archive = LiveAudioArchive(host())
+    await archive.append(b'\x01\x00', 'conversation', 1000, 1)
+    published = []
+
+    async def old():
+        published.append('old')
+
+    async def latest():
+        published.append('latest')
+
+    await archive.defer_ack('conversation', old)
+    await archive.defer_ack('conversation', old)
+    await archive.defer_ack('conversation', latest)
+    for index in range(31):
+        await archive.defer_ack(str(index), old)
+    with pytest.raises(RuntimeError, match='queue full'):
+        await archive.defer_ack('overflow', old)
+    assert not published and len(archive.pending_acks) == 32
+    await archive.close()
+    assert published.count('latest') == 1 and published.count('old') == 32
+
+
+@pytest.mark.asyncio
+async def test_continuous_transcripts_cannot_starve_committed_window_ack(remote, monkeypatch):
+    archive = LiveAudioArchive(host())
+    release = asyncio.Event()
+    real = archive._write
+    published = []
+
+    async def blocked(pack, channel):
+        await release.wait()
+        await real(pack, channel)
+
+    monkeypatch.setattr(archive, '_write', blocked)
+
+    async def first():
+        published.append('first')
+
+    async def latest():
+        published.append('latest')
+
+    await archive.append(b'\x01\x00', 'conversation', 1000, 1)
+    await archive.defer_ack('conversation', first)
+    await archive.flush(0)
+    await archive.append(b'\x02\x00', 'conversation', 1001, 1)
+    for _ in range(20):
+        await archive.defer_ack('conversation', latest)
+    assert len(archive.pending_acks['conversation']) == 2
+    release.set()
+    await archive.ensure_durable()
+    assert published == ['first'] and archive.packs
+    await archive.close()
+    assert published == ['first', 'latest']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('boundary', ['conversation', 'hour', 'frame_cap'])
+async def test_listen_pack_boundary_commits_only_frozen_frames(remote, boundary):
+    archive = LiveAudioArchive(host())
+    count = 4096 if boundary == 'frame_cap' else 1
+    for _ in range(count):
+        await archive.append(b'\x01\x00', 'conversation', 1000, 0)
+    await archive.append(
+        b'\x02\x00',
+        'next' if boundary == 'conversation' else 'conversation',
+        3600 if boundary == 'hour' else 1000,
+        0,
+    )
+    await archive.ensure_durable()
+    assert len(archive.host.events) == 1
+    assert len(archive.host.events[0].frames) == count
+    assert archive.packs[0].data == b'\x02\x00'
+    await archive.close()
+    assert len(archive.host.events) == 2
 
 
 @pytest.mark.asyncio

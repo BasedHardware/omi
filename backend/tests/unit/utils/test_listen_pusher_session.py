@@ -3,6 +3,8 @@ import json
 import logging
 import struct
 import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from websockets.exceptions import ConnectionClosedError
@@ -19,6 +21,7 @@ from utils.listen_pusher_session import (
     ListenPusherSessionDeps,
 )
 from utils.pusher_protocol import audio_timeline_ack_frame
+from utils.other.live_audio_archive import LiveAudioArchive
 
 
 class FakePusherWebSocket:
@@ -299,20 +302,77 @@ def test_default_audio_pressure_retains_prefix_and_unacknowledged_input(monkeypa
 
 
 @pytest.mark.anyio
-async def test_audio_socket_send_cannot_clear_pcm_before_archive_barrier(monkeypatch):
-    monkeypatch.delenv('AUDIO_DURABLE_OUTBOX_ENABLED', raising=False)
+async def test_live_relay_keeps_its_cadence_while_original_window_is_unacknowledged(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    h = SimpleNamespace(
+        request=SimpleNamespace(uid='synthetic', codec='pcm16', sample_rate=16000),
+        private_cloud_sync_enabled=True,
+        spawn=lambda coro, **kwargs: asyncio.create_task(coro),
+    )
+    archive = LiveAudioArchive(h)
+    write = AsyncMock()
+    monkeypatch.setattr(archive, '_write', write)
     ws = FakePusherWebSocket()
-
-    async def refused():
-        raise OSError('durable storage unavailable')
-
-    session = make_session(ws=ws, deps_overrides={'ensure_audio_durable': refused})
+    session = make_session(ws=ws)
     await session.connect()
-    session.audio_bytes_send(b'abcd', received_at=1)
-    with pytest.raises(OSError):
+    for second in range(10):
+        await archive.append(b'abcd', 'conv-1', 1000 + second, 2)
+        session.audio_bytes_send(b'abcd', received_at=1000 + second)
         await session._audio_bytes_flush()
-    assert not ws.sent
-    assert [run.data for run in session.audio_runs] == [b'abcd']
+        assert len([frame for frame in ws.sent if frame_type(frame) == 101]) == second + 1
+    write.assert_not_awaited()
+    assert archive.packs[0].data == b'abcd' * 10
+    assert session.audio_total_size == 0
+    await archive.close()
+    write.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_slow_window_commit_does_not_block_live_relay_or_release_custody(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    h = SimpleNamespace(
+        request=SimpleNamespace(uid='synthetic', codec='pcm16', sample_rate=16000),
+        private_cloud_sync_enabled=True,
+        spawn=lambda coro, **kwargs: asyncio.create_task(coro),
+    )
+    archive = LiveAudioArchive(h)
+    release = asyncio.Event()
+    started = asyncio.Event()
+    acknowledged = []
+
+    async def slow_write(*args):
+        started.set()
+        await release.wait()
+
+    async def ack():
+        acknowledged.append(True)
+
+    monkeypatch.setattr(archive, '_write', slow_write)
+    # A real 60s boundary schedules storage but does not await its upload.
+    await archive.append(b'\x01\x00' * 16000 * 60, 'conv-1', 1000, 16000 * 60)
+    await archive.defer_ack('conv-1', ack)
+    await started.wait()
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    await session.connect()
+    relay = None
+    try:
+        for second in range(10):
+            await archive.append(b'abcd', 'conv-1', 1060 + second, 2)
+            session.audio_bytes_send(b'abcd', received_at=1060 + second)
+            relay = asyncio.create_task(session._audio_bytes_flush())
+            await asyncio.sleep(0)
+            assert relay.done()  # No wall-clock threshold: storage is still blocked.
+            await relay
+            assert not acknowledged and archive.uncommitted
+            assert len([frame for frame in ws.sent if frame_type(frame) == 101]) == second + 1
+        assert archive.packs[0].data == b'abcd' * 10
+    finally:
+        release.set()
+        if relay is not None:
+            await relay
+        await archive.close()
+    assert acknowledged == [True]
 
 
 @pytest.mark.anyio
