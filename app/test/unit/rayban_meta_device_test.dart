@@ -374,5 +374,4 @@ void main() {
       expect(subscription, isNull);
     });
   });
-
 }
