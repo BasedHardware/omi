@@ -34,10 +34,6 @@ from pydantic import BaseModel, Field
 
 from database.redis_db import r as redis_client
 from utils.executors import db_executor, run_blocking
-from utils.llm.user_voice import (
-    apply_user_voice_to_propose_message,
-    enrich_search_contacts_with_user_voice,
-)
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -299,6 +295,8 @@ def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: 
         # payload the device should receive.
         kwargs.pop('config', None)
         if name == 'propose_message' and isinstance(kwargs.get('text'), str):
+            from utils.llm.user_voice import apply_user_voice_to_propose_message
+
             recipients = kwargs.get('to') if isinstance(kwargs.get('to'), list) else []
             kwargs['text'] = await run_blocking(
                 db_executor,
@@ -338,6 +336,8 @@ def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: 
             int((time.monotonic() - started_at) * 1000),
         )
         if name == 'search_contacts' and isinstance(result.get('contacts'), list):
+            from utils.llm.user_voice import enrich_search_contacts_with_user_voice
+
             await run_blocking(db_executor, enrich_search_contacts_with_user_voice, uid, result['contacts'])
         # Returned as JSON text: the model reads `status` and `ok` directly, and
         # a cancelled sheet must stay visibly distinct from a delivered message.
