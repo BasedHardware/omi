@@ -602,6 +602,7 @@ def _verified_read_session(
         bounds_by_path[chunk['path']] = bounds
     verified: set[str] = set()
     decoded: Dict[str, Tuple[float, float]] = {}
+    rejected_extents: List[Tuple[float, float]] = []
     first_refusal = None
     for segment in pending:
         placement = placements.get(segment.id) if segment.id is not None else None
@@ -638,6 +639,7 @@ def _verified_read_session(
                 if isinstance(chunk.get('span'), Mapping):
                     if upper_end is None or abs(duration - (upper_end - start)) > 0.002:
                         session.cache[chunk['path']] = (None, 'decode_failed')
+                        rejected_extents.append((start, max(upper_end or start, start + duration)))
                         refusal = 'decoded_duration_mismatch'
                         break
                 # Actual decoded samples, rather than a declared rounded end,
@@ -660,6 +662,14 @@ def _verified_read_session(
             verified.add(segment.id)
         else:
             first_refusal = first_refusal or refusal
+    # A contradiction discovered later also revokes earlier provisional proof.
+    # Keep its observed extent even after its PCM is removed from the cache.
+    verified.difference_update(
+        segment_id
+        for segment_id, placement in placements.items()
+        if (window := placement.window) is not None
+        and any(start < window[1] and end > window[0] for start, end in rejected_extents)
+    )
     logger.info(
         'event=conversation_speaker_audio_evidence pending=%d verified=%d refused=%d '
         'downloads=%d bytes=%d read_budget_hit=%s reason=%s',

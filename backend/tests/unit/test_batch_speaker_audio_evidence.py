@@ -159,21 +159,28 @@ def inventory(monkeypatch):
     return add, reads
 
 
-def test_rejected_decoded_bytes_cannot_contaminate_a_proven_boundary_clip(env, inventory, monkeypatch):
+@pytest.mark.parametrize('reverse', [False, True])
+def test_rejected_extent_refuses_intersecting_windows_but_preserves_disjoint_clip(env, inventory, monkeypatch, reverse):
     _, diarizer = env
     add, _ = inventory
-    conversation = _conversation([1, 0], seconds=6)
+    conversation = _conversation([1, 0, 0], seconds=6)
     origin = conversation.started_at.timestamp()
-    # Invalid duration is detected for the first window. Its long PCM must not
-    # remain available to the later boundary assembler after that refusal.
+    conversation.transcript_segments[2].start = 24
+    conversation.transcript_segments[2].end = 29.8
+    segments = list(conversation.transcript_segments)
+    if reverse:
+        conversation.transcript_segments.reverse()
+    # The observed invalid extent contradicts the second window's independence,
+    # even when that window was verified before the mismatch was discovered.
     add(origin, 1, decoded_duration=20, value=2000)
-    for index in range(8):
-        add(origin + 6 + index * 0.725, 0.725)
+    for start in (6, 24):
+        for index in range(8):
+            add(origin + start + index * 0.725, 0.725)
     monkeypatch.setattr(stage.users_db, 'get_user_speaker_embedding', lambda uid: list(VOICES[0]))
     stage._resolve('synthetic-owner', conversation, receipt={}, deadline=time.monotonic() + 45)
     assert diarizer.calls == 1
-    assert not conversation.transcript_segments[0].is_user
-    assert conversation.transcript_segments[1].is_user
+    assert all(not segment.is_user and segment.person_id is None for segment in segments[:2])
+    assert segments[2].is_user
 
 
 def prove(conversation, windows):
