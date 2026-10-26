@@ -12,12 +12,38 @@ APP = {'bundleIdentifier': admission.DEV, 'url': 'file://' + ROOT + '/'}
 
 
 class AdmissionTests(unittest.TestCase):
-    def test_dev_main_and_extension_are_busy_even_with_url_slash_variation(self):
-        for suffix in ('/Runner', '/PlugIns/Widget.appex/Widget'):
+    def test_post_install_widget_is_recorded_without_blocking_main_admission(self):
+        state = admission.idle_state([APP], [
+            {'executable': 'file://' + ROOT + '/PlugIns/BatteryWidget.appex/BatteryWidget', 'processIdentifier': 42}])
+        self.assertEqual(state['running_pids'], [])
+        self.assertEqual(state['extension_pids'], [42])
+
+    def test_main_remains_busy_alongside_an_extension(self):
+        state = admission.idle_state([APP], [
+            {'executable': 'file://' + ROOT + '/PlugIns/BatteryWidget.appex/BatteryWidget', 'processIdentifier': 42},
+            {'executable': 'file://' + ROOT + '/Runner', 'processIdentifier': 43}])
+        self.assertEqual(state['running_pids'], [43])
+        self.assertEqual(state['extension_pids'], [42])
+
+    def test_unclassified_dev_executable_still_fails_closed(self):
+        for suffix in ('/Helper', '/Other/Widget.appex/Widget', '/PlugIns/Unknown/Runner', '/PlugIns/Widget.appex',
+                       '/PlugIns/BatteryWidget.appex/Frameworks/Helper.framework/Helper',
+                       '/PlugIns/BatteryWidget.appex/Helper'):
+            with self.subTest(suffix=suffix), self.assertRaises(ValueError):
+                admission.idle_state([APP], [
+                    {'executable': 'file://' + ROOT + suffix, 'processIdentifier': 42}])
+
+    def test_extension_with_incomplete_pid_is_not_ignored(self):
+        with self.assertRaises(ValueError):
+            admission.idle_state([APP], [
+                {'executable': 'file://' + ROOT + '/PlugIns/BatteryWidget.appex/BatteryWidget'}])
+
+    def test_main_and_extension_classification_normalizes_url_slash_variation(self):
+        for suffix, key in (('/Runner', 'running_pids'), ('/PlugIns/Widget.appex/Widget', 'extension_pids')):
             with self.subTest(suffix=suffix):
                 state = admission.idle_state([APP], [
                     {'executable': 'file:///' + ROOT + suffix, 'processIdentifier': 42}])
-                self.assertEqual(state['running_pids'], [42])
+                self.assertEqual(state[key], [42])
 
     def test_another_installed_app_and_prefix_sibling_are_not_dev(self):
         state = admission.idle_state([APP], [
