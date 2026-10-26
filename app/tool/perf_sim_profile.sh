@@ -97,6 +97,7 @@ shasum -a 256 integration_test/perf/production_shell.dart test_driver/heavy_prof
   tool/perf/device_run.py tool/perf/compare.py >> "$OUT_DIR/protocol-files.raw"
 shasum -a 256 tool/perf/device_admission.py >> "$OUT_DIR/protocol-files.raw"
 shasum -a 256 tool/perf/virtual_admission.py >> "$OUT_DIR/protocol-files.raw"
+shasum -a 256 tool/perf/host_load.py >> "$OUT_DIR/protocol-files.raw"
 shasum -a 256 tool/perf/android_manifest.py android/app/build.gradle \
   android/app/src/heavyPerf/AndroidManifest.xml >> "$OUT_DIR/protocol-files.raw"
 LC_ALL=C sort "$OUT_DIR/protocol-files.raw" > "$OUT_DIR/harness-sha256.txt"
@@ -137,7 +138,7 @@ if [[ "$PLATFORM" == ios && "$SIMULATOR" != 1 ]]; then
     --domain-type appDataContainer --domain-identifier "$BUNDLE_ID" \
     --destination "Documents/$CANARY_NAME" --timeout 20 > "$OUT_DIR/canary-create.log" 2>&1
 fi
-printf '{"warmup_runs":%s,"measured_runs":%s,"outlier_policy":"retain-all"}\n' "$WARMUP_RUNS" "$RUNS" > "$OUT_DIR/launch-protocol.json"
+printf '{"warmup_runs":%s,"measured_runs":%s,"outlier_policy":"retain-all","host_load_policy":"load1-per-logical-cpu<=1/v1"}\n' "$WARMUP_RUNS" "$RUNS" > "$OUT_DIR/launch-protocol.json"
 for ((launch=1; launch<=RUNS+WARMUP_RUNS; launch++)); do
   run=$((launch-WARMUP_RUNS))
   PREFIX=receipt
@@ -161,15 +162,24 @@ for ((launch=1; launch<=RUNS+WARMUP_RUNS; launch++)); do
         --out "$ATTEMPT_DIR/admission-before-launch.json"
     fi
     DRIVE_RESULT=0
+    HOST_GUARD=()
+    if [[ "$VIRTUAL" == 1 ]]; then
+      HOST_GUARD=(python3 -I tool/perf/host_load.py --out "$ATTEMPT_DIR/host-load.json" --)
+    fi
     OMI_PERF_DEVICE_OUTPUT_DIR="$ATTEMPT_DIR" \
       OMI_PERF_RUN_NUMBER="$run" \
       OMI_PERF_TIMELINE="$TIMELINE" \
       OMI_PERF_SIMULATOR="$SIMULATOR" \
       OMI_PERF_VIRTUAL="$VIRTUAL" \
-      python3 -I tool/perf_drive.py "$ATTEMPT_DIR/driver.log" \
+      "${HOST_GUARD[@]}" python3 -I tool/perf_drive.py "$ATTEMPT_DIR/driver.log" \
       flutter drive --"$MODE" --flavor dev --no-pub --no-dds --keep-app-running --no-publish-port \
       --driver=test_driver/heavy_profile_driver.dart --target="$TARGET" \
       --use-application-binary="$BINARY" "${DEFINES[@]}" -d "$DEVICE" || DRIVE_RESULT=$?
+    if [[ "$VIRTUAL" == 1 ]]; then
+      cp "$ATTEMPT_DIR/host-load.json" "$OUT_DIR/$PREFIX-$run-host-load.json"
+      # An otherwise completed slow/overloaded launch must never be retried.
+      if [[ "$DRIVE_RESULT" == 65 ]]; then exit 65; fi
+    fi
     if [[ "$PLATFORM" == ios && "$SIMULATOR" != 1 ]]; then
       xcrun devicectl device copy from --device "$DEVICE" --source "Documents/$CANARY_NAME" \
         --domain-type appDataContainer --domain-identifier "$BUNDLE_ID" \

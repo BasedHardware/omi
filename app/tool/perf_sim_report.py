@@ -157,6 +157,19 @@ def summarize(directory, expected_runs):
         expected_platform, expected_mode = ('android', 'profile') if kind == 'android-emulator' else ('ios', 'debug')
         if identities[0]['platform'] != expected_platform or first['build_mode'] != expected_mode:
             raise ValueError('virtual runtime kind does not match platform/build mode')
+        if protocol.get('host_load_policy') != 'load1-per-logical-cpu<=1/v1':
+            raise ValueError('virtual qualification requires fixed host load admission')
+        for prefix, count in (('warmup', warmups), ('receipt', expected_runs)):
+            for index in range(1, count + 1):
+                host = json.loads((directory / f'{prefix}-{index}-host-load.json').read_text())
+                samples = host.get('samples', [])
+                if (host.get('policy') != protocol['host_load_policy'] or host.get('passed') is not True
+                        or host.get('command_exit_code') != 0 or len(samples) < 2
+                        or samples[0].get('phase') != 'before' or samples[-1].get('phase') != 'after'
+                        or any(type(s.get('logical_cpus')) is not int or s['logical_cpus'] <= 0
+                               or not math.isfinite(s['load_1_5_15m'][0])
+                               or not 0 <= s['load_1_5_15m'][0] <= s['logical_cpus'] for s in samples)):
+                    raise ValueError('host overload or missing launch load evidence invalidates entire batch')
         if expected_platform == 'android' and identities[0].get('native_harness') != {
                 'package': 'com.friend.ios.dev', 'firebase_auto_initializer_absent': True}:
             raise ValueError('missing native heavy APK admission')

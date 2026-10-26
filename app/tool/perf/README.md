@@ -35,6 +35,13 @@ An APK inspection checks DEV identity and the initializer's absence before any
 installation. This covers native startup that Dart's HTTP override cannot block
 ([Firebase initialization](https://firebase.google.com/docs/reference/android/com/google/firebase/FirebaseApp)).
 
+Virtual launches require load1 no greater than the logical CPU count, fixed
+before measurement. `host_load.py` retains samples before, every second during,
+and after each launch. An overload before launch prevents it; an overload during
+launch lets it complete and retains its output, then invalidates the entire
+batch without retry. Every warmup and measured launch needs passing host-load
+evidence before the report can qualify a virtual baseline.
+
 All measured runs participate in the unchanged 15% p90 spread gate. Slow runs
 and frames are retained, including first exposure in warmup. No statistical
 outlier is silently dropped. A passing profile emulator batch is marked
