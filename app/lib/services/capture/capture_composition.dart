@@ -62,9 +62,11 @@ class CaptureDependencies {
     required this.telemetry,
     required this.ensureDeviceConnection,
     this.pendantReconnect,
+    this.pendantReconnectBlocked,
   });
   final Future<DeviceConnection?> Function(String) ensureDeviceConnection;
   final Future<void> Function(String deviceId)? pendantReconnect;
+  final bool Function(String deviceId)? pendantReconnectBlocked;
   final RecordingLifecycleTelemetry telemetry;
   final IWalService wal;
   final IMicRecorderService phoneMic;
@@ -128,6 +130,7 @@ CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) => Capt
       localSegmentStore: dependencies.localSegments,
       deviceConnectionLoader: dependencies.ensureDeviceConnection,
       pendantReconnect: dependencies.pendantReconnect,
+      pendantReconnectBlocked: dependencies.pendantReconnectBlocked,
     );
 
 /// Composition entry signature for main.dart. Builder must resolve defaults

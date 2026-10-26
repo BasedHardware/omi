@@ -55,6 +55,8 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   bool get pendantCaptureActionRequired => false;
   @override
   bool get pendantCaptureVerified => true;
+  @override
+  bool get pendantReconnectInFlight => false;
   bool streaming = false;
   bool paused = false;
   double rate = 1;

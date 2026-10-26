@@ -786,7 +786,11 @@ void main() {
         capture: capture,
         episodes: episodes,
       );
+      // The failure never says Listening: the warning names the problem as the
+      // title and the plain-words sentence sits under it, as the island does.
       expect(find.text(en.captureNoAudioFromPendant), findsOneWidget);
+      expect(find.text(en.captureNoAudioDetail), findsOneWidget);
+      expect(find.text(en.episodeListeningNow), findsNothing, reason: 'a pendant that owes audio is not Listening now');
       expect(find.text(en.captureConnecting), findsNothing);
       expect(find.textContaining('Capturing ·', findRichText: true), findsNothing);
       expect(find.byIcon(Icons.chevron_right_rounded), findsNothing,

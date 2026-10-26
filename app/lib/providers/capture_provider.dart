@@ -29,6 +29,7 @@ class CaptureProvider extends CaptureController {
     super.processInProgressOutcome,
     super.deviceConnectionLoader,
     super.pendantReconnect,
+    super.pendantReconnectBlocked,
     super.omiCallState,
     super.captureWedgeMonitor,
     super.calendarGapMonitor,

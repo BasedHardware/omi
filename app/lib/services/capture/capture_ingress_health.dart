@@ -14,6 +14,7 @@ class CaptureIngressHealth {
     required this.validUntilMs,
     required this.subscriptionConfirmed,
     required this.unverifiedSinceMs,
+    this.lastAudioAtMs = 0,
     this.recoveryOutcome = 'none',
     this.recoverySpent = false,
     this.reconnectSpent = false,
@@ -25,17 +26,27 @@ class CaptureIngressHealth {
   final int validUntilMs;
   final bool subscriptionConfirmed;
   final int unverifiedSinceMs;
+
+  /// When audio last arrived on the current connection generation, or 0 if it
+  /// never did. Native resets it on every generation change (and on a failed
+  /// subscription), so a non-zero value proves the link of this generation has
+  /// delivered audio — the difference between healthy silence and a
+  /// confirmed-but-never-delivering subscription.
+  final int lastAudioAtMs;
+
   final String recoveryOutcome;
   final bool recoverySpent;
   final bool reconnectSpent;
 
   /// Whether this snapshot proves the pendant is capturing. A flowing lease is
-  /// one proof; a confirmed-subscription quiet is the other: the pendant only
-  /// sends audio while there is sound, so silence after a confirmed
-  /// subscription is healthy listening, not a lapsed link. Anything else —
-  /// an unconfirmed or expired subscription, a repair, a reconnect, an
-  /// exhausted recovery — is not.
-  bool verifiedAt(DateTime now) => subscriptionConfirmed && (audioLeaseValid(now) || phase == 'quiet');
+  /// one proof; a confirmed-subscription quiet that already delivered audio in
+  /// this generation is the other: the pendant only sends audio while there is
+  /// sound, so silence after sound is healthy listening, not a lapsed link.
+  /// A quiet with no audio this generation proves nothing — a subscription the
+  /// pendant never delivered on is exactly the wedge the wait grace exists for.
+  /// Waits, repairs, reconnects and exhausted recoveries are not proofs either.
+  bool verifiedAt(DateTime now) =>
+      subscriptionConfirmed && (audioLeaseValid(now) || (phase == 'quiet' && lastAudioAtMs > 0));
 
   /// A current audio lease: audio actually arrived, and recently. The proof a
   /// zero-byte dispute (a wedge episode) still needs — a confirmed subscription
@@ -57,6 +68,7 @@ class CaptureIngressHealth {
         validUntilMs: data['valid_until_ms'] as int,
         subscriptionConfirmed: data['subscription_confirmed'] as bool,
         unverifiedSinceMs: data['unverified_since_ms'] as int,
+        lastAudioAtMs: data['last_audio_at_ms'] as int? ?? 0,
         recoveryOutcome: data['recovery_outcome'] as String? ?? 'none',
         recoverySpent: data['recovery_spent'] as bool? ?? false,
         reconnectSpent: data['reconnect_spent'] as bool? ?? false,

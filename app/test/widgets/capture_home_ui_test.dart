@@ -57,6 +57,8 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   bool get pendantCaptureVerified => verified;
   @override
   bool get pendantCaptureActionRequired => false;
+  @override
+  bool get pendantReconnectInFlight => false;
 
   final _Live live;
   final bool failure;

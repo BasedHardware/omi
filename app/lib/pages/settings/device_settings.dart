@@ -730,13 +730,14 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     final capture = context.read<CaptureProvider?>();
     // Only the visible source, its running length and its audio health depend on
     // capture, not its transcript text, socket state, or BLE/network rate samples.
-    final (source, _, pendantFailed, pendantVerified) =
-        context.select<CaptureProvider?, (String?, DateTime?, bool, bool)>(
+    final (source, _, pendantFailed, pendantVerified, reconnecting) =
+        context.select<CaptureProvider?, (String?, DateTime?, bool, bool, bool)>(
       (c) => (
         c?.liveCaptureSource,
         c?.liveCaptureStartedAt,
         c?.pendantCaptureActionRequired ?? false,
-        c?.pendantCaptureVerified ?? true
+        c?.pendantCaptureVerified ?? true,
+        c?.pendantReconnectInFlight ?? false,
       ),
     );
     final deviceStreaming = source != null && source != 'phone';
@@ -760,7 +761,9 @@ extension _DeviceLiveSections on _DeviceSettingsState {
               ? l10n.captureConnecting
               : null,
       liveProblem: noAudio,
-      onFixProblem: noAudio && capture != null
+      // No tap while a reconnect runs: the controller ignores one anyway, and the
+      // row saying nothing is quieter than a second teardown racing the first.
+      onFixProblem: noAudio && capture != null && !reconnecting
           ? () {
               OmiHaptics.medium();
               final message = l10n.somethingWentWrong;

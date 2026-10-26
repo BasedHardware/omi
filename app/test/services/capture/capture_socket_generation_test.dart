@@ -47,6 +47,7 @@ CaptureDependencies _deps({
   LocalSegmentStore? localSegments,
   RecordingTransferCoordinator? coordinator,
   Future<void> Function(String deviceId)? pendantReconnect,
+  bool Function(String deviceId)? pendantReconnectBlocked,
 }) {
   final clock = world?.clock ?? VirtualClock(DateTime.utc(2026));
   return CaptureDependencies(
@@ -98,6 +99,7 @@ CaptureDependencies _deps({
         ),
     localSegments: localSegments ?? LocalSegmentStore.disabled(),
     pendantReconnect: pendantReconnect,
+    pendantReconnectBlocked: pendantReconnectBlocked,
     codec: codec ?? (_) async => BleAudioCodec.pcm16,
     microphonePermission: () async => true,
     refreshConversation: () async {},
@@ -558,7 +560,7 @@ void main() {
     }
   });
 
-  test('a confirmed-subscription quiet is Listening with a running clock, not unverified', () async {
+  test('a confirmed-subscription quiet after this generation\'s audio is Listening with a running clock', () async {
     final dir = await Directory.systemTemp.createTemp('capture-quiet-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     final ble = _IngressBle();
@@ -573,7 +575,8 @@ void main() {
       );
 
       // Audio flowed, then the room fell silent: native settles into quiet with a
-      // confirmed subscription and no audio lease. That is still Listening.
+      // confirmed subscription, no audio lease, and this generation's last audio.
+      // That is still Listening.
       ble.health = CaptureIngressHealth(
         phase: 'quiet',
         generation: 'gen',
@@ -581,6 +584,7 @@ void main() {
         validUntilMs: 0,
         subscriptionConfirmed: true,
         unverifiedSinceMs: 0,
+        lastAudioAtMs: world.clock.now().millisecondsSinceEpoch - 60000,
       );
       ble.notifyListeners();
       expect(p.pendantCaptureVerified, isTrue);
@@ -601,11 +605,81 @@ void main() {
         validUntilMs: 0,
         subscriptionConfirmed: false,
         unverifiedSinceMs: world.clock.now().millisecondsSinceEpoch,
+        lastAudioAtMs: world.clock.now().millisecondsSinceEpoch - 60000,
       );
       ble.notifyListeners();
       expect(p.pendantCaptureVerified, isFalse);
       expect(card.snapshot['status'], 'unverified');
       expect(card.snapshot['paused'], isTrue);
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
+  test('a fresh quiet with no audio this generation claims nothing and marks no capture start', () async {
+    final dir = await Directory.systemTemp.createTemp('capture-fresh-quiet-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    final ble = _IngressBle();
+    final events = <String>[];
+    try {
+      world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
+      final p = composeCaptureProvider(_deps(
+        world: world,
+        ble: ble,
+        telemetry: RecordingLifecycleTelemetry(
+          emitter: (name, _) => events.add(name),
+          idFactory: () => 'synthetic',
+          clock: world.clock.now,
+        ),
+      ));
+      addTearDown(p.dispose);
+      await p.streamDeviceRecording(
+        device: BtDevice(id: 'synthetic-device', name: 'Omi', type: DeviceType.omi, rssi: -50),
+      );
+      events.clear();
+
+      // fresh_subscription_quiet with hadAudio == false: the subscription confirmed,
+      // but this generation never delivered a packet. Listening claims nothing
+      // (#20378: a CCCD confirmation alone is not delivery), no capture start is
+      // marked, and the wait keeps its grace and the unheard notice behind it.
+      ble.health = CaptureIngressHealth(
+        phase: 'quiet',
+        generation: 'gen',
+        reason: 'fresh_subscription_quiet',
+        validUntilMs: 0,
+        subscriptionConfirmed: true,
+        unverifiedSinceMs: world.clock.now().millisecondsSinceEpoch - 60000,
+      );
+      ble.notifyListeners();
+      expect(p.pendantCaptureVerified, isFalse, reason: 'no audio this generation proves nothing');
+      expect(p.pendantCaptureActionRequired, isFalse);
+      expect(p.liveCaptureStartedAt, isNull);
+      expect(events.where((name) => name == RecordingLifecycleTelemetry.startedEvent), isEmpty,
+          reason: 'a zero-audio link must not mark capture started');
+      final card = CaptureSystemSurface(p, _NoCard(), now: world.clock.now);
+      expect(card.snapshot['status'], 'unverified', reason: 'the island grace still applies to it');
+
+      // The next generation delivering audio is what finally verifies — and marks
+      // the capture started on real evidence.
+      ble.health = CaptureIngressHealth(
+        phase: 'flowing',
+        generation: 'gen-2',
+        reason: 'audio_observed',
+        validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
+        subscriptionConfirmed: true,
+        unverifiedSinceMs: 0,
+        lastAudioAtMs: world.clock.now().millisecondsSinceEpoch,
+      );
+      ble.notifyListeners();
+      expect(p.pendantCaptureVerified, isTrue);
+      expect(p.liveCaptureStartedAt, isNotNull);
+      expect(
+        events.where((name) => name == RecordingLifecycleTelemetry.startedEvent),
+        isNotEmpty,
+        reason: 'flowing audio marks the capture started once',
+      );
     } finally {
       await world.dispose();
       await dir.delete(recursive: true);
@@ -667,6 +741,96 @@ void main() {
         throwsStateError,
       );
       expect(reconnects, hasLength(1));
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
+  test('a reader Reconnect coalesces concurrent taps into one pendant reconnect', () async {
+    final dir = await Directory.systemTemp.createTemp('capture-reconnect-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    final ble = _IngressBle();
+    final reconnects = <String>[];
+    final gate = Completer<void>();
+    try {
+      world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
+      final p = composeCaptureProvider(_deps(
+        world: world,
+        ble: ble,
+        pendantReconnect: (deviceId) async {
+          reconnects.add(deviceId);
+          await gate.future;
+        },
+      ));
+      addTearDown(p.dispose);
+      await p.streamDeviceRecording(
+        device: BtDevice(id: 'synthetic-device', name: 'Omi', type: DeviceType.omi, rssi: -50),
+      );
+
+      // Two taps while the first reconnect still runs: one disconnect-and-reconnect,
+      // not two racing teardowns of the same link.
+      final first = p.reconnectRecordingPendant();
+      final second = p.reconnectRecordingPendant();
+      expect(p.pendantReconnectInFlight, isTrue);
+      await pumpEventQueue();
+      expect(reconnects, ['synthetic-device']);
+      gate.complete();
+      await Future.wait([first, second]);
+      expect(reconnects, ['synthetic-device']);
+      expect(p.pendantReconnectInFlight, isFalse, reason: 'the guard re-arms for a later attempt');
+
+      // A later tap reconnects again; only concurrency is coalesced.
+      await p.reconnectRecordingPendant();
+      expect(reconnects, ['synthetic-device', 'synthetic-device']);
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
+  test('a reader Reconnect without a pendant, after a pause, or over a manual disconnect does nothing', () async {
+    final dir = await Directory.systemTemp.createTemp('capture-reconnect-guard-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    final ble = _IngressBle();
+    final reconnects = <String>[];
+    var readerDisconnected = true;
+    try {
+      world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
+      final p = composeCaptureProvider(_deps(
+        world: world,
+        ble: ble,
+        pendantReconnect: (deviceId) async => reconnects.add(deviceId),
+        pendantReconnectBlocked: (_) => readerDisconnected,
+      ));
+      addTearDown(p.dispose);
+
+      // No recording pendant: a caller learns there is nothing to reconnect instead
+      // of an uncaught failure deep in a tap handler.
+      await expectLater(p.reconnectRecordingPendant(), throwsStateError);
+      expect(reconnects, isEmpty);
+
+      await p.streamDeviceRecording(
+        device: BtDevice(id: 'synthetic-device', name: 'Omi', type: DeviceType.omi, rssi: -50),
+      );
+
+      // The reader disconnected the pendant themselves: their choice survives; the
+      // reconnect never runs, so the manual-disconnect state is never overridden.
+      await p.reconnectRecordingPendant();
+      expect(reconnects, isEmpty);
+
+      readerDisconnected = false;
+      // The reader paused capture: the pendant is not revived from a capture surface.
+      await p.pauseCapture();
+      await p.reconnectRecordingPendant();
+      expect(reconnects, isEmpty);
+
+      // With neither holding it back, the same tap performs the one reconnect.
+      await p.resumeCapture();
+      await p.reconnectRecordingPendant();
+      expect(reconnects, ['synthetic-device']);
     } finally {
       await world.dispose();
       await dir.delete(recursive: true);
