@@ -67,6 +67,10 @@ def test_two_inflight_slots_and_expiry_bound_work(repository):
     assert repository.authorize(item())
     repository.clock = lambda: 7321
     assert not repository.authorize(item())
+    assert not repository.reserve(item('three'))
+    # A deadline revokes new calls, but cannot recycle a decoder/request still
+    # running under its original owner. Only its completion frees the slot.
+    repository.release(item())
     assert repository.reserve(item('three'))
     # A late release cannot revoke the new occupant of an expired slot.
     repository.release(item())
@@ -144,8 +148,43 @@ def test_decoder_closes_after_the_first_canonical_unit(monkeypatch):
             closed.append(True)
 
     monkeypatch.setattr(language_shadow, 'decode_units', units)
+    monkeypatch.setattr(language_shadow, 'validate_language_probe_paths', lambda _: None)
     assert language_shadow.first_unit(['synthetic']) is first
     assert closed == [True]
+
+
+def test_large_upload_never_enters_canonical_decode(monkeypatch, tmp_path):
+    import struct
+    from utils.sync.input_limits import BackfillInputLimitExceeded
+
+    path = tmp_path / 'audio_omi_opus_16000_1_fs1920_1710000000.bin'
+    path.write_bytes((struct.pack('<I', 1) + b'\0') * 501)
+    decoder = Mock(side_effect=AssertionError('must refuse before expansion'))
+    monkeypatch.setattr(language_shadow, 'decode_units', decoder)
+    with pytest.raises(BackfillInputLimitExceeded):
+        language_shadow.first_unit([str(path)])
+    decoder.assert_not_called()
+
+
+def test_bounded_probe_preserves_the_actual_canonical_first_unit(tmp_path):
+    import struct
+    from utils.batch_pipeline.capture_decode import decode_units
+    from config.batch_pipeline_providers import provider_config
+
+    def bundle(name):
+        directory = tmp_path / name
+        directory.mkdir()
+        paths = []
+        for offset in range(2):
+            path = directory / f'audio_phonemic_pcm16_16000_1_fs160_{1710000000 + offset}.bin'
+            path.write_bytes((struct.pack('<I', 320) + b'\x01\x00' * 160) * 100)
+            paths.append(str(path))
+        return paths
+
+    expected = list(decode_units(bundle('normal'), max_seconds=provider_config().max_unit_seconds))[0]
+    observed = language_shadow.first_unit(bundle('qualification'))
+    assert observed.wav == expected.wav
+    assert observed.capture_at == expected.capture_at and observed.duration_seconds == expected.duration_seconds
 
 
 @pytest.mark.asyncio
@@ -199,6 +238,7 @@ async def test_offer_and_pair_task_only_write_qualification_control_and_remove_p
     monkeypatch.setattr(language_shadow, 'selected', lambda *_: True)
     monkeypatch.setattr(language_shadow, 'run_blocking', inline)
     monkeypatch.setattr(language_shadow, 'batch_artifact_authorize', authorize)
+    monkeypatch.setattr(language_shadow, 'validate_language_probe_paths', lambda _: None)
     monkeypatch.setattr(language_shadow, 'LanguageShadowStore', lambda _store: repository)
     monkeypatch.setattr(shadow_intake, 'repository_for_stage', lambda: SimpleNamespace(store=repository.store))
     monkeypatch.setattr(shadow_intake, 'copy_paths', copies)

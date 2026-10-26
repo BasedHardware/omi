@@ -27,7 +27,9 @@ class LanguageShadowStore:
             if len(active) > 2:
                 return False
             slots = [*active, *({} for _ in range(2 - len(active)))]
-            slot = next((i for i, value in enumerate(slots) if value.get('until', 0) <= now), None)
+            # Expiry revokes permission; only completion releases occupancy.
+            # A hung/crashed owner creates an explicit HOLD, never overlapping IO.
+            slot = next((i for i, value in enumerate(slots) if not value), None)
             if (
                 prior
                 or slot is None

@@ -12,6 +12,16 @@ legacy upload is sampled. Its effective input language matches batch intake:
 only an explicit single-language preference supplies a declared language;
 otherwise the input is `multi`. Declared languages do not require a probe.
 
+Qualification accepts only whole uploads within eight files, 2MiB encoded,
+4MiB codec-aware decoded working audio, 60 total audio seconds and4,096 frames.
+The shared backfill validator applies this stricter resource profile before
+reservation/copy and again immediately before canonical decoding. Oversized
+uploads are counted and skipped in full; no truncated prefix is silently
+substituted for a canonical unit. PCM rate/width and Opus maximum decoded
+frame size participate in the expansion proof. Ordinary backfill bounds and
+serving uploads are unchanged. This restricted sample population must remain
+explicit in the rate and coverage review.
+
 There is no GPU transcription/diarization, artifact upload, serving job, route,
 projection, transcript or allowance/usage write. Legacy owns its original files
 and processing. Only private temporary copies belong to the task; canonical
@@ -34,8 +44,14 @@ zero/malformed denies. One durable reservation permits at most one self call
 and one vendor call for that immutable upload. Reservations survive duplicate
 delivery and UTC-hour rollover; a lost commit response is refusal, not permission
 to repeat. There is also a fleet-wide minute cap of `ceil(hourly_cap/60)` and
-two concurrent slots with120s deadlines. An expired slot cannot authorize a
-late external call or be released by its previous occupant.
+two occupied slots with120s authorization deadlines. Expiry denies further
+external calls but **does not free occupancy**: a decoder/request still running
+keeps its slot until its completion path releases it. A crashed owner therefore
+causes HOLD rather than overlapping detector requests. Inspect aggregate occupied/
+expired counts when reservations stop; the lead/operator may reset stale control
+slots only after qualification is off and the old owners/requests are proved
+drained. Never recycle solely because a timer elapsed. Consumed probe intents
+remain consumed. A duplicate late release cannot revoke another occupant.
 
 Every reservation transaction checks privacy; each external detector call
 checks current privacy/generation and ordinary batch funded dispatch again.
@@ -66,7 +82,7 @@ The eligible denominator is both routes available and `vendor_conf=ge90`.
 Dangerous direction is self Parakeet while the vendor bucket is unsupported.
 Report batch, batch_shadow and prerecorded separately, with duration/language
 buckets. `omi_batch_language_shadow_total{outcome}` counts eligible, declared,
-not_reserved, matched, unmatched, no_unit and error outcomes. Eligible is an
+not_reserved, oversized, matched, unmatched, no_unit and error outcomes. Eligible is an
 offer count; only reserved matched results qualify. Missing series are unknown.
 Do not count duplicate uploads, pool the prerecorded population, import an
 old-threshold window, or treat a silence-only interval as qualification.
@@ -97,7 +113,9 @@ activation, op1 applies**. Source merge alone does not enable qualification.
    dangerous events and explicit bucket coverage. Required rate is
    `2995 / hours_remaining`; at22:00Z start it is213.93 matched/hour. At500
    attempts/hour that needs a measured match fraction≥42.79% plus adequate
-   selected traffic. The old batch6h match fraction256/362≈70.72% is a scenario
+   selected traffic in the bounded-upload population. Report the oversized offer
+   fraction; do not import the old unrestricted arrival rate. The old batch6h
+   match fraction256/362≈70.72% is a scenario
    only; transferring it gives353.59 matched/hour and8.47h, not a promise.
    A qualifying percentage cannot be inferred from a0%-serving baseline.
    Lead checks the first15min and hourly ETA; if100% selection still misses

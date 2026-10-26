@@ -23,12 +23,14 @@ from utils.executors import db_executor, storage_executor, sync_executor, run_bl
 from utils.stt.batch_language import compare_shadow_pair
 from utils.stt_cap_dispatch import sync_allowed
 from utils.sync.content_id import compute_sync_content_id
+from utils.sync.input_limits import BackfillInputLimitExceeded, validate_language_probe_paths
 
 logger = logging.getLogger(__name__)
 UNITS = Counter('omi_batch_language_shadow_total', 'Probe-only qualification admission and outcomes', ['outcome'])
 
 
 def first_unit(paths):
+    validate_language_probe_paths(paths)
     iterator = decode_units(paths, max_seconds=provider_config().max_unit_seconds)
     try:
         return next(iterator, None)
@@ -80,6 +82,11 @@ async def offer_upload(*, uid, content_id, paths, conversation_id, byok, policy,
             return
         item = replace(seed, privacy_generation=context.generation)
         UNITS.labels('eligible').inc()
+        try:
+            await run_blocking(storage_executor, validate_language_probe_paths, paths)
+        except BackfillInputLimitExceeded:
+            UNITS.labels('oversized').inc()
+            return
         repository = await run_blocking(db_executor, LanguageShadowStore, store)
         if not await run_blocking(db_executor, repository.reserve, item):
             UNITS.labels('not_reserved').inc()
