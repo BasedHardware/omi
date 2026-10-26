@@ -3786,7 +3786,7 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
         if playback_on_demand():
             PLAYBACK_BUILDS.labels('file', 'built').inc()
             record_playback_ready(payload, 'file')
-        logger.info(f'audio_merge: built artifact conv={conversation_id} file={audio_file_id} size={len(mp3_data)}')
+        logger.debug(f'audio_merge: built artifact conv={conversation_id} file={audio_file_id} size={len(mp3_data)}')
         return JSONResponse(status_code=200, content={'status': 'done'})
     finally:
         await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)

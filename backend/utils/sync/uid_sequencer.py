@@ -149,7 +149,7 @@ def _dispatch(claim: dict[str, Any]) -> None:
     payload = {**claim['payload'], 'sequencer_epoch': claim['epoch']}
     enqueue_sync_job(payload, dispatch_attempt=claim.get('dispatch_attempt', 0))
     latency = max(0.0, (datetime.now(timezone.utc) - claim['accepted_at']).total_seconds())
-    logger.info('event=sync_uid_sequencer action=dispatch outcome=enqueued latency_seconds=%.1f', latency)
+    logger.debug('event=sync_uid_sequencer action=dispatch outcome=enqueued latency_seconds=%.1f', latency)
 
 
 def _enqueue_wake(uid: str, uid_hash: str, deadline: int) -> None:

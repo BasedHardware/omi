@@ -376,7 +376,10 @@ def _record_sync_segment_outcome(
             # completing. A later retry may duplicate this metric, but not the
             # customer-visible transcription result.
             logger.warning('event=sync_transcription_metric outcome=dedupe_failed kind=segment')
-    log = logger.info if outcome in _NON_ERROR_SEGMENT_OUTCOMES else logger.error
+    # Non-error segment outcomes fire once per segment and dominate sync stdout
+    # volume; rates stay observable via omi_sync_transcription_* metrics and the
+    # per-job summary line below stays INFO.
+    log = logger.debug if outcome in _NON_ERROR_SEGMENT_OUTCOMES else logger.error
     reason = _sync_failure_reason(None if outcome in _NON_ERROR_SEGMENT_OUTCOMES else phase, exception)
     log(
         'event=sync_transcription_segment outcome=%s provider=%s model=%s lane=%s retryable=%s '
@@ -969,7 +972,7 @@ def retrieve_vad_segments(
         raise  # Re-raise to ensure thread failure is visible
 
     segments = _merge_and_cap_vad_segments(voice_segments)
-    logger.info('event=sync_vad outcome=success segment_count=%d', len(segments))
+    logger.debug('event=sync_vad outcome=success segment_count=%d', len(segments))
 
     aseg = AudioSegment.from_wav(path)
     path_dir = '/'.join(path.split('/')[:-1])
@@ -1887,7 +1890,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 response['new_memories'].discard(conversation_id)
                 response['updated_memories'].discard(conversation_id)
                 response.get('_merged', {}).pop(conversation_id, None)
-        logger.info('event=sync_assignment outcome=superseded')
+        logger.debug('event=sync_assignment outcome=superseded')
         _set_deferred_segment_outcome(
             deferred_outcome, outcome=TranscriptionOutcome.SUCCESS, provider=provider, model=model, retryable=False
         )
@@ -3078,7 +3081,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             if task_mode:
                 already_processed = await run_blocking(db_executor, get_processed_segments, job_id)
             if already_processed:
-                logger.info(
+                logger.debug(
                     'event=sync_transcription_retry outcome=deduplicated segment_count=%d', len(already_processed)
                 )
 
