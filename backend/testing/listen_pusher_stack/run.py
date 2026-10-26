@@ -1241,6 +1241,7 @@ async def _rest_finalization_survives_listener_restart(stack: Stack) -> None:
         return bool(conversation and conversation.get('has_content'))
 
     _wait_until(content_persisted, label='persisted content before REST finalization')
+    await _assign_owner_for_memory(stack, uid, conversation_id)
     responses = await _request_rest_finalization(
         stack, conversation_id, uid, requests=stack.rest_finalization_race_parties
     )
@@ -1451,6 +1452,7 @@ async def _integration_retry_preserves_processed_conversation(stack: Stack) -> N
     uid = 'stack-cloud-integration-retry'
     conversation_id = str(uuid.uuid4())
     task = await _cloud_task_for_clean_desktop_close(stack, uid, conversation_id)
+    await _assign_owner_for_memory(stack, uid, conversation_id)
     first = await stack.deliver_finalization_task(task, retry_count=0)
     if first != (500, {'status': 'retry'}):
         raise StackFailure(f'integration failure delivery did not request a retry: {first}')
@@ -1489,6 +1491,25 @@ async def _integration_retry_preserves_processed_conversation(stack: Stack) -> N
     expected_fanout_key_hash = sha256(fanout_key.encode('utf-8')).hexdigest()
     if len(integration_attempts) != 2 or fanout_key_hashes != {expected_fanout_key_hash}:
         raise StackFailure('integration retry did not preserve one idempotency key across both delivery attempts')
+
+
+async def _assign_owner_for_memory(stack: Stack, uid: str, conversation_id: str) -> None:
+    """Positive owner fixture through the real manual-label HTTP authority.
+
+    The synthetic STT voice starts unresolved. Tests that expect memory provider
+    work must explicitly establish its owner, rather than bypass admission.
+    Training is disabled; this is local emulator data only.
+    """
+    async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
+        response = await client.patch(
+            f'http://127.0.0.1:{stack.backend_port}/v1/conversations/{conversation_id}/assign-speaker/0',
+            params={'assign_type': 'is_user', 'value': 'true', 'use_for_speech_training': 'false'},
+            headers={'Authorization': f'Bearer {ADMIN_KEY}{uid}'},
+        )
+    if response.status_code != 200:
+        raise StackFailure(f'manual owner fixture returned HTTP {response.status_code}')
+    if not any(segment.get('is_user') for segment in response.json().get('transcript_segments', [])):
+        raise StackFailure('manual owner fixture did not label the synthetic voice')
 
 
 async def _memory_fence_blocks_durable_finalization(stack: Stack) -> None:

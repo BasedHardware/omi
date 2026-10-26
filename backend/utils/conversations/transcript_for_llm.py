@@ -396,6 +396,10 @@ def render_cluster_transcript(
         segment_id = str(getattr(row, 'id', None) or f'moment-{index}')
         participant = display.for_segment(row)
         key, name = participant.key, participant.name
+        if name and name.startswith('likely '):
+            # Suggestions remain useful on speaker-review surfaces, but do not
+            # become a named speaker binding in summaries.
+            name = None
         # If a fallback cluster has contradictory labels, retain no named claim.
         if key in labels and labels[key] != name:
             labels[key] = None

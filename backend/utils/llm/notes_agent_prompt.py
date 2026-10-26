@@ -67,7 +67,7 @@ EVIDENCE
 - A name merely mentioned in the transcript may refer to a third party. Preserve names as heard with a hedge
   when useful, but never promote that mention to a verified speaker identity or expand it from People alone.
 - Record evidenced non-owner participants with their speaker key and evidence. Otherwise omit the participant
-  and say "a speaker" (or the stable Speaker A/B label supplied by the authority). Lead the title with the topic
+  and attribute the statement as "someone said". Lead the title with the topic
   whenever the counterpart's identity is unverified; do not put a guessed or hedged identity in the title.
 - A calendar invitee or screen listing alone is not proof of attendance; never infer an absence or no-show from it.
 - Keep proposals, decisions, intentions and completed work distinct, and keep tense and hedges. A suggestion is

@@ -135,6 +135,6 @@ def noise_hidden_from_home(
     return (
         client_supports_discarded
         and not user_kept
-        and value(conversation, 'content_kind') == 'noise'
+        and value(conversation, 'content_kind') in ('media', 'noise')
         and serving_for(FLAG, uid)
     )

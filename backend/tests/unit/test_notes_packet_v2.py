@@ -182,7 +182,7 @@ def test_two_speakers_with_unknown_owner_never_get_named_attribution(evidence):
     assert fixture['segments'][0]['is_user'] is True  # Source labels are never rewritten.
 
 
-@pytest.mark.parametrize('band,expected', [('confident', 'Nik'), ('likely', 'likely Nik'), ('unknown', None)])
+@pytest.mark.parametrize('band,expected', [('confident', 'Nik'), ('likely', None), ('unknown', None)])
 def test_renderer_uses_the_policy_band_and_higher_probability(band, expected):
     evidence = SpeakerEvidence(
         status='resolved',

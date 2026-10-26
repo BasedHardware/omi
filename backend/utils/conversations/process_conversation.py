@@ -120,7 +120,11 @@ from utils.conversations.projection_payload import (
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
-from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
+from utils.conversations.owner_attribution import (
+    OwnerAttributionEvidence,
+    may_attribute_to_owner,
+    confident_owner_segments,
+)
 from utils.conversations.speaker_resolution import resolve_speakers_for_processing
 from utils.observability.owner_identity_retry import identity_pass
 from utils.memory.memory_service import MemoryService
@@ -1019,6 +1023,15 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     # configuration contract that Pusher qualification is meant to exercise.
     db_client = getattr(db_client_module, 'db', None)
     MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
+    if conversation.source != ConversationSource.external_integration:
+        owner_segments = confident_owner_segments(conversation.transcript_segments)
+        if not owner_segments:
+            # No new memory and no empty replacement of earlier memories. A
+            # later confident resolution/manual correction may retry normally.
+            return
+        # Quote grounding and the L1 fingerprint must see this same owner-only
+        # input. Never mutate the retained transcript or the notes/task input.
+        conversation = conversation.model_copy(update={'transcript_segments': owner_segments})
     sweep_owned_mode = _sweep_owned_writer_mode(uid)
     if sweep_owned_mode is not None:
         logger.info(

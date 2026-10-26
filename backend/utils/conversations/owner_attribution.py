@@ -72,3 +72,25 @@ def may_attribute_to_owner(evidence: OwnerAttributionEvidence, *, segment: Any =
     return evidence.trust == "unique_owner" and (
         segment is None or speaker_cluster_key(segment) == evidence.owner_cluster_id
     )
+
+
+def confident_owner_segments(segments: Sequence[Any]) -> list[Any]:
+    """Memory input requires a positive identity decision, never a legacy boolean.
+
+    Keep the full transcript for notes/playback. Only this derived input is
+    narrowed. Ambiguous multi-owner clusters and a carried ``is_user`` without
+    a current user decision do not authorize memory formation. An explicit
+    manual label is a positive owner decision too.
+    """
+    evidence = OwnerAttributionEvidence.from_segments(segments)
+    return [
+        segment
+        for segment in segments
+        if getattr(segment, 'is_user', False)
+        and not getattr(segment, 'person_id', None)
+        and may_attribute_to_owner(evidence, segment=segment)
+        and (
+            getattr(segment, 'speaker_identity_status', None) == 'user'
+            or getattr(segment, 'speaker_label_source', None) == 'manual'
+        )
+    ]

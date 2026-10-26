@@ -286,16 +286,17 @@ def test_failed_inputs_abstain_without_logging_payload(monkeypatch, caplog):
     assert 'sensitive synthetic payload' not in caplog.text
 
 
-def test_home_hiding_requires_serve_and_existing_client_capability(monkeypatch):
+@pytest.mark.parametrize('kind', ['noise', 'media'])
+def test_home_hiding_requires_serve_and_existing_client_capability(monkeypatch, kind):
     from utils.conversations.relevance_content import noise_hidden_from_home
 
-    row = {'content_kind': 'noise'}
+    row = {'content_kind': kind}
     assert not noise_hidden_from_home('', row, client_supports_discarded=True)
     monkeypatch.setenv(FLAG, 'serve')
     assert not noise_hidden_from_home('', row)
     assert noise_hidden_from_home('', row, client_supports_discarded=True)
     assert not noise_hidden_from_home('', row, client_supports_discarded=True, user_kept=True)
-    assert not noise_hidden_from_home('', {'content_kind': 'media'}, client_supports_discarded=True)
+    assert not noise_hidden_from_home('', {'content_kind': 'conversation'}, client_supports_discarded=True)
     monkeypatch.setenv(FLAG, 'off')
     assert not noise_hidden_from_home('', row, client_supports_discarded=True)
 
