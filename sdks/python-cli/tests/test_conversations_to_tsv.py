@@ -192,6 +192,79 @@ class TestConversationsToTsv(unittest.TestCase):
             sys.stdin = saved_stdin
             sys.stdout = saved_stdout
 
+    def test_speaker_zero_and_alternate_speaker_keys_preserved(self):
+        conv_with_speaker_0 = {
+            "id": "c-speaker-0",
+            "segments": [
+                {"speaker": 0, "text": "I am speaker zero."},
+                {"speaker": "0", "text": "I am also speaker zero as string."},
+                {"speaker_name": "Host", "text": "Welcome to the show."},
+                {"speaker_id": "42", "text": "Answering question 42."},
+                {"speaker": False, "text": "Anonymous narration."},
+            ],
+        }
+        tsv = c2tsv.conversations_to_tsv_string([conv_with_speaker_0])
+        lines = tsv.strip().split("\n")
+        self.assertEqual(len(lines), 2)
+        record = lines[1]
+        self.assertIn("0: I am speaker zero.", record)
+        self.assertIn("0: I am also speaker zero as string.", record)
+        self.assertIn("Host: Welcome to the show.", record)
+        self.assertIn("42: Answering question 42.", record)
+        self.assertIn("Anonymous narration.", record)
+        self.assertNotIn("False:", record)
+
+    def test_lone_surrogates_stripped_without_encode_error(self):
+        conv_with_surrogates = {
+            "id": "c-surrogate",
+            "structured": {
+                "title": "Title with \ud800 surrogate",
+                "overview": "Overview with \udfff surrogate",
+            },
+            "transcript": "Transcript with \ud83d\ud800 incomplete emoji",
+            "segments": [
+                {"speaker": "Speaker", "text": "Segment with \ud800 lone surrogate"},
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            in_file = Path(tmp_dir) / "surrogates.json"
+            out_file = Path(tmp_dir) / "surrogates.tsv"
+            in_file.write_text(json.dumps([conv_with_surrogates]), encoding="utf-8")
+            # Must succeed without UnicodeEncodeError
+            c2tsv.convert(str(in_file), str(out_file))
+            self.assertTrue(out_file.exists())
+            content = out_file.read_text(encoding="utf-8")
+            self.assertNotIn("\ud800", content)
+            self.assertNotIn("\udfff", content)
+
+    def test_cli_stdin_with_utf8_bom(self):
+        saved_stdin = sys.stdin
+        saved_stdout = sys.stdout
+        try:
+            # BOM prefixed JSON
+            sys.stdin = io.StringIO("\ufeff" + json.dumps([self.sample_conv_1]))
+            sys.stdout = io.StringIO()
+            exit_code = c2tsv.main(["-"])
+            self.assertEqual(exit_code, 0)
+            output = sys.stdout.getvalue()
+            self.assertIn("Weekly Standup", output)
+        finally:
+            sys.stdin = saved_stdin
+            sys.stdout = saved_stdout
+
+    def test_atomic_write_creates_valid_file(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            in_file = Path(tmp_dir) / "input.json"
+            out_file = Path(tmp_dir) / "atomic.tsv"
+            in_file.write_text(json.dumps([self.sample_conv_1]), encoding="utf-8")
+
+            res = c2tsv.convert(str(in_file), str(out_file))
+            self.assertTrue(out_file.exists())
+            # Ensure no temporary files left behind
+            temp_files = list(Path(tmp_dir).glob(".*.tmp.*"))
+            self.assertEqual(len(temp_files), 0)
+            self.assertIn("Weekly Standup", out_file.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()
