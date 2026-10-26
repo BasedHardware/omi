@@ -219,7 +219,7 @@ def build_evidence(
                         person_id=pid, probability=1, band='confident', source='manual', segment_ids=[]
                     )
                     candidates.append(candidate)
-                candidate.segment_ids = [*(candidate.segment_ids or ()), metadata['id']]
+                candidate.segment_ids = [*(candidate.segment_ids or ()), str(metadata['id'])]
         candidates.sort(key=lambda c: (-c.probability, c.source, c.person_id))
         cluster = VoiceCluster(
             id=f'v{len(clusters)}',
