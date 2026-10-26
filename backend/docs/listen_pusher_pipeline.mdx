@@ -8,12 +8,15 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 ## Sync storage round trips
 
-Sync assignment strictly decodes retained server-only `open_loop_extractions`
-before the conversation write codec runs, just like manual speaker receipts.
-Assignment and donor redirects still commit in one transaction; an unreadable
-retained extraction aborts the write rather than becoming empty content.
-Protection migration and mixed-protection smart absorbs re-encode the retained
-extraction at the destination protection level. Client conversation models omit
+Retained server-only `open_loop_extractions` never reach the conversation
+write codec as encoded blobs. When the row's protection level is unchanged,
+sync assignment carries the stored blob and its compression marker verbatim —
+no decrypt/decompress on any transaction replay. A protection-level change
+(strictly: migration, mixed-protection assignment and smart absorbs, or a
+processor racing a migration) decodes the retained extraction and re-protects
+it at the destination level; an unreadable blob then aborts the write before
+any transaction write rather than becoming empty content. Assignment and donor
+redirects still commit in one transaction. Client conversation models omit
 both the extraction and its compression marker. Persistence/finalize diagnostics
 emit only closed `value_error_reason` tokens: `open_loop_extractions_not_object`,
 `other_value_error`, or `none` for other exception types.

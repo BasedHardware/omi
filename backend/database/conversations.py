@@ -4282,10 +4282,10 @@ def assign_sync_conversation(
             )
         else:
             result.pop('manual_speaker_assignments', None)
-        if OPEN_LOOP_EXTRACTIONS_FIELD in raw:
-            result[OPEN_LOOP_EXTRACTIONS_FIELD] = decode_open_loop_extractions(
-                uid, raw[OPEN_LOOP_EXTRACTIONS_FIELD], bool(raw.get(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD))
-            )
+        # Never decode here (every same-chain replay would pay it) and never
+        # hand the blob to the logical encoder; the encode seam preserves it.
+        result.pop(OPEN_LOOP_EXTRACTIONS_FIELD, None)
+        result.pop(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, None)
         _reveal_match_scores_for_read(result, uid)
         return result
 

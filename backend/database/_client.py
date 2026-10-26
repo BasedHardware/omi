@@ -520,7 +520,9 @@ def run_transactional(
     commit can be ambiguous, so the callable must re-read and refuse a second
     increment. Backoff runs in this helper, after the callable has returned, so a
     lock held only inside the callable is not held during the sleep. The default
-    path still retries only an expired transaction id and does not sleep.
+    path still retries only an expired transaction id, now with the same
+    equal-jitter backoff so an inner restart does not land inside the same
+    contention spike that retired the previous id.
     ``outcome`` receives ``retried_ok`` or ``exhausted`` when set.
     """
     predicate = is_retryable_firestore_transaction_error if transient else is_expired_transaction_error
@@ -547,10 +549,10 @@ def run_transactional(
                     attempts,
                     firestore_failure_reason(error),
                 )
-                delay = equal_jitter_delay(attempt, random_value or random.random)
-                (sleep or time.sleep)(delay)
             else:
                 logger.warning('Firestore transaction expired, restarting attempt=%d/%d', attempt, attempts)
+            delay = equal_jitter_delay(attempt, random_value or random.random)
+            (sleep or time.sleep)(delay)
 
 
 class _LazyFirestoreClient:
