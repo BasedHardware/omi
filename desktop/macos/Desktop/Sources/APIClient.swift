@@ -918,9 +918,11 @@ extension APIClient {
   /// Fetches a single conversation by ID
   func getConversation(
     id: String,
+    includeDiscarded: Bool? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ServerConversation {
-    return try await get("v1/conversations/\(id)", authorizationSnapshot: authorizationSnapshot)
+    let query = includeDiscarded.map { "?include_discarded=\($0)" } ?? ""
+    return try await get("v1/conversations/\(id)\(query)", authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Reads conversation-lifetime photo bytes. Storage-backed photos no longer

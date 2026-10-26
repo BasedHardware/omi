@@ -124,6 +124,22 @@ def test_account_deletion_blocks_explicit_text_before_provider(db, monkeypatch):
     assert not calls and stored(db).processing_state.value == 'pending'
 
 
+def test_deletion_after_control_read_is_fenced_before_provider_claim(db, monkeypatch):
+    actual = processing._read_control_state
+    calls = []
+
+    def start_deleting(uid, **kwargs):
+        control = actual(uid, **kwargs)
+        db.rows[('account_deletions', UID)] = {'wipe_status': 'pending'}
+        return control
+
+    monkeypatch.setattr(processing, '_read_control_state', start_deleting)
+    monkeypatch.setattr(intake, 'normalize', lambda row: calls.append(row.memory_id) or normalized(row))
+    result = intake.after_capture(UID, stored(db), db_client=db)
+    assert result is not None and not result.attempted
+    assert not calls and stored(db).processing_state.value == 'pending'
+
+
 @pytest.mark.asyncio
 async def test_account_deletion_blocks_backlog_before_embedding(db):
     historical_candidate(db)

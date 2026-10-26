@@ -194,6 +194,24 @@ class _PausableCapture extends _LiveCapture {
   }
 }
 
+/// A pendant whose native ingress health the test drives directly.
+class _IngressCapture extends _LiveCapture {
+  _IngressCapture({this.verified = true, this.actionRequired = false});
+
+  bool verified;
+  bool actionRequired;
+  int reconnects = 0;
+
+  @override
+  bool get pendantCaptureVerified => verified;
+
+  @override
+  bool get pendantCaptureActionRequired => actionRequired;
+
+  @override
+  Future<void> reconnectRecordingPendant() async => reconnects++;
+}
+
 EpisodeProvider _episodes({Episode? live, bool enabled = true, List<String>? dismissed, DateTime Function()? clock}) {
   final provider = EpisodeProvider(
     fetchLive: () async => ApiSuccess(EpisodeRead(enabled: enabled, episode: live)),
@@ -736,6 +754,52 @@ void main() {
       expect(find.textContaining('Capturing · 3m', findRichText: true), findsOneWidget);
       await _unmount(tester);
     });
+
+    testWidgets('an unverified pendant waits without claiming Listening or a time', (tester) async {
+      final en = lookupAppLocalizations(const Locale('en'));
+      final capture = _IngressCapture(verified: false);
+      addTearDown(capture.dispose);
+      final episodes = _episodes(live: null, clock: tester.binding.clock.now);
+      addTearDown(episodes.dispose);
+      await _pump(
+        tester,
+        const Scaffold(body: LiveEpisodeRow()),
+        capture: capture,
+        episodes: episodes,
+      );
+      expect(find.text(en.captureConnecting), findsOneWidget);
+      expect(find.textContaining('Capturing ·', findRichText: true), findsNothing,
+          reason: 'a wait claims neither Listening nor a running time');
+      expect(find.byKey(const Key('home_live_episode_reconnect')), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('an exhausted pendant recovery warns on the row and its action reconnects', (tester) async {
+      final en = lookupAppLocalizations(const Locale('en'));
+      final capture = _IngressCapture(actionRequired: true);
+      addTearDown(capture.dispose);
+      final episodes = _episodes(live: null, clock: tester.binding.clock.now);
+      addTearDown(episodes.dispose);
+      await _pump(
+        tester,
+        const Scaffold(body: LiveEpisodeRow()),
+        capture: capture,
+        episodes: episodes,
+      );
+      // The failure never says Listening: the warning names the problem as the
+      // title and the plain-words sentence sits under it, as the island does.
+      expect(find.text(en.captureNoAudioFromPendant), findsOneWidget);
+      expect(find.text(en.captureNoAudioDetail), findsOneWidget);
+      expect(find.text(en.episodeListeningNow), findsNothing, reason: 'a pendant that owes audio is not Listening now');
+      expect(find.text(en.captureConnecting), findsNothing);
+      expect(find.textContaining('Capturing ·', findRichText: true), findsNothing);
+      expect(find.byIcon(Icons.chevron_right_rounded), findsNothing,
+          reason: 'the failure replaces the open affordance with its fix');
+      await tester.tap(find.byKey(const Key('home_live_episode_reconnect')));
+      await tester.pump();
+      expect(capture.reconnects, 1);
+      await _unmount(tester);
+    });
     testWidgets('unnamed voices are never counted as people, however many diarization ids appear', (tester) async {
       final capture = _LiveCapture();
       addTearDown(capture.dispose);
@@ -956,6 +1020,37 @@ void main() {
       expect(find.text('Waiting to sync'), findsOneWidget);
       await tester.tap(find.byKey(const Key('device_right_now_live')));
       expect(opened, 1);
+    });
+
+    testWidgets('right now waits without a length while the pendant is still verified', (tester) async {
+      final en = lookupAppLocalizations(const Locale('en'));
+      await tester.pumpWidget(
+        wrap(const DeviceRightNowGroup(liveTitle: 'Listening now', liveSubtitle: 'Connecting…')),
+      );
+      expect(find.text(en.deviceRightNow), findsOneWidget);
+      expect(find.text('Connecting…'), findsOneWidget);
+      expect(find.byKey(const Key('device_right_now_no_audio')), findsNothing);
+    });
+
+    testWidgets('right now names a pendant that owes audio and its tap reconnects', (tester) async {
+      final en = lookupAppLocalizations(const Locale('en'));
+      var reconnected = 0;
+      await tester.pumpWidget(
+        wrap(
+          DeviceRightNowGroup(
+            liveTitle: en.captureNoAudioFromPendant,
+            liveSubtitle: en.captureNoAudioDetail,
+            liveProblem: true,
+            onFixProblem: () => reconnected++,
+          ),
+        ),
+      );
+      expect(find.byKey(const Key('device_right_now_no_audio')), findsOneWidget);
+      expect(find.text(en.captureNoAudioDetail), findsOneWidget);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+      expect(find.byKey(const Key('device_right_now_live')), findsNothing, reason: 'the failure replaces the live row');
+      await tester.tap(find.byKey(const Key('device_right_now_no_audio')));
+      expect(reconnected, 1);
     });
 
     testWidgets('recently lists only real drops from the last day', (tester) async {

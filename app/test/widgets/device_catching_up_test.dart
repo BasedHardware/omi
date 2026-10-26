@@ -47,6 +47,12 @@ class _Device extends ChangeNotifier implements DeviceProvider {
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
+  bool get pendantCaptureActionRequired => false;
+  @override
+  bool get pendantCaptureVerified => true;
+  @override
+  bool get pendantReconnectInFlight => false;
+  @override
   bool get isPaused => false;
   @override
   bool get havingRecordingDevice => false;
