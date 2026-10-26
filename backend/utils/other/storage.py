@@ -64,6 +64,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+class AudioChunkContentConflict(ValueError):
+    """A v2 upload found different bytes at its content-addressed name.
+
+    Deterministic: retrying the same payload replays the same collision, so
+    the durable projection treats it as terminal instead of transient. Other
+    upload failures (including wrapped probe/read errors raised as plain
+    ``ValueError``) stay retryable.
+    """
+
+
 # Per-request fan-out limits for storage_executor (#7387)
 _STORAGE_CHUNK_SEM = threading.BoundedSemaphore(32)
 # 4 → 2 in #7526 was load-shedding while the pool was full of sleeping
@@ -1015,7 +1026,7 @@ def upload_audio_chunks_batch(
                             # Identical retry: never overwrite or double-write.
                             # Exit the playback gate before the optional archive.
                             break
-                        raise ValueError(f'v2 audio blob content conflict at {path}')
+                        raise AudioChunkContentConflict(f'v2 audio blob content conflict at {path}')
                     blob.metadata = {
                         **(blob.metadata or {}),
                         **span_blob_metadata(span),

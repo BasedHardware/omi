@@ -1239,7 +1239,8 @@ def _projection_harness(remote, monkeypatch, upload, *, chunk_duration=0.001):
 
     ``chunk_duration`` defaults small so windows commit while the socket is
     still live: the retry path only requeues during an active session, so a
-    teardown-only commit cannot exercise it.
+    teardown-only commit cannot exercise it. Tests that must observe retries
+    deterministically hold the socket open with ``_hold_socket_open``.
     """
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
@@ -1259,10 +1260,29 @@ def _projection_harness(remote, monkeypatch, upload, *, chunk_duration=0.001):
     return failures
 
 
+async def _hold_socket_open(sock, release):
+    """Serve every buffered frame, then keep the session live until released.
+
+    Without the hold, the drain loop's first projection flush can race the
+    receive loop's disconnect and run entirely at teardown, where the
+    (correct) no-requeue teardown semantics would make retry tests flaky.
+    """
+    real_receive = sock.receive_bytes
+
+    async def receive():
+        if not sock.frames:
+            await release.wait()
+            raise WebSocketDisconnect(1000)
+        return await real_receive()
+
+    return receive
+
+
 @pytest.mark.asyncio
 async def test_transient_projection_failure_requeues_and_then_lands(remote, monkeypatch):
     payloads = [struct.pack('<160h', *[n] * 160) for n in range(5)]
     attempts = {'upload': 0}
+    release = asyncio.Event()
 
     def flaky_upload(*args, **kwargs):
         attempts['upload'] += 1
@@ -1275,8 +1295,17 @@ async def test_transient_projection_failure_requeues_and_then_lands(remote, monk
     monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', audio_files_calls)
     monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', MagicMock())
     sock = Socket(_audio_frames('conversation', payloads))
-    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
-    assert attempts['upload'] >= 2, 'the failed projection must be retried, not dropped'
+    monkeypatch.setattr(sock, 'receive_bytes', await _hold_socket_open(sock, release))
+    task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+    try:
+        for _ in range(4000):  # <= ~20 s at the 5 ms poll cadence
+            if attempts['upload'] >= 2:
+                break
+            await asyncio.sleep(0.005)
+        assert attempts['upload'] >= 2, 'the failed projection must be retried, not dropped'
+    finally:
+        release.set()
+    await task
     assert failures == [], 'a retry that lands records no custody failure'
     assert audio_files_calls.call_count >= 1
     assert [read_pcm('owner', receipt) for receipt in _sent_receipts(sock)] == payloads
@@ -1288,7 +1317,7 @@ async def test_conflict_projection_failure_never_retries_and_withholds_close(rem
 
     def conflict_upload(chunks, *args, **kwargs):
         flushed_spans.extend(chunk['timestamp'] for chunk in chunks)
-        raise ValueError('v2 audio blob content conflict at chunks/owner/conversation/1000.000')
+        raise storage.AudioChunkContentConflict('v2 audio blob content conflict at chunks/owner/conversation/1000.000')
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=conflict_upload))
     seal = MagicMock()
@@ -1370,3 +1399,98 @@ def test_custody_failure_reason_label_is_a_bounded_vocabulary():
     before = value('other')
     audio_outbox_metrics.record_failure('projection', 'free text from an exception message')
     assert value('other') == before + 1, 'unknown reasons coerce to other, never become labels'
+
+
+@pytest.mark.asyncio
+async def test_wrapped_probe_valueerror_is_transient_and_retries(remote, monkeypatch):
+    """Luna r1 P1: a failed blob.exists() probe is wrapped as a plain
+    ValueError by the uploader; it must retry like any transient failure,
+    not be classified as a deterministic conflict."""
+    payloads = [struct.pack('<160h', *[n] * 160) for n in range(5)]
+    attempts = {'upload': 0}
+    release = asyncio.Event()
+
+    def probe_error_then_success(*args, **kwargs):
+        attempts['upload'] += 1
+        if attempts['upload'] == 1:
+            raise ValueError('v2 audio blob existence check failed at chunks/owner/conversation/1000.000')
+        return []
+
+    failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=probe_error_then_success))
+    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[]))
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', MagicMock())
+    sock = Socket(_audio_frames('conversation', payloads))
+    monkeypatch.setattr(sock, 'receive_bytes', await _hold_socket_open(sock, release))
+    task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+    try:
+        for _ in range(4000):
+            if attempts['upload'] >= 2:
+                break
+            await asyncio.sleep(0.005)
+        assert attempts['upload'] >= 2, 'a plain-ValueError probe failure must be retried'
+    finally:
+        release.set()
+    await task
+    assert failures == [], 'a retry that lands records no failure of either class'
+    assert [read_pcm('owner', receipt) for receipt in _sent_receipts(sock)] == payloads
+
+
+@pytest.mark.asyncio
+async def test_projection_retry_budget_resets_after_a_dropped_batch(remote, monkeypatch):
+    """Luna r1 P2: exhausting the budget on one batch must not poison a later
+    independent batch of the same conversation — and dropped entries must not
+    accumulate in the bounded retry map."""
+    pcm = struct.pack('<160h', *range(160))
+    attempts = {'upload': 0}
+    phase_two = asyncio.Event()
+    release = asyncio.Event()
+
+    def fail_five_then_succeed(*args, **kwargs):
+        attempts['upload'] += 1
+        # Three failures exhaust the first batch's budget; two more exercise
+        # the second batch's fresh requeues; the sixth attempt lands.
+        if attempts['upload'] <= 2 * pusher.PROJECTION_RETRY_BUDGET + 1:
+            raise OSError('projection unavailable')
+        return []
+
+    failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=fail_five_then_succeed))
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', MagicMock())
+    frames = [struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm]
+    sock = Socket(frames)
+    real_receive = sock.receive_bytes
+    served = {'n': 0}
+
+    async def scripted_receive():
+        if not sock.frames:
+            await release.wait()
+            raise WebSocketDisconnect(1000)
+        if served['n'] == 2:
+            # Both pre-scripted frames delivered; hold the socket open until
+            # the second batch is due, keeping the session live throughout.
+            await phase_two.wait()
+        frame = await real_receive()
+        served['n'] += 1
+        return frame
+
+    monkeypatch.setattr(sock, 'receive_bytes', scripted_receive)
+    sock.frames.append(struct.pack('<Id', 101, 5000) + pcm)  # second, later batch
+    task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+    try:
+        for _ in range(4000):
+            if attempts['upload'] >= 1 + pusher.PROJECTION_RETRY_BUDGET and len(failures) == 1:
+                break
+            await asyncio.sleep(0.005)
+        assert attempts['upload'] == 1 + pusher.PROJECTION_RETRY_BUDGET, 'first batch exhausts its budget'
+        phase_two.set()
+        for _ in range(4000):
+            if attempts['upload'] >= 2 * pusher.PROJECTION_RETRY_BUDGET + 2:
+                break
+            await asyncio.sleep(0.005)
+        assert (
+            attempts['upload'] == 2 * pusher.PROJECTION_RETRY_BUDGET + 2
+        ), 'the later batch gets a fresh budget: two requeues, then success'
+    finally:
+        release.set()
+    await task
+    assert failures == [('projection', 'transient')], 'only the first batch dropped'
+    assert [read_pcm('owner', receipt) for receipt in _sent_receipts(sock)] == [pcm, pcm]

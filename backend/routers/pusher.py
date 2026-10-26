@@ -56,7 +56,7 @@ from utils.webhooks import (
     realtime_transcript_webhook,
     get_audio_bytes_webhook_seconds,
 )
-from utils.other.storage import upload_audio_chunks_batch
+from utils.other.storage import AudioChunkContentConflict, upload_audio_chunks_batch
 from utils.other.audio_outbox import AudioReceipt, AudioProjection, commit_pcm_window, read_pcm
 from utils.other.audio_outbox_metrics import BACKPRESSURE, record_failure, record_would_drop
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind
@@ -425,13 +425,13 @@ async def _websocket_util_trigger(
                         if len(identity_refreshed) < 128:
                             identity_refreshed.add(conv_id)
                 projection_retries.pop(conv_id, None)
-            except ValueError:
-                # Deterministic projection conflict: a content collision at
-                # the millisecond-keyed chunk name, or a custody read-back
-                # verify failure. Every retry would re-run the same collision,
-                # so the batch drops now. Projection is optional for custody:
-                # media AND its exact manifest survive in remote storage and
-                # are discoverable by raw-live playback after restart/reconnect.
+            except AudioChunkContentConflict:
+                # Deterministic projection conflict: different bytes already
+                # live at this run's content-addressed name. Every retry would
+                # re-run the same collision, so the batch drops now.
+                # Projection is optional for custody: media AND its exact
+                # manifest survive in remote storage and are discoverable
+                # by raw-live playback after restart/reconnect.
                 fail_recording(conv_id)
                 record_failure('projection', reason='conflict')
                 record_fallback(
@@ -449,7 +449,9 @@ async def _websocket_util_trigger(
                 # dropping the projection outright; the drain loop's age and
                 # duration scans re-flush them without a new scheduler. At
                 # teardown there is no later pass, so the tail keeps today's
-                # drop semantics.
+                # drop semantics. Only the deterministic conflict above is
+                # exempt — plain ValueError upload wrappers (probe/read
+                # errors) and custody read-back mismatches retry here.
                 if (
                     websocket_active
                     and projection_retries.get(conv_id, 0) < PROJECTION_RETRY_BUDGET
@@ -460,6 +462,11 @@ async def _websocket_util_trigger(
                     queued_at[conv_id] = time.monotonic()
                     logger.warning('Durable audio projection failure; receipts requeued for retry')
                     return
+                # Terminal for this batch: a later independent batch for the
+                # same conversation starts with a fresh budget instead of
+                # inheriting this one's exhaustion, and the entry stops
+                # counting toward the bounded retry map.
+                projection_retries.pop(conv_id, None)
                 fail_recording(conv_id)
                 record_failure('projection', reason='transient')
                 record_fallback(
