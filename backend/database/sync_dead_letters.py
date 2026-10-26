@@ -25,7 +25,7 @@ from typing import Any, Optional
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client
+from database._client import get_firestore_client, run_transactional
 from utils.sync import stage as sync_stage
 
 DEAD_LETTERS_COLLECTION = 'sync_dead_letters'
@@ -117,7 +117,10 @@ def record_dead_letter_pending(
         transaction.set(doc_ref, record, merge=True)
         return record
 
-    return firestore.transactional(_txn)(client.transaction())
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction: the ledger write is the durable diagnosis a terminal
+    # publish must not lose to a retired-id replay.
+    return run_transactional(client, firestore.transactional(_txn))
 
 
 def get_dead_letter(job_id: str, *, firestore_client: Any = None) -> Optional[dict[str, Any]]:
@@ -152,7 +155,9 @@ def confirm_dead_letter(job_id: str, *, firestore_client: Any = None) -> Optiona
         transaction.set(doc_ref, {'status': STATUS_DEAD_LETTER, 'dead_lettered_at': now}, merge=True)
         return {**doc, 'status': STATUS_DEAD_LETTER, 'dead_lettered_at': now}, True
 
-    confirmed, did_transition = firestore.transactional(_txn)(client.transaction())
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction; the confirmed cohort stays counted once.
+    confirmed, did_transition = run_transactional(client, firestore.transactional(_txn))
     if confirmed is not None and did_transition:
         _emit_confirmed(confirmed)
     return confirmed

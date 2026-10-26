@@ -17,7 +17,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
-from database._client import document_id_from_seed, get_firestore_client
+from database._client import document_id_from_seed, get_firestore_client, run_transactional
 from database.conversation_terminal_title import (
     dead_letter_conversation_updates,
     kept_row_terminal_update,
@@ -658,22 +658,29 @@ def create_or_get_finalization_intent(
         # The Firestore SDK's transactional wrapper retains retry state. Build
         # it for this outer attempt so concurrent REST finalizers always get a
         # fresh transaction and wrapper after read-time contention.
-        transactional = firestore.transactional(_create_or_get_finalization_intent_txn)
-        return transactional(
-            transaction,
-            conversation_ref,
-            jobs_collection,
-            uid,
-            conversation_id,
-            requires_byok,
-            finalization_admission,
-            _now(),
-            projection_collection=projection_collection,
-            trigger=trigger,
-            extra_updates=extra_updates,
-            recovery_cutoff=recovery_cutoff,
-            recording_sessions_collection=recording_sessions_collection,
-        )
+        # ``run_transactional`` restarts the commit of an already-retired
+        # transaction id on a fresh transaction — the replay the SDK cannot
+        # recover — inside this outer contention attempt.
+        def run_once(transaction: Any) -> FinalizationIntent:
+            return run_transactional(
+                client,
+                firestore.transactional(_create_or_get_finalization_intent_txn),
+                conversation_ref,
+                jobs_collection,
+                uid,
+                conversation_id,
+                requires_byok,
+                finalization_admission,
+                _now(),
+                projection_collection=projection_collection,
+                trigger=trigger,
+                extra_updates=extra_updates,
+                recovery_cutoff=recovery_cutoff,
+                recording_sessions_collection=recording_sessions_collection,
+                initial_transaction=transaction,
+            )
+
+        return run_once(transaction)
 
     intent = run_with_transaction_contention_retry(
         client.transaction,
@@ -718,10 +725,12 @@ def _resume_blocked_byok_job_txn(
 
 def resume_blocked_byok_job_for_live_session(job_id: str, *, firestore_client: Any = None) -> FinalizationIntent:
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_resume_blocked_byok_job_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction; the live pusher session's caller has no way to
+    # distinguish that replay from a real write failure.
+    return run_transactional(
+        client,
+        firestore.transactional(_resume_blocked_byok_job_txn),
         _job_ref(client, job_id),
         _now(),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
@@ -814,10 +823,12 @@ def claim_finalization_job(
     firestore_client: Any = None,
 ) -> FinalizationClaim:
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_claim_finalization_job_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction: the Cloud Tasks worker would otherwise answer the
+    # replay with a 500 and burn a retry on an attempt that wrote nothing.
+    return run_transactional(
+        client,
+        firestore.transactional(_claim_finalization_job_txn),
         _job_ref(client, job_id),
         dispatch_generation,
         allow_byok,
@@ -868,10 +879,12 @@ def mark_finalization_completed(
     job_id: str, dispatch_generation: int, lease_epoch: int, *, firestore_client: Any = None
 ) -> bool:
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_mark_finalization_completed_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction: a completed fanout must not be re-leased and
+    # re-processed because its acknowledgement died on a retired id.
+    return run_transactional(
+        client,
+        firestore.transactional(_mark_finalization_completed_txn),
         _job_ref(client, job_id),
         dispatch_generation,
         lease_epoch,
@@ -914,10 +927,11 @@ def mark_finalization_fenced(
     job_id: str, dispatch_generation: int, lease_epoch: int, *, firestore_client: Any = None
 ) -> bool:
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_mark_finalization_fenced_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction.
+    return run_transactional(
+        client,
+        firestore.transactional(_mark_finalization_fenced_txn),
         _job_ref(client, job_id),
         dispatch_generation,
         lease_epoch,
@@ -1029,10 +1043,11 @@ def claim_finalization_fanout(
     firestore_client: Any = None,
 ) -> FinalizationFanoutClaim:
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_claim_finalization_fanout_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction.
+    return run_transactional(
+        client,
+        firestore.transactional(_claim_finalization_fanout_txn),
         _job_ref(client, job_id),
         dispatch_generation,
         lease_epoch,
@@ -1076,10 +1091,12 @@ def mark_finalization_fanout_completed(
     firestore_client: Any = None,
 ) -> bool:
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_mark_finalization_fanout_completed_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction: the committed fanout must not strand leased because
+    # its completion write died on a retired id.
+    return run_transactional(
+        client,
+        firestore.transactional(_mark_finalization_fanout_completed_txn),
         _job_ref(client, job_id),
         dispatch_generation,
         lease_epoch,
@@ -1127,10 +1144,12 @@ def mark_finalization_retryable(
     firestore_client: Any = None,
 ) -> bool:
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_mark_finalization_retryable_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction: a retryable failure must keep its Cloud Tasks retry
+    # budget for real failures, not spend it replaying a retired id.
+    return run_transactional(
+        client,
+        firestore.transactional(_mark_finalization_retryable_txn),
         _job_ref(client, job_id),
         dispatch_generation,
         lease_epoch,
@@ -1227,10 +1246,12 @@ def mark_finalization_dead_letter(
     firestore_client: Any = None,
 ) -> bool:
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_mark_finalization_dead_letter_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction: the terminal transition must land on the attempt
+    # that earned it, not dead-letter through a retired-id replay.
+    return run_transactional(
+        client,
+        firestore.transactional(_mark_finalization_dead_letter_txn),
         _job_ref(client, job_id),
         dispatch_generation,
         lease_epoch,
@@ -1371,10 +1392,11 @@ def record_meeting_receipt(
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_record_meeting_receipt_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction.
+    return run_transactional(
+        client,
+        firestore.transactional(_record_meeting_receipt_txn),
         _conversation_ref(client, uid, conversation_id),
         client.collection(FINALIZATION_JOBS_COLLECTION),
         uid,
@@ -1633,10 +1655,12 @@ def claim_finalization_replay(
     job_id: str, *, stale_after: timedelta, firestore_client: Any = None, byok_only: bool = False
 ) -> FinalizationIntent:
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_claim_finalization_replay_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction: the reconciler must not error-skip a reclaim whose
+    # commit died on a retired id.
+    return run_transactional(
+        client,
+        firestore.transactional(_claim_finalization_replay_txn),
         _job_ref(client, job_id),
         stale_after,
         _now(),
@@ -1684,8 +1708,16 @@ def recover_stranded_byok_jobs(*, limit: int = 50, firestore_client: Any = None)
             except Exception:
                 result['errors'] += 1
         next_path = snapshots[-1].reference.path if len(snapshots) == page_size else None
-        firestore.transactional(_advance_stale_processing_sweep_cursor_txn)(
-            client.transaction(), state_ref, int(state.get('generation', 0)), next_path, _now()
+        # ``run_transactional`` restarts a retired-transaction-id commit on a
+        # fresh transaction; the sweep keeps its cursor instead of rescanning
+        # the window after a retired-id replay.
+        run_transactional(
+            client,
+            firestore.transactional(_advance_stale_processing_sweep_cursor_txn),
+            state_ref,
+            int(state.get('generation', 0)),
+            next_path,
+            _now(),
         )
     return result
 
@@ -1964,10 +1996,11 @@ def advance_in_progress_content_sweep_cursor(
 ) -> bool:
     """Atomically advance the self-heal sweep cursor; ``False`` on a CAS loss."""
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_advance_in_progress_content_sweep_cursor_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction.
+    return run_transactional(
+        client,
+        firestore.transactional(_advance_in_progress_content_sweep_cursor_txn),
         client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(IN_PROGRESS_CONTENT_SWEEP_STATE_DOC),
         expected_generation,
         new_resume_after_path,
@@ -2035,10 +2068,11 @@ def advance_stale_processing_sweep_cursor(
     safely re-scans the same window.
     """
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_advance_stale_processing_sweep_cursor_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction.
+    return run_transactional(
+        client,
+        firestore.transactional(_advance_stale_processing_sweep_cursor_txn),
         client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(STALE_PROCESSING_SWEEP_STATE_DOC),
         expected_generation,
         new_resume_after_path,
@@ -2065,10 +2099,11 @@ def advance_meeting_receipt_backfill_cursor(
     expected_generation: int, new_resume_after_path: str | None, *, firestore_client: Any = None
 ) -> bool:
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_advance_stale_processing_sweep_cursor_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction.
+    return run_transactional(
+        client,
+        firestore.transactional(_advance_stale_processing_sweep_cursor_txn),
         client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(MEETING_RECEIPT_SWEEP_STATE_DOC),
         expected_generation,
         new_resume_after_path,
@@ -2099,9 +2134,14 @@ def _stamp_processing_admission_if_absent_txn(transaction: Any, conversation_ref
 def stamp_processing_admission_if_absent(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
     """Stamp the authoritative admission fence on a legacy processing conversation."""
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_stamp_processing_admission_if_absent_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction.
+    return run_transactional(
+        client,
+        firestore.transactional(_stamp_processing_admission_if_absent_txn),
+        _conversation_ref(client, uid, conversation_id),
+        _now(),
+    )
 
 
 def _complete_unstampable_orphan_conversation_txn(
@@ -2140,9 +2180,15 @@ def complete_unstampable_orphan_conversation(
 ) -> bool:
     """Terminalize a legacy orphan that is too large to accept the admission fence."""
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_complete_unstampable_orphan_conversation_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now() - stale_after)
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction; the terminalization must land on the attempt that
+    # verified the orphan, not strand the row processing on a retired id.
+    return run_transactional(
+        client,
+        firestore.transactional(_complete_unstampable_orphan_conversation_txn),
+        _conversation_ref(client, uid, conversation_id),
+        _now() - stale_after,
+    )
 
 
 def _complete_orphan_conversation_txn(
@@ -2193,10 +2239,12 @@ def complete_orphan_conversation(
 ) -> bool:
     """Close one crash orphan through the generation/ownership fence."""
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_complete_orphan_conversation_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction: the crash orphan must be closed by the sweep that
+    # verified it, not retried after another full stale window.
+    return run_transactional(
+        client,
+        firestore.transactional(_complete_orphan_conversation_txn),
         _conversation_ref(client, uid, conversation_id),
         expected_admitted_at,
         _now(),
@@ -2220,9 +2268,15 @@ def _renew_processing_lease_txn(transaction: Any, conversation_ref: Any, now: da
 def renew_processing_lease(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
     """Renew the server-owned admission lease so recovery cannot mistake a live processor for a crash."""
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_renew_processing_lease_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction: the renewal rides every processing heartbeat, and a
+    # retired-id replay on it is the recovery sweep's false crash signal.
+    return run_transactional(
+        client,
+        firestore.transactional(_renew_processing_lease_txn),
+        _conversation_ref(client, uid, conversation_id),
+        _now(),
+    )
 
 
 def _reacquire_deferred_processing_txn(transaction: Any, conversation_ref: Any, now: datetime) -> bool:
@@ -2253,9 +2307,15 @@ def _reacquire_deferred_processing_txn(transaction: Any, conversation_ref: Any, 
 def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
     """Atomically claim deferred ownership and renew the lease in one transaction."""
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_reacquire_deferred_processing_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction; the deferred row stays claimable instead of
+    # surfacing the retirement as a failed claim.
+    return run_transactional(
+        client,
+        firestore.transactional(_reacquire_deferred_processing_txn),
+        _conversation_ref(client, uid, conversation_id),
+        _now(),
+    )
 
 
 def _recover_deferred_processing_failure_txn(transaction: Any, conversation_ref: Any) -> bool:
@@ -2277,9 +2337,14 @@ def _recover_deferred_processing_failure_txn(transaction: Any, conversation_ref:
 def recover_deferred_processing_failure(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
     """Atomically re-arm deferred enrichment without exposing a stuck processing row."""
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_recover_deferred_processing_failure_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id))
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction; the retry stays re-armed instead of surfacing the
+    # retirement as a failed recovery.
+    return run_transactional(
+        client,
+        firestore.transactional(_recover_deferred_processing_failure_txn),
+        _conversation_ref(client, uid, conversation_id),
+    )
 
 
 def _job_last_activity_at(job: Mapping[str, Any]) -> datetime | None:
@@ -2526,10 +2591,11 @@ def abandon_byok_finalization_job(
     """Close one unownable BYOK job through its generation/ownership fence."""
     client = _client(firestore_client)
     now = _now()
-    transaction = client.transaction()
-    transactional = firestore.transactional(_abandon_byok_finalization_job_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction.
+    return run_transactional(
+        client,
+        firestore.transactional(_abandon_byok_finalization_job_txn),
         _job_ref(client, job_id),
         expected_status,
         expected_dispatch_generation,
@@ -2562,10 +2628,11 @@ def advance_byok_abandonment_sweep_cursor(
 ) -> bool:
     """Atomically advance the BYOK sweep cursor; ``None`` rotates the next sweep to the top."""
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_advance_stale_processing_sweep_cursor_txn)
-    return transactional(
-        transaction,
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction.
+    return run_transactional(
+        client,
+        firestore.transactional(_advance_stale_processing_sweep_cursor_txn),
         client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(BYOK_ABANDONMENT_SWEEP_STATE_DOC),
         expected_generation,
         new_resume_after_path,

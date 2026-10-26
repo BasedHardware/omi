@@ -2198,6 +2198,20 @@ durable receipt projection remains on the finalization write path. The disabled
 historical receipt seeding reconciler has been removed from startup and the
 five-minute sweep.
 
+#### Transaction boundaries on the finalization ledger
+
+Every transaction on `conversation_finalization_jobs` (claim, completion,
+fencing, retryable and dead-letter transitions, BYOK resume, replay claim,
+meeting receipt) and on the processing-admission state it fences (lease
+renewal, deferred re-arm, orphan terminalization, sweep cursors) runs through
+the shared storage boundary: a commit rejected because Firestore retired the
+transaction id restarts on a fresh transaction instead of surfacing as a
+worker error, and read-time contention replays on the bounded fresh-transaction
+budget the rest of `database/` uses. A retired-id replay wrote nothing, so
+restarting it costs nothing; surfacing it as a worker failure spent Cloud Tasks
+retries on attempts that never ran and let the recovery sweep misread a live
+processor as a crash orphan.
+
 See [Listen finalization jobs](./listen_finalization_jobs.mdx) for configuration,
 replay, metrics, and the operational runbook.
 

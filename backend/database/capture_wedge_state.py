@@ -18,7 +18,7 @@ from typing import Any
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client
+from database._client import get_firestore_client, run_transactional
 
 CAPTURE_WEDGE_STATE_COLLECTION = 'capture_wedge_state'
 WEDGE_NUDGE_COOLDOWN = timedelta(hours=24)
@@ -48,7 +48,10 @@ def claim_wedge_first_seen(
         transaction.set(doc_ref, {'uid': uid, 'first_seen_day': day, 'updated_at': stamp}, merge=True)
         return True
 
-    return firestore.transactional(_txn)(client.transaction())
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction: the daily cohort cannot be double-counted by a
+    # retired-id replay racing the next tick.
+    return run_transactional(client, firestore.transactional(_txn))
 
 
 def claim_wedge_nudge_cooldown(
@@ -80,4 +83,6 @@ def claim_wedge_nudge_cooldown(
         transaction.set(doc_ref, {'uid': uid, 'last_nudge_at': now, 'updated_at': now}, merge=True)
         return True
 
-    return firestore.transactional(_txn)(client.transaction())
+    # ``run_transactional`` restarts a retired-transaction-id commit on a
+    # fresh transaction; the at-most-once nudge claim stays at-most-once.
+    return run_transactional(client, firestore.transactional(_txn))
