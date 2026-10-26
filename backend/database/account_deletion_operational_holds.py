@@ -18,6 +18,26 @@ class OperationalStorageHoldBlocked(RuntimeError):
     """A hold cannot be proved operational and authorized for this wipe."""
 
 
+def delete_owner_bucket_prefix(
+    bucket: Any, prefix: str, *, real_gcs: bool, account_deletion_uid: str | None = None
+) -> int:
+    """Purge and verify owner generations, honoring approved operational holds."""
+    listing_kwargs = {'versions': True} if real_gcs else {}
+    blobs = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
+    for blob in blobs:
+        if account_deletion_uid is not None and (
+            getattr(blob, 'temporary_hold', None) is True or getattr(bucket, 'name', None) == 'syncing-local'
+        ):
+            release_operational_hold_for_account_deletion(account_deletion_uid, blob)
+        if real_gcs:
+            blob.delete(if_generation_match=blob.generation, if_metageneration_match=blob.metageneration)
+        else:
+            blob.delete()
+    if list(bucket.list_blobs(prefix=prefix, **listing_kwargs)):
+        raise RuntimeError('owner storage purge left objects under the owner prefix')
+    return len(blobs)
+
+
 def plan_digest(plan: dict[str, Any]) -> str:
     return hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 

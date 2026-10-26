@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import PreconditionFailed
 
-from utils.other import account_deletion_holds as holds
+from database import account_deletion_operational_holds as holds
 from scripts import account_deletion_operational_holds as operator
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 

@@ -25,7 +25,7 @@ from database.legal_holds import (
     assert_account_deletion_permitted,
 )
 from utils.cloud_tasks import enqueue_account_deletion_wipe
-from utils.other.account_deletion_holds import object_digest, plan_digest, validate_release_plan
+from database.account_deletion_operational_holds import object_digest, plan_digest, validate_release_plan
 
 BUCKET = 'syncing-local'
 PROJECT = 'based-hardware'
