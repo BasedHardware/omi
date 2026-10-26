@@ -239,7 +239,7 @@ from utils.sync.intake_completion import (
 )
 from utils.sync.lanes import SyncLane
 from utils.sync.telemetry import bounded_correlation_ref as _bounded_correlation_ref
-from utils.sync.telemetry import bounded_exception_class, finalize_exception_site
+from utils.sync.telemetry import bounded_exception_class, finalize_exception_site, value_error_reason
 from utils.sync.telemetry import bounded_exception_type as _bounded_exception_type
 from utils.sync.telemetry import bounded_sync_lane as _bounded_sync_lane
 from utils.sync.telemetry import bounded_sync_language as _bounded_retry_language
@@ -1902,19 +1902,21 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             # never log exception text, document IDs, paths, or transcript.
             logger.error(
                 'event=sync_persistence_exception exception_type=%s firestore_error=%s firestore_doc_kind=%s '
-                'job_ref=%s attempt_ref=%s',
+                'job_ref=%s attempt_ref=%s value_error_reason=%s',
                 _bounded_exception_type(e),
                 _firestore_error_class(e),
                 _firestore_doc_kind(e),
                 _bounded_correlation_ref(job_id),
                 _bounded_correlation_ref(attempt_ref),
+                value_error_reason(e),
             )
         if phase == 'finalize':
             logger.error(
-                'event=sync_finalize_exception exception_type=%s site=%s firestore_error=%s',
+                'event=sync_finalize_exception exception_type=%s site=%s firestore_error=%s value_error_reason=%s',
                 _bounded_exception_type(e),
                 finalize_exception_site(e),
                 _firestore_error_class(e),
+                value_error_reason(e),
             )
         fingerprint = _persistence_failure_fingerprint(e, phase, sync_lane)
         if phase in ('persistence', 'finalize'):

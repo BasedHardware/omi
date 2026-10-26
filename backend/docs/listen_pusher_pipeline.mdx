@@ -6,6 +6,18 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Sync storage round trips
+
+Sync assignment strictly decodes retained server-only `open_loop_extractions`
+before the conversation write codec runs, just like manual speaker receipts.
+Assignment and donor redirects still commit in one transaction; an unreadable
+retained extraction aborts the write rather than becoming empty content.
+Protection migration and mixed-protection smart absorbs re-encode the retained
+extraction at the destination protection level. Client conversation models omit
+both the extraction and its compression marker. Persistence/finalize diagnostics
+emit only closed `value_error_reason` tokens: `open_loop_extractions_not_object`,
+`other_value_error`, or `none` for other exception types.
+
 ## Desktop local segment upload
 
 Desktop local finalization preserves stored utterance boundaries, timestamps and
