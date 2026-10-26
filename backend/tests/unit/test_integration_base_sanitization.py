@@ -170,7 +170,6 @@ class TestIntegrationBaseSanitization(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(err, "Error after token refresh. Please try again later.")
         self.assertNotIn(secret_leak, err)
 
-
     def test_resolve_config_uid_configurable_user_id(self):
         uid, err = integration_base.resolve_config_uid({"configurable": {"user_id": "user_base_1"}})
         self.assertEqual(uid, "user_base_1")

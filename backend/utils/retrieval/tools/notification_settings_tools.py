@@ -2,53 +2,22 @@
 Tools for managing user notification settings.
 """
 
-from typing import Any, Dict, Optional, cast
-import contextvars
+import logging
+from typing import Any, Optional
 
-from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 
 import database.notifications as notification_db
-import logging
+from utils.retrieval.tools.integration_base import resolve_config_uid
 
 logger = logging.getLogger(__name__)
 
-# Import agent_config_context for fallback config access
-try:
-    from utils.retrieval.agentic import agent_config_context
-except ImportError:
-    agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
-
-def _agent_config() -> Optional[Dict[str, Any]]:
-    """Retrieve the agent config dict from the context var, or None if unset."""
-    try:
-        return agent_config_context.get()
-    except LookupError:
-        return None
-
-
-def _resolve_uid(config: RunnableConfig | None) -> Optional[str]:
-    """Extract uid or user_id from config (configurable or top-level) with fallback to agent_config_context."""
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        cfg = _agent_config()
-    if not isinstance(cfg, dict):
-        return None
-    try:
-        raw_configurable = cfg.get('configurable')
-        if isinstance(raw_configurable, dict):
-            configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
-            uid = configurable.get('user_id') or configurable.get('uid')
-            if isinstance(uid, str) and uid.strip():
-                return uid.strip()
-    except (KeyError, TypeError):
-        pass
-
-    top_uid = cfg.get('user_id') or cfg.get('uid')
-    if isinstance(top_uid, str) and top_uid.strip():
-        return top_uid.strip()
-    return None
+def _resolve_uid(config: Optional[Any] = None) -> Optional[str]:
+    """Extract uid from config via shared resolve_config_uid."""
+    uid, _ = resolve_config_uid(config)
+    return uid
 
 
 def _format_hour(hour: int) -> str:
@@ -101,16 +70,12 @@ def manage_daily_summary_tool(
     """
     logger.info(f"🔧 manage_daily_summary_tool called - action: {action}, hour: {hour}")
 
-    # config may be None when called directly (not via langchain injection)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        cfg = _agent_config()
-    if cfg is None or not isinstance(cfg, dict):
-        return "Error: Configuration not available"
-
-    uid = _resolve_uid(cfg)
-    if not uid:
+    uid, err = resolve_config_uid(config)
+    if err is not None:
+        if "not available" in err:
+            return "Error: Configuration not available"
         return "Error: User ID not found"
+    assert uid is not None
 
     action_str = str(action or "").lower().strip()
 

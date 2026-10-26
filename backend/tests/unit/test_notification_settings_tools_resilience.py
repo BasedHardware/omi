@@ -13,7 +13,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -40,6 +40,7 @@ def _mod(name: str):
     return mod
 
 
+_mod("database.users")
 for _p in ["database", "utils", "utils.retrieval", "utils.retrieval.tools"]:
     _pkg(_p)
 
@@ -54,6 +55,15 @@ agentic_mock.agent_config_context = MagicMock()
 agentic_mock.agent_config_context.get.return_value = None
 
 sys.path.insert(0, str(BACKEND_DIR))
+
+# Ensure integration_base is loaded for resolve_config_uid
+spec_base = importlib.util.spec_from_file_location(
+    "utils.retrieval.tools.integration_base",
+    str(BACKEND_DIR / "utils/retrieval/tools/integration_base.py"),
+)
+integration_base = importlib.util.module_from_spec(spec_base)
+sys.modules["utils.retrieval.tools.integration_base"] = integration_base
+spec_base.loader.exec_module(integration_base)
 
 spec = importlib.util.spec_from_file_location(
     "utils.retrieval.tools._test_notification_settings_tools",

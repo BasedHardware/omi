@@ -1,36 +1,35 @@
 import contextvars
-from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 from datetime import datetime
+import logging
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 
 import database.users as users_db
-import logging
 
 logger = logging.getLogger(__name__)
 
 try:
     from utils.retrieval.agentic import agent_config_context
 except ImportError:
-    agent_config_context = contextvars.ContextVar('agent_config', default=None)
+    agent_config_context = contextvars.ContextVar("agent_config", default=None)
 
 
-def resolve_config_uid(config: Optional[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
-    if config is None:
+def resolve_config_uid(config: Optional[Any] = None) -> Tuple[Optional[str], Optional[str]]:
+    raw: Any = config
+    if raw is None:
         try:
-            config = agent_config_context.get()
+            raw = agent_config_context.get()
         except LookupError:
-            config = None
-    if config is None or not isinstance(config, dict):
+            raw = None
+    if not isinstance(raw, dict):
         return None, "Error: Configuration not available"
-    try:
-        configurable: Any = config.get('configurable')
-        if isinstance(configurable, dict):
-            uid = configurable.get('user_id') or configurable.get('uid')
-            if isinstance(uid, str) and uid.strip():
-                return uid.strip(), None
-    except Exception:
-        pass
 
-    top_uid = config.get('user_id') or config.get('uid')
+    configurable: Any = raw.get("configurable")
+    if isinstance(configurable, dict):
+        uid: Any = configurable.get("user_id") or configurable.get("uid")
+        if isinstance(uid, str) and uid.strip():
+            return uid.strip(), None
+
+    top_uid: Any = raw.get("user_id") or raw.get("uid")
     if isinstance(top_uid, str) and top_uid.strip():
         return top_uid.strip(), None
 
@@ -49,7 +48,7 @@ def get_integration_checked(
     except Exception as e:
         logger.error(f"Failed to fetch integration {key} for user {uid}: {e}", exc_info=True)
         return None, f"{error_prefix}. Please try again later."
-    if not integration or not integration.get('connected'):
+    if not integration or not integration.get("connected"):
         return None, not_connected_msg
     return integration, None
 
@@ -57,7 +56,7 @@ def get_integration_checked(
 def get_access_token_checked(
     integration: Optional[Dict[str, Any]], missing_msg: str
 ) -> Tuple[Optional[str], Optional[str]]:
-    token = integration.get('access_token') if integration else None
+    token = integration.get("access_token") if integration else None
     if not token:
         return None, missing_msg
     return token, None
@@ -83,7 +82,7 @@ def parse_iso_with_tz(
     if not value:
         return None, None
     try:
-        dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
         if dt.tzinfo is None:
             return None, f"Error: {field_name} must include timezone {tz_required_msg}: {value}"
         return dt, None
@@ -93,7 +92,7 @@ def parse_iso_with_tz(
 
 
 def prepare_access(
-    config: Optional[Dict[str, Any]],
+    config: Optional[Any],
     provider_key: str,
     provider_label: str,
     not_connected_msg: str,
@@ -146,7 +145,7 @@ def retry_on_auth(
                 return None, expired_msg
             if new_token:
                 call_kwargs = dict(call_kwargs)
-                call_kwargs['access_token'] = new_token
+                call_kwargs["access_token"] = new_token
                 try:
                     return call_fn(**call_kwargs), None
                 except Exception as e2:
@@ -183,7 +182,7 @@ async def retry_on_auth_async(
                 return None, expired_msg
             if new_token:
                 call_kwargs = dict(call_kwargs)
-                call_kwargs['access_token'] = new_token
+                call_kwargs["access_token"] = new_token
                 try:
                     return await call_fn(**call_kwargs), None
                 except Exception as e2:

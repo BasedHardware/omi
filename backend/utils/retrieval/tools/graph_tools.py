@@ -4,59 +4,29 @@ Bounded read-only knowledge-graph traversal for agentic chat (WS-N).
 
 from __future__ import annotations
 
-import contextvars
 import logging
-from typing import Any, Dict, Optional, cast
+from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 
 from utils.log_sanitizer import sanitize
 from utils.memory.kg_graph_traversal import format_traversal_result, traverse_knowledge_graph
+from utils.retrieval.tools.integration_base import resolve_config_uid
 
 logger = logging.getLogger(__name__)
 
-try:
-    from utils.retrieval.agentic import agent_config_context
-except ImportError:
-    agent_config_context = contextvars.ContextVar("agent_config", default=None)
 
-
-def _agent_config() -> Optional[Dict[str, Any]]:
-    """Retrieve the agent config dict from the context var, or None if unset."""
-    try:
-        return agent_config_context.get()
-    except LookupError:
-        return None
-
-
-def _resolve_uid(config: RunnableConfig | None) -> Optional[str]:
-    """Extract uid or user_id from config (configurable or top-level) with fallback to agent_config_context."""
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        cfg = _agent_config()
-    if not isinstance(cfg, dict):
-        return None
-    try:
-        raw_configurable = cfg.get('configurable')
-        if isinstance(raw_configurable, dict):
-            configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
-            uid = configurable.get('user_id') or configurable.get('uid')
-            if isinstance(uid, str) and uid.strip():
-                return uid.strip()
-    except (KeyError, TypeError):
-        pass
-
-    top_uid = cfg.get('user_id') or cfg.get('uid')
-    if isinstance(top_uid, str) and top_uid.strip():
-        return top_uid.strip()
-    return None
+def _resolve_uid(config: Optional[Any] = None) -> Optional[str]:
+    """Extract uid from config via shared resolve_config_uid."""
+    uid, _ = resolve_config_uid(config)
+    return uid
 
 
 @tool
 def traverse_knowledge_graph_tool(
     entity: str,
-    hops: int = 1,
+    hops: int | float | str | None = 1,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
@@ -90,9 +60,10 @@ def traverse_knowledge_graph_tool(
     except (TypeError, ValueError):
         parsed_hops = 1
 
+    # Clamp hops to [1, 2], matching MAX_TRAVERSAL_HOPS in utils.memory.kg_graph_traversal.
     parsed_hops = max(1, min(parsed_hops, 2))
 
-    uid = _resolve_uid(config)
+    uid, _ = resolve_config_uid(config)
     if not uid:
         return "Error: User ID not found in configuration"
 
