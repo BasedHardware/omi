@@ -263,16 +263,17 @@ The maintenance-host Dream drain is removed. Consolidation tuning reads,
 `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` and
 `MEMORY_CANONICAL_MAINTENANCE_FLEX` bindings/registry entries are removed.
 
-The mixed maintenance host remains for TTL, explicit required intake and committed
-outboxes/recurrence delivery. DB claim/settlement and model normalization borrow
-separate executor steps; outbox ticks do not hold a worker across a whole drain.
-Ledger accounts retain daily-sweep lifecycle authority and still drain outboxes.
-The daily sweep retains new-fact formation, local-day/onboarding receipts, standing
-triggers, summaries and filing. Stranded finalization, ingest-time prevention,
-speaker teaching, task refresh, frame retention, X ingestion and compliance stay
-with their owning pipelines. No Scheduler entry or `.github` workflow becomes
-dead; the dev maintenance schedule still owns required work. Workflow files are
-not edited. See [cleanup inventory](dream-cleanup-fold.md).
+The mixed maintenance host (`memory-maintenance-job`), its dev hourly schedule and
+its deploy workflows are retired (2026-10-26); the job never served production.
+Required intake now runs inline when a memory is extracted, and Dream's scheduled
+sweep is the retry/backlog owner. The retired host's residual duties — deterministic
+TTL transitions, committed canonical outbox drains and already-enqueued recurrence
+delivery — have no live owner in dev or prod and are tracked as follow-up work; the
+dev `daily-memory-sweep` and `knowledge-ledger-drain` schedulers/jobs that kept
+running old code are paused pending cloud retirement. Stranded finalization,
+ingest-time prevention, speaker teaching, task refresh, frame retention, X ingestion
+and compliance stay with their owning pipelines. See
+[cleanup inventory](dream-cleanup-fold.md).
 
 ## Operations and evidence
 
@@ -322,19 +323,19 @@ Do not change `allowlist` to `all` as an outage workaround.
 ## Memory intake is independent of Dream cleanup
 
 Ordinary compatibility-mode observations receive a bounded canonical intake
-route after extraction commits, for free and paid owners alike. The maintenance
-worker rotates through pending observations to retry failures, including rows
-past their former TTL. Explicit submissions retain their required-processing
-receipt path. Ledger-mode accounts retain the daily sweep as their formation
-owner. Intake uses the existing memory L2 gateway lane (Flex on maintenance),
-not the Dream reasoning/capacity/paid-cohort budget.
+route after extraction commits, for free and paid owners alike. With the
+maintenance host retired, Dream's scheduled sweep retries pending observations,
+including rows past their former TTL. Explicit submissions run the
+required-processing path inline at write time, with the same receipts, and Dream
+retries their stragglers. Intake uses the existing memory L2 gateway lane
+(background Flex), not the Dream reasoning/capacity/paid-cohort budget.
 `MEMORY_OBSERVATION_INTAKE_ENABLED` defaults on; false stops both observation
 entrypoints before DB/model work, leaving capture and required intake intact. Dream still owns verified
 retrospective cleanup. A promotion admission receipt binds the canonical
 content, evidence and graph plan; it is not a Dream session receipt.
 
 `MEMORY_UNDECIDED_VISIBLE` defaults on. Undecided and Review observations remain
-Short-term and TTL maintenance cannot reject them for age alone. Historical
+Short-term and are not rejected for age alone. Historical
 active Review archives project as Short-term in default lists without rewriting
 their audit records. Explicit owner rejection, source/privacy tombstones,
 processing blocks, sensitivity policy and third-party grants still apply. Set
