@@ -269,6 +269,8 @@ class ReadInventory:
                 evidence.runtime_checked = True
                 raw = self.redis.get(f'sync_job:{job_id}')
                 evidence.job = json.loads(raw) if raw else None
+                if evidence.job and isinstance(evidence.job.get('policy'), dict):
+                    evidence.field_sources['policy'] = 'redis_sync_job_admission_policy'
                 evidence.active_owner = evidence.active_owner or bool(self.redis.get(f'sync_job_lock:{job_id}'))
                 sources = {o['name']: o for o in row.get('staging_objects', []) if o.get('bucket') == 'syncing-local'}
                 evidence.sources_present = True
@@ -442,6 +444,13 @@ def configure_dispatch(inventory: ReadInventory) -> None:
 
 def result_record(row: dict, evidence: Evidence, reason: str) -> dict:
     assert reason in REASONS
+    fields = (
+        PAYLOAD_FIELDS
+        + OPTIONAL_FIELDS
+        + ('filenames', 'partial_result', 'processed_segment_ids', 'policy', 'language')
+    )
+    sources = dict.fromkeys(fields, 'unavailable')
+    sources.update(evidence.field_sources)
     return {
         'job_id': row['job_id'],
         'job_ref': row.get('job_ref'),
@@ -456,7 +465,7 @@ def result_record(row: dict, evidence: Evidence, reason: str) -> dict:
             )
         ),
         'reason': reason,
-        'field_sources': evidence.field_sources,
+        'field_sources': sources,
         'source_checks': evidence.source_checks,
         'evidence_digest': evidence_digest(evidence),
     }

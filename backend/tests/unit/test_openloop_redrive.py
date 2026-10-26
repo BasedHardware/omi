@@ -387,3 +387,12 @@ def test_main_requires_population_and_limit_before_constructing_apply_client(mon
     assert operator.main(['--input', str(path), '--apply', '--runtime-redis']) == 2
     assert json.loads(capsys.readouterr().out) == {'counts': {'invalid_input': 1}}
     client.assert_not_called()
+
+
+def test_missing_payload_outputs_explicit_per_field_unavailability(candidate):
+    row, evidence = candidate
+    evidence.payloads = {}
+    record = operator.result_record(row, evidence, classify(row, evidence))
+    assert record['status'] == 'blocked'
+    for field in ('content_id', 'partial_result', 'processed_segment_ids', 'filenames', 'source', 'lane', 'language'):
+        assert record['field_sources'][field] == 'unavailable'
