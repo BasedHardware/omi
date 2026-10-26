@@ -597,6 +597,11 @@ def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, er
         (ValueError('open_loop_extractions must be an object'), 'open_loop_extractions_not_object'),
         (ValueError('synthetic confidential detail'), 'other_value_error'),
         (ValueError('open_loop_extractions must be an object synthetic confidential detail'), 'other_value_error'),
+        (ValueError('Failed to commit transaction in 5 attempts.'), 'sdk_commit_attempts_exhausted'),
+        (
+            ValueError('The transaction has no transaction ID, so it cannot be rolled back.'),
+            'sdk_transaction_not_in_progress',
+        ),
         (RuntimeError('synthetic confidential detail'), 'none'),
     ],
 )
