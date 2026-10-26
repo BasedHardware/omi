@@ -10,18 +10,44 @@ import logging
 import os
 import hashlib
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from langchain_core.language_models import BaseChatModel
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
+
+if TYPE_CHECKING:
+    # The runtime import is deferred through module ``__getattr__`` below; it
+    # exists statically for type checking.
+    from langchain_google_genai import ChatGoogleGenerativeAI
 
 from utils.llm.gateway_client import GatewayContextChatOpenAI, get_llm_gateway_base_url, get_llm_gateway_service_token
 from utils.llm.gateway_resilience import gateway_transport_timeout
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
+
+
+# ChatGoogleGenerativeAI is resolved on first use: its import drags the google
+# gRPC client stack into every process that imports this module, and the
+# backend unit suite pays that once per isolated test file. Only Gemini model
+# construction needs the class. Resolution goes through this helper (and
+# module ``__getattr__`` for external attribute access), so ``mock.patch`` of
+# ``utils.llm.providers.ChatGoogleGenerativeAI`` still sees the patched object.
+def _chat_google_generative_ai_cls():
+    cls = globals().get('ChatGoogleGenerativeAI')
+    if cls is None:
+        from langchain_google_genai import ChatGoogleGenerativeAI as _chat_google_generative_ai
+
+        cls = globals()['ChatGoogleGenerativeAI'] = _chat_google_generative_ai
+    return cls
+
+
+def __getattr__(name: str) -> object:
+    if name == 'ChatGoogleGenerativeAI':
+        return _chat_google_generative_ai_cls()
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
 
 _usage_callback = get_usage_callback()
 
@@ -205,12 +231,12 @@ def get_or_create_gemini_llm(
 
         if gcp_project:
             gcp_location = os.environ.get('GCP_LOCATION', 'us-central1')
-            _llm_cache[key] = ChatGoogleGenerativeAI(
+            _llm_cache[key] = _chat_google_generative_ai_cls()(
                 model=model_name, project=gcp_project, location=gcp_location, **kwargs
             )
         elif gemini_key:
             kwargs['google_api_key'] = gemini_key
-            _llm_cache[key] = ChatGoogleGenerativeAI(model=model_name, **kwargs)
+            _llm_cache[key] = _chat_google_generative_ai_cls()(model=model_name, **kwargs)
         else:
             logger.warning('No USE_VERTEX_AI or GEMINI_API_KEY — Gemini calls will fail at invoke time')
             # Strip thinking_budget — it's a ChatGoogleGenerativeAI-only param
