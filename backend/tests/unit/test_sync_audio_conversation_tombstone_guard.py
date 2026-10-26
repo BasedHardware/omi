@@ -56,6 +56,8 @@ class TestPrecacheConversationAudio:
             'get_conversation',
             lambda uid, cid: _make_conversation(deleted=True, conversation_id=cid),
         )
+        mock_precache = MagicMock()
+        monkeypatch.setattr(sync_routes.sync_playback, 'precache_audio_files', mock_precache)
 
         with pytest.raises(HTTPException) as exc_info:
             sync_routes.precache_conversation_audio_endpoint(
@@ -65,6 +67,7 @@ class TestPrecacheConversationAudio:
 
         assert exc_info.value.status_code == 404
         assert exc_info.value.detail == 'Conversation not found'
+        mock_precache.assert_not_called()
 
     def test_precache_audio_rejects_nonexistent_conversation(self, monkeypatch):
         """Precache audio endpoint must return 404 when conversation does not exist."""
@@ -128,6 +131,8 @@ class TestGetAudioSignedUrls:
             'get_conversation',
             lambda uid, cid, read_site=None: _make_conversation(deleted=True, conversation_id=cid),
         )
+        mock_get_urls = MagicMock()
+        monkeypatch.setattr(sync_routes.sync_playback, 'get_audio_signed_urls', mock_get_urls)
 
         with pytest.raises(HTTPException) as exc_info:
             sync_routes.get_audio_signed_urls_endpoint(
@@ -137,6 +142,7 @@ class TestGetAudioSignedUrls:
 
         assert exc_info.value.status_code == 404
         assert exc_info.value.detail == 'Conversation not found'
+        mock_get_urls.assert_not_called()
 
     def test_get_audio_signed_urls_rejects_nonexistent_conversation(self, monkeypatch):
         """Signed URLs endpoint must return 404 when conversation does not exist."""
@@ -201,6 +207,8 @@ class TestDownloadAudioFile:
             'get_conversation',
             lambda uid, cid: _make_conversation(deleted=True, conversation_id=cid),
         )
+        mock_download = MagicMock()
+        monkeypatch.setattr(sync_routes.sync_playback, 'download_audio_file_response', mock_download)
         mock_request = MagicMock()
 
         with pytest.raises(HTTPException) as exc_info:
@@ -213,6 +221,7 @@ class TestDownloadAudioFile:
 
         assert exc_info.value.status_code == 404
         assert exc_info.value.detail == 'Conversation not found'
+        mock_download.assert_not_called()
 
     def test_download_audio_rejects_nonexistent_conversation(self, monkeypatch):
         """Download audio endpoint must return 404 when conversation does not exist."""
