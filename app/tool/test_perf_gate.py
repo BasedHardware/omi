@@ -14,7 +14,8 @@ from perf_gate_report import SCENARIOS, summarize
 def load_tests(loader, tests, pattern):
     # Use the existing manifest check entrypoint for all heavy-account guards.
     for relative in ('test_perf_sim_report.py', 'test_perf_drive.py',
-                     'perf/test_device_tools.py', 'perf/test_ios_admission.py'):
+                     'perf/test_device_tools.py', 'perf/test_ios_admission.py', 'perf/test_virtual_admission.py',
+                     'perf/test_android_manifest.py', 'perf/test_host_load.py'):
         path = Path(__file__).parent / relative
         spec = importlib.util.spec_from_file_location('heavy_' + path.stem, path)
         module = importlib.util.module_from_spec(spec)

@@ -91,6 +91,30 @@ class DeviceToolsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             comparison.compare(summary(), after)
 
+    def test_virtual_comparison_cannot_cross_runtime_or_physical_evidence(self):
+        before, after = summary(), summary()
+        for value in (before, after):
+            value.update(accepted_baseline=False, qualified_virtual_baseline=True, virtual_qualification=True)
+            value['identity'].update(virtual_runtime={'kind': 'android-emulator', 'runtime_build': 'pin',
+                                                     'host': {'node_sha256': 'a' * 64}},
+                                     launch_protocol={'warmup_runs': 1, 'measured_runs': 3, 'outlier_policy': 'retain-all'})
+        self.assertTrue(comparison.compare(before, after)['current_variance_pass'])
+        after['identity']['virtual_runtime']['runtime_build'] = 'new'
+        with self.assertRaisesRegex(ValueError, 'virtual_runtime'):
+            comparison.compare(before, after)
+        after['identity']['virtual_runtime']['runtime_build'] = 'pin'
+        after['identity']['virtual_runtime']['host']['node_sha256'] = 'b' * 64
+        with self.assertRaisesRegex(ValueError, 'virtual_runtime'):
+            comparison.compare(before, after)
+        del after['identity']['virtual_runtime']['host']
+        with self.assertRaisesRegex(ValueError, 'requires host identity'):
+            comparison.compare(before, after)
+        after = summary()
+        with self.assertRaisesRegex(ValueError, 'virtual and physical'):
+            comparison.compare(before, after)
+        with self.assertRaisesRegex(ValueError, 'physical and virtual'):
+            comparison.compare(summary(), before)
+
     def test_cancellation_reaps_owned_process(self):
         with tempfile.TemporaryDirectory() as directory:
             script = Path(directory) / 'sleep.py'

@@ -86,6 +86,12 @@ void main() {
       onEmptyWindow: (scenario) => _rejectMeasurement(binding, 'no_engine_frames', scenario: scenario));
   final fixture = HeavyFixtureServer();
   final results = <String, Map<String, Object?>>{};
+  final operationMarks = <Map<String, Object?>>[];
+  void mark(String operation) {
+    operationMarks.add({'operation': operation, 'vm_us': developer.Timeline.now});
+    developer.Timeline.instantSync('heavy.operation', arguments: {'operation': operation});
+  }
+
   late WalService walService;
 
   testWidgets('heavy_profile_scenarios', (tester) async {
@@ -97,6 +103,7 @@ void main() {
     debugPrint('HEAVY_LIFECYCLE ${jsonEncode(lifecycleSnapshot)}');
     final idleFrames = await _verifyIdleScheduling(tester, binding);
     const simulatorQualification = bool.fromEnvironment('PERF_SIM_QUALIFICATION');
+    const virtualQualification = bool.fromEnvironment('PERF_VIRTUAL_QUALIFICATION');
     expect(kProfileMode || (kDebugMode && simulatorQualification), isTrue,
         reason: 'Profile required; debug simulator runs must opt into qualification only');
     final resumed = await _awaitCondition(() => binding.lifecycleState == AppLifecycleState.resumed,
@@ -161,6 +168,7 @@ void main() {
       // 4. Cold start: shell mount → Home request → empty server page → cache
       //    decode of the full seeded history → grouped list rendered → settled.
       collector.begin('cold_start');
+      mark('cold_start.mount');
       walService.start();
       stopped = false;
       await tester.pumpWidget(entry);
@@ -177,6 +185,7 @@ void main() {
           () => conversations.conversations.length >= heavyConversationCount && !conversations.isLoadingConversations,
           timeout: const Duration(seconds: 30));
       expect(settled, isTrue, reason: 'Home must restore the complete synthetic conversation history');
+      mark('cold_start.cache_ready');
       await _idle(const Duration(seconds: 3));
       var summary = await collector.end();
       summary['restored_from_cache'] = settled;
@@ -187,6 +196,7 @@ void main() {
       collector.begin('scroll_conversations');
       final listFinder = await _verticalScrollable(tester, find.byType(ConversationsPage));
       for (var i = 0; i < 8; i++) {
+        mark('scroll_conversations.fling.$i');
         await tester.fling(listFinder, Offset(0, i < 4 ? -600 : 600), 2500);
         await _settleScrolled();
         await _idle(const Duration(milliseconds: 500));
@@ -197,16 +207,19 @@ void main() {
       // 6. Open the newest conversation's detail page and scroll its transcript.
       collector.begin('open_conversation');
       final newest = conversations.conversations.first;
+      mark('open_conversation.push');
       globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(
           builder: (_) => ConversationDetailPage(conversation: newest, initialTab: ConversationTab.transcript)));
       await _idle(const Duration(seconds: 2));
       final transcriptFinder = await _verticalScrollable(tester, find.byType(ConversationDetailPage));
       for (var i = 0; i < 6; i++) {
+        mark('open_conversation.fling.$i');
         await tester.fling(transcriptFinder, Offset(0, i < 3 ? -600 : 600), 2500);
         await _settleScrolled();
         await _idle(const Duration(milliseconds: 400));
       }
       globalNavigatorKey.currentState!.pop();
+      mark('open_conversation.pop');
       await _idle(const Duration(seconds: 1));
       results['open_conversation'] = await collector.end();
       debugPrint('HEAVY_STAGE detail complete');
@@ -214,8 +227,10 @@ void main() {
       // 7. Home ↔ Tasks tab switches on the production switch shape.
       collector.begin('tab_switch');
       for (var i = 0; i < 8; i++) {
+        mark('tab_switch.tasks.$i');
         await tester.tap(find.byKey(OmiKeys.homeTabTasks));
         await _idle(const Duration(milliseconds: 700));
+        mark('tab_switch.home.$i');
         await tester.tap(find.byKey(OmiKeys.homeTabHome));
         await _idle(const Duration(milliseconds: 700));
       }
@@ -256,7 +271,8 @@ void main() {
       'pacing': 'fixed-real-time/v1',
       'build_mode': kProfileMode ? 'profile' : 'debug',
       'device_os_version': Platform.operatingSystemVersion,
-      'acceptance_eligible': kProfileMode && !simulatorQualification && !timelineEnabled,
+      'acceptance_eligible': kProfileMode && !simulatorQualification && !virtualQualification && !timelineEnabled,
+      'virtual_qualification': virtualQualification,
       'timeline_enabled': timelineEnabled,
       'storage_isolated': true,
       'foreground_before_measurement': resumed,
@@ -272,6 +288,7 @@ void main() {
         'task_items': 50,
       },
       'fixture_requests': fixture.countsByKind,
+      'operation_marks': operationMarks,
       'scenarios': results,
       'complete': results.length == 5,
     };

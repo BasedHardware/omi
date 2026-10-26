@@ -123,6 +123,64 @@ class ReportTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 reporter.summarize(root, 3)
 
+    def test_virtual_baseline_requires_retained_identical_warmup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            value = driver_response()
+            value['heavy_profile'].update(virtual_qualification=True, acceptance_eligible=False)
+            value['heavy_run'].update(platform='android',
+                                     native_harness={'package': 'com.friend.ios.dev', 'firebase_auto_initializer_absent': True},
+                                     virtual_runtime={'kind': 'android-emulator', 'runtime_build': 'pinned',
+                                                      'host': {'node_sha256': 'a' * 64, 'platform': 'fixture-os',
+                                                               'architecture': 'arm64', 'logical_cpus': 10}},
+                                     launch_protocol={'warmup_runs': 1, 'measured_runs': 3, 'outlier_policy': 'retain-all',
+                                                      'host_load_policy': 'load1-per-logical-cpu<=1/v1'})
+            for prefix, count in (('warmup', 1), ('receipt', 3)):
+                for index in range(1, count + 1):
+                    (root / f'{prefix}-{index}-host-load.json').write_text(json.dumps({
+                        'policy': 'load1-per-logical-cpu<=1/v1', 'passed': True, 'command_exit_code': 0,
+                        'samples': [{'phase': phase, 'logical_cpus': 10, 'load_1_5_15m': [10, 9, 8]}
+                                    for phase in ('before', 'after')]}))
+            for i in range(1, 4):
+                (root / f'receipt-{i}.json').write_text(json.dumps(value))
+            with self.assertRaises(FileNotFoundError):
+                reporter.summarize(root, 3)
+            (root / 'warmup-1.json').write_text(json.dumps(value))
+            summary = reporter.summarize(root, 3)
+            self.assertTrue(summary['qualified_virtual_baseline'])
+            self.assertFalse(summary['accepted_baseline'])
+            host_path = root / 'receipt-2-host-load.json'
+            host = json.loads(host_path.read_text())
+            host['samples'][1]['load_1_5_15m'][0] = 10.01
+            host_path.write_text(json.dumps(host))
+            with self.assertRaisesRegex(ValueError, 'host overload'):
+                reporter.summarize(root, 3)
+            host['samples'][1]['load_1_5_15m'][0] = 10
+            host_path.write_text(json.dumps(host))
+            value['heavy_run']['binary_sha256'] = 'different'
+            (root / 'warmup-1.json').write_text(json.dumps(value))
+            with self.assertRaisesRegex(ValueError, 'warmup differs'):
+                reporter.summarize(root, 3)
+            del value['heavy_run']['virtual_runtime']['host']
+            for path in [root / f'receipt-{i}.json' for i in range(1, 4)] + [root / 'warmup-1.json']:
+                path.write_text(json.dumps(value))
+            with self.assertRaisesRegex(ValueError, 'requires host identity'):
+                reporter.summarize(root, 3)
+
+    def test_ios_profile_cannot_masquerade_as_virtual_profile_baseline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            value = driver_response()
+            value['heavy_profile'].update(virtual_qualification=True, acceptance_eligible=False)
+            value['heavy_run'].update(virtual_runtime={'kind': 'ios-simulator', 'runtime_build': 'pin'},
+                                     launch_protocol={'warmup_runs': 1, 'measured_runs': 3, 'outlier_policy': 'retain-all'})
+            for i in range(1, 4):
+                (root / f'receipt-{i}.json').write_text(json.dumps(value))
+                (root / f'receipt-{i}-preservation.json').write_text(json.dumps({
+                    'verified': True, 'bundle_id': 'com.friend-app-with-wearable.ios12.development'}))
+            with self.assertRaisesRegex(ValueError, 'platform/build mode'):
+                reporter.summarize(root, 3)
+
 
 if __name__ == '__main__':
     unittest.main()
