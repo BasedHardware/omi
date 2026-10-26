@@ -36,6 +36,7 @@ def state(monkeypatch):
     monkeypatch.setattr(cache, '_redis', lambda: redis)
     monkeypatch.setattr(cache.time, 'monotonic', lambda: clock[0])
     monkeypatch.setenv('ENCRYPTION_SECRET', 'test-membership-cache-secret')
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     monkeypatch.delenv('OMI_ROLLOUT_MEMBERSHIP_SHARED_CACHE_ENABLED', raising=False)
     return redis, clock, SimpleNamespace(project='fixture-project', _database='(default)')
 
@@ -47,6 +48,7 @@ def test_cross_replica_reuse_does_not_renew_sixty_second_expiry(state, monkeypat
     first = cache.read_memberships_cached('owner', client, fetch)
     assert first == members and first.deadline == 60
     assert all('owner' not in key for key in redis.values)
+    assert all(b'batch-pipeline' not in value for value, _ in redis.values.values())
     redis.now += 59_000
     clock[0] = 59
     second = cache.read_memberships_cached('owner', client, fetch)
@@ -107,3 +109,12 @@ def test_missing_secret_or_unknown_plane_bypasses_shared_data(state, monkeypatch
     assert not redis.values
     assert cache.read_memberships_cached('owner', object(), fetch) == {}
     assert fetch.call_count == 2
+
+
+def test_emulator_planes_do_not_share_matching_project_and_uid(state, monkeypatch):
+    redis, clock, client = state
+    fetch = Mock(return_value={'prod': {'batch-pipeline': True}})
+    for endpoint in ('localhost:8081', 'localhost:8082'):
+        monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', endpoint)
+        assert cache.read_memberships_cached('owner', client, fetch) == fetch.return_value
+    assert fetch.call_count == 2 and not redis.values

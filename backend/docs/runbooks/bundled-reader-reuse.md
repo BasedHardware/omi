@@ -18,6 +18,8 @@ rollout. Demand sizing now also works with the existing raw query. It changes
 only the raw batch limit (the indexed path retains its existing 500-row cap): candidate policy, identity validation, lineage, device and
 archive scope, historical merging, signed cursors and visible offset slicing
 remain authoritative. Filtered rows advance the raw keyset and trigger refill.
+After observing filtered candidates, raw scans resume their original 50-row
+batches for the rest of the request, so sparse prefixes cannot multiply tiny RPCs.
 The existing deadline and total-row caps remain in force. A page can still be
 truncated under those caps; smaller RPCs are not a promise of identical timing
 under concurrent mutation or provider failure.
@@ -38,7 +40,9 @@ Expiry is the invalidation mechanism, preserving the existing maximum cohort
 revocation delay. This is not immediate revocation and must not be extended to
 fresh account-generation or privacy authority. Redis faults, missing encryption
 configuration, unknown data-plane identity and corrupt ciphertext use the source
-reader. No shared payload can extend the existing process-cache error behavior.
+reader. Emulator reads bypass shared entries, so separate local stacks cannot
+collide through a reused project/database/UID. No shared payload can extend the
+existing process-cache error behavior.
 
 Source reads now appear as `database.rollout_cohorts:_read_memberships` in the
 caller probe. Compare the sum of old/new caller labels across the deployment,

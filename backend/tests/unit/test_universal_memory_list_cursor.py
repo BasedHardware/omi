@@ -265,6 +265,8 @@ def test_demand_scan_refills_filtered_prefix_and_retains_last_page(service_mod, 
         service_mod.read_canonical_scan_page = MagicMock(side_effect=scan)
         page = service.read_page('uid-test', limit=10)
         assert not page.truncated and page.next_cursor is None
+        if enabled:
+            assert [call.kwargs['limit'] for call in service_mod.read_canonical_scan_page.call_args_list] == [11, 50]
         return [memory.model_dump() for memory in page.memories]
 
     assert run(True) == run(False) == [memory.model_dump() for memory in visible]

@@ -619,6 +619,7 @@ class CanonicalMemoryBackend:
                         min(needed - len(collected), raw_cap - scanned),
                         MEMORY_LIST_SCAN_CHUNK_SIZE,
                         indexed=indexed_list_reads_enabled(),
+                        filtered=scanned > len(collected),
                     ),
                     "start_after": start_after,
                     "db_client": self._db_client,
@@ -1806,6 +1807,7 @@ class _CanonicalCursorStream:
         self._as_of = as_of
         self._page_limit = max(1, int(page_limit or 100))
         self._consumed_count = 0
+        self._filtered_slots = False
         self._peek: Optional[MemoryDB] = None
         self._peek_keyset: Optional[StreamKeyset] = None
         self._peek_scan: Optional[StreamKeyset] = None
@@ -1826,6 +1828,7 @@ class _CanonicalCursorStream:
                     max(1, self._page_limit + 1 - self._consumed_count),
                     MEMORY_LIST_SCAN_CHUNK_SIZE,
                     indexed=indexed_list_reads_enabled(),
+                    filtered=self._filtered_slots,
                 ),
                 "start_after": start_after,
                 "db_client": self._service.db_client,
@@ -1878,6 +1881,7 @@ class _CanonicalCursorStream:
             memory, scan_keyset = self._slots[self._slot_index]
             # Raw scan position advances for filtered rows too.
             if memory is None:
+                self._filtered_slots = True
                 self._budget.charge(stream="canonical")
                 self.scan_keyset = scan_keyset
                 self._advance_raw_slot()
@@ -1885,6 +1889,7 @@ class _CanonicalCursorStream:
             if self.emitted_keyset is not None and self._service.memory_cursor_sort_key(memory) <= (
                 self._service.keyset_sort_key(self.emitted_keyset)
             ):
+                self._filtered_slots = True
                 self._budget.charge(stream="canonical")
                 self.scan_keyset = scan_keyset
                 self._advance_raw_slot()

@@ -80,11 +80,11 @@ def canonical_demand_window_enabled() -> bool:
     return os.getenv('OMI_CANONICAL_DEMAND_WINDOW_ENABLED', '').strip().lower() != 'false'
 
 
-def canonical_scan_window_size(demand: int, raw_chunk: int, *, indexed: bool) -> int:
+def canonical_scan_window_size(demand: int, raw_chunk: int, *, indexed: bool, filtered: bool = False) -> int:
     """Keep indexed batching unchanged; remove only surplus raw candidates."""
     if indexed:
         return min(500, demand)
-    return min(raw_chunk, demand) if canonical_demand_window_enabled() else raw_chunk
+    return min(raw_chunk, demand) if canonical_demand_window_enabled() and not filtered else raw_chunk
 
 
 def _env_float(name: str) -> Optional[float]:

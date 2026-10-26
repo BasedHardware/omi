@@ -75,7 +75,7 @@ def _fallback():
 
 def read_memberships_cached(uid, client, fetch):
     secret = os.getenv('ENCRYPTION_SECRET', '')
-    if not enabled() or not secret:
+    if not enabled() or not secret or os.getenv('FIRESTORE_EMULATOR_HOST'):
         return fetch()
     # Unknown/injected clients must never share another data plane's entries.
     project, database = getattr(client, 'project', None), getattr(client, '_database', None)
