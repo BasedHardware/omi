@@ -900,6 +900,7 @@ public enum OmiAPI {
     public let conversationId: String
     public let duration: Double
     public let id: String
+    public let playbackStart: Double?
     public let provider: String?
     public let sourceFingerprint: String?
     public let startedAt: String?
@@ -911,6 +912,7 @@ public enum OmiAPI {
       case conversationId = "conversation_id"
       case duration
       case id
+      case playbackStart = "playback_start"
       case provider
       case sourceFingerprint = "source_fingerprint"
       case startedAt = "started_at"
@@ -924,18 +926,20 @@ public enum OmiAPI {
       conversationId = try c.decode(String.self, forKey: .conversationId)
       duration = try c.decode(Double.self, forKey: .duration)
       id = try c.decode(String.self, forKey: .id)
+      playbackStart = try c.decodeIfPresent(Double.self, forKey: .playbackStart)
       provider = try c.decodeIfPresent(String.self, forKey: .provider)
       sourceFingerprint = try c.decodeIfPresent(String.self, forKey: .sourceFingerprint)
       startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
       uid = try c.decode(String.self, forKey: .uid)
     }
 
-    public init(chunkSpans: [ChunkSpan]? = nil, chunkTimestamps: [Double], conversationId: String, duration: Double, id: String, provider: String? = nil, sourceFingerprint: String? = nil, startedAt: String? = nil, uid: String) {
+    public init(chunkSpans: [ChunkSpan]? = nil, chunkTimestamps: [Double], conversationId: String, duration: Double, id: String, playbackStart: Double? = nil, provider: String? = nil, sourceFingerprint: String? = nil, startedAt: String? = nil, uid: String) {
       self.chunkSpans = chunkSpans
       self.chunkTimestamps = chunkTimestamps
       self.conversationId = conversationId
       self.duration = duration
       self.id = id
+      self.playbackStart = playbackStart
       self.provider = provider
       self.sourceFingerprint = sourceFingerprint
       self.startedAt = startedAt
