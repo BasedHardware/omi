@@ -102,7 +102,9 @@ async def test_cancelled_poll_cleans_only_its_resources_without_resubmission():
 
 @pytest.mark.asyncio
 async def test_http_queue_wait_counts_against_deadline(monkeypatch):
-    monkeypatch.setattr(module, 'DEADLINE_SECONDS', 0.01)
+    # Only the timeout path is exercised: the semaphore never opens. Keep the
+    # real-clock budget large enough for loaded CI runners (#22758/#22767).
+    monkeypatch.setattr(module, 'DEADLINE_SECONDS', 1.0)
     client = AsyncMock()
     with pytest.raises(module.SonioxBatchError):
         await module.transcribe_async(b'synthetic', 5, client=client, semaphore=asyncio.Semaphore(0))
