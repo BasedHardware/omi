@@ -32,6 +32,12 @@ attempt also prevents an operator from buying Soniox again for the same unit.
   outcome, word count (null means unobserved), and measured VAD seconds. The job's
   `measured_held_vad_speech_seconds` remains the T2 census value. `refused` means
   the independent recognizer did not run; it is never counted as an empty answer.
+  This census is monotone: `max(prior, new)` across worker, CPU inspection,
+  recognizer receipts and failed settlement. A later zero cannot erase prior
+  measured speech. Provider receipts retain their own local measurements.
+  Prior positive evidence at or above one frame blocks silence even when CPU
+  VAD later reports zero; settlement also fences saved-silence replay against
+  unknown or positive census evidence.
 
 Threshold evidence: local Silero evaluates 512 samples at 16 kHz, one 32 ms frame
 (`utils/stt/local_vad.py`). Only the clipped final frame can be shorter. Synthetic
@@ -99,6 +105,12 @@ belong to a separate approved config change. A missing key refuses the operator 
 its paid intent and leaves automatic recovery held with a `refused` receipt.
 It does not consume the independent attempt, so explicit recovery can proceed
 after the runtime configuration is corrected.
+
+The separately deployed worker imports the same control, so its chart explicitly
+pins `worker.independentLanguageRecoveryEnabled=false` as well. Keep this reader
+aligned with the CPU flag in the approved activation/config change; the worker
+does not receive a new Soniox credential. This PR needs the worker chart wiring
+rolled as well as the CPU source, while actual recognition runs on the CPU role.
 
 For the seven untouched epoch-2 units and three spent Modulate epoch-2 units,
 use `scripts/batch_pipeline_speech_redrive.py` with **both**

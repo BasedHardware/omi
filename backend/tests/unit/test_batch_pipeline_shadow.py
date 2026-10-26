@@ -35,7 +35,7 @@ def repository(monkeypatch):
     return ShadowStore(store, clock=lambda: 7200, busy=lambda: False)
 
 
-def running(repository, name='one', *, duration=300, guarded=False):
+def running(repository, name='one', *, duration=300, guarded=False, worker_speech=None):
     repository.offer('worker-' + name)
     reservation = repository.reserve('synthetic-owner', name, 'deep')
     assert reservation
@@ -45,7 +45,7 @@ def running(repository, name='one', *, duration=300, guarded=False):
     assert repository.ready(reservation, item, '')
     assert repository.take('worker-' + name) == item
     evidence = (
-        ValidationFailureWork(item.segment_id, 'vad_windows', 'unsupported_language')
+        ValidationFailureWork(item.segment_id, 'vad_windows', 'unsupported_language', worker_speech)
         if guarded
         else RecoveryWork(item.segment_id, padded_retry='skipped_long_speech')
     )
@@ -159,6 +159,45 @@ def test_guarded_shadow_missing_key_refuses_without_claim(repository, monkeypatc
     settled = row(repository, item.segment_id)
     assert settled['paid_providers'] == ['modulate']
     assert settled['recognizers']['soniox']['outcome'] == 'refused'
+
+
+def test_guarded_shadow_retains_positive_worker_evidence_when_cpu_is_zero(repository):
+    item = running(repository, duration=20, guarded=True, worker_speech=2)
+    empty = Mock(side_effect=MultilingualEmpty(20, []))
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            stt=empty,
+            second_stt=empty,
+            inspect=lambda *a: (b'', 20, []),
+        )
+        == 'failed_held'
+    )
+    settled = row(repository, item.segment_id)
+    assert settled['speech_seconds'] == settled['speech_loss_seconds'] == 2
+    assert all(r['vad_speech_seconds'] == 0 for r in settled['recognizers'].values())
+
+
+def test_guarded_shadow_inspection_error_keeps_prior_measured_speech(repository):
+    item = running(repository, duration=20, guarded=True, worker_speech=2)
+    provider = Mock()
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            stt=provider,
+            second_stt=provider,
+            inspect=Mock(side_effect=ValueError()),
+        )
+        == 'error'
+    )
+    settled = row(repository, item.segment_id)
+    assert settled['speech_seconds'] == settled['speech_loss_seconds'] == 2
+    assert settled['vad'] == 'strict'
+    provider.assert_not_called()
 
 
 def test_cohort_is_static_independent_and_disjoint(monkeypatch):

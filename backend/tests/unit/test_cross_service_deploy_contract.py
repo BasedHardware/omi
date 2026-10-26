@@ -166,6 +166,15 @@ def _worker_without_head_priority() -> dict[str, str]:
     return {WORKER_VALUES: yaml.safe_dump(values, sort_keys=False)}
 
 
+def _worker_without_independent_recovery() -> dict[str, str]:
+    path = 'backend/charts/batch-pipeline-worker/templates/deployment.yaml'
+    original = (REPO_ROOT / path).read_text(encoding='utf-8')
+    lines = original.splitlines(keepends=True)
+    kept = [line for line in lines if 'name: BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED,' not in line]
+    assert len(kept) == len(lines) - 1
+    return {path: ''.join(kept)}
+
+
 MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
     'config_map_without_source': _manifest_mutation(_config_map_without_source),
     'recovery_without_audience': _manifest_mutation(_recovery_without_audience),
@@ -181,8 +190,9 @@ MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
     'uid_allowlist_appended': _manifest_mutation(_uid_allowlist_appended),
     'prod_url_in_dev': _manifest_mutation(_prod_url_in_dev),
     'worker_without_head_priority': _worker_without_head_priority,
+    'worker_without_independent_recovery': _worker_without_independent_recovery,
 }
-HELM_MUTATIONS = {'worker_without_head_priority'}
+HELM_MUTATIONS = {'worker_without_head_priority', 'worker_without_independent_recovery'}
 
 
 @dataclass
@@ -274,6 +284,17 @@ def test_worker_missing_head_priority_fails_like_22121(results: Results) -> None
     # reader-split also catches (see the opt-in commit replay).
     found = {(v.invariant, v.scope) for v in results.mutations['worker_without_head_priority']}
     assert ('coupled-flag', 'BATCH_PIPELINE_HEAD_PRIORITY_ENABLED') in found
+
+
+@pytest.mark.skipif(not HAS_HELM, reason='Helm unavailable; worker chart render runs where helm is installed')
+def test_worker_missing_independent_recovery_kill_switch_fails(results: Results) -> None:
+    found = results.mutations['worker_without_independent_recovery']
+    assert {
+        v.env
+        for v in found
+        if v.invariant == 'reader-split'
+        and v.scope == 'helm/batch-pipeline-worker/BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'
+    } == {'dev', 'prod'}
 
 
 def test_unparseable_boolean_value_fails(results: Results) -> None:

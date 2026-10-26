@@ -2,7 +2,7 @@
 
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
-from utils.batch_pipeline.contracts import validate_measured_vad
+from utils.batch_pipeline.contracts import validate_measured_vad, held_vad_census
 
 
 def record_recognizer(store, segment_id, token, intent, provider, outcome, words, speech_seconds, *, claim=False):
@@ -40,7 +40,7 @@ def record_recognizer(store, segment_id, token, intent, provider, outcome, words
             'word_count': words,
             'vad_speech_seconds': measured,
         }
-        job['measured_held_vad_speech_seconds'] = measured
+        job['measured_held_vad_speech_seconds'] = held_vad_census(job, measured)
         tx.put('jobs', segment_id, job)
         return True
 

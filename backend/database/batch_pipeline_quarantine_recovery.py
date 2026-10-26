@@ -12,8 +12,9 @@ from database.batch_pipeline_policy import (
 )
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, normalized_binding
 from database.sync_ledger import batch_projection_ledger_owner_matches
+from config.batch_language_recovery import language_guarded, below_silence_threshold
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
-from utils.batch_pipeline.contracts import WorkResult, validate_measured_vad
+from utils.batch_pipeline.contracts import WorkResult, held_vad_census
 from utils.batch_pipeline.scheduler import owner_key
 
 
@@ -235,7 +236,7 @@ class RecoveryStore:
                 or job.get('result')
             ):
                 return False
-            measured = validate_measured_vad(seconds, job['duration_seconds'])
+            measured = held_vad_census(job, seconds)
             if job.get('measured_held_vad_speech_seconds') != measured:
                 job['measured_held_vad_speech_seconds'] = measured
                 tx.put('jobs', segment_id, job)
@@ -265,11 +266,13 @@ class RecoveryStore:
                 or existing
             ):
                 return False, 0
+            if result_uri and outcome == 'silence' and language_guarded(job):
+                census = held_vad_census(job)
+                if census is None or not below_silence_threshold(census):
+                    return False, 0
             if result_uri is None:
                 job.update(recovery_state='failed_held')
-                measured = validate_measured_vad(measured_held_vad_speech_seconds, job['duration_seconds'])
-                if measured is not None or 'measured_held_vad_speech_seconds' not in job:
-                    job['measured_held_vad_speech_seconds'] = measured
+                job['measured_held_vad_speech_seconds'] = held_vad_census(job, measured_held_vad_speech_seconds)
                 if failure:
                     from utils.batch_pipeline.recovery_disposition import STAGES, REASONS
 

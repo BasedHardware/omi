@@ -7,7 +7,7 @@ from config.policy import RecoveryPolicy
 from config.batch_pipeline_empty_asr import terminal_empty_allowed
 from config.batch_language_recovery import language_guarded, below_silence_threshold, allowed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.contracts import WorkItem, held_vad_census
 from utils.batch_pipeline.recovery_disposition import inspect_audio, MultilingualEmpty, padded_empty
 from utils.batch_pipeline.recovery_recognizers import recognizer_attempt, independent_ready
 
@@ -46,7 +46,7 @@ def guarded_recovery(repository, segment, item, job, audio, duration, spans, stt
     receipt('soniox', second, count)
     if payload is not None:
         return 'recovered', receipts
-    if first == second == 'empty' and below_silence_threshold(speech):
+    if first == second == 'empty' and below_silence_threshold(held_vad_census({**job['item'], **job}, speech)):
         return 'empty', receipts
     return 'failed_held', receipts
 
@@ -126,5 +126,8 @@ def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspec
                 outcome = 'failed_held'
     except Exception:
         outcome = 'error'
-    repository.finish(segment, outcome, speech=speech, vad=vad, recognizers=receipts)
+    census = held_vad_census({**job['item'], **job}, speech if vad == 'strict' else None)
+    repository.finish(
+        segment, outcome, speech=census or 0.0, vad='strict' if census is not None else 'unknown', recognizers=receipts
+    )
     return outcome

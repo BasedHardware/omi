@@ -14,7 +14,7 @@ from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from config.batch_language_recovery import allowed as independent_allowed, below_silence_threshold, prior_modulate_empty
-from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.contracts import WorkItem, held_vad_census
 from utils.batch_pipeline.quarantine_recovery import log_failure, log_terminal_empty
 from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -167,7 +167,7 @@ def redrive_one(
                 count,
                 measured,
             )
-            if empty and first_empty and below_silence_threshold(measured):
+            if empty and first_empty and below_silence_threshold(held_vad_census(job, measured)):
                 payload = independent_silence_payload(duration, spans)
                 failure = None
         if (

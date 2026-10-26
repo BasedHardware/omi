@@ -6171,7 +6171,10 @@ Only two validated empty recognizers and fewer than 512 original 16 kHz samples
 recognizers. Unknown VAD, either provider error, a full positive frame, or words
 contradicting zero VAD retain custody. Receipts include provider, outcome, word
 count (null for unobserved) and original measured VAD seconds; T2 retains the
-measured held value. The 32 ms boundary is a conservative Silero frame-resolution
+maximum prior/new measured held value. A later CPU zero cannot erase positive
+worker evidence; per-provider receipts still retain their own local measurements.
+The retained census also gates silence and saved-silence settlement/replay.
+The 32 ms boundary is a conservative Silero frame-resolution
 proposal supported by synthetic tests, not labeled evidence about held audio.
 
 `BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults on in code;
@@ -6190,6 +6193,9 @@ independent claim; it cannot consume that attempt. Both dev/prod CPU recovery
 manifests explicitly pin the kill switch false pending David's approval for
 this new service's access to the existing secret (lead ruling 01d584, 2026-10-26).
 No binding or IAM change is included. Activation is blocked on that approval.
+The worker chart also pins `worker.independentLanguageRecoveryEnabled=false`,
+keeping the separately deployed reader aligned. The approved config change must
+align both controls; no new Soniox credential is exposed to the GPU worker.
 The rollout lead owns a 2026-10-26 morning review, then op1 uses an exact-ID
 one-unit canary, verifies recovered words or evidenced hold and clean T1/T2/T4,
 and expands the approved ten-unit prefix only after lead approval. Keep batch

@@ -35,7 +35,7 @@ from config.batch_language_recovery import allowed as independent_allowed, langu
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
-from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.contracts import WorkItem, held_vad_census
 from utils.batch_pipeline.recovery_recognizers import (
     transcribe,
     second_transcribe,
@@ -139,7 +139,7 @@ class QuarantineRecovery:
         return second_provider_eligible(job, empty)
 
     def _second_multilingual(
-        self, item, owner_id, audio, empty, policy, *, guarded=False, byok=False, token=None, first_empty=True
+        self, item, owner_id, audio, empty, policy, *, guarded=False, byok=False, token=None, first_empty=True, job=None
     ):
         """At most one independent call inside the running intent; None leaves custody held."""
         payload, outcome, word_count = None, 'refused', None
@@ -192,7 +192,13 @@ class QuarantineRecovery:
         if outcome in ('words', 'empty'):
             metered(record_accepted, owner_id, provider, item.duration_seconds)
         if guarded:
-            if outcome == 'empty' and first_empty and below_silence_threshold(measured):
+            if (
+                outcome == 'empty'
+                and first_empty
+                and below_silence_threshold(
+                    held_vad_census(job or {'duration_seconds': item.duration_seconds}, measured)
+                )
+            ):
                 return independent_silence_payload(empty.duration, empty.spans)
             return payload
         if outcome == 'empty' and policy.terminal_empty_disposition and terminal_empty_allowed(empty.spans):
@@ -386,6 +392,7 @@ class QuarantineRecovery:
                         byok=byok,
                         token=token,
                         first_empty=first_empty,
+                        job=job,
                     )
                     if payload is not None:
                         failure = None

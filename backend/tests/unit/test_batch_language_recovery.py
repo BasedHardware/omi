@@ -502,3 +502,96 @@ def test_missing_soniox_key_does_not_burn_the_independent_attempt(setup, monkeyp
         )
         == 'recovered'
     )
+
+
+@pytest.mark.parametrize('case', ['disabled', 'cap', 'allowance', 'empty', 'error', 'words_without_vad'])
+def test_cpu_zero_never_erases_positive_worker_census(setup, monkeypatch, legacy_dependencies, case):
+    from utils.batch_pipeline.contracts import vad_receipt
+
+    client, _, binding, artifacts, _, soniox, recovery, _ = guarded(setup, monkeypatch, legacy_dependencies, speech=0)
+    job = row(client)
+    job['measured_held_vad_speech_seconds'] = 2
+    job['worker_vad_receipt'] = receipt = vad_receipt(job['audio_uri'], round(job['duration_seconds'] * 16000), 2)
+    if case == 'disabled':
+        monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
+    elif case == 'cap':
+        monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS', '1')
+    elif case == 'allowance':
+        monkeypatch.setattr('utils.batch_pipeline.quarantine_recovery.sync_allowed', lambda *a, **kw: False)
+    elif case == 'error':
+        soniox.side_effect = TimeoutError('synthetic')
+    elif case == 'words_without_vad':
+        soniox.return_value = (WORDS, 'vi')
+    expected = 'held' if case in {'disabled', 'cap', 'allowance'} else 'failed_held'
+    assert recovery.recover('bad', binding.owner_id) == expected
+    final = row(client)
+    assert final['measured_held_vad_speech_seconds'] == 2
+    assert final['worker_vad_receipt'] == receipt
+    artifacts.persist_recovery_result.assert_not_called()
+    if expected == 'failed_held':
+        assert all(r['vad_speech_seconds'] == 0 for r in final['recovery']['recognizers'].values())
+
+
+@pytest.mark.parametrize('case', ['disabled', 'empty', 'error'])
+def test_operator_zero_never_erases_positive_held_census(setup, monkeypatch, legacy_dependencies, case):
+    client, store, binding, artifacts, _, soniox, _, old = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0, automatic=False
+    )
+    row(client)['measured_held_vad_speech_seconds'] = 2
+    if case == 'disabled':
+        monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
+    elif case == 'error':
+        soniox.side_effect = TimeoutError('synthetic')
+    expected = 'independent_budget_held' if case == 'disabled' else 'failed_held'
+    assert (
+        redrive_one(
+            store,
+            artifacts,
+            'bad',
+            binding.owner_id,
+            'new-plan',
+            old,
+            server_flags=SERVING_ENV,
+            independent_language=True,
+        )
+        == expected
+    )
+    assert row(client)['measured_held_vad_speech_seconds'] == 2
+    artifacts.persist_recovery_result.assert_not_called()
+    if case != 'disabled':
+        assert row(client)['speech_redrive']['recognizers']['soniox']['vad_speech_seconds'] == 0
+
+
+@pytest.mark.parametrize('prior,new,expected', [(None, None, None), (None, 0, 0), (2, None, 2), (2, 0, 2), (2, 4, 4)])
+def test_held_vad_census_is_monotone(prior, new, expected):
+    from utils.batch_pipeline.contracts import attach_held_vad, held_vad_census
+
+    job = {'duration_seconds': 20, 'measured_held_vad_speech_seconds': prior}
+    assert held_vad_census(job, new) == expected
+    attach_held_vad(job, new)
+    assert job['measured_held_vad_speech_seconds'] == expected
+
+
+@pytest.mark.parametrize('prior', [None, 2])
+@pytest.mark.parametrize('operator', [False, True])
+def test_saved_silence_cannot_discharge_unknown_or_positive_held_evidence(
+    setup, monkeypatch, legacy_dependencies, prior, operator
+):
+    client, store, binding, _, _, _, recovery, old = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0, automatic=not operator
+    )
+    row(client)['measured_held_vad_speech_seconds'] = prior
+    if operator:
+        protocol = SpeechRedriveStore(store, server_flags=SERVING_ENV)
+        job = protocol.prepare('bad', binding.owner_id, 'new-plan', old, 100)
+        token = job['speech_redrive']['token']
+        assert protocol.start('bad', token, 'new-plan', 100)
+        assert not protocol.settle('bad', token, 'new-plan', 101, 'encrypted:stale-silence', outcome='silence')
+    else:
+        protocol = recovery.protocol
+        job = protocol.prepare('bad', binding.owner_id, 100)
+        token = job['recovery']['token']
+        assert protocol.start('bad', token, 100, provider='modulate')
+        assert not protocol.settle('bad', token, 101, 'encrypted:stale-silence', outcome='silence')
+    assert row(client)['measured_held_vad_speech_seconds'] == prior
+    assert not row(client).get('result')
