@@ -1428,6 +1428,7 @@ def test_held_sweep_completes_each_upload_once_and_contains_failures(setup, monk
         'units': 4,
         'reads': 38,
         'more': 1,
+        'pages': 1,
     }
     assert ledger_row(client, binding)['status'] == 'partial'
     assert projector.held_after == 'broken'
@@ -1441,6 +1442,7 @@ def test_held_sweep_completes_each_upload_once_and_contains_failures(setup, monk
         'units': 4,
         'reads': 4,
         'more': 0,
+        'pages': 1,
     }
     assert projector.held_after is None
     assert sum(len(tx.updates) for tx in client.transactions) == writes
@@ -1454,6 +1456,7 @@ def test_held_sweep_completes_each_upload_once_and_contains_failures(setup, monk
         'units': 4,
         'reads': 38,
         'more': 0,
+        'pages': 1,
     }
     assert sum(len(tx.updates) for tx in client.transactions) == writes
     keys = [(call.args[1], call.kwargs['idempotency_key']) for call in fair_use.record_speech_ms.call_args_list]
@@ -1490,7 +1493,7 @@ def test_full_pages_chain_into_one_pass_and_attempt_each_upload_once(setup, monk
     counts = projector.sweep_held(3, deadline=1e12)
     # Two full pages schedule the third immediately: one call, three fetches.
     assert pages.call_count == 3
-    assert counts == {'partial': 0, 'waiting': 7, 'error': 0, 'units': 8, 'reads': 127, 'more': 0}
+    assert counts == {'partial': 0, 'waiting': 7, 'error': 0, 'units': 8, 'reads': 127, 'more': 0, 'pages': 3}
     # The unit repeated across pages is one upload: one attempt for the pass.
     assert attempts == [f'upload-{index}' for index in (0, 1, 2, 3, 5, 6, 7)]
     assert projector.held_after is None
@@ -1513,13 +1516,13 @@ def test_pass_deadline_stops_between_pages_and_keeps_the_cursor(setup, monkeypat
     # The first page ran before the deadline, the second after it: two fetches
     # only, with the cursor left on the second page's last unit.
     assert pages.call_count == 2
-    assert counts == {'partial': 0, 'waiting': 4, 'error': 0, 'units': 4, 'reads': 72, 'more': 1}
+    assert counts == {'partial': 0, 'waiting': 4, 'error': 0, 'units': 4, 'reads': 72, 'more': 1, 'pages': 2}
     assert projector.held_after == 'unit-0003'
     resumed = projector.sweep_held(2, deadline=1e12)
     # The resumed segment is the same pass: both uploads stay deduped, so its
     # page reads rows without re-attempting, then the short page wraps.
     assert pages.call_count == 4
-    assert resumed == {'partial': 0, 'waiting': 0, 'error': 0, 'units': 2, 'reads': 2, 'more': 0}
+    assert resumed == {'partial': 0, 'waiting': 0, 'error': 0, 'units': 2, 'reads': 2, 'more': 0, 'pages': 2}
 
 
 def test_page_budget_caps_a_pass_at_max_pages(setup, monkeypatch):
@@ -1534,7 +1537,7 @@ def test_page_budget_caps_a_pass_at_max_pages(setup, monkeypatch):
     monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
     counts = projector.sweep_held(2, deadline=1e12, max_pages=3)
     assert pages.call_count == 3
-    assert counts == {'partial': 0, 'waiting': 6, 'error': 0, 'units': 6, 'reads': 108, 'more': 1}
+    assert counts == {'partial': 0, 'waiting': 6, 'error': 0, 'units': 6, 'reads': 108, 'more': 1, 'pages': 3}
 
 
 def test_max_pages_alone_chains_full_pages(setup, monkeypatch):
@@ -1550,7 +1553,7 @@ def test_max_pages_alone_chains_full_pages(setup, monkeypatch):
     # No deadline: the page budget alone must still chain the pass.
     counts = projector.sweep_held(2, max_pages=3)
     assert pages.call_count == 3
-    assert counts == {'partial': 0, 'waiting': 6, 'error': 0, 'units': 6, 'reads': 108, 'more': 1}
+    assert counts == {'partial': 0, 'waiting': 6, 'error': 0, 'units': 6, 'reads': 108, 'more': 1, 'pages': 3}
 
 
 def test_failed_fetch_ends_the_segment_with_its_pages_charged(setup, monkeypatch):
@@ -1567,11 +1570,11 @@ def test_failed_fetch_ends_the_segment_with_its_pages_charged(setup, monkeypatch
     # The failed fetch raises nothing and charges the page already served, so
     # the caller's read budget sees it; the cursor stays resumable.
     assert pages.call_count == 2
-    assert counts == {'partial': 0, 'waiting': 2, 'error': 0, 'units': 2, 'reads': 36, 'more': 1}
+    assert counts == {'partial': 0, 'waiting': 2, 'error': 0, 'units': 2, 'reads': 36, 'more': 1, 'pages': 1}
     assert projector.held_after == 'unit-0001'
     resumed = projector.sweep_held(2, deadline=1e12)
     assert pages.call_count == 4
-    assert resumed == {'partial': 0, 'waiting': 2, 'error': 0, 'units': 2, 'reads': 36, 'more': 0}
+    assert resumed == {'partial': 0, 'waiting': 2, 'error': 0, 'units': 2, 'reads': 36, 'more': 0, 'pages': 2}
 
 
 def test_a_full_pass_over_a_large_backlog_finishes_within_the_tick_bound(setup, monkeypatch):
@@ -1616,7 +1619,7 @@ def test_unit_failures_never_stop_a_multi_page_pass(setup, monkeypatch):
     # Every even unit failed — still charged for its reads — and the pass
     # served both pages to the end.
     assert pages.call_count == 3
-    assert counts == {'partial': 0, 'waiting': 3, 'error': 3, 'units': 6, 'reads': 108, 'more': 0}
+    assert counts == {'partial': 0, 'waiting': 3, 'error': 3, 'units': 6, 'reads': 108, 'more': 0, 'pages': 3}
 
 
 def test_attempt_charge_floors_at_the_measured_single_upload_worst(setup, monkeypatch):
@@ -1635,7 +1638,7 @@ def test_attempt_charge_floors_at_the_measured_single_upload_worst(setup, monkey
     # must never undercut the measured per-attempt worst case. The short page
     # wraps the scan in the same call.
     assert pages.call_count == 1
-    assert counts == {'partial': 0, 'waiting': 1, 'error': 0, 'units': 1, 'reads': 17, 'more': 0}
+    assert counts == {'partial': 0, 'waiting': 1, 'error': 0, 'units': 1, 'reads': 17, 'more': 0, 'pages': 1}
 
 
 @pytest.mark.parametrize('change', ['speech_redrive', 'recovery_enabled'])
