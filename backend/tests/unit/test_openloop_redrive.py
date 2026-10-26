@@ -449,3 +449,37 @@ def test_complete_failure_phases_and_all_successful_checkpoints_are_required(can
     evidence.job['result'] = result
     evidence.ledger['processed_segment_ids'] = processed
     assert classify(row, evidence) == reason
+
+
+def test_verified_cloud_run_alias_is_accepted_without_accepting_unrelated_endpoints():
+    service = {
+        'status': {'url': 'https://backfill-hash.run.app'},
+        'metadata': {
+            'annotations': {
+                'run.googleapis.com/urls': json.dumps(
+                    [
+                        'https://backfill-number.run.app',
+                        'https://unrelated.example',
+                    ]
+                )
+            }
+        },
+    }
+    urls = operator.service_handler_urls(service)
+    assert urls == {
+        'https://backfill-hash.run.app/v2/sync-jobs/run',
+        'https://backfill-number.run.app/v2/sync-jobs/run',
+    }
+    assert 'https://unrelated.example/v2/sync-jobs/run' not in urls
+
+
+def test_queue_route_change_cannot_replay_an_uncertain_create_in_a_new_queue(writer, monkeypatch):
+    row, evidence, inventory, ref = writer
+    approved = evidence_digest(evidence)
+    enqueue = Mock(side_effect=TimeoutError())
+    assert operator.apply_one(row, evidence, approved, inventory, enqueue) == 'dispatch_uncertain'
+    evidence.ledger = ref.get().to_dict()
+    evidence.job = json.loads(inventory.redis.get('sync_job:job'))
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'different-queue')
+    assert operator.apply_one(row, evidence, approved, inventory, enqueue) == 'plan_changed'
+    enqueue.assert_called_once()

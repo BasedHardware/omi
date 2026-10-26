@@ -24,6 +24,7 @@ import subprocess
 import tempfile
 import time
 from typing import Any
+from urllib.parse import urlsplit
 import uuid
 
 import google.auth
@@ -57,6 +58,18 @@ REGION = 'us-central1'
 REPOSITORY = Path(__file__).resolve().parents[2]
 PAYLOAD_MASK = [f'payload.{k}' for k in PAYLOAD_FIELDS + OPTIONAL_FIELDS]
 OWNER_MASK = ['active_job_id'] + [f'active_payload.{k}' for k in PAYLOAD_FIELDS + OPTIONAL_FIELDS]
+DISPATCH_KEYS = (
+    'SYNC_TASKS_PROJECT',
+    'SYNC_TASKS_LOCATION',
+    'SYNC_TASKS_QUEUE',
+    'SYNC_TASKS_INVOKER_SA',
+    'SYNC_TASKS_HANDLER_URL',
+    'SYNC_TASKS_OIDC_AUDIENCE',
+    'SYNC_BACKFILL_TASKS_QUEUE',
+    'SYNC_BACKFILL_TASKS_HANDLER_URL',
+    'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE',
+    'SYNC_BACKFILL_ROUTING_ENABLED',
+)
 LOCK_RELEASE = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end return 0"
 RESET_JOB = """
 if redis.call('get', KEYS[1]) ~= ARGV[1] then return 0 end
@@ -372,6 +385,9 @@ def apply_one(
     existing = evidence.ledger.get('openloop_redrive') or {}
     if evidence_digest(evidence) != approved_digest and existing.get('plan_digest') != approved_digest:
         return 'plan_changed'
+    route = {name: os.getenv(name, '') for name in DISPATCH_KEYS}
+    if existing and existing.get('dispatch_route') != route:
+        return 'plan_changed'
     redis = inventory.redis
     job_id = row['job_id']
     lock, job_key = f'sync_job_lock:{job_id}', f'sync_job:{job_id}'
@@ -389,6 +405,7 @@ def apply_one(
             'state': 'prepared',
             'plan_digest': approved_digest,
             'enqueue_until': time.time() + 1800,
+            'dispatch_route': route,
         }
         if not prepare_operation(inventory.firestore.transaction(), ref, evidence.ledger, marker):
             return 'plan_changed'
@@ -415,28 +432,44 @@ def apply_one(
         redis.eval(LOCK_RELEASE, 1, lock, token)
 
 
+def service_handler_urls(service: dict) -> set[str]:
+    """Accept only URLs the target Cloud Run service reports as its own."""
+    annotations = service.get('metadata', {}).get('annotations', {})
+    aliases = json.loads(annotations.get('run.googleapis.com/urls', '[]'))
+    if not isinstance(aliases, list) or any(not isinstance(value, str) for value in aliases):
+        raise Blocked('operator_runtime_required')
+    bases = {service['status']['url'], *aliases}
+    allowed = set()
+    for base in bases:
+        parsed = urlsplit(base)
+        if (
+            parsed.scheme == 'https'
+            and parsed.hostname
+            and parsed.hostname.endswith('.run.app')
+            and not parsed.username
+            and not parsed.password
+            and parsed.port is None
+            and parsed.path in ('', '/')
+            and not parsed.query
+            and not parsed.fragment
+        ):
+            allowed.add(base.rstrip('/') + '/v2/sync-jobs/run')
+    return allowed
+
+
 def configure_dispatch(inventory: ReadInventory) -> None:
     envs = [inventory.literal_env(r) for r in inventory.revisions['backend-sync']]
-    keys = (
-        'SYNC_TASKS_PROJECT',
-        'SYNC_TASKS_LOCATION',
-        'SYNC_TASKS_QUEUE',
-        'SYNC_TASKS_INVOKER_SA',
-        'SYNC_TASKS_HANDLER_URL',
-        'SYNC_TASKS_OIDC_AUDIENCE',
-        'SYNC_BACKFILL_TASKS_QUEUE',
-        'SYNC_BACKFILL_TASKS_HANDLER_URL',
-        'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE',
-        'SYNC_BACKFILL_ROUTING_ENABLED',
-    )
-    config = {k: envs[0].get(k, '') for k in keys}
-    if any({k: env.get(k, '') for k in keys} != config for env in envs):
+    config = {k: envs[0].get(k, '') for k in DISPATCH_KEYS}
+    if any({k: env.get(k, '') for k in DISPATCH_KEYS} != config for env in envs):
         raise Blocked('operator_runtime_required')
     if config['SYNC_TASKS_PROJECT'] != PROJECT:
         raise Blocked('operator_runtime_required')
     for name, prefix in (('backend-sync', 'SYNC_TASKS'), ('backend-sync-backfill', 'SYNC_BACKFILL_TASKS')):
-        url = inventory.services[name]['status']['url'] + '/v2/sync-jobs/run'
-        if config[prefix + '_HANDLER_URL'] != url or config[prefix + '_OIDC_AUDIENCE'] not in ('', url):
+        handler = config[prefix + '_HANDLER_URL']
+        if handler not in service_handler_urls(inventory.services[name]) or config[prefix + '_OIDC_AUDIENCE'] not in (
+            '',
+            handler,
+        ):
             raise Blocked('operator_runtime_required')
     # Only literal, non-secret dispatch bindings from the serving revision.
     os.environ.update(config)

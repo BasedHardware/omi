@@ -68,8 +68,10 @@ legacy-fence, conflicting, changed or incomplete jobs block. Apply rereads
 metadata and verifies **every traffic-bearing revision** of backend-sync,
 backend-sync-backfill and backend-integration reports an
 `OMI_BACKEND_RELEASE_SHA` containing `87083b7b9c298c915de89ff6e8054eb94c4e7661`.
-Unknown Git ancestry or rollout identity blocks. Dispatch URLs must match the
-canonical Cloud Run services inspected by the guard.
+Unknown Git ancestry or rollout identity blocks. Dispatch URLs must match URLs reported by the target Cloud Run services
+(including their generated aliases), with the corresponding OIDC audience.
+The operation freezes those dispatch bindings; a queue/route change cannot
+replay an uncertain create into another queue.
 
 `finalize_legacy` is a separate, pre-existing `bridge_receipt` failure class.
 Its intake may already be persisted without a processed-segment checkpoint.
