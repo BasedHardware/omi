@@ -38,7 +38,14 @@ def card(cid, text='x'):
 
 @pytest.mark.parametrize(
     'start,end,expected',
-    [(-285.0, -42.0, (0.0, 0.0)), (-0.25, 1.5, (0.0, 1.5)), (0, 2, (0, 2)), (1.25, 3.5, (1.25, 3.5))],
+    [
+        (-285.0, -42.0, (0.0, 0.0)),
+        ('-285', '-42', (0, 0)),
+        (-0.25, 1.5, (0.0, 1.5)),
+        ('-0.25', 1.5, (0, 1.5)),
+        (0, 2, (0, 2)),
+        (1.25, 3.5, (1.25, 3.5)),
+    ],
 )
 def test_mcp_read_clamps_pre_origin_offsets_without_changing_storage(start, end, expected):
     source = [{'id': 'synthetic-segment', 'text': 'synthetic', 'speaker_id': 0, 'start': start, 'end': end}]

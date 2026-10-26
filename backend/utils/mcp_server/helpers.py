@@ -100,10 +100,15 @@ def public_transcript_timing(fields: Dict[str, Any]) -> Dict[str, Any]:
     it does not supply a playback interval. Search millisecond aliases agree.
     """
     projected = dict(fields)
-    for key in ("start", "end", "start_ms", "end_ms"):
-        value = projected.get(key)
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and value < 0:
-            projected[key] = 0
+    for clock_key in ("start", "end", "start_ms", "end_ms"):
+        raw_offset = projected.get(clock_key)
+        if isinstance(raw_offset, bool):
+            continue
+        try:
+            if float(raw_offset) < 0:
+                projected[clock_key] = 0
+        except (TypeError, ValueError):
+            continue
     return projected
 
 
