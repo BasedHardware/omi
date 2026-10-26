@@ -296,6 +296,7 @@ final class ConversationRepository {
   private var mutationWaiters: [String: [MutationWaiter]] = [:]
   private var deletionTokens: [String: UUID] = [:]
   private var confirmedRestores: [String: ServerConversation] = [:]
+  private var confirmedRestoreRevisions: [String: Date] = [:]
   private var currentQuery: ConversationListQuery?
   private var nextPageOffset = 0
   private var isLoadingMore = false
@@ -378,7 +379,8 @@ final class ConversationRepository {
           // filter mid-mutation) paints the bare cached rows and visually reverts
           // the edit until the remote call lands.
           conversations = cached.map {
-            ConversationReconciliationPolicy.apply(mutation: pendingMutations[$0.id], to: applyingConfirmedRestore($0))
+            ConversationReconciliationPolicy.apply(
+              mutation: pendingMutations[$0.id], to: confirmedRestores[$0.id] ?? $0)
           }
           count = cachedCount
           emit(.cache)
@@ -518,7 +520,7 @@ final class ConversationRepository {
     let session = cacheWriteScope.capture()
     if let cached = try? await local.detail(id: id) {
       try ensureCurrentSession(session)
-      onCached?(applyingConfirmedRestore(cached))
+      onCached?(confirmedRestores[id] ?? cached)
     }
 
     do {
@@ -540,11 +542,11 @@ final class ConversationRepository {
       try ensureCurrentSession(session)
       if let cached = try? await local.detail(id: id) {
         try ensureCurrentSession(session)
-        return applyingConfirmedRestore(cached)
+        return confirmedRestores[id] ?? cached
       }
       try ensureCurrentSession(session)
       guard let seed else { throw error }
-      return applyingConfirmedRestore(seed)
+      return confirmedRestores[id] ?? seed
     }
   }
 
@@ -575,6 +577,7 @@ final class ConversationRepository {
       throw ConversationRestoreError.stillDiscarded
     }
     confirmedRestores[id] = restored
+    confirmedRestoreRevisions.removeValue(forKey: id)
     try? await local.store(restored, scope: cacheWriteScope, generation: session)
     try ensureCurrentSession(session)
     replaceVisible(restored)
@@ -653,6 +656,7 @@ final class ConversationRepository {
     activeMutationTokens = [:]
     deletionTokens = [:]
     confirmedRestores = [:]
+    confirmedRestoreRevisions = [:]
     conversations = []
     count = nil
     isCountAuthoritative = false
@@ -857,14 +861,18 @@ final class ConversationRepository {
   /// hit undo that confirmed mutation; a newer server decision remains truth.
   private func applyingConfirmedRestore(_ row: ServerConversation) -> ServerConversation {
     guard let restored = confirmedRestores[row.id] else { return row }
-    let newer = row.updatedAt.flatMap { incoming in restored.updatedAt.map { incoming > $0 } } ?? false
-    let current = row.updatedAt.flatMap { incoming in restored.updatedAt.map { incoming >= $0 } } ?? false
+    // Reprocess can echo the pre-write revision (or omit it). Learn a revision
+    // floor only from a subsequent visible server row, never from that echo.
+    let newer = row.updatedAt.flatMap { incoming in confirmedRestoreRevisions[row.id].map { incoming > $0 } } ?? false
+    let current = row.updatedAt.map { incoming in restored.updatedAt.map { incoming >= $0 } ?? true } ?? false
     if row.deleted || (row.discarded && newer) {
       confirmedRestores.removeValue(forKey: row.id)
+      confirmedRestoreRevisions.removeValue(forKey: row.id)
       return row
     }
     if !row.discarded && current {
       confirmedRestores[row.id] = row
+      confirmedRestoreRevisions[row.id] = row.updatedAt
       return row
     }
     return restored

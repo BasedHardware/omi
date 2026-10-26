@@ -5,6 +5,7 @@ description: Hidden conversations remain recoverable through list, search, trans
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/APIClient.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Apps.swift
   - desktop/macos/Desktop/Sources/AppState.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+DataLoading.swift
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift

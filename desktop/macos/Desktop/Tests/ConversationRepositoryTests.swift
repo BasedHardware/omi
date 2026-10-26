@@ -92,6 +92,31 @@ final class ConversationRepositoryTests: XCTestCase {
       ).isEmpty)
   }
 
+  func testRestoreWithoutResponseRevisionAdoptsFreshServerChanges() async throws {
+    let restored = makeConversation(title: "Restored", revision: nil)
+    let fresh = makeConversation(title: "Later title", revision: 3)
+    let remote = FakeConversationRemote(searchResult: .success([fresh]))
+    remote.restoreResult = .success(restored)
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    _ = try await repository.restore(id: restored.id)
+    let freshHits = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertEqual(freshHits, [fresh])
+    remote.searchResult = .success([makeConversation(revision: 2, discarded: true)])
+    let staleHits = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertEqual(staleHits, [fresh])
+  }
+
+  func testRestorePrewriteRevisionCannotAuthorizeAnInflightHiddenResponse() async throws {
+    let restored = makeConversation(revision: 1)
+    let hidden = makeConversation(revision: 2, discarded: true)
+    let remote = FakeConversationRemote(searchResult: .success([hidden]))
+    remote.restoreResult = .success(restored)
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    _ = try await repository.restore(id: restored.id)
+    let staleHits = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertEqual(staleHits, [restored], "The POST can echo a revision older than an in-flight GET")
+  }
+
   func testStaleCacheCannotRehideConfirmedRestoreWhenOffline() async throws {
     let hidden = makeConversation(revision: 1, discarded: true)
     let restored = makeConversation(revision: 2)
@@ -1025,7 +1050,7 @@ final class ConversationRepositoryTests: XCTestCase {
     overview: String = "Overview",
     status: ConversationStatus = .completed,
     starred: Bool = false,
-    revision: TimeInterval,
+    revision: TimeInterval?,
     transcript: String? = nil,
     discarded: Bool = false,
     deleted: Bool = false
@@ -1049,7 +1074,7 @@ final class ConversationRepositoryTests: XCTestCase {
     return ServerConversation(
       id: id,
       createdAt: created,
-      updatedAt: Date(timeIntervalSince1970: revision),
+      updatedAt: revision.map { Date(timeIntervalSince1970: $0) },
       startedAt: created,
       finishedAt: created.addingTimeInterval(60),
       structured: Structured(
