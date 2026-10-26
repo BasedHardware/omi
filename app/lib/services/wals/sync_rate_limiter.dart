@@ -67,6 +67,7 @@ class SyncRateLimiter extends ChangeNotifier {
   RateLimitReason _inMemoryReason = RateLimitReason.backendBusy;
   int _dispatchHoldBackoffLevel = 0;
   int _dispatchHoldUntilMs = 0;
+  int _dispatchHoldLastCooldownMs = 0;
   Timer? _expiryTimer;
 
   /// Whether a server-confirmed fair-use cooldown is persisted, including an
@@ -139,12 +140,16 @@ class SyncRateLimiter extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Pause after a scoped destructive-operation fence. Repeated holds received
-  /// before the current cooldown expires double the server's Retry-After, up
-  /// to one hour. A successful upload or an expired hold window resets it.
+  /// Pause after a scoped destructive-operation fence. Each further hold
+  /// doubles the server's Retry-After, up to one hour. The next upload can only
+  /// run after a cooldown expires, so a hold that arrives soon after expiry is
+  /// the same fence still held and keeps the backoff. A successful upload
+  /// resets it, and so does a quiet gap of twice the last cooldown.
   void markDispatchHoldLimited({int? retryAfterSeconds}) {
     final nowMs = _clock().millisecondsSinceEpoch;
-    if (_dispatchHoldUntilMs <= nowMs) _dispatchHoldBackoffLevel = 0;
+    if (_dispatchHoldUntilMs > 0 && nowMs - _dispatchHoldUntilMs > 2 * _dispatchHoldLastCooldownMs) {
+      _dispatchHoldBackoffLevel = 0;
+    }
 
     var seconds =
         (retryAfterSeconds != null && retryAfterSeconds > 0) ? retryAfterSeconds : _defaultDispatchHoldCooldownSeconds;
@@ -154,7 +159,8 @@ class SyncRateLimiter extends ChangeNotifier {
     if (seconds > _maxDispatchHoldCooldownSeconds) seconds = _maxDispatchHoldCooldownSeconds;
     if (_dispatchHoldBackoffLevel < 16) _dispatchHoldBackoffLevel++;
 
-    _dispatchHoldUntilMs = nowMs + Duration(seconds: seconds).inMilliseconds;
+    _dispatchHoldLastCooldownMs = Duration(seconds: seconds).inMilliseconds;
+    _dispatchHoldUntilMs = nowMs + _dispatchHoldLastCooldownMs;
     final untilMs = _dispatchHoldUntilMs;
     if (untilMs >= _backendBusyUntilMs) {
       _inMemoryReason = RateLimitReason.backendBusy;
@@ -177,6 +183,7 @@ class SyncRateLimiter extends ChangeNotifier {
     _backendBusyUntilMs = 0;
     _dispatchHoldBackoffLevel = 0;
     _dispatchHoldUntilMs = 0;
+    _dispatchHoldLastCooldownMs = 0;
     SharedPreferencesUtil().saveInt(_prefKeyUntil, 0);
     SharedPreferencesUtil().saveString(_prefKeyReason, '');
     _scheduleExpiryNotification();
@@ -205,11 +212,6 @@ class SyncRateLimiter extends ChangeNotifier {
     if (deadlines.isEmpty) return;
     final next = deadlines.reduce((a, b) => a < b ? a : b);
     _expiryTimer = Timer(Duration(milliseconds: next - now + 1), () {
-      final nowMs = _clock().millisecondsSinceEpoch;
-      if (_dispatchHoldUntilMs > 0 && _dispatchHoldUntilMs <= nowMs) {
-        _dispatchHoldUntilMs = 0;
-        _dispatchHoldBackoffLevel = 0;
-      }
       notifyListeners();
       _scheduleExpiryNotification();
     });
