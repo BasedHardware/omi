@@ -14,8 +14,8 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Backend pacing (429 `backfill_paced` / `backfill_capacity`, and the 503
-/// returned while a failed backfill job is still finalizing) is expected
+/// Backend pacing (429 `backfill_paced` / `backfill_capacity`, scoped 503
+/// `dispatch_hold`, and the 503 returned while a failed backfill job is finalizing) is expected
 /// backoff. The recording stays pending, Retry-After is honored, and the
 /// client does not mint `Recording Upload Failed`.
 
@@ -82,7 +82,7 @@ void main() {
           429,
           headers: {
             'x-omi-rate-limit-reason': 'fair_use',
-            'retry-after': '3600',
+            'retry-after': '60',
           },
         );
         expect(isSyncUploadRateLimitResponse(fairUse), isTrue);
@@ -200,7 +200,7 @@ void main() {
               uploads++;
               throw SyncRateLimitedException(
                 kind: SyncRateLimitKind.backendCapacity,
-                retryAfterSeconds: reason == 'dispatch_hold' ? 3600 : 60,
+                retryAfterSeconds: 60,
                 reasonCode: reason,
                 statusCode: reason == 'dispatch_hold' ? 503 : 429,
               );
@@ -224,7 +224,7 @@ void main() {
           expect(limiter.reason, RateLimitReason.backendBusy);
           expect(
             limiter.activeRetryAfterSeconds,
-            reason == 'dispatch_hold' ? inInclusiveRange(3599, 3600) : inInclusiveRange(59, 60),
+            inInclusiveRange(59, 60),
           );
           expect(events.map((event) => event.name), [
             RecordingUploadTelemetry.startedEvent,
@@ -364,7 +364,7 @@ void main() {
             }) async {
               throw SyncRateLimitedException(
                 kind: SyncRateLimitKind.backendCapacity,
-                retryAfterSeconds: 3600,
+                retryAfterSeconds: 60,
                 reasonCode: 'dispatch_hold',
                 statusCode: 503,
               );
@@ -388,7 +388,7 @@ void main() {
           events.map((event) => event.name),
           isNot(contains(RecordingUploadTelemetry.failedEvent)),
         );
-        expect(limiter.activeRetryAfterSeconds, inInclusiveRange(3599, 3600));
+        expect(limiter.activeRetryAfterSeconds, inInclusiveRange(59, 60));
       },
     );
 

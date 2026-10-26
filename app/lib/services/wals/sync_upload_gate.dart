@@ -248,10 +248,14 @@ class SyncUploadGate {
         );
         return result;
       } on SyncRateLimitedException catch (error) {
-        _limiter.markLimited(
-          retryAfterSeconds: error.retryAfterSeconds,
-          reason: error.kind.cooldownReason,
-        );
+        if (error.reasonCode == 'dispatch_hold') {
+          _limiter.markDispatchHoldLimited(retryAfterSeconds: error.retryAfterSeconds);
+        } else {
+          _limiter.markLimited(
+            retryAfterSeconds: error.retryAfterSeconds,
+            reason: error.kind.cooldownReason,
+          );
+        }
         // Paced admission is the server asking this account to wait. The WAL
         // stays pending and retries on Retry-After; it is not a user-visible
         // upload failure. Fair-use and unscoped 429s still are.

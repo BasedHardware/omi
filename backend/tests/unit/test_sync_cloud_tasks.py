@@ -3063,6 +3063,7 @@ async def test_sync_dispatch_staging_failure_can_terminalize_and_release_for_wal
         assert response.headers['retry-after'] == '30'
         assert 'x-omi-rate-limit-reason' not in response.headers
         assert 'gcs unavailable' not in response.body.decode()
+        module._stage_files_to_gcs.assert_called_once()
         module.enqueue_sync_job.assert_not_called()
         module.start_background_task.assert_not_called()
         module._delete_staged_blobs_async.assert_awaited_once()
@@ -3090,11 +3091,13 @@ async def test_sync_dispatch_staging_failure_can_terminalize_and_release_for_wal
 
 
 @pytest.mark.asyncio
-async def test_sync_dispatch_hold_returns_scoped_slow_retry_without_gate_detail_leakage():
+async def test_sync_dispatch_hold_returns_scoped_retry_after_recheck_without_gate_detail_leakage(monkeypatch):
     from database.legal_holds import DestructiveOperationInProgress
     from starlette.datastructures import UploadFile
 
     module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    monkeypatch.setattr(module, 'SYNC_DISPATCH_HOLD_RECHECK_SECONDS', 0.02)
+    monkeypatch.setattr(module, 'SYNC_DISPATCH_HOLD_RECHECK_INTERVAL_SECONDS', 0.005)
     module.start_background_task = MagicMock()
     module._stage_files_to_gcs = MagicMock(
         side_effect=DestructiveOperationInProgress('account deletion internal marker secret')
@@ -3116,7 +3119,7 @@ async def test_sync_dispatch_hold_returns_scoped_slow_retry_without_gate_detail_
         response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
 
         assert response.status_code == 503
-        assert response.headers['retry-after'] == '3600'
+        assert response.headers['retry-after'] == '60'
         assert response.headers['x-omi-rate-limit-reason'] == 'dispatch_hold'
         assert json.loads(response.body) == {
             'code': 'dispatch_hold',
@@ -3138,6 +3141,48 @@ async def test_sync_dispatch_hold_returns_scoped_slow_retry_without_gate_detail_
             lane='fresh',
         )
         module.OMI_SYNC_DISPATCH_FAILURES_TOTAL.labels.assert_called_once_with(reason='dispatch_hold')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_hold_that_clears_during_recheck_stages_successfully(monkeypatch):
+    from database.legal_holds import DestructiveOperationInProgress
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    monkeypatch.setattr(module, 'SYNC_DISPATCH_HOLD_RECHECK_SECONDS', 0.05)
+    monkeypatch.setattr(module, 'SYNC_DISPATCH_HOLD_RECHECK_INTERVAL_SECONDS', 0.001)
+    module.start_background_task = MagicMock()
+    module._stage_files_to_gcs = MagicMock(side_effect=[DestructiveOperationInProgress('internal hold marker'), None])
+    module._delete_staged_blobs_async = AsyncMock()
+    module._finalize_sync_job_failure = AsyncMock()
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.FRESH,
+            trust=types.SimpleNamespace(value='device_bound'),
+            reason='recent_capture',
+            maximum_age_seconds=60,
+            automatic_recovery_allowed=True,
+        )
+    )
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert response.status_code == 202
+        assert module._stage_files_to_gcs.call_count == 2
+        module.enqueue_sync_job.assert_called_once()
+        module._delete_staged_blobs_async.assert_not_awaited()
+        module._finalize_sync_job_failure.assert_not_awaited()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

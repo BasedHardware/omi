@@ -226,10 +226,25 @@ from utils.sync import cap_hold_redrive
 
 logger = logging.getLogger(__name__)
 
-# The destructive gate treats running rows as live for up to six hours before
-# stale takeover. A one-hour re-probe avoids 30-second body re-uploads while
-# allowing recovery checks during that generous safety window.
-SYNC_DISPATCH_HOLD_RETRY_AFTER_SECONDS = 60 * 60
+# Give short account-operation fences a chance to clear before asking the
+# client to pause. Persistent holds use a short, bounded in-request recheck.
+SYNC_DISPATCH_HOLD_RETRY_AFTER_SECONDS = 60
+SYNC_DISPATCH_HOLD_RECHECK_SECONDS = 2.0
+SYNC_DISPATCH_HOLD_RECHECK_INTERVAL_SECONDS = 0.1
+
+
+async def _stage_files_to_gcs_with_hold_recheck(paths: List[str]) -> None:
+    deadline = time.monotonic() + SYNC_DISPATCH_HOLD_RECHECK_SECONDS
+    while True:
+        try:
+            await run_blocking(sync_executor, _stage_files_to_gcs, paths)
+            return
+        except DestructiveOperationInProgress:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise
+            await asyncio.sleep(min(SYNC_DISPATCH_HOLD_RECHECK_INTERVAL_SECONDS, remaining))
+
 
 # Audio constants
 AUDIO_SAMPLE_RATE = 16000
@@ -1494,7 +1509,7 @@ async def sync_local_files_v2(
                 # sync_executor, NOT storage_executor — same reasoning as the
                 # file save above (#7372): a saturated storage pool would queue
                 # the staging upload and delay the 202.
-                await run_blocking(sync_executor, _stage_files_to_gcs, owned_paths)
+                await _stage_files_to_gcs_with_hold_recheck(owned_paths)
             except Exception as e:
                 dispatch_hold = isinstance(e, DestructiveOperationInProgress)
                 dispatch_reason = (
