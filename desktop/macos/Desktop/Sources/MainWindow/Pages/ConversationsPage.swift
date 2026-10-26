@@ -120,6 +120,23 @@ struct ConversationsPage: View {
       != ConversationDetailRequestToken(conversation: current)
   }
 
+  /// Whether a restore should re-run the active text search rather than patch
+  /// the restored row in place.
+  ///
+  /// Restoring a discarded conversation can reprocess its summary/title, so
+  /// patching the row's fields without revalidating the query can leave a row
+  /// that no longer matches stuck in the result list until the next search.
+  /// A local substring check can't stand in for the server's match semantics,
+  /// so this only decides *whether* to re-ask the server, never what matches.
+  static func shouldRefreshSearchAfterRestore(
+    searchResults: [ServerConversation],
+    searchQuery: String,
+    restoredId: String
+  ) -> Bool {
+    guard !searchQuery.isEmpty else { return false }
+    return searchResults.contains(where: { $0.id == restoredId })
+  }
+
   var body: some View {
     pageSurface
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -231,7 +248,12 @@ struct ConversationsPage: View {
         self.selectedConversation = refreshed
       }
       .onReceive(appState.conversationRestored) { restored in
-        searchResults = searchResults.map { $0.id == restored.id ? restored : $0 }
+        guard
+          Self.shouldRefreshSearchAfterRestore(
+            searchResults: searchResults, searchQuery: searchQuery, restoredId: restored.id)
+        else { return }
+        searchResults = []
+        performSearch(query: searchQuery)
       }
       .dismissableSheet(isPresented: $showCreateFolderSheet) {
         FolderFormSheet(folder: nil, onDismiss: { showCreateFolderSheet = false })
