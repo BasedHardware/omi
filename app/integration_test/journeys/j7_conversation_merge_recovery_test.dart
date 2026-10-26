@@ -66,7 +66,9 @@ void main() {
         provider.addListener(() {
           if (!settled.isCompleted &&
               provider.conversations.length == 1 &&
-              provider.conversations.single.id == server.mergeTargetId) settled.complete();
+              provider.conversations.single.id == server.mergeTargetId) {
+            settled.complete();
+          }
         });
         server.conversations.removeWhere((c) => c['id'] != server.mergeTargetId);
         await settled.future.timeout(const Duration(seconds: 5));

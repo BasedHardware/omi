@@ -24,7 +24,7 @@ class ConversationMergeWatch {
     _deadline = Timer(limit, () {
       if (!isCurrent()) return cancel();
       cancel();
-      unawaited(onRefresh(false).catchError((Object _) {
+      unawaited(onRefresh(_sourcesGone).catchError((Object _) {
         Logger.debug('Merge observation refresh failed; pending journal remains retryable');
       }));
     });
@@ -40,6 +40,7 @@ class ConversationMergeWatch {
   late final Timer _deadline;
   bool _cancelled = false;
   bool _probing = false;
+  bool _sourcesGone = false;
 
   void cancel() {
     _cancelled = true;
@@ -50,6 +51,7 @@ class ConversationMergeWatch {
   Future<void> probe() async {
     if (_cancelled || _probing || !isCurrent()) return;
     _probing = true;
+    _sourcesGone = false;
     try {
       for (final id in sourceIds) {
         final result = await fetch(id);
@@ -58,6 +60,7 @@ class ConversationMergeWatch {
         // inferred to be the merged result, even if it is completed.
         if (result is! ApiFailure<ServerConversation> || result.problem.kind != ApiProblemKind.notFound) return;
       }
+      _sourcesGone = true;
       if (targetId == null) {
         // Compatibility with an older server that does not return a target.
         // All sources are authoritatively gone; reconcile the server list.

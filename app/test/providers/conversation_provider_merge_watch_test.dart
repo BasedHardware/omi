@@ -137,6 +137,28 @@ void main() {
     });
   });
 
+  test('unreadable target never announces success but deadline retains proven source absence', () {
+    fakeAsync((clock) {
+      final refreshes = <bool>[];
+      final watch = ConversationMergeWatch(
+          sourceIds: ['a', 'b'],
+          targetId: 'target',
+          fetch: (id) async => id == 'target'
+              ? const ApiFailure<ServerConversation>(ApiProblem(ApiProblemKind.paymentRequired))
+              : missing,
+          isCurrent: () => true,
+          onCompleted: (_) async => fail('locked target cannot complete'),
+          onRefresh: (gone) async {
+            refreshes.add(gone);
+          },
+          interval: const Duration(seconds: 1),
+          limit: const Duration(seconds: 3));
+      clock.elapse(const Duration(seconds: 5));
+      expect(refreshes, [true]);
+      watch.cancel();
+    });
+  });
+
   test('deadline refresh failure is contained and cannot escape as an unhandled timer error', () {
     fakeAsync((clock) {
       final watch = ConversationMergeWatch(

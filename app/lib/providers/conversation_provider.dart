@@ -2188,7 +2188,9 @@ class ConversationProvider extends ChangeNotifier {
     if (generation != _sessionGeneration ||
         !_isSignedIn() ||
         SharedPreferencesUtil().uid != owner ||
-        Env.apiBaseUrl != origin) return null;
+        Env.apiBaseUrl != origin) {
+      return null;
+    }
     PlatformManager.instance.analytics.conversationMergeInitiated(idsToMerge);
 
     if (response == null) {
@@ -2330,7 +2332,9 @@ class ConversationProvider extends ChangeNotifier {
         target == null ||
         target.id != mergedConversationId ||
         target.status != ConversationStatus.completed ||
-        target.isLocked) return;
+        target.isLocked) {
+      return;
+    }
     final removed = removedConversationIds.where((id) => id != mergedConversationId).toSet();
     final cached = await _conversationCacheLoader();
     if (!current()) return;
