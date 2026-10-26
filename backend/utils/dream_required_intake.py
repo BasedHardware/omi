@@ -313,7 +313,9 @@ def validate(edit, records, *, authority='dream'):
 
 def apply(uid, edit, records, change, key, row, *, expected_records=None, authority='dream'):
     try:
-        with source_scope(uid, (row.get(MARKER) or {}).get('source_revisions', {}), backlog=True):
+        with source_scope(
+            uid, (row.get(MARKER) or {}).get('source_revisions', {}), backlog=True, processing_id=row['id']
+        ):
             return _apply(uid, edit, records, change, key, row, expected_records=expected_records, authority=authority)
     except RequiredIntakeSourceChanged as error:
         raise review_store.ReviewConflict('Required intake source changed') from error
@@ -344,7 +346,9 @@ def _apply(uid, edit, records, change, key, row, *, expected_records=None, autho
             uid,
             item.memory_id,
             db_client=client,
-            processor=partial(bounded_normalize, deadline=time.monotonic() + policy.INLINE_TIMEOUT_SECONDS),
+            processor=partial(
+                bounded_normalize, deadline=time.monotonic() + policy.INLINE_TIMEOUT_SECONDS, db_client=client
+            ),
             result_guard=partial(result_guard, time.monotonic() + policy.INLINE_TIMEOUT_SECONDS),
             expected_head_commit_id=control.head_commit_id,
         )

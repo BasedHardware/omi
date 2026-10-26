@@ -16,7 +16,9 @@ from typing import Any, Callable
 from config import required_memory_intake as policy
 from database._client import get_firestore_client
 from database import dream_scheduler, required_intake_cursors
-from database.required_intake_fence import source_scope
+from database.memory_collections import MemoryCollections
+from database.required_intake_fence import source_scope, assert_account_active, RequiredIntakeSourceChanged
+from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItem
 from utils.executors import db_executor, llm_executor, run_blocking, ExecutorSaturatedError, after_db_call, in_db_worker
 from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_llm
@@ -73,13 +75,55 @@ def result_guard(deadline):
         raise required.RequiredProcessingDeferred('required_intake_disabled_or_deadline')
 
 
-def bounded_normalize(item, *, deadline):
+def _assert_dispatch_current(item, *, db_client, deadline):
+    from utils.memory.canonical_memory_adapter import read_canonical_memory_item
+
+    result_guard(deadline)
+    if item.captured_at < policy.BACKLOG_CUTOFF and not policy.backlog_enabled(item.uid):
+        raise required.RequiredProcessingDeferred('required_intake_backlog_disabled')
+    assert_account_active(item.uid, None, db_client)
+    current = read_canonical_memory_item(item.uid, item.memory_id, db_client=db_client, include_inactive=True)
+    if (
+        current is None
+        or not required.is_pending_required_processing(current)
+        or current.item_revision != item.item_revision
+        or current.content != item.content
+        or current.source_state.value != 'active'
+        or source_revisions(item.uid, current, db_client=db_client) is None
+    ):
+        raise RequiredIntakeSourceChanged('required_intake_dispatch_source_changed')
+    control = MemoryControlState.model_validate(
+        db_client.document(MemoryCollections(uid=item.uid).memory_apply_control_state).get().to_dict()
+    )
+    if control.account_generation != item.account_generation:
+        raise RequiredIntakeSourceChanged('required_intake_dispatch_generation_changed')
+    result_guard(deadline)
+    assert_account_active(item.uid, None, db_client)
+
+
+def normalize_at_dispatch(item, *, db_client, deadline, request_timeout=None):
+    """Re-admit in the actual model worker, after any executor queue wait."""
+    try:
+        _assert_dispatch_current(item, db_client=db_client, deadline=deadline)
+    except (required.RequiredProcessingDeferred, RequiredIntakeSourceChanged):
+        raise
+    except Exception as error:
+        # Metadata availability is not a model quality failure.
+        raise required.RequiredProcessingDeferred('required_intake_dispatch_unavailable') from error
+    if request_timeout is None:
+        return normalize(item)
+    return normalize(item, request_timeout=min(request_timeout, max(1, int(deadline - time.monotonic()))))
+
+
+def bounded_normalize(item, *, deadline, db_client):
     remaining = deadline - time.monotonic()
     if remaining < 1:
         raise required.RequiredProcessingDeferred('required_intake_deadline')
     # Quantized timeouts keep the shared model cache bounded to twelve clients.
     try:
-        future = llm_executor.submit(normalize, item, request_timeout=int(remaining))
+        future = llm_executor.submit(
+            normalize_at_dispatch, item, db_client=db_client, deadline=deadline, request_timeout=int(remaining)
+        )
     except ExecutorSaturatedError as error:
         raise required.RequiredProcessingDeferred('required_intake_executor_busy') from error
     try:
@@ -131,12 +175,12 @@ def after_capture(uid, item: MemoryItem, *, db_client):
         revisions = source_revisions(uid, item, db_client=db_client)
         if revisions is None:
             return None
-        with source_scope(uid, revisions):
+        with source_scope(uid, revisions, processing_id=item.memory_id):
             result = required.process_required_memory_item(
                 uid,
                 item.memory_id,
                 db_client=db_client,
-                processor=partial(bounded_normalize, deadline=deadline),
+                processor=partial(bounded_normalize, deadline=deadline, db_client=db_client),
                 result_guard=partial(result_guard, deadline),
             )
         logger.info('required_intake_inline processed=%s attempted=%s', result.processed, result.attempted)
@@ -176,12 +220,12 @@ async def after_capture_async(uid, item, *, db_client, deadline, views=None):
         revisions = await run_blocking(db_executor, source_revisions, uid, item, db_client=db_client)
         if revisions is None or deadline <= time.monotonic():
             return None
-        with source_scope(uid, revisions):
+        with source_scope(uid, revisions, processing_id=item.memory_id):
             result = await required.process_required_memory_item_async(
                 uid,
                 item.memory_id,
                 db_client=db_client,
-                processor=normalize,
+                processor=partial(normalize_at_dispatch, db_client=db_client, deadline=deadline),
                 timeout_seconds=max(0, deadline - time.monotonic()),
                 result_guard=partial(result_guard, deadline),
             )
@@ -240,14 +284,15 @@ async def retry_owner(uid, *, db_client=None, now=None):
         if revisions is None:
             continue
         try:
-            with source_scope(uid, revisions):
+            deadline = time.monotonic() + policy.INLINE_TIMEOUT_SECONDS
+            with source_scope(uid, revisions, processing_id=item.memory_id):
                 result = await required.process_required_memory_item_async(
                     uid,
                     item.memory_id,
                     db_client=client,
-                    processor=normalize,
+                    processor=partial(normalize_at_dispatch, db_client=client, deadline=deadline),
                     timeout_seconds=policy.INLINE_TIMEOUT_SECONDS,
-                    result_guard=partial(result_guard, time.monotonic() + policy.INLINE_TIMEOUT_SECONDS),
+                    result_guard=partial(result_guard, deadline),
                 )
         except Exception as error:
             attempted += 1  # Conservatively charge an unknown provider/settlement outcome.

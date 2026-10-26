@@ -145,6 +145,95 @@ def test_deletion_after_control_read_is_fenced_before_provider_claim(db, monkeyp
     assert not calls and stored(db).processing_state.value == 'pending'
 
 
+def start_deletion(database, kind):
+    if kind == 'account':
+        database.rows[('account_deletions', UID)] = {'wipe_status': 'pending'}
+    else:
+        database.rows[('users', UID, 'memory_items', 'new')].update(
+            status='tombstoned', source_state='tombstoned', processing_state='blocked', item_revision=2
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['account', 'memory'])
+@pytest.mark.parametrize('phase', ['queued', 'in_flight'])
+async def test_deletion_during_model_wait_wins(db, monkeypatch, kind, phase):
+    loop = asyncio.get_running_loop()
+    queued, started = asyncio.Event(), asyncio.Event()
+    release = Event()
+    calls = []
+
+    class QueuedPool(ThreadPoolExecutor):
+        submissions = 0
+
+        def submit(self, fn, /, *args, **kwargs):
+            future = super().submit(fn, *args, **kwargs)
+            self.submissions += 1
+            if self.submissions == (2 if phase == 'queued' else 1):
+                loop.call_soon_threadsafe(queued.set)
+            return future
+
+    def normalize(row):
+        calls.append(row.memory_id)
+        loop.call_soon_threadsafe(started.set)
+        assert release.wait(20)
+        return normalized(row)
+
+    with QueuedPool(max_workers=1) as pool:
+        blocker = pool.submit(release.wait, 20) if phase == 'queued' else None
+        monkeypatch.setattr(processing, 'llm_executor', pool)
+        monkeypatch.setattr(intake, 'normalize', normalize)
+        task = asyncio.create_task(
+            intake.after_capture_async(UID, stored(db), db_client=db, deadline=intake.time.monotonic() + 15)
+        )
+        try:
+            await asyncio.wait_for((queued if phase == 'queued' else started).wait(), 10)
+            start_deletion(db, kind)
+        finally:
+            release.set()
+            result = await task
+            if blocker is not None:
+                blocker.result(timeout=2)
+    assert calls == ([] if phase == 'queued' else ['new'])
+    assert result is None or not result.processed
+    assert stored(db).processing_state.value == ('pending' if kind == 'account' else 'blocked')
+    assert not stored(db).promotion.get('admission_receipt')
+
+
+@pytest.mark.parametrize('kind', ['account', 'memory'])
+def test_deletion_is_rechecked_in_required_result_transaction(db, monkeypatch, kind):
+    actual = processing.apply_long_term_patch_firestore
+
+    def delete_before_transaction(**kwargs):
+        start_deletion(db, kind)
+        return actual(**kwargs)
+
+    monkeypatch.setattr(intake, 'normalize', normalized)
+    monkeypatch.setattr(processing, 'apply_long_term_patch_firestore', delete_before_transaction)
+    result = intake.after_capture(UID, stored(db), db_client=db)
+    assert result is None or not result.processed
+    assert stored(db).processing_state.value == ('pending' if kind == 'account' else 'blocked')
+    assert not stored(db).promotion.get('admission_receipt')
+
+
+def test_dispatch_metadata_failure_defers_without_quality_retry(db, monkeypatch):
+    calls = []
+    actual = intake.source_revisions
+
+    def unavailable_in_model_worker(*args, **kwargs):
+        calls.append('admit')
+        if len(calls) == 2:
+            raise ConnectionError('synthetic metadata outage')
+        return actual(*args, **kwargs)
+
+    monkeypatch.setattr(intake, 'source_revisions', unavailable_in_model_worker)
+    monkeypatch.setattr(intake, 'normalize', lambda *a, **k: pytest.fail('metadata unavailable'))
+    result = intake.after_capture(UID, stored(db), db_client=db)
+    assert result.retryable and not result.processed
+    receipts = [value for path, value in db.rows.items() if 'required_processing_retry_' in path[-1]]
+    assert len(receipts) == 1 and receipts[0]['attempt_count'] == 0 and receipts[0]['lease_owner'] is None
+
+
 @pytest.mark.asyncio
 async def test_account_deletion_blocks_backlog_before_embedding(db):
     historical_candidate(db)
@@ -851,7 +940,7 @@ async def test_timed_out_model_completion_has_no_late_write_authority(db):
             finished.set()
 
     task = asyncio.create_task(
-        processing.process_required_memory_item_async(UID, 'new', db_client=db, processor=slow, timeout_seconds=0.1)
+        processing.process_required_memory_item_async(UID, 'new', db_client=db, processor=slow, timeout_seconds=1)
     )
     try:
         assert await asyncio.to_thread(started.wait, 1)

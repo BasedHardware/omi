@@ -9,7 +9,9 @@ from database.account_deletion_policy import account_deletion_blocks_access, nor
 from database.legal_holds import assert_no_destructive_operation_transaction
 from database.memory_collections import MemoryCollections
 
-_sources = ContextVar[tuple[str, dict[str, datetime], str | None, bool] | None]('required_intake_sources', default=None)
+_sources = ContextVar[tuple[str, dict[str, datetime], str | None, bool, str | None] | None](
+    'required_intake_sources', default=None
+)
 
 
 class RequiredIntakeSourceChanged(RuntimeError):
@@ -17,8 +19,8 @@ class RequiredIntakeSourceChanged(RuntimeError):
 
 
 @contextmanager
-def source_scope(uid, revisions, *, completion_id=None, backlog=False):
-    token = _sources.set((uid, revisions, completion_id, backlog))
+def source_scope(uid, revisions, *, completion_id=None, backlog=False, processing_id=None):
+    token = _sources.set((uid, revisions, completion_id, backlog, processing_id))
     try:
         yield
     finally:
@@ -45,6 +47,24 @@ def assert_current(uid, transaction, client):
         raise RequiredIntakeSourceChanged('required_intake_disabled')
     if scope[0] != uid:
         raise RequiredIntakeSourceChanged('required_intake_source_owner_changed')
+    assert_account_active(uid, transaction, client)
+    if scope[4] is not None:
+        raw = (
+            client.document(f'{MemoryCollections(uid=uid).memory_items}/{scope[4]}')
+            .get(transaction=transaction)
+            .to_dict()
+            or {}
+        )
+        audit = raw.get('promotion') or {}
+        if (
+            raw.get('status') != 'active'
+            or raw.get('processing_state') != 'pending'
+            or raw.get('source_state') != 'active'
+            or audit.get('user_review') is False
+            or audit.get('is_locked')
+            or audit.get('is_dismissed')
+        ):
+            raise RequiredIntakeSourceChanged('required_intake_processing_source_changed')
     for path, expected in scope[1].items():
         snapshot = client.document(path).get(transaction=transaction)
         revision = firestore_revision_datetime(getattr(snapshot, 'update_time', None))
