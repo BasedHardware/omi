@@ -3625,6 +3625,7 @@ export interface MergeConversationsRequest {
 
 export interface MergeConversationsResponse {
   conversation_ids: Array<string>;
+  merged_conversation_id?: string | null;
   message?: string;
   status?: string;
   warning?: string | null;

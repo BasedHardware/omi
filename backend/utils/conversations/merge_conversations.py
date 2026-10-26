@@ -23,6 +23,7 @@ from google.api_core import exceptions as google_exceptions
 
 import database.conversations as conversations_db
 from database import conversation_tombstones
+from database.conversation_merge_policy import source_has_merge_receipt
 from database._client import db as firestore_db
 from database.vector_db import delete_action_item_vectors_batch, delete_vector
 from models.audio_file import AudioFile
@@ -171,6 +172,9 @@ def validate_merge_compatibility(
         if conv.get("deleted"):
             return False, "Cannot merge a deleted conversation.", None
 
+    if any(source_has_merge_receipt(conv) for conv in conversations):
+        return False, "A conversation is already incorporated into a merged result.", None
+
     # Check none are locked
     for conv in conversations:
         if conv.get("is_locked", False):
@@ -268,6 +272,11 @@ def perform_merge_async(
         # transcript/photos/audio into a new visible conversation. Abort rather than merge.
         if any(conv.get("deleted") for conv in conversations):
             logger.error(f"Merge aborted: a source was deleted after admission uid={uid}")
+            checkpoint() if merge_job_id else _handle_merge_failure(uid, conversation_ids)
+            return
+
+        if any(source_has_merge_receipt(conv) for conv in conversations):
+            logger.error(f"Merge aborted: a source was already incorporated into another target uid={uid}")
             checkpoint() if merge_job_id else _handle_merge_failure(uid, conversation_ids)
             return
 

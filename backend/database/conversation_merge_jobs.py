@@ -13,6 +13,7 @@ from google.cloud import firestore
 
 from database.quiet_check_retirement import stop_quiet_checks_for_job
 from database._client import get_firestore_client
+from database.conversation_merge_policy import source_has_merge_receipt
 
 COLLECTION = 'conversation_finalization_jobs'
 KIND = 'conversation_merge'
@@ -44,7 +45,11 @@ def admit(uid: str, conversation_ids: list[str], reprocess: bool, *, firestore_c
         deleting = client.collection('account_deletions').document(uid).get(transaction=transaction)
         rows = [ref.get(transaction=transaction).to_dict() or {} for ref in refs]
         if deleting.exists or any(
-            row.get('status') != 'completed' or row.get('deleted') or row.get('is_locked') or row.get('merge_job_id')
+            row.get('status') != 'completed'
+            or row.get('deleted')
+            or row.get('is_locked')
+            or row.get('merge_job_id')
+            or source_has_merge_receipt(row)
             for row in rows
         ):
             return None
