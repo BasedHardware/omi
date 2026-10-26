@@ -21,7 +21,6 @@ from utils.executors import db_executor, llm_executor, run_blocking, ExecutorSat
 from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_llm
 from utils.llm.usage_tracker import track_usage
 from utils.memory import canonical_required_processing as required
-from utils.memory.promotion_flex import PromotionFlexDeferred
 from utils.memory.required_source_admission import source_revisions
 from utils.observability.fallback import record_fallback
 
@@ -49,7 +48,7 @@ def normalize(item, *, request_timeout=policy.INLINE_TIMEOUT_SECONDS):
             feature='memory_l2_flex',
         ).bind(service_tier='flex')
     except Exception as error:
-        raise PromotionFlexDeferred('required_intake_model_unavailable') from error
+        raise required.RequiredProcessingDeferred('required_intake_model_unavailable') from error
     try:
         with track_usage(item.uid, 'memory_l2_flex'):
             return required.invoke_required_memory_processor(item, llm)
@@ -61,30 +60,30 @@ def normalize(item, *, request_timeout=policy.INLINE_TIMEOUT_SECONDS):
             in {'APITimeoutError', 'APIConnectionError', 'RateLimitError', 'InternalServerError'}
             or getattr(error, 'status_code', None) in {408, 409, 429, 500, 502, 503, 504}
         ):
-            raise PromotionFlexDeferred(type(error).__name__) from error
+            raise required.RequiredProcessingDeferred(type(error).__name__) from error
         raise
 
 
 def result_guard(deadline):
     if not policy.enabled() or time.monotonic() >= deadline:
-        raise PromotionFlexDeferred('required_intake_disabled_or_deadline')
+        raise required.RequiredProcessingDeferred('required_intake_disabled_or_deadline')
 
 
 def bounded_normalize(item, *, deadline):
     remaining = deadline - time.monotonic()
     if remaining < 1:
-        raise PromotionFlexDeferred('required_intake_deadline')
+        raise required.RequiredProcessingDeferred('required_intake_deadline')
     # Quantized timeouts keep the shared model cache bounded to twelve clients.
     try:
         future = llm_executor.submit(normalize, item, request_timeout=int(remaining))
     except ExecutorSaturatedError as error:
-        raise PromotionFlexDeferred('required_intake_executor_busy') from error
+        raise required.RequiredProcessingDeferred('required_intake_executor_busy') from error
     try:
         return future.result(timeout=remaining)
     except TimeoutError as error:
         # A running provider call may finish late, but it has no write authority.
         future.cancel()
-        raise PromotionFlexDeferred('required_intake_timeout') from error
+        raise required.RequiredProcessingDeferred('required_intake_timeout') from error
 
 
 def record_deferred(error=None):

@@ -61,7 +61,7 @@ from utils.memory.required_promotion import (
     REQUIRED_PROCESSOR_VERSION,
     REQUIRED_PROMOTION_STATUS_PENDING,
 )
-from utils.memory.promotion_flex import PromotionFlexDeferred
+from utils.memory.promotion_flex import PromotionFlexDeferred as RequiredProcessingDeferred
 
 logger = logging.getLogger(__name__)
 
@@ -716,7 +716,7 @@ def _apply_processed_result(
     if item.account_generation != control.account_generation:
         raise RequiredIntakeSourceChanged('required_intake_account_generation_changed')
     if expected_head_commit_id is not None and control.head_commit_id != expected_head_commit_id:
-        raise PromotionFlexDeferred('required_intake_dedupe_snapshot_changed')
+        raise RequiredProcessingDeferred('required_intake_dedupe_snapshot_changed')
     evidence_ids = [evidence.evidence_id for evidence in item.evidence]
     source_attribution = _conserved_processed_source_attribution(item, processed)
     logical_payload: Dict[str, Any] = {
@@ -789,7 +789,7 @@ def _apply_processed_result(
         if result.status != ApplyStatus.retryable_head_mismatch:
             break
         if expected_head_commit_id is not None:
-            raise PromotionFlexDeferred('required_intake_dedupe_snapshot_changed')
+            raise RequiredProcessingDeferred('required_intake_dedupe_snapshot_changed')
     assert result is not None
     return result.status
 
@@ -1101,7 +1101,7 @@ def _settle_required_processing(
             now=current_time,
             **fence,
         )
-    except (PromotionFlexDeferred, RequiredIntakeSourceChanged):
+    except (RequiredProcessingDeferred, RequiredIntakeSourceChanged):
         try:
             _release_deferred_retry_state(
                 uid,
@@ -1222,7 +1222,7 @@ async def process_required_memory_item_async(
         async with asyncio.timeout(timeout_seconds):
             processed = await run_blocking(llm_executor, processor, context[0])
     except TimeoutError:
-        error = PromotionFlexDeferred('required_intake_timeout')
+        error = RequiredProcessingDeferred('required_intake_timeout')
     except Exception as exc:
         error = exc
     return await run_blocking(
@@ -1308,7 +1308,7 @@ async def run_required_memory_processing_async(
             if result.quarantined:
                 report.quarantined_memory_ids.append(item.memory_id)
             if result.error_code == "flex_deferred":
-                raise PromotionFlexDeferred("required_intake_deferred")
+                raise RequiredProcessingDeferred("required_intake_deferred")
         else:
             report.skipped_memory_ids.append(item.memory_id)
     return report
