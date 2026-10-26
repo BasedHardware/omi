@@ -60,7 +60,9 @@ def redrive_one(
         original_job, policy = load_stage_policy(store, sid, 'recovery', server_flags=server_flags)
     except UnpinnedPolicyRefused:
         return 'policy_unpinned'
-    if policy is None or not policy.speech_empty_multilingual or not policy.recovery_enabled:
+    if policy is None or not policy.recovery_enabled:
+        return 'disabled'
+    if not policy.speech_empty_multilingual and not independent_redrive(original_job):
         return 'disabled'
     if independent_redrive(original_job) != independent_language:
         return 'independent_plan_required'

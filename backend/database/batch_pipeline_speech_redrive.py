@@ -78,7 +78,7 @@ class SpeechRedriveStore:
             policy = stage_in_transaction(
                 tx, job, 'recovery', candidates=candidates, observations=observations, server_flags=self.server_flags
             )
-            if not policy.speech_empty_multilingual or not policy.recovery_enabled:
+            if not policy.recovery_enabled or (not policy.speech_empty_multilingual and not independent_redrive(job)):
                 raise ProjectionBlocked('speech redrive disabled')
             existing = tx.get('results', segment_id)
             marker = job.get('speech_redrive') or {}
@@ -139,7 +139,7 @@ class SpeechRedriveStore:
 
     def start(self, segment_id, token, plan_digest, now):
         _, policy = load_stage_policy(self.store, segment_id, 'recovery', server_flags=self.server_flags)
-        if policy is None or not policy.speech_empty_multilingual:
+        if policy is None:
             return False
 
         def commit(tx):
@@ -148,6 +148,7 @@ class SpeechRedriveStore:
             marker = job.get('speech_redrive') or {}
             if (
                 not policy.recovery_enabled
+                or (not policy.speech_empty_multilingual and not independent_redrive(job))
                 or not self.terminal(job, existing, now)
                 or marker.get('token') != token
                 or marker.get('plan_digest') != plan_digest

@@ -349,3 +349,19 @@ def test_customer_funding_cannot_bypass_company_soniox_allowance(setup, monkeypa
     assert allowance.call_args.args[2] == 'soniox'
     modulate.assert_not_called()
     soniox.assert_not_called()
+
+
+def test_guarded_obligation_drains_with_older_multilingual_snapshot_off(setup, monkeypatch, legacy_dependencies):
+    client, store, binding, artifacts, modulate, soniox, _, old = guarded(
+        setup, monkeypatch, legacy_dependencies, automatic=False
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', 'false')
+    soniox.return_value = (WORDS, 'vi')
+    assert (
+        redrive_one(
+            store, artifacts, 'bad', binding.owner_id, 'plan', old, server_flags=SERVING_ENV, independent_language=True
+        )
+        == 'recovered'
+    )
+    soniox.assert_called_once()
+    modulate.assert_not_called()
