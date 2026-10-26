@@ -14614,4 +14614,21 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'چھوڑ دیں';
+
+  @override
+  String get syncRejectionInvalidDate => 'غلط ریکارڈنگ کی تاریخ';
+
+  @override
+  String get syncRejectionServer => 'سرور نے مسترد کیا';
+
+  @override
+  String get syncRejectionTooLarge => 'بہت بڑا';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'فون پر $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'اپلوڈز چند لمحے کے لیے روک دیے گئے ہیں — یہ خودکار طور پر دوبارہ شروع ہوں گے';
 }

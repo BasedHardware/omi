@@ -11865,5 +11865,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "ಮುಗಿದಿದೆ",
     "openLoopAnswerRemind": "ನಂತರ ನೆನಪಿಸು",
-    "openLoopAnswerDrop": "ಬಿಡು"
+    "openLoopAnswerDrop": "ಬಿಡು",
+    "syncRejectionInvalidDate": "ಅಮಾನ್ಯ ರೆಕಾರ್ಡಿಂಗ್ ದಿನಾಂಕ",
+    "syncRejectionServer": "ಸರ್ವರ್ ತಿರಸ್ಕರಿಸಿದೆ",
+    "syncRejectionTooLarge": "ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ",
+    "deviceOnPhoneQueue": "ಫೋನ್‌ನಲ್ಲಿ {duration}",
+    "syncCardUploadsPaused": "ಅಪ್‌ಲೋಡ್‌ಗಳು ಕ್ಷಣಮಾತ್ರ ವಿರಾಮದಲ್ಲಿವೆ — ಅವು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮುಂದುವರಿಯುತ್ತವೆ"
 }

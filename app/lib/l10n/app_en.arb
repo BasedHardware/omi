@@ -17845,5 +17845,28 @@
     "openLoopAnswerDrop": "Drop it",
     "@openLoopAnswerDrop": {
         "description": "Answer button on an open-loop Review card: stop asking about this follow-up."
+    },
+    "syncRejectionInvalidDate": "Invalid recording date",
+    "@syncRejectionInvalidDate": {
+        "description": "A recording whose capture date the server refused"
+    },
+    "syncRejectionServer": "Rejected by server",
+    "@syncRejectionServer": {
+        "description": "The server refused this upload"
+    },
+    "syncRejectionTooLarge": "Too large",
+    "@syncRejectionTooLarge": {
+        "description": "The audio file is too large to upload"
+    },
+    "deviceOnPhoneQueue": "{duration} on phone",
+    "@deviceOnPhoneQueue": {
+        "description": "Audio queued on the phone waiting to upload, with its duration",
+        "placeholders": {
+            "duration": {}
+        }
+    },
+    "syncCardUploadsPaused": "Uploads paused for a moment — they'll resume automatically",
+    "@syncCardUploadsPaused": {
+        "description": "Upload cooldown copy for a per-account dispatch hold, not server capacity"
     }
 }

@@ -21,9 +21,9 @@ import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_d
 import 'package:omi/pages/settings/device/device_control_sheets.dart';
 import 'package:omi/pages/settings/device/device_info_groups.dart';
 import 'package:omi/pages/settings/device/device_live_sections.dart';
+import 'package:omi/pages/settings/device/heard_today.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/settings/device/device_page_header.dart';
@@ -698,6 +698,7 @@ extension _DeviceLiveSections on _DeviceSettingsState {
                       isCharging: isCharging,
                       heardTodaySeconds: _heardTodaySeconds(context),
                       onDeviceSeconds: local.onDeviceSeconds,
+                      phoneQueueSeconds: local.onPhoneSeconds,
                     )),
             gap,
           ],
@@ -714,14 +715,34 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     });
   }
 
-  /// Speech heard today, by the conversation list's own length rule.
+  /// Speech heard today: transcript time inside today's local day across the
+  /// loaded conversations, plus the running live episode since midnight. A
+  /// pendant that streams without a break files its conversations under the
+  /// session's start day, so bucketing by that day hid today's speech.
   int _heardTodaySeconds(BuildContext context) {
-    return context.select<ConversationProvider?, int>((conversations) {
-      final today = DateUtils.dateOnly(DateTime.now());
-      return (conversations?.groupedConversations[today] ?? const <ServerConversation>[])
-          .where((c) => !c.discarded)
-          .fold<int>(0, (sum, c) => sum + c.getDurationInSeconds());
+    final fromConversations = context.select<ConversationProvider?, int>((conversations) {
+      if (conversations == null) return 0;
+      return heardTodaySpeechSeconds(
+        conversations: [
+          ...conversations.groupedConversations.values.expand((group) => group),
+          ...conversations.processingConversations,
+        ],
+        now: DateTime.now(),
+      );
     });
+    return fromConversations + _liveEpisodeSecondsToday(context);
+  }
+
+  /// The live episode's runtime that falls inside today: the whole elapsed
+  /// time when it started today, only the part since midnight otherwise.
+  int _liveEpisodeSecondsToday(BuildContext context) {
+    final startedAt = context.select<CaptureProvider?, DateTime?>((c) => c?.liveCaptureStartedAt);
+    if (startedAt == null) return 0;
+    final now = DateTime.now();
+    final elapsed = now.difference(startedAt);
+    if (elapsed.isNegative) return 0;
+    final midnight = DateTime(now.year, now.month, now.day);
+    return elapsed.inSeconds.clamp(0, now.difference(midnight).inSeconds);
   }
 
   DeviceRightNowGroup _rightNow(BuildContext context,

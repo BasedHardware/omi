@@ -14678,4 +14678,21 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Ignora';
+
+  @override
+  String get syncRejectionInvalidDate => 'Data di registrazione non valida';
+
+  @override
+  String get syncRejectionServer => 'Rifiutata dal server';
+
+  @override
+  String get syncRejectionTooLarge => 'Troppo grande';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration sul telefono';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Caricamenti in pausa per un momento — riprenderanno automaticamente';
 }

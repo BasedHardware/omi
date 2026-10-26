@@ -22,6 +22,22 @@ import 'package:omi/utils/sync/offline_sync_amounts.dart';
 /// and an hour figure on Home reads as a problem.
 const int largeSyncBacklogSeconds = 30 * 60;
 
+/// The short reason a refused recording shows, shared by On the Way rows and
+/// the Offline Sync pages. A server refusal names which refusal it was; a
+/// refusal with no stored token (records refused before the token existed)
+/// still reads as refused by the server rather than a bare "Failed".
+String walAttentionLabel(WalSyncDisplayState state, AppLocalizations l, {String? rejectionReason}) => switch (state) {
+      WalSyncDisplayState.corrupted => l.syncStatusFileUnavailable,
+      WalSyncDisplayState.outsideRecoveryWindow => l.syncStatusTooOld,
+      WalSyncDisplayState.unsupportedAudio => l.syncStatusUnsupportedAudio,
+      WalSyncDisplayState.uploadRejected => switch (rejectionReason) {
+          WalUploadRejection.invalidCaptureTime => l.syncRejectionInvalidDate,
+          WalUploadRejection.tooLarge => l.syncRejectionTooLarge,
+          _ => l.syncRejectionServer,
+        },
+      _ => l.syncStatusFailed,
+    };
+
 /// Recordings still on their way to becoming conversations, as Home's pending
 /// row and the On the Way page read them from [SyncProvider].
 ///

@@ -14614,4 +14614,21 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Yoksay';
+
+  @override
+  String get syncRejectionInvalidDate => 'Geçersiz kayıt tarihi';
+
+  @override
+  String get syncRejectionServer => 'Sunucu tarafından reddedildi';
+
+  @override
+  String get syncRejectionTooLarge => 'Çok büyük';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'telefonda $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Yüklemeler kısa süreliğine duraklatıldı — otomatik olarak devam edecek';
 }

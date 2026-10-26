@@ -4439,5 +4439,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Hecho",
     "openLoopAnswerRemind": "Recuérdamelo más tarde",
-    "openLoopAnswerDrop": "Descartar"
+    "openLoopAnswerDrop": "Descartar",
+    "syncRejectionInvalidDate": "Fecha de grabación no válida",
+    "syncRejectionServer": "Rechazada por el servidor",
+    "syncRejectionTooLarge": "Demasiado grande",
+    "deviceOnPhoneQueue": "{duration} en el teléfono",
+    "syncCardUploadsPaused": "Subidas en pausa un momento — se reanudarán automáticamente"
 }

@@ -4439,5 +4439,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Selesai",
     "openLoopAnswerRemind": "Ingatkan saya nanti",
-    "openLoopAnswerDrop": "Buang"
+    "openLoopAnswerDrop": "Buang",
+    "syncRejectionInvalidDate": "Tarikh rakaman tidak sah",
+    "syncRejectionServer": "Ditolak oleh pelayan",
+    "syncRejectionTooLarge": "Terlalu besar",
+    "deviceOnPhoneQueue": "{duration} pada telefon",
+    "syncCardUploadsPaused": "Muat naik dijeda seketika — ia akan disambung semula secara automatik"
 }

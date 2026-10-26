@@ -11865,5 +11865,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "انجام شد",
     "openLoopAnswerRemind": "بعدً یادآوری کن",
-    "openLoopAnswerDrop": "رهاش کن"
+    "openLoopAnswerDrop": "رهاش کن",
+    "syncRejectionInvalidDate": "تاریخ ضبط نامعتبر",
+    "syncRejectionServer": "سرور رد کرد",
+    "syncRejectionTooLarge": "بیش از حد بزرگ",
+    "deviceOnPhoneQueue": "{duration} در گوشی",
+    "syncCardUploadsPaused": "بارگذاری لحظه‌ای متوقف شد — به‌طور خودکار ادامه می‌یابد"
 }

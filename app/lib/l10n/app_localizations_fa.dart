@@ -14596,4 +14596,21 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'رهاش کن';
+
+  @override
+  String get syncRejectionInvalidDate => 'تاریخ ضبط نامعتبر';
+
+  @override
+  String get syncRejectionServer => 'سرور رد کرد';
+
+  @override
+  String get syncRejectionTooLarge => 'بیش از حد بزرگ';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration در گوشی';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'بارگذاری لحظه‌ای متوقف شد — به‌طور خودکار ادامه می‌یابد';
 }

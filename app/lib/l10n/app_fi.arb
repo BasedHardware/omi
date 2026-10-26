@@ -4439,5 +4439,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Valmis",
     "openLoopAnswerRemind": "Muistuta myöhemmin",
-    "openLoopAnswerDrop": "Ohita"
+    "openLoopAnswerDrop": "Ohita",
+    "syncRejectionInvalidDate": "Virheellinen tallennuspäivä",
+    "syncRejectionServer": "Palvelin hylkäsi",
+    "syncRejectionTooLarge": "Liian suuri",
+    "deviceOnPhoneQueue": "{duration} puhelimessa",
+    "syncCardUploadsPaused": "Lataukset on pysäytetty hetkeksi — ne jatkuvat automaattisesti"
 }

@@ -14625,4 +14625,21 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Atmesti';
+
+  @override
+  String get syncRejectionInvalidDate => 'Netinkamas įrašo data';
+
+  @override
+  String get syncRejectionServer => 'Serveris atmetė';
+
+  @override
+  String get syncRejectionTooLarge => 'Per didelis';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration telefone';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Įkėlimai trumpai pristabdyti — jie atsinaujins automatiškai';
 }

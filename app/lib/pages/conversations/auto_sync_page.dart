@@ -6,6 +6,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/local_storage_page.dart';
 import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
+import 'package:omi/pages/conversations/sync_pending_work.dart' show walAttentionLabel;
 import 'package:omi/pages/conversations/private_cloud_sync_page.dart';
 import 'package:omi/pages/conversations/recording_blocks.dart';
 import 'package:omi/pages/conversations/widgets/device_download_meter.dart';
@@ -813,7 +814,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
   (Color, String) _rowLabel(Wal wal) {
     final state = wal.syncDisplayState;
-    var (color, _, label) = _rowVisual(state);
+    var (color, _, label) = _rowVisual(state, rejectionReason: wal.uploadRejectionReason);
     // On-device WALs surface their transfer state instead of "Waiting to sync".
     final onDevice = wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
     if (state == WalSyncDisplayState.waiting && onDevice) {
@@ -886,7 +887,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   /// Row subtitle (color, icon, label). Colors stay restrained: grey for
   /// neutral/active, amber for auto-retry, red for failed/corrupted. Purple
   /// is reserved for actions and the spinner — not body text.
-  (Color, FaIconData, String) _rowVisual(WalSyncDisplayState state) {
+  (Color, FaIconData, String) _rowVisual(WalSyncDisplayState state, {String? rejectionReason}) {
     switch (state) {
       case WalSyncDisplayState.synced:
         return (Colors.grey.shade500, FontAwesomeIcons.cloudArrowUp, context.l10n.statusProcessed);
@@ -907,7 +908,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       case WalSyncDisplayState.unsupportedAudio:
         return (Colors.redAccent, FontAwesomeIcons.fileCircleExclamation, context.l10n.syncStatusUnsupportedAudio);
       case WalSyncDisplayState.uploadRejected:
-        return (Colors.redAccent, FontAwesomeIcons.circleExclamation, context.l10n.failedStatus);
+        // Which refusal it was, in On the Way's words.
+        return (
+          Colors.redAccent,
+          FontAwesomeIcons.circleExclamation,
+          walAttentionLabel(state, context.l10n, rejectionReason: rejectionReason)
+        );
     }
   }
 

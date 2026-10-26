@@ -14676,4 +14676,21 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Descarta-ho';
+
+  @override
+  String get syncRejectionInvalidDate => 'Data d\'enregistrament no vàlida';
+
+  @override
+  String get syncRejectionServer => 'Rebutjada pel servidor';
+
+  @override
+  String get syncRejectionTooLarge => 'Massa gran';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration al telèfon';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Les pujades estan en pausa un moment — es reprendran automàticament';
 }

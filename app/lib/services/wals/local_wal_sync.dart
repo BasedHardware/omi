@@ -41,6 +41,7 @@ import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_evidence_runs.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/sync/offline_sync_amounts.dart' show walMinPlausibleTimerStartSeconds, walTimerStartPlausible;
 import 'package:omi/utils/wal_file_manager.dart';
 
 import 'capture_committed_journal.dart';
@@ -2236,33 +2237,39 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         await _saveWalsToFile(generation);
         _notifyUpdated(generation);
         continue;
+      } on SyncInvalidCaptureTimeException catch (e) {
+        if (!_isCurrent(generation)) return resp;
+        await handleBatchInvalidCaptureTime(
+          batchWals,
+          generation,
+          e,
+          isolateAfterRefusal: isolateAfterRefusal,
+          attemptedWalIds: attemptedWalIds,
+          walAttemptKey: walAttemptKey,
+        );
+        continue;
       } on SyncUploadHttpException catch (e) {
         if (!_isCurrent(generation)) return resp;
         final definitive = isDefinitiveUploadRefusal(e);
         // A request-level 400/413 proves nothing about every member. Try each
         // retained file once through the same gate before retiring that file.
         if (definitive && batchWals.length > 1) {
-          for (final wal in batchWals) {
-            final key = walAttemptKey(wal);
-            isolateAfterRefusal.add(key);
-            attemptedWalIds.remove(key);
-            wal.isSyncing = false;
-            wal.syncStartedAt = null;
-            wal.syncEtaSeconds = null;
-          }
-          DebugLogManager.logEvent('local_upload_batch_isolated', {
-            'statusCode': e.statusCode,
-            'walCount': batchWals.length,
-          });
-          await _saveWalsToFile(generation);
-          _notifyUpdated(generation);
+          await isolateBatchAfterRefusal(
+            batchWals,
+            generation,
+            isolateAfterRefusal: isolateAfterRefusal,
+            attemptedWalIds: attemptedWalIds,
+            walAttemptKey: walAttemptKey,
+            statusCode: e.statusCode,
+          );
           continue;
         }
         batchesFailed++;
         final authenticationFailed = e.statusCode == 401 || e.statusCode == 403;
         if (definitive) {
+          final reasonCode = uploadRejectionTokenForStatus(e.statusCode);
           for (final wal in batchWals) {
-            wal.markUploadRejected();
+            wal.markUploadRejected(reasonCode: reasonCode);
           }
           resp.localUploadPermanentFailures += batchWals.length;
           resp.localUploadPermanentError = e.toString();
@@ -2527,9 +2534,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       await _saveWalsToFile(generation);
       _notifyUpdated(generation);
       return resp;
+    } on SyncInvalidCaptureTimeException catch (e) {
+      await handleSingleInvalidCaptureTime(walToSync, generation, e);
+      return resp;
     } on SyncUploadHttpException catch (e) {
       if (isDefinitiveUploadRefusal(e)) {
-        walToSync.markUploadRejected();
+        walToSync.markUploadRejected(reasonCode: uploadRejectionTokenForStatus(e.statusCode));
         resp.localUploadFailures = 1;
         resp.localUploadPermanentFailures = 1;
         resp.localUploadPermanentError = e.toString();

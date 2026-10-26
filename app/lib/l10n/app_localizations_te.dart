@@ -14661,4 +14661,21 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'వదిలేయి';
+
+  @override
+  String get syncRejectionInvalidDate => 'చెల్లని రికార్డింగ్ తేదీ';
+
+  @override
+  String get syncRejectionServer => 'సర్వర్ తిరస్కరించింది';
+
+  @override
+  String get syncRejectionTooLarge => 'చాలా పెద్దది';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'ఫోన్‌లో $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'అప్‌లోడ్‌లు కొద్దిసేపు నిలిచిపోయాయి — అవి స్వయంచాలకంగా కొనసాగుతాయి';
 }

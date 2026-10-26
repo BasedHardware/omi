@@ -51,6 +51,14 @@ enum WalStorage { mem, disk, sdcard, flashPage }
 
 enum SyncMethod { ble }
 
+/// Bounded reasons an upload was refused, persisted so the row can say which
+/// refusal it was instead of a bare "Failed". Tokens, never server prose.
+class WalUploadRejection {
+  static const invalidCaptureTime = 'invalid_capture_time';
+  static const tooLarge = 'too_large';
+  static const serverRefused = 'server_refused';
+}
+
 /// User-facing sync state for a single recording, derived from [Wal.status],
 /// [Wal.isSyncing] and [Wal.retryCount]. This is what the sync UI renders so a
 /// recording is never shown as an indistinct row — every state is explicit.
@@ -289,6 +297,15 @@ class Wal {
   /// never merges it with audio outside that run by invented adjacency.
   String? clockRun;
 
+  /// Why the server refused the last upload attempt, as a bounded
+  /// [WalUploadRejection] token; null when the row was never refused.
+  String? uploadRejectionReason;
+
+  /// Latched after the capture time was re-stamped once following an
+  /// `invalid_capture_time` refusal: a second refusal can never be repaired
+  /// by estimating again, so it is terminal and must not loop.
+  bool captureTimeRestamped;
+
   String get id => '${device}_$timerStart';
 
   /// Single source of truth for how this recording's sync state is shown to the
@@ -361,8 +378,11 @@ class Wal {
   /// Marks a definitive upload-endpoint refusal. The bytes stay available for
   /// review/deletion and automatic connectivity wakes do not re-offer them;
   /// an explicit manual retry may still re-submit after user intervention.
-  void markUploadRejected() {
+  /// [reasonCode] is a bounded [WalUploadRejection] token naming which
+  /// refusal it was, so rows can say "Too large" instead of a bare "Failed".
+  void markUploadRejected({String? reasonCode}) {
     status = WalStatus.uploadRejected;
+    uploadRejectionReason = reasonCode;
     jobId = null;
     isSyncing = false;
     syncStartedAt = null;
@@ -420,6 +440,8 @@ class Wal {
     this.syncedAt = 0,
     this.keptForTranscriptRecovery = false,
     this.clockRun,
+    this.uploadRejectionReason,
+    this.captureTimeRestamped = false,
   }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
@@ -472,6 +494,8 @@ class Wal {
       syncedAt: json['synced_at'] ?? 0,
       keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
       clockRun: json['clock_run'] as String?,
+      uploadRejectionReason: json['upload_rejection_reason'] as String?,
+      captureTimeRestamped: json['capture_time_restamped'] == true,
     )
       ..frameSize = json['frame_size'] ?? mapNameToCodec(json['codec']).getFrameSize()
       ..repairLegacyImportedCustody();
@@ -520,6 +544,8 @@ class Wal {
       'synced_at': syncedAt,
       if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
       if (clockRun != null) 'clock_run': clockRun,
+      if (uploadRejectionReason != null) 'upload_rejection_reason': uploadRejectionReason,
+      if (captureTimeRestamped) 'capture_time_restamped': true,
     };
   }
 
@@ -575,6 +601,8 @@ class Wal {
     h = _mixFingerprint(h, syncedAt);
     h = _mixFingerprint(h, keptForTranscriptRecovery ? 1 : 0);
     h = _mixFingerprint(h, clockRun?.hashCode ?? 0);
+    h = _mixFingerprint(h, uploadRejectionReason?.hashCode ?? 0);
+    h = _mixFingerprint(h, captureTimeRestamped ? 1 : 0);
     return h;
   }
 

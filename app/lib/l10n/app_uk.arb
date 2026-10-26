@@ -4439,5 +4439,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Готово",
     "openLoopAnswerRemind": "Нагадати пізніше",
-    "openLoopAnswerDrop": "Відхилити"
+    "openLoopAnswerDrop": "Відхилити",
+    "syncRejectionInvalidDate": "Недійсна дата запису",
+    "syncRejectionServer": "Відхилено сервером",
+    "syncRejectionTooLarge": "Занадто великий",
+    "deviceOnPhoneQueue": "{duration} на телефоні",
+    "syncCardUploadsPaused": "Завантаження ненадоло призупинено — воно відновиться автоматично"
 }

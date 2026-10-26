@@ -14396,4 +14396,21 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => '破棄';
+
+  @override
+  String get syncRejectionInvalidDate => '無効な録音日';
+
+  @override
+  String get syncRejectionServer => 'サーバーに拒否されました';
+
+  @override
+  String get syncRejectionTooLarge => '大きすぎます';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'スマホに$duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'アップロードは一時停止中です — 自動的に再開されます';
 }

@@ -11865,5 +11865,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "முடிந்தது",
     "openLoopAnswerRemind": "பின்னர் நினைவூட்டு",
-    "openLoopAnswerDrop": "விட்டுவிடு"
+    "openLoopAnswerDrop": "விட்டுவிடு",
+    "syncRejectionInvalidDate": "தவறான பதிவு தேதி",
+    "syncRejectionServer": "சேவையகம் நிராகரித்தது",
+    "syncRejectionTooLarge": "மிகப் பெரியது",
+    "deviceOnPhoneQueue": "போனில் {duration}",
+    "syncCardUploadsPaused": "பதிவேற்றங்கள் சிறிது நேரம் இடைநிறுத்தப்பட்டுள்ளன — தானாகவே தொடரும்"
 }

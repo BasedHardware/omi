@@ -14632,4 +14632,21 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Відхилити';
+
+  @override
+  String get syncRejectionInvalidDate => 'Недійсна дата запису';
+
+  @override
+  String get syncRejectionServer => 'Відхилено сервером';
+
+  @override
+  String get syncRejectionTooLarge => 'Занадто великий';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration на телефоні';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Завантаження ненадоло призупинено — воно відновиться автоматично';
 }

@@ -14629,4 +14629,21 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Opusti';
+
+  @override
+  String get syncRejectionInvalidDate => 'Neveljaven datum snemanja';
+
+  @override
+  String get syncRejectionServer => 'Zavrnjeno s strani strežnika';
+
+  @override
+  String get syncRejectionTooLarge => 'Preveliko';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration na telefonu';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Nalaganje je za trenutek zaustavljeno — samodejno se bo nadaljevalo';
 }

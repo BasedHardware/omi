@@ -11865,5 +11865,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "పూర్తయింది",
     "openLoopAnswerRemind": "తర్వాత గుర్తు చేయి",
-    "openLoopAnswerDrop": "వదిలేయి"
+    "openLoopAnswerDrop": "వదిలేయి",
+    "syncRejectionInvalidDate": "చెల్లని రికార్డింగ్ తేదీ",
+    "syncRejectionServer": "సర్వర్ తిరస్కరించింది",
+    "syncRejectionTooLarge": "చాలా పెద్దది",
+    "deviceOnPhoneQueue": "ఫోన్‌లో {duration}",
+    "syncCardUploadsPaused": "అప్‌లోడ్‌లు కొద్దిసేపు నిలిచిపోయాయి — అవి స్వయంచాలకంగా కొనసాగుతాయి"
 }

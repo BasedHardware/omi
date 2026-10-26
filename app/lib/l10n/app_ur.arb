@@ -11865,5 +11865,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "مکمل",
     "openLoopAnswerRemind": "بعد میں یاد دلائیں",
-    "openLoopAnswerDrop": "چھوڑ دیں"
+    "openLoopAnswerDrop": "چھوڑ دیں",
+    "syncRejectionInvalidDate": "غلط ریکارڈنگ کی تاریخ",
+    "syncRejectionServer": "سرور نے مسترد کیا",
+    "syncRejectionTooLarge": "بہت بڑا",
+    "deviceOnPhoneQueue": "فون پر {duration}",
+    "syncCardUploadsPaused": "اپلوڈز چند لمحے کے لیے روک دیے گئے ہیں — یہ خودکار طور پر دوبارہ شروع ہوں گے"
 }

@@ -4439,5 +4439,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Tehtud",
     "openLoopAnswerRemind": "Meenuta hiljem",
-    "openLoopAnswerDrop": "Jäta ära"
+    "openLoopAnswerDrop": "Jäta ära",
+    "syncRejectionInvalidDate": "Vigane salvestuse kuupäev",
+    "syncRejectionServer": "Server lükkas tagasi",
+    "syncRejectionTooLarge": "Liiga suur",
+    "deviceOnPhoneQueue": "{duration} telefonis",
+    "syncCardUploadsPaused": "Üleslaadimine on hetkeks peatatud — see jätkub automaatselt"
 }

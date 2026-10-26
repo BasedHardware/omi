@@ -4439,5 +4439,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Gata",
     "openLoopAnswerRemind": "Amintește-mi mai târziu",
-    "openLoopAnswerDrop": "Renunță"
+    "openLoopAnswerDrop": "Renunță",
+    "syncRejectionInvalidDate": "Dată de înregistrare nevalidă",
+    "syncRejectionServer": "Respins de server",
+    "syncRejectionTooLarge": "Prea mare",
+    "deviceOnPhoneQueue": "{duration} pe telefon",
+    "syncCardUploadsPaused": "Încărcările sunt pauzate pentru o clipă — vor reveni automat"
 }

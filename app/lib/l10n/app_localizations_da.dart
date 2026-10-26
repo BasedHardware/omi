@@ -14592,4 +14592,21 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Drop det';
+
+  @override
+  String get syncRejectionInvalidDate => 'Ugyldig optagedato';
+
+  @override
+  String get syncRejectionServer => 'Afvist af serveren';
+
+  @override
+  String get syncRejectionTooLarge => 'For stor';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration på telefonen';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Uploads er sat på pause et øjeblik — de fortsætter automatisk';
 }

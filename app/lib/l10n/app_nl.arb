@@ -4439,5 +4439,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Klaar",
     "openLoopAnswerRemind": "Herinner me later",
-    "openLoopAnswerDrop": "Negeren"
+    "openLoopAnswerDrop": "Negeren",
+    "syncRejectionInvalidDate": "Ongeldige opnamedatum",
+    "syncRejectionServer": "Afgewezen door de server",
+    "syncRejectionTooLarge": "Te groot",
+    "deviceOnPhoneQueue": "{duration} op de telefoon",
+    "syncCardUploadsPaused": "Uploads zijn even gepauzeerd — ze worden automatisch hervat"
 }

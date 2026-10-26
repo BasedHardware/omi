@@ -4474,5 +4474,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Tamamlandı",
     "openLoopAnswerRemind": "Daha sonra hatırlat",
-    "openLoopAnswerDrop": "Yoksay"
+    "openLoopAnswerDrop": "Yoksay",
+    "syncRejectionInvalidDate": "Geçersiz kayıt tarihi",
+    "syncRejectionServer": "Sunucu tarafından reddedildi",
+    "syncRejectionTooLarge": "Çok büyük",
+    "deviceOnPhoneQueue": "telefonda {duration}",
+    "syncCardUploadsPaused": "Yüklemeler kısa süreliğine duraklatıldı — otomatik olarak devam edecek"
 }

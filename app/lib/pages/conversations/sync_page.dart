@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
+import 'package:omi/pages/conversations/sync_pending_work.dart' show walAttentionLabel;
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -77,7 +78,8 @@ class WalListItem extends StatelessWidget {
       case WalSyncDisplayState.unsupportedAudio:
         return (Colors.redAccent, l.syncStatusUnsupportedAudio);
       case WalSyncDisplayState.uploadRejected:
-        return (Colors.redAccent, l.failedStatus);
+        // Which refusal it was, in On the Way's words.
+        return (Colors.redAccent, walAttentionLabel(state, l, rejectionReason: wal.uploadRejectionReason));
       case WalSyncDisplayState.waiting:
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade500, l.syncStatusWaiting);

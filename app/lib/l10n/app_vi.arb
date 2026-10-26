@@ -4439,5 +4439,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Xong",
     "openLoopAnswerRemind": "Nhắc tôi sau",
-    "openLoopAnswerDrop": "Bỏ qua"
+    "openLoopAnswerDrop": "Bỏ qua",
+    "syncRejectionInvalidDate": "Ngày ghi âm không hợp lệ",
+    "syncRejectionServer": "Bị máy chủ từ chối",
+    "syncRejectionTooLarge": "Quá lớn",
+    "deviceOnPhoneQueue": "{duration} trên điện thoại",
+    "syncCardUploadsPaused": "Tải lên tạm dừng trong chốc lát — sẽ tự động tiếp tục"
 }

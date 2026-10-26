@@ -4481,5 +4481,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Færdig",
     "openLoopAnswerRemind": "Mind mig senere",
-    "openLoopAnswerDrop": "Drop det"
+    "openLoopAnswerDrop": "Drop det",
+    "syncRejectionInvalidDate": "Ugyldig optagedato",
+    "syncRejectionServer": "Afvist af serveren",
+    "syncRejectionTooLarge": "For stor",
+    "deviceOnPhoneQueue": "{duration} på telefonen",
+    "syncCardUploadsPaused": "Uploads er sat på pause et øjeblik — de fortsætter automatisk"
 }

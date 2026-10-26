@@ -14710,4 +14710,21 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Verwerfen';
+
+  @override
+  String get syncRejectionInvalidDate => 'Ungültiges Aufnahmedatum';
+
+  @override
+  String get syncRejectionServer => 'Vom Server abgelehnt';
+
+  @override
+  String get syncRejectionTooLarge => 'Zu groß';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration auf dem Telefon';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Uploads wurden kurzzeitig pausiert — sie werden automatisch fortgesetzt';
 }

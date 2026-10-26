@@ -4439,5 +4439,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Atlikta",
     "openLoopAnswerRemind": "Priminti vėliau",
-    "openLoopAnswerDrop": "Atmesti"
+    "openLoopAnswerDrop": "Atmesti",
+    "syncRejectionInvalidDate": "Netinkamas įrašo data",
+    "syncRejectionServer": "Serveris atmetė",
+    "syncRejectionTooLarge": "Per didelis",
+    "deviceOnPhoneQueue": "{duration} telefone",
+    "syncCardUploadsPaused": "Įkėlimai trumpai pristabdyti — jie atsinaujins automatiškai"
 }

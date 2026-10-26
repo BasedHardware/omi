@@ -11865,5 +11865,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "সম্পন্ন",
     "openLoopAnswerRemind": "পরে মনে করিয়ে দিন",
-    "openLoopAnswerDrop": "বাদ দিন"
+    "openLoopAnswerDrop": "বাদ দিন",
+    "syncRejectionInvalidDate": "অবৈধ রেকর্ডিং তারিখ",
+    "syncRejectionServer": "সার্ভার প্রত্যাখ্যান করেছে",
+    "syncRejectionTooLarge": "খুব বড়",
+    "deviceOnPhoneQueue": "ফোনে {duration}",
+    "syncCardUploadsPaused": "আপলোড কিছুক্ষণের জন্য বিরত — স্বয়ংক্রিয়ভাবে আবার শুরু হবে"
 }

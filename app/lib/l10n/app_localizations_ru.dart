@@ -14650,4 +14650,21 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Отклонить';
+
+  @override
+  String get syncRejectionInvalidDate => 'Недопустимая дата записи';
+
+  @override
+  String get syncRejectionServer => 'Отклонено сервером';
+
+  @override
+  String get syncRejectionTooLarge => 'Слишком большой';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration на телефоне';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Загрузка ненадолго приостановлена — она возобновится автоматически';
 }

@@ -14653,4 +14653,21 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Изостави го';
+
+  @override
+  String get syncRejectionInvalidDate => 'Невалидна дата на записа';
+
+  @override
+  String get syncRejectionServer => 'Отказано от сървъра';
+
+  @override
+  String get syncRejectionTooLarge => 'Твърде голям';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration в телефона';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Качването е спряно за момент — ще продължи автоматично';
 }

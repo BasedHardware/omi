@@ -4439,5 +4439,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Hotovo",
     "openLoopAnswerRemind": "Pripomenúť neskôr",
-    "openLoopAnswerDrop": "Zahodiť"
+    "openLoopAnswerDrop": "Zahodiť",
+    "syncRejectionInvalidDate": "Neplatný dátum nahrávky",
+    "syncRejectionServer": "Server odmietol",
+    "syncRejectionTooLarge": "Príliš veľké",
+    "deviceOnPhoneQueue": "{duration} v telefóne",
+    "syncCardUploadsPaused": "Nahrávanie je na chvíľu pozastavené — automaticky pokračuje"
 }

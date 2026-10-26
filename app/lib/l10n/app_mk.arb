@@ -11865,5 +11865,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Завршено",
     "openLoopAnswerRemind": "Потсети ме подоцна",
-    "openLoopAnswerDrop": "Отфрли"
+    "openLoopAnswerDrop": "Отфрли",
+    "syncRejectionInvalidDate": "Неважечки датум на снимање",
+    "syncRejectionServer": "Одбиено од серверот",
+    "syncRejectionTooLarge": "Преголемо",
+    "deviceOnPhoneQueue": "{duration} на телефонот",
+    "syncCardUploadsPaused": "Качувањата се привремено паузирани — ќе продолжат автоматски"
 }

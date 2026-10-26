@@ -14402,4 +14402,21 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => '버리기';
+
+  @override
+  String get syncRejectionInvalidDate => '잘못된 녹음 날짜';
+
+  @override
+  String get syncRejectionServer => '서버가 거절함';
+
+  @override
+  String get syncRejectionTooLarge => '너무 큼';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '휴대전화에 $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => '업로드가 잠시 일시중지되었습니다 — 자동으로 다시 시작됩니다';
 }

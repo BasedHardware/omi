@@ -19,6 +19,7 @@ class DeviceStatsRow extends StatelessWidget {
     required this.isCharging,
     required this.heardTodaySeconds,
     required this.onDeviceSeconds,
+    this.phoneQueueSeconds = 0,
   });
 
   /// Battery percent, or <= 0 when the device has not reported one.
@@ -26,6 +27,10 @@ class DeviceStatsRow extends StatelessWidget {
   final bool isCharging;
   final int heardTodaySeconds;
   final int onDeviceSeconds;
+
+  /// Audio recorded on the phone still waiting for its upload: the On Device
+  /// tile names it so hours of phone queue never read as nothing to sync.
+  final int phoneQueueSeconds;
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +53,8 @@ class DeviceStatsRow extends StatelessWidget {
         label: l10n.onDevice,
         value: OmiDuration.compact(_minutes(onDeviceSeconds), l10n),
         caption: onDeviceSeconds > 0 ? l10n.deviceToSync : null,
+        secondCaption:
+            phoneQueueSeconds > 0 ? l10n.deviceOnPhoneQueue(OmiDuration.compact(phoneQueueSeconds, l10n)) : null,
       ),
     ];
     return Row(
@@ -65,16 +72,19 @@ class DeviceStatsRow extends StatelessWidget {
 }
 
 class _StatTile extends StatelessWidget {
-  const _StatTile({super.key, required this.label, required this.value, this.caption});
+  const _StatTile({super.key, required this.label, required this.value, this.caption, this.secondCaption});
 
   final String label;
   final String value;
   final String? caption;
 
+  /// A second line under the caption, in the same style.
+  final String? secondCaption;
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: [label, value, if (caption != null) caption!].join(', '),
+      label: [label, value, if (caption != null) caption!, if (secondCaption != null) secondCaption!].join(', '),
       excludeSemantics: true,
       child: Container(
         constraints: const BoxConstraints(minHeight: 84),
@@ -89,6 +99,10 @@ class _StatTile extends StatelessWidget {
             if (caption != null) ...[
               const SizedBox(height: 2),
               Text(caption!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+            ],
+            if (secondCaption != null) ...[
+              const SizedBox(height: 2),
+              Text(secondCaption!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             ],
           ],
         ),

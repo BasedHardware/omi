@@ -14644,4 +14644,21 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Odrzuć';
+
+  @override
+  String get syncRejectionInvalidDate => 'Nieprawidłowa data nagrania';
+
+  @override
+  String get syncRejectionServer => 'Odrzucone przez serwer';
+
+  @override
+  String get syncRejectionTooLarge => 'Za duży';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration w telefonie';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Przesyłanie wstrzymane na chwilę — zostanie automatycznie wznowione';
 }

@@ -14609,4 +14609,21 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Släpp det';
+
+  @override
+  String get syncRejectionInvalidDate => 'Ogiltigt inspelningsdatum';
+
+  @override
+  String get syncRejectionServer => 'Avvisad av servern';
+
+  @override
+  String get syncRejectionTooLarge => 'För stor';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration på telefonen';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Uppladdningar har pausats en stund — de återupptas automatiskt';
 }

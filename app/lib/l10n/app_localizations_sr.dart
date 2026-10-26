@@ -14608,4 +14608,21 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Одбаци';
+
+  @override
+  String get syncRejectionInvalidDate => 'Неважећи датум снимања';
+
+  @override
+  String get syncRejectionServer => 'Сервер је одбио';
+
+  @override
+  String get syncRejectionTooLarge => 'Превелико';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration на телефону';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Отпремање је кратко паузирано — аутоматски ће се наставити';
 }

@@ -14615,4 +14615,21 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Abaikan';
+
+  @override
+  String get syncRejectionInvalidDate => 'Tanggal perekaman tidak valid';
+
+  @override
+  String get syncRejectionServer => 'Ditolak oleh server';
+
+  @override
+  String get syncRejectionTooLarge => 'Terlalu besar';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration di ponsel';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Unggahan dijeda sejenak — akan dilanjutkan otomatis';
 }

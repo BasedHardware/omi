@@ -14663,4 +14663,21 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Renunță';
+
+  @override
+  String get syncRejectionInvalidDate => 'Dată de înregistrare nevalidă';
+
+  @override
+  String get syncRejectionServer => 'Respins de server';
+
+  @override
+  String get syncRejectionTooLarge => 'Prea mare';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration pe telefon';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Încărcările sunt pauzate pentru o clipă — vor reveni automat';
 }

@@ -4474,5 +4474,10 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Terminé",
     "openLoopAnswerRemind": "Me le rappeler plus tard",
-    "openLoopAnswerDrop": "Abandonner"
+    "openLoopAnswerDrop": "Abandonner",
+    "syncRejectionInvalidDate": "Date d'enregistrement non valide",
+    "syncRejectionServer": "Rejeté par le serveur",
+    "syncRejectionTooLarge": "Trop volumineux",
+    "deviceOnPhoneQueue": "{duration} sur le téléphone",
+    "syncCardUploadsPaused": "Envois en pause un instant — ils reprendront automatiquement"
 }

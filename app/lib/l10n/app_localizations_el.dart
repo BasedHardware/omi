@@ -14697,4 +14697,21 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Απόρριψη';
+
+  @override
+  String get syncRejectionInvalidDate => 'Μη έγκυρη ημερομηνία εγγραφής';
+
+  @override
+  String get syncRejectionServer => 'Απορρίφθηκε από τον διακομιστή';
+
+  @override
+  String get syncRejectionTooLarge => 'Πολύ μεγάλο';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration στο τηλέφωνο';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Οι μεταφορτώσεις τέθηκαν προσωρινά σε παύση — θα συνεχιστούν αυτόματα';
 }
