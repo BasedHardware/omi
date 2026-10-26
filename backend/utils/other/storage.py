@@ -42,6 +42,7 @@ from database.redis_db import (
 )
 from database.legal_holds import external_write_fence, destructive_operation_gate
 from utils.other import audio_packs
+from database.account_deletion_operational_holds import delete_owner_bucket_prefix
 from utils.request_validation import parse_sync_filename_timestamp
 from utils import encryption
 from utils.sync.staged_prefetch import MAX_FILE_BYTES, StagedBytes, staged_prefetch
@@ -180,19 +181,10 @@ def _owner_uid_from_sync_path(file_path: str) -> Optional[str]:
     return None
 
 
-def _delete_owner_bucket_prefix(bucket: Any, prefix: str) -> int:
-    """Delete and verify one owner prefix, failing closed on a torn purge."""
-
-    listing_kwargs = {'versions': True} if _uses_real_gcs_bucket(bucket) else {}
-    blobs = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
-    deleted = 0
-    for blob in blobs:
-        blob.delete()
-        deleted += 1
-    remaining = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
-    if remaining:
-        raise RuntimeError(f'owner storage purge left {len(remaining)} objects under {prefix}')
-    return deleted
+def _delete_owner_bucket_prefix(bucket: Any, prefix: str, *, account_deletion_uid: str | None = None) -> int:
+    return delete_owner_bucket_prefix(
+        bucket, prefix, real_gcs=_uses_real_gcs_bucket(bucket), account_deletion_uid=account_deletion_uid
+    )
 
 
 def delete_all_user_storage_objects(uid: str) -> int:
@@ -269,7 +261,7 @@ def delete_all_user_storage_objects(uid: str) -> int:
                         if lookup.exists():
                             lookup.delete()
                             deleted += 1
-            deleted += _delete_owner_bucket_prefix(bucket, prefix)
+            deleted += _delete_owner_bucket_prefix(bucket, prefix, account_deletion_uid=uid)
     return deleted
 
 
