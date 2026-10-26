@@ -14,9 +14,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
-import os
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -191,6 +189,84 @@ class TestConversationsToTsv(unittest.TestCase):
         finally:
             sys.stdin = saved_stdin
             sys.stdout = saved_stdout
+
+    def test_speaker_zero_and_alternate_speaker_keys_preserved(self):
+        conv = {
+            "id": "c-speaker-0",
+            "segments": [
+                {"speaker": 0, "text": "Speaking as zero"},
+                {"speaker_id": "0", "text": "String zero id"},
+                {"speaker_name": "Host", "text": "Speaking as host"},
+                {"speaker": False, "text": "Boolean speaker ignored"},
+            ],
+        }
+        tsv = c2tsv.conversations_to_tsv_string([conv])
+        self.assertIn("0: Speaking as zero", tsv)
+        self.assertIn("0: String zero id", tsv)
+        self.assertIn("Host: Speaking as host", tsv)
+        self.assertIn("Boolean speaker ignored", tsv)
+        self.assertNotIn("False: Boolean speaker ignored", tsv)
+
+    def test_lone_surrogates_stripped_without_encode_error(self):
+        conv_with_surrogates = {
+            "id": "c-surrogate",
+            "structured": {
+                "title": "Title with lone surrogate \ud800 in text",
+                "overview": "Overview \ud83d\ude00 good and \ud800 bad",
+            },
+            "transcript": "Audio segment \ud800 clean \ud83d\ude0a",
+        }
+        # Escaped string should not contain unencodable lone surrogates
+        tsv = c2tsv.conversations_to_tsv_string([conv_with_surrogates])
+        # Verify writing to UTF-8 bytes succeeds without UnicodeEncodeError
+        encoded = tsv.encode("utf-8")
+        self.assertGreater(len(encoded), 0)
+        self.assertIn("Title with lone surrogate", tsv)
+        self.assertIn("Audio segment", tsv)
+
+    def test_cli_stdin_with_utf8_bom(self):
+        saved_stdin = sys.stdin
+        saved_stdout = sys.stdout
+        try:
+            bom_json = "\ufeff" + json.dumps([self.sample_conv_1])
+            sys.stdin = io.StringIO(bom_json)
+            sys.stdout = io.StringIO()
+            exit_code = c2tsv.main(["-"])
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Weekly Standup", sys.stdout.getvalue())
+        finally:
+            sys.stdin = saved_stdin
+            sys.stdout = saved_stdout
+
+    def test_atomic_write_creates_valid_file(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            in_file = Path(tmp_dir) / "input.json"
+            out_file = Path(tmp_dir) / "out.tsv"
+            in_file.write_text(json.dumps([self.sample_conv_1]), encoding="utf-8")
+
+            c2tsv.convert(str(in_file), str(out_file))
+            self.assertTrue(out_file.exists())
+            # Ensure no stray temp files remain in directory
+            all_files = list(Path(tmp_dir).iterdir())
+            self.assertEqual(len(all_files), 2)  # input.json and out.tsv
+
+    def test_atomic_write_force_overwrite_replaces_existing_file(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            in_file = Path(tmp_dir) / "input.json"
+            out_file = Path(tmp_dir) / "out.tsv"
+            out_file.write_text("old content", encoding="utf-8")
+            in_file.write_text(json.dumps([self.sample_conv_1]), encoding="utf-8")
+
+            # Default without force raises FileExistsError
+            with self.assertRaises(FileExistsError):
+                c2tsv.convert(str(in_file), str(out_file), force=False)
+
+            # With force=True, atomically replaces existing file cleanly
+            c2tsv.convert(str(in_file), str(out_file), force=True)
+            self.assertIn("Weekly Standup", out_file.read_text(encoding="utf-8"))
+            self.assertNotIn("old content", out_file.read_text(encoding="utf-8"))
+            all_files = list(Path(tmp_dir).iterdir())
+            self.assertEqual(len(all_files), 2)
 
 
 if __name__ == "__main__":

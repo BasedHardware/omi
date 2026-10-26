@@ -10,6 +10,9 @@ Features:
 - Unwraps bare JSON arrays or envelope objects (`conversations`, `items`, `data`, `results`).
 - Supports reading from files or standard input (`-`).
 - Supports writing to files or standard output (`-`).
+- Robust speaker resolution preserving speaker 0 and excluding booleans.
+- Lone surrogate stripping to prevent UnicodeEncodeError.
+- Atomic file writes preventing partial/corrupt outputs on failure.
 - Path traversal guard refusing '..' in destination paths.
 - Exclusive creation by default to avoid accidental overwrites, with `-f` / `--force` to override.
 """
@@ -36,15 +39,25 @@ FIELDS: Tuple[str, ...] = (
 )
 
 
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from malformed inputs, but
+    writing them raises UnicodeEncodeError. Dropping them preserves valid text.
+    """
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
+
 def escape_tsv_field(value: Any) -> str:
     """Safely escape field value into plain text conforming to the TSV single-line constraint.
 
     Rules:
     1. None returns an empty string;
     2. Non-string objects are JSON-encoded or converted to strings;
-    3. Newlines (\\r\\n, \\r, \\n) are normalized and escaped to literal '\\n';
-    4. Tabs (\\t) are escaped to literal '\\t';
-    5. Neutralizes control characters to preserve single-line TSV record integrity.
+    3. Drops unencodable surrogate code points;
+    4. Newlines (\\r\\n, \\r, \\n) are normalized and escaped to literal '\\n';
+    5. Tabs (\\t) are escaped to literal '\\t';
+    6. Neutralizes control characters to preserve single-line TSV record integrity.
     """
     if value is None:
         return ""
@@ -56,6 +69,7 @@ def escape_tsv_field(value: Any) -> str:
     else:
         text = value
 
+    text = strip_surrogates(text)
     # Normalize CRLF and tabs to guarantee single-line record format
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = text.replace("\t", "\\t")
@@ -67,7 +81,7 @@ def extract_transcript(item: Dict[str, Any]) -> str:
     """Extract transcript text from conversation item, handling top-level strings or segments arrays."""
     transcript_val = item.get("transcript")
     if isinstance(transcript_val, str) and transcript_val.strip():
-        return transcript_val
+        return strip_surrogates(transcript_val.strip())
 
     # Support segment/transcripts arrays
     segments = item.get("segments") or item.get("transcripts")
@@ -75,15 +89,25 @@ def extract_transcript(item: Dict[str, Any]) -> str:
         parts: List[str] = []
         for seg in segments:
             if isinstance(seg, dict):
-                speaker = seg.get("speaker") or seg.get("speaker_label")
+                speaker = None
+                # Resolve speaker label from name/label/id, explicitly handling 0 and excluding booleans
+                for key in ("speaker_name", "speaker", "speaker_label", "speaker_id"):
+                    val = seg.get(key)
+                    if val is not None and not isinstance(val, bool):
+                        cleaned = str(val).strip()
+                        if cleaned:
+                            speaker = cleaned
+                            break
+
                 text = seg.get("text") or seg.get("content") or ""
-                if text:
-                    if speaker:
-                        parts.append(f"{speaker}: {text}")
+                text_str = strip_surrogates(str(text).strip())
+                if text_str:
+                    if speaker is not None:
+                        parts.append(f"{speaker}: {text_str}")
                     else:
-                        parts.append(str(text))
+                        parts.append(text_str)
             elif isinstance(seg, str) and seg.strip():
-                parts.append(seg.strip())
+                parts.append(strip_surrogates(seg.strip()))
         if parts:
             return " ".join(parts)
 
@@ -165,7 +189,7 @@ def convert(source: str, destination: Optional[str] = None, force: bool = False)
     """
     # 1. Read input data
     if source == "-":
-        raw_text = sys.stdin.read()
+        raw_text = sys.stdin.read().lstrip("\ufeff")
         source_name = "<stdin>"
     else:
         source_path = Path(source)
@@ -195,8 +219,16 @@ def convert(source: str, destination: Optional[str] = None, force: bool = False)
     if dest_path.parent and not dest_path.parent.exists():
         dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write output file
-    dest_path.write_text(tsv_content, encoding="utf-8")
+    # Atomic write via temporary file
+    temp_path = dest_path.with_name(f".{dest_path.name}.tmp.{os.getpid()}")
+    try:
+        temp_path.write_text(tsv_content, encoding="utf-8")
+        os.replace(temp_path, dest_path)
+    except Exception:
+        if temp_path.is_file():
+            temp_path.unlink(missing_ok=True)
+        raise
+
     return tsv_content
 
 
