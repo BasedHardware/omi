@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/gen/review_wire.g.dart' as wire;
 import 'package:omi/backend/schema/open_loops.dart';
 import 'package:omi/env/env.dart';
 
@@ -11,20 +12,26 @@ import 'package:omi/env/env.dart';
 /// A 409 from the answer call means the card was already answered elsewhere
 /// (for example on another device); it stays answered.
 
+Map<String, dynamic> _object(String body) {
+  final json = jsonDecode(body);
+  if (json is! Map<String, dynamic>) throw const FormatException('Expected a JSON object');
+  return json;
+}
+
 String _id(String id) => Uri.encodeComponent(id);
 
 Future<ApiResult<OpenLoopCardsResponse>> getOpenLoopCards() => executeApi(
       request: ApiRequest(url: '${Env.apiBaseUrl}v1/review/open-loops', method: 'GET'),
-      decode: (body) => OpenLoopCardsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>),
+      decode: (body) => OpenLoopCardsResponse.fromGeneratedWireJson(_object(body)),
     );
 
 Future<ApiResult<OpenLoopAnswerResult>> answerOpenLoopCard(OpenLoopCard card, OpenLoopAction action) => executeApi(
       request: ApiRequest(
         url: '${Env.apiBaseUrl}v1/review/open-loops/${_id(card.date)}/${_id(card.cardId)}/answer',
         method: 'POST',
-        body: jsonEncode({'action': action.wire}),
+        body: jsonEncode(wire.GeneratedOpenLoopAnswerRequest(action: action.wire).toJson()),
       ),
-      decode: (body) =>
-          OpenLoopAnswerResult.fromJson(jsonDecode(body) as Map<String, dynamic>) ??
-          (throw const FormatException('Malformed OpenLoopAnswerResult')),
+      decode: (body) => OpenLoopAnswerResult.fromGenerated(
+        wire.GeneratedOpenLoopAnswerResponse.fromJson(_object(body)),
+      ),
     );

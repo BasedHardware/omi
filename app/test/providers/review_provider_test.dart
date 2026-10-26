@@ -347,7 +347,7 @@ void main() {
         isEligible: () => true,
         reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
         loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [_item(_speakerJson('a'))], remainingToday: 1)),
-        loadOpenLoopCards: () async => ApiSuccess(OpenLoopCardsResponse.fromJson({
+        loadOpenLoopCards: () async => ApiSuccess(OpenLoopCardsResponse.fromGeneratedWireJson({
           'cards': [
             {
               'card_id': 'ol-1',
