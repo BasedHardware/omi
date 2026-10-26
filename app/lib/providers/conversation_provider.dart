@@ -790,7 +790,7 @@ class ConversationProvider extends ChangeNotifier {
       if (index == -1) {
         conversations.insert(0, conversation);
       } else if (identical(conversationsAtStart[conversation.id], conversations[index])) {
-        conversations[index] = conversation;
+        conversations[index] = conversation.keepingTranscriptOf(conversations[index]);
       }
     }
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
@@ -906,7 +906,7 @@ class ConversationProvider extends ChangeNotifier {
     final completedById = <String, ServerConversation>{
       for (final conversation in fetchedConversations)
         if (conversation.status == ConversationStatus.completed && !currentlyProcessingIds.contains(conversation.id))
-          conversation.id: conversation,
+          conversation.id: conversation.keepingTranscriptOf(conversationsAtStart[conversation.id]),
     };
     for (final lifecycleResult in lifecycleResults.values) {
       final conversation = lifecycleResult.item;
@@ -920,7 +920,7 @@ class ConversationProvider extends ChangeNotifier {
       }
       // A successful lifecycle probe is authoritative when the page still
       // reports this row as processing, so publish its completed detail.
-      completedById[conversation.id] = conversation;
+      completedById[conversation.id] = conversation.keepingTranscriptOf(conversationsAtStart[conversation.id]);
     }
     for (final conversation in conversations) {
       if (conversation.status != ConversationStatus.completed) continue;
