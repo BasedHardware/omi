@@ -2,7 +2,9 @@
 """Attest an explicit virtual target and pinned runtime before any installation."""
 import argparse
 import json
+import os
 from pathlib import Path
+import platform
 import re
 import subprocess
 
@@ -46,9 +48,14 @@ def main():
     parser.add_argument('--device', required=True)
     parser.add_argument('--runtime-build', required=True)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--host-out', type=Path)
     args = parser.parse_args()
     try:
         args.out.write_text(json.dumps(attest(args.platform, args.device, args.runtime_build), indent=2) + '\n')
+        if args.host_out:
+            args.host_out.write_text(json.dumps({'load_1_5_15m': os.getloadavg(),
+                                                 'logical_cpus': os.cpu_count(),
+                                                 'platform': platform.platform()}, indent=2) + '\n')
     except (ValueError, KeyError, StopIteration, subprocess.SubprocessError) as error:
         parser.exit(65, f'virtual admission refused: {error}\n')
 

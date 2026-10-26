@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <!-- Only the explicit synthetic heavy target's devProfile variant. -->
+        <provider android:name="com.google.firebase.provider.FirebaseInitProvider"
+            tools:node="remove" />
+    </application>
+</manifest>

@@ -28,6 +28,12 @@ a fresh process. Cold here never means a fresh installation or native app boot.
 The fixture, real-time action sequence and 30-second launch interval are fixed.
 Keep the same emulator version, GPU backend, display/refresh rate and host
 conditions for a pair; runtime/image pins cannot remove host scheduling noise.
+Per-launch receipts record host load and CPU count separately from comparison
+identity. The Android heavy target alone uses a devProfile manifest overlay to
+remove native Firebase eager initialization; ordinary app targets retain it.
+An APK inspection checks DEV identity and the initializer's absence before any
+installation. This covers native startup that Dart's HTTP override cannot block
+([Firebase initialization](https://firebase.google.com/docs/reference/android/com/google/firebase/FirebaseApp)).
 
 All measured runs participate in the unchanged 15% p90 spread gate. Slow runs
 and frames are retained, including first exposure in warmup. No statistical

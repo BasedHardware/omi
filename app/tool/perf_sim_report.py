@@ -153,11 +153,21 @@ def summarize(directory, expected_runs):
                 or not runtime.get('runtime_build') or type(warmups) is not int or not 1 <= warmups <= 3
                 or protocol.get('measured_runs') != expected_runs or protocol.get('outlier_policy') != 'retain-all'):
             raise ValueError('virtual qualification requires pinned runtime and retained warmup protocol')
+        kind = runtime['kind']
+        expected_platform, expected_mode = ('android', 'profile') if kind == 'android-emulator' else ('ios', 'debug')
+        if identities[0]['platform'] != expected_platform or first['build_mode'] != expected_mode:
+            raise ValueError('virtual runtime kind does not match platform/build mode')
+        if expected_platform == 'android' and identities[0].get('native_harness') != {
+                'package': 'com.friend.ios.dev', 'firebase_auto_initializer_absent': True}:
+            raise ValueError('missing native heavy APK admission')
         for index in range(1, warmups + 1):
             warmup = json.loads((directory / f'warmup-{index}.json').read_text())
-            validate(warmup.get('heavy_profile', {}))
+            warmup_report = validate(warmup.get('heavy_profile', {}))
             if warmup.get('heavy_run') != identities[0]:
                 raise ValueError('warmup differs from measured source/binary/runtime/protocol')
+            for key in ('dataset', 'build_mode', 'scenario_order', 'timeline_enabled', 'pacing', 'virtual_qualification'):
+                if warmup_report.get(key) != first.get(key):
+                    raise ValueError(f'warmup differs from measured {key}')
         eligible = False
     summary = {
         "runs": len(paths), "build_mode": first["build_mode"],
@@ -178,6 +188,8 @@ def summarize(directory, expected_runs):
     }
     (directory / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print("VARIANCE:", "FAIL" if failures else "PASS")
+    if virtual:
+        print('VIRTUAL QUALIFICATION:', 'PASS' if summary['qualified_virtual_baseline'] else 'FAIL/DIAGNOSTIC')
     print("ACCEPTANCE:", "PASS" if eligible and not failures else
           "FAIL — p90 variance" if eligible else "NOT ELIGIBLE — debug/ablation/timeline diagnostics")
     return summary

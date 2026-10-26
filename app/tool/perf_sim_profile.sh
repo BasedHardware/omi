@@ -38,6 +38,9 @@ fi
 [[ -n "$DEVICE" ]] || { echo 'pass --device UDID (use a dedicated development device)' >&2; exit 64; }
 [[ "$PLATFORM" == ios || "$PLATFORM" == android ]] || { echo 'platform must be ios or android' >&2; exit 64; }
 [[ -n "$OUT_DIR" ]] || OUT_DIR="${TMPDIR:-/tmp}/omi-heavy-$(date -u +%Y%m%dT%H%M%SZ)"
+if [[ "$VIRTUAL" == 1 && -d "$OUT_DIR" && -n "$(find "$OUT_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+  echo 'virtual output directory must be new or empty; retain failed batches separately' >&2; exit 64
+fi
 mkdir -p "$OUT_DIR"
 OUT_DIR="$(realpath "$OUT_DIR")"
 [[ -z "$(find "$OUT_DIR" -name 'receipt-*.json' -print -quit)" ]] || {
@@ -94,6 +97,8 @@ shasum -a 256 integration_test/perf/production_shell.dart test_driver/heavy_prof
   tool/perf/device_run.py tool/perf/compare.py >> "$OUT_DIR/protocol-files.raw"
 shasum -a 256 tool/perf/device_admission.py >> "$OUT_DIR/protocol-files.raw"
 shasum -a 256 tool/perf/virtual_admission.py >> "$OUT_DIR/protocol-files.raw"
+shasum -a 256 tool/perf/android_manifest.py android/app/build.gradle \
+  android/app/src/heavyPerf/AndroidManifest.xml >> "$OUT_DIR/protocol-files.raw"
 LC_ALL=C sort "$OUT_DIR/protocol-files.raw" > "$OUT_DIR/harness-sha256.txt"
 flutter --version --machine > "$OUT_DIR/flutter-version.json"
 OMI_APP_PROFILE=local_dev bash scripts/validate_mobile_build_config.sh --flavor dev --profile local_dev > "$OUT_DIR/config-validation.log" 2>&1
@@ -109,6 +114,9 @@ elif [[ "$PLATFORM" == ios ]]; then
   BINARY=build/ios/iphoneos/Runner.app
 fi
 [[ -e "$BINARY" ]] || { echo "missing $BINARY; see $OUT_DIR/build.log" >&2; exit 1; }
+if [[ "$PLATFORM" == android ]]; then
+  python3 -I tool/perf/android_manifest.py "$BINARY" --out "$OUT_DIR/native-harness.json"
+fi
 if [[ "$PLATFORM" == ios ]]; then
   BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$BINARY/Info.plist")"
   [[ "$BUNDLE_ID" == com.friend-app-with-wearable.ios12.development ]] || {
@@ -140,10 +148,12 @@ for ((launch=1; launch<=RUNS+WARMUP_RUNS; launch++)); do
     for identity in source-sha.txt binary-sha256.txt harness-sha256.txt flutter-version.json device-id.txt platform.txt; do
       cp "$OUT_DIR/$identity" "$ATTEMPT_DIR/$identity"
     done
+    if [[ "$PLATFORM" == android ]]; then cp "$OUT_DIR/native-harness.json" "$ATTEMPT_DIR/native-harness.json"; fi
     echo "heavy $MODE $PREFIX $run attempt $attempt/3 on $DEVICE"
     if [[ "$VIRTUAL" == 1 ]]; then
       python3 -I tool/perf/virtual_admission.py --platform "$PLATFORM" --device "$DEVICE" \
-        --runtime-build "$RUNTIME_BUILD" --out "$ATTEMPT_DIR/virtual-runtime.json"
+        --runtime-build "$RUNTIME_BUILD" --out "$ATTEMPT_DIR/virtual-runtime.json" \
+        --host-out "$ATTEMPT_DIR/host-state.json"
       cmp "$OUT_DIR/virtual-runtime.json" "$ATTEMPT_DIR/virtual-runtime.json"
       cp "$OUT_DIR/launch-protocol.json" "$ATTEMPT_DIR/launch-protocol.json"
     elif [[ "$SIMULATOR" != 1 ]]; then
