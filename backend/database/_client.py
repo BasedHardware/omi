@@ -514,6 +514,9 @@ def run_transactional(
     session have no way to distinguish it from a real write failure.
     ``initial_transaction`` lets an outer contention budget own the first transaction;
     expiry still replaces it with a new transaction under the existing attempt limit.
+    A nested contention budget that owns the attempts too passes ``attempts=1``:
+    the expiry restart then happens as one bounded outer retry instead of
+    inner restarts, so a single budget bounds the whole chain count.
 
     ``transient=True`` is the idempotent-caller opt-in. It also restarts on contention,
     ``DeadlineExceeded``, ``ServiceUnavailable``, and ``ResourceExhausted``, with

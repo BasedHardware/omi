@@ -916,6 +916,12 @@ OMI_SYNC_LANE_ADMISSIONS_TOTAL = Counter(
     ['lane', 'trust', 'reason'],
 )
 
+OMI_SYNC_CAPTURE_TIME_TOTAL = Counter(
+    'omi_sync_capture_time_total',
+    'Sync upload capture-time admission outcomes under the shared future-skew tolerance',
+    ['outcome'],
+)
+
 OMI_SYNC_RECORDING_AGE_SECONDS = Histogram(
     'omi_sync_recording_age_seconds',
     'Oldest recording age at sync admission by lane',

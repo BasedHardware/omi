@@ -103,8 +103,10 @@ on the GPU worker queue; Apache-2.0) scores at most the first 30 s of the probe
 and returns `p_supported`, the summed probability of the 25 Parakeet languages,
 with the top language and a route. MMS-LID scored better offline but is
 CC-BY-NC, so it cannot serve a commercial product. Parakeet needs
-`p_supported >= 0.95` for at least 6 s of audio, `>= 0.985` below 6 s, and never
-below 1 s. The backend re-derives that rule
+`p_supported >= 0.985` for measured clips of at least 1 s, and never below
+1 s. Production shadow found two long Vietnamese/vendor versus English/self
+candidates at 0.9700 and 0.9757, so long clips no longer get a lower floor.
+The backend re-derives that rule
 (`config/prerecorded_language.self_lid_confidence_floor`) instead of trusting the
 service's `route`, and also requires the top language to be supported. The model
 never sees recognizer text. `PARAKEET_LID_MODEL` defaults to `whisper-base`;
@@ -127,6 +129,11 @@ Routing is unchanged. When the gate says Parakeet but the vendor said an
 unsupported language, the backend logs `event=language_gate_shadow_disagreement`
 with bounded codes and scores only. Call outcomes are counted in
 `omi_stt_language_gate_self_total{surface,outcome}`.
+
+The separately bounded [batch-unit qualification](batch-language-shadow-qualification.md)
+uses `surface=batch_shadow`, canonical decoded units and durable probe budgets;
+it never routes or projects user output. Its sample window must use the current
+candidate threshold, with language/duration coverage reported separately.
 
 Enforcement (`STT_PRERECORDED_LANGUAGE_GATE_PERCENT`, default 0): a stable uid
 cohort on legacy sync, or an audio-hash cohort for voice messages, uses the gate

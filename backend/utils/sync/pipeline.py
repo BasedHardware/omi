@@ -38,6 +38,7 @@ from database._client import (
     is_document_size_limit_error,
     is_expired_transaction_error,
 )
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
@@ -177,6 +178,13 @@ from utils.stt.sync_speaker_evidence import collect_speaker_audio
 from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
 from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD, clock_run_from_path, segment_name_prefix
+from utils.sync.capture_clock import (
+    CaptureTimeWindowError,
+    SyncCaptureTimeRejected,
+    capture_clock_offset,
+    capture_time_rejection,
+    clamp_capture_time,
+)
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.recording_intent import user_selected_recording
 from utils.sync.input_limits import (
@@ -255,6 +263,8 @@ from utils.manual_speaker_assignments import manual_owner_reserved
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL, record_conversation_relevance
+from utils.metrics import OMI_SYNC_CAPTURE_TIME_TOTAL
+from utils.observability.reasons import ReasonFamily, SyncCaptureTimeReason, reason_label
 from utils.observability.journeys import record_client_journey_accepted, record_client_journey_terminal
 
 logger = logging.getLogger(__name__)
@@ -301,6 +311,11 @@ def _whole_job_persistence_fingerprint(
 
 
 def _firestore_error_class(error: BaseException) -> str:
+    if isinstance(error, FirestoreContentionExhausted):
+        # The bounded retry budget's own terminal token, not the last provider
+        # error it chained from: attempt and deadline exhaustion are different
+        # operational signals (the token carries no ids).
+        return 'deadline_exhausted' if getattr(error, 'reason', '') == 'deadline_exhausted' else 'contention'
     if is_document_size_limit_error(error):
         return 'document_size_limit'
     if is_expired_transaction_error(error):
@@ -1446,6 +1461,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
     cap_dispatch_lane: str = 'sync',
     redrive_mode: str | None = None,
     recording_session_id: str | None = None,
+    capture_time_offset: float = 0.0,
 ):
     if cap_dispatch_lane not in LANES:
         raise ValueError('unknown cap dispatch lane')
@@ -1684,14 +1700,20 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
         # Lines are timed from the first word, speech_offset seconds into this file.
         segment_end_timestamp = timestamp + speech_offset + max(segment.end for segment in transcript_segments)
+        # Server-clock views of the same two instants: every comparison against
+        # server-clock rows (attach-first fallback, closest conversation) uses
+        # the one request-wide offset, while chunk identity and lineage below
+        # keep the raw capture-clock timestamp so retry anchors stay stable.
+        server_timestamp = timestamp - capture_time_offset
+        server_segment_end_timestamp = segment_end_timestamp - capture_time_offset
         # Minimal redrive attaches first; lineage-bound segments keep their plan.
         target_conversation_id = minimal_redrive.segment_target(
             redrive_mode,
             target_conversation_id,
             lineage_binding,
             uid,
-            timestamp,
-            segment_end_timestamp,
+            server_timestamp,
+            server_segment_end_timestamp,
             source,
             client_device_id,
             is_locked,
@@ -1703,7 +1725,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         closest_memory = (
             None
             if target_conversation_id
-            else get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
+            else get_closest_conversation_to_timestamps(uid, server_timestamp, server_segment_end_timestamp)
         )
         candidate_id = target_conversation_id or (closest_memory['id'] if closest_memory else None)
         owner_reserved = False
@@ -1742,10 +1764,20 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             if audio_bytes is not None and not private_cloud_sync_enabled:
                 audio_bytes = None
         shift_to_vad_file_clock(transcript_segments, speech_offset)
-        started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        # Stored times move onto the server clock as a pair: the same
+        # request-wide offset subtracts from both ends, so duration is
+        # preserved and finish <= server now; one captured `now` backstops
+        # both clamps. Identity/lineage math above keeps the raw filename
+        # timestamp so retry anchors stay stable.
+        stored_now = time.time()
+        started_at = datetime.fromtimestamp(
+            clamp_capture_time(timestamp - capture_time_offset, now=stored_now), tz=timezone.utc
+        )
         create_memory = CreateConversation(
             started_at=started_at,
-            finished_at=datetime.fromtimestamp(segment_end_timestamp, tz=timezone.utc),
+            finished_at=datetime.fromtimestamp(
+                clamp_capture_time(segment_end_timestamp - capture_time_offset, now=stored_now), tz=timezone.utc
+            ),
             transcript_segments=transcript_segments,
             source=source,
             language=language,
@@ -1858,6 +1890,12 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 survivors,
                 len(transcript_segments),
                 private_cloud_sync_enabled,
+                # Retained audio persists its server-clock playback start (the
+                # stored pair's basis, including its clamp to now) beside the
+                # raw capture-clock chunk key, so conversation playback wall
+                # offsets stay truthful for skewed captures.
+                playback_start=clamp_capture_time(timestamp - capture_time_offset),
+                playback_clock_offset=capture_time_offset,
             ),
             finish=finish_sync_segment,
             mark_finalize=mark_finalize,
@@ -2096,6 +2134,9 @@ def _store_intake_audio(
     transcript_segment_count: int,
     private_cloud_sync_enabled: bool,
     conversation_id: str,
+    *,
+    playback_start: Optional[float] = None,
+    playback_clock_offset: float = 0.0,
 ) -> None:
     store_intake_audio(
         uid,
@@ -2106,6 +2147,8 @@ def _store_intake_audio(
         transcript_segment_count,
         private_cloud_sync_enabled,
         conversation_id,
+        playback_start=playback_start,
+        playback_clock_offset=playback_clock_offset,
         store_full=_store_sync_audio_chunk,
         store_partial=store_partial_merge_survivor_audio,
     )
@@ -2117,6 +2160,7 @@ def _store_sync_audio_chunk(
     timestamp: float,
     audio_bytes: Optional[bytes],
     data_protection_level: Optional[str],
+    playback_start: Optional[float] = None,
 ):
     """Reuse stable private-cloud chunk naming; audio storage remains best-effort."""
     store_sync_audio_chunk(
@@ -2125,6 +2169,7 @@ def _store_sync_audio_chunk(
         timestamp,
         audio_bytes,
         data_protection_level,
+        playback_start=playback_start,
         decode_audio=_wav_bytes_to_pcm16_16k,
         upload_audio=upload_audio_chunk,
     )
@@ -2166,6 +2211,26 @@ def _cleanup_files(file_paths: Iterable[str]):
             logger.error('event=sync_cleanup outcome=failed exception_type=%s', type(e).__name__)
 
 
+def _record_capture_time_admission(outcome: SyncCaptureTimeReason, ahead_seconds: float = 0.0) -> None:
+    """Count one capture-time admission disposition; log only the notable ones.
+
+    Plain acceptances are counter-only (per-file volume); skew and rejections
+    get a log line so the readback can count and sample both sides.
+    """
+    try:
+        OMI_SYNC_CAPTURE_TIME_TOTAL.labels(
+            outcome=reason_label(ReasonFamily.SYNC_CAPTURE_TIME, outcome, SyncCaptureTimeReason)
+        ).inc()
+    except Exception:
+        pass
+    if outcome != SyncCaptureTimeReason.ACCEPTED:
+        logger.info(
+            'event=sync_capture_time outcome=%s ahead_seconds=%.1f',
+            reason_label(ReasonFamily.SYNC_CAPTURE_TIME, outcome, SyncCaptureTimeReason),
+            ahead_seconds,
+        )
+
+
 def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     """Like retrieve_file_paths but uses a job-specific directory to avoid concurrency conflicts."""
     directory = f'syncing/{uid}/{job_id}/'
@@ -2181,12 +2246,25 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
             raise HTTPException(status_code=400, detail='Invalid sync file format')
         try:
             timestamp = get_timestamp_from_path(filename)
+        except CaptureTimeWindowError as error:
+            _record_capture_time_admission(error.capture_time_reason)
+            raise SyncCaptureTimeRejected() from error
         except ValueError:
-            raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
+            _record_capture_time_admission(SyncCaptureTimeReason.REJECTED_MALFORMED)
+            raise SyncCaptureTimeRejected()
 
         time_val = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        if time_val > datetime.now(timezone.utc) or time_val < datetime(2024, 1, 1, tzinfo=timezone.utc):
-            raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
+        now = datetime.now(timezone.utc)
+        ahead_seconds = (time_val - now).total_seconds()
+        rejection = capture_time_rejection(time_val, now=now)
+        if rejection is not None:
+            # Defense in depth: the shared parser already enforces this window.
+            _record_capture_time_admission(rejection, ahead_seconds=ahead_seconds)
+            raise SyncCaptureTimeRejected()
+        _record_capture_time_admission(
+            SyncCaptureTimeReason.ACCEPTED_FUTURE_SKEW if ahead_seconds > 0 else SyncCaptureTimeReason.ACCEPTED,
+            ahead_seconds=max(0.0, ahead_seconds),
+        )
 
         path = f"{directory}{filename}"
         try:
@@ -3094,6 +3172,20 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     p: await run_blocking(sync_executor, compute_sync_segment_id, uid, p) for p in segmented_paths
                 }
 
+            # One server-clock offset per request, computed once after
+            # segmentation: the furthest segment end (VAD names carry the
+            # source capture clock) minus server now. Every temporal
+            # comparison and stored pair in process_segment shifts by it, and
+            # the lineage planner below receives it for its comparison spans
+            # and query bounds; chunk identity and lineage keys keep raw
+            # capture-clock times.
+            request_capture_offset = await run_blocking(
+                sync_executor,
+                lambda: capture_clock_offset(
+                    max(get_timestamp_from_path(path) + get_wav_duration(path) for path in segmented_paths)
+                ),
+            )
+
             # Chronological order + turnstile: STT runs in parallel (per chunk), but
             # conversation assignment is serialized oldest-first so adjacent chunks merge
             # instead of racing into separate conversations (#6551, #5747).
@@ -3117,6 +3209,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         is_locked,
                         job_id,
                         segment_binding_reasons,
+                        capture_time_offset=request_capture_offset,
                         **({'segment_source_maps': segment_source_maps} if segment_source_maps else {}),
                     )
                 except Exception:
@@ -3167,6 +3260,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     ),
                     **({'cap_content_id': content_id} if cap_enabled(uid, 'sync') else {}),
                     **({'redrive_mode': redrive_mode} if redrive_mode else {}),
+                    capture_time_offset=request_capture_offset,
                 )
                 if deferred_outcome.get('provider'):
                     with segment_lock:

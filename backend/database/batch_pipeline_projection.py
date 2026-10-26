@@ -253,7 +253,9 @@ class ProjectionStore:
             return run_transactional(self.client, operation)
         return run_with_transaction_contention_retry(
             self.client.transaction,
-            lambda transaction: run_transactional(self.client, operation, initial_transaction=transaction),
+            # attempts=1: the outer budget owns every attempt, so an expired
+            # chain costs one bounded outer retry instead of inner restarts.
+            lambda transaction: run_transactional(self.client, operation, initial_transaction=transaction, attempts=1),
             operation_name='batch_projection',
         )
 

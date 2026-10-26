@@ -728,7 +728,12 @@ def prefetch_syncing_temporal_file(file_path: str) -> StagedBytes | None:
 
 @sync_phase('gcs')
 def upload_audio_chunk(
-    chunk_data: bytes, uid: str, conversation_id: str, timestamp: float, data_protection_level: Optional[str] = None
+    chunk_data: bytes,
+    uid: str,
+    conversation_id: str,
+    timestamp: float,
+    data_protection_level: Optional[str] = None,
+    playback_start: Optional[float] = None,
 ) -> str:
     """
     Upload an audio chunk to Google Cloud Storage with optional encryption.
@@ -737,9 +742,13 @@ def upload_audio_chunk(
         chunk_data: Raw audio bytes (PCM16)
         uid: User ID
         conversation_id: Conversation ID
-        timestamp: Unix timestamp when chunk was recorded
+        timestamp: Unix timestamp when chunk was recorded (raw capture clock)
         data_protection_level: Optional cached protection level. When provided,
             skips the per-chunk Firestore read. Falls back to DB read when None.
+        playback_start: Optional server-clock (skew-normalized) start for
+            playback wall math. Persisted beside the span metadata so a skewed
+            capture's wall offsets stay truthful while the blob key keeps the
+            raw capture-clock timestamp.
 
     Returns:
         GCS path of the uploaded chunk
@@ -770,6 +779,7 @@ def upload_audio_chunk(
         # Speaker evidence needs that clock even when archive routing is off.
         wanted_metadata = {
             **span_blob_metadata({'start': timestamp, 'samples': len(chunk_data) // 2, 'sample_rate': 16000}),
+            **({'v2_playback_start': repr(playback_start)} if playback_start is not None else {}),
             'canonical': 'false',
             'codec': 'opus',
             'rendition': 'sync-pcm-reencode',

@@ -43,6 +43,7 @@ from database import fair_use as fair_use_db
 from database import sync_dead_letters, sync_backfill_sequencer
 from database import users as users_db
 from database.memories import historical_scan_memo_scope
+from database.firestore_transaction_retry import transaction_retry_deadline_scope
 from database.person_aliases import people_scan_attempt
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_read_origin import read_origin
@@ -190,6 +191,12 @@ from utils.sync.pipeline import (
     retrieve_vad_segments,
     SyncConversationPersistenceFenced,
 )
+from utils.sync.capture_clock import (
+    INVALID_CAPTURE_TIME_CODE,
+    INVALID_CAPTURE_TIME_DETAIL,
+    SyncCaptureTimeRejected,
+    capture_clock_offset,
+)
 from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.sync.rate_limit import (
@@ -250,6 +257,13 @@ async def _stage_files_to_gcs_with_hold_recheck(paths: List[str]) -> None:
 AUDIO_SAMPLE_RATE = 16000
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
+
+# How far past the newest admitted filename start a claimed session end may
+# run: one live-capture chunk of trailing audio, mirroring the trailing
+# allowance recording-session binding itself grants (recording_session_target).
+# Decode has not run at the staging seam, so the last file's duration is the
+# one admitted-audio fact this slack stands in for.
+SESSION_CLAIM_TRAILING_SLACK_SECONDS = 60.0
 
 
 async def _offer_shadow_upload(**kwargs) -> None:
@@ -1216,7 +1230,43 @@ async def sync_local_files_v2(
         # --- Fast path: save raw files only (< 2s typical) ---
         # Use sync_executor, NOT storage_executor — storage is saturated with
         # background pipeline cleanup/GCS work and would queue the 202 response.
-        paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id)
+        try:
+            paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id)
+        except SyncCaptureTimeRejected:
+            # Typed 400 for implausible capture times (beyond the shared
+            # future-skew tolerance or before 2024). Released clients only see
+            # the status + detail; new clients can act on the code.
+            return JSONResponse(
+                status_code=400,
+                content={'code': INVALID_CAPTURE_TIME_CODE, 'detail': INVALID_CAPTURE_TIME_DETAIL},
+            )
+
+        # One server-clock offset per request shifts the client's
+        # recording-session audio bounds onto the server clock before any
+        # temporal comparison (recording-session binding compares them against
+        # server-clock conversation rows). Admitted data only: at this staging
+        # seam decode has not run, so the basis is the staged filename starts
+        # alone — the pipeline recomputes the offset from decoded durations
+        # after VAD — and a claimed end past the admitted span plus one
+        # live-capture chunk of slack (the same trailing allowance session
+        # binding grants) is clipped to it, so an inflated client claim can
+        # neither widen the claimed span nor move the session matching
+        # interval. Files keep their raw capture-clock names and keys.
+        if isinstance(audio_start_seconds, (int, float)) and isinstance(audio_end_seconds, (int, float)):
+            admitted_file_starts = []
+            for filename in filenames:
+                try:
+                    admitted_file_starts.append(float(get_timestamp_from_path(filename)))
+                except (IndexError, ValueError):
+                    continue  # Admission above rejects unparseable names with the typed 400.
+            if admitted_file_starts:
+                admitted_end = max(admitted_file_starts) + SESSION_CLAIM_TRAILING_SLACK_SECONDS
+                audio_start_seconds = float(audio_start_seconds)
+                audio_end_seconds = min(float(audio_end_seconds), admitted_end)
+                session_clock_offset = capture_clock_offset(max(admitted_file_starts))
+                if session_clock_offset > 0:
+                    audio_start_seconds -= session_clock_offset
+                    audio_end_seconds -= session_clock_offset
 
         if manifest_claims is not None and not await run_blocking(
             sync_executor, manifest_claims_match_paths, manifest_claims, paths
@@ -2477,6 +2527,13 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
 # this cap exists to prevent.
 SYNC_JOB_RESPONSE_MARGIN_SECONDS = 120.0
 SYNC_JOB_ROUTE_TIMEOUT_SECONDS = float(os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT') or 1500)
+# Kept below the handler budget for Firestore transaction retries (deadline-
+# aware contention budget in database/firestore_transaction_retry.py): retries
+# stop while the remaining budget cannot cover the next attempt's reserve, and
+# this margin absorbs the one in-flight attempt the helper cannot stop (a
+# started chain ends within Firestore's 270 s lifetime), leaving time for
+# finalization and the response.
+SYNC_TRANSACTION_RETRY_SAFETY_MARGIN_SECONDS = 120.0
 
 
 def _resolve_sync_job_handler_budget(
@@ -3038,9 +3095,20 @@ async def _run_sync_job_body(request: Request, task_retry_count: int, attempt_st
         else SYNC_JOB_HANDLER_BUDGET_SECONDS
     )
     budget = asyncio.timeout(remaining)
+    # Firestore transaction retries under this attempt stop with the request
+    # budget's remaining time minus a margin for post-transaction pipeline
+    # work (finalization, response): run_blocking copies the scoped deadline
+    # into every executor leaf, so the retry budget can never outlive the
+    # attempt wall even though a cancelled blocking leaf cannot be interrupted.
+    retry_deadline = (
+        anchored_deadline
+        if isinstance(anchored_deadline, float)
+        else time.monotonic() + SYNC_JOB_HANDLER_BUDGET_SECONDS
+    ) - SYNC_TRANSACTION_RETRY_SAFETY_MARGIN_SECONDS
     try:
-        async with budget:
-            return await _run_sync_job_attempt(request, task_retry_count, state)
+        with transaction_retry_deadline_scope(retry_deadline):
+            async with budget:
+                return await _run_sync_job_attempt(request, task_retry_count, state)
     except TimeoutError:
         if not budget.expired():
             raise
@@ -3912,10 +3980,19 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
 
         started_at_ts = persisted_started_seconds(conversation.get('started_at') or conversation.get('created_at'))
         if started_at_ts is None:
-            chunk_starts = [
-                min(af['chunk_timestamps']) for af in audio_files if isinstance(af, dict) and af.get('chunk_timestamps')
+            # No stored origin: anchor the wall clock on each part's own basis
+            # (normalized playback start when persisted, else raw chunk keys)
+            # so skewed parts keep non-negative, truthful offsets.
+            part_bases = [
+                (
+                    af['playback_start']
+                    if isinstance(af.get('playback_start'), (int, float))
+                    else (min(af['chunk_timestamps']) if af.get('chunk_timestamps') else None)
+                )
+                for af in audio_files
+                if isinstance(af, dict)
             ]
-            started_at_ts = min(chunk_starts) if chunk_starts else 0.0
+            started_at_ts = min((base for base in part_bases if base is not None), default=0.0)
 
         try:
             with PLAYBACK_BUILD_SECONDS.labels('conversation').time() if demand else nullcontext():
