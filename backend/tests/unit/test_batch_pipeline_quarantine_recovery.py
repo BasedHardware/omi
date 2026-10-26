@@ -324,7 +324,7 @@ def test_legacy_adapter_preserves_original_clocks_and_uses_one_sync_client_attem
     import wave
 
     pre_recorded, vad, split_result, build_incoming, *_ = legacy_dependencies
-    from utils.batch_pipeline.quarantine_recovery import transcribe
+    from utils.batch_pipeline.recovery_recognizers import transcribe
 
     data = io.BytesIO()
     with wave.open(data, 'wb') as wav:
