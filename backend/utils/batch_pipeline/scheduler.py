@@ -27,6 +27,15 @@ HEAD_OWNER_BUDGET = 64
 logger = logging.getLogger(__name__)
 
 
+def _admission_retry_delay(value: object, streak: int) -> float:
+    minimum = min(300, 30 * 2 ** (streak - 1))
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return minimum
+    if isinstance(value, float) and not math.isfinite(value):
+        return minimum
+    return max(minimum, min(86400, value))
+
+
 def owner_key(owner_id: str) -> str:
     return hashlib.sha256(owner_id.encode()).hexdigest()
 
@@ -556,13 +565,7 @@ class Scheduler:
                 streak = min(previous + 1, 5)
                 job['admission_refusals'] = streak
                 # Bad/missing authority stays deferred; it never grants compute.
-                if (
-                    isinstance(delay, bool)
-                    or not isinstance(delay, (int, float))
-                    or (isinstance(delay, float) and not math.isfinite(delay))
-                ):
-                    delay = 30
-                delay = max(delay, min(300, 30 * 2 ** (streak - 1)))
+                delay = _admission_retry_delay(delay, streak)
                 if not held_reason:
                     # A prior allow is not the latest decision when this RPC
                     # was unevaluated. Preserve BLIND instead of a false hold.
