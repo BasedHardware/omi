@@ -233,9 +233,10 @@ def _validate_memory_job_retirement(env: str, env_config: ConfigDict) -> list[Va
 
     memory-maintenance-job never served production and was retired on
     2026-10-26: required intake runs inline at write time with Dream's sweep
-    as retry owner. The manifest must not re-introduce the job, its cron
-    switch, or its deploy window, and notifications-job keeps none of the
-    memory-plane bindings. The scheduled X-extraction Flex contract stays.
+    as retry owner. The manifest must not re-introduce the job, its retired
+    maintenance or consolidation switches, or its deploy window, and
+    notifications-job keeps none of the memory-plane bindings. The scheduled
+    X-extraction Flex contract stays.
     """
     errors: list[ValidationError] = []
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
@@ -284,7 +285,12 @@ def _validate_memory_job_retirement(env: str, env_config: ConfigDict) -> list[Va
         errors.append(
             ValidationError(f'{env}/cloud_run/jobs', 'memory-maintenance-job is retired; remove its manifest block')
         )
-    retired_env = ('MEMORY_CANONICAL_MAINTENANCE_ENABLED', 'MEMORY_MAINTENANCE_CAPTURED_AFTER')
+    retired_env = (
+        'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
+        'MEMORY_MAINTENANCE_CAPTURED_AFTER',
+        'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_FLEX',
+    )
     for job_name, raw_job in jobs.items():
         other_env = _as_config_dict(_as_config_dict(raw_job).get('env')) or {}
         for name in retired_env:

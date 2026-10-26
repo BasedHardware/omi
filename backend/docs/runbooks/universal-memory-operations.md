@@ -19,7 +19,8 @@ and retention paths.
 | Control | Owner | Meaning |
 | --- | --- | --- |
 | `MEMORY_ENABLED` | backend manifests | Canonical intake incident stop; unset fail-closes to off. Never a user selector. |
-| `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` | retired everywhere | Retired L2 cost/incident switch; runtime-env validation rejects it and `MEMORY_CANONICAL_MAINTENANCE_ENABLED` on any surface. |
+| inline required-intake switch | lane memreq | Kill switch for inline per-write L2 normalization; see the feature-flag registry row once memreq lands. |
+| `MEMORY_CANONICAL_MAINTENANCE_ENABLED` / `MEMORY_MAINTENANCE_CAPTURED_AFTER` / `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` / `MEMORY_CANONICAL_MAINTENANCE_FLEX` | retired | Runtime-env validation rejects these from all Cloud Run jobs and canonical-memory service surfaces (Cloud Run and GKE). |
 
 `MEMORY_ENABLED_USERS` and code-owned product UID lists are retired. Runtime
 validation rejects a reintroduced per-user memory inventory and any
@@ -62,9 +63,9 @@ Alerting must aggregate those fields without UID, memory ID, or content labels.
 
 1. Keep the universal dual-format reader deployed. Rolling back to a
    legacy-only reader can hide newly canonical data and is forbidden.
-2. Stop L2 cost or bad consolidation by pausing Dream's scheduled sweep;
-   `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` is retired and must not be
-   reintroduced (runtime-env validation rejects it).
+2. Stop inline per-write L2 cost with the inline required-intake kill switch
+   (lane memreq; its registry row names the env). Pausing the Dream sweep stops
+   only retry/backlog cost, not new inline calls.
 3. Stop scheduled retry/backlog work by pausing the Dream sweep Scheduler
    (`dream-agent-sweep-hourly`); continue authoritative reads.
 4. If new intake itself is unsafe, use the global memory incident mode owned by

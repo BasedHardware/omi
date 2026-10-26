@@ -2642,6 +2642,27 @@ def test_memory_job_retirement_rejects_retired_cron_env_on_request_path(tmp_path
     )
 
 
+@pytest.mark.parametrize(
+    'retired_name',
+    ('MEMORY_CANONICAL_CONSOLIDATION_ENABLED', 'MEMORY_CANONICAL_MAINTENANCE_FLEX'),
+)
+def test_memory_job_retirement_rejects_retired_maintenance_controls_on_request_path(tmp_path, retired_name):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    backend_env = manifest['environments']['dev']['cloud_run']['services']['backend']['env']
+    backend_env[retired_name] = {'value': 'true', 'category': 'memory_rollout'}
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+    assert (
+        validator.ValidationError(
+            'cloud_run/backend',
+            f'retired memory env {retired_name} must be absent',
+        )
+        in errors
+    )
+
+
 def test_memory_job_retirement_rejects_captured_after_window(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
