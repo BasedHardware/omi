@@ -14,6 +14,14 @@ and unlocked. Push and polling converge through `ConversationProvider`'s one
 list/search/processing/cache commit. That commit fences in-flight pages and
 searches and suppresses merged-away source IDs until the account session ends.
 
+Cache read/modify/write transactions share one provider queue with page-cache
+writes and old-server source cleanup. Each queued operation rechecks its account,
+backend and generation before reading or committing. A merge retires its journal
+entry only after its cache write completes, so simultaneous completions preserve
+both targets across offline reopen. A failed transaction does not poison later
+work, and a late completion cannot restore a target already incorporated by a
+later merge. Target HTTP reads remain outside the persistence queue.
+
 Pending source/target IDs are journaled by account and API origin. Reopening or
 refreshing restores observation without submitting another merge. After the fast window, a source still marked merging remains observed at a
 lower bounded rate for durable cleanup recovery. Final expiry refreshes once;
@@ -43,6 +51,7 @@ do not automatically delete ambiguous originals or repeat a merge to repair them
 - [x] Atomic durable admission and the same target in off/shadow/serve lifecycle modes.
 - [x] Typed source absence, new target readiness, bounded retries and scope fences.
 - [x] Restart journal and cache/search/pagination reconciliation.
+- [x] Concurrent completions, racing refresh, offline reopen, failed transaction retry and queued account/backend fences.
 - [x] HTTP client/provider/production-row foreground and reopen journey with no push.
 - [x] Source-delete refusal, delayed observation, sealed cleanup retry and rebound/consumed-source regressions.
 - [x] Real Firestore emulator admission, lease expiry, correction transfer, partial failure and same-target recovery.
