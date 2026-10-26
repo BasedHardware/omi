@@ -15,11 +15,12 @@ import importlib.util
 import io
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 # Dynamically load examples/conversations_to_tsv.py module
 _script_path = Path(__file__).resolve().parent.parent / "examples" / "conversations_to_tsv.py"
@@ -191,6 +192,119 @@ class TestConversationsToTsv(unittest.TestCase):
         finally:
             sys.stdin = saved_stdin
             sys.stdout = saved_stdout
+
+    def test_numeric_speakers_and_segment_aliases(self):
+        segments = [
+            {"speaker": 0, "text": "zero"},
+            {"speaker": "0", "text": "string zero"},
+            {"speaker": False, "text": "unlabelled"},
+            {"speaker_name": " Ada ", "text": "named"},
+            {"speaker_label": "Host", "text": "labelled"},
+            {"speaker_id": 0, "text": "id zero"},
+        ]
+        for key in ("transcript_segments", "segments", "transcripts"):
+            with self.subTest(key=key):
+                self.assertEqual(
+                    c2tsv.extract_transcript({key: segments}),
+                    "0: zero 0: string zero unlabelled Ada: named Host: labelled 0: id zero",
+                )
+
+    def test_lone_surrogates_are_removed_without_losing_valid_unicode(self):
+        record = {
+            "id": "id\ud800",
+            "title": "café \ud83d\ude80\udfff",
+            "overview": {"detail": "keep \ud800世界"},
+            "transcript": "before\udc00 after 😀",
+        }
+        rendered = c2tsv.conversations_to_tsv_string([record])
+        rendered.encode("utf-8")
+        fields = rendered.splitlines()[1].split("\t")
+        self.assertEqual(fields[0], "id")
+        self.assertEqual(fields[2], "café 🚀")
+        self.assertEqual(fields[5], '{"detail": "keep 世界"}')
+        self.assertEqual(fields[6], "before after 😀")
+
+    def test_cli_writes_valid_utf8_for_json_surrogate_escapes(self):
+        payload = json.dumps([{"id": "one", "title": "bad\ud800 text 😀"}]).encode("utf-8")
+        result = subprocess.run(
+            [sys.executable, str(_script_path), "-"], input=payload, capture_output=True, check=False
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("bad text 😀", result.stdout.decode("utf-8", errors="strict"))
+
+    def test_stdin_bom_has_the_same_behavior_as_file_bom(self):
+        payload = b"\xef\xbb\xbf" + json.dumps([self.sample_conv_1]).encode("utf-8")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir) / "input.json"
+            source.write_bytes(payload)
+            from_file = subprocess.run(
+                [sys.executable, str(_script_path), str(source)], capture_output=True, check=False
+            )
+            from_stdin = subprocess.run(
+                [sys.executable, str(_script_path), "-"], input=payload, capture_output=True, check=False
+            )
+        self.assertEqual(from_file.returncode, 0, from_file.stderr)
+        self.assertEqual(from_stdin.returncode, 0, from_stdin.stderr)
+        self.assertEqual(from_stdin.stdout, from_file.stdout)
+
+    def test_publication_failure_preserves_existing_output_and_cleans_staging(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            directory = Path(tmp_dir)
+            source = directory / "input.json"
+            destination = directory / "output.tsv"
+            source.write_text("[]", encoding="utf-8")
+            destination.write_text("original output", encoding="utf-8")
+            with patch.object(c2tsv.os, "replace", side_effect=OSError("simulated publication failure")):
+                with self.assertRaisesRegex(OSError, "publication failure"):
+                    c2tsv.convert(str(source), str(destination), force=True)
+            self.assertEqual(destination.read_text(encoding="utf-8"), "original output")
+            self.assertEqual({path.name for path in directory.iterdir()}, {"input.json", "output.tsv"})
+
+    def test_exclusive_publication_preserves_a_concurrently_created_file(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            directory = Path(tmp_dir)
+            source = directory / "input.json"
+            destination = directory / "output.tsv"
+            source.write_text("[]", encoding="utf-8")
+            validate = c2tsv.validate_destination_path
+
+            def create_after_validation(value, force=False):
+                result = validate(value, force=force)
+                result.write_text("concurrent writer", encoding="utf-8")
+                return result
+
+            with patch.object(c2tsv, "validate_destination_path", side_effect=create_after_validation):
+                with self.assertRaises(FileExistsError):
+                    c2tsv.convert(str(source), str(destination))
+            self.assertEqual(destination.read_text(encoding="utf-8"), "concurrent writer")
+            self.assertEqual({path.name for path in directory.iterdir()}, {"input.json", "output.tsv"})
+
+    @unittest.skipIf(os.name == "nt", "POSIX permission bits are not the Windows ACL contract")
+    def test_forced_publication_preserves_existing_permissions(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            directory = Path(tmp_dir)
+            source = directory / "input.json"
+            destination = directory / "output.tsv"
+            source.write_text("[]", encoding="utf-8")
+            destination.write_text("old", encoding="utf-8")
+            destination.chmod(0o640)
+            c2tsv.convert(str(source), str(destination), force=True)
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o640)
+            self.assertEqual({path.name for path in directory.iterdir()}, {"input.json", "output.tsv"})
+
+    @unittest.skipIf(os.name == "nt", "Creating symlinks requires additional Windows privileges")
+    def test_forced_publication_keeps_existing_output_symlinks(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            directory = Path(tmp_dir)
+            source = directory / "input.json"
+            target = directory / "target.tsv"
+            destination = directory / "output.tsv"
+            source.write_text("[]", encoding="utf-8")
+            target.write_text("old", encoding="utf-8")
+            destination.symlink_to(target.name)
+            c2tsv.convert(str(source), str(destination), force=True)
+            self.assertTrue(destination.is_symlink())
+            self.assertEqual(target.read_text(encoding="utf-8"), "\t".join(c2tsv.FIELDS) + "\n")
 
 
 if __name__ == "__main__":

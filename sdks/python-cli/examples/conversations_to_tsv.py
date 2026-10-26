@@ -20,8 +20,10 @@ import argparse
 import io
 import json
 import os
-from pathlib import Path
+import stat
 import sys
+import tempfile
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 # Core schema contract for exported TSV columns
@@ -56,6 +58,9 @@ def escape_tsv_field(value: Any) -> str:
     else:
         text = value
 
+    # JSON may contain lone UTF-16 surrogates; keep valid Unicode (including pairs) encodable as UTF-8.
+    text = text.encode("utf-16-le", errors="surrogatepass").decode("utf-16-le", errors="ignore")
+
     # Normalize CRLF and tabs to guarantee single-line record format
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = text.replace("\t", "\\t")
@@ -70,12 +75,18 @@ def extract_transcript(item: Dict[str, Any]) -> str:
         return transcript_val
 
     # Support segment/transcripts arrays
-    segments = item.get("segments") or item.get("transcripts")
+    segments = item.get("transcript_segments") or item.get("segments") or item.get("transcripts")
     if isinstance(segments, list):
         parts: List[str] = []
         for seg in segments:
             if isinstance(seg, dict):
-                speaker = seg.get("speaker") or seg.get("speaker_label")
+                speaker = ""
+                for key in ("speaker_name", "speaker", "speaker_label", "speaker_id"):
+                    value = seg.get(key)
+                    if value is not None and not isinstance(value, bool):
+                        speaker = str(value).strip()
+                        if speaker:
+                            break
                 text = seg.get("text") or seg.get("content") or ""
                 if text:
                     if speaker:
@@ -107,7 +118,9 @@ def unwrap_conversations(data: Any, source_name: str = "input") -> List[Dict[str
     conversations: List[Dict[str, Any]] = []
     for idx, item in enumerate(data):
         if not isinstance(item, dict):
-            raise ValueError(f"{source_name}: conversation at index {idx} must be a JSON object, got {type(item).__name__}")
+            raise ValueError(
+                f"{source_name}: conversation at index {idx} must be a JSON object, got {type(item).__name__}"
+            )
         conversations.append(item)
 
     return conversations
@@ -158,6 +171,24 @@ def conversations_to_tsv_string(conversations: Iterable[Dict[str, Any]]) -> str:
     return output.getvalue()
 
 
+def _write_tsv_atomically(destination: Path, content: str, force: bool) -> None:
+    """Publish a complete file without changing existing overwrite or symlink semantics."""
+    destination = destination.resolve()
+    with tempfile.TemporaryDirectory(prefix=f".{destination.name}.", dir=destination.parent) as directory:
+        staged = Path(directory) / "output.tsv"
+        with staged.open("x", encoding="utf-8", newline="") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if force:
+            if destination.exists():
+                os.chmod(staged, stat.S_IMODE(destination.stat().st_mode))
+            os.replace(staged, destination)
+        else:
+            # Linking publishes complete content and fails atomically if another writer won the name.
+            os.link(staged, destination)
+
+
 def convert(source: str, destination: Optional[str] = None, force: bool = False) -> str:
     """Execute TSV conversion pipeline.
 
@@ -165,7 +196,7 @@ def convert(source: str, destination: Optional[str] = None, force: bool = False)
     """
     # 1. Read input data
     if source == "-":
-        raw_text = sys.stdin.read()
+        raw_text = sys.stdin.read().lstrip("\ufeff")
         source_name = "<stdin>"
     else:
         source_path = Path(source)
@@ -196,7 +227,7 @@ def convert(source: str, destination: Optional[str] = None, force: bool = False)
         dest_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Write output file
-    dest_path.write_text(tsv_content, encoding="utf-8")
+    _write_tsv_atomically(dest_path, tsv_content, force=force)
     return tsv_content
 
 

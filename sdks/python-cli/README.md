@@ -447,6 +447,26 @@ Conversation and action-item datetime options accept ISO timestamps with `Z`
 requests. Date-only values and timestamps without an offset remain supported;
 the CLI does not assign a timezone to those inputs.
 
+## Conversation JSON to TSV
+
+From `sdks/python-cli`, convert an existing JSON export without any API access:
+
+```bash
+python examples/conversations_to_tsv.py export.json export.tsv
+python examples/conversations_to_tsv.py - < export.json
+```
+
+File and stdin inputs accept a UTF-8 BOM. Segment arrays may use
+`transcript_segments`, `segments`, or `transcripts`; numeric speaker zero is kept.
+Lone UTF-16 surrogates in JSON values are omitted so that every output field is
+valid UTF-8, while valid Unicode and surrogate pairs are preserved.
+
+File output is staged on the destination filesystem before publication. Existing
+files require `--force`; a concurrent creator is never overwritten without that
+flag. Forced replacement preserves the existing file's permissions and follows
+existing output symlinks. A failed publication leaves the previous file intact
+and removes staging files. Stdout remains a stream.
+
 ## Development
 
 ```bash
