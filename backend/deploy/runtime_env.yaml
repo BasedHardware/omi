@@ -3294,6 +3294,7 @@ environments:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_DURABLE_STATUS_RECONCILIATION: {value: 'true', category: rollout}
             SYNC_TASKS_OIDC_AUDIENCE:
               env_var: SYNC_TASKS_HANDLER_URL
@@ -4301,6 +4302,7 @@ environments:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED

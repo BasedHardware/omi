@@ -154,6 +154,8 @@ env:
     value: "false"
   - name: REPEAT_WORK_REVISION_ENABLED
     value: "false"
+  - name: CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+    value: "true"
   - name: REPEAT_WORK_LLM_VERSION
     value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
