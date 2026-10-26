@@ -41,6 +41,7 @@ from utils.batch_pipeline.recovery_disposition import result_outcome
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidence
+from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.sync.intake_completion import log_sync_lineage_stamp_gap_refused
 
@@ -195,21 +196,19 @@ def build_incoming(
     from models.conversation import Conversation, CreateConversation
     from models.conversation_enums import ConversationSource
     from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
-    from utils.conversations.final_pass_assignment import assign_words
     from utils.stt.pre_recorded import postprocess_words
     from utils.sync.capture import chunk_identity
 
-    from diarizer.batch_pipeline import validate_words
-
-    words = validate_words(payload['words'], float(payload['audio_seconds']))
-    if not words:
-        raise ValueError('successful batch result must contain words')
     duration = float(payload['audio_seconds'])
     if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1:
         raise ValueError('result audio duration differs from admitted capture')
+    # Model clocks may exceed EOF by the validator's 10 ms tolerance. Bound
+    # words to real PCM, and keep its precision through the legacy grouper:
+    # rounding to centiseconds can otherwise create a decoded coverage hole.
+    words = bounded_projection_words(payload['words'], duration)
     # The existing final-pass aligner abstains in diarization gaps; the existing
     # prerecorded grouper supplies the same sentence/segment shapes as sync.
-    aligned = words if payload.get('recovery_version') == 1 else assign_words(words, payload['diarization']['turns'])
+    aligned = align_projection_words(words, payload, item.segment_id)
     authoritative = (binding.record_origin or (policy or ProjectionPolicy()).authoritative_labels) and payload.get(
         'recovery_version'
     ) != 1
@@ -229,16 +228,16 @@ def build_incoming(
                 in_gap = False
             prepared.append(word)
         aligned = prepared
-    segments = postprocess_words([{**word, 'text': word['word']} for word in aligned], 0)
+    segments = postprocess_words([{**word, 'text': word['word']} for word in aligned], 0, preserve_timestamps=True)
     if not segments:
         raise ValueError('successful batch result produced no transcript')
     # Legacy sync transcribes a VAD-isolated file whose capture timestamp is
     # already shifted. Batch words cover the full capture; undo the grouper's
     # first-word normalization to keep absolute speech/playback clocks intact.
-    offset = round(float(words[0]['timestamp'][0]), 2)
+    offset = float(words[0]['timestamp'][0])
     for index, segment in enumerate(segments):
-        segment.start = round(segment.start + offset, 2)
-        segment.end = round(segment.end + offset, 2)
+        segment.start += offset
+        segment.end += offset
         segment.id = str(uuid5(NAMESPACE_URL, f'batch:{item.segment_id}:{index}'))
         segment.speaker_id_scope = (
             f'final:batch:{batch_segment_id or item.segment_id}' if authoritative else f'sync:{item.segment_id}'

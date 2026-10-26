@@ -3738,19 +3738,20 @@ inventory — after placement, before any embedding or cache upload — and
 proves it end to end: every listed object must carry a positive generation
 and correspond to a manifest timestamp/span pair in strict whole-manifest
 correspondence (including objects outside the requested windows — a
-conservative refusal that accepts an availability cost), and every pending
-trusted window must map onto unambiguous actual coverage. All listed objects
-are then prefetched within the session budget (at most 32 downloads, 64 MiB,
-30 seconds) with each download pinned to its listed generation and decoded
-to PCM before a single embedding call: a span's declared duration must match
-the decoded duration, a spanless object's extent is its actual decoded end,
-and any positive overlap between distinct objects — including identical
-extents — refuses. A late-arriving chunk, a missing or extra object, a
-duplicate, a malformed entry, missing generation (as on storage providers
-that do not expose one), or a span whose decoded sample count mismatches all
-refuse the whole read with `unverified_inventory`/`unaligned_audio` before
-any embedding or cache upload; a generation that changes between listing and
-download fails the pinned fetch rather than substituting replacement PCM.
+conservative refusal that accepts an availability cost). The reader then proves
+each pending trusted window separately. Only objects whose declared extent could
+intersect that window are downloaded, sharing the existing 32-download, 64 MiB,
+30-second budget. Unknown Opus durations remain unbounded until decoded; the next
+filename is never treated as proof of an object's end. Downloads pin the listed
+generation. Declared spans must agree with decoded duration, while coverage uses
+the actual sample extent. Missing bytes, decode failure, overlapping extents or a
+coverage hole abstain that window. Other independently proven windows remain usable,
+including cached PCM proven before a later window exhausts the I/O budget. Refused
+windows cannot borrow a neighbouring vector or identity. If none is proven, the
+read refuses as `unverified_inventory`/`unaligned_audio` before embedding/cache upload.
+Malformed inventory/manifest entries, missing generation and whole-manifest
+count/pair contradictions still refuse globally. A generation change fails the
+pinned fetch rather than substituting replacement PCM.
 `omi_audio_placement_total{reason=...}` counts each `locate` per attempt, and
 `omi_conversation_speaker_resolution_reasons_total{outcome,reason}` breaks
 each stage outcome down by `capture_span|sync|v2|mixed|cached|none`
@@ -3770,6 +3771,19 @@ roundoff, without padding or interpolation. A gap outside an embeddable base
 subclip does not withdraw that subclip. Live, sync and v2 placements share this
 policy after inventory admission.
 Existing embedding/cache formats, keys and download/time/embedding caps stay intact.
+
+Batch projection retains provider timestamp precision through word grouping and
+clips the validator's permitted EOF overrun to the actual admitted PCM duration.
+Every validated word is retained. Zero-duration words, including words wholly
+inside the permitted EOF overrun, remain isolated anonymous point segments;
+grouping cannot lend them a neighbouring voice or fabricate positive duration.
+It does not round these sample-backed clocks to legacy centiseconds: that rounding
+can put a segment 5 ms beyond EOF while coverage tolerates only 1 ms. The sync
+playback uploader stamps exact input sample count/rate/start on every new Opus
+rendition, independently of archive routing admission. The existing Opus header
+retains original PCM length, so partial final frames do not claim padded audio.
+Bucket routing, retention, sync consent and archive rollout remain under their
+existing controls. This is forward processing; it schedules no historical reprocess.
 
 For `outcome="no_embeddings"`, `reason` is exactly one of `all_short`, `no_eligible`,
 `chunk_boundary`, `clip_too_short`, `embed_failed`, `budget`, `max_embeddings`,
@@ -5072,6 +5086,9 @@ validated manifest) → unvalidated manifest → capture coverage hole. Only aft
 those gates pass does the actual inventory/read proof run; its checks retain
 execution order: read budget/listing, object metadata, manifest inventory,
 count/pair equality, blob fetch/decode, decoded duration, overlap, coverage.
+After global inventory validation, decoded checks run per requested window;
+the first refusal is terminal only when no window is proven. A partial result
+retains the existing `partial` primary outcome.
 No clock, storage, embedding, eligibility or proof read is added to classify it.
 `read_budget` includes the existing download/byte/deadline/transient-listing
 budget refusal, not proof that audio is absent. `no_proven_window` includes

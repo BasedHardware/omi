@@ -766,15 +766,15 @@ def upload_audio_chunk(
             payload = upload_data
             path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus'
         blob = bucket.blob(path)
-        wanted_metadata = None
-        if audio_archive.admitted(uid, 'SYNC'):
-            wanted_metadata = {
-                **span_blob_metadata({'start': timestamp, 'samples': len(chunk_data) // 2, 'sample_rate': 16000}),
-                'canonical': 'false',
-                'codec': 'opus',
-                'rendition': 'sync-pcm-reencode',
-            }
-            blob.metadata = wanted_metadata
+        # The playback writer always knows the exact input sample extent.
+        # Speaker evidence needs that clock even when archive routing is off.
+        wanted_metadata = {
+            **span_blob_metadata({'start': timestamp, 'samples': len(chunk_data) // 2, 'sample_rate': 16000}),
+            'canonical': 'false',
+            'codec': 'opus',
+            'rendition': 'sync-pcm-reencode',
+        }
+        blob.metadata = wanted_metadata
         try:
             # Create-only: a retried upload of the same rendition must not
             # overwrite the committed object and mint a superseded generation
