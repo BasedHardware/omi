@@ -548,16 +548,27 @@ env:
         key: METRICS_SECRET
 
 resources:
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # Right-sized 2026-10-26 from 7d prod telemetry (172 pods, 5m steps, ro-prod
+  # Prometheus): working set fleet p50/p99 = 0.68/1.18Gi, worst-pod p99 1.38Gi,
+  # fleet max 2.27Gi; CPU fleet p50/p99 = 220/495m, per-pod max 694m; zero
+  # container restarts or OOM kills in 30d. Memory request = 1.44x worst-pod
+  # p99; limit 3.5Gi = 1.54x fleet max and keeps the sum of three co-located
+  # limits (10.5Gi) plus ~0.6Gi of DaemonSet requests under the node's 12.87Gi
+  # allocatable, so correlated spikes cannot reach kubelet node-pressure
+  # eviction (lead ruling 2026-10-26: three pods per node, not four). CPU
+  # request 450m yields exactly three pods per n4-highmem-2 node — 3x450m =
+  # 1350m of ~1530m allocatable after ~358m of DaemonSet requests, while
+  # 4x450m = 1800m can never fit — and aggregate p99 usage (3x495m = 1485m)
+  # stays under the node's 1930m allocatable. CPU limit is unchanged, so
+  # per-pod burst headroom is identical to the 2-pods-per-node era. The HPA is
+  # unaffected: it scales on the external pusher_active_ws_connections_per_pod
+  # metric, not resource utilization.
   requests:
-    cpu: 0.7
-    memory: 4.5Gi
+    cpu: 0.45
+    memory: 2Gi
   limits:
     cpu: 0.7
-    memory: 4.5Gi
+    memory: 3.5Gi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
