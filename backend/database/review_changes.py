@@ -23,6 +23,7 @@ from database import (
     review_queries,
     review_store as store,
 )
+from database.people_generation import bump_people_generation
 from database.action_items_cache import bump_action_items_list_version
 from database import review_exact_undo
 from database.review_field_states import read_field_state, write_field_state
@@ -187,6 +188,8 @@ def record_agent_change(
                     transaction.set(target, edit.patch)
                 else:
                     transaction.update(target, edit.patch)
+                if edit.collection == 'people':
+                    bump_people_generation(transaction, target)
             transaction.set(ref, store.encode_doc(uid, journal))
 
         return {'mutations': mutations, 'projection_writer': write}
@@ -424,6 +427,8 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
 
         def write(transaction):
             for target, patch, _ in rows:
+                if target.parent.id == 'people':
+                    bump_people_generation(transaction, target)
                 identity = target.path
                 if identity in exact_restores:
                     transaction.set(target, exact_restores[identity])

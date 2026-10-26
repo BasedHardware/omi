@@ -9,6 +9,7 @@ import os
 from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ResourceExhausted, ServiceUnavailable
 from google.cloud import firestore
 
+from database.people_generation import bump_people_generation
 from database.document_ids import document_id_from_seed
 from database.firestore_transaction_retry import (
     FirestoreAborted,
@@ -596,6 +597,12 @@ def delete_collection_recursive(collection_ref: Any, *, client: Any, batch_size:
         batch = client.batch()
         for doc in docs:
             batch.delete(doc.reference)
+        if (
+            collection_ref.id == 'people'
+            and collection_ref.parent is not None
+            and collection_ref.parent.parent.id == 'users'
+        ):
+            bump_people_generation(batch, docs[0].reference)
         batch.commit()
 
         if len(docs) < batch_size:

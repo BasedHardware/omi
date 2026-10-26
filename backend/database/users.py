@@ -1,3 +1,4 @@
+from database.people_generation import bump_people_generation, write_person
 from config.refactor_modes import serving_for
 from utils.speakers.person_pool import (
     pool_profile,
@@ -971,7 +972,7 @@ def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELE
 
 def create_person(uid: str, data: dict):
     people_ref = db.collection('users').document(uid).collection('people')
-    people_ref.document(data['id']).set({**data, 'is_user_created': True})
+    write_person(db, people_ref.document(data['id']), 'set', {**data, 'is_user_created': True})
     return data
 
 
@@ -1056,7 +1057,7 @@ def dismiss_person(uid: str, person_id: str) -> bool:
 def delete_person(uid: str, person_id: str):
     auto_enroll_db.revoke_person(uid, person_id, firestore_client=db)
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_ref.delete()
+    write_person(db, person_ref, 'delete')
 
 
 @transactional
@@ -1092,6 +1093,7 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
         update_data['speech_samples_version'] = 3
 
     transaction.update(person_ref, update_data)
+    bump_people_generation(transaction, person_ref)
     return True
 
 
@@ -1159,6 +1161,7 @@ def _replace_speech_profile_transaction(
     elif person.get('person_voice_confirmations') is not None:
         profile = {**profile, 'person_voice_confirmations': None, 'person_voice_base': None}
     transaction.update(person_ref, {**profile, 'updated_at': datetime.now(timezone.utc)})
+    bump_people_generation(transaction, person_ref)
     return old_samples
 
 
@@ -1216,6 +1219,7 @@ def _invalidate_speech_profile_transaction(transaction, person_ref, conversation
             speech_samples=[], speech_sample_transcripts=[], speaker_embedding=None, speech_sample_source=None
         )
     transaction.update(person_ref, update)
+    bump_people_generation(transaction, person_ref)
     return removed
 
 
@@ -1260,6 +1264,7 @@ def _remove_sample_transaction(transaction, person_ref, sample_path: str) -> boo
             **remove_sample(person_data, sample_path),
         },
     )
+    bump_people_generation(transaction, person_ref)
     return True
 
 
@@ -1358,11 +1363,14 @@ def set_person_speech_sample_transcript(uid: str, person_id: str, sample_index: 
 
     transcripts[sample_index] = transcript
 
-    person_ref.update(
+    write_person(
+        db,
+        person_ref,
+        'update',
         {
             'speech_sample_transcripts': transcripts,
             'updated_at': datetime.now(timezone.utc),
-        }
+        },
     )
     return True
 
@@ -1409,7 +1417,7 @@ def update_person_speech_samples_after_migration(
     else:
         update_data['speaker_embedding'] = firestore.DELETE_FIELD
 
-    person_ref.update(update_data)
+    write_person(db, person_ref, 'update', update_data)
     return True
 
 
@@ -1431,11 +1439,14 @@ def clear_person_speaker_embedding(uid: str, person_id: str) -> bool:
     if not person_doc.exists:
         return False
 
-    person_ref.update(
+    write_person(
+        db,
+        person_ref,
+        'update',
         {
             'speaker_embedding': firestore.DELETE_FIELD,
             'updated_at': datetime.now(timezone.utc),
-        }
+        },
     )
     return True
 
@@ -1458,11 +1469,14 @@ def update_person_speech_samples_version(uid: str, person_id: str, version: int)
     if not person_doc.exists:
         return False
 
-    person_ref.update(
+    write_person(
+        db,
+        person_ref,
+        'update',
         {
             'speech_samples_version': version,
             'updated_at': datetime.now(timezone.utc),
-        }
+        },
     )
     return True
 
