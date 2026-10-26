@@ -9,11 +9,15 @@ replayed.
 Attempts are bounded twice.  ``max_attempts`` bounds the chain count for every
 caller.  A caller that owns a wall-clock budget — the sync handler's request
 budget, a batch projection claim's lease — additionally scopes a deadline, and
-a new attempt starts only while the remaining budget covers a whole
-conservative attempt estimate, so total retry wall time stays below that
-deadline.  Expired-transaction retirements count as contention here (an
-expired chain is atomic and wrote nothing, exactly like an aborted one), but
-only under those bounds.
+a retry (attempt 2 onward) starts only while the remaining budget covers a
+reserve derived from the last attempt's observed duration, so total retry wall
+time stays at ``deadline + one in-flight attempt`` at worst.  The deadline
+never refuses the first attempt: a caller that reached the transaction always
+gets one try, so scoping a deadline can only remove retries, never the attempt
+itself.  Expired-transaction retirements count as contention here (an expired
+chain is atomic and wrote nothing, exactly like an aborted one), but only
+under those bounds; with no deadline in scope they keep the three-fresh-chain
+ceiling of the inner ``run_transactional`` default.
 """
 
 import logging
@@ -45,10 +49,23 @@ _INITIAL_MAX_DELAY_SECONDS = 0.2
 _MAX_DELAY_SECONDS = 1.0
 # Firestore retires any transaction chain after 270 seconds (the documented
 # transaction lifetime quota — the same retirement that surfaces as
-# "transaction has expired"), so no single attempt can outlive this.  Starting
-# an attempt only while that whole worst case fits the remaining budget keeps
-# total retry wall time below the deadline without ever timing the body itself.
+# "transaction has expired"), so an attempt that already started cannot run
+# materially past this.  The deadline gate cannot stop an in-flight attempt,
+# which is why the accepted bound below is "deadline + one in-flight attempt"
+# rather than the deadline alone.
 FIRESTORE_TRANSACTION_CHAIN_SECONDS = 270.0
+# A retry (attempt 2 onward) starts only while the remaining budget covers this
+# fraction of the last attempt's observed duration, and never less than the
+# floor.  Fast Aborted contention (near-zero observed durations) therefore
+# spends the full attempt cap inside a short budget — the claim lease or the
+# sync handler window — while a chain that already consumed real time raises
+# the reserve enough that another full chain still fits before the deadline.
+RETRY_RESERVE_FACTOR = 1.5
+RETRY_RESERVE_FLOOR_SECONDS = 30.0
+# With no deadline in scope, expired-transaction retries keep today's ceiling
+# of three fresh chains (database._client.run_transactional's default);
+# Aborted contention keeps the full DEFAULT_MAX_ATTEMPTS policy either way.
+_EXPIRED_CHAIN_CEILING_WITHOUT_DEADLINE = 3
 
 _EXPIRED_TRANSACTION_MARKER = "transaction has expired"
 
@@ -126,7 +143,6 @@ def run_with_transaction_contention_retry(
     operation_name: str,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     deadline: float | None = None,
-    per_attempt_estimate_seconds: float = FIRESTORE_TRANSACTION_CHAIN_SECONDS,
     sleep: Callable[[float], None] = time.sleep,
     random_value: Callable[[], float] = random.random,
     monotonic: Callable[[], float] = time.monotonic,
@@ -142,36 +158,43 @@ def run_with_transaction_contention_retry(
     ``attempts=1`` so a single budget bounds the whole chain count.
 
     ``deadline`` (monotonic seconds; the ambient ``transaction_retry_deadline_scope``
-    applies when the parameter is ``None``) adds a wall-clock bound: a new
-    attempt starts only while the remaining budget covers a whole conservative
-    attempt estimate — Firestore's documented 270 s chain lifetime, or the last
-    attempt's observed duration when that was longer.  When it does not, the
-    loop stops with ``FirestoreContentionExhausted(reason='deadline_exhausted')``.
-    Callers without a deadline keep the attempt-only bound.
+    applies when the parameter is ``None``) adds a wall-clock bound.  The first
+    attempt is never gated — a caller that reached the transaction always gets
+    one try, so a deadline scope can only remove retries, never make the call
+    worse than running the transaction once.  Each retry (attempt 2 onward)
+    starts only while the remaining budget covers
+    ``max(last attempt's observed duration × RETRY_RESERVE_FACTOR,
+    RETRY_RESERVE_FLOOR_SECONDS)``, and a post-failure jitter sleep never runs
+    past the deadline.  When the reserve does not fit, the loop stops with
+    ``FirestoreContentionExhausted(reason='deadline_exhausted')``.  The
+    accepted bound is ``deadline + one in-flight attempt``: an attempt that
+    already started cannot be stopped, and Firestore retires any chain at
+    270 s; callers keep a post-transaction margin (the sync handler's 120 s)
+    to absorb that tail.  Callers without a deadline keep the attempt-only
+    bound — expiry at three fresh chains, Aborted at ``max_attempts``.
     """
 
     if max_attempts < 1:
         raise ValueError("max_attempts must be positive")
-    if per_attempt_estimate_seconds <= 0:
-        raise ValueError("per_attempt_estimate_seconds must be positive")
 
     if deadline is None:
         deadline = _retry_deadline.get()
     last_error: Exception | None = None
     last_attempt_seconds = 0.0
+    expired_chains = 0
     for attempt in range(1, max_attempts + 1):
-        if deadline is not None:
+        if attempt > 1 and deadline is not None:
             remaining = deadline - monotonic()
-            estimate = max(per_attempt_estimate_seconds, last_attempt_seconds)
-            if remaining < estimate:
+            reserve = max(last_attempt_seconds * RETRY_RESERVE_FACTOR, RETRY_RESERVE_FLOOR_SECONDS)
+            if remaining < reserve:
                 logger.error(
                     "firestore_transaction_contention operation=%s attempt=%d/%d outcome=deadline_exhausted "
-                    "remaining_ms=%d estimate_ms=%d",
+                    "remaining_ms=%d reserve_ms=%d",
                     operation_name,
                     attempt,
                     max_attempts,
                     round(remaining * 1000),
-                    round(estimate * 1000),
+                    round(reserve * 1000),
                 )
                 error = FirestoreContentionExhausted(
                     f"Firestore transaction retry deadline exhausted for {operation_name}",
@@ -196,7 +219,13 @@ def run_with_transaction_contention_retry(
             last_attempt_seconds = monotonic() - attempt_started
             if not _is_transaction_contention(error):
                 raise
-            if attempt >= max_attempts:
+            if _is_expired_transaction(error):
+                expired_chains += 1
+            if attempt >= max_attempts or (
+                deadline is None and expired_chains >= _EXPIRED_CHAIN_CEILING_WITHOUT_DEADLINE
+            ):
+                # The attempt cap, or — with no wall-clock budget in scope —
+                # the expired-chain ceiling at today's run_transactional default.
                 logger.error(
                     "firestore_transaction_contention operation=%s attempt=%d/%d outcome=exhausted",
                     operation_name,
@@ -208,6 +237,22 @@ def run_with_transaction_contention_retry(
                 ) from error
 
             delay = equal_jitter_delay(attempt, random_value)
+            if deadline is not None and deadline - monotonic() < delay:
+                # Never sleep past the deadline: after the attempts themselves,
+                # the jitter would be the only remaining overspend.
+                logger.error(
+                    "firestore_transaction_contention operation=%s attempt=%d/%d outcome=deadline_exhausted "
+                    "remaining_ms=%d delay_ms=%d",
+                    operation_name,
+                    attempt,
+                    max_attempts,
+                    round((deadline - monotonic()) * 1000),
+                    round(delay * 1000),
+                )
+                raise FirestoreContentionExhausted(
+                    f"Firestore transaction retry deadline exhausted for {operation_name}",
+                    reason="deadline_exhausted",
+                ) from error
             logger.warning(
                 "firestore_transaction_contention operation=%s attempt=%d/%d outcome=retry delay_ms=%d",
                 operation_name,

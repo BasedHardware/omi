@@ -159,18 +159,18 @@ def test_expiry_restarts_still_work_inside_outer_contention_retry(sdk_assignment
     assert len(store.commits) == 1
 
 
-def test_nested_expiry_spends_one_chain_per_outer_attempt_not_three(sdk_assignment, monkeypatch):
+def test_nested_expiry_keeps_one_chain_per_attempt_and_todays_three_chain_ceiling(sdk_assignment, monkeypatch):
     # The outer budget owns every attempt: an expired chain costs one outer
-    # retry. Before the budget moved to the outer layer, three inner restarts
-    # inside five outer attempts admitted up to 15 fresh chains (~67 min at
-    # Firestore's 270 s chain lifetime) — past the sync handler budget, the
-    # dispatch deadline, and the run-lock TTL.
+    # retry (no inner restarts, which once multiplied the worst case to 15
+    # chains), and with no deadline in scope the storm keeps today's ceiling
+    # of three fresh chains — run_transactional's default — rather than the
+    # five-chain Aborted policy.
     monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     store, reads = sdk_assignment(commit_errors=[expired() for _ in range(8)])
     with pytest.raises(FirestoreContentionExhausted) as raised:
         persist(store)
     assert raised.value.reason == 'attempts_exhausted'
-    assert len(store.transactions) == len(reads) == 5
+    assert len(store.transactions) == len(reads) == 3
     assert store.commits == []
 
 
@@ -188,9 +188,10 @@ def test_nested_repeated_expiry_stops_before_the_deadline(sdk_assignment, monkey
         ),
     )
 
-    # Each transaction body's read charges 100 s of the 500 s budget; a new
-    # chain starts only while the remaining budget covers a whole worst-case
-    # 270 s chain, so the third attempt's tail stops the loop.
+    # Each transaction body's read charges 100 s of the 500 s budget; a retry
+    # starts only while the remaining budget covers the last attempt's observed
+    # duration x 1.5 (150 s, above the 30 s floor), so the fifth attempt's gate
+    # stops the loop.
     def charge_read():
         clock.now += 100.0
 
@@ -202,7 +203,7 @@ def test_nested_repeated_expiry_stops_before_the_deadline(sdk_assignment, monkey
 
     assert raised.value.reason == 'deadline_exhausted'
     assert isinstance(raised.value.__cause__, InvalidArgument)
-    assert len(store.transactions) == len(reads) == 3
+    assert len(store.transactions) == len(reads) == 4
     assert store.commits == []
     assert clock.monotonic() - start <= 500.0
 

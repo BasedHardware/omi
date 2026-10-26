@@ -270,45 +270,57 @@ def test_owner_claim_is_shared_token_fenced_with_bounded_ttl(monkeypatch, claim_
 
 
 def test_claim_redis_unavailable_keeps_firestore_as_authority(monkeypatch):
+    import time as real_time
+
     from database import batch_pipeline_projection_claim as claims
+    from database import firestore_transaction_retry
 
     redis = Mock()
     redis.set.side_effect = ConnectionError('synthetic')
     monkeypatch.setattr(claims, '_redis_client', lambda: redis)
     with claims.projection_claim('synthetic', 'owner') as acquired:
         assert acquired
+        # The fail-open path carries the same local lease budget: without it,
+        # its retries would fall back to the attempt count with no wall-time
+        # bound at all.
+        now = real_time.monotonic()
+        deadline = firestore_transaction_retry._retry_deadline.get()
+        assert claims.LEASE_SECONDS - 5 < deadline - now <= claims.LEASE_SECONDS
+    assert firestore_transaction_retry._retry_deadline.get() is None
 
 
-def test_claim_scopes_the_transaction_retry_deadline_to_its_lease(claim_redis):
+def test_claim_scopes_the_transaction_retry_deadline_to_its_full_lease(claim_redis):
     import time as real_time
 
     from database import batch_pipeline_projection_claim as claims
     from database import firestore_transaction_retry
 
     with claims.projection_claim('synthetic', 'owner'):
+        now = real_time.monotonic()
         deadline = firestore_transaction_retry._retry_deadline.get()
-        assert (
-            real_time.monotonic()
-            < deadline
-            <= real_time.monotonic() + (claims.LEASE_SECONDS - claims.CLAIM_RETRY_MARGIN_SECONDS)
-        )
+        # Anchored at claim start over the full lease — never lease minus a
+        # margin, which suppressed the claim's first transaction.
+        assert claims.LEASE_SECONDS - 5 < deadline - now <= claims.LEASE_SECONDS
     assert firestore_transaction_retry._retry_deadline.get() is None
 
 
-def test_claim_lease_bounds_projection_retries_within_the_claim(monkeypatch, claim_redis):
+def test_claim_lease_runs_the_first_chain_and_bounds_the_storm(monkeypatch, claim_redis):
     import time as real_time
     from functools import partial
 
     from database import batch_pipeline_projection_claim as claims
     from database import firestore_transaction_retry
-    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from database.firestore_transaction_retry import (
+        FIRESTORE_TRANSACTION_CHAIN_SECONDS,
+        FirestoreContentionExhausted,
+    )
 
     EXPIRED = 'The referenced transaction has expired or is no longer valid.'
 
     class Clock:
+        """One time base for the claim's lease anchor and the retry gates."""
+
         def __init__(self):
-            # Anchored to the real clock so the claim's lease deadline and the
-            # retry gates share one time base.
             self.now = real_time.monotonic()
 
         def monotonic(self):
@@ -321,40 +333,55 @@ def test_claim_lease_bounds_projection_retries_within_the_claim(monkeypatch, cla
     monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     clock = Clock()
     actual = firestore_transaction_retry.run_with_transaction_contention_retry
+    # Production retry configuration: no estimate override and no clock
+    # shortcut beyond the shared time base.
     monkeypatch.setattr(
         firestore_transaction_retry,
         'run_with_transaction_contention_retry',
-        partial(
-            actual,
-            sleep=clock.sleep,
-            random_value=lambda: 0,
-            monotonic=clock.monotonic,
-            per_attempt_estimate_seconds=250.0,
-        ),
+        partial(actual, sleep=clock.sleep, random_value=lambda: 0, monotonic=clock.monotonic),
     )
     client = Mock()
-    calls = []
-
-    def operation(transaction):
-        calls.append(transaction)
-        clock.now += 100.0
-        raise InvalidArgument(EXPIRED)
-
     store = ProjectionStore(Mock(client=client))
     policy = resolve_stage_policy('synthetic-owner', 'projection')
-    with claims.projection_claim('synthetic', 'owner') as acquired:
+    calls = []
+
+    # Real work time (> the 30 s reserve floor) passes between claim
+    # acquisition and helper entry; the first transaction still runs and fast
+    # Aborted contention spends the five-attempt cap inside the lease.
+    def fast_aborted(transaction):
+        calls.append(transaction)
+        clock.now += 0.01
+        raise Aborted('synthetic contention')
+
+    claim_started = clock.monotonic()
+    with claims.projection_claim('synthetic', 'owner', monotonic=clock.monotonic) as acquired:
         assert acquired
-        # One 100 s attempt fits the 270 s lease budget; the next chain's
-        # worst case does not, so the storm stops inside the claim.
+        clock.now += 31.0
         with pytest.raises(FirestoreContentionExhausted) as raised:
-            store.run(operation, policy=policy)
+            store.run(fast_aborted, policy=policy)
+        assert raised.value.reason == 'attempts_exhausted'
+        assert len(calls) == 5
+    assert clock.monotonic() - claim_started <= claims.LEASE_SECONDS
+
+    # A chain that consumed real time raises the next reserve (270 s x 1.5),
+    # so an expired-chain storm stops inside the accepted bound: the lease
+    # plus one in-flight chain the helper cannot stop.
+    calls.clear()
+
+    def slow_expired(transaction):
+        calls.append(transaction)
+        clock.now += FIRESTORE_TRANSACTION_CHAIN_SECONDS
+        raise InvalidArgument(EXPIRED)
+
+    claim_started = clock.monotonic()
+    with claims.projection_claim('synthetic', 'owner', monotonic=clock.monotonic) as acquired:
+        assert acquired
+        clock.now += 31.0
+        with pytest.raises(FirestoreContentionExhausted) as raised:
+            store.run(slow_expired, policy=policy)
         assert raised.value.reason == 'deadline_exhausted'
         assert len(calls) == 1
-    # Without the claim's lease the same storm spends the full attempt budget.
-    with pytest.raises(FirestoreContentionExhausted) as raised:
-        store.run(operation, policy=policy)
-    assert raised.value.reason == 'attempts_exhausted'
-    assert len(calls) == 6
+    assert clock.monotonic() - claim_started <= claims.LEASE_SECONDS + FIRESTORE_TRANSACTION_CHAIN_SECONDS
 
 
 def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch):

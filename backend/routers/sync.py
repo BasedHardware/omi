@@ -2479,11 +2479,11 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
 SYNC_JOB_RESPONSE_MARGIN_SECONDS = 120.0
 SYNC_JOB_ROUTE_TIMEOUT_SECONDS = float(os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT') or 1500)
 # Kept below the handler budget for Firestore transaction retries (deadline-
-# aware contention budget in database/firestore_transaction_retry.py): the
-# assignment transaction stops starting new chains while the remaining budget
-# cannot cover one worst-case chain, leaving this margin for finalization and
-# the response instead of spending it on a retry that past-the-budget work
-# would cancel anyway.
+# aware contention budget in database/firestore_transaction_retry.py): retries
+# stop while the remaining budget cannot cover the next attempt's reserve, and
+# this margin absorbs the one in-flight attempt the helper cannot stop (a
+# started chain ends within Firestore's 270 s lifetime), leaving time for
+# finalization and the response.
 SYNC_TRANSACTION_RETRY_SAFETY_MARGIN_SECONDS = 120.0
 
 
