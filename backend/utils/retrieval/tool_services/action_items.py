@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from config.action_item_reminder_triggers import action_item_write_affects_reminder
 import database.action_items as action_items_db
+import database.conversations as conversations_db
 from utils.notifications import (
     send_action_item_completed_notification,
     send_action_item_created_notification,
@@ -157,6 +158,11 @@ def create_action_item_text(
     if not description or not description.strip():
         return "Error: Description is required."
 
+    if conversation_id is not None:
+        conversation = conversations_db.get_conversation(uid, conversation_id)
+        if not conversation or conversations_db.is_soft_deleted(conversation):
+            return f"Error: Conversation '{conversation_id}' not found."
+
     action_item_data: Dict[str, Any] = {
         'description': description.strip(),
         'completed': False,
@@ -231,9 +237,9 @@ def update_action_item_text(
     if not action_item_id or not action_item_id.strip():
         return "Error: action_item_id is required."
 
-    # Verify exists and not locked
+    # Verify exists, not soft-deleted, and not locked
     existing = action_items_db.get_action_item(uid, action_item_id)
-    if not existing:
+    if not existing or existing.get('deleted', False):
         return f"Error: Action item '{action_item_id}' not found."
     if existing.get('is_locked', False):
         return "Error: A paid plan is required to modify this action item."

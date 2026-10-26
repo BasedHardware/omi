@@ -250,3 +250,65 @@ def test_repeated_correction_preserves_prior_protected_notes(monkeypatch, receip
     edit_tools.update_conversation.func('target', 'New confirmed correction', 'New', config=CONFIG)
     assert writes[0]['user_corrections'][0] == notes[0]
     assert writes[0]['user_corrections'][1]['note'] == 'New confirmed correction'
+
+
+def test_update_action_item_tool_rejects_soft_deleted(monkeypatch):
+    from unittest.mock import MagicMock
+
+    row = {'id': 'task', 'description': 'Task', 'deleted': True, 'completed': False}
+    monkeypatch.setattr(action_item_tools.action_items_db, 'get_action_item', lambda *args: dict(row))
+    update_mock = MagicMock()
+    monkeypatch.setattr(action_item_tools.action_items_db, 'update_action_item', update_mock)
+
+    result = action_item_tools.update_action_item_tool.func('task', completed=True, config=CONFIG)
+    assert 'not found' in result.lower()
+    update_mock.assert_not_called()
+
+
+def test_create_action_item_tool_rejects_missing_conversation(monkeypatch):
+    from unittest.mock import MagicMock
+
+    monkeypatch.setattr(action_item_tools.conversations_db, 'get_conversation', lambda uid, conv_id: None)
+    create_mock = MagicMock()
+    monkeypatch.setattr(action_item_tools.action_items_db, 'create_action_item', create_mock)
+
+    result = action_item_tools.create_action_item_tool.func('Test task', conversation_id='conv-missing', config=CONFIG)
+    assert 'not found' in result.lower()
+    create_mock.assert_not_called()
+
+
+def test_create_action_item_tool_rejects_soft_deleted_conversation(monkeypatch):
+    from unittest.mock import MagicMock
+
+    conv = {'id': 'conv-1', 'deleted': True}
+    monkeypatch.setattr(action_item_tools.conversations_db, 'get_conversation', lambda uid, conv_id: conv)
+    monkeypatch.setattr(action_item_tools.conversations_db, 'is_soft_deleted', lambda c: bool(c and c.get('deleted')))
+    create_mock = MagicMock()
+    monkeypatch.setattr(action_item_tools.action_items_db, 'create_action_item', create_mock)
+
+    result = action_item_tools.create_action_item_tool.func('Test task', conversation_id='conv-1', config=CONFIG)
+    assert 'not found' in result.lower()
+    create_mock.assert_not_called()
+
+
+def test_create_action_item_tool_accepts_valid_conversation(monkeypatch):
+    from unittest.mock import MagicMock
+
+    conv = {'id': 'conv-1', 'deleted': False}
+    monkeypatch.setattr(action_item_tools.conversations_db, 'get_conversation', lambda uid, conv_id: conv)
+    monkeypatch.setattr(action_item_tools.conversations_db, 'is_soft_deleted', lambda c: bool(c and c.get('deleted')))
+    create_mock = MagicMock(return_value='item-1')
+    monkeypatch.setattr(action_item_tools.action_items_db, 'create_action_item', create_mock)
+    monkeypatch.setattr(
+        action_item_tools.action_items_db,
+        'get_action_item',
+        lambda uid, task_id: {'id': task_id, 'description': 'Test task', 'completed': False, 'due_at': None},
+    )
+    monkeypatch.setattr(action_item_tools, 'send_action_item_created_notification', lambda *args: None)
+    monkeypatch.setattr(action_item_tools, 'send_action_item_data_message', lambda **kwargs: None)
+    monkeypatch.setattr(action_item_tools, 'sync_action_item_reminder', lambda *args, **kwargs: None)
+
+    result = action_item_tools.create_action_item_tool.func('Test task', conversation_id='conv-1', config=CONFIG)
+    assert 'Added' in result
+    create_mock.assert_called_once()
+    assert create_mock.call_args[0][1]['conversation_id'] == 'conv-1'
