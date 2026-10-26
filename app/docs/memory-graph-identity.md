@@ -49,3 +49,23 @@ customer needs to delete or rebuild the graph to apply this presentation fix.
 
 The executable regressions live in `test/widgets/memory_graph_owner_identity_test.dart`,
 `test/utils/memory_graph_identity_test.dart` and `test/unit/knowledge_graph_read_test.dart`.
+
+## Onboarding prebuild
+
+`KnowledgeGraphApi.prebuildForOnboarding` owns the optional warm-up. A canonical
+read or an existing compatibility map completes without mutation. Only a
+successfully read empty legacy graph may request the existing rebuild; failed
+reads, invalid responses and replaced sessions propagate to onboarding's
+best-effort boundary without a rebuild or polling. The normal Mind Map view
+still reads and offers its existing retry independently. HTTP 409 is terminal,
+not evidence that memories exist; a queued legacy rebuild keeps bounded polling.
+
+- [x] Production HTTP loopback regressions cover failed compatibility/canonical
+      reads, malformed input, account replacement, canonical empty/catalog
+      reads, a working compatibility map, positively absent canonical state,
+      terminal conflict and queued/failed legacy rebuilds.
+- [x] Six regressions fail with the previous catch-and-rebuild behavior;
+      all 13 prebuild scenarios and 75 existing graph/read/widget tests pass.
+- [ ] Merge and release the mobile change for #20481. This client-only change
+      requires no additional backend deployment and does not prove recovery
+      of an affected account's map.
