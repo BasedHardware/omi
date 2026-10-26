@@ -121,6 +121,16 @@ python3 -I "$G24_RECEIPTS/watch.py" --context "$G24_CONTEXT" \
   --revision g24-qualification-001 --percent 0 --seconds 21600
 ```
 
+The owner explicitly renews its readiness receipt while awake:
+
+```bash
+printf '{"expires":%s}\n' "$(( $(date +%s) + 240 ))" > "$G24_RECEIPTS/owner.json"
+```
+
+Warm both isolated endpoints with approved public/synthetic probes during the
+initial lookback so startup peaks and nonzero loaded GPU samples are captured.
+The observer must complete the full window before the acceptance harness starts.
+
 First run without `--apply`: it performs aggregate reads only. It requires all
 listener scrape targets, fresh first-text/POST and candidate GPU/queue/readiness
 series. It deduplicates DCGM by physical UUID and requires nonzero loaded GPU
@@ -188,8 +198,10 @@ against control; v2 output (including language/speakers) must match exactly.
 This deliberately holds nondeterministic differences for investigation.
 
 At every ladder phase (1,2,4,8) and soak, compare p95 using exact binomial
-order-statistic intervals. Bonferroni alpha=.05/60 per tail covers two arms,
-three metrics, five phases and two tails. Accept only if the candidate upper
+order-statistic intervals, both pooled and separately for every fixture (so
+language/speaker/input-length regressions cannot average away). Bonferroni
+alpha=.05/(60 times the number of pooled/fixture cohorts) per tail covers two
+arms, three metrics, five phases, two tails and all cohorts. Accept only if the candidate upper
 bound <= control lower bound: zero worsening margin. Infinite/overlapping
 intervals are HOLD, a separated regression ABORT. No post hoc margin or sample
 floor reduction. A short or sparse run cannot pass by lasting an hour.
