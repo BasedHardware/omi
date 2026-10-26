@@ -276,7 +276,9 @@ class AndroidChecks(unittest.TestCase):
                 ],
             },
         )
-        client.edits().commit.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
+        client.edits().commit.assert_called_once_with(
+            packageName="com.friend.ios", editId="edit-id", changesNotSentForReview=True
+        )
         self.assertFalse(client.edits().bundles.upload.called)
 
     def test_staged_and_halted_are_the_alternatives_to_completed(self):

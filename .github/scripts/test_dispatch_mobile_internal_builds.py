@@ -2,10 +2,12 @@
 """Tests for the mobile internal build dispatch decision."""
 
 import importlib.util
+import io
 import os
 import pathlib
 import subprocess
 import tempfile
+from contextlib import redirect_stdout
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -327,6 +329,25 @@ class TestSourceIdentity(unittest.TestCase):
                     ]
                 )
         dispatch.assert_not_called()
+
+
+class TestHeldChangesReminder(unittest.TestCase):
+    def test_a_schedule_run_names_the_held_android_distribution(self):
+        # Under held changes a settled Android publish is not tester-visible
+        # distribution; every scheduled run must say so instead of stalling
+        # silently on an advanced baseline.
+        with patch.dict(mod.os.environ, {"CODEMAGIC_API_TOKEN": "secret"}), patch.object(
+            mod, "_api_get", return_value={"builds": []}
+        ), patch.object(
+            mod.subprocess, "run", return_value=SimpleNamespace(stdout="a" * 40 + "\n")
+        ):
+            with redirect_stdout(io.StringIO()) as captured:
+                rc = mod.main(
+                    ["--event", "schedule", "--app-id", "app", "--source-sha", "a" * 40, "--dry-run"]
+                )
+        self.assertEqual(rc, 0)
+        self.assertIn("android_distribution=held-changes-mode", captured.getvalue())
+        self.assertIn("Send for review", captured.getvalue())
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
