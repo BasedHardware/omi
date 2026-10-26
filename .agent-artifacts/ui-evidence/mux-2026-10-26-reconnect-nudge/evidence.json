@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-before-light.png",
+      "platform": "mobile-ios",
+      "description": "BEFORE (main): Home for that owner shows only the small Connect chip. Simulator, local dev backend, 5 seeded conversations; stored state: Omi paired 5 days ago, last connected 4 days ago.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-home-after-light.png",
+      "platform": "mobile-ios",
+      "description": "AFTER: one quiet row at the top of Home: Omi glyph, \"Your Omi hasn't connected in 4 days\", Reconnect, close. Simulator, local dev backend, 5 seeded conversations; stored state: Omi paired 5 days ago, last connected 4 days ago.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-home-before-dark.png",
+      "platform": "mobile-ios",
+      "description": "BEFORE (main), dark appearance. Simulator, local dev backend, 5 seeded conversations; stored state: Omi paired 5 days ago, last connected 4 days ago.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-home-after-dark.png",
+      "platform": "mobile-ios",
+      "description": "AFTER, dark appearance. Simulator, local dev backend, 5 seeded conversations; stored state: Omi paired 5 days ago, last connected 4 days ago.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-reconnect-opens-connection-guide.png",
+      "platform": "mobile-ios",
+      "description": "AFTER: Reconnect tapped. The real paired-device connect runs and the Omi does not come back (the simulator has no Bluetooth), so the existing Connection Guide opens.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "007-mobile-ios-row-stays-closed-after-relaunch.png",
+      "platform": "mobile-ios",
+      "description": "AFTER: the close button hides the row (24 hour snooze); after a relaunch it stays hidden. Identical to the frame right after closing.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "008-mobile-ios-home-after-largest-text.png",
+      "platform": "mobile-ios",
+      "description": "AFTER at the largest accessibility text size: the words wrap and Reconnect stays whole under them. The Home title overflow stripe is already on main (009).",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "009-mobile-ios-home-before-largest-text.png",
+      "platform": "mobile-ios",
+      "description": "BEFORE (main) at the largest accessibility text size: the Home title already overflows here.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
