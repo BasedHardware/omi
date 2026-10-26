@@ -44,6 +44,7 @@ from database import sync_dead_letters
 from database import sync_backfill_sequencer
 from database import users as users_db
 from database.memories import historical_scan_memo_scope
+from database.firestore_transaction_retry import transaction_retry_deadline_scope
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_read_origin import read_origin
 from database.sync_jobs import (
@@ -2477,6 +2478,13 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
 # this cap exists to prevent.
 SYNC_JOB_RESPONSE_MARGIN_SECONDS = 120.0
 SYNC_JOB_ROUTE_TIMEOUT_SECONDS = float(os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT') or 1500)
+# Kept below the handler budget for Firestore transaction retries (deadline-
+# aware contention budget in database/firestore_transaction_retry.py): retries
+# stop while the remaining budget cannot cover the next attempt's reserve, and
+# this margin absorbs the one in-flight attempt the helper cannot stop (a
+# started chain ends within Firestore's 270 s lifetime), leaving time for
+# finalization and the response.
+SYNC_TRANSACTION_RETRY_SAFETY_MARGIN_SECONDS = 120.0
 
 
 def _resolve_sync_job_handler_budget(
@@ -3038,9 +3046,20 @@ async def _run_sync_job_body(request: Request, task_retry_count: int, attempt_st
         else SYNC_JOB_HANDLER_BUDGET_SECONDS
     )
     budget = asyncio.timeout(remaining)
+    # Firestore transaction retries under this attempt stop with the request
+    # budget's remaining time minus a margin for post-transaction pipeline
+    # work (finalization, response): run_blocking copies the scoped deadline
+    # into every executor leaf, so the retry budget can never outlive the
+    # attempt wall even though a cancelled blocking leaf cannot be interrupted.
+    retry_deadline = (
+        anchored_deadline
+        if isinstance(anchored_deadline, float)
+        else time.monotonic() + SYNC_JOB_HANDLER_BUDGET_SECONDS
+    ) - SYNC_TRANSACTION_RETRY_SAFETY_MARGIN_SECONDS
     try:
-        async with budget:
-            return await _run_sync_job_attempt(request, task_retry_count, state)
+        with transaction_retry_deadline_scope(retry_deadline):
+            async with budget:
+                return await _run_sync_job_attempt(request, task_retry_count, state)
     except TimeoutError:
         if not budget.expired():
             raise

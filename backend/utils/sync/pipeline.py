@@ -38,6 +38,7 @@ from database._client import (
     is_document_size_limit_error,
     is_expired_transaction_error,
 )
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
@@ -301,6 +302,11 @@ def _whole_job_persistence_fingerprint(
 
 
 def _firestore_error_class(error: BaseException) -> str:
+    if isinstance(error, FirestoreContentionExhausted):
+        # The bounded retry budget's own terminal token, not the last provider
+        # error it chained from: attempt and deadline exhaustion are different
+        # operational signals (the token carries no ids).
+        return 'deadline_exhausted' if getattr(error, 'reason', '') == 'deadline_exhausted' else 'contention'
     if is_document_size_limit_error(error):
         return 'document_size_limit'
     if is_expired_transaction_error(error):

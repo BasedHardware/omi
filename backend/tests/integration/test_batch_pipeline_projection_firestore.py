@@ -1510,6 +1510,107 @@ def test_batch_flag_recovers_real_sdk_read_abort_with_fresh_transaction(lane, mo
     assert len(lane.tasks) == len(lane.published) == len(lane.loads) == 1
 
 
+def test_late_writer_after_claim_takeover_replays_committed_receipt(lane, monkeypatch):
+    """The advisory claim is never a mutation fence; the Firestore receipts are.
+
+    Writer A's claim lease expires while its assignment chain is in flight.
+    Writer B takes the same owner claim and fully projects and commits the
+    segment. A's late transaction body then reaches commit on a fresh
+    transaction: it must replay B's committed receipt — one conversation copy,
+    one ``sync_content_revision`` increment, one usage charge — and A's
+    token-fenced release must never evict B's live claim.
+    """
+    from google.api_core.exceptions import Aborted
+    import fakeredis
+    from database import batch_pipeline_projection_claim as claims
+    from database import firestore_transaction_retry
+    from utils.batch_pipeline.scheduler import owner_key
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    batch = lane.seed()
+    lane.finish(batch)
+
+    transport = lane.client._firestore_api._transport
+    original_read = transport._wrapped_methods[transport.batch_get_documents]
+    assign = lane.conversations.assign_sync_conversation
+    assignment_threads = set()
+    injected = False
+    late_transactions = []
+    claim_key = f'batch_projection:{lane.store.namespace}:{owner_key(lane.uid)}'
+
+    def assignment(*args, **kwargs):
+        assignment_threads.add(threading.get_ident())
+        try:
+            return assign(*args, **kwargs)
+        finally:
+            assignment_threads.discard(threading.get_ident())
+
+    def read(request, **kwargs):
+        nonlocal injected
+        if request.transaction and threading.get_ident() in assignment_threads:
+            late_transactions.append(bytes(request.transaction))
+            if not injected:
+                injected = True
+                raise Aborted('synthetic read-time contention')
+        return original_read(request, **kwargs)
+
+    in_flight, resume = threading.Event(), threading.Event()
+    takeover = {}
+    actual_retry = firestore_transaction_retry.run_with_transaction_contention_retry
+
+    def retry_with_takeover(transaction_factory, operation, *, operation_name, **kwargs):
+        if operation_name != 'sync_assignment' or 'done' in takeover:
+
+            return actual_retry(transaction_factory, operation, operation_name=operation_name, **kwargs)
+
+        def sleep(_delay):
+            takeover['done'] = True
+            in_flight.set()
+            assert resume.wait(20)
+
+        return actual_retry(transaction_factory, operation, operation_name=operation_name, sleep=sleep, **kwargs)
+
+    monkeypatch.setattr(lane.conversations, 'assign_sync_conversation', assignment)
+    monkeypatch.setattr(firestore_transaction_retry, 'run_with_transaction_contention_retry', retry_with_takeover)
+    monkeypatch.setitem(transport._wrapped_methods, transport.batch_get_documents, read)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        late = pool.submit(lane.projector.project, batch.ids[0])
+        assert in_flight.wait(20)
+        # A's Redis lease expires mid-chain (the TTL); writer B takes the same
+        # owner claim and fully projects the same segment under it.
+        redis.delete(claim_key)
+        with claims.projection_claim(lane.store.namespace, owner_key(lane.uid)) as writer_b:
+            assert writer_b
+            replacement = redis.get(claim_key)
+            committed = lane.projector._project_read(
+                batch.ids[0], *lane.projector.store.read(batch.ids[0]), claimed=True
+            )
+            receipt = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+            ledger = batch.ledger.get().to_dict()
+            resume.set()
+            assert late.result(30) == committed
+            # The late writer's release never evicts B's live claim token.
+            assert redis.get(claim_key) == replacement
+    assert len(set(late_transactions)) >= 2  # A's late body ran on a fresh transaction after B's commit.
+    rows = active_rows(lane)
+    assert len(rows) == 1 and rows[0]['sync_content_revision'] == 1
+    assert rows[0]['transcript_segments'][0]['text'] == 'We discussed the project.'
+    assert len(rows[0]['transcript_segments']) == 1
+    # Each writer fetched the provider transcript once; every durable effect
+    # of the segment stayed single-copy.
+    assert lane.loads == [batch.ids[0], batch.ids[0]] and len(lane.tasks) == 1
+    final_receipt = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert final_receipt['projection'] == receipt['projection']
+    assert final_receipt['projection_state'] == 'completed'
+    assert batch.ledger.get().to_dict() == ledger
+    usage = list(lane.user.collection('hourly_usage').stream())
+    assert len(usage) == 1 and usage[0].to_dict()['speech_seconds'] == 4
+    assert not redis.exists(claim_key)  # only B's own release removed B's token
+
+
 def superseded_anchor(lane, item, *, merged=False):
     """Metadata-only fixture: assignment must reject without decoding content."""
     anchor = lane.user.collection('conversations').document(item.conversation_id)

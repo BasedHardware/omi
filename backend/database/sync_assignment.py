@@ -113,7 +113,12 @@ def run_sync_assignment(client: Any, assign: Any, full_ids: frozenset[str], *, r
         return run_transactional(client, assign, full_ids=full_ids)
     return run_with_transaction_contention_retry(
         client.transaction,
-        lambda transaction: run_transactional(client, assign, full_ids=full_ids, initial_transaction=transaction),
+        # attempts=1: the outer budget owns every attempt, so an expired chain
+        # costs one bounded outer retry instead of up to three inner restarts
+        # (which multiplied the worst case to 15 chains).
+        lambda transaction: run_transactional(
+            client, assign, full_ids=full_ids, initial_transaction=transaction, attempts=1
+        ),
         operation_name='sync_assignment',
     )
 

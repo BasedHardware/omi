@@ -16,6 +16,7 @@ from database import conversations as conversations_db
 from database.firestore_transaction_retry import (
     FirestoreContentionExhausted,
     run_with_transaction_contention_retry,
+    transaction_retry_deadline_scope,
 )
 from tests.unit.test_conversation_persistence_transaction_expiry import _FakeFirestoreClient
 from tests.unit.test_sync_cross_job_assignment import chunk
@@ -24,6 +25,25 @@ from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD as FIELD
 from utils.sync import assignment
 
 EXTRACTIONS = {'version': 1, 'delegated_by_user': [], 'commitments_by_others': [], 'observed_issue_or_blocker': None}
+
+EXPIRED = 'The referenced transaction has expired or is no longer valid.'
+
+
+def expired() -> InvalidArgument:
+    return InvalidArgument(EXPIRED)
+
+
+class FakeClock:
+    """Monotonic clock shared by the retry gates, the reads, and the sleeps."""
+
+    def __init__(self, now: float = 1000.0):
+        self.now = now
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
 
 
 @pytest.fixture
@@ -40,7 +60,7 @@ def sdk_assignment(monkeypatch):
     )
     monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
 
-    def build(*, read_errors=(), commit_errors=()):
+    def build(*, read_errors=(), commit_errors=(), read_advance=None):
         store = _FakeFirestoreClient(None, list(commit_errors))
         errors = list(read_errors)
         read_transactions = []
@@ -50,6 +70,8 @@ def sdk_assignment(monkeypatch):
             if transaction is None:
                 return original_get(transaction=transaction)
             read_transactions.append(transaction)
+            if read_advance is not None:
+                read_advance()
             if errors:
                 error = errors.pop(0)
                 if error is not None:
@@ -135,6 +157,79 @@ def test_expiry_restarts_still_work_inside_outer_contention_retry(sdk_assignment
     assert len(store.transactions) == 3
     assert reads == store.transactions
     assert len(store.commits) == 1
+
+
+def test_nested_expiry_keeps_one_chain_per_attempt_and_todays_three_chain_ceiling(sdk_assignment, monkeypatch):
+    # The outer budget owns every attempt: an expired chain costs one outer
+    # retry (no inner restarts, which once multiplied the worst case to 15
+    # chains), and with no deadline in scope the storm keeps today's ceiling
+    # of three fresh chains — run_transactional's default — rather than the
+    # five-chain Aborted policy.
+    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
+    store, reads = sdk_assignment(commit_errors=[expired() for _ in range(8)])
+    with pytest.raises(FirestoreContentionExhausted) as raised:
+        persist(store)
+    assert raised.value.reason == 'attempts_exhausted'
+    assert len(store.transactions) == len(reads) == 3
+    assert store.commits == []
+
+
+def test_nested_repeated_expiry_stops_before_the_deadline(sdk_assignment, monkeypatch):
+    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
+    clock = FakeClock()
+    monkeypatch.setattr(
+        firestore_transaction_retry,
+        'run_with_transaction_contention_retry',
+        partial(
+            run_with_transaction_contention_retry,
+            sleep=clock.sleep,
+            random_value=lambda: 0,
+            monotonic=clock.monotonic,
+        ),
+    )
+
+    # Each transaction body's read charges 100 s of the 500 s budget; a retry
+    # starts only while the remaining budget covers the last attempt's observed
+    # duration x 1.5 (150 s, above the 30 s floor), so the fifth attempt's gate
+    # stops the loop.
+    def charge_read():
+        clock.now += 100.0
+
+    store, reads = sdk_assignment(commit_errors=[expired() for _ in range(8)], read_advance=charge_read)
+    start = clock.monotonic()
+    with transaction_retry_deadline_scope(start + 500.0):
+        with pytest.raises(FirestoreContentionExhausted) as raised:
+            persist(store)
+
+    assert raised.value.reason == 'deadline_exhausted'
+    assert isinstance(raised.value.__cause__, InvalidArgument)
+    assert len(store.transactions) == len(reads) == 4
+    assert store.commits == []
+    assert clock.monotonic() - start <= 500.0
+
+
+def test_nested_expiry_recovers_within_budget_when_time_allows(sdk_assignment, monkeypatch):
+    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
+    clock = FakeClock()
+    monkeypatch.setattr(
+        firestore_transaction_retry,
+        'run_with_transaction_contention_retry',
+        partial(
+            run_with_transaction_contention_retry,
+            sleep=clock.sleep,
+            random_value=lambda: 0,
+            monotonic=clock.monotonic,
+        ),
+    )
+    store, reads = sdk_assignment(commit_errors=[expired(), expired()])
+    start = clock.monotonic()
+    with transaction_retry_deadline_scope(start + 1260.0):
+        result, created, _ = persist(store)
+
+    assert created and result['id'] == 'canonical'
+    assert len(store.transactions) == len(reads) == 3
+    assert len(store.commits) == 1
+    assert clock.monotonic() - start <= 1260.0
 
 
 class _ReplaySnapshot:
