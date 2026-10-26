@@ -410,7 +410,7 @@ def get_conversations_tool(
                 if max_transcript_segments != -1 and conversation.transcript_segments and len(conversation.transcript_segments) > max_transcript_segments:
                     total_segments = len(conversation.transcript_segments)
                     conversation.transcript_segments = conversation.transcript_segments[:max_transcript_segments]
-                    truncation_notes[conversation.id] = truncation_note(len(conversation.transcript_segments), total_segments, 'transcript segments', 'Increase max_transcript_segments.')
+                    truncation_notes[conversation.id] = truncation_note(shown=len(conversation.transcript_segments), total=total_segments, unit='transcript segments', how_to_get_more='Increase max_transcript_segments.')
                 conversations.append(conversation)
             except Exception:
                 continue
@@ -555,11 +555,11 @@ def search_conversations_tool(
                 keyword_ids = keyword_search_conversation_ids(
                     uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at, raise_on_error=True
                 )
-                OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(outcome="keyword_success").inc()
+                OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="keyword", outcome="success").inc()
             except Exception as kw_err:
                 logger.warning("Keyword search failed during conversation search; falling back to vector/semantic search: %s", kw_err)
-                record_fallback("conversation_keyword_search", kw_err)
-                OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(outcome="keyword_fallback").inc()
+                record_fallback(conversation_keyword_search=kw_err)
+                OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="keyword", outcome="fallback").inc()
                 keyword_degraded = True
 
             index_available = getattr(vector_db, 'index', None) is not None
@@ -588,11 +588,11 @@ def search_conversations_tool(
             withheld_locked = sum(1 for row in conversations_data if row.get('is_locked', False) and not row.get('discarded', False))
             withheld_discarded = sum(1 for row in conversations_data if row.get('discarded', False))
             conversations_data = [c for c in conversations_data if not c.get('is_locked', False) and not c.get('discarded', False)]
-            OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(outcome="success").inc()
+            OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="semantic", outcome="success").inc()
 
         if not conversations_data:
             msg = none_found('conversations', f"matching query {query!r}")
-            coverage_note = chat_transcript_coverage_note(transcript_search)
+            coverage_note = chat_transcript_coverage_note(transcript_search.searched)
             if coverage_note:
                 msg += f"\n\n{coverage_note}"
             withheld = _withheld_conversation_notes(withheld_locked, withheld_discarded)
@@ -618,7 +618,7 @@ def search_conversations_tool(
                     total_segments = len(conversation.transcript_segments)
                     conversation.transcript_segments = conversation.transcript_segments[:max_transcript_segments]
                     truncation_notes[conversation.id] = truncation_note(
-                        len(conversation.transcript_segments), total_segments, 'transcript segments', 'Increase max_transcript_segments.'
+                        shown=len(conversation.transcript_segments), total=total_segments, unit='transcript segments', how_to_get_more='Increase max_transcript_segments.'
                     )
                 conversations.append(conversation)
             except Exception:
@@ -667,7 +667,7 @@ def search_conversations_tool(
                     else:
                         result += '\n\n[Transcript excerpts omitted to fit size budget.]'
 
-        coverage_note = chat_transcript_coverage_note(transcript_search)
+        coverage_note = chat_transcript_coverage_note(transcript_search.searched)
         if coverage_note:
             result += f"\n\n{coverage_note}"
 
@@ -677,5 +677,5 @@ def search_conversations_tool(
         return result
     except Exception as e:
         logger.error(f"Error in search_conversations_tool: {e}")
-        OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(outcome="error").inc()
+        OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="semantic", outcome="error").inc()
         return "An unexpected error occurred during search."
