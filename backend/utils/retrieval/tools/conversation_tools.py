@@ -617,9 +617,7 @@ def search_conversations_tool(
                 if max_transcript_segments != -1 and conversation.transcript_segments and len(conversation.transcript_segments) > max_transcript_segments:
                     total_segments = len(conversation.transcript_segments)
                     conversation.transcript_segments = conversation.transcript_segments[:max_transcript_segments]
-                    truncation_notes[conversation.id] = truncation_note(
-                        shown=len(conversation.transcript_segments), total=total_segments, unit='transcript segments', how_to_get_more='Increase max_transcript_segments.'
-                    )
+                    truncation_notes[conversation.id] = truncation_note(shown=len(conversation.transcript_segments), total=total_segments, unit='transcript segments', cut=True)
                 conversations.append(conversation)
             except Exception:
                 continue
