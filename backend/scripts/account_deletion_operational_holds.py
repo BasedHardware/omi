@@ -7,6 +7,7 @@ revalidates authority, records receipts, releases approved holds and purges.
 
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from google.cloud import firestore, storage
 from google.cloud.firestore_v1.base_query import FieldFilter
+from google.auth import default as default_credentials
+from google.auth.transport.requests import AuthorizedSession
 
 from database.legal_holds import (
     destructive_operation_gate,
@@ -25,14 +28,61 @@ from database.legal_holds import (
     assert_account_deletion_permitted,
 )
 from utils.cloud_tasks import enqueue_account_deletion_wipe
-from database.account_deletion_operational_holds import object_digest, plan_digest, validate_release_plan
+from database.account_deletion_operational_holds import (
+    object_digest,
+    plan_digest,
+    validate_release_plan,
+    PRESERVATION_LEDGER_SHA256,
+)
 
 BUCKET = 'syncing-local'
 PROJECT = 'based-hardware'
+SERVICE_METADATA_URL = (
+    'https://run.googleapis.com/v2/projects/based-hardware/locations/us-central1/services/backend-sync'
+)
+
+
+def verify_preservation_ledger(root: Path) -> None:
+    for filename, expected in PRESERVATION_LEDGER_SHA256.items():
+        # WAL contents would overlay the pinned main database. Refuse rather
+        # than claiming its rows are covered by the completed campaign receipt.
+        wal = root / (filename + '-wal')
+        if wal.exists() and wal.stat().st_size:
+            raise ValueError('preservation campaign ledger has uncheckpointed changes')
+        with (root / filename).open('rb') as handle:
+            actual = hashlib.file_digest(handle, 'sha256').hexdigest()
+        if actual != expected:
+            raise ValueError('preservation campaign ledger identity or integrity mismatch')
+
+
+def verified_handler_url(session, requested: str | None) -> str:
+    response = session.get(SERVICE_METADATA_URL, params={'fields': 'uri'}, timeout=30)
+    response.raise_for_status()
+    uri = response.json().get('uri')
+    if not isinstance(uri, str):
+        raise ValueError('backend-sync control plane returned no service URI')
+    endpoint = urlsplit(uri)
+    if (
+        endpoint.scheme != 'https'
+        or not endpoint.hostname
+        or not endpoint.hostname.endswith('.run.app')
+        or endpoint.path not in {'', '/'}
+        or endpoint.username
+        or endpoint.password
+        or endpoint.port
+        or endpoint.query
+        or endpoint.fragment
+    ):
+        raise ValueError('backend-sync control plane returned an invalid service URI')
+    handler = uri.rstrip('/') + '/v1/users/account-deletion-wipes/run'
+    if requested is not None and requested != handler:
+        raise ValueError('requested handler differs from the live production backend-sync URI')
+    return handler
 
 
 def preservation_proofs(root: Path, uid: str) -> set[tuple[str, str]]:
     """Only this owner's control rows; no audio or conversation data."""
+    verify_preservation_ledger(root)
     with sqlite3.connect(f'file:{root / "source-index.sqlite"}?mode=ro', uri=True) as db:
         db.execute('ATTACH DATABASE ? AS audited', (f'file:{root / "final-audit.sqlite"}?mode=ro',))
         # LIKE wildcards in UIDs must not broaden the owner prefix.
@@ -42,6 +92,7 @@ def preservation_proofs(root: Path, uid: str) -> set[tuple[str, str]]:
             "WHERE x.n LIKE ? ESCAPE '\\' AND p.state='held' AND p.hold=1",
             (prefix + '%',),
         ).fetchall()
+    verify_preservation_ledger(root)
     return {(object_digest(name), str(generation)) for name, generation in rows}
 
 
@@ -79,6 +130,7 @@ def build_plan(uid: str, blobs, proofs: set[tuple[str, str]]) -> dict:
     plan = {
         'schema_version': 1,
         'campaign': 'expiry-20261017',
+        'campaign_ledger_sha256': plan_digest(PRESERVATION_LEDGER_SHA256),
         'owner_sha256': object_digest(uid),
         'objects': sorted(objects, key=lambda item: (item['object_sha256'], item['generation'])),
     }
@@ -130,22 +182,12 @@ def main() -> None:
         raise ValueError('select ro-prod for plans or approved prod-operator for registration')
     if applying and (not args.approved_plan or not args.approval_ref):
         raise ValueError('apply needs the reviewed plan and approval reference')
+    handler_url = None
     if args.enqueue:
-        endpoint = urlsplit(args.handler_url or '')
-        if (
-            not applying
-            or endpoint.scheme != 'https'
-            or not endpoint.hostname
-            or not endpoint.hostname.startswith('backend-sync-')
-            or not endpoint.hostname.endswith('.run.app')
-            or endpoint.path != '/v1/users/account-deletion-wipes/run'
-            or endpoint.username
-            or endpoint.password
-            or endpoint.port
-            or endpoint.query
-            or endpoint.fragment
-        ):
-            raise ValueError('queue wake needs approved registration and the verified backend-sync handler')
+        if not applying:
+            raise ValueError('queue wake needs approved registration')
+        credentials, _ = default_credentials(scopes=['https://www.googleapis.com/auth/cloud-platform'])
+        handler_url = verified_handler_url(AuthorizedSession(credentials), args.handler_url)
     client = firestore.Client(project=PROJECT)
     docs = list(
         client.collection('account_deletions')
@@ -188,15 +230,15 @@ def main() -> None:
     with destructive_operation_gate(uid, kind='account_deletion', firestore_client=client) as token:
         register_plan(client.transaction(), client, uid, job_id, token, approval)
     print(json.dumps({'registered': True, 'at': datetime.now(timezone.utc).isoformat()}), flush=True)
-    if args.enqueue:
+    if handler_url is not None:
         os.environ.update(
             {
                 'SYNC_TASKS_PROJECT': PROJECT,
                 'SYNC_TASKS_LOCATION': 'us-central1',
                 'SYNC_TASKS_INVOKER_SA': 'sync-tasks-invoker@based-hardware.iam.gserviceaccount.com',
                 'ACCOUNT_DELETION_TASKS_QUEUE': 'account-deletion',
-                'ACCOUNT_DELETION_HANDLER_URL': args.handler_url,
-                'ACCOUNT_DELETION_TASKS_OIDC_AUDIENCE': args.handler_url,
+                'ACCOUNT_DELETION_HANDLER_URL': handler_url,
+                'ACCOUNT_DELETION_TASKS_OIDC_AUDIENCE': handler_url,
             }
         )
         enqueue_account_deletion_wipe(job_id)

@@ -17,6 +17,10 @@ refuses unless exactly one failed deletion exists, reads deletion metadata and
 only that owner's GCS metadata, and joins only that prefix's preservation
 control rows. It does not read audio, memories, or transcripts. All held
 generations must match the campaign's audited restored-generation proofs.
+Before and after that owner-scoped query, the tool checks both opaque SQLite
+artifacts against the preservation operator's completed-campaign SHA256
+receipt and rejects nonempty WAL overlays. A directory name or a matching
+generation from an unrelated ledger is insufficient proof.
 
 ```bash
 source ~/.local/bin/gcp-agent-env.sh ro-prod
@@ -38,6 +42,9 @@ digest and approval reference before the write step.
 Only the separately authorized operator runs this step. Resolve the live
 backend-sync URL with a metadata-only service read, then append
 `/v1/users/account-deletion-wipes/run`. Do not use a signed-in customer API.
+The tool independently reads only `uri` from the exact production backend-sync
+Cloud Run resource and rejects a supplied URL that differs. Omitting
+`--handler-url` uses that verified URI directly.
 
 ```bash
 source ~/.local/bin/gcp-agent-env.sh prod-operator
@@ -61,7 +68,9 @@ account/deletion job to force progress.
 
 The worker requires its running marker and matching account gate, rechecks
 legal holds, refuses event-based holds, retention and unknown object metadata,
-and pins both generation and metageneration for PATCH and DELETE. Each release
+and pins both generation and metageneration for PATCH and DELETE. The worker
+checks custom legal/hold/retention markers before unheld or unapproved objects
+can return to the purge as well. Each release
 has a durable intent and outcome under
 `account_deletions/{uid}/operational_hold_releases`; receipts contain no UID or
 object name. An ambiguous PATCH success is reconciled only against that intent

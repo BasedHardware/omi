@@ -13,9 +13,34 @@ from typing import Any
 from database.account_deletion_marker import account_deletion_document, account_deletion_firestore_client
 from database.legal_holds import assert_account_deletion_permitted, assert_destructive_gate_still_ours
 
+# The preservation operator's COMPLETE.json receipt (2026-10-18T13:05:24Z).
+# These are opaque control-artifact integrity bindings, not account identifiers.
+PRESERVATION_LEDGER_SHA256 = {
+    'source-index.sqlite': '03dae01244eb564f758d804511c3e3467bf58b0d6144d8ce0265916d835bdc56',
+    'final-audit.sqlite': '6a4536d4150d688478a83fd05e0d6232a1288c14d11a282d774e01d2226189c4',
+}
+
 
 class OperationalStorageHoldBlocked(RuntimeError):
     """A hold cannot be proved operational and authorized for this wipe."""
+
+
+def assert_no_protected_object_hold(blob: Any) -> None:
+    """Custom legal markers protect unheld and unapproved generations too."""
+    retention = getattr(blob, 'retention', None)
+    metadata = getattr(blob, 'metadata', None) or {}
+    if (
+        getattr(blob, 'event_based_hold', False)
+        or getattr(retention, 'mode', None)
+        or getattr(retention, 'retain_until_time', None)
+        or getattr(blob, 'retention_expiration_time', None)
+        or not isinstance(metadata, dict)
+        or any(
+            any(marker in str(key).lower() for marker in ('legal', 'hold', 'retention', 'litigation', 'compliance'))
+            for key in metadata
+        )
+    ):
+        raise OperationalStorageHoldBlocked('legal, retention, or unknown object hold metadata is protected')
 
 
 def delete_owner_bucket_prefix(
@@ -25,6 +50,8 @@ def delete_owner_bucket_prefix(
     listing_kwargs = {'versions': True} if real_gcs else {}
     blobs = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
     for blob in blobs:
+        if account_deletion_uid is not None:
+            assert_no_protected_object_hold(blob)
         if account_deletion_uid is not None and (
             getattr(blob, 'temporary_hold', None) is True or getattr(bucket, 'name', None) == 'syncing-local'
         ):
@@ -54,6 +81,7 @@ def validate_release_plan(uid: str, approval: Any) -> dict[str, Any]:
         not isinstance(plan, dict)
         or plan.get('schema_version') != 1
         or plan.get('campaign') != 'expiry-20261017'
+        or plan.get('campaign_ledger_sha256') != plan_digest(PRESERVATION_LEDGER_SHA256)
         or plan.get('owner_sha256') != object_digest(uid)
         or not isinstance(approval.get('approval_ref'), str)
         or not approval['approval_ref'].strip()
@@ -91,6 +119,7 @@ def release_operational_hold_for_account_deletion(uid: str, blob: Any, *, firest
     precedes the PATCH; a retry reconciles an ambiguous success without ever
     granting approval for a replacement generation or metageneration.
     """
+    assert_no_protected_object_hold(blob)
     client = account_deletion_firestore_client(firestore_client=firestore_client)
     marker_ref = account_deletion_document(uid, firestore_client=client)
     snapshot = marker_ref.get()
@@ -127,6 +156,7 @@ def release_operational_hold_for_account_deletion(uid: str, blob: Any, *, firest
     # A generation-bound Blob keeps reload/PATCH on the same version. Never
     # release event-based holds, object retention, or equivalent legal markers.
     blob.reload(if_generation_match=int(generation))
+    assert_no_protected_object_hold(blob)
     metadata = blob.metadata or {}
     known_tags = {'incident', 'source_sha256', 'source_generation'}
     if (
