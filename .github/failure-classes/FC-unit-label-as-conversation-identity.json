@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-unit-label-as-conversation-identity",
+  "violated_contract": "A diarizer label scoped to one upload unit is an anonymous partition, not a conversation-wide voice or a reason to bypass identity resolution. Treating it as final fragments one person across short uploads and leaves enrolled speakers unnamed.",
+  "canonical_prevention": "Retain the immutable unit partition, link whole labels across units using verified compatible-space acoustic evidence with transitive same-unit cannot-links, then run calibrated naming and joint owner arbitration on the conversation groups. Names and roster heuristics cannot regroup authoritative labels; missing evidence abstains and manual receipts remain authoritative.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_conversation_speakers.py",
+    "backend/tests/unit/test_conversation_speaker_resolution_stage.py",
+    "backend/tests/unit/test_audio_placement.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/stt/conversation_speakers.py", "backend/utils/conversations/speaker_resolution.py"],
+  "status": "open"
+}

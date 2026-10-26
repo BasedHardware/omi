@@ -1,3 +1,4 @@
+import 'package:omi/models/voice_question_result.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -29,6 +30,10 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   bool voiceSessionActive = false;
   bool questionSent = false;
   String? aiResponse;
+  String? userQuestion;
+  VoiceQuestionFailure? questionFailure;
+  int _questionAttempt = 0;
+  int get questionAttempt => _questionAttempt;
   // True right after a question was dropped empty or came back with no speech
   // detected, so the step can show a retry hint instead of processing forever.
   bool questionFailed = false;
@@ -44,6 +49,10 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   int selectedDoubleTapAction = -1; // -1 = none selected
   int doublePressCount = 0;
   bool showSingleTapHint = false;
+
+  /// A step reopened from the All Set summary; finishing it goes back to the summary instead of
+  /// walking through every later step again (#20787).
+  bool reviewingFromSummary = false;
 
   Timer? _hintTimer;
   bool _disposed = false;
@@ -62,18 +71,23 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     voiceSessionActive = false;
     questionSent = false;
     aiResponse = null;
+    userQuestion = null;
+    questionFailure = null;
+    _questionAttempt++;
     questionFailed = false;
     selectedVoiceResponseMode = null;
     powerCycleState = PowerCycleSubState.waitingForOff;
     selectedDoubleTapAction = -1;
     doublePressCount = 0;
     showSingleTapHint = false;
+    reviewingFromSummary = false;
     _hintTimer?.cancel();
     _hintTimer = null;
   }
 
   void advanceStep() {
     if (currentStep < totalSteps - 1) {
+      _questionAttempt++;
       currentStep++;
       notifyListeners();
     }
@@ -81,7 +95,16 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
   void goToStep(int step) {
     if (step < transcriptionStep || step >= totalSteps || step == currentStep) return;
+    reviewingFromSummary = currentStep == allSetStep;
+    _questionAttempt++;
     currentStep = step;
+    notifyListeners();
+  }
+
+  void returnToSummary() {
+    reviewingFromSummary = false;
+    _questionAttempt++;
+    currentStep = allSetStep;
     notifyListeners();
   }
 
@@ -99,6 +122,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   }
 
   void completeOnboarding() {
+    _questionAttempt++;
     isOnboardingActive = false;
     _hintTimer?.cancel();
     _hintTimer = null;
@@ -140,12 +164,10 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   }
 
   void _handleStep1Button(int buttonState) {
-    if (buttonState != 1) return;
+    if (buttonState != 1 || (questionSent && aiResponse == null)) return;
 
     if (!voiceSessionActive) {
-      voiceSessionActive = true;
-      questionFailed = false;
-      notifyListeners();
+      onVoiceQuestionStarted();
     } else {
       // Second press — question is being sent
       voiceSessionActive = false;
@@ -154,17 +176,57 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     }
   }
 
-  void onVoiceResponseReceived(String response) {
-    if (currentStep != askQuestionStep) return;
+  /// Capture calls this only after it admits the physical press.
+  void onVoiceQuestionStarted() {
+    if (_disposed || !isOnboardingActive || currentStep != askQuestionStep) return;
+    _questionAttempt++;
+    voiceSessionActive = true;
+    questionSent = false;
+    questionFailed = false;
+    questionFailure = null;
+    aiResponse = null;
+    userQuestion = null;
+    notifyListeners();
+  }
+
+  bool acceptsQuestionResult(int attempt) =>
+      !_disposed && isOnboardingActive && currentStep == askQuestionStep && attempt == _questionAttempt;
+
+  void onVoiceQuestionFinished(VoiceQuestionResult result, int attempt) {
+    if (!acceptsQuestionResult(attempt)) return;
+    if (result.answer case final String answer when answer.trim().isNotEmpty) {
+      onVoiceResponseReceived(answer, question: result.question);
+    } else {
+      onVoiceQuestionFailed(result.failure ?? VoiceQuestionFailure.unavailable);
+    }
+  }
+
+  void onVoiceResponseReceived(String response, {String? question}) {
+    if (_disposed || !isOnboardingActive || currentStep != askQuestionStep) return;
+    voiceSessionActive = false;
+    questionSent = true;
+    questionFailed = false;
+    questionFailure = null;
+    userQuestion = question;
     aiResponse = response;
+    notifyListeners();
+  }
+
+  /// Capture's 15 s voice-command timeout sent the question without the second press this step
+  /// counts, so move on to "Processing" exactly as the second press would (#20786).
+  void onQuestionAutoSubmitted() {
+    if (!isOnboardingActive || currentStep != askQuestionStep || !voiceSessionActive) return;
+    voiceSessionActive = false;
+    questionSent = true;
     notifyListeners();
   }
 
   /// The question was dropped before sending (no audio captured) or the
   /// server reported no speech detected. Reset back to the pre-press state
   /// so the step can show a retry hint instead of processing forever.
-  void onVoiceQuestionFailed() {
-    if (currentStep != askQuestionStep || aiResponse != null) return;
+  void onVoiceQuestionFailed([VoiceQuestionFailure failure = VoiceQuestionFailure.noSpeech]) {
+    if (_disposed || !isOnboardingActive || currentStep != askQuestionStep || aiResponse != null) return;
+    questionFailure = failure;
     voiceSessionActive = false;
     questionSent = false;
     questionFailed = true;

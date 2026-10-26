@@ -99,6 +99,7 @@ dependencies:
   flutter_background_service: 5.1.0
   flutter_background_service_android: 6.3.0
   flutter_background_service_platform_interface: 5.1.2
+  onnxruntime_v2: 1.23.2+2
   opus_flutter: ^3.0.3
   opus_dart:
     git:
@@ -136,6 +137,7 @@ dependencies:
   marionette_flutter: ^0.3.0
   quick_actions: ^1.0.0
   in_app_review: ^2.0.12
+  cryptography: ^2.9.0
 
 dependency_overrides:
   js: ^0.7.1
@@ -151,6 +153,8 @@ dependency_overrides:
       path: opus_flutter_android
 
 dev_dependencies:
+  flutter_driver:
+    sdk: flutter
   flutter_launcher_icons: 0.13.1
   google_sign_in_ios: 5.7.5
   flutter_lints: ^4.0.0
@@ -207,36 +211,14 @@ flutter:
   generate: true
   uses-material-design: true
   assets:
+    - assets/models/silero_vad.onnx
     - assets/images/stars.png
     - assets/images/herologo.png
-    - assets/fonts/
     - assets/images/
     - assets/test/tts_progressive_probe.mp3
     - assets/integration_app_logos/
     - assets/competitor-logos/
     - shorebird.yaml
-  fonts:
-    - family: "SF Pro Display"
-      fonts:
-        - asset: assets/fonts/SFPRODISPLAYTHINITALIC.OTF
-          weight: 100
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYLIGHTITALIC.OTF
-          weight: 300
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYREGULAR.OTF
-        - asset: assets/fonts/SFPRODISPLAYHEAVYITALIC.OTF
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYMEDIUM.OTF
-          weight: 500
-        - asset: assets/fonts/SFPRODISPLAYSEMIBOLDITALIC.OTF
-          weight: 600
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYBOLD.OTF
-          weight: 700
-        - asset: assets/fonts/SFPRODISPLAYBLACKITALIC.OTF
-          weight: 900
-          style: italic
 
 flutter_gen:
   output: lib/gen/

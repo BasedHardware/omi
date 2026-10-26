@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from config.policy.listen import service_models, listen_value
+
 import asyncio
 import os
 import time
+from collections import deque
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
 from starlette.websockets import WebSocketState
@@ -12,11 +15,13 @@ from starlette.websockets import WebSocketState
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.observability.routing_cohort import current_routing_cohort
+from utils.stt_cap_dispatch import CapSocket, session_admission, suppress_socket_audio, set_cap_capture
 from utils.stt import streaming as st
+from utils.stt.edge_shadow import attach_tap as attach_edge_tap
 from utils.dream_vocabulary import keyterms
 from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
-from utils.stt.live_metrics import MANAGED_LEGS_OPEN
+from utils.stt.live_metrics import MANAGED_LEGS_OPEN, NONWINDOW_REPLAY_SETTLES
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt import replay_delivery
@@ -26,16 +31,23 @@ from utils.stt.live_health import health, bounded_language
 from utils.stt.live_router import connecting_target, target_circuit, TargetEngineMismatch, engine_matches
 from utils.stt.live_target_connect import connect_modulate
 from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
+from config.stt_provider_policy import provider_for_model_token
+from utils.stt.live_chain import connect_configured_chain
 from config.audio_timeline import soniox_wire_ledger_enabled
 from utils.stt.soniox_wire_ledger import capture_spans
 from utils.stt.soniox_capture_axis import disable_socket_diagnostics, enabled as capture_axis_diagnostics_enabled
-from config.live_stt_replay import ReplayLimits
+from config.live_stt_replay import (
+    ReplayLimits,
+    nonwindow_emitted_text_accounting_enabled,
+    nonwindow_replay_settle_enabled,
+)
 from config.audio_timeline import live_capture_window_translator_sends_enabled
 from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 from utils.stt.no_text_rescue import NoTextRescue
 from utils.stt.replay_capture_accounting import note_observed_spans
+from utils.stt.local_send_diagnostics import record_local_send_failure
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
@@ -73,6 +85,7 @@ class LiveChainSession:
         self.total_speech_ms = 0
         self.vad_mode = 'off'
         self._routing_target_entry: Target | None = None
+        self.speaker_provider_epoch: SpeakerProviderEpoch | None = None
 
     def consume_speech_ms_delta(self) -> int:
         delta, self.speech_ms = self.speech_ms, 0
@@ -84,22 +97,41 @@ class LiveChainSession:
     def to_json_log(self) -> dict[str, Any]:
         return {'event': 'managed_live_vad_metrics', **self.get_metrics()}
 
+    @session_admission
     async def connect(
-        self, sample_rate: int, epoch: Any = None, *, same_provider: bool = False, replay_start_sample: int = 0
+        self,
+        sample_rate: int,
+        epoch: Any = None,
+        *,
+        same_provider: bool = False,
+        replay_start_sample: int = 0,
+        demand_lane: str | None = None,
     ) -> STTSocket:
         host = self.receiver.host
         constructed: list[LiveLegSocket] = []
         language = host.stt_language
         uid = host.request.uid
-        models = [m.strip() for m in st.stt_service_models]
+        models = [m.strip() for m in service_models(st.stt_service_models)]
         keywords: list[str] = await keyterms(uid, host.vocabulary[:100] if host.vocabulary else [])
         dg_model = st.deepgram_fallback_model(language)
+        demand = getattr(self.receiver, 'live_demand', None)
+        if demand is not None and not demand.eligible:
+            demand = None
+        if demand is not None:
+            self.no_text_rescue.enabled = False
         window_eligible = (
             window_allocation(uid)
+            and (demand.window_permitted if demand is not None else True)
             and window_language_supported(host.language, language)
             and bool(os.getenv('HOSTED_PARAKEET_API_URL'))
         )
-        rnnt_eligible = st.parakeet_is_configured_fallback(language)
+        if demand is not None and not window_eligible:
+            models = [model for model in models if model not in {'parakeet', 'parakeet-window'}]
+        if demand_lane == 'parakeet':
+            models = ['parakeet-window']
+        elif demand_lane == 'vendor':
+            models = [model for model in models if model not in {'parakeet', 'parakeet-window'}]
+        rnnt_eligible = demand is None and st.parakeet_is_configured_fallback(language)
         parakeet_models = ([host.stt_model] if host.stt_service == st.STTService.parakeet else []) + models
         parakeet_token = next(
             (
@@ -185,7 +217,11 @@ class LiveChainSession:
 
         async def build(service: st.STTService) -> STTSocket:
             is_window = service == st.STTService.parakeet and window
-            stream_epoch = SpeakerProviderEpoch()
+            if same_provider and self.speaker_provider_epoch is not None:
+                stream_epoch = self.speaker_provider_epoch
+            else:
+                stream_epoch = SpeakerProviderEpoch()
+                self.speaker_provider_epoch = stream_epoch
             target = connecting_target.get()
             if target is not None and (
                 target.family != service.value
@@ -203,6 +239,7 @@ class LiveChainSession:
                 record_fallback(
                     component='vad', from_mode='gated', to_mode='direct', reason='config_incomplete', outcome='degraded'
                 )
+            attach_edge_tap(gate, self.receiver)
             passthrough = service == st.STTService.modulate
             if epoch is not None:
                 epoch.set_validation_callback(
@@ -254,39 +291,75 @@ class LiveChainSession:
                         elif gate is not None and not passthrough:
                             gate.remap_segments(translated)
                         translated.sort(key=lambda item: item['start'])
+                        retained = []
                         for segment in translated:
                             segment_offset = 0.0 if epoch.replay_origin_sample is not None else offset
-                            start = max(self.last_end, segment_offset + max(0.0, float(segment['start'])))
-                            end = max(start, segment_offset + max(0.0, float(segment['end'])))
+                            raw_start = segment_offset + max(0.0, float(segment['start']))
+                            raw_end = segment_offset + max(0.0, float(segment['end']))
+                            if raw_end <= self.last_end:
+                                continue
+                            start = max(self.last_end, raw_start)
+                            end = max(start, raw_end)
+                            if end <= start:
+                                continue
                             segment['start'], segment['end'] = start, end
                             self.last_end = end
-                        leg.note_selection_transcript(translated)
-                        self.receiver._enqueue_epoch_segments(
-                            translated, provider=service.value, speaker_epoch=stream_epoch
-                        )
+                            retained.append(segment)
+                        if retained:
+                            leg.note_selection_transcript(retained)
+                            self.receiver._enqueue_epoch_segments(
+                                retained, provider=service.value, speaker_epoch=stream_epoch
+                            )
 
                     self.receiver._run_on_listen_loop(attach_then_rebase, segments)
                     return
                 if gate is not None and not passthrough:
                     gate.remap_segments(segments)
                 segments.sort(key=lambda item: item['start'])
+                retained = []
                 for segment in segments:
-                    start = max(self.last_end, offset + max(0.0, float(segment['start'])))
-                    end = max(start, offset + max(0.0, float(segment['end'])))
+                    raw_start = offset + max(0.0, float(segment['start']))
+                    raw_end = offset + max(0.0, float(segment['end']))
+                    if raw_end <= self.last_end:
+                        continue
+                    start = max(self.last_end, raw_start)
+                    end = max(start, raw_end)
+                    if end <= start:
+                        continue
                     segment['start'], segment['end'] = start, end
                     self.last_end = end
-                leg.note_selection_transcript(segments)
-                self.receiver._enqueue_stt_segments(segments, provider=service.value, speaker_epoch=stream_epoch)
+                    retained.append(segment)
+                if retained:
+                    leg.note_selection_transcript(retained)
+                    self.receiver._enqueue_stt_segments(retained, provider=service.value, speaker_epoch=stream_epoch)
 
             raw = None
             try:
                 if is_window:
                     from utils.stt.parakeet_window import connect_window
 
-                    raw = connect_window(callback, sample_rate)
-                    if self.no_text_rescue.enabled:
-                        raw.allow_no_text_rescue = self.no_text_rescue.allow_window_rescue
-                        raw.progress_deadline_enabled = True
+                    def new_window():
+                        window_raw = connect_window(callback, sample_rate)
+                        if self.no_text_rescue.enabled:
+                            window_raw.allow_no_text_rescue = self.no_text_rescue.allow_window_rescue
+                            window_raw.progress_deadline_enabled = True
+                        return window_raw
+
+                    admission = getattr(self.receiver, 'cap_admission', None)
+                    if admission is None:
+                        raw = new_window()
+                    else:
+
+                        async def open_window():
+                            return new_window()
+
+                        raw = CapSocket(
+                            admission,
+                            'parakeet',
+                            sample_rate,
+                            open_window,
+                            new_window() if admission.allowed('parakeet') else None,
+                        )
                 elif service == st.STTService.parakeet:
                     raw = await st.process_audio_parakeet(callback, language, sample_rate, 1, keywords=keywords)
                 elif service == st.STTService.soniox:
@@ -295,8 +368,8 @@ class LiveChainSession:
                         sample_rate,
                         language,
                         profile=host.language_profile,
-                        keywords=keywords,
                         idle_budget=getattr(self.receiver, 'soniox_idle_budget', None),
+                        uid=uid,
                     )
                 elif service == st.STTService.modulate:
                     raw = await connect_modulate(callback, sample_rate, language)
@@ -318,6 +391,7 @@ class LiveChainSession:
                     epoch.provider_label = service.value
                 leg = LiveLegSocket(raw, gate, self, service, sample_rate, is_window, passthrough, send_tracker=epoch)
                 leg.speaker_provider_epoch = stream_epoch
+                self.receiver.speaker_provider_epoch = stream_epoch
                 replay_ring = getattr(self.receiver, '_window_ring', None)
                 if not is_window and callable(replay_ring) and replay_ring() is not None:
                     # An empty snapshot still carries the obligation to retain
@@ -350,7 +424,24 @@ class LiveChainSession:
                 for service, callback in callbacks.items()
             }
             models = ['parakeet-window']
-        primary = callbacks.get(host.stt_service)
+        primary_service = host.stt_service
+        if demand_lane is not None:
+            service = next(
+                (
+                    st.STTService(provider_for_model_token(model))
+                    for model in models
+                    if provider_for_model_token(model) in {'parakeet', 'soniox', 'modulate', 'deepgram'}
+                ),
+                None,
+            )
+            if service is None:
+                raise st.ParakeetConnectionError('config_incomplete')
+            primary_service = service
+            callbacks = {
+                key: value if (key == st.STTService.parakeet) == (demand_lane == 'parakeet') else None
+                for key, value in callbacks.items()
+            }
+        primary = callbacks.get(primary_service)
         primary_missing = primary is None
         if primary_missing:
 
@@ -387,6 +478,18 @@ class LiveChainSession:
                     record_managed_leg_handoff(socket)
                 finally:
                     connecting_target.reset(token)
+            elif demand_lane is not None:
+                socket, actual = await connect_configured_chain(
+                    primary_service=primary_service,
+                    connect_primary=primary,
+                    callbacks=callbacks,
+                    failed=set(),
+                    models=models,
+                    routing_models=engine_models,
+                    routing_language=host.language,
+                    routing_uid=uid if demand_lane == 'vendor' else None,
+                    optional_handover=True,
+                )
             else:
                 socket, actual = await st.connect_stt_socket_with_fallback(
                     primary_service=host.stt_service,
@@ -428,6 +531,13 @@ class LiveChainSession:
         self.generation = generation
         self.receiver.vad_gate = self
         return socket
+
+
+# A provider gets this long after the last send of a span before an empty,
+# fully-final answer for it counts as settled (real-time providers finalize
+# within seconds; replayed audio is sent faster than real time).
+NONWINDOW_SETTLE_GRACE_SECONDS = 15.0
+_replay_clock = time.monotonic
 
 
 class LiveLegSocket(STTSocket):
@@ -534,15 +644,31 @@ class LiveLegSocket(STTSocket):
         self._replay_failure_reason: str | None = None
         self._replay_capacity_subtype: str | None = None
         self._emitted_capture_sample = 0
+        # Non-window legs: quiet capture settled at the replay horizon because
+        # the provider answered it with nothing (see window_replay_settle_through).
+        self._settled_capture_sample = 0
+        # Soniox legs: tracked speech sends older than the settle grace when
+        # the provider last emitted final text (see _account_aged_sends).
+        self._text_accounted_sample = 0
+        self._settling = False
         self._pending_capture_sample: int | None = None
         self._speech_capture_end = 0
+        # [first start sample, opened at, last noted at] per ~1 s of tracked speech sends.
+        self._replay_capture_notes: deque[list[float]] = deque()
+        self._last_text_at: float | None = None
+        self._text_segments = 0
+        self._placed_text_segments = 0
         self._tracks_window_replay = False
         self._replay_passthrough = False
         record_live_stt_socket_open(service.value)
         if window:
             from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC, WindowedParakeetSocket
 
-            if isinstance(raw, WindowedParakeetSocket):
+            if isinstance(raw, CapSocket):
+                raw.on_open(
+                    lambda transport: transport.set_replay_progress_callback(self._trim_window_replay_to_anchor)
+                )
+            elif isinstance(raw, WindowedParakeetSocket):
                 raw.set_replay_progress_callback(self._trim_window_replay_to_anchor)
             if WINDOW_INGEST_AGC:
                 self._ingest_gain = SessionPcmGain()
@@ -584,6 +710,8 @@ class LiveLegSocket(STTSocket):
     def window_replay_diagnostics(self, first: int, end: int, projected_samples: int) -> ReplayLagDiagnostics | None:
         from utils.stt.parakeet_window import WindowedParakeetSocket
 
+        if not self.window:
+            return self._nonwindow_replay_diagnostics(first, end, projected_samples)
         if not isinstance(self.raw, WindowedParakeetSocket) or self._send_tracker is None:
             return None
         send_map = self._send_tracker.send_map
@@ -591,9 +719,99 @@ class LiveLegSocket(STTSocket):
         rate = send_map.provider_sample_rate
         return self.raw.replay_diagnostics(projected_samples / rate, admitted / rate)
 
+    def _nonwindow_replay_diagnostics(
+        self, first: int, end: int, projected_samples: int
+    ) -> ReplayLagDiagnostics | None:
+        if not self._tracks_window_replay:
+            return None
+        rate = self.sample_rate
+        admitted = -1.0
+        if self._send_tracker is not None:
+            send_map = self._send_tracker.send_map
+            admitted = send_map.accepted_samples_in_capture_range(first, end) / send_map.provider_sample_rate
+        pending_output = getattr(self.raw, 'has_pending_provider_output', None)
+        return ReplayLagDiagnostics(
+            capture_seconds=projected_samples / rate,
+            admitted_seconds=admitted,
+            seconds_since_text=-1.0 if self._last_text_at is None else _replay_clock() - self._last_text_at,
+            posts_since_anchor=0,
+            empty_posts_since_anchor=0,
+            post_in_flight=False,
+            empty_streak=0,
+            cut_pending=False,
+            pacing_wait=False,
+            leg='nonwindow',
+            speech_unemitted_seconds=max(0, self._speech_capture_end - self._replay_accounted_sample()) / rate,
+            text_segments=self._text_segments,
+            placed_text_segments=self._placed_text_segments,
+            provider_output_pending=bool(pending_output()) if callable(pending_output) else None,
+        )
+
+    def _replay_accounted_sample(self) -> int:
+        return max(self._emitted_capture_sample, self._settled_capture_sample, self._text_accounted_sample)
+
+    def _account_aged_sends(self) -> None:
+        """Account tracked speech sent at least the settle grace before final text.
+
+        Soniox finalizes tokens in stream order within seconds, so final text
+        now proves every send older than the grace was transcribed or answered
+        empty, even when the translator could not place the text on the capture
+        axis (prod 2026-10-20 overflow lines: median 224 text segments but 11
+        placed, last text 2.9 s earlier, ~85 s of speech still unaccounted).
+        Ring retention and the settle's no-pending-output rule are unchanged;
+        only the unresolved-speech boundary advances.
+        """
+        if self.service != st.STTService.soniox or not nonwindow_emitted_text_accounting_enabled():
+            return
+        notes = self._replay_capture_notes
+        cutoff = _replay_clock() - NONWINDOW_SETTLE_GRACE_SECONDS
+        while notes and notes[0][2] <= cutoff:
+            notes.popleft()
+        bound = min((int(note[0]) for note in notes), default=self._speech_capture_end)
+        self._text_accounted_sample = max(self._text_accounted_sample, min(bound, self._speech_capture_end))
+
+    def window_replay_settle_through(self, floor: int) -> bool:
+        """Settle a non-window leg's quiet replay span once it ages past the ring.
+
+        VAD-positive noise, a cough or hangover that the provider correctly
+        ignores never gets a text segment, so on its own it would hold the
+        replay ring until it overflows into failover. Capture before ``floor``
+        settles like an answered-empty window only when the leg is serving,
+        the provider owes no partial or unflushed output, and every speech
+        send before ``floor`` is older than the grace. Spans with pending
+        provider output keep their replay obligation.
+        """
+        if self.window or not self._tracks_window_replay or not self.has_untranscribed_speech():
+            return False
+        pending = self._pending_capture_sample
+        if pending is not None and pending >= floor:
+            return False
+        if not nonwindow_replay_settle_enabled() or self.is_connection_dead:
+            return False
+        pending_output = getattr(self.raw, 'has_pending_provider_output', None)
+        if not callable(pending_output) or pending_output():
+            return False
+        notes = self._replay_capture_notes
+        cutoff = _replay_clock() - NONWINDOW_SETTLE_GRACE_SECONDS
+        while notes and notes[0][2] <= cutoff:
+            notes.popleft()
+        if notes and notes[0][0] < floor:
+            return False
+        if not self._settling:
+            # Count episodes, not the per-packet advance of a span already settled.
+            self._settling = True
+            NONWINDOW_REPLAY_SETTLES.labels(provider=self.service.value).inc()
+        self._settled_capture_sample = max(self._settled_capture_sample, floor)
+        self._pending_capture_sample = self._settled_capture_sample if self.has_untranscribed_speech() else None
+        return True
+
     @property
     def replay_lag_diagnostics(self) -> ReplayLagDiagnostics | None:
         return getattr(self.raw, 'replay_lag_diagnostics', None)
+
+    @property
+    def connection_cause(self) -> str | None:
+        return getattr(self.raw, 'connection_cause', None)
 
     @property
     def first_text_diagnostics(self) -> FirstTextDeadlineDiagnostics | None:
@@ -606,7 +824,7 @@ class LiveLegSocket(STTSocket):
     def has_untranscribed_speech(self) -> bool:
         if self.window:
             return bool(getattr(self.raw, 'has_untranscribed_speech')())
-        return self._speech_capture_end > self._emitted_capture_sample
+        return self._speech_capture_end > self._replay_accounted_sample()
 
     def fail(self, reason: str, *, capacity_subtype: str | None = None) -> None:
         if self.window:
@@ -650,13 +868,16 @@ class LiveLegSocket(STTSocket):
         self._target_death_recorded = True
         circuit = target_circuit(target)
         if reason in ACCOUNT_REJECTION_REASONS:
-            circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+            circuit.record_account_failure(
+                float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')),
+                error_class=reason,
+            )
             health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
             health.quarantine(self.service.value, 'account', circuit.account_cooldown_seconds_remaining)
         elif getattr(self.raw, 'idle_reopen_failed', False) is True:
             circuit.record_failure()
         else:
-            circuit.record_serve_failure()
+            circuit.record_serve_failure(error_class=reason)
             health.quarantine(
                 self.service.value, 'selection', circuit.serve_error_bench_seconds, endpoint=self.routing_endpoint
             )
@@ -703,14 +924,21 @@ class LiveLegSocket(STTSocket):
         if self._tracks_window_replay:
             for segment in segments:
                 end = segment.get('_capture_end_sample')
-                if isinstance(end, int) and str(segment.get('text') or '').strip():
-                    self._emitted_capture_sample = max(self._emitted_capture_sample, end)
+                if str(segment.get('text') or '').strip():
+                    self._last_text_at = _replay_clock()
+                    self._text_segments = min(1000000, self._text_segments + 1)
+                    if isinstance(end, int):
+                        self._placed_text_segments = min(1000000, self._placed_text_segments + 1)
+                        self._emitted_capture_sample = max(self._emitted_capture_sample, end)
+            if any(str(segment.get('text') or '').strip() for segment in segments):
+                self._account_aged_sends()
             if not self.has_untranscribed_speech():
                 self._pending_capture_sample = None
+                self._settling = False
             elif self._pending_capture_sample is not None:
-                self._pending_capture_sample = max(self._pending_capture_sample, self._emitted_capture_sample)
+                self._pending_capture_sample = max(self._pending_capture_sample, self._replay_accounted_sample())
         if any(str(segment.get('text') or '').strip() for segment in segments) and self._transcript_outcome is None:
-            deadline = max(1.0, float(os.getenv('STT_NO_TEXT_SECONDS', '30')))
+            deadline = max(1.0, float(listen_value('no_text_seconds', 'STT_NO_TEXT_SECONDS', '30')))
             if self._first_speech_at is not None and time.monotonic() - self._first_speech_at <= deadline:
                 self._record_transcript_outcome('text')
             elif self._first_speech_at is not None:
@@ -737,7 +965,9 @@ class LiveLegSocket(STTSocket):
     def _check_no_text_deadline(self) -> None:
         if self._first_speech_at is None or self._transcript_outcome is not None:
             return
-        if time.monotonic() - self._first_speech_at >= max(1.0, float(os.getenv('STT_NO_TEXT_SECONDS', '30'))):
+        if time.monotonic() - self._first_speech_at >= max(
+            1.0, float(listen_value('no_text_seconds', 'STT_NO_TEXT_SECONDS', '30'))
+        ):
             self._record_transcript_outcome('no_text')
 
     @property
@@ -749,6 +979,8 @@ class LiveLegSocket(STTSocket):
 
         if self._routing_active:
             self._health_success, self._health_close = on_success, on_close
+        elif self.window and isinstance(self.raw, CapSocket):
+            self.raw.on_open(lambda transport: transport.set_health_callbacks(on_success, on_close))
         elif isinstance(self.raw, WindowedParakeetSocket):
             self.raw.set_health_callbacks(on_success, on_close)
 
@@ -756,8 +988,22 @@ class LiveLegSocket(STTSocket):
         if start_sample is None:
             return
         if self._pending_capture_sample is None:
-            self._pending_capture_sample = max(start_sample, self._emitted_capture_sample)
+            self._pending_capture_sample = max(start_sample, self._replay_accounted_sample())
+            self._settling = False
         self._speech_capture_end = max(self._speech_capture_end, start_sample + len(data) // 2)
+        self._note_replay_send(start_sample)
+
+    def _note_replay_send(self, start_sample: int) -> None:
+        if self.window:
+            return
+        now = _replay_clock()
+        notes = self._replay_capture_notes
+        while notes and notes[0][2] <= now - NONWINDOW_SETTLE_GRACE_SECONDS:
+            notes.popleft()
+        if notes and now - notes[-1][1] < 1.0:
+            notes[-1][2] = now
+        else:
+            notes.append([start_sample, now, now])
 
     def _send_unscored_replay_capture(self, data: bytes, start_sample: int | None = None) -> bool:
         self._note_replay_capture(data, start_sample)
@@ -801,6 +1047,8 @@ class LiveLegSocket(STTSocket):
         setattr(gate, 'process_audio', process_replay_capture)
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
+        if suppress_socket_audio(self.raw, data, start_sample=start_sample):
+            return True
         if self._closing_for_health:
             return False
         if self.is_connection_dead:
@@ -869,19 +1117,24 @@ class LiveLegSocket(STTSocket):
             else:
                 sent_spans = tuple(output.send_spans) if output is not None else ()
         record_before_finalize = live_capture_window_translator_sends_enabled()
+        send_phase = 'usage_accounting'
         try:
             if audio:
                 if not self.window and not self._no_text_rescue.can_admit(len(audio) / (self.sample_rate * 2)):
                     self._expire_rescue()
                     return False
                 try:
+                    send_phase = 'capture_mapping'
                     token = capture_spans.set(sent_spans) if self._soniox_wire_ledger else None
                     try:
+                        set_cap_capture(self.raw, audio, sent_spans)
+                        send_phase = 'raw_send'
                         sent = self.raw.send(audio)
                     finally:
                         if token is not None:
                             capture_spans.reset(token)
-                except Exception:
+                except Exception as error:
+                    record_local_send_failure(self.service, send_phase, self.raw, error)
                     # A raised send is transport evidence unless the socket
                     # already owns a more specific bounded cause.
                     self._latch_failure(reason='connection_lost')
@@ -889,6 +1142,7 @@ class LiveLegSocket(STTSocket):
                     self._finish_transport()
                     return False
                 if sent is not True:
+                    record_local_send_failure(self.service, 'raw_refused', self.raw)
                     # False is a send symptom only while the raw socket still
                     # reports alive. A dead socket with unknown diagnostics is
                     # a connection loss, and typed causes win in normalization.
@@ -900,18 +1154,22 @@ class LiveLegSocket(STTSocket):
                     self._finish_transport()
                     self._dead = True
                     return False
+                send_phase = 'usage_accounting'
                 if self._routing_cohort is not None and getattr(self.raw, 'idle_close_enabled', False) is not True:
                     self._routing_cohort.paid_audio(self.service.value, len(audio) / (self.sample_rate * 2))
                 if not self.window:
                     self._no_text_rescue.audio(self.service.value, len(audio) / (self.sample_rate * 2))
             if record_before_finalize and self._send_tracker is not None and not self._soniox_wire_ledger:
+                send_phase = 'capture_mapping'
                 note_observed_spans(self._send_tracker, sent_spans, 'managed_chain')
             if output is not None and output.should_finalize:
+                send_phase = 'finalize'
                 if self.window and isinstance(self.raw, WindowedParakeetSocket):
                     self.raw.finalize(vad_pause=True)
                 else:
                     self.raw.finalize()
-        except Exception:
+        except Exception as error:
+            record_local_send_failure(self.service, send_phase, self.raw, error)
             self._local_death_reason = 'send_failed'
             self._dead = True
             self._finish_transport()
@@ -986,6 +1244,9 @@ class LiveLegSocket(STTSocket):
             if self._pending_capture_sample is None:
                 self._pending_capture_sample = start_sample
             self._speech_capture_end = max(self._speech_capture_end, start_sample + len(data) // 2)
+            # Record send time even when this leg's VAD scores the span silent:
+            # the settle grace must cover every replayed obligation.
+            self._note_replay_send(start_sample)
         self._replaying = True
         try:
             return self.send(data, start_sample=start_sample)
@@ -1019,6 +1280,8 @@ class LiveLegSocket(STTSocket):
             commit()
 
     def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
+        if suppress_socket_audio(self.raw, data):
+            return True
         from utils.stt.soniox_idle import unaccepted_onset
 
         data, spans = unaccepted_onset(data, spans, self._send_tracker)
@@ -1027,6 +1290,7 @@ class LiveLegSocket(STTSocket):
         self._idle_send_spans = spans
         token = capture_spans.set(tuple(spans)) if self._soniox_wire_ledger else None
         try:
+            set_cap_capture(self.raw, data, spans)
             accepted = self.raw.send(data)
         finally:
             if token is not None:

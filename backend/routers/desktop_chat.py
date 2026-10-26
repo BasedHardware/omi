@@ -574,7 +574,8 @@ def _user_content(content: object) -> object:
         if not isinstance(block, Mapping):
             continue
         if block.get('type') == 'text' and isinstance(block.get('text'), str):
-            blocks.append({'type': 'text', 'text': block['text']})
+            if block['text']:
+                blocks.append({'type': 'text', 'text': block['text']})
         elif block.get('type') == 'image_url' and isinstance(block.get('image_url'), Mapping):
             url = block['image_url'].get('url')
             if isinstance(url, str) and url.startswith('data:') and ';base64,' in url:
@@ -693,14 +694,14 @@ def _log_gateway_rejection(response: httpx.Response, *, lane_id: str, request_id
     sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
 
 
-_DESKTOP_CHAT_UNAVAILABLE_REASONS = frozenset({'metering_unavailable', 'jit_requires_gateway', 'circuit_open'})
+_DESKTOP_CHAT_UNAVAILABLE_REASONS = frozenset({'metering_unavailable', 'circuit_open'})
 
 
 def _log_desktop_chat_unavailable(*, reason: str, request_id: str) -> None:
     """Record why this router returned HTTP 503.
 
     The 2026-09-09 desktop-chat outage returned 503 in ~105ms with no traceback
-    and no coded reason, so operators could not tell metering, JIT, and circuit
+    and no coded reason, so operators could not tell metering and circuit
     open apart. Log one warning with a closed reason plus request_id. Never log
     request/response bodies, UIDs, or prompts.
     """
@@ -808,6 +809,21 @@ class _RequestValidationError(ValueError):
     pass
 
 
+def _record_history_repair(*, dropped: str, reason: str) -> None:
+    # The direct-path translation silently adapts malformed or Anthropic-
+    # incompatible history shapes (see _request); the fallback telemetry
+    # contract (backend/AGENTS.md, .github/agent-docs/fallback-telemetry.md)
+    # requires every fail-open repair to stay observable through the shared
+    # counter instead of inventing a new one.
+    record_fallback(
+        component='other',
+        from_mode=dropped,
+        to_mode='none',
+        reason=reason,
+        outcome='degraded',
+    )
+
+
 def _request(
     body: object, *, web_search_authorization: WebSearchAuthorization = 'unavailable'
 ) -> tuple[str, dict[str, object]]:
@@ -821,6 +837,40 @@ def _request(
         raise _RequestValidationError('messages must be an array')
     system: str | None = None
     translated: list[dict[str, object]] = []
+    # An assistant turn that issued tool calls is held back until its results
+    # arrive. Anthropic rejects with 400 invalid_request_error: a tool_result
+    # with no preceding tool_use, a tool_use whose tool_result does not arrive
+    # before the next turn of another role, and a conversation that does not
+    # open with a user turn — all shapes an OpenAI-format replay can carry
+    # after client-side trimming or persistence (an OpenAI history may legally
+    # open with an assistant turn).
+    pending_assistant: dict[str, object] | None = None
+    pending_unanswered: set[str] = set()
+    pending_results: list[dict[str, object]] = []
+
+    def _flush_pending_assistant() -> None:
+        nonlocal pending_assistant, pending_unanswered, pending_results
+        if pending_assistant is None:
+            return
+        assistant, unanswered, results = pending_assistant, pending_unanswered, pending_results
+        pending_assistant, pending_unanswered, pending_results = None, set(), []
+        if not translated:
+            # The conversation must open with a user turn, so an assistant turn
+            # with nothing before it is dropped together with the tool results that
+            # already answered it — kept, they would arrive without their tool_use.
+            _record_history_repair(dropped='assistant_tool_round', reason='local_heal')
+            return
+        if unanswered:
+            _record_history_repair(dropped='tool_use', reason='malformed')
+            assistant['content'] = [
+                block
+                for block in cast(list[dict[str, object]], assistant['content'])
+                if block.get('id') not in unanswered
+            ]
+        if assistant['content']:
+            translated.append(assistant)
+            translated.extend(results)
+
     for message in messages:
         if not isinstance(message, Mapping) or not isinstance(message.get('role'), str):
             raise _RequestValidationError('messages must contain role objects')
@@ -828,7 +878,15 @@ def _request(
         if role in {'system', 'developer'}:
             system = _text(message.get('content'))
         elif role == 'user':
-            translated.append({'role': 'user', 'content': _user_content(message.get('content', ''))})
+            user_content = _user_content(message.get('content', ''))
+            if not user_content:
+                # Anthropic rejects empty content and empty text blocks with 400
+                # invalid_request_error; a user turn with no text and no images
+                # carries nothing, and the provider merges the adjacent turns the
+                # drop leaves behind.
+                continue
+            _flush_pending_assistant()
+            translated.append({'role': 'user', 'content': user_content})
         elif role == 'assistant':
             content: list[dict[str, object]] = []
             text = _text(message.get('content'))
@@ -848,12 +906,34 @@ def _request(
                     except ValueError:
                         input_value = {}
                     content.append({'type': 'tool_use', 'id': call_id, 'name': name, 'input': input_value})
-            translated.append({'role': 'assistant', 'content': content or [{'type': 'text', 'text': ''}]})
+            if not content:
+                # Anthropic rejects empty text blocks (400 invalid_request_error); an
+                # assistant turn with no text and no tool calls carries nothing, and
+                # the provider merges the adjacent user turns it leaves behind.
+                continue
+            _flush_pending_assistant()
+            if any(block['type'] == 'tool_use' for block in content):
+                pending_assistant = {'role': 'assistant', 'content': content}
+                pending_unanswered = {cast(str, block['id']) for block in content if block['type'] == 'tool_use'}
+            elif translated:
+                translated.append({'role': 'assistant', 'content': content})
+            else:
+                # A legal OpenAI history may open with an assistant turn; Anthropic
+                # requires the first message to use the user role, so it is dropped.
+                _record_history_repair(dropped='assistant_turn', reason='local_heal')
         elif role == 'tool':
             tool_call_id = message.get('tool_call_id')
             if not isinstance(tool_call_id, str):
                 raise _RequestValidationError('tool message missing tool_call_id')
-            translated.append(
+            if tool_call_id not in pending_unanswered:
+                # Anthropic requires every tool_result to answer the tool_use in
+                # the immediately preceding assistant turn; a result that lost
+                # its assistant half (client-side trimming, or a duplicate)
+                # must not reach the wire.
+                _record_history_repair(dropped='tool_result', reason='malformed')
+                continue
+            pending_unanswered.discard(tool_call_id)
+            pending_results.append(
                 {
                     'role': 'user',
                     'content': [
@@ -863,6 +943,9 @@ def _request(
             )
         else:
             raise _RequestValidationError(f'unsupported message role: {role}')
+    _flush_pending_assistant()
+    if not translated:
+        raise _RequestValidationError('messages must contain at least one user or assistant message')
     maximum = body.get('max_completion_tokens', body.get('max_tokens', 8192))
     if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum < 1:
         raise _RequestValidationError('max_tokens must be a positive integer')
@@ -1697,32 +1780,9 @@ async def _chat_completions_unobserved(
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
     x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
     x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
-    x_omi_jit_contract_version: str | None = None,
-    x_omi_jit_run_id: str | None = None,
-    x_omi_jit_max_attempts: str | None = None,
-    x_omi_jit_max_output_tokens: str | None = None,
-    x_omi_jit_max_input_tokens: str | None = None,
-    x_omi_jit_max_spend_micro_usd: str | None = None,
 ) -> JSONResponse | StreamingResponse:
     if x_omi_chat_contract_version not in {None, '1'}:
         raise HTTPException(status_code=426, detail='Unsupported chat contract version')
-    # Direct unit callers invoke the FastAPI endpoint without dependency
-    # injection, so omitted Header defaults arrive as Param objects.  Treat
-    # those as absent just as the HTTP adapter does; only actual strings may
-    # activate the explicit JIT qualification capability.
-    jit_header_values = tuple(
-        value if isinstance(value, str) else None
-        for value in (
-            x_omi_jit_contract_version,
-            x_omi_jit_run_id,
-            x_omi_jit_max_attempts,
-            x_omi_jit_max_output_tokens,
-            x_omi_jit_max_input_tokens,
-            x_omi_jit_max_spend_micro_usd,
-        )
-    )
-    if any(value is not None for value in jit_header_values):
-        raise HTTPException(status_code=410, detail={'error': 'feature_retired'})
     request_id = x_omi_request_id or str(uuid4())
     stub_headers = {
         'Cache-Control': 'no-cache',
@@ -1904,12 +1964,6 @@ async def chat_completions(
     x_app_version: str | None = Header(None, alias='X-App-Version'),
     x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
     x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
-    x_omi_jit_contract_version: str | None = Header(None, alias='X-Omi-Jit-Contract-Version'),
-    x_omi_jit_run_id: str | None = Header(None, alias='X-Omi-Jit-Run-Id'),
-    x_omi_jit_max_attempts: str | None = Header(None, alias='X-Omi-Jit-Max-Attempts'),
-    x_omi_jit_max_output_tokens: str | None = Header(None, alias='X-Omi-Jit-Max-Output-Tokens'),
-    x_omi_jit_max_input_tokens: str | None = Header(None, alias='X-Omi-Jit-Max-Input-Tokens'),
-    x_omi_jit_max_spend_micro_usd: str | None = Header(None, alias='X-Omi-Jit-Max-Spend-Micro-Usd'),
     user_agent: str | None = Header(None, alias='User-Agent'),
 ) -> JSONResponse | StreamingResponse:
     attempt = ClientJourneyAttempt(
@@ -1932,12 +1986,6 @@ async def chat_completions(
             x_app_platform=x_app_platform,
             x_omi_chat_contract_version=x_omi_chat_contract_version,
             x_omi_request_id=x_omi_request_id,
-            x_omi_jit_contract_version=x_omi_jit_contract_version,
-            x_omi_jit_run_id=x_omi_jit_run_id,
-            x_omi_jit_max_attempts=x_omi_jit_max_attempts,
-            x_omi_jit_max_output_tokens=x_omi_jit_max_output_tokens,
-            x_omi_jit_max_input_tokens=x_omi_jit_max_input_tokens,
-            x_omi_jit_max_spend_micro_usd=x_omi_jit_max_spend_micro_usd,
         )
     except asyncio.CancelledError:
         attempt.cancel()

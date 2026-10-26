@@ -1,24 +1,29 @@
 import json
-import logging
 import os
 from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-from utils.logging_config import configure_split_stream_logging
+from omi_logging import configure_logging
 
-# Route INFO/DEBUG to stdout and WARNING+ to stderr so GKE Cloud Logging does not
-# classify routine request logs as ERROR severity (issues #9136, #9138, #9135).
-configure_split_stream_logging(level=logging.INFO)
+# Text routes INFO/DEBUG to stdout and WARNING+ to stderr so GKE Cloud Logging does not
+# classify routine request logs as ERROR severity (issues #9136, #9138, #9135), and keeps
+# textPayload for log metrics until pusher's consumers are admitted for JSON
+# (docs/runbooks/structured-logging-rollout.md). Pusher keeps its Uvicorn access lines.
+configure_logging('pusher', access_policy='keep', default_format='text')
 
 import firebase_admin
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from firebase_admin import credentials
 
+from database.firestore_tier_context import FirestoreTierMiddleware
+from utils.rollout_cohorts import configure_rollout_runtime
+from utils.stt_cap_cohort import refresh_stt_cap_cohort_forever
 from routers import pusher, metrics
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.http_client import close_all_clients
+from utils.sync.cap_hold_lifecycle import flush_active
 from utils.executors import drain_background_tasks, log_executor_health, start_background_task
 from utils.readiness import ReadinessGate
 from utils.env_loader import firebase_admin_options
@@ -52,6 +57,7 @@ def _validate_static_capabilities(env: Mapping[str, str] | None = None) -> None:
 
 async def startup_event() -> None:
     _validate_static_capabilities()
+    start_background_task(refresh_stt_cap_cohort_forever(), name='pusher:stt_cap_cohort_refresh')
     start_background_task(log_executor_health(), name='pusher:executor_health')
 
 
@@ -60,6 +66,7 @@ async def shutdown_event() -> None:
     # even if the chart preStop hook did not run. Existing in-flight sessions are
     # then drained by drain_background_tasks within the bounded grace period.
     ReadinessGate.begin_drain()
+    await flush_active(timeout=30.0)
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()
 
@@ -74,7 +81,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await shutdown_event()
 
 
+# Bind private cohort resolution once at the serving composition root.
+configure_rollout_runtime()
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(FirestoreTierMiddleware)
 app.include_router(pusher.router)
 app.include_router(metrics.router)
 

@@ -35,6 +35,17 @@ on:
         description: 'Production Pusher only: successful gcp_backend_pusher_auto_deploy.yml run ID that qualified the digest'
         required: false
         default: ''
+      # Plan B B3: blank (the default) builds and deploys today's pusher:<sha7>
+      # image in development. A digest moves the development Pusher onto the
+      # backend-pusher role image published by a gcp_backend.yml build-only run
+      # of the SAME checked-out SHA; admit_role_image.py rejects anything else.
+      # Production never takes it: a production Pusher ships only a
+      # development-qualified digest through pusher_image_digest above, and that
+      # qualification may itself name the backend-pusher image.
+      pusher_role_image_digest:
+        description: 'Development Pusher only: backend-pusher role-image digest sha256:<64 hex> from a build-only run of this SHA (blank = build and deploy today image)'
+        required: false
+        default: ''
       skip_live_capacity_gate:
         description: 'Break-glass: deploy without the live surge-capacity gate (still requires a merged main SHA and immutable digest)'
         required: false
@@ -48,14 +59,27 @@ on:
         description: 'Why the live capacity gate is unavailable (required with skip_live_capacity_gate)'
         required: false
         default: ''
+      break_glass_lock:
+        description: 'Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)'
+        required: false
+        default: false
+        type: boolean
 
 # The LLM Gateway path reapplies shared backend-secrets; standalone pusher only
 # mutates its own GKE release and therefore keeps a separate environment lock.
+# B5 (named by David, 2026-10-19 fourth round #9): every prod deploy writer shares the
+# prod-train lock, so trains, config-trains and GPU/listen deploys never overlap and the
+# ramp controller can refuse while one runs (backend/scripts/prod_train_lock.py).
+# Break-glass keeps the pre-B5 per-target lock. Development groups are unchanged.
 concurrency:
-  group: ${{ (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}
+  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}
   cancel-in-progress: false
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: ${{ github.event.inputs.service || 'pusher' }}
   REGION: us-central1
 
@@ -70,6 +94,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate Environment Input
+        # Plan B B3 review: the free-text role-image digest reaches this step
+        # through env, never inline ${{ }} interpolation (script injection).
+        env:
+          PUSHER_ROLE_IMAGE_DIGEST_INPUT: ${{ github.event.inputs.pusher_role_image_digest }}
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
@@ -81,6 +109,10 @@ jobs:
           fi
           if [[ "${{ env.SERVICE }}" == "llm-gateway" && "${{ github.event.inputs.environment }}" != "development" ]]; then
             echo "LLM Gateway deploys are dev-only until the prod launch checklist is explicitly completed."
+            exit 1
+          fi
+          if [[ -n "$PUSHER_ROLE_IMAGE_DIGEST_INPUT" && ( "${{ env.SERVICE }}" != "pusher" || "${{ github.event.inputs.environment }}" != "development" ) ]]; then
+            echo "pusher_role_image_digest applies only to a development Pusher deploy; production ships a dev-qualified digest via pusher_image_digest."
             exit 1
           fi
 
@@ -138,6 +170,8 @@ jobs:
             echo "Production Pusher requires a numeric successful development qualification run ID." >&2
             exit 1
           fi
+          # The promotion contract fingerprint reads the Pusher slice of runtime_env.yaml.
+          python3 -m pip install -q pyyaml
           QUALIFICATION_DIR="$RUNNER_TEMP/pusher-dev-qualification-$QUALIFICATION_RUN_ID"
           mkdir -p "$QUALIFICATION_DIR"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID" > "$QUALIFICATION_DIR/run.json"
@@ -153,14 +187,29 @@ jobs:
             echo "Expected exactly one exact live Pusher development deployment receipt." >&2
             exit 1
           fi
-          DEV_PUSHER_REPOSITORY="gcr.io/based-hardware-dev/pusher"
+          # Plan B B3: the qualification may name the fat pusher image or its
+          # backend-pusher role image; the verifier binds the receipt to whichever
+          # the evidence names, and the promotion keeps that repository name.
+          DEV_PUSHER_REPOSITORIES="gcr.io/based-hardware-dev/pusher,gcr.io/based-hardware-dev/backend-pusher"
+          DEV_PUSHER_REPOSITORY="$(jq -r '.image_repository // empty' "${EVIDENCE_FILES[0]}")"
+          if [[ -z "$DEV_PUSHER_REPOSITORY" ]]; then
+            echo "Development qualification names no image_repository." >&2
+            exit 1
+          fi
+          case ",$DEV_PUSHER_REPOSITORIES," in
+            *",$DEV_PUSHER_REPOSITORY,"*) ;;
+            *)
+              echo "Development qualification names repository '${DEV_PUSHER_REPOSITORY}', not one of ${DEV_PUSHER_REPOSITORIES}." >&2
+              exit 1
+              ;;
+          esac
           python3 backend/scripts/verify_pusher_promotion_evidence.py \
             --phase qualification \
             --evidence "${EVIDENCE_FILES[0]}" \
             --deployment-receipt "${DEPLOYMENT_RECEIPTS[0]}" \
             --run-json "$QUALIFICATION_DIR/run.json" \
             --expected-digest "$REQUESTED_DIGEST" \
-            --expected-repository "$DEV_PUSHER_REPOSITORY" \
+            --expected-repository "$DEV_PUSHER_REPOSITORIES" \
             --expected-workflow-id "$EXPECTED_WORKFLOW_ID" \
             --expected-run-id "$QUALIFICATION_RUN_ID"
           QUALIFIED_SOURCE_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_sha"])' "${EVIDENCE_FILES[0]}")"
@@ -174,13 +223,18 @@ jobs:
           # utils,pusher}/, so a change to any of those after qualification would
           # silently ship a stale digest. Derive the paths from the Dockerfile
           # itself so this never drifts from what the image actually baked in.
-          mapfile -t PUSHER_SOURCE_PATHS < <(python3 backend/scripts/verify_pusher_source_closure.py)
+          # Plan B B3 review: a backend-pusher qualification compares the role
+          # image's closure instead — the pusher target of Dockerfile.roles plus
+          # the role Dockerfile and its venv lock — selected by the repository
+          # the evidence names.
+          mapfile -t PUSHER_SOURCE_PATHS < <(python3 backend/scripts/verify_pusher_source_closure.py --image-repository "$DEV_PUSHER_REPOSITORY")
           if ! git diff --quiet "$QUALIFIED_SOURCE_SHA" "$CHECKED_OUT_SHA" -- "${PUSHER_SOURCE_PATHS[@]}"; then
             echo "Current main changed Pusher image source or chart since the selected dev qualification; run a new dev bake." >&2
             git diff --stat "$QUALIFIED_SOURCE_SHA" "$CHECKED_OUT_SHA" -- "${PUSHER_SOURCE_PATHS[@]}" >&2 || true
             exit 1
           fi
           {
+            echo "PUSHER_DEV_IMAGE_REPOSITORIES=$DEV_PUSHER_REPOSITORIES"
             echo "PUSHER_DEV_IMAGE_REPOSITORY=$DEV_PUSHER_REPOSITORY"
             echo "PUSHER_IMAGE_DIGEST=$REQUESTED_DIGEST"
             echo "PUSHER_QUALIFICATION_EVIDENCE=${EVIDENCE_FILES[0]}"
@@ -291,7 +345,7 @@ jobs:
         env:
           # Dest: repo MONITOR_GRAFANA_TOKEN → monitor.omiapi.com
           # Prod: environment MONITOR_GRAFANA_TOKEN → monitor.omi.me
-          # Do not use GRAFANA_TOKEN; that belongs to the TV Cloud Run Grafana.
+          # Use only the environment-specific monitor token above.
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
           set -euo pipefail
@@ -315,8 +369,29 @@ jobs:
         if: env.SERVICE == 'llm-gateway' || github.event.inputs.environment != 'prod'
         uses: docker/setup-buildx-action@v4
 
+      - name: Admit role-image digest opt-in
+        # Plan B B3: a development Pusher may run the published backend-pusher
+        # image instead of building one. Runs after GCR login so imagetools can
+        # read the private registry; sets PUSHER_IMAGE_REPOSITORY/DIGEST/REFERENCE
+        # for the live-capacity gate, Helm deploy and receipts below, and fails
+        # the run on a stale or foreign digest.
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment != 'prod' && github.event.inputs.pusher_role_image_digest != ''
+        env:
+          ROLE_IMAGE_DIGEST_INPUT: ${{ github.event.inputs.pusher_role_image_digest }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/admit_role_image.py \
+            --service pusher \
+            --digest "$ROLE_IMAGE_DIGEST_INPUT" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --admitted-sha "$CHECKED_OUT_SHA" \
+            --prefix PUSHER_IMAGE \
+            --github-env "$GITHUB_ENV"
+
+      # Plan B B3: a development Pusher on a role-image digest deploys the
+      # published backend-pusher image instead of building one.
       - name: Build and Push Docker image
-        if: env.SERVICE == 'llm-gateway' || github.event.inputs.environment != 'prod'
+        if: env.SERVICE == 'llm-gateway' || (github.event.inputs.environment != 'prod' && github.event.inputs.pusher_role_image_digest == '')
         run: |
           if [[ "${{ env.SERVICE }}" == "llm-gateway" ]]; then
             docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG} -f backend/Dockerfile .
@@ -332,7 +407,7 @@ jobs:
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}
 
       - name: Resolve immutable development Pusher image
-        if: env.SERVICE == 'pusher' && github.event.inputs.environment != 'prod'
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment != 'prod' && github.event.inputs.pusher_role_image_digest == ''
         run: |
           set -euo pipefail
           PUSHER_IMAGE_REPOSITORY="gcr.io/${{ vars.GCP_PROJECT_ID }}/pusher"
@@ -353,7 +428,8 @@ jobs:
           set -euo pipefail
           test -n "$PUSHER_DEV_IMAGE_REPOSITORY"
           test -n "$PUSHER_IMAGE_DIGEST"
-          PUSHER_IMAGE_REPOSITORY="gcr.io/${{ vars.GCP_PROJECT_ID }}/pusher"
+          # The promotion keeps the qualified repository name (pusher or backend-pusher).
+          PUSHER_IMAGE_REPOSITORY="gcr.io/${{ vars.GCP_PROJECT_ID }}/${PUSHER_DEV_IMAGE_REPOSITORY##*/}"
           SOURCE_IMAGE="${PUSHER_DEV_IMAGE_REPOSITORY}@${PUSHER_IMAGE_DIGEST}"
           PROMOTION_TAG="promotion-${PUSHER_IMAGE_DIGEST#sha256:}"
           gcloud container images describe "$SOURCE_IMAGE" --format='value(image_summary.digest)' | grep -Fx "$PUSHER_IMAGE_DIGEST"
@@ -419,8 +495,13 @@ jobs:
       - name: Create isolated proposed production Pusher ConfigMap
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
         env:
+          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
+          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
+          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PRO_MONTH_PRICE_ID }}
+          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PRO_YEAR_PRICE_ID }}
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
           ACCOUNT_DELETION_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.account_deletion_handler_url }}
-          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
           CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
           ENVIRONMENT: ${{ vars.ENV }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
@@ -466,6 +547,8 @@ jobs:
           helm -n prod-omi-backend upgrade --install "$PUSHER_CANARY" ./backend/charts/pusher \
             -f ./backend/charts/pusher/prod_omi_pusher_values.yaml \
             --set-string "fullnameOverride=$PUSHER_CANARY" \
+            --set serviceAccount.create=false \
+            --set-string serviceAccount.name=prod-omi-pusher \
             --set autoscaling.enabled=false \
             --set replicaCount=1 \
             --set ingress.enabled=false \
@@ -564,7 +647,7 @@ jobs:
             --canary-run-json pusher-prod-canary-run.json \
             --run-json "$PUSHER_QUALIFICATION_RUN_JSON" \
             --expected-digest "$PUSHER_IMAGE_DIGEST" \
-            --expected-repository "$PUSHER_DEV_IMAGE_REPOSITORY" \
+            --expected-repository "$PUSHER_DEV_IMAGE_REPOSITORIES" \
             --expected-workflow-id "$PUSHER_QUALIFICATION_WORKFLOW_ID" \
             --expected-run-id "$PUSHER_QUALIFICATION_RUN_ID" \
             --expected-canary-workflow-id "$EXPECTED_CANARY_WORKFLOW_ID" \
@@ -604,8 +687,13 @@ jobs:
       - name: Apply non-secret pusher runtime config
         if: env.SERVICE == 'pusher'
         env:
+          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
+          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
+          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PRO_MONTH_PRICE_ID }}
+          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PRO_YEAR_PRICE_ID }}
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
           ACCOUNT_DELETION_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.account_deletion_handler_url }}
-          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
           CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
           ENVIRONMENT: ${{ vars.ENV }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
@@ -739,7 +827,7 @@ jobs:
             --expected-final-repository "$PUSHER_IMAGE_REPOSITORY" \
             --run-json "$PUSHER_QUALIFICATION_RUN_JSON" \
             --expected-digest "$PUSHER_IMAGE_DIGEST" \
-            --expected-repository "$PUSHER_DEV_IMAGE_REPOSITORY" \
+            --expected-repository "$PUSHER_DEV_IMAGE_REPOSITORIES" \
             --expected-workflow-id "$PUSHER_QUALIFICATION_WORKFLOW_ID" \
             --expected-run-id "$PUSHER_QUALIFICATION_RUN_ID" \
             --expected-canary-workflow-id "$EXPECTED_CANARY_WORKFLOW_ID" \

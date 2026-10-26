@@ -8,6 +8,26 @@ token and can never carry caller-controlled text into structured logs.
 from __future__ import annotations
 
 import uuid
+from enum import StrEnum
+
+from utils.sync.assignment_errors import SYNC_ASSIGNMENT_CONFLICT_AWAITING_WRITER, SYNC_ASSIGNMENT_CONFLICT_STRUCTURAL
+
+# Metric/log outcome for a sync failure that never reached an STT vendor. It is
+# deliberately not a TranscriptionOutcome member: that enum is an API contract.
+SYNC_INTERNAL_ERROR_OUTCOME = 'internal_error'
+
+
+class SyncFailureReason(StrEnum):
+    """Internal cause of a persistence/finalize failure (``utils.sync.failure_reason``)."""
+
+    NONE = 'none'
+    STORAGE_RATE_LIMITED = 'storage_rate_limited'
+    QUOTA_EXHAUSTED = 'quota_exhausted'
+    FIRESTORE_CONTENTION = 'firestore_contention'
+    ASSIGNMENT_CONFLICT = 'assignment_conflict'
+    PERSISTENCE_ERROR = 'persistence_error'
+    FINALIZE_ERROR = 'finalize_error'
+
 
 SYNC_PHASE_TOKENS = frozenset(
     {
@@ -80,6 +100,7 @@ SYNC_EXCEPTION_CLASSES = frozenset(
         'NotFound',
         'PermissionDenied',
         'ResourceExhausted',
+        'TooManyRequests',
         'RetryError',
         'ServiceUnavailable',
         'Unauthenticated',
@@ -90,8 +111,11 @@ SYNC_EXCEPTION_CLASSES = frozenset(
         'SyncAssignmentConflict',
         'FirestoreContentionExhausted',
         'SyncConversationPersistenceFenced',
+        'FirstSummaryCallbackPending',
+        'SummaryOutputUnavailable',
         'SyncJobRunLeaseLost',
         'TranscriptionFailure',
+        'RefreshConversationUnavailable',
         'OtherException',
     }
 )
@@ -124,7 +148,14 @@ SYNC_REPEAT_FAILURE_PERSISTENCE_FINGERPRINTS = frozenset(
         'persistence:document_size_limit',
         'persistence:mixed',
     }
-) | frozenset(f'persistence:{name}' for name in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS)
+) | frozenset(
+    f'persistence:{name}'
+    for name in (
+        SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
+        | SYNC_ASSIGNMENT_CONFLICT_STRUCTURAL
+        | SYNC_ASSIGNMENT_CONFLICT_AWAITING_WRITER
+    )
+)
 
 
 def bounded_sync_phase(phase: object) -> str:

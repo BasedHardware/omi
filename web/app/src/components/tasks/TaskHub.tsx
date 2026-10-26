@@ -13,6 +13,7 @@ import { BulkActionBar } from './BulkActionBar';
 import { PageToolbar } from '@/components/layout/PageToolbar';
 import { copyTasksToClipboard, downloadTasks } from '@/lib/taskExport';
 import { useChat as useChatContext } from '@/components/chat/ChatContext';
+import { readHighlightParam, taskListFocus } from '@/lib/itemList';
 
 type ViewMode = 'hub' | 'list';
 
@@ -53,6 +54,26 @@ export function TaskHub() {
 
   // Chat context for passing selected task info
   const { setContext } = useChatContext();
+
+  // `/tasks?highlight=<id>` (from an item-list link): focus that task's row in the list view once
+  // it is loaded, showing Completed when it is done. The focused row scrolls itself into view.
+  const [pendingHighlight, setPendingHighlight] = useState<string | null>(() =>
+    readHighlightParam(),
+  );
+  useEffect(() => {
+    if (!pendingHighlight || loading) return;
+    const focus = taskListFocus(
+      sortedFlatList.pending,
+      sortedFlatList.completed,
+      pendingHighlight,
+    );
+    setPendingHighlight(null);
+    if (!focus) return;
+    setViewMode('list');
+    setSearchQuery('');
+    if (focus.completed) setShowCompleted(true);
+    setFocusedIndex(focus.index);
+  }, [pendingHighlight, loading, sortedFlatList]);
 
   // Set chat context when a single task is selected
   useEffect(() => {
@@ -132,24 +153,6 @@ export function TaskHub() {
     setIsSelectMode(!isSelectMode);
   }, [isSelectMode]);
 
-  // Handle select all (respects search filter)
-  const handleSelectAll = useCallback(() => {
-    // Filter by search query if present
-    const visibleItems = searchQuery
-      ? items.filter((i) =>
-          i.description.toLowerCase().includes(searchQuery.toLowerCase()),
-        )
-      : items;
-    const pendingItems = visibleItems.filter((i) => !i.completed);
-    if (selectedIds.size === pendingItems.length && pendingItems.length > 0) {
-      // Deselect all
-      setSelectedIds(new Set());
-    } else {
-      // Select all pending items
-      setSelectedIds(new Set(pendingItems.map((i) => i.id)));
-    }
-  }, [items, searchQuery, selectedIds.size]);
-
   // Bulk actions
   const handleBulkComplete = useCallback(async () => {
     await bulkComplete(Array.from(selectedIds));
@@ -209,13 +212,21 @@ export function TaskHub() {
     [bulkSetDueDate],
   );
 
-  // Handle bulk toggle complete
+  // Handle bulk toggle complete (Enter): complete the selection's pending tasks, or
+  // reopen the selection when every selected task is already done. Completing a done
+  // task again would only reset its completion time.
   const handleBulkToggleComplete = useCallback(
     async (ids: string[]) => {
-      await bulkComplete(ids);
+      const selected = items.filter((i) => ids.includes(i.id));
+      const pendingIds = selected.filter((i) => !i.completed).map((i) => i.id);
+      if (pendingIds.length > 0) {
+        await bulkComplete(pendingIds);
+      } else {
+        await Promise.all(selected.map((i) => toggleComplete(i.id, false)));
+      }
       clearSelection();
     },
-    [bulkComplete, clearSelection],
+    [items, bulkComplete, toggleComplete, clearSelection],
   );
 
   // Handle bulk delete via keyboard
@@ -279,13 +290,80 @@ export function TaskHub() {
     };
   }, [groupedItems, searchQuery]);
 
+  // The list view's rows, narrowed by the search. TaskListView renders exactly these and
+  // highlights focusedIndex among them (pending first, then completed), so the arrow
+  // keys and Space must index the same rows, not the unfiltered list.
+  const filteredFlatList = useMemo(() => {
+    if (!searchQuery) return sortedFlatList;
+    const query = searchQuery.toLowerCase();
+    const filterTasks = (tasks: typeof items) =>
+      tasks.filter((item) => item.description.toLowerCase().includes(query));
+    return {
+      pending: filterTasks(sortedFlatList.pending),
+      completed: filterTasks(sortedFlatList.completed),
+    };
+  }, [sortedFlatList, searchQuery]);
+
+  // Shortcuts act only on selected tasks the search still shows. A task selected before
+  // the search hid it stays selected, but d, Enter, t and n cannot reach it unseen.
+  const visibleSelectedIds = useMemo(() => {
+    if (!searchQuery) return selectedIds;
+    const visibleIds = new Set(filteredItems.map((item) => item.id));
+    return new Set(Array.from(selectedIds).filter((id) => visibleIds.has(id)));
+  }, [selectedIds, filteredItems, searchQuery]);
+
+  // Filter tasks based on view mode and selected date
+  const filteredView = useMemo(() => {
+    if (!selectedDate) return null;
+    const dateStr = selectedDate.toDateString();
+    const dateFilteredItems = filteredItems.filter((item) => {
+      if (!item.due_at) return false;
+      return new Date(item.due_at).toDateString() === dateStr;
+    });
+    return {
+      pending: dateFilteredItems.filter((i) => !i.completed),
+      completed: dateFilteredItems.filter((i) => i.completed),
+      dateLabel: selectedDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+      }),
+    };
+  }, [filteredItems, selectedDate]);
+
+  // The pending rows the view actually shows: the search narrows them, and in the hub
+  // a picked day narrows them further. Select All and its toggle state both use this
+  // set, so neither can reach a row the list hides.
+  const selectablePendingItems = useMemo(
+    () =>
+      viewMode === 'list'
+        ? filteredFlatList.pending
+        : filteredView
+          ? filteredView.pending
+          : filteredItems.filter((i) => !i.completed),
+    [filteredFlatList, filteredItems, filteredView, viewMode],
+  );
+
+  // Select all toggles exactly the pending rows the view shows. Compare membership by
+  // id, not by count: with a task selected that the search or the picked day hides, a
+  // size comparison counts that hidden task as one of the visible rows and clears the
+  // selection instead of selecting the rows on screen.
+  const handleSelectAll = useCallback(() => {
+    if (selectablePendingItems.length === 0) return;
+    if (selectablePendingItems.every((item) => selectedIds.has(item.id))) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(selectablePendingItems.map((item) => item.id)));
+    }
+  }, [selectablePendingItems, selectedIds]);
+
   // Keyboard navigation (defined after filteredItems)
   const handleNavigate = useCallback(
     (direction: 'up' | 'down') => {
       const totalItems =
         viewMode === 'list'
-          ? sortedFlatList.pending.length +
-            (showCompleted ? sortedFlatList.completed.length : 0)
+          ? filteredFlatList.pending.length +
+            (showCompleted ? filteredFlatList.completed.length : 0)
           : filteredItems.filter((i) => !i.completed).length;
 
       if (totalItems === 0) return;
@@ -298,30 +376,40 @@ export function TaskHub() {
         }
       });
     },
-    [viewMode, sortedFlatList, showCompleted, filteredItems],
+    [viewMode, filteredFlatList, showCompleted, filteredItems],
   );
 
   // Toggle select focused item
   const handleToggleSelectFocused = useCallback(() => {
     const allItems =
       viewMode === 'list'
-        ? [...sortedFlatList.pending, ...(showCompleted ? sortedFlatList.completed : [])]
+        ? [
+            ...filteredFlatList.pending,
+            ...(showCompleted ? filteredFlatList.completed : []),
+          ]
         : filteredItems.filter((i) => !i.completed);
 
     if (focusedIndex >= 0 && focusedIndex < allItems.length) {
       const item = allItems[focusedIndex];
       handleSelect(item.id, !selectedIds.has(item.id));
     }
-  }, [viewMode, sortedFlatList, showCompleted, filteredItems, focusedIndex, selectedIds]);
+  }, [
+    viewMode,
+    filteredFlatList,
+    showCompleted,
+    filteredItems,
+    focusedIndex,
+    selectedIds,
+  ]);
 
   // Keyboard shortcuts
   useTaskKeyboardShortcuts({
     enabled: !loading && items.length > 0,
-    selectedIds,
+    selectedIds: visibleSelectedIds,
     focusedIndex,
     totalItems:
       viewMode === 'list'
-        ? sortedFlatList.pending.length
+        ? filteredFlatList.pending.length
         : filteredItems.filter((i) => !i.completed).length,
     onSetDueToday: handleSetDueToday,
     onSetDueTomorrow: handleSetDueTomorrow,
@@ -335,37 +423,10 @@ export function TaskHub() {
   });
 
   // Filter tasks based on view mode and selected date
-  const getVisibleGroups = () => {
-    if (selectedDate) {
-      // Filter to selected date only
-      const dateStr = selectedDate.toDateString();
-      const dateFilteredItems = filteredItems.filter((item) => {
-        if (!item.due_at) return false;
-        return new Date(item.due_at).toDateString() === dateStr;
-      });
-
-      const pending = dateFilteredItems.filter((i) => !i.completed);
-      const completed = dateFilteredItems.filter((i) => i.completed);
-
-      return {
-        pending,
-        completed,
-        dateLabel: selectedDate.toLocaleDateString('en-US', {
-          weekday: 'long',
-          month: 'short',
-          day: 'numeric',
-        }),
-      };
-    }
-
-    return null;
-  };
-
-  const filteredView = getVisibleGroups();
   const isEmpty = !loading && items.length === 0;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden">
       <PageToolbar
         search={{
           value: searchQuery,
@@ -375,18 +436,18 @@ export function TaskHub() {
         controls={
           <>
             {/* View mode toggle */}
-            <div className="flex items-center gap-1 p-1 bg-bg-tertiary rounded-lg">
+            <div className="flex items-center gap-1 rounded-lg bg-bg-tertiary p-1">
               <button
                 onClick={() => setViewMode('hub')}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm',
+                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm',
                   'transition-colors',
                   viewMode === 'hub'
                     ? 'bg-white text-black'
                     : 'text-text-tertiary hover:text-text-secondary',
                 )}
               >
-                <LayoutGrid className="w-4 h-4" />
+                <LayoutGrid className="h-4 w-4" />
                 Hub
               </button>
               <button
@@ -395,14 +456,14 @@ export function TaskHub() {
                   setSelectedDate(null); // Clear date filter when switching to list
                 }}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm',
+                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm',
                   'transition-colors',
                   viewMode === 'list'
                     ? 'bg-white text-black'
                     : 'text-text-tertiary hover:text-text-secondary',
                 )}
               >
-                <List className="w-4 h-4" />
+                <List className="h-4 w-4" />
                 List
               </button>
             </div>
@@ -412,21 +473,21 @@ export function TaskHub() {
               <button
                 onClick={toggleSelectMode}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
+                  'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm',
                   'transition-colors',
                   isSelectMode
                     ? 'bg-white/10 text-white'
-                    : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary',
+                    : 'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
                 )}
               >
                 {isSelectMode ? (
                   <>
-                    <CheckSquare className="w-4 h-4" />
+                    <CheckSquare className="h-4 w-4" />
                     <span>Selecting</span>
                   </>
                 ) : (
                   <>
-                    <Square className="w-4 h-4" />
+                    <Square className="h-4 w-4" />
                     <span>Select</span>
                   </>
                 )}
@@ -438,9 +499,9 @@ export function TaskHub() {
 
       {/* Content - Two column layout for Hub view */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full flex flex-col lg:flex-row w-full">
+        <div className="flex h-full w-full flex-col lg:flex-row">
           {/* Left Column - Tasks (scrollable) */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 order-last lg:order-first">
+          <div className="order-last flex-1 space-y-4 overflow-y-auto p-4 lg:order-first">
             {/* Quick add */}
             <TaskQuickAdd onAdd={handleAddTask} disabled={loading} />
 
@@ -459,16 +520,16 @@ export function TaskHub() {
                 onSelectAll={handleSelectAll}
                 onDone={toggleSelectMode}
                 allSelected={
-                  selectedIds.size === filteredItems.filter((i) => !i.completed).length &&
-                  filteredItems.filter((i) => !i.completed).length > 0
+                  selectablePendingItems.length > 0 &&
+                  selectablePendingItems.every((i) => selectedIds.has(i.id))
                 }
-                totalCount={filteredItems.filter((i) => !i.completed).length}
+                totalCount={selectablePendingItems.length}
               />
             )}
 
             {/* Error state */}
             {error && (
-              <div className="p-4 rounded-xl bg-error/10 border border-error/20 text-error text-sm">
+              <div className="rounded-xl border border-error/20 bg-error/10 p-4 text-sm text-error">
                 {error}
               </div>
             )}
@@ -485,13 +546,13 @@ export function TaskHub() {
             {/* Empty state */}
             {isEmpty && (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="w-16 h-16 rounded-2xl bg-bg-tertiary flex items-center justify-center mb-4">
-                  <CheckSquare className="w-8 h-8 text-text-quaternary" />
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-tertiary">
+                  <CheckSquare className="h-8 w-8 text-text-quaternary" />
                 </div>
-                <h3 className="text-lg font-medium text-text-primary mb-2">
+                <h3 className="mb-2 text-lg font-medium text-text-primary">
                   No tasks yet
                 </h3>
-                <p className="text-text-tertiary text-sm max-w-xs">
+                <p className="max-w-xs text-sm text-text-tertiary">
                   Add a task above or they&apos;ll appear automatically from your
                   conversations
                 </p>
@@ -534,8 +595,8 @@ export function TaskHub() {
                 {/* List view - flat list with TaskListView */}
                 {viewMode === 'list' ? (
                   <TaskListView
-                    pendingTasks={sortedFlatList.pending}
-                    completedTasks={sortedFlatList.completed}
+                    pendingTasks={filteredFlatList.pending}
+                    completedTasks={filteredFlatList.completed}
                     showCompleted={showCompleted}
                     onToggleShowCompleted={() => setShowCompleted(!showCompleted)}
                     selectedIds={selectedIds}
@@ -575,7 +636,7 @@ export function TaskHub() {
                     )}
                     {filteredView.pending.length === 0 &&
                       filteredView.completed.length === 0 && (
-                        <div className="text-center py-8 text-text-tertiary text-sm">
+                        <div className="py-8 text-center text-sm text-text-tertiary">
                           No tasks for this date
                         </div>
                       )}
@@ -642,13 +703,13 @@ export function TaskHub() {
 
           {/* Right Column - Dashboard (sticky sidebar) - only in Hub view */}
           {viewMode === 'hub' && (
-            <div className="w-full lg:w-[380px] lg:flex-shrink-0 p-4 lg:pl-6 lg:border-l border-bg-tertiary order-first lg:order-last lg:h-full lg:overflow-y-auto">
+            <div className="order-first w-full border-bg-tertiary p-4 lg:order-last lg:h-full lg:w-[380px] lg:flex-shrink-0 lg:overflow-y-auto lg:border-l lg:pl-6">
               {/* Loading state for dashboard */}
               {loading && items.length === 0 && (
                 <div className="space-y-4">
-                  <div className="h-32 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
-                  <div className="h-24 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
-                  <div className="h-64 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
+                  <div className="h-32 animate-pulse rounded-xl border border-bg-tertiary bg-bg-secondary" />
+                  <div className="h-24 animate-pulse rounded-xl border border-bg-tertiary bg-bg-secondary" />
+                  <div className="h-64 animate-pulse rounded-xl border border-bg-tertiary bg-bg-secondary" />
                 </div>
               )}
 

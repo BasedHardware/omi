@@ -128,6 +128,18 @@ async def test_every_replacement_late_rejects_once_then_terminates_when_chain_ex
     monkeypatch.setattr(window, 'connect_window', initial)
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    # Deepgram is retired (2026-08-27); pin the policy and session seams so
+    # this window-replay regression keeps a third leg to hand off to, exactly
+    # the wiring a pre-retirement deployment had.
+    _real_provider_is_enabled = st.provider_is_enabled
+
+    def _admit_deepgram_streaming(provider, surface):
+        if provider in ('deepgram_cloud', 'deepgram_self_hosted') and surface is st.STTServingSurface.STREAMING:
+            return True
+        return _real_provider_is_enabled(provider, surface)
+
+    monkeypatch.setattr(st, 'provider_is_enabled', _admit_deepgram_streaming)
+    monkeypatch.setattr(st, 'deepgram_fallback_model', lambda language: 'nova-3')
     monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
     legs['deepgram'] = []
 
@@ -211,6 +223,18 @@ async def test_empty_snapshot_handoff_tracks_new_speech_and_replays_it_on_next_f
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if timeline_v2 else 'false')
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    # Deepgram is retired (2026-08-27); pin the policy and session seams so
+    # this window-replay regression keeps a third leg to hand off to, exactly
+    # the wiring a pre-retirement deployment had.
+    _real_provider_is_enabled = st.provider_is_enabled
+
+    def _admit_deepgram_streaming(provider, surface):
+        if provider in ('deepgram_cloud', 'deepgram_self_hosted') and surface is st.STTServingSurface.STREAMING:
+            return True
+        return _real_provider_is_enabled(provider, surface)
+
+    monkeypatch.setattr(st, 'provider_is_enabled', _admit_deepgram_streaming)
+    monkeypatch.setattr(st, 'deepgram_fallback_model', lambda language: 'nova-3')
     monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
     legs['deepgram'] = []
 
@@ -521,11 +545,41 @@ async def test_replay_tracking_survives_downstream_vad_fail_open(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('pending_output', [False, True])
+async def test_quiet_modulate_replacement_settles_instead_of_overflow_failover(monkeypatch, pending_output):
+    actual, base, previous, legs, capture = await setup_chain(monkeypatch)
+    clock = [0.0]
+    monkeypatch.setattr(live_session, '_replay_clock', lambda: clock[0])
+    try:
+        assert await actual._failover_stt_socket()
+        replacement = actual.stt_socket
+        modulate = legs['modulate'][0]
+        modulate.has_pending_provider_output = lambda: pending_output
+        # The replayed window capture is VAD speech this leg never answered.
+        assert replacement._tracks_window_replay and replacement.has_untranscribed_speech()
+        monkeypatch.setattr(replacement.gate, '_run_vad', lambda _pcm: False)
+        pcm = b'\x00\x00' * 16000
+        for second in range(120):
+            clock[0] = float(second + 1)
+            await _flush_capture(actual, pcm, 1920 + second * 16000)
+        if pending_output:
+            # Output the provider still owes keeps today's replay obligation.
+            assert modulate.is_connection_dead and replacement.death_reason == 'replay_ring_overflow'
+            return
+        assert actual.host.stt_service == st.STTService.modulate and legs['soniox'] == []
+        assert not modulate.is_connection_dead and not replacement.has_untranscribed_speech()
+        first, end = actual._window_ring().capture_bounds
+        assert end == 1920 + 120 * 16000 and end - first <= 90 * 16000
+    finally:
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('account_failure', [False, True])
 async def test_mid_session_modulate_endpoint_failure_preserves_healthy_sibling(monkeypatch, account_failure):
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):

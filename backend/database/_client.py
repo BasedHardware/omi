@@ -1,14 +1,20 @@
 import logging
+import random
 import re
+import time
 from threading import Lock
-from typing import Any
+from typing import Any, Callable
 
 import os
-from google.api_core.exceptions import InvalidArgument
+from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ResourceExhausted, ServiceUnavailable
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
-from database.firestore_transaction_retry import FirestoreAborted, FirestoreContentionExhausted
+from database.firestore_transaction_retry import (
+    FirestoreAborted,
+    FirestoreContentionExhausted,
+    equal_jitter_delay,
+)
 from database.google_credentials import (
     customer_data_service_account,
     customer_entitlement_service_account,
@@ -30,6 +36,7 @@ __all__ = [
     "get_users_uid",
     "is_document_size_limit_error",
     "is_expired_transaction_error",
+    "is_retryable_firestore_transaction_error",
     "run_transactional",
 ]
 
@@ -110,38 +117,65 @@ def _install_document_read_probe() -> None:
 
 _install_document_read_probe()
 
+
+def _install_action_item_write_fences() -> None:
+    # Match the SDK read probe's import-isolation seam. No clients or IO here.
+    try:
+        from database.action_item_write_fence import install_write_fences
+    except ImportError:
+        return
+    install_write_fences()
+
+
+_install_action_item_write_fences()
+
+
+def _install_memory_change_heads() -> None:
+    try:
+        from database.memory_change_head import install_write_heads
+    except ImportError:
+        return
+    install_write_heads()
+
+
+_install_memory_change_heads()
+
+
+def _install_list_projection_writer() -> None:
+    try:
+        from database.list_projection import install_list_projection_writer
+    except ImportError:
+        return
+    install_list_projection_writer()
+
+
+_install_list_projection_writer()
+
+
 _firestore_client = None
 _firestore_client_lock = Lock()
 _customer_firestore_client = None
 _customer_firestore_client_lock = Lock()
 
 
-def _firestore_database_id() -> str | None:
-    """Resolve the optional named database, with a hard QA-only fence.
+def _firestore_database_id(project: str | None = None) -> str | None:
+    """Reject named database overrides outside the emulator, except staging's own DB.
 
-    The isolated JIT plane owns ``jit-qa`` in the development project.  A
-    named database must never be accepted as an ambient production override:
-    ordinary services retain the default database when this variable is absent,
-    while a misconfigured QA process fails before constructing a client.
+    The staging deployment (contract (i)) reads and writes the named database
+    ``staging`` in ``based-hardware-dev``. That is allowed only when
+    ``OMI_DEPLOYMENT=staging`` and the client's project is ``based-hardware-dev``;
+    the staging isolation fence runs first, so a staging process pointed at prod
+    never gets this far.
     """
+    from utils.staging_fence import STAGING_DATABASE, STAGING_PROJECT, assert_staging_isolation, is_staging
 
+    assert_staging_isolation()
     database = (os.getenv("FIRESTORE_DATABASE_ID") or "").strip()
-    qa_auth_only = (os.getenv("OMI_JIT_QA_AUTH_ONLY") or "").strip().casefold() in {"1", "true", "yes", "on"}
-    if qa_auth_only:
-        if database != "jit-qa":
-            raise RuntimeError("isolated JIT QA requires FIRESTORE_DATABASE_ID=jit-qa")
-        if (
-            (os.getenv("OMI_ENV_STAGE") or "").strip().casefold() != "dev"
-            or (os.getenv("GOOGLE_CLOUD_PROJECT") or "").strip() != "based-hardware-dev"
-            or (os.getenv("OMI_FIRESTORE_DATA_PLANE_PROJECT") or "").strip() != "based-hardware-dev"
-        ):
-            raise RuntimeError("FIRESTORE_DATABASE_ID=jit-qa requires the isolated development JIT QA fence")
-        return database
     if not database or database == "(default)":
         return None
-    if database == "jit-qa":
-        raise RuntimeError("FIRESTORE_DATABASE_ID=jit-qa requires the isolated development JIT QA fence")
-    raise RuntimeError("FIRESTORE_DATABASE_ID is restricted to the isolated JIT QA database")
+    if database == STAGING_DATABASE and is_staging() and project == STAGING_PROJECT:
+        return database
+    raise RuntimeError("FIRESTORE_DATABASE_ID is restricted to local Firestore emulators and staging")
 
 
 def _client_kwargs(credentials: Any, project: str) -> dict[str, Any]:
@@ -171,16 +205,14 @@ def _build_firestore_client() -> Any:
     customer_data = customer_data_service_account()
     if customer_data is not None:
         credentials, project_id = customer_data
-        database = _firestore_database_id()
-        if database and project_id != "based-hardware-dev":
-            raise RuntimeError("jit-qa cannot use a mounted customer-data service account")
+        database = _firestore_database_id(project_id)
         customer_kwargs: dict[str, Any] = _client_kwargs(credentials, project_id)
         if database:
             customer_kwargs["database"] = database
         return firestore.Client(**customer_kwargs)
 
     prepare_google_credentials()
-    database = _firestore_database_id()
+    database = _firestore_database_id("based-hardware-dev")
     if database:
         return firestore.Client(project="based-hardware-dev", database=database)
     return firestore.Client()
@@ -208,9 +240,7 @@ def _build_customer_firestore_client() -> Any:
     entitlements = customer_entitlement_service_account()
     if entitlements is not None:
         credentials, project_id = entitlements
-        database = _firestore_database_id()
-        if database and project_id != "based-hardware-dev":
-            raise RuntimeError("jit-qa cannot use a mounted customer-entitlement service account")
+        database = _firestore_database_id(project_id)
         kwargs: dict[str, Any] = _client_kwargs(credentials, project_id)
         if database:
             kwargs["database"] = database
@@ -238,7 +268,7 @@ def _build_data_plane_firestore_client() -> Any:
 
     Some deployments (desktop-backend in dev) run their compute on one GCP
     project via bare ADC (``GOOGLE_CLOUD_PROJECT``) while the user's actual
-    Firestore data — the memory ledger, JIT proactivity state, screen-activity
+    Firestore data — the memory ledger, retained proactivity history, screen-activity
     sync — lives in a different project (see ``backend/deploy/runtime_env``'s
     ``data_plane_project``). ``OMI_FIRESTORE_DATA_PLANE_PROJECT`` names that
     project explicitly so ADC can be pinned to it instead of silently
@@ -251,12 +281,14 @@ def _build_data_plane_firestore_client() -> Any:
         return get_firestore_client()
 
     data_plane_project = os.environ.get("OMI_FIRESTORE_DATA_PLANE_PROJECT", "").strip()
-    database = _firestore_database_id()
     if not data_plane_project:
         service = (os.getenv("K_SERVICE") or os.getenv("APP_NAME") or "").strip().casefold()
         if "desktop-backend" in service:
             raise RuntimeError("OMI_FIRESTORE_DATA_PLANE_PROJECT is required on desktop-backend")
         return get_firestore_client()
+    # Resolved only once a data-plane project is pinned: without one this seam is the default client,
+    # which applies its own (project-aware) named-DB check.
+    database = _firestore_database_id(data_plane_project)
 
     # Bare ADC pinned to another project is not enough: the dev compute
     # service account has no data-plane Firestore IAM (writes came back 403
@@ -275,8 +307,6 @@ def _build_data_plane_firestore_client() -> Any:
                 f"{data_plane_project} does not match the mounted service account's "
                 f"project {sa_project}"
             )
-        if database and sa_project != "based-hardware-dev":
-            raise RuntimeError("jit-qa cannot use a mounted customer-entitlement service account")
         kwargs: dict[str, Any] = _client_kwargs(credentials, data_plane_project)
         if database:
             kwargs["database"] = database
@@ -303,11 +333,29 @@ _EXPIRED_TRANSACTION_MARKER = "transaction has expired"
 
 
 def is_expired_transaction_error(error: BaseException) -> bool:
-    """True for the Firestore 400 that retires a transaction id mid-flight."""
-    return isinstance(error, InvalidArgument) and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
+    """True when Firestore has retired the transaction id mid-flight.
+
+    A commit reports that as ``InvalidArgument`` 400. A streaming read
+    (``BatchGetDocuments`` / ``RunQuery``) reports the same retirement as
+    ``Aborted`` 409, raised from ``google.api_core.grpc_helpers``. The SDK
+    retries ``Aborted`` only when ``_commit`` raises it, and that retry reuses
+    the dead id, so the read-path ``Aborted`` has to be recognized here.
+    """
+    return isinstance(error, (InvalidArgument, Aborted)) and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
 
 
 _DOCUMENT_SIZE_LIMIT_MARKER = "exceeds the maximum allowed size"
+
+# Google RPC codes whose rejections do not change when the same write is
+# retried: the row's size, its ACL, or the database's policy refuses the
+# operation itself, not this attempt at it.
+_PERMANENT_WRITE_CODE_MARKERS = (
+    _DOCUMENT_SIZE_LIMIT_MARKER,
+    "the request must be modified",  # failed_precondition envelope
+    "permission denied",  # permission_denied on the row or database
+    "caller does not have permission",
+    "forbidden for",  # policy refusals phrased as ``... forbidden for ...``
+)
 
 
 def is_document_size_limit_error(error: BaseException) -> bool:
@@ -320,6 +368,22 @@ def is_document_size_limit_error(error: BaseException) -> bool:
     return isinstance(error, InvalidArgument) and _DOCUMENT_SIZE_LIMIT_MARKER in str(error).lower()
 
 
+def is_permanent_firestore_write_rejection(error: BaseException) -> bool:
+    """True when Firestore refused the write itself, not this attempt at it.
+
+    The document-size 400 is the volume case, but the same permanence holds for
+    a permission-denied row and for failed-precondition policy refusals: no
+    retry of the same write can succeed, so callers must move the payload to
+    storage that still accepts it (or a different row) instead of looping.
+    Transient classes — contention (``Aborted``), an expired transaction id,
+    availability faults — return False; callers keep their retry.
+    """
+    if is_document_size_limit_error(error):
+        return True
+    message = str(error).lower()
+    return any(marker in message for marker in _PERMANENT_WRITE_CODE_MARKERS[1:])
+
+
 # The SDK's ``_Transactional`` raises a bare ValueError once its own attempts are spent.
 _SDK_COMMIT_EXHAUSTED_PREFIX = "failed to commit transaction"
 
@@ -329,8 +393,10 @@ def firestore_failure_reason(error: BaseException) -> str:
 
     Firestore error text names the rejected document by path, which carries the
     uid, so callers log this token (and ``firestore_document_kind``) instead.
-    ``document_size_limit`` is permanent; ``expired_transaction`` and
-    ``contention`` are transient and succeed on a later attempt.
+    ``document_size_limit`` is permanent; ``expired_transaction``,
+    ``contention``, ``deadline_exceeded``, ``unavailable``, and
+    ``resource_exhausted`` are transient and succeed on a later attempt.
+    ``resource_exhausted`` is retried only by the ``transient=True`` path.
     """
     if is_document_size_limit_error(error):
         return 'document_size_limit'
@@ -340,7 +406,43 @@ def firestore_failure_reason(error: BaseException) -> str:
         type(error) is ValueError and str(error).lower().startswith(_SDK_COMMIT_EXHAUSTED_PREFIX)
     ):
         return 'contention'
+    if isinstance(error, DeadlineExceeded):
+        return 'deadline_exceeded'
+    if isinstance(error, ServiceUnavailable):
+        return 'unavailable'
+    if isinstance(error, ResourceExhausted):
+        return 'resource_exhausted'
     return 'other'
+
+
+# Used only by the transient publication opt-in. The default transactional path
+# still retries an expired id alone and does not consult this set.
+_RETRYABLE_FIRESTORE_REASONS = frozenset(
+    {'expired_transaction', 'contention', 'deadline_exceeded', 'unavailable', 'resource_exhausted'}
+)
+
+
+def is_retryable_firestore_transaction_error(error: BaseException) -> bool:
+    """True when a new transaction can succeed and the write itself is not refused.
+
+    Composes ``firestore_failure_reason`` and ``is_permanent_firestore_write_rejection``.
+    Expired transaction ids, contention (including the SDK's exhausted-commit
+    wrapper), ``DeadlineExceeded``, ``ServiceUnavailable``, and
+    ``ResourceExhausted`` are retryable. Any other ``InvalidArgument`` is not.
+    The cause chain is walked because the SDK wraps a spent ``Aborted`` retry
+    in ``ValueError``. Callers that do not pass ``transient=True`` do not use
+    this predicate.
+    """
+    if is_permanent_firestore_write_rejection(error):
+        return False
+    current: BaseException | None = error
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if firestore_failure_reason(current) in _RETRYABLE_FIRESTORE_REASONS:
+            return True
+        current = current.__cause__
+    return False
 
 
 # Firestore names the rejected document as ``.../documents/<collection>/<id>/...``.
@@ -388,23 +490,67 @@ def firestore_document_kind(error: BaseException) -> str:
     return 'other'
 
 
-def run_transactional(client: Any, transactional_callable: Any, *args: Any, attempts: int = 3, **kwargs: Any) -> Any:
+def run_transactional(
+    client: Any,
+    transactional_callable: Any,
+    *args: Any,
+    attempts: int = 3,
+    initial_transaction: Any = None,
+    transient: bool = False,
+    sleep: Callable[[float], None] | None = None,
+    random_value: Callable[[], float] | None = None,
+    outcome: dict[str, str] | None = None,
+    **kwargs: Any,
+) -> Any:
     """Run a ``@firestore.transactional`` callable, restarting it on an expired transaction.
 
     ``_Transactional.__call__`` retries contention by replaying the *same* transaction id,
-    which is exactly what cannot work once Firestore has retired that id: the commit comes
-    back ``400 The referenced transaction has expired or is no longer valid`` and nothing
-    was written. The SDK treats that as fatal, so recovery requires a brand-new transaction
-    and belongs to this boundary rather than to every caller — callers that own a live
-    WebSocket session have no way to distinguish it from a real write failure.
+    which is exactly what cannot work once Firestore has retired that id. The commit comes
+    back ``400 The referenced transaction has expired or is no longer valid``; a streaming
+    read comes back ``409`` ``Aborted`` with the same message, and the SDK does not retry
+    that read. Nothing was written. Recovery requires a brand-new transaction and belongs
+    to this boundary rather than to every caller — callers that own a live WebSocket
+    session have no way to distinguish it from a real write failure.
+    ``initial_transaction`` lets an outer contention budget own the first transaction;
+    expiry still replaces it with a new transaction under the existing attempt limit.
+
+    ``transient=True`` is the idempotent-caller opt-in. It also restarts on contention,
+    ``DeadlineExceeded``, ``ServiceUnavailable``, and ``ResourceExhausted``, with
+    equal-jitter backoff between fresh transactions. A deadline or a throttle at
+    commit can be ambiguous, so the callable must re-read and refuse a second
+    increment. Backoff runs in this helper, after the callable has returned, so a
+    lock held only inside the callable is not held during the sleep. The default
+    path still retries only an expired transaction id and does not sleep.
+    ``outcome`` receives ``retried_ok`` or ``exhausted`` when set.
     """
+    predicate = is_retryable_firestore_transaction_error if transient else is_expired_transaction_error
+    caught: tuple[type[BaseException], ...] | type[Exception] = Exception if transient else (InvalidArgument, Aborted)
     for attempt in range(1, max(1, attempts) + 1):
         try:
-            return transactional_callable(client.transaction(), *args, **kwargs)
-        except InvalidArgument as error:
-            if attempt >= attempts or not is_expired_transaction_error(error):
+            transaction = (
+                initial_transaction if attempt == 1 and initial_transaction is not None else client.transaction()
+            )
+            result = transactional_callable(transaction, *args, **kwargs)
+            if outcome is not None and attempt > 1:
+                outcome['status'] = 'retried_ok'
+            return result
+        except caught as error:
+            retryable = predicate(error)
+            if attempt >= attempts or not retryable:
+                if outcome is not None and retryable and attempt >= attempts:
+                    outcome['status'] = 'exhausted'
                 raise
-            logger.warning('Firestore transaction expired, restarting attempt=%d/%d', attempt, attempts)
+            if transient:
+                logger.warning(
+                    'Firestore transaction retryable, restarting attempt=%d/%d reason=%s',
+                    attempt,
+                    attempts,
+                    firestore_failure_reason(error),
+                )
+                delay = equal_jitter_delay(attempt, random_value or random.random)
+                (sleep or time.sleep)(delay)
+            else:
+                logger.warning('Firestore transaction expired, restarting attempt=%d/%d', attempt, attempts)
 
 
 class _LazyFirestoreClient:

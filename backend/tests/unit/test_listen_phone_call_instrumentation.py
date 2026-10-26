@@ -48,6 +48,7 @@ def _phone_call_host(**overrides):
             source='phone_call', codec='pcm', sample_rate=48000, uid='', websocket=SimpleNamespace()
         ),
         state=SimpleNamespace(
+            current_conversation_id=None,
             fair_use_dg_budget_exhausted=False,
             fair_use_track_dg_usage=False,
             dg_usage_ms_pending=0,

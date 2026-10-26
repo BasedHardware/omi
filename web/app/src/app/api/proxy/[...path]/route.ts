@@ -3,8 +3,6 @@ import { moonshineJson } from '@tschk/moonshine-next/server';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me';
 
 const FORWARDED_RESPONSE_HEADERS = [
-  'X-Omi-Memory-As-Of',
-  'X-Omi-Memory-Belief-Enabled',
   'X-Omi-Memory-Canonical-Lifecycle-Exposed',
   'X-Omi-Memory-Default-Delete-Supported',
   'X-Omi-Memory-Device-Scope-Supported',

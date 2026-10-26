@@ -213,7 +213,7 @@ def load_dependencies():
 @pytest.fixture(autouse=True)
 def default_flags(monkeypatch):
     monkeypatch.delenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, raising=False)
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
 
 
 @pytest.mark.parametrize('skew', [40, 1200])
@@ -591,14 +591,13 @@ def _drive_process_segment(
     from utils.conversations import lifecycle
 
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', signed_url_impl or (lambda _path: 'file://x'))
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
     monkeypatch.setattr(pipeline, 'prerecorded', prerecorded_impl or (lambda *args, **kwargs: (['w'], 'en')))
     monkeypatch.setattr(pipeline, 'postprocess_words', lambda *args, **kwargs: _segments(texts))
     monkeypatch.setattr(pipeline, 'get_timestamp_from_path', lambda _path: wal_ts)
     monkeypatch.setattr(pipeline, 'identify_speakers_for_segments', lambda *args, **kwargs: None)
     monkeypatch.setattr(pipeline.conversations_db, 'get_manual_speaker_receipt', lambda *args: {})
-    monkeypatch.setattr(pipeline, 'capture_evidence_dark_write_enabled', lambda: False)
+
     if prove:
 
         def dark_write(incoming, _map, segments):
@@ -1016,7 +1015,7 @@ def test_config_parser_active_for_requires_the_allowlist(monkeypatch):
     from config.sync_live_dedupe import sync_live_dedupe_active_for
 
     monkeypatch.delenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, raising=False)
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
     assert sync_live_dedupe_active_for('u') is True
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, 'other-uid')
     assert sync_live_dedupe_active_for('u') is False

@@ -2,8 +2,17 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderBox, ScrollDirection;
+import 'package:flutter/rendering.dart'
+    show
+        RenderAbstractViewport,
+        RenderBox,
+        RenderObject,
+        RenderSliverMultiBoxAdaptor,
+        ScrollDirection,
+        SliverMultiBoxAdaptorParentData;
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart' show kTouchSlop, PointerDownEvent, PointerMoveEvent;
 
@@ -57,6 +66,10 @@ class TranscriptWidget extends StatefulWidget {
   /// third. [playbackFollowRequest] re-triggers the scroll even when the target
   /// did not change (line tap, scrub, back-to-current).
   final String? currentSegmentId;
+
+  /// When set, the current-line highlight follows this listenable and does not
+  /// require the list to rebuild. [currentSegmentId] is the fallback.
+  final ValueListenable<String?>? highlightedSegment;
   final String? followTargetSegmentId;
   final bool followCurrentSegment;
   final int playbackFollowRequest;
@@ -111,6 +124,7 @@ class TranscriptWidget extends StatefulWidget {
     this.onRejectSpeakerLabel,
     this.startedAt,
     this.currentSegmentId,
+    this.highlightedSegment,
     this.followTargetSegmentId,
     this.followCurrentSegment = false,
     this.playbackFollowRequest = 0,
@@ -207,6 +221,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   // Search result tracking
   final Map<String, GlobalKey> _segmentKeys = {};
+  final GlobalKey _listKey = GlobalKey();
   final List<GlobalKey> _matchKeys = [];
   int _previousSearchResultIndex = -1;
 
@@ -475,51 +490,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     }
   }
 
-  void _captureCurrentPosition({String? layoutIdentity}) {
-    if (!_scrollController.hasClients) return;
-
-    final currentScroll = _scrollController.offset;
-    final isAtBottom = _scrollController.position.maxScrollExtent - currentScroll <= 24;
-    _userHasScrolled = !isAtBottom;
-    if (isAtBottom && !_isUserScrolling) {
-      // Settled at the live edge: resume follow. Do not clear this during an
-      // active drag — a reader who has only moved a few pixels must still win.
-      _userInterruptedAutoScroll = false;
-    }
-    final scrollState = widget.scrollState;
-    if (scrollState != null) {
-      String? anchorId;
-      var anchorIndex = 0;
-      var anchorViewportOffset = 0.0;
-      if (!isAtBottom) {
-        var closestTop = double.infinity;
-        for (var index = 0; index < widget.segments.length; index++) {
-          final segment = widget.segments[index];
-          final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
-          if (renderObject is! RenderBox) continue;
-          final viewport = RenderAbstractViewport.of(renderObject);
-          final top = viewport.getOffsetToReveal(renderObject, 0).offset - currentScroll;
-          final bottom = top + renderObject.size.height;
-          if (bottom > 0 && top < _scrollController.position.viewportDimension && top < closestTop) {
-            closestTop = top;
-            anchorId = segment.id;
-            anchorIndex = index;
-            anchorViewportOffset = top;
-          }
-        }
-      }
-      scrollState.update(
-        offset: currentScroll,
-        isAtBottom: isAtBottom,
-        anchorSegmentId: anchorId,
-        anchorSegmentIndex: anchorIndex,
-        anchorViewportOffset: anchorViewportOffset,
-        layoutIdentity: layoutIdentity ?? widget.layoutIdentity,
-      );
-    }
-    _setIsAtBottom(isAtBottom);
-  }
-
   Future<void> _restoreAnchor() async {
     if (!_scrollController.hasClients) return;
     final scrollState = widget.scrollState;
@@ -589,7 +559,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   void _setIsAtBottom(bool value) {
     if (_isAtBottom == value || !mounted) return;
-    setState(() => _isAtBottom = value);
+    // Saved transcripts have no jump-to-latest control. Updating their scroll
+    // bookkeeping must not rebuild the list and its whole-transcript resolver.
+    if (widget.followLatest) {
+      setState(() => _isAtBottom = value);
+    } else {
+      _isAtBottom = value;
+    }
   }
 
   Future<void> _runFollowToBottom({required bool animated}) async {
@@ -833,6 +809,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       people: people,
       l10n: context.l10n,
       unresolved: widget.unresolvedSpeakers,
+      deferShortVoices: widget.followLatest,
     );
     final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
     final transcriptList = NotificationListener<ScrollMetricsNotification>(
@@ -852,6 +829,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               }
             },
             child: ListView.builder(
+              key: _listKey,
               controller: _scrollController,
               padding: EdgeInsets.only(top: searchBarHeight),
               itemCount: widget.leadingItems.length + widget.segments.length + 2,
@@ -1019,7 +997,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               child: Column(
                 crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
-                  if (!isUser) ...[
+                  if (!isUser && data.sttProvider?.startsWith('on_device:') != true) ...[
                     Padding(
                       padding: const EdgeInsets.only(left: 4, bottom: 2),
                       child: Row(
@@ -1193,6 +1171,22 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   /// line plays the recording from there; double-tapping the words edits them.
   Widget _buildDetailLine(int segmentIdx, List<Person> people, SpeakerNames names, Set<String> askSegmentIds) {
     final data = widget.segments[segmentIdx];
+    return _SegmentHighlight(
+      segmentId: data.id,
+      highlighted: widget.highlightedSegment,
+      staticCurrent: data.id == widget.currentSegmentId,
+      builder: (context, isCurrent) => _buildHighlightedDetailLine(segmentIdx, people, names, askSegmentIds, isCurrent),
+    );
+  }
+
+  Widget _buildHighlightedDetailLine(
+    int segmentIdx,
+    List<Person> people,
+    SpeakerNames names,
+    Set<String> askSegmentIds,
+    bool isCurrent,
+  ) {
+    final data = widget.segments[segmentIdx];
     final Person? person = personById(people, data.personId);
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
@@ -1214,7 +1208,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         !isTagging &&
         askSegmentIds.contains(data.id);
     final isOmi = data.speakerId == omiSpeakerId && !data.isUser;
-    final isCurrent = data.id == widget.currentSegmentId;
     final unnamed = !data.isUser && !isOmi && (person == null || person.name.trim().isEmpty);
     final labelColor = data.isUser ? OmiColors.textPrimary : OmiColors.textTertiary;
     final label = OmiType.footnote.copyWith(color: labelColor, fontWeight: FontWeight.w600, height: 1.3);
@@ -1482,6 +1475,87 @@ class LiteTranscriptWidget extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Rebuilds one transcript line only when that line gains or loses the playhead
+/// highlight. A reader fling moves the highlight often; rebuilding the list for
+/// each move lays out every visible line again.
+class _SegmentHighlight extends StatefulWidget {
+  const _SegmentHighlight({
+    required this.segmentId,
+    required this.highlighted,
+    required this.staticCurrent,
+    required this.builder,
+  });
+
+  final String segmentId;
+  final ValueListenable<String?>? highlighted;
+  final bool staticCurrent;
+  final Widget Function(BuildContext context, bool isCurrent) builder;
+
+  @override
+  State<_SegmentHighlight> createState() => _SegmentHighlightState();
+}
+
+class _SegmentHighlightState extends State<_SegmentHighlight> {
+  ValueListenable<String?>? _highlighted;
+  late bool _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = _isCurrent;
+    _subscribe(widget.highlighted);
+  }
+
+  @override
+  void didUpdateWidget(_SegmentHighlight oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.highlighted != widget.highlighted || oldWidget.segmentId != widget.segmentId) {
+      _unsubscribe();
+      _current = _isCurrent;
+      _subscribe(widget.highlighted);
+    } else {
+      _current = _isCurrent;
+    }
+  }
+
+  @override
+  void dispose() {
+    _unsubscribe();
+    super.dispose();
+  }
+
+  bool get _isCurrent {
+    final highlighted = widget.highlighted;
+    if (highlighted != null) return highlighted.value == widget.segmentId;
+    return widget.staticCurrent;
+  }
+
+  void _subscribe(ValueListenable<String?>? highlighted) {
+    _highlighted = highlighted;
+    highlighted?.addListener(_onHighlight);
+  }
+
+  void _unsubscribe() {
+    _highlighted?.removeListener(_onHighlight);
+    _highlighted = null;
+  }
+
+  void _onHighlight() {
+    if (!mounted) return;
+    final next = _isCurrent;
+    if (next == _current) return;
+    _current = next;
+    // updateSegments() can sync the highlight from a parent build. That build
+    // already includes this line; setState here would assert.
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks || phase == SchedulerPhase.midFrameMicrotasks) return;
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _isCurrent);
 }
 
 String getLastTranscript(

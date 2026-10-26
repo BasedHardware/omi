@@ -169,6 +169,162 @@ def test_can_pay_basic_stale_defers_plan_change_until_cancellation_ends(monkeypa
     assert "reactivate" in reason
 
 
+def _mock_new_buyer(monkeypatch, subscription_module):
+    """A buyer with no current paid subscription and no Stripe-side surprises."""
+    sub = subscription_module
+    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
+    sub.users_db.get_user_valid_subscription = lambda uid: None
+    sub.users_db.get_stripe_customer_id = lambda uid: "cus_x"
+    monkeypatch.setattr(sub, "_has_active_stripe_subscription", lambda uid: False)
+    monkeypatch.setattr(sub, "find_active_paid_subscription_for_user", lambda uid: None)
+
+
+def _set_catalog_prices(monkeypatch):
+    monkeypatch.setenv("STRIPE_PLUS_MONTHLY_PRICE_ID", "price_plus_monthly")
+    monkeypatch.setenv("STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID", "price_unlimited_v2_monthly")
+    monkeypatch.setenv("STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID", "price_unlimited_v2_annual")
+    monkeypatch.setenv("STRIPE_OPERATOR_MONTHLY_PRICE_ID", "price_operator_monthly")
+
+
+def test_new_buyer_single_plan_rejects_legacy_prices_on_explicit_platforms(monkeypatch, subscription_module):
+    """2026-10-24 ruling: a buyer with no current paid subscription may only
+    start on Omi Pro (`unlimited_v2`). The restriction follows the explicit
+    first-party platform values (mobile and web); a missing or unknown header
+    keeps the pre-ruling behaviour for desktop compatibility."""
+    sub = subscription_module
+    _mock_new_buyer(monkeypatch, sub)
+    _set_catalog_prices(monkeypatch)
+
+    for platform in ("ios", "android", "web"):
+        error = sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", platform)
+        assert error is not None and "Omi Pro" in error, platform
+    # Missing / unknown platform: old behaviour, no rejection.
+    for platform in ("unknown", None):
+        assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", platform) is None, platform
+
+
+def test_new_buyer_single_plan_unknown_platform_allowance_is_counted(monkeypatch, subscription_module):
+    """A legacy price allowed only because the platform is missing/unknown is
+    visible in the guard metric under reason `unknown_platform_allowed`."""
+    from prometheus_client import REGISTRY
+
+    sub = subscription_module
+    _mock_new_buyer(monkeypatch, sub)
+    _set_catalog_prices(monkeypatch)
+    labels = {"reason": "unknown_platform_allowed", "plan": "plus"}
+    before = REGISTRY.get_sample_value("omi_new_buyer_checkout_rejected_total", labels) or 0.0
+
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", None) is None
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "not-a-platform") is None
+    # Desktop and explicit-platform rejections never touch this reason.
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "macos") is None
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "ios") is not None
+
+    after = REGISTRY.get_sample_value("omi_new_buyer_checkout_rejected_total", labels)
+    assert after == before + 2.0
+
+
+def test_granted_plan_without_personal_subscription_is_not_exempt(monkeypatch, subscription_module):
+    """Organization grants store a one-time PaymentIntent (`pi_…`) or no id at
+    all; only a current *recurring* personal subscription exempts a caller
+    from the single-plan rule. A grant recipient is a new buyer for checkout."""
+    sub = subscription_module
+    _set_catalog_prices(monkeypatch)
+    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
+    for granted_id in ("pi_org_grant", None):
+        sub.users_db.get_user_valid_subscription = lambda uid, _id=granted_id: SimpleNamespace(
+            plan=PlanType.operator,
+            status="active",
+            cancel_at_period_end=False,
+            current_period_end=2_000_000_000,
+            stripe_subscription_id=_id,
+            current_price_id=None,
+        )
+        assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "web") is not None, granted_id
+
+
+def test_current_recurring_subscriber_still_exempt_on_web(monkeypatch, subscription_module):
+    sub = subscription_module
+    _set_catalog_prices(monkeypatch)
+    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
+    sub.users_db.get_user_valid_subscription = lambda uid: SimpleNamespace(
+        plan=PlanType.operator,
+        status="active",
+        cancel_at_period_end=False,
+        current_period_end=2_000_000_000,
+        stripe_subscription_id="sub_personal",
+        current_price_id="price_operator_monthly",
+    )
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "web") is None
+
+
+def test_new_buyer_single_plan_accepts_unlimited_v2_off_desktop(monkeypatch, subscription_module):
+    sub = subscription_module
+    _mock_new_buyer(monkeypatch, sub)
+    _set_catalog_prices(monkeypatch)
+
+    for platform in ("ios", "web", None):
+        for price_id in ("price_unlimited_v2_monthly", "price_unlimited_v2_annual"):
+            assert sub.new_buyer_single_plan_violation("u1", price_id, platform) is None, (platform, price_id)
+
+
+def test_new_buyer_single_plan_desktop_platforms_unchanged(monkeypatch, subscription_module):
+    """Desktop checkout keeps every pre-ruling target, including Plus."""
+    sub = subscription_module
+    _mock_new_buyer(monkeypatch, sub)
+    _set_catalog_prices(monkeypatch)
+
+    for platform in ("macos", "windows", "MacOS"):
+        assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", platform) is None, platform
+
+
+def test_new_buyer_single_plan_kill_switch_restores_old_targets(monkeypatch, subscription_module):
+    for off_value in ("false", "0", "off", "no"):
+        monkeypatch.setenv("NEW_BUYER_SINGLE_PLAN_ENABLED", off_value)
+        sub = subscription_module
+        _mock_new_buyer(monkeypatch, sub)
+        _set_catalog_prices(monkeypatch)
+        assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "ios") is None, off_value
+    monkeypatch.delenv("NEW_BUYER_SINGLE_PLAN_ENABLED", raising=False)
+
+
+def test_new_buyer_single_plan_rejection_metric_counts_by_reason_and_plan(monkeypatch, subscription_module):
+    from prometheus_client import REGISTRY
+
+    sub = subscription_module
+    _mock_new_buyer(monkeypatch, sub)
+    _set_catalog_prices(monkeypatch)
+    labels = {"reason": "non_omi_pro_price", "plan": "plus"}
+    before = REGISTRY.get_sample_value("omi_new_buyer_checkout_rejected_total", labels) or 0.0
+
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "ios") is not None
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "web") is not None
+    # A rejection-free call must not move the counter.
+    assert sub.new_buyer_single_plan_violation("u1", "price_unlimited_v2_monthly", "ios") is None
+
+    after = REGISTRY.get_sample_value("omi_new_buyer_checkout_rejected_total", labels)
+    assert after == before + 2.0
+
+
+def test_paid_subscriber_not_restricted_by_single_plan_rule(monkeypatch, subscription_module):
+    """A current paid subscriber is never constrained by the single-plan rule,
+    on any platform — their plan-change rules are can_user_make_payment's,
+    unchanged."""
+    sub = subscription_module
+    _set_catalog_prices(monkeypatch)
+    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
+    sub.users_db.get_user_valid_subscription = lambda uid: SimpleNamespace(
+        plan=PlanType.plus,
+        status="active",
+        cancel_at_period_end=False,
+        current_period_end=2_000_000_000,
+        stripe_subscription_id="sub_1",
+        current_price_id="price_plus_monthly",
+    )
+    for platform in ("ios", "web", None):
+        assert sub.new_buyer_single_plan_violation("u1", "price_operator_monthly", platform) is None, platform
+
+
 def test_retained_price_matches_current_price_with_same_plan_and_interval(monkeypatch, subscription_module):
     sub = subscription_module
     retained_price_id = "price_1RtJPm1F8wnoWYvwhVJ38kLb"
@@ -382,3 +538,99 @@ def test_basic_feature_defaults_project_from_plan_limits(monkeypatch, subscripti
     assert '10 minutes of listening per month' in features
     assert '7 words transcribed per month' in features
     assert '9 insights per month' in features
+
+
+@pytest.mark.parametrize(
+    'platform,version,capable',
+    [
+        ('macos', '0.12.196', False),
+        ('macos', '0.12.197', True),
+        ('macos', '0.12.198', True),
+        ('macos', None, False),
+        ('windows', '1.0.35', False),
+        ('windows', None, False),
+        ('ios', '1.0.552', False),
+        ('android', '1.0.552', False),
+        ('web', '0.1.0', True),
+        ('web', '0.0.9', False),
+        ('web', None, False),
+        ('web', 'invalid', False),
+        (None, '0.1.0', False),
+        ('desktop', '99.0.0', False),
+    ],
+)
+def test_true_plan_wire_capability_boundaries(subscription_module, monkeypatch, platform, version, capable):
+    def compare(a, b):
+        left, right = tuple(map(int, a.split('.'))), tuple(map(int, b.split('.')))
+        return (left > right) - (left < right)
+
+    monkeypatch.setattr(subscription_module, 'compare_versions', compare)
+    for plan in (PlanType.plus, PlanType.unlimited_v2):
+        expected = plan if capable else PlanType.unlimited
+        assert subscription_module.wire_plan_for_client(plan, platform, version) == expected
+
+
+def test_macos_capability_floor_remains_operator_configurable(subscription_module, monkeypatch):
+    from utils import plan_wire_capabilities
+
+    monkeypatch.setattr(plan_wire_capabilities, 'MIN_MACOS_VERSION', '99.0.0')
+    monkeypatch.setattr(subscription_module, 'compare_versions', lambda a, b: -1)
+    assert subscription_module.wire_plan_for_client(PlanType.plus, 'macos', '0.12.197') == PlanType.unlimited
+
+
+@pytest.mark.parametrize('platform', ['ios', 'android', 'macos', 'windows', 'web'])
+@pytest.mark.parametrize('plan', [PlanType.plus, PlanType.unlimited_v2])
+def test_declared_safe_decoder_receives_true_plan_before_version_resolves(subscription_module, platform, plan):
+    assert subscription_module.wire_plan_for_client(plan, platform, None, '1') == plan
+
+
+@pytest.mark.parametrize('capability', [None, '', '0', '2', 'true'])
+def test_absent_or_unrecognized_capability_keeps_old_clients_safe(subscription_module, monkeypatch, capability):
+    monkeypatch.setattr(subscription_module, 'compare_versions', lambda a, b: -1)
+    assert subscription_module.wire_plan_for_client(PlanType.plus, 'ios', '1.0.0', capability) == PlanType.unlimited
+    assert subscription_module.wire_plan_for_client(PlanType.plus, 'unknown', '1.0.0', '1') == PlanType.unlimited
+
+
+@pytest.mark.parametrize('plan', [PlanType.basic, PlanType.unlimited, PlanType.operator, PlanType.architect])
+def test_capability_never_changes_plan_membership(subscription_module, plan):
+    assert subscription_module.wire_plan_for_client(plan, 'ios', None, '1') == plan
+
+
+@pytest.mark.parametrize('desktop_floor,windows_floor', [(None, None), ('0.12.197', None), ('0.12.197', '2.0.0')])
+def test_windows_import_time_floor_does_not_inherit_macos(monkeypatch, desktop_floor, windows_floor):
+    import importlib.util
+
+    for name, value in [
+        ('PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION', desktop_floor),
+        ('PLUS_UNLIMITED_V2_MIN_WINDOWS_VERSION', windows_floor),
+    ]:
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    spec = importlib.util.spec_from_file_location('windows_floor_fixture', _BACKEND / 'utils/plan_wire_capabilities.py')
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def compare(a, b):
+        left, right = tuple(map(int, a.split('.'))), tuple(map(int, b.split('.')))
+        return (left > right) - (left < right)
+
+    assert module.MIN_WINDOWS_VERSION == (windows_floor or '99.0.0')
+    assert not module.understands_plan_identity('windows', '1.0.35', None, compare)
+    assert module.understands_plan_identity('macos', '0.12.197', None, compare)
+    if windows_floor:
+        assert module.understands_plan_identity('windows', '2.0.0', None, compare)
+
+
+@pytest.mark.parametrize('interval', ['Monthly', 'Annual'])
+def test_operator_wire_title_preserves_released_macos_price_ownership(subscription_module, interval):
+    # Released normalizedPlanId routes titles containing "pro" to Architect.
+    # Payments appends these intervals to the definition title; the old merger
+    # then unions those prices into that inferred plan, even when IDs are sent.
+    definition = next(d for d in subscription_module.get_paid_plan_definitions() if d['plan_id'] == 'operator')
+    title = f"{definition['title']} {interval}".lower()
+    assert definition['title'] == 'Operator'
+    assert 'operator' in title and 'pro' not in title
+    assert subscription_module.PLAN_DISPLAY_NAMES[PlanType.operator] == 'Pro'

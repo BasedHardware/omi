@@ -14,29 +14,77 @@ from collections import deque
 from typing import Any, Awaitable, Callable
 
 from utils.stt.soniox_wire_ledger import capture_spans, observed_audio
-from config.soniox_idle import idle_max_closes_per_hour, idle_rearm_seconds
+from config.soniox_idle import (
+    IdleCohortSettings,
+    VAD_HANGOVER_SECONDS,
+    cohort_armed,
+    idle_no_frames_seconds,
+    idle_settings_for,
+)
 from utils.async_tasks import create_named_task
 from utils.stt.socket import STTSocket
 from utils.stt.soniox_capture_axis import disable_socket_diagnostics
 from utils.stt.replay_delivery import abort_replay_socket
+from utils.stt.live_reason import LOCAL_DELIVERY_SEND_QUEUE_FULL
 from utils.stt.live_metrics import soniox_idle_metrics
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_reason import normalize_live_stt_reason
+from utils.stt.provider_stream_end import US_TIMEOUT, begin_stream_close, note_stream_close_intent
 
 IDLE_DRAIN_SECONDS = 2.0
+_sleep = asyncio.sleep  # Seam for deterministic watchdog tests.
 
 
 class SonioxIdleBudget:
-    """Session-owned churn limits, retained through leg rotation/recovery."""
+    """Session-owned churn limits, retained through leg rotation/recovery.
 
-    def __init__(self):
-        self.rearm_seconds = idle_rearm_seconds()
-        self.max_closes_per_hour = idle_max_closes_per_hour()
+    The arm and effective values resolve once, on first use, so the live
+    receiver can hand identity over lazily (``uid_provider``): the provider is
+    consulted at most once and only while the cohort knobs can assign an arm
+    (``cohort_armed``), so identity-bypass and unauthenticated paths never
+    touch ``request.uid`` and a provider-less budget is plain control.
+    """
+
+    def __init__(self, uid: str | None = None, uid_provider: Callable[[], str | None] | None = None):
+        self._uid = uid
+        self._uid_provider = uid_provider
+        self._settings: IdleCohortSettings | None = None
         self.rearm_at = 0.0
         self.close_times: deque[float] = deque()
 
+    def _resolve(self) -> IdleCohortSettings:
+        if self._settings is None:
+            uid = self._uid
+            if uid is None and self._uid_provider is not None and cohort_armed():
+                try:
+                    uid = self._uid_provider()
+                except AttributeError:
+                    uid = None  # host without identity: control, no arm requirement
+            self._settings = idle_settings_for(uid)
+        return self._settings
+
+    @property
+    def arm(self) -> str:
+        return self._resolve().arm
+
+    @property
+    def close_seconds(self) -> float:
+        return self._resolve().close_seconds
+
+    @property
+    def rearm_seconds(self) -> float:
+        return self._resolve().rearm_seconds
+
+    @property
+    def max_closes_per_hour(self) -> int:
+        return self._resolve().max_closes_per_hour
+
     def reserve_close(self, now: float) -> bool:
+        """Spend one rolling-hour slot shared by every planned-close trigger.
+
+        Each reopen starts a new provider speaker scope, so the cap bounds that
+        churn for the whole session whatever caused the close."""
         while self.close_times and now - self.close_times[0] >= 3600.0:
             self.close_times.popleft()
         if now < self.rearm_at or len(self.close_times) >= self.max_closes_per_hour:
@@ -88,7 +136,13 @@ class IdleSonioxSocket(STTSocket):
         self._socket_epoch = 0
         self._last_end = 0.0
         self._capture_axis_ledger: Callable[[], int | None] | None = None
+        self._no_frames_seconds = idle_no_frames_seconds()
+        self._last_frame_at = time.monotonic()
+        self._last_speech_at = float('-inf')  # No speech seen yet on this leg.
+        self._close_trigger = 'vad'
+        self._watchdog: asyncio.Task[None] | None = None
         transport._stream_transcript = self._socket_callback(0.0, 0)
+        self._start_watchdog()
 
     def set_wire_ledger(self, epoch: Any) -> None:
         self._wire_epoch = epoch
@@ -120,24 +174,88 @@ class IdleSonioxSocket(STTSocket):
         return self._reason or self._transport.typed_death_reason
 
     def observe_vad(self, output: Any, mode: str) -> None:
+        # Every client frame reaches either this observer or send(); either one
+        # proves the client is still producing audio, whatever the VAD mode.
+        now = time.monotonic()
+        self._last_frame_at = now
+        if output.is_speech or output.audio_to_send:
+            # Speech or its hangover tail: the word boundary is not settled yet.
+            self._last_speech_at = now
         if mode != 'active' or self._finishing or self.is_connection_dead:
             return
-        now = time.monotonic()
         if output.is_speech:
             self._silent_since = None
         elif self._silent_since is None:
             self._silent_since = now
         elif not output.audio_to_send and self._idle_since is None and now - self._silent_since >= self._seconds:
+            # ``audio_to_send`` is non-empty through the VAD hangover, so a
+            # close can only start after the gate released the word boundary.
             if not self._idle_budget.reserve_close(now):
                 return
             # Reserve before scheduling so repeated VAD callbacks cannot spend
             # the same rolling-hour slot. These limits belong to the logical
             # session and survive each replacement transport.
-            # Fence death publication before any await. The logical leg stays
-            # alive while the paid transport finishes its last committed text.
-            self._transport._planned_close = True
-            self._idle_since = now
-            self._close_task = create_named_task(self._close_idle(), name='soniox_idle_close')
+            self._begin_idle_close(now, 'vad')
+
+    def _begin_idle_close(self, now: float, trigger: str) -> None:
+        # Fence death publication before any await. The logical leg stays
+        # alive while the paid transport finishes its last committed text.
+        self._close_trigger = trigger
+        self._transport._planned_close = True
+        note_stream_close_intent(self._transport, US_TIMEOUT)
+        self._idle_since = now
+        self._close_task = create_named_task(self._close_idle(), name='soniox_idle_close')
+
+    def check_no_frames(self, now: float | None = None) -> float | None:
+        """Close when the client sent no frames for the no-frames interval.
+
+        VAD only runs on arriving frames, so a backgrounded app or a dropped
+        pendant would otherwise hold the billed socket open with keepalives
+        until the session ends. Returns seconds until the next check, or
+        ``None`` when this watchdog has nothing left to guard.
+        """
+        if self._finishing or self._closed or self._no_frames_seconds <= 0:
+            return None
+        if self.is_connection_dead:
+            # Death belongs to the normal failover boundary, not to idle.
+            return None
+        now = time.monotonic() if now is None else now
+        if self._idle_since is not None:
+            # Already closed; the successful reopen restarts this watchdog.
+            return None
+        # A stall right after speech first lets the VAD hangover elapse, so the
+        # close never finalizes inside the tail that protects the word boundary.
+        due = max(
+            self._last_frame_at + self._no_frames_seconds,
+            self._last_speech_at + VAD_HANGOVER_SECONDS + self._no_frames_seconds,
+        )
+        if now < due:
+            return due - now
+        if not self._idle_budget.reserve_close(now):
+            # Re-arm floor or the shared hourly cap: retry when a slot can open.
+            budget = self._idle_budget
+            retry = budget.rearm_at - now
+            if budget.close_times and len(budget.close_times) >= budget.max_closes_per_hour:
+                retry = max(retry, budget.close_times[0] + 3600.0 - now)
+            return max(0.5, retry)
+        self._begin_idle_close(now, 'no_frames')
+        return None
+
+    def _start_watchdog(self) -> None:
+        if self._no_frames_seconds <= 0 or (self._watchdog is not None and not self._watchdog.done()):
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._watchdog = create_named_task(self._watch_frames(), name='soniox_idle_no_frames')
+
+    async def _watch_frames(self) -> None:
+        while True:
+            delay = self.check_no_frames()
+            if delay is None:
+                return
+            await _sleep(delay)
 
     async def _close_idle(self) -> None:
         transport = self._transport
@@ -159,15 +277,25 @@ class IdleSonioxSocket(STTSocket):
             # Avoided time starts only after the transport is actually closed.
             self._idle_closed_at = time.monotonic()
             self._metrics.closes.inc()
+            self._metrics.cohort_closes.labels(arm=self._idle_budget.arm).inc()
+            self._metrics.closes_by_trigger.labels(trigger=self._close_trigger).inc()
+            self._metrics.cohort_closes_by_trigger.labels(arm=self._idle_budget.arm, trigger=self._close_trigger).inc()
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
+        self._last_frame_at = time.monotonic()
+        if data:
+            # Gated sends carry only speech, hangover or pre-roll; ungated sends
+            # cannot be classified, so both count as unsettled audio.
+            self._last_speech_at = self._last_frame_at
         if self._finishing or self.is_connection_dead:
             return False
         if self._idle_since is not None:
             # The serving send boundary awaits complete_send before accepting
             # this frame. Retain at most ten seconds, including VAD pre-roll.
             if len(self._pending) + len(data) > self._rate * 2 * 10:
-                self._dead, self._reason = True, 'capacity_full'
+                # The idle wrapper's own pending buffer filled: a local bound,
+                # never vendor capacity.
+                self._dead, self._reason = True, LOCAL_DELIVERY_SEND_QUEUE_FULL
                 return False
             self._pending.extend(data)
             if self._wire_epoch is not None:
@@ -252,6 +380,8 @@ class IdleSonioxSocket(STTSocket):
             if accepted:
                 self._resumed_audio = data
                 self._metrics.reopens.inc()
+                self._metrics.cohort_reopens.labels(arm=self._idle_budget.arm).inc()
+                self._start_watchdog()
                 record_stt_provider_connect(provider='soniox', outcome=CONNECT_SUCCESS)
             return accepted
         except asyncio.CancelledError:
@@ -261,13 +391,18 @@ class IdleSonioxSocket(STTSocket):
             from utils.stt.live_chain import failure_reason
 
             self._metrics.failures.inc()
+            self._metrics.cohort_failures.labels(arm=self._idle_budget.arm).inc()
             self._dead = True
-            self._reason = normalize_live_stt_reason(self._reason, failure_reason(error), default='other')
+            # A reopen failure the classifier cannot name degrades to typed
+            # connection_lost, never the ``other`` metric token: this latch is
+            # the leg's death reason on every later failover hop (P59).
+            self._reason = normalize_live_stt_reason(self._reason, failure_reason(error), default='connection_lost')
             self.idle_reopen_failed = True
             record_stt_provider_connect(provider='soniox', outcome=CONNECT_FAILURE, reason=self._reason)
             return False
         finally:
             self._metrics.latency.observe(time.monotonic() - started)
+            self._metrics.cohort_latency.labels(arm=self._idle_budget.arm).observe(time.monotonic() - started)
 
     def _socket_callback(self, offset: float, epoch: int) -> Any:
         def callback(segments: list[dict[str, Any]]) -> None:
@@ -312,7 +447,9 @@ class IdleSonioxSocket(STTSocket):
 
     def _account_avoided(self) -> None:
         if self._idle_closed_at is not None:
-            self._metrics.avoided.inc(max(0.0, time.monotonic() - self._idle_closed_at))
+            avoided = max(0.0, time.monotonic() - self._idle_closed_at)
+            self._metrics.avoided.inc(avoided)
+            self._metrics.cohort_avoided.labels(arm=self._idle_budget.arm).inc(avoided)
             self._idle_closed_at = time.monotonic()
 
     def enable_writer_pacing(self, *args: Any) -> None:
@@ -328,10 +465,15 @@ class IdleSonioxSocket(STTSocket):
         if self._idle_since is None:
             self._transport.finalize()
 
+    def _stop_watchdog(self) -> None:
+        if self._watchdog is not None and not self._watchdog.done():
+            self._watchdog.cancel()
+
     def finish(self) -> None:
         if self._finishing:
             return
         self._finishing = True
+        self._stop_watchdog()
         if self._reopen_task is not None and not self._reopen_task.done():
             self._reopen_task.cancel()
         self._account_avoided()
@@ -339,7 +481,10 @@ class IdleSonioxSocket(STTSocket):
             self._transport.finish()
 
     async def drain_and_close(self) -> None:
+        begin_stream_close(self._transport)  # The drain or idle close below records it after closing.
         self.finish()
+        if self._watchdog is not None:
+            await asyncio.gather(self._watchdog, return_exceptions=True)
         if self._reopen_task is not None:
             await asyncio.gather(self._reopen_task, return_exceptions=True)
         if self._close_task is not None:
@@ -353,7 +498,7 @@ class IdleSonioxSocket(STTSocket):
     async def abort_transport(self, timeout: float) -> None:
         self.finish()
         deadline = time.monotonic() + max(0.0, timeout)
-        tasks = [task for task in (self._close_task, self._reopen_task) if task is not None]
+        tasks = [task for task in (self._close_task, self._reopen_task, self._watchdog) if task is not None]
         for task in tasks:
             task.cancel()
         if tasks:

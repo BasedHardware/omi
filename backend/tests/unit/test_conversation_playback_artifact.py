@@ -41,6 +41,7 @@ def _load_playback(request):
         "get_or_create_merged_audio",
         "get_playback_artifact_signed_url",
         "is_playback_unavailable",
+        "list_audio_chunks",
     ):
         setattr(storage_module, name, MagicMock())
     storage_module._PRECACHE_FILE_SEM = MagicMock()
@@ -100,13 +101,14 @@ def test_span_math_collapses_inter_part_gap(monkeypatch):
     assert round(spans[-1]['wall_offset'] + spans[-1]['len'], 3) == 215.0
 
 
-def test_parts_sorted_by_first_chunk_timestamp(monkeypatch):
+@pytest.mark.parametrize('equal_start', [False, True])
+def test_parts_sorted_by_first_chunk_timestamp(monkeypatch, equal_start):
     monkeypatch.setattr(playback, 'AudioSegment', _FakeAudioSegment)
     monkeypatch.setattr(playback, 'download_audio_chunks_and_merge', _fake_download)
 
     # Input deliberately unordered; spans must come out in wall order.
     audio_files = [
-        {'id': 'B', 'chunk_timestamps': [1200.0]},
+        {'id': 'B', 'chunk_timestamps': [1000.0 if equal_start else 1200.0]},
         {'id': 'A', 'chunk_timestamps': [1000.0]},
     ]
     _, spans = playback.build_conversation_playback_artifact('u', 'c', audio_files, 990.0)
@@ -277,7 +279,7 @@ def test_conversation_merge_handler_structure():
 
     # Upload precedes the doc stamp so a stamped fingerprint implies a servable blob.
     body = source.split('async def _run_conversation_merge_job', 1)[1]
-    upload_pos = body.index('upload_conversation_playback_artifact')
+    upload_pos = body.index('playback_build.ensure_conversation_artifact')
     stamp_pos = body.index("'conversation_audio': {")
     assert upload_pos < stamp_pos
 

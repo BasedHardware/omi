@@ -1,0 +1,71 @@
+name: Mobile rollout watch
+
+# The intraday half of the self-driving lane. The operator release gate
+# (mobile_daily_train.yml) audits candidates and starts releases once a day;
+# this schedule advances the ALREADY-RELEASED rollouts between gate runs so a
+# release reaches full exposure about 12 hours after it started:
+#   iOS:     phased rollout jumps to 100% once its 12-hour observation window
+#            has passed (never while PAUSED in App Store Connect — that pause
+#            is the operator brake and holds the jump).
+#   Android: staged rollout hops 1% -> 10% -> 50% -> 100%, one hop per 4-hour
+#            observation window (never while HALTED in Play Console).
+# The advance mode never submits or stages a candidate — that stays the daily
+# gate's audited job — and it never bypasses store approval or the console
+# brakes. See .github/agent-docs/mobile-release-process.md.
+#
+# Each hop also waits on capture health (app/scripts/mobile_capture_health.py):
+# a build whose capture-loss wedge share is over 2x the store build it replaces,
+# or over 50 users a day, holds in place. A manual dispatch with
+# capture_health_override=<reason> lets that one run advance past the hold.
+
+on:
+  schedule:
+    - cron: "0 1,5,9,13,17,21 * * *"
+  workflow_dispatch:
+    inputs:
+      capture_health_override:
+        description: "Reason to advance past a capture-health HOLD for this run only; empty = no override"
+        type: string
+        default: ""
+
+concurrency:
+  group: mobile-rollout-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Start the Codemagic rollout advance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+          CAPTURE_HEALTH_OVERRIDE: ${{ inputs.capture_health_override }}
+          CODEMAGIC_APP_ID: ${{ vars.CODEMAGIC_APP_ID || '66c95e6ec76853c447b8bcbb' }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/dispatch_mobile_rollout_watch.py \
+            --app-id "$CODEMAGIC_APP_ID" \
+            --dry-run false \
+            --capture-health-override "$CAPTURE_HEALTH_OVERRIDE" | tee "$RUNNER_TEMP/dispatch.txt"
+          {
+            echo "### Mobile rollout advance"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/dispatch.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

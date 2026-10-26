@@ -24,8 +24,53 @@ Merging a manifest PR triggers `.github/workflows/gcp_firestore_indexes.yml`. De
 
 `web/admin` has a separate TypeScript query contract at `web/admin/lib/__tests__/firestore-query-contract.test.ts`, run by `web-checks.yml` for changes under `web/admin/**` and `firestore.indexes.json`. `web/personas-open-source` queries Firestore client-side and is outside the Python guard; its only composite shapes (`messages`: `pluginId ASC, timestamp ASC` and `botName ASC, timestamp ASC`) are declared in the registry and READY in prod (verified 2026-10-01); its Firebase project is build-time configurable.
 
-The real-Firestore oracle is `backend/scripts/firestore_index_oracle.py`, exposed as `index-oracle` in `.github/workflows/jit_qa_manual_operator.yml`. Run it when validating a query/index change against Firestore's actual planning response or investigating a suspected index gap. It is an oracle and does not provision indexes.
+The real-Firestore oracle is `backend/scripts/firestore_index_oracle.py`. Use it when validating a query/index change against Firestore's actual planning response or investigating a suspected index gap. It is an oracle and does not provision indexes.
 
 ## Respond to a missing-index alert
 
 The backend provisions a missing-index alert through `.github/scripts/ensure_firestore_missing_index_alert.py`. Follow `backend/docs/runbooks/firestore-missing-index.md`: confirm the actual query and platform suggestion, declare the composite or collection-group field requirement in the registry, regenerate the manifest, and verify the request after readiness. Never copy a suggested index directly into a project.
+
+## Prebuild additions during PR review
+
+Same-repository PRs opened, synchronized, or reopened against main and touching
+`backend/database/firestore_index_registry.py` or `firestore.indexes.json` run the
+index workflow's credential-free diff plan. It compares the exact PR head's
+manifest with current main, pinned when the plan starts. It prebuilds only when
+there are additions and no removed/replaced composites, changed/removed field
+overrides, or new destructive exemptions. Such mixed changes stay main-only.
+Reordering declarations is harmless. Registry generation remains checked by the
+normal index guard; the privileged jobs read PR JSON as data and execute only
+controls checked out from the event's immutable main base, never PR Python.
+
+Development runs automatically. Production still waits in `pending_deployments`
+for the existing `prod` Environment approval; the lead can use
+`bin/omi-deploy-prod approve-own`. Fork PRs are excluded before planning or auth.
+The existing workflow-level `firestore-schema-prod` lock serializes PR builds
+with main reconcile and manual exemptions; development retains its own lock.
+PR jobs use `--start-only` to submit builds and exit without polling or holding
+a runner for 1–2 hours; a successful submission does not assert READY. GitHub concurrency keeps
+only one pending run: either a PR plan or a main reconcile can be superseded.
+A queued prod approval also retains the workflow lock. If a train is blocked
+because a main reconcile was superseded, the lead must run the existing confirmed
+main reconcile/approval path and verify READY; never bypass deploy readiness.
+Superseded PR plans may need a later synchronize event. The main/PR schema lock
+is deliberately unchanged; async PR submission bounds runner occupancy, but
+approval queues still require operator attention.
+
+`--add-only-base BASE --manifest HEAD --provision-missing` revalidates the diff
+and sends only new requirements through the existing composite and
+union-preserving field provisioners. READY/CREATING composites are not recreated;
+already READY requirements satisfy the unchanged deploy readiness gate. Closing
+a PR leaves any prebuilt indexes in place: removal is a separate human decision.
+
+Rollout prerequisites: `prod` currently uses protected-branches-only deployment
+policy (inspected 2026-10-22). The environment owner must permit PR merge refs
+(`refs/pull/*/merge`) while retaining required reviewers. Development currently
+allows only `main` and also needs the PR merge-ref rule. See
+[GitHub deployment branch rules](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments#deployment-branches-and-tags).
+Review both WIF providers' PR/environment subject acceptance as well.
+The read-only agent tiers cannot inspect those WIF policies. No policy or IAM
+change is included here. After merge, validate with a same-repository additive
+index PR, approve its production pending deployment, and verify both targets
+READY before merging that PR. This change's own workflow-only PR does not
+prebuild indexes; the new controls must exist on main first.

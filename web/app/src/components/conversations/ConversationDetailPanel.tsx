@@ -23,6 +23,7 @@ import ReactMarkdown from 'react-markdown';
 import { TranscriptView } from './TranscriptView';
 import { AppSummaryCard } from './AppSummaryCard';
 import { ActionItemsTab, NextStepsList } from './NoteActionItems';
+import { repairNoteCitations } from '@omi/note-shared/note-citations.mjs';
 import { NoteInsights } from './NoteInsights';
 import { NoteParticipants } from './NoteParticipants';
 import { NoteSections } from './NoteSections';
@@ -61,6 +62,7 @@ import type {
   StructuredActionItem,
 } from '@/types/conversation';
 import { isFirstPartyNoteSelection, meetingTypeLabel } from '@/lib/meetingNotes';
+import { conversationDisplayTitle } from '@/lib/conversationTitle';
 import {
   selectConversationSummary,
   type SummarySection,
@@ -127,10 +129,16 @@ function calculateDuration(start: string | null, end: string | null): number {
 const OVERVIEW_MARKDOWN_CLASS =
   'text-text-secondary leading-relaxed text-lg prose max-w-none prose-invert prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-headings:text-text-primary prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-strong:text-text-primary first:prose-headings:mt-0';
 
-function OverviewMarkdown({ overview }: { overview: string }) {
+function OverviewMarkdown({
+  overview,
+  transcriptIDs,
+}: {
+  overview: string;
+  transcriptIDs: string[];
+}) {
   return (
     <div className={OVERVIEW_MARKDOWN_CLASS}>
-      <ReactMarkdown>{overview}</ReactMarkdown>
+      <ReactMarkdown>{repairNoteCitations(overview, transcriptIDs).text}</ReactMarkdown>
     </div>
   );
 }
@@ -140,6 +148,8 @@ function OverviewMarkdown({ overview }: { overview: string }) {
  */
 interface SummaryTabProps {
   overview: string;
+  transcriptSegments?: TranscriptSegment[];
+  onOpenSource?: (id: string) => void;
   sections?: SummarySection[] | null;
   insights?: NoteInsight[] | null;
   actionItems?: StructuredActionItem[];
@@ -153,6 +163,8 @@ interface SummaryTabProps {
 
 export function SummaryTab({
   overview,
+  transcriptSegments = [],
+  onOpenSource,
   sections,
   insights,
   actionItems,
@@ -167,6 +179,9 @@ export function SummaryTab({
     structured: { overview, sections },
     apps_results: appResults,
   });
+  const transcriptIDs = transcriptSegments.flatMap((segment) =>
+    segment.id ? [segment.id] : [],
+  );
   const isStructuredNote = isFirstPartyNoteSelection(summary.kind, sections);
   const secondaryAppResults = (appResults ?? []).filter(
     (result, index) => result.content?.trim() && index !== summary.resultIndex,
@@ -228,11 +243,20 @@ export function SummaryTab({
                     </span>
                   </div>
                 )}
-                {isStructuredNote && <NoteInsights insights={insights} />}
+                {isStructuredNote && (
+                  <NoteInsights insights={insights} transcriptIDs={transcriptIDs} />
+                )}
                 {isStructuredNote && sections ? (
-                  <NoteSections sections={sections} />
+                  <NoteSections
+                    sections={sections}
+                    onOpenSource={onOpenSource}
+                    transcriptSegments={transcriptSegments}
+                  />
                 ) : (
-                  <OverviewMarkdown overview={summary.content} />
+                  <OverviewMarkdown
+                    overview={summary.content}
+                    transcriptIDs={transcriptIDs}
+                  />
                 )}
                 {geolocation.address && (
                   <div className="mt-4 flex items-start gap-2 text-sm text-text-tertiary">
@@ -291,17 +315,23 @@ export function SummaryTab({
               </span>
             </div>
           )}
-          {isStructuredNote && <NoteInsights insights={insights} />}
+          {isStructuredNote && (
+            <NoteInsights insights={insights} transcriptIDs={transcriptIDs} />
+          )}
           {isStructuredNote && sections ? (
-            <NoteSections sections={sections} />
+            <NoteSections
+              sections={sections}
+              onOpenSource={onOpenSource}
+              transcriptSegments={transcriptSegments}
+            />
           ) : (
-            <OverviewMarkdown overview={summary.content} />
+            <OverviewMarkdown overview={summary.content} transcriptIDs={transcriptIDs} />
           )}
         </div>
       )}
 
       {isStructuredNote && actionItems && actionItems.length > 0 && (
-        <NextStepsList items={actionItems} />
+        <NextStepsList items={actionItems} transcriptIDs={transcriptIDs} />
       )}
 
       {/* App Summaries Section */}
@@ -388,6 +418,10 @@ export function ConversationDetailPanel({
   onConversationUpdate,
   onDelete,
 }: ConversationDetailPanelProps) {
+  const [sourceRequest, setSourceRequest] = useState<{
+    id: string;
+    request: number;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('summary');
   const [selectedSegment, setSelectedSegment] = useState<TranscriptSegment | null>(null);
   const [showTagSheet, setShowTagSheet] = useState(false);
@@ -858,6 +892,7 @@ export function ConversationDetailPanel({
             <EditableTitle
               conversationId={conversationId}
               title={structured.title || 'Untitled Conversation'}
+              displayTitle={conversationDisplayTitle(conversation)}
               onTitleChange={handleTitleChange}
               className="mb-2 line-clamp-2 font-display text-xl font-semibold text-text-primary"
             />
@@ -916,7 +951,7 @@ export function ConversationDetailPanel({
         <div className="flex-shrink-0 px-4 pt-4 lg:px-6 lg:pt-6">
           <ConversationScreenFrameBanner
             frame={screenFrames.frameSet.banner}
-            title={structured.title || 'Untitled Conversation'}
+            title={conversationDisplayTitle(conversation) || 'Untitled Conversation'}
             dateLabel={
               conversation.started_at ? formatDate(conversation.started_at) : undefined
             }
@@ -972,7 +1007,15 @@ export function ConversationDetailPanel({
             {activeTab === 'summary' && summarySelection.kind !== 'empty' && (
               <>
                 <SummaryTab
+                  onOpenSource={(id) => {
+                    setActiveTab('transcript');
+                    setSourceRequest((previous) => ({
+                      id,
+                      request: (previous?.request ?? 0) + 1,
+                    }));
+                  }}
                   overview={structured.overview || ''}
+                  transcriptSegments={conversation.transcript_segments ?? []}
                   sections={structured.sections}
                   insights={structured.insights}
                   actionItems={actionItems}
@@ -995,7 +1038,12 @@ export function ConversationDetailPanel({
             )}
 
             {activeTab === 'actions' && hasActionItems && (
-              <ActionItemsTab items={actionItems} />
+              <ActionItemsTab
+                items={actionItems}
+                transcriptIDs={(transcript_segments ?? []).flatMap((segment) =>
+                  segment.id ? [segment.id] : [],
+                )}
+              />
             )}
 
             {activeTab === 'transcript' && hasTranscript && (
@@ -1087,6 +1135,7 @@ export function ConversationDetailPanel({
                     </div>
                   )}
                 <TranscriptView
+                  sourceRequest={sourceRequest}
                   segments={transcript_segments}
                   userName={userName}
                   conversationId={conversationId}

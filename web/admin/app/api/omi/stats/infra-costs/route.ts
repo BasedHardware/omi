@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
 import {
   MAX_PRECOMPUTED_AGE_MS,
@@ -47,6 +47,15 @@ interface DailyCostPoint {
   mobile: number;
   unknown: number;
   total: number;
+  /** Billing mode only: the provider legs that sum to `total`. */
+  components?: {
+    gcpInfra: number;
+    vertexLlm: number;
+    openai: number;
+    anthropic: number;
+    /** GCP net by service; the TV's one-time incident detector reads it. */
+    gcpServices?: Record<string, number>;
+  };
 }
 
 interface ServiceCostRow {
@@ -444,23 +453,26 @@ export function infraCostsCacheKey(
 // llm_usage scan stays as an attribution signal (perUserLlmUsd, coverage)
 // but is NOT added to totals: its cost_usd rows are provider spend already
 // present in the provider invoices / GCP bill — adding both double-counts.
-async function computeBillingInfraCosts(
+export async function computeBillingInfraCosts(
   days: number,
-  overheadMonthly: number
+  overheadMonthly: number,
+  aggregatesOnly = false
 ): Promise<InfraCostsPayload | null> {
   // The ledger leg is scoped to the GCP window, so it chains off the GCP
   // promise rather than guessing the dates — but it still settles alongside the
   // other legs instead of adding a serial round trip.
   const gcpPromise = fetchGcpBilling(days);
   const ledgerPromise = gcpPromise.then((snapshot) =>
-    snapshot ? fetchGatewayLedgerDays(snapshot.daily.map((d) => d.date)) : null
+    snapshot && !aggregatesOnly
+      ? fetchGatewayLedgerDays(snapshot.daily.map((d) => d.date))
+      : null
   );
   const [gcpRes, anthropicRes, openaiRes, llmRes, ledgerRes] =
     await Promise.allSettled([
       gcpPromise,
       fetchAnthropicDailyCosts(days),
       fetchOpenAiDailyCosts(days),
-      fetchLlmCostsPerDay(days),
+      aggregatesOnly ? Promise.resolve(null) : fetchLlmCostsPerDay(days),
       ledgerPromise,
     ]);
   const gcp: GcpBillingSnapshot | null =
@@ -522,6 +534,19 @@ async function computeBillingInfraCosts(
       mobile: round(mobile),
       unknown: 0,
       total: round(desktop + mobile),
+      // Provider legs of the same total (TV cost stack). Vertex/Gemini LLM is
+      // inside the GCP bill; OpenAI and Anthropic are their own invoices.
+      // `vertexReserved` is the prepaid Provisioned-Throughput slice already
+      // inside `vertexLlm` (never an extra dollar): the variable-margin tile
+      // subtracts it; the all-in total keeps counting it.
+      components: {
+        gcpInfra: round(otherPool),
+        vertexLlm: round(row.llmNetUsd),
+        vertexReserved: round(row.vertexReservedUsd ?? 0),
+        openai: round(openaiByDay.get(row.date) ?? 0),
+        anthropic: round(chatPool),
+        gcpServices: row.services,
+      },
     };
   });
 
@@ -808,7 +833,7 @@ export async function computeInfraCosts(opts: {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "finance:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -825,16 +850,16 @@ export async function GET(request: NextRequest) {
       maxAgeMs: MAX_PRECOMPUTED_AGE_MS,
     });
     if (cached) {
-      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
+      return authResult.json(withFreshness(cached.data, cached.freshAt));
     }
 
     // Cold start before the first precompute: compute inline (may be slow), cache, return.
     const payload = await computeInfraCosts({ days, overheadMonthly });
     await setPayload(key, payload);
-    return NextResponse.json(withFreshness(payload, Date.now()));
+    return authResult.json(withFreshness(payload, Date.now()));
   } catch (err: any) {
     console.error("Infra costs error:", err);
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Failed to compute infra costs" },
       { status: 500 }
     );

@@ -5,23 +5,59 @@ Unlike Whoop which uses OAuth and live API calls, Apple Health data is synced
 from the device to our backend and stored in Firestore.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
 import database.users as users_db
-import database.notifications as notification_db
-from zoneinfo import ZoneInfo
 
 from utils.retrieval.tools.integration_base import (
     resolve_config_uid,
     get_integration_checked,
 )
+from utils.model_text import DisplayClock, count_header, format_date, format_instant, to_datetime, truncation_note
+from utils.user_clock import clock_for_config
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _health_period_context(integration: Dict[str, Any], clock: DisplayClock, period_days: Any) -> str:
+    """Describe the HealthKit window relative to its last successful sync."""
+    try:
+        days = int(period_days)
+    except (TypeError, ValueError):
+        days = 0
+
+    synced_at = to_datetime(integration.get('last_synced'))
+    start = synced_at - timedelta(days=days) if synced_at is not None and days > 0 else None
+    lines = [f"Covered dates: {format_date(start, clock)} – {format_date(synced_at, clock)}."]
+    lines.append(f"Data last synced: {format_instant(synced_at, clock)}.")
+    if synced_at is not None and datetime.now(timezone.utc) - synced_at > timedelta(hours=24):
+        lines.append("Data may be stale because the last sync was over 24 hours ago.")
+    return "\n".join(lines)
+
+
+def _workout_timestamp(workout: Dict[str, Any]) -> float:
+    """Return a sortable epoch value for HealthKit's millisecond startDate."""
+    value = workout.get('startDate')
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    parsed = to_datetime(value)
+    return parsed.timestamp() * 1000 if parsed is not None else float('-inf')
+
+
+def _format_health_date(value: Any, clock: DisplayClock) -> str:
+    """Format HealthKit's local YYYY-MM-DD buckets without shifting their calendar day."""
+    if isinstance(value, str):
+        try:
+            day = date.fromisoformat(value[:10])
+            return format_date(datetime.combine(day, time.min).replace(tzinfo=clock.tz), clock)
+        except ValueError:
+            pass
+    return format_date(value, clock)
 
 
 def get_apple_health_data(uid: str, data_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -92,34 +128,26 @@ def get_apple_health_steps_tool(
     Returns:
         Formatted step count data with daily breakdown, averages and totals.
     """
-    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+    uid, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
     if err:
         return err
+    assert uid is not None
     assert integration is not None
+    clock = clock_for_config(config, uid)
 
     try:
         health_data: Dict[str, Any] = integration.get('health_data', {})
         steps_data: Dict[str, Any] = health_data.get('steps', {})
+        period_days = steps_data.get('period_days', health_data.get('period_days', 7))
+        daily_steps: List[Dict[str, Any]] = steps_data.get('daily', [])
+        context = _health_period_context(integration, clock, period_days)
 
         if not steps_data:
-            return "No step data found. Make sure Apple Health is synced from your iPhone."
+            return "No step data found. Make sure Apple Health is synced from your iPhone.\n" + context
 
         total_steps = steps_data.get('total', 0)
         avg_per_day = steps_data.get('average_per_day', 0)
-        period_days = steps_data.get('period_days', 7)
-        daily_steps: List[Dict[str, Any]] = steps_data.get('daily', [])
-
-        # Get last sync time
-        last_synced = integration.get('last_synced')
-        sync_info = ""
-        if last_synced:
-            try:
-                sync_dt = datetime.fromisoformat(last_synced.replace('Z', '+00:00'))
-                sync_info = f"\n\n(Data last synced: {sync_dt.strftime('%Y-%m-%d %H:%M')} UTC)"
-            except (ValueError, TypeError):
-                pass
-
-        result = f"Apple Health Step Data (Last {period_days} days):\n\n"
+        result = f"Apple Health Step Data\n{context}\n\n"
         result += f"Total Steps: {total_steps:,}\n"
         result += f"Average Steps per Day: {avg_per_day:,.0f}\n"
 
@@ -129,11 +157,9 @@ def get_apple_health_steps_tool(
             # Sort by date descending (most recent first)
             sorted_days = sorted(daily_steps, key=lambda x: x.get('date', ''), reverse=True)
             for day in sorted_days:
-                date_str = day.get('date', 'Unknown')
+                date_str = _format_health_date(day.get('date'), clock)
                 steps = day.get('steps', 0)
                 result += f"  {date_str}: {steps:,} steps\n"
-
-        result += sync_info
 
         return result.strip()
 
@@ -163,22 +189,25 @@ def get_apple_health_sleep_tool(
     Returns:
         Formatted sleep data with daily breakdown, total hours and session details.
     """
-    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+    uid, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
     if err:
         return err
+    assert uid is not None
     assert integration is not None
+    clock = clock_for_config(config, uid)
 
     try:
         health_data: Dict[str, Any] = integration.get('health_data', {})
         sleep_data: Dict[str, Any] = health_data.get('sleep', {})
+        context = _health_period_context(integration, clock, health_data.get('period_days', 7))
 
         if not sleep_data:
-            return "No sleep data found. Make sure Apple Health is synced from your iPhone."
+            return "No sleep data found. Make sure Apple Health is synced from your iPhone.\n" + context
 
         total_sleep_hours = sleep_data.get('total_sleep_hours', 0)
         daily_sleep: List[Dict[str, Any]] = sleep_data.get('daily', [])
 
-        result = f"Apple Health Sleep Data:\n\n"
+        result = f"Apple Health Sleep Data\n{context}\n\n"
         result += f"Total Sleep: {total_sleep_hours:.1f} hours\n"
         result += f"Average per Night: {total_sleep_hours / max(len(daily_sleep), 1):.1f} hours\n"
 
@@ -188,18 +217,9 @@ def get_apple_health_sleep_tool(
             # Sort by date descending (most recent first)
             sorted_days = sorted(daily_sleep, key=lambda x: x.get('date', ''), reverse=True)
             for day in sorted_days:
-                date_str = day.get('date', 'Unknown')
+                date_str = _format_health_date(day.get('date'), clock)
                 hours = day.get('sleepHours', 0)
                 result += f"  {date_str}: {hours:.1f} hours\n"
-
-        # Get last sync time
-        last_synced = integration.get('last_synced')
-        if last_synced:
-            try:
-                sync_dt = datetime.fromisoformat(last_synced.replace('Z', '+00:00'))
-                result += f"\n(Data last synced: {sync_dt.strftime('%Y-%m-%d %H:%M')} UTC)"
-            except (ValueError, TypeError):
-                pass
 
         return result.strip()
 
@@ -227,23 +247,29 @@ def get_apple_health_heart_rate_tool(
     Returns:
         Formatted heart rate data with average, min, and max values.
     """
-    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+    uid, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
     if err:
         return err
+    assert uid is not None
     assert integration is not None
+    clock = clock_for_config(config, uid)
 
     try:
         health_data: Dict[str, Any] = integration.get('health_data', {})
         heart_data: Dict[str, Any] = health_data.get('heart_rate', {})
+        context = _health_period_context(integration, clock, health_data.get('period_days', 7))
 
         if not heart_data:
-            return "No heart rate data found. Make sure Apple Health is synced from your iPhone and you have heart rate data from Apple Watch."
+            return (
+                "No heart rate data found. Make sure Apple Health is synced from your iPhone "
+                "and you have heart rate data from Apple Watch.\n" + context
+            )
 
         avg_hr = heart_data.get('average')
         min_hr = heart_data.get('minimum')
         max_hr = heart_data.get('maximum')
 
-        result = "Apple Health Heart Rate Data:\n\n"
+        result = f"Apple Health Heart Rate Data\n{context}\n\n"
 
         if avg_hr is not None:
             result += f"Average Heart Rate: {avg_hr:.0f} bpm\n"
@@ -251,15 +277,6 @@ def get_apple_health_heart_rate_tool(
             result += f"Minimum Heart Rate: {min_hr:.0f} bpm\n"
         if max_hr is not None:
             result += f"Maximum Heart Rate: {max_hr:.0f} bpm\n"
-
-        # Get last sync time
-        last_synced = integration.get('last_synced')
-        if last_synced:
-            try:
-                sync_dt = datetime.fromisoformat(last_synced.replace('Z', '+00:00'))
-                result += f"\n(Data last synced: {sync_dt.strftime('%Y-%m-%d %H:%M')} UTC)"
-            except (ValueError, TypeError):
-                pass
 
         return result.strip()
 
@@ -293,24 +310,27 @@ def get_apple_health_workouts_tool(
         return err
     assert uid is not None
     assert integration is not None
+    clock = clock_for_config(config, uid)
 
     try:
         health_data: Dict[str, Any] = integration.get('health_data', {})
         workouts: List[Dict[str, Any]] = health_data.get('workouts', [])
+        context = _health_period_context(integration, clock, health_data.get('period_days', 7))
 
         if not workouts:
-            return "No workout data found. Make sure Apple Health is synced from your iPhone."
+            return "No workout data found. Make sure Apple Health is synced from your iPhone.\n" + context
 
-        # Get user timezone
-        user_tz_str = notification_db.get_user_time_zone(uid)
-        try:
-            user_tz = ZoneInfo(user_tz_str or 'UTC')
-        except Exception:
-            user_tz = timezone.utc
+        sorted_workouts = sorted(workouts, key=_workout_timestamp, reverse=True)
+        shown_workouts = sorted_workouts[:10]
+        result = count_header(
+            "Apple Health Workouts",
+            shown=len(shown_workouts),
+            total=len(workouts),
+            order="newest first",
+        )
+        result += f"\n{context}\n\n"
 
-        result = f"Apple Health Workouts ({len(workouts)} total):\n\n"
-
-        for i, workout in enumerate(workouts[:10], 1):  # Show last 10 workouts
+        for i, workout in enumerate(shown_workouts, 1):
             workout_type = workout.get('type', 'Unknown')
             duration = workout.get('durationMinutes', 0)
             calories = workout.get('caloriesBurned', 0)
@@ -321,8 +341,8 @@ def get_apple_health_workouts_tool(
             date_str = ""
             if start_ms:
                 try:
-                    start_dt = datetime.fromtimestamp(start_ms / 1000, tz=timezone.utc).astimezone(user_tz)
-                    date_str = f" - {start_dt.strftime('%m/%d %I:%M %p')}"
+                    start_dt = datetime.fromtimestamp(start_ms / 1000, tz=timezone.utc)
+                    date_str = f" - {format_instant(start_dt, clock)}"
                 except (ValueError, TypeError, OSError, OverflowError):
                     pass
 
@@ -334,14 +354,16 @@ def get_apple_health_workouts_tool(
                 result += f"   Distance: {distance:.2f} km\n"
             result += "\n"
 
-        # Get last sync time
-        last_synced = integration.get('last_synced')
-        if last_synced:
-            try:
-                sync_dt = datetime.fromisoformat(last_synced.replace('Z', '+00:00'))
-                result += f"(Data last synced: {sync_dt.strftime('%Y-%m-%d %H:%M')} UTC)"
-            except (ValueError, TypeError):
-                pass
+        if len(workouts) > len(shown_workouts):
+            result += (
+                truncation_note(
+                    shown=len(shown_workouts),
+                    total=len(workouts),
+                    unit="workouts",
+                    how_to_get_more="Ask for a narrower workout period or a specific activity type.",
+                )
+                + "\n"
+            )
 
         return result.strip()
 
@@ -369,19 +391,23 @@ def get_apple_health_summary_tool(
     Returns:
         Comprehensive health summary with all available Apple Health data.
     """
-    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+    uid, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
     if err:
         return err
+    assert uid is not None
     assert integration is not None
+    clock = clock_for_config(config, uid)
 
     try:
         health_data: Dict[str, Any] = integration.get('health_data', {})
 
         if not health_data:
-            return "No health data found. Make sure Apple Health is synced from your iPhone."
+            context = _health_period_context(integration, clock, 7)
+            return "No health data found. Make sure Apple Health is synced from your iPhone.\n" + context
 
         period_days = health_data.get('period_days', 7)
-        result = f"Apple Health Summary (Last {period_days} days):\n\n"
+        context = _health_period_context(integration, clock, period_days)
+        result = f"Apple Health Summary\n{context}\n\n"
 
         # Steps with daily breakdown
         steps: Dict[str, Any] = health_data.get('steps', {})
@@ -394,7 +420,7 @@ def get_apple_health_summary_tool(
                 result += "  Daily:\n"
                 sorted_days = sorted(daily_steps, key=lambda x: x.get('date', ''), reverse=True)
                 for day in sorted_days:
-                    result += f"    {day.get('date', '?')}: {day.get('steps', 0):,}\n"
+                    result += f"    {_format_health_date(day.get('date'), clock)}: {day.get('steps', 0):,}\n"
             result += "\n"
 
         # Active Energy with daily breakdown
@@ -410,7 +436,7 @@ def get_apple_health_summary_tool(
                 result += "  Daily:\n"
                 sorted_days = sorted(daily_energy, key=lambda x: x.get('date', ''), reverse=True)
                 for day in sorted_days:
-                    result += f"    {day.get('date', '?')}: {day.get('calories', 0):,.0f} kcal\n"
+                    result += f"    {_format_health_date(day.get('date'), clock)}: {day.get('calories', 0):,.0f} kcal\n"
             result += "\n"
 
         # Sleep with daily breakdown
@@ -423,7 +449,7 @@ def get_apple_health_summary_tool(
                 result += "  Daily:\n"
                 sorted_days = sorted(daily_sleep, key=lambda x: x.get('date', ''), reverse=True)
                 for day in sorted_days:
-                    result += f"    {day.get('date', '?')}: {day.get('sleepHours', 0):.1f} hrs\n"
+                    result += f"    {_format_health_date(day.get('date'), clock)}: {day.get('sleepHours', 0):.1f} hrs\n"
             result += "\n"
 
         # Heart Rate
@@ -450,15 +476,6 @@ def get_apple_health_summary_tool(
                 types[t] = types.get(t, 0) + 1
             for t, count in types.items():
                 result += f"  - {t}: {count}\n"
-
-        # Get last sync time
-        last_synced = integration.get('last_synced')
-        if last_synced:
-            try:
-                sync_dt = datetime.fromisoformat(last_synced.replace('Z', '+00:00'))
-                result += f"\n(Data last synced: {sync_dt.strftime('%Y-%m-%d %H:%M')} UTC)"
-            except (ValueError, TypeError):
-                pass
 
         return result.strip()
 

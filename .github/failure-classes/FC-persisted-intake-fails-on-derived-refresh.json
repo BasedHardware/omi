@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-persisted-intake-fails-on-derived-refresh",
+  "violated_contract": "After audio and transcript intake commit, a derived action-item refresh must not turn the segment into a terminal invalid-input failure. A stale target must resolve through a server-authored redirect or respect deletion without resurrecting it.",
+  "canonical_prevention": "Keep the transactional deleted-target guard, expose its server redirect in a typed exception, bound redirect traversal, and isolate refresh failure from acknowledgement while preserving donor tasks and the uncommitted cleanup receipt. Classify other finalize errors as retryable internal failures with bounded diagnostic sites.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_bridge_lifecycle.py",
+    "backend/tests/unit/test_sync_capture_pipeline.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/sync/bridge.py",
+    "backend/utils/sync/pipeline.py",
+    "backend/database/action_item_refresh.py"
+  ],
+  "status": "open"
+}

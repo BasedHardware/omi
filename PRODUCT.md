@@ -71,6 +71,12 @@ describes the capture, memory consent, and quality boundaries.
 
 ## Before you build
 
+Missing Daily Recaps must have a user-initiated recovery path for older dates,
+including accounts without push notifications. Reuse the shared date-based
+creation authority, preserve existing recaps and conversations, and distinguish
+empty days, ongoing generation, cooldowns, and failures. The cross-client flow
+and verification checklist live in `app/docs/recap-recovery.md`.
+
 - Large or ambiguous features start as a GitHub issue
   ([Contribution guide](docs/doc/developer/Contribution.mdx)).
 - Check the [invariant registry](product/invariants/) for locked rules that
@@ -101,6 +107,11 @@ visible. Duration alone never establishes irrelevance: brief meaningful speech
 must remain available. Uncertain content stays kept. Long narration is not reliable
 evidence of irrelevance, so it remains one retained recording rather than being
 silently discarded. Implementation and limits: `backend/utils/sync/ARCHITECTURE.md`.
+
+Selecting Process Now for a saved phone Transcribe Later recording is an explicit
+keep choice. Once transcription produces speech, preserve that choice across
+enrichment and later refreshes. Silence or an empty transcription creates no
+conversation. Automatic offline fallback continues to assess content normally.
 
 Silence-only audio creates nothing and cannot bridge conversations.
 Without an existing explicit target, sync intake groups connected speech intervals

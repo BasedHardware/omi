@@ -44,7 +44,7 @@ final class SBOnboardingCloudContextStateTests: XCTestCase {
 
     model.begin()
 
-    let signals = DesktopDiagnosticsManager.shared.currentSnapshotsForSentry().filter {
+    let signals = DesktopDiagnosticsManager.shared.currentSnapshots().filter {
       $0["seam"] as? String == DesktopStateAuthoritySeam.onboardingSetupState.rawValue
     }
     XCTAssertEqual(
@@ -202,6 +202,29 @@ final class SBOnboardingCloudContextStateTests: XCTestCase {
 
     XCTAssertEqual(model.contextStates["gmail"], "on")
     XCTAssertNil(model.contextDetails["gmail"])
+  }
+
+  func testGoogleSignInHandoffDoesNotRefocusOnboarding() {
+    let pending = ["gmail": "connecting"]
+    XCTAssertFalse(SBOnboardingModel.shouldRefocusContext(from: pending, to: ["gmail": "needsSignIn"]))
+    XCTAssertFalse(SBOnboardingModel.shouldRefocusContext(from: pending, to: pending))
+    XCTAssertTrue(SBOnboardingModel.shouldRefocusContext(from: pending, to: ["gmail": "on"]))
+    XCTAssertTrue(SBOnboardingModel.shouldRefocusContext(from: pending, to: ["gmail": "error"]))
+    XCTAssertFalse(SBOnboardingModel.shouldRefocusContext(from: pending, to: [:]))
+  }
+
+  @MainActor
+  func testContextCanAdvanceWhileGoogleConnectorsArePendingOrFailed() {
+    for state in ["connecting", "needsSignIn", "error", "on"] {
+      let appState = AppState()
+      let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+      model.step = .context
+      model.contextStates = ["gmail": state, "calendar": "connecting"]
+      model.answerContext()
+      XCTAssertEqual(model.step, .capture, "connector state must never gate Continue")
+      XCTAssertEqual(model.contextStates["calendar"], "connecting")
+      model.streamTask?.cancel()
+    }
   }
 
   private func makeDefaults() throws -> (defaults: UserDefaults, suiteName: String) {

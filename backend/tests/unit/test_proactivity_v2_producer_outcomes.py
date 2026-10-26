@@ -7,6 +7,7 @@ import database.action_items as tasks
 import database.chat as chat
 from database import proactivity as ledger
 from database import proactivity_producers as mapping
+from tests.support.synthetic_proactivity_producers import synthetic_producers  # noqa: F401
 from tests.unit.test_proactivity_v2_budget import NOW, store
 from tests.unit.test_proactivity_v2_ledger import outcome, ready
 
@@ -116,7 +117,10 @@ def test_canonical_mentor_human_persistence_observes_after_commit(monkeypatch):
 
 def test_canonical_task_completion_observation_is_post_commit(monkeypatch):
     saved, events = {}, []
-    document = SimpleNamespace(get=lambda: SimpleNamespace(exists=True), update=lambda values: saved.update(values))
+    document = SimpleNamespace(
+        get=lambda: SimpleNamespace(exists=True, to_dict=lambda: {'completed': False}),
+        update=lambda values: saved.update(values),
+    )
     owner = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda task_id: document))
     monkeypatch.setattr(
         tasks, 'db', SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: owner))

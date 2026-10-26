@@ -51,7 +51,8 @@ COPY backend/services/ ./services/
 COPY backend/testing/parity_pack_v0/ ./testing/parity_pack_v0/
 COPY backend/utils/ ./utils/
 COPY backend/pusher/ ./pusher/
+COPY backend/omi_logging.py ./omi_logging.py
 
 EXPOSE 8080
 USER 10001:10001
-CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080", "--ws-ping-interval", "20", "--ws-ping-timeout", "20", "--loop", "uvloop"]
+CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080", "--ws-ping-interval", "20", "--ws-ping-timeout", "20", "--loop", "uvloop", "--timeout-graceful-shutdown", "60"]

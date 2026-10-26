@@ -40,7 +40,9 @@ from routers.listen.receiver import ListenReceiver
 from routers.listen.transcripts import ConversationCache, TranscriptProcessor
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator, UNPLACED_SEGMENT_OFFSET
+from utils.stt.transcript_admission import AdmissionState
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
+from utils.episodes import live as episode_live
 
 RATE = 16000
 UID = 'uid-r3'
@@ -318,6 +320,11 @@ def _seed_row(store, cid, *, started_at, segments=(), status='in_progress'):
 
 def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
     monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(episode_live, 'on_realtime_segments', _async_noop)
+    from database import capture_coverage as coverage_store
+    from routers.listen.coverage import record_committed
+
+    monkeypatch.setattr(coverage_store, '_client', lambda: store)
 
     def _row(cid):
         return store.rows.get(('users', UID, 'conversations', cid)) or {}
@@ -333,7 +340,7 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
     class _Persistence:
         @staticmethod
         async def call(fn, *args, **kwargs):
-            if fn is conversations_db.update_conversation_segments:
+            if fn is conversations_db.update_conversation_segments or fn is record_committed:
                 return fn(*args, **kwargs)
             if fn is conversations_db.update_conversation_finished_at:
                 _uid, cid, finished = args
@@ -366,7 +373,7 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
     state.first_audio_byte_timestamp = T0
     state.speaker_id_enabled = False
     host = SimpleNamespace(
-        request=SimpleNamespace(uid=UID, websocket=SimpleNamespace(send_json=send_json), codec='pcm16'),
+        request=SimpleNamespace(uid=UID, websocket=SimpleNamespace(send_json=send_json), codec='pcm16', source='omi'),
         state=state,
         persistence=_Persistence(),
         speakers=SimpleNamespace(
@@ -380,6 +387,7 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
         onboarding_handler=None,
         transcript_send=None,
         pusher_enabled=True,
+        is_multi_channel=False,
         user_has_credits=True,
         client_kind='test',
         language='en',
@@ -390,6 +398,7 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
     )
     processor = object.__new__(TranscriptProcessor)
     processor.host = host
+    processor.media_admission = AdmissionState()
     processor.cache = ConversationCache(loader)
     processor.segment_buffer = deque(maxlen=host.limits.max_segment_buffer_size)
     processor.photo_buffer = deque()
@@ -530,6 +539,30 @@ async def test_unplaced_retry_after_committed_write_with_lost_ack_is_idempotent(
         ('earlier', 'earlier words'),
         ('ack-lost', 'store once'),
     ]
+
+
+async def test_unplaced_fallback_delivers_retained_identity_to_episode_tracker(monkeypatch):
+    store = StrictFirestore()
+    _seed_row(store, 'conv-fallback', started_at=datetime.fromtimestamp(T0, tz=timezone.utc))
+    processor, _ = _processor(monkeypatch, store, current='conv-fallback')
+    seen = []
+
+    async def observe(uid, segments, cid, source):
+        seen.append((uid, segments, cid, source))
+
+    monkeypatch.setattr(episode_live, 'on_realtime_segments', observe)
+    await processor._persist_v1_unplaced(
+        _v2_segment('retained-id', T0, T0 + 1, 'conv-fallback', text='retained speech')
+    )
+    assert len(seen) == 1 and seen[0][0] == UID and seen[0][2] == 'conv-fallback'
+    segment = seen[0][1][0]
+    assert segment['id'] == 'retained-id' and segment['text'] == 'retained speech'
+    assert segment['start'] == segment['end'] == -1
+    processor.host.user_has_credits = False
+    await processor._persist_v1_unplaced(
+        _v2_segment('retained-without-credits', T0 + 2, T0 + 3, 'conv-fallback', text='still retained')
+    )
+    assert len(seen) == 1  # Persistence never bypasses the existing notes-spend boundary.
 
 
 async def test_resumed_v1_row_is_never_marked_v2(monkeypatch):

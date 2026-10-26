@@ -160,7 +160,8 @@ def test_seventy_minutes_of_identical_narration_is_one_recording():
     assert rows[0]['discarded'] is False
 
 
-def test_reverse_order_retry_and_deleted_target():
+def test_reverse_order_retry_and_deleted_target(monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
     store = StrictFirestore()
     later, _, _ = intake(store, chunk('later', 1060))
     earlier, _, _ = intake(store, chunk('earlier', 1000))
@@ -290,6 +291,10 @@ def independent_job_pipeline():
         pipeline = load_module_fresh(
             'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
         )
+        # The episodes intake attach is fail-open; the harness stand-in skips like
+        # a user whose app never called the episodes API, keeping the overlay's
+        # deferred service import out of this file's behavior timing budget.
+        pipeline.schedule_synced_intake_attach = lambda uid, cid, row: None
         yield pipeline, transcript_segment, lifecycle
 
 
@@ -298,7 +303,6 @@ def test_real_process_segment_two_independent_job_responses(independent_job_pipe
     store = StrictFirestore()
     barrier = threading.Barrier(2)
     pipeline.get_syncing_file_temporal_signed_url = lambda path: path
-    pipeline.schedule_syncing_temporal_file_deletion = lambda path: None
     pipeline.get_prerecorded_service = lambda language: ('test', None, 'test')
     pipeline.prerecorded = lambda *a, **kw: ([{}], 'en')
     pipeline.postprocess_words = lambda *a: [
@@ -501,7 +505,8 @@ def _smart_merge_pair(store):
     store.rows[('users', 'u', 'conversations', 'n')] = donor
 
 
-def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
+def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor(monkeypatch):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
     store = StrictFirestore()
     _smart_merge_pair(store)
     from tests.unit.test_sync_lineage_dedupe_replay import prove
@@ -517,7 +522,8 @@ def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
     assert ('users', 'u', 'conversations', 'wal-new') not in store.rows
 
 
-def test_repeated_late_repair_to_revisioned_smart_survivor_appends():
+def test_repeated_late_repair_to_revisioned_smart_survivor_appends(monkeypatch):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
     store = StrictFirestore()
     _smart_merge_pair(store)
     store.rows[('users', 'u', 'conversations', 'p')]['sync_content_revision'] = 1
@@ -549,3 +555,78 @@ def test_sync_bridge_donor_targets_still_fall_back_to_temporal_assignment():
     store.rows[('users', 'u', 'conversations', 'p')].pop('smart_merge')
     result, created, _ = intake(store, chunk('wal-other', 1620), target_id='n')
     assert created and result['id'] == 'wal-other'
+
+
+def _tombstone(store, conversation_id):
+    store.rows[('users', 'u', 'deleted_conversations', conversation_id)] = {'conversation_id': conversation_id}
+
+
+def test_reupload_never_recreates_a_hard_deleted_conversation_id():
+    store = StrictFirestore()
+    _tombstone(store, 'deleted')
+    with pytest.raises(SyncAssignmentSuperseded):
+        intake(store, chunk('deleted', 1000))
+    assert conversations(store) == []
+
+
+def test_hard_deleted_explicit_target_is_not_replaced_temporally():
+    store = StrictFirestore()
+    _tombstone(store, 'deleted-target')
+    with pytest.raises(SyncAssignmentSuperseded):
+        intake(store, chunk('wal', 1000), target_id='deleted-target')
+    assert conversations(store) == []
+
+
+def test_tombstone_of_another_id_still_creates_and_appends():
+    store = StrictFirestore()
+    _tombstone(store, 'unrelated')
+    first, created, _ = intake(store, chunk('first', 1000))
+    assert created and first['id'] == 'first'
+    second, created, _ = intake(store, chunk('second', 1012))
+    assert not created and second['id'] == 'first'
+
+
+def test_adapter_retires_sync_merge_donors_and_terminal_target(monkeypatch):
+    from database import conversations as db, conversation_quiet_checks as checks
+    from google.cloud import firestore
+
+    store = StrictFirestore()
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, '_delete_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *a: None)
+    for cid, timestamp in [('a', 1000), ('b', 1240)]:
+        incoming = chunk(cid, timestamp)
+        incoming['data_protection_level'] = 'standard'
+        db.assign_sync_conversation('u', incoming, firestore_client=store)
+        store.rows[('conversation_finalization_jobs', checks.quiet_check_id('u', cid))] = {
+            'kind': 'listen_quiet_check',
+            'status': 'waiting_quiet',
+            'dispatch_generation': 1,
+            'reconcile_after_at': incoming['finished_at'],
+        }
+    bridge = chunk('bridge', 1120)
+    bridge['data_protection_level'] = 'standard'
+    result, _, _ = db.assign_sync_conversation('u', bridge, firestore_client=store)
+    donor_ids = result['sync_merged_from']
+    assert donor_ids
+    for cid in [result['id'], *donor_ids]:
+        job = store.rows[('conversation_finalization_jobs', checks.quiet_check_id('u', cid))]
+        assert job['status'] == 'quiet_done'
+        assert job['reconcile_after_at'] is firestore.DELETE_FIELD
+
+
+def test_adapter_preserves_live_sync_target_quiet_check(monkeypatch):
+    from database import conversations as db, conversation_quiet_checks as checks
+
+    store = StrictFirestore()
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *a: None)
+    live = chunk('live', 1000)
+    live.update(status='in_progress', data_protection_level='standard')
+    store.rows[('users', 'u', 'conversations', 'live')] = live
+    job_path = ('conversation_finalization_jobs', checks.quiet_check_id('u', 'live'))
+    store.rows[job_path] = {'kind': 'listen_quiet_check', 'status': 'waiting_quiet', 'dispatch_generation': 1}
+    incoming = chunk('sync', 1060)
+    incoming['data_protection_level'] = 'standard'
+    db.assign_sync_conversation('u', incoming, target_id='live', firestore_client=store)
+    assert store.rows[job_path]['status'] == 'waiting_quiet'

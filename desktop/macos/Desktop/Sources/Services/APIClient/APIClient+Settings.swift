@@ -54,7 +54,15 @@ extension APIClient {
     let body = UpdateRequest(singleLanguageMode: singleLanguageMode, vocabulary: vocabulary)
     struct StatusResponse: Decodable { let status: String }
     let _: StatusResponse = try await patch("v1/users/transcription-preferences", body: body)
-    return try await getTranscriptionPreferences()
+    // The PATCH above already succeeded, so the account has stored this change. A failed
+    // follow-up read (offline, a transient server error) must not make the caller treat the
+    // save itself as failed and roll it back — fall back to what was just confirmed saved.
+    do {
+      return try await getTranscriptionPreferences()
+    } catch {
+      return TranscriptionPreferences(
+        singleLanguageMode: singleLanguageMode ?? false, vocabulary: vocabulary ?? [])
+    }
   }
 
   /// Fetches user language preference
@@ -337,6 +345,11 @@ struct TranscriptionPreferences: Codable {
     case vocabulary
   }
 
+  init(singleLanguageMode: Bool, vocabulary: [String]) {
+    self.singleLanguageMode = singleLanguageMode
+    self.vocabulary = vocabulary
+  }
+
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     singleLanguageMode =
@@ -398,11 +411,11 @@ struct NotificationSettingsResponse: Codable {
 enum SubscriptionPlanType: Codable, Equatable, RawRepresentable {
   case basic  // display "Free"
   case plus
-  case unlimited  // legacy — display "Unlimited (legacy)"
+  case unlimited  // legacy — display "Neo"
   case unlimitedV2
   case architect  // display "Architect" ($400/mo, cost_usd quota)
   case pro  // backward compat: old Firestore docs may still say "pro"
-  case `operator`  // new — display "Operator"
+  case `operator`  // display "Pro"
   case unknown(String)
 
   init(rawValue: String) {
@@ -446,10 +459,10 @@ enum SubscriptionPlanType: Codable, Equatable, RawRepresentable {
     switch self {
     case .basic: return "Free"
     case .plus: return "Plus"
-    case .unlimited: return "Unlimited (legacy)"
+    case .unlimited: return "Neo"
     case .unlimitedV2: return "Unlimited"
     case .architect, .pro: return "Architect"
-    case .operator: return "Operator"
+    case .operator: return "Pro"
     case .unknown: return "Plan unavailable"
     }
   }
@@ -460,6 +473,27 @@ enum SubscriptionPlanType: Codable, Equatable, RawRepresentable {
     case .basic, .unknown: return false
     case .plus, .unlimited, .unlimitedV2, .architect, .pro, .operator: return true
     }
+  }
+}
+
+/// Title compatibility for catalogs that predate explicit plan IDs.
+/// Bare Pro is Operator; the retired Omi Pro title still identifies Architect.
+enum SubscriptionPlanNames {
+  static func planId(from title: String) -> String? {
+    let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if normalized.contains("architect") || normalized.contains("omi pro") { return "architect" }
+    if normalized.contains("operator") || normalized == "pro" || normalized.hasPrefix("pro ") {
+      return "operator"
+    }
+    if normalized.contains("plus") { return "plus" }
+    if normalized.contains("neo") || normalized.contains("legacy")
+      || normalized == "unlimited plan" || normalized.hasPrefix("unlimited plan ")
+      || normalized.hasPrefix("omi unlimited")
+    {
+      return "unlimited"
+    }
+    if normalized.contains("unlimited") { return "unlimited_v2" }
+    return nil
   }
 }
 
@@ -524,6 +558,8 @@ struct SubscriptionPlanOption: Codable, Identifiable {
   let eyebrow: String?
   let features: [String]
   let prices: [SubscriptionPriceOption]
+
+  var displayTitle: String { SubscriptionPlanType(rawValue: id).displayName }
 
   init(
     id: String, title: String, subtitle: String? = nil, description: String? = nil, eyebrow: String? = nil,

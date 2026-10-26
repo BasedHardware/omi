@@ -20,20 +20,20 @@ from typing import Any, Dict
 
 from google.cloud import firestore
 
-from database.llm_usage import _nested
+from database.llm_usage import nest_usage_fields
 
 
 def test_a_dotted_path_becomes_a_nested_map():
-    assert _nested({'chat.gpt-4o.input_tokens': 3}) == {'chat': {'gpt-4o': {'input_tokens': 3}}}
+    assert nest_usage_fields({'chat.gpt-4o.input_tokens': 3}) == {'chat': {'gpt-4o': {'input_tokens': 3}}}
 
 
 def test_a_key_without_dots_is_left_alone():
-    assert _nested({'date': '2026-01-01'}) == {'date': '2026-01-01'}
+    assert nest_usage_fields({'date': '2026-01-01'}) == {'date': '2026-01-01'}
 
 
 def test_paths_that_share_a_prefix_merge_into_one_branch():
     """The whole point: three counters for one model must be three keys of one map, not three maps."""
-    nested = _nested(
+    nested = nest_usage_fields(
         {
             'chat.gpt-4o.input_tokens': 1,
             'chat.gpt-4o.output_tokens': 2,
@@ -55,7 +55,7 @@ def test_sentinels_are_carried_through_untouched():
     not stringify or copy them, or the write stops being an atomic increment."""
     increment = firestore.Increment(2)
 
-    nested = _nested({'chat.gpt-4o.input_tokens': increment})
+    nested = nest_usage_fields({'chat.gpt-4o.input_tokens': increment})
 
     assert nested['chat']['gpt-4o']['input_tokens'] is increment
 
@@ -63,7 +63,7 @@ def test_sentinels_are_carried_through_untouched():
 def test_a_leaf_and_a_branch_at_the_same_path_do_not_lose_the_branch():
     """`plan_usage.<plan>._metadata.last_cost_status` is a leaf while
     `plan_usage.<plan>._metadata.cost_status_counts.missing` is a branch under the same parent."""
-    nested = _nested(
+    nested = nest_usage_fields(
         {
             'plan_usage.free._metadata.last_cost_status': 'missing',
             'plan_usage.free._metadata.cost_status_counts.missing': 1,

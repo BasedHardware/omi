@@ -53,10 +53,10 @@ def test_registration_reuses_collector_and_only_materializes_closed_pairs():
     telemetry.record_retry('late', 'resolver_exit', 'resolved')
     importlib.reload(telemetry)
     assert telemetry.OWNER_IDENTITY_RETRY is counter
-    assert len(telemetry.PAIRS) == 60
-    assert len(telemetry.PAIRS - {p for p in telemetry.PAIRS if p[0] in ('resolver_exit', 'segment_abstained')}) == 28
+    assert len(telemetry.PAIRS) == 67
+    assert len(telemetry.PAIRS - {p for p in telemetry.PAIRS if p[0] in ('resolver_exit', 'segment_abstained')}) == 35
     assert set(counter._metrics) <= {(p, s, r) for p in ('first', 'late') for s, r in telemetry.PAIRS}
-    assert len(counter._metrics) < 120
+    assert len(counter._metrics) < 134
     before = snapshot('late')
     telemetry.record_retry('late', 'dynamic-conversation-id', 'dynamic-uid')
     assert delta('late', before) == {('skipped', 'processing_error'): 1}
@@ -194,6 +194,7 @@ def test_batch_pass_cap_and_skips_preserve_reads_and_attempts(monkeypatch):
 
 def test_slot_denial_counts_deduplicated_candidates_and_keeps_return(monkeypatch):
     monkeypatch.setattr(retry, '_slots', SimpleNamespace(acquire=lambda **kw: False))
+    monkeypatch.setattr(retry, '_waiting_slots', SimpleNamespace(acquire=lambda **kw: False))
     before = snapshot('late')
     assert not retry.schedule_completed_identity_retries('u', ['c1', 'c1', 'c2'])
     assert delta('late', before) == {('entry', 'candidate'): 2, ('skipped', 'slot_limit'): 2}
@@ -298,6 +299,11 @@ def baseline_module(monkeypatch):
         capture_output=True,
         text=True,
     ).stdout
+    # The retired rollout reader is gone; compare the historical ON path.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType('owner_retry_funnel_baseline')
     monkeypatch.setitem(sys.modules, module.__name__, module)
     exec(compile(source, 'baseline_speaker_resolution.py', 'exec'), module.__dict__)
@@ -306,6 +312,9 @@ def baseline_module(monkeypatch):
 
 @pytest.mark.parametrize('case', ['resolved', 'zero', 'spanless', 'partial', 'disabled', 'failed_embedding'])
 def test_literal_baseline_and_instrumented_outputs_and_cache_bytes_identical(env, monkeypatch, baseline_module, case):
+    # This historical telemetry baseline predates optional V1 energy metadata.
+    # Isolate its byte-parity contract from the separately tested shadow cache extension.
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'off')
     _span_flags(monkeypatch)
     audio = _install_audio(monkeypatch, [0, 0], offset=180.0)
     original = _capture_shifted_conversation([0, 0])
@@ -420,6 +429,7 @@ def test_actual_inventory_proof_primary_reason_and_unchanged_io(env, monkeypatch
             self.chunks = chunks
             self.limit_hit = False
             self.reason = fetch_reason
+            self.cache = {}
 
         def in_budget(self):
             return failure != 'budget'
@@ -428,6 +438,7 @@ def test_actual_inventory_proof_primary_reason_and_unchanged_io(env, monkeypatch
             reads.append(path)
             if failure == 'download_cap':
                 self.limit_hit = True
+            self.cache[path] = (pcm, fetch_reason)
             return pcm
 
     monkeypatch.setattr(stage, 'AudioChunkReadSession', Session)
@@ -441,6 +452,11 @@ def test_actual_inventory_proof_primary_reason_and_unchanged_io(env, monkeypatch
         result = stage._verified_read_session('u1', conv, files, conv.transcript_segments, placements, float('inf'))
         assert telemetry.resolver_trace().reason == reason
     assert result is None and baseline is None
+    if failure == 'window':
+        # A window with no trusted coordinates now refuses before downloading
+        # unrelated PCM; the closed primary reason remains unchanged.
+        assert reads == [] and baseline_reads == ['fixture']
+        return
     assert reads == baseline_reads
 
 

@@ -6,7 +6,6 @@ ones; only a genuine difference is a mismatch.
 """
 
 from copy import deepcopy
-from pathlib import Path
 import json
 import sys
 from unittest.mock import MagicMock
@@ -15,14 +14,13 @@ from starlette.datastructures import UploadFile
 
 from google.api_core.exceptions import InvalidArgument
 import pytest
-import yaml
 
-from config.sync_assignment_recovery import sync_assignment_recovery_enabled
 from database import sync_ledger
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cloud_tasks import _load_sync_router_for_fast_path
 from tests.unit.test_sync_cross_job_assignment import chunk, conversations, intake
-from utils.sync.assignment import auto_mergeable, capture_mismatch, compatible_capture
+from utils.sync.assignment import auto_mergeable, capture_mismatch
+from utils.sync.live_overlap import compatible_capture
 from utils.sync.assignment_errors import SyncAssignmentConflict
 from utils.sync.pipeline import _firestore_error_class
 
@@ -60,27 +58,6 @@ def _assignment_events(caplog):
     return [r.message for r in caplog.records if 'event=sync_assignment_target' in r.message]
 
 
-@pytest.mark.parametrize(
-    'value,expected',
-    [
-        (None, True),
-        ('true', True),
-        ('ON', True),
-        ('1', True),
-        ('off', False),
-        ('false', False),
-        ('', False),
-        ('typo', False),
-    ],
-)
-def test_recovery_switch(monkeypatch, value, expected):
-    if value is None:
-        monkeypatch.delenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', raising=False)
-    else:
-        monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', value)
-    assert sync_assignment_recovery_enabled() is expected
-
-
 def test_mismatch_token_is_bounded_and_agrees_with_compatible_capture():
     seen = set()
     states = [
@@ -111,10 +88,9 @@ def test_locked_sync_row_remains_auto_mergeable():
     assert not auto_mergeable({'sync_content_revision': 1, 'is_locked': True, 'user_title': 'Mine'})
 
 
-@pytest.mark.parametrize('flag', ['true', 'off'])
 @pytest.mark.parametrize('reverse', [False, True])
-def test_two_adjacent_locked_chunks_become_one_conversation(monkeypatch, caplog, flag, reverse):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', flag)
+def test_two_adjacent_locked_chunks_become_one_conversation(monkeypatch, caplog, reverse):
+
     store = StrictFirestore()
     chunks = [dict(chunk('a', 1000), is_locked=True), dict(chunk('b', 1060), is_locked=True)]
     for item in reversed(chunks) if reverse else chunks:
@@ -126,10 +102,9 @@ def test_two_adjacent_locked_chunks_become_one_conversation(monkeypatch, caplog,
     assert not _assignment_events(caplog)
 
 
-@pytest.mark.parametrize('flag', ['true', 'off'])
 @pytest.mark.parametrize('revision', [None, 1])
-def test_locked_chunk_appends_to_locked_explicit_target(monkeypatch, caplog, flag, revision):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', flag)
+def test_locked_chunk_appends_to_locked_explicit_target(monkeypatch, caplog, revision):
+
     store = StrictFirestore()
     target = dict(chunk('locked', 1000, text='The first locked part of the talk.'), is_locked=True)
     if revision:
@@ -148,12 +123,11 @@ def test_locked_chunk_appends_to_locked_explicit_target(monkeypatch, caplog, fla
     assert not _assignment_events(caplog)
 
 
-@pytest.mark.parametrize('flag', ['true', 'off'])
 @pytest.mark.parametrize('scenario', ['own_anchor', 'explicit_target', 'absorbed_by_neighbor'])
-def test_identical_locked_retry_after_commit_before_checkpoint_deduplicates(monkeypatch, caplog, flag, scenario):
+def test_identical_locked_retry_after_commit_before_checkpoint_deduplicates(monkeypatch, caplog, scenario):
     """The assignment committed, the processed-segment checkpoint did not, and the
     same locked chunk is assigned again. It must deduplicate, not conflict."""
-    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', flag)
+
     store = StrictFirestore()
     incoming = dict(chunk('wal', 1060, text='A locked sentence that was already saved.'), is_locked=True)
     target_id = None
@@ -176,7 +150,6 @@ def test_identical_locked_retry_after_commit_before_checkpoint_deduplicates(monk
     assert not _assignment_events(caplog)
 
 
-@pytest.mark.parametrize('flag', ['true', 'off'])
 @pytest.mark.parametrize(
     'incoming_locked,field,value,token',
     [
@@ -187,8 +160,8 @@ def test_identical_locked_retry_after_commit_before_checkpoint_deduplicates(monk
         (False, 'client_device_id', 'changed-device', 'device'),
     ],
 )
-def test_genuinely_changed_retry_anchor_is_fenced(monkeypatch, caplog, flag, incoming_locked, field, value, token):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', flag)
+def test_genuinely_changed_retry_anchor_is_fenced(monkeypatch, caplog, incoming_locked, field, value, token):
+
     store = StrictFirestore()
     incoming = dict(chunk('wal', 1000), is_locked=incoming_locked)
     intake(store, incoming)
@@ -213,7 +186,7 @@ def test_incompatible_target_recovers_temporally_and_leaves_the_target_untouched
     token,
     compatible_neighbor,
 ):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', 'true')
+
     store = StrictFirestore()
     target = dict(chunk('private-target', 1000), **target_fields)
     store.rows[('users', 'u', 'conversations', target['id'])] = deepcopy(target)
@@ -234,27 +207,8 @@ def test_incompatible_target_recovers_temporally_and_leaves_the_target_untouched
     assert target['id'] not in event and 'other-device' not in event and 'desktop' not in event
 
 
-@pytest.mark.parametrize('target_fields,incoming_locked,token', _TARGET_MISMATCHES)
-def test_switch_off_rejects_an_incompatible_target_as_before(
-    monkeypatch, caplog, target_fields, incoming_locked, token
-):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', 'false')
-    store = StrictFirestore()
-    target = dict(chunk('private-target', 1000), **target_fields)
-    store.rows[('users', 'u', 'conversations', target['id'])] = deepcopy(target)
-    intake(store, dict(chunk('neighbor', 960), is_locked=incoming_locked))
-    before = deepcopy(store.rows)
-    with pytest.raises(SyncAssignmentConflict) as exc:
-        intake(store, dict(chunk('wal', 1010), is_locked=incoming_locked), target_id=target['id'])
-    assert exc.value.subtype == 'provenance_mismatch'
-    assert store.rows == before
-    events = _assignment_events(caplog)
-    assert len(events) == 1
-    assert 'outcome=rejected' in events[0] and f'mismatch={token} ' in f'{events[0]} '
-
-
 def test_missing_target_keeps_temporal_behavior_with_switch_off(monkeypatch):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', 'off')
+
     store = StrictFirestore()
     intake(store, chunk('neighbor', 1000))
     result, created, _ = intake(store, chunk('wal', 1060), target_id='missing')
@@ -280,17 +234,6 @@ def test_ledger_has_no_permanent_segment_guard():
     assert not hasattr(sync_ledger, 'quarantine_sync_segment')
 
 
-def test_recovery_flag_reaches_every_sync_host_in_both_environments():
-    manifest = yaml.load((Path(__file__).parents[2] / 'deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
-    for env in manifest['environments'].values():
-        hosts = [
-            env['cloud_run']['services'][service]
-            for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
-        ]
-        hosts.append(env['gke']['backend-listen'])
-        assert all(host['env']['SYNC_ASSIGNMENT_RECOVERY_ENABLED']['value'] == 'true' for host in hosts)
-
-
 @pytest.fixture
 def admission_router():
     module, saved, jobs, bytes_io, _, _ = _load_sync_router_for_fast_path()
@@ -299,6 +242,7 @@ def admission_router():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -327,3 +271,26 @@ async def test_paused_persistence_upload_keeps_the_retaining_contract_before_dis
     event = next(r.message for r in caplog.records if 'event=sync_repeat_failure_cap' in r.message)
     assert 'outcome=paused' in event and 'failure_key=persistent_persistence' in event
     assert 'quarantined' not in event and 'test-uid' not in event
+
+
+def test_batch_explicit_live_target_missing_holds_and_replays_after_live_create():
+    store = StrictFirestore()
+    incoming = dict(chunk('batch-anchor', 1000), _batch_require_live_target=True)
+    incoming['transcript_segments'][0].update(
+        id='synthetic-wal-segment', speaker='SPEAKER_00', speaker_id_scope='final:batch:unit'
+    )
+    with pytest.raises(SyncAssignmentConflict, match='not persisted'):
+        intake(store, incoming, target_id='live')
+    assert not conversations(store)
+    target = chunk('live', 1000)
+    target['transcript_segments'] = []
+    store.rows[('users', 'u', 'conversations', 'live')] = target
+    result, created, _ = intake(store, incoming, target_id='live')
+    assert result['id'] == 'live' and not created
+    assert len(conversations(store)) == 1
+
+
+def test_missing_live_target_keeps_legacy_fallback_without_batch_marker():
+    store = StrictFirestore()
+    result, created, _ = intake(store, chunk('wal', 1000), target_id='live')
+    assert result['id'] == 'wal' and created

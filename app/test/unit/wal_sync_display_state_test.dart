@@ -176,12 +176,12 @@ void main() {
       );
     });
 
-    test('only failed is retryable', () {
+    test('spent budgets and request refusals allow explicit retry', () {
       for (final state in WalSyncDisplayState.values) {
         expect(
           isRetryableSyncState(state),
-          state == WalSyncDisplayState.failed,
-          reason: '$state must not offer a retry that cannot succeed',
+          state == WalSyncDisplayState.failed || state == WalSyncDisplayState.uploadRejected,
+          reason: '$state must distinguish a request refusal from a permanent audio verdict',
         );
       }
     });

@@ -886,6 +886,30 @@ struct FloatingControlBarView: View {
         for: FloatingControlBarManager.snoozeTwoHoursDuration
       )
     }
+
+    Divider()
+
+    // Hiding the bar deliberately does not silence notifications — a hidden bar still
+    // nudges. These are the separate statement: stop suggesting for a while.
+    //
+    // Deliberately flat buttons rather than a submenu: a nested `Menu` inside
+    // `.contextMenu` does not render reliably on macOS, and the adjacent
+    // "Hide for 2 hours" button is the shape already proven to work here.
+    if let snoozedUntil = NotificationService.currentSnoozeExpiry(), snoozedUntil > Date() {
+      Button("Resume suggestions") {
+        NotificationService.endNotificationSnooze()
+      }
+    } else {
+      Button("Silence suggestions for 1 hour") {
+        NotificationService.snoozeNotifications(for: 60 * 60)
+      }
+      Button("Silence suggestions for 4 hours") {
+        NotificationService.snoozeNotifications(for: 4 * 60 * 60)
+      }
+      Button("Silence suggestions for 8 hours") {
+        NotificationService.snoozeNotifications(for: 8 * 60 * 60)
+      }
+    }
   }
 
   private var conversationView: some View {
@@ -1229,9 +1253,7 @@ struct FloatingControlBarView: View {
         // Reserve space so text never runs under the overlaid action buttons.
         // Wider for actionable (task) notifications that also show Execute.
         Color.clear
-          .frame(
-            width: notification.kind == .proactivityV2 ? 112 : (notification.assistantId == "task" ? 96 : 40),
-            height: 20)
+          .frame(width: notification.assistantId == "task" ? 96 : 40, height: 20)
       }
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.md + 2)
@@ -1243,9 +1265,6 @@ struct FloatingControlBarView: View {
     .onChange(of: notification.id) { _, _ in FloatingControlBarManager.shared.notificationDidRender(notification) }
     .overlay(alignment: .topTrailing) {
       HStack(spacing: OmiSpacing.xs) {
-        if notification.kind == .proactivityV2 {
-          ProactivityCardFeedback(onInteraction: notification.onInteraction).id(notification.id)
-        }
         // Execute is only meaningful for actionable notifications (tasks).
         // Focus / Insight (tips) / other passive notifications are
         // informational — spawning an agent there made no sense.

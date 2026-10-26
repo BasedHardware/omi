@@ -86,7 +86,9 @@ def _has_call_control(row: dict[str, Any]) -> bool:
 
 def is_conferencing_row(row: dict[str, Any]) -> bool:
     if _is_messaging_call_app(str(row.get('appName') or '')):
-        return True
+        # A messaging app is a call only while its window shows call controls: an open chat
+        # (2026-10-22: a Telegram chat left open through an in-person dinner) is not a meeting.
+        return _has_call_control(row)
     haystack = f'{row.get("appName", "")} {row.get("windowTitle", "")}'.casefold()
     if any(marker in haystack for marker in _CONFERENCING_MARKERS):
         return True
@@ -142,9 +144,22 @@ _NON_PERSON_WORDS = {
 # "Aryan Gupta and Nik"); only `_split_roster` may take such a line apart.
 _JOINER_WORDS = {'and', 'with', 'vs', 'versus', 'or', 'et'}
 
+# Zoom's speaking-indicator glyph OCRs as a run of I/l bars, often with a w/W
+# lead, glued to the tile name: "IllNik Shevchenko", "wIllNik Shevchenko". Each
+# row then reads as a different name, so the persistence count never reaches
+# MIN_TILE_ROWS. Only a bar-run directly followed by a Capitalised token is a
+# glyph: "Illinois Smith", "William Smith" and "VIII Nik" all keep their lead.
+# Conversation 79e8e434: the real case recovered once these prefixes strip.
+_TILE_GLYPH_PREFIX = re.compile(r'^(?:[wW]?[Il]{1,4})(?=[A-Z][a-z])')
+
+
+def strip_leading_tile_glyphs(line: str) -> str:
+    """Drop a speaking-indicator glyph OCR prefix glued to a tile-name line."""
+    return _TILE_GLYPH_PREFIX.sub('', line)
+
 
 def _clean_line(raw_line: str) -> str:
-    return re.sub(r'\s+', ' ', raw_line).strip(' •|*·-—\t')
+    return strip_leading_tile_glyphs(re.sub(r'\s+', ' ', raw_line).strip(' •|*·-—\t'))
 
 
 def _looks_like_person_name(value: str) -> bool:
@@ -549,37 +564,19 @@ def participants_from_ocr(texts: Iterable[str], *, tile_names: Iterable[str] = (
     return participants[:12]
 
 
-def _dominating_call_windows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    counts: dict[str, int] = {}
-    for row in rows:
-        title = _clean_line(str(row.get('windowTitle') or ''))
-        if not title:
-            continue
-        counts[title] = counts.get(title, 0) + 1
-    titled_count = sum(counts.values())
-    if not titled_count:
-        return []
-    top_title, top_count = max(counts.items(), key=lambda item: item[1])
-    if not _looks_like_person_name(top_title):
-        return []
-    runner_up = max((count for title, count in counts.items() if title != top_title), default=0)
-    if top_count * 2 <= titled_count or top_count <= runner_up:
-        return []
-    return [row for row in rows if _clean_line(str(row.get('windowTitle') or '')) == top_title]
-
-
 def _messaging_call_participants(rows: list[dict[str, Any]]) -> list[MeetingParticipant]:
-    """Name-shaped native-call window titles, only with call chrome or a dominant window.
+    """Name-shaped native-call window titles, only from windows that show call chrome.
 
     Telegram/Discord/Slack/WhatsApp do not print Meet-style roster sentences. The
     call window's title *is* the other party, but only when in-call chrome (mute /
-    end call / video) corroborates a live call, or one title dominates the interval.
-    Browsing many chats in the same window must not invent a roster.
+    end call / video) corroborates a live call. An open or browsed chat is not a call.
     """
     messaging = [row for row in rows if _is_messaging_call_app(str(row.get('appName') or ''))]
     if not messaging:
         return []
-    source = [row for row in messaging if _has_call_control(row)] or _dominating_call_windows(messaging)
+    # Only windows that show call controls name the other party; a chat that merely stays open
+    # (dominates the interval) is not a call.
+    source = [row for row in messaging if _has_call_control(row)]
     names: list[str] = []
     for row in source:
         title = _clean_line(str(row.get('windowTitle') or ''))

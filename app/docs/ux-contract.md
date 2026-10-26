@@ -9,6 +9,9 @@ Primitives live in `lib/ui/` (`omi_tokens.dart`, `components/`, `feedback/`, `fo
 `prompts/`). This is the mobile twin of the macOS contract (`desktop/macos/.../ux-contract.md`,
 INV-UI-2): same rules where the platforms agree, platform-correct where they do not.
 
+Frame cost (UI-isolate work, rebuild cascades, blur, image decode) has its own rules and guard:
+[performance.md](performance.md), `INV-PERF-1`.
+
 Guard: `INV-UI-3` ([`product/invariants/mobile-ux-contract.md`](../../product/invariants/mobile-ux-contract.md))
 runs `.github/scripts/check_mobile_ux_contract.py`, a per-file no-increase ratchet over the
 hand-rolled patterns named below (rule ids in `code`). A deliberate exception ends its line with
@@ -85,11 +88,12 @@ There are exactly two ways out, and they mean different things.
 | On/off setting | `OmiSwitch` in an `OmiSettingsRow` | a checkbox, a purple/green/indigo switch |
 | Settings list | `OmiSettingsGroup` of `OmiSettingsRow`s under an `OmiSectionHeader` | a hand-built row per page |
 | Search | `OmiSearchField(placeholder: l10n.searchConversations)` | a styled `TextField` per page |
-| Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:, count:)` — one selected, accent-filled; 44 pt target | a local chip with its own colours per page |
+| Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:, count:)` — one selected, accent-filled; 44 pt target; an icon-only "+" chip is `icon:` with an empty `label` and a `semanticsLabel` | a local chip with its own colours per page |
 | A choice among people or answers (tag a speaker, a likely-speaker Yes / Not) | `OmiFilterChip` as above, with an optional leading `icon:` ("+ Add Person") | a Material `ChoiceChip` on a grey slab that reads as disabled |
 | A removable **date** filter | `OmiDateFilterChip(start:, end:, onClear:)` — calendar glyph, localized date or `start – end`, ×; remove semantics `removeFilter` + the date | a raw `InputChip`, a filter with no way off |
 | A level (how sure Omi is, how close a voice is) | `OmiLevelMeter(level: 0–3, semanticsLabel:)` — three neutral steps; a newly filled step animates in (`OmiMotion.standard`) | a percentage, a coloured or traffic-light bar |
 | Loading indicator | `OmiSpinner` (small / regular / large) | `CircularProgressIndicator(` with a local colour and stroke (`raw-spinner`) |
+| Something happening live (Omi listening, a device syncing quietly) | `OmiLiveDot(live:)` — a small success-green dot that pulses while live and holds still otherwise (reduced motion: still); `OmiActivityRing(active:, child:)` — a thin spinning ring around a glyph, no text, hidden when idle | a local `AnimationController` pulse per page, a "Syncing…" label in a header |
 | Locked card preview | `OmiLockedPreview(child:, label:, onPressed:)` — clips a child-only blur and a translucent surface beneath an `OmiButton.tertiary`; excludes the obscured content from touch and semantics | a dark strip with readable content overlapping its upgrade label |
 
 - Every tappable control is at least **44×44 pt** (48 dp on Android is fine), including the label
@@ -194,6 +198,7 @@ order and a 12-hour clock on everyone.
 | `timeRange` | 10:17 – 11:19 AM | a span; across days both ends carry the date |
 | `OmiDuration.offset` | 0:05 · 3:38 · 1:02:05 | a position in a recording, time remaining |
 | `OmiDuration.compact` | 8s · 4m 10s · 42m · 1h 5m | a length — the list row and the detail page use the same one |
+| `OmiDuration.live` | 8s · 10m 1s · 1h 5m 1s | an elapsed live length that keeps ticking every second |
 | `OmiDuration.long` | 12 mins 34 secs | screen-reader labels and sentences |
 
 A row inside a day group shows only the time. Group rows by the same date the row displays.
@@ -205,17 +210,21 @@ only way to name a transcript speaker — bubbles, the edit-segment and tag-spea
 participant lists, the speaker filter and every copied, shared or exported transcript
 (`TranscriptSegment.segmentsAsString` uses it).
 
+- Server-projected Review excerpts use `SpeakerNames.excerptLabel` for stored names and localized owner/unnamed labels.
 - The owner is **You** in the app; exports use the owner's given name, else "You".
 - A speaker assigned to a person shows the person's name (live people list first).
 - Omi's own speaker is **Omi**, never "Speaker 100".
 - Everyone else is **Speaker N**, N dense per conversation (1, 2, 3… in order of first
   appearance, skipping the owner and Omi). Never a raw id, never a gap. Naming a person does not
   renumber the others. `TranscriptSegment.getDisplaySpeakerId` returns the same N.
+- Live capture passes `deferShortVoices: true`: unnamed voices remain plain **Speaker** until five seconds of non-overlapping placed speech. Unplaced text cannot qualify. Number at qualification time so a short earlier voice cannot renumber an established voice; owner and known-person names still use their existing authority. This display floor does not identify or merge voices.
 - When the server could not resolve speakers across the conversation (`speaker_resolution.status`
   is `unavailable`), raw ids from different recordings are not comparable, so an unnamed voice is
   the plain **Speaker** (`l10n.unnamedSpeakerLabel`), never "Speaker ?" and never a number, and the
   transcript heading omits its speaker count. A saved transcript names each speaker once per turn
   (consecutive lines from the same voice), so a change of voice is still visible.
+- When diarization splits into more than eight unnamed voices, group tiny-evidence voices as **Others** and omit exact counts in conversation headers and the transcript heading. `DiarizationLabel` keeps storage ids out of display text.
+- On-device overflow transcripts (`stt_provider=on_device:<engine>`) have one **unlabeled** voice: omit speaker names and the speaker count. Local engines never imply diarization or identity.
 - The speaker filter is "Filter by speaker" (`l10n.filterBySpeaker`), never the loudspeaker string
   `phoneSpeaker`.
 

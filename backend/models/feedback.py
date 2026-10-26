@@ -234,31 +234,6 @@ class MobileFeedbackReceipt(BaseModel):
     persisted: Literal[True] = True
 
 
-class MemoryUseFeedback(BaseModel):
-    """Content-free receipt envelope for canonical memory-use feedback.
-
-    The canonical apply transaction turns this envelope into one append-only
-    ``FeedbackEvent``.  It lives beside the existing feedback models so the
-    owner mutation and the product feedback ledger can share one idempotency
-    boundary without creating a second receipt collection.
-    """
-
-    schema_version: Literal["memory_use_feedback.v1"] = "memory_use_feedback.v1"
-    uid: str
-    feedback_id: str = Field(min_length=1, max_length=128)
-    target_memory_id: str
-    action: Literal["suppress", "allow", "useful"]
-    created_at: datetime
-
-    @field_validator("uid", "feedback_id", "target_memory_id")
-    @classmethod
-    def validate_nonblank(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("memory-use feedback identifiers must not be blank")
-        return normalized
-
-
 class FeedbackContextTurn(BaseModel):
     """A pointer to one turn near the rated one. Carries no text."""
 

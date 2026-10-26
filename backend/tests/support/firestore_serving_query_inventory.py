@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +35,13 @@ def is_serving_query_inventory_path(path: str) -> bool:
 def _query_call(call: ast.Call, collection_names: set[str]) -> bool:
     func = call.func
     if isinstance(func, ast.Name):
-        return func.id in {'budgeted_stream_iter', 'budgeted_stream_list', 'mcp_auth_stream'}
+        return func.id in {
+            'budgeted_stream_iter',
+            'budgeted_stream_list',
+            'mcp_auth_stream',
+            'projected_stream_list',
+            'projected_stream_iter',
+        }
     if not isinstance(func, ast.Attribute):
         return False
     if func.attr in BUILDERS:
@@ -112,6 +119,12 @@ def discover_serving_query_functions(backend_root: str | Path) -> list[dict[str,
     return sorted(rows, key=lambda row: row['key'])
 
 
+@lru_cache(maxsize=16)
+def _parsed_serving_source(source: str) -> ast.Module:
+    """Reuse repeated parses by exact content; source edits always get a fresh AST."""
+    return ast.parse(source)
+
+
 def serving_function_body_digest(key: str, backend_root: str | Path | None = None) -> str:
     root = Path(backend_root) if backend_root is not None else Path(__file__).resolve().parents[2]
     parts = key.split('.')
@@ -119,7 +132,7 @@ def serving_function_body_digest(key: str, backend_root: str | Path | None = Non
         path = root.joinpath(*parts[:split]).with_suffix('.py')
         if path.is_file():
             names = parts[split:]
-            nodes = ast.parse(path.read_text()).body
+            nodes = _parsed_serving_source(path.read_text()).body
             target = None
             for name in names:
                 target = next(

@@ -83,10 +83,82 @@ class BeeDeviceConnection extends CustomDeviceConnection {
     return null;
   }
 
+  static const List<List<int>> _dischargeStates = [
+    [4200, 100],
+    [4100, 85],
+    [4000, 65],
+    [3900, 50],
+    [3800, 35],
+    [3700, 15],
+    [3600, 5],
+    [3500, 1],
+    [3400, 0],
+  ];
+
+  static const List<List<int>> _chargingStates = [
+    [4250, 100],
+    [4180, 85],
+    [4080, 65],
+    [3980, 50],
+    [3880, 35],
+    [3780, 15],
+    [3680, 5],
+    [3580, 1],
+    [3480, 0],
+  ];
+
+  /// Interpolates battery percentage from millivolts using the Bee LiPo calibration curve.
+  static int millivoltsToPercentage(int millivolts, bool isCharging) {
+    final states = isCharging ? _chargingStates : _dischargeStates;
+    if (millivolts >= states.first[0]) {
+      return states.first[1];
+    }
+    if (millivolts <= states.last[0]) {
+      return states.last[1];
+    }
+
+    for (int i = 0; i < states.length - 1; i++) {
+      final high = states[i];
+      final low = states[i + 1];
+      if (millivolts <= high[0] && millivolts >= low[0]) {
+        final vRange = high[0] - low[0];
+        if (vRange == 0) return high[1];
+        final pRange = high[1] - low[1];
+        final vDiff = high[0] - millivolts;
+        final pct = high[1] - ((vDiff * pRange) / vRange).round();
+        return pct.clamp(0, 100);
+      }
+    }
+    return 0;
+  }
+
   @override
   Map<String, dynamic>? parseBatteryResponse(List<int> payload) {
     if (payload.length < 2) return null;
-    return {'level': payload[0], 'is_charging': payload[1] != 0};
+
+    if (payload.length == 2) {
+      // Legacy 2-byte format: [percentage, charging]
+      return {
+        'level': payload[0].clamp(0, 100),
+        'is_charging': payload[1] != 0,
+      };
+    }
+
+    // 3-byte voltage format: [mv_low, mv_high, charging_state]
+    final millivolts = payload[0] | (payload[1] << 8);
+
+    // Reject implausible voltage readings (< 3.0V or > 4.5V)
+    if (millivolts < 3000 || millivolts > 4500) {
+      return null;
+    }
+
+    final isCharging = payload[2] != 0;
+    final level = millivoltsToPercentage(millivolts, isCharging);
+
+    return {
+      'level': level,
+      'is_charging': isCharging,
+    };
   }
 
   @override

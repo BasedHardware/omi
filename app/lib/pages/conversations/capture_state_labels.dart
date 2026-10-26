@@ -12,9 +12,11 @@ import 'package:omi/l10n/app_localizations.dart';
 /// | [recording]                  | Recording                    | audio saved for later (no live transcription)  |
 /// | [paused]                     | Paused                       | the reader paused, or the OS interrupted audio (a call, another app) |
 /// | [muted]                      | Muted                        | the device's mic is muted                      |
+/// | [connecting]                 | Connecting…                  | a pendant link is being verified before it can claim Listening |
+/// | [noAudio]                    | No audio from pendant        | the pendant is connected but its audio never arrived and recovery is exhausted |
 /// | [reconnecting]               | Reconnecting…                | the transcription connection dropped and is being restored |
 /// | [bufferingOffline]           | Offline, buffering (· 3m)    | a custom speech endpoint is unreachable; audio is kept locally |
-/// | [transcriptionUnavailable]   | Transcriptions are unavailable, recording continues on device and will process later | the server said live transcription cannot run; the WAL keeps recording regardless |
+/// | [transcriptionUnavailable]   | Not transcribing             | the server said live transcription cannot run; the WAL keeps recording regardless — the recovery banner carries the full outage sentence |
 /// | [processing]                 | Processing                   | capture ended; the conversation is being made  |
 ///
 /// An audio-session interruption is **Paused**, not Reconnecting: nothing is reconnecting, the OS
@@ -25,6 +27,8 @@ enum CaptureDisplayState {
   recording,
   paused,
   muted,
+  connecting,
+  noAudio,
   reconnecting,
   bufferingOffline,
   transcriptionUnavailable,
@@ -32,8 +36,9 @@ enum CaptureDisplayState {
 }
 
 /// The one label for [state]. [bufferingFor] adds the elapsed minutes to [CaptureDisplayState.bufferingOffline].
-/// The capturing page uses the full transcription-outage sentence so the reader learns recording
-/// still continues and will be processed later; the Home card uses [captureCardCopy].
+/// [transcriptionUnavailable] is the short "Not transcribing": a heading, not the whole story — the
+/// full outage sentence (recording continues, processes later) lives only in the recovery banner
+/// and the Home card's details sheet, so one moment never states itself twice.
 String captureStateLabel(
   AppLocalizations l10n,
   CaptureDisplayState state, {
@@ -50,13 +55,17 @@ String captureStateLabel(
       return l10n.paused;
     case CaptureDisplayState.muted:
       return l10n.muted;
+    case CaptureDisplayState.connecting:
+      return l10n.captureConnecting;
+    case CaptureDisplayState.noAudio:
+      return l10n.captureNoAudioFromPendant;
     case CaptureDisplayState.reconnecting:
       return l10n.reconnecting;
     case CaptureDisplayState.bufferingOffline:
       final minutes = bufferingFor?.inMinutes ?? 0;
       return minutes < 1 ? l10n.captureOfflineBuffering : l10n.captureOfflineBufferingFor(minutes);
     case CaptureDisplayState.transcriptionUnavailable:
-      return l10n.transcriptionUnavailableRecordingContinues;
+      return l10n.captureNotTranscribing;
     case CaptureDisplayState.processing:
       return l10n.processing;
   }
@@ -106,6 +115,11 @@ CaptureCardCopy captureCardCopy(
     case CaptureDisplayState.paused when micTaken:
       return CaptureCardCopy(l10n.paused,
           detail: l10n.captureMicInUseElsewhere, explanation: l10n.captureMicInterruptedDetail);
+    case CaptureDisplayState.noAudio:
+      // The pendant link is there but its audio never arrived and recovery is
+      // exhausted; the explanation says what the reader can do about it.
+      return CaptureCardCopy(l10n.captureNoAudioFromPendant,
+          detail: l10n.captureNoAudioDetail, explanation: l10n.captureIngressNeedsReconnectExplanation);
     case CaptureDisplayState.reconnecting when !socketDown:
       return CaptureCardCopy(l10n.reconnecting);
     case CaptureDisplayState.reconnecting:
@@ -123,12 +137,15 @@ CaptureCardCopy captureCardCopy(
 }
 
 /// Resolves the state of a live capture from the capture provider's signals, in priority order:
-/// an interruption or pause, then a server-side transcription failure, then offline buffering,
+/// an interruption or pause, then a pendant whose audio is not arriving (a failure) or still
+/// being verified (a wait), then a server-side transcription failure, then offline buffering,
 /// then a dropped transcription connection, then live.
 CaptureDisplayState liveCaptureDisplayState({
   bool audioInterrupted = false,
   bool paused = false,
   bool deviceMuted = false,
+  bool pendantNoAudio = false,
+  bool pendantUnverified = false,
   bool transcriptionUnavailable = false,
   Duration? bufferingFor,
   bool reconnecting = false,
@@ -136,6 +153,10 @@ CaptureDisplayState liveCaptureDisplayState({
 }) {
   if (audioInterrupted) return CaptureDisplayState.paused;
   if (paused) return deviceMuted ? CaptureDisplayState.muted : CaptureDisplayState.paused;
+  // A pendant that owes audio and cannot get it is the capture's own problem, ahead
+  // of anything the transcription connection is doing.
+  if (pendantNoAudio) return CaptureDisplayState.noAudio;
+  if (pendantUnverified) return CaptureDisplayState.connecting;
   if (transcriptionUnavailable) return CaptureDisplayState.transcriptionUnavailable;
   if (bufferingFor != null) return CaptureDisplayState.bufferingOffline;
   if (reconnecting) return CaptureDisplayState.reconnecting;

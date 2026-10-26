@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import unittest.mock
 from types import SimpleNamespace
 
@@ -20,8 +21,9 @@ DRIVERS: dict[str, DriverEntry] = {}
 COVERED_BY: dict[str, CoveredByEntry] = {}
 SKIPS: dict[str, SkipEntry] = {}
 BODY_DIGEST = {
+    'routers.fleet_telemetry.read_summary': '3152b3a9ec2e644280e6b176d02ed8174772586d713f314944dd5e305d0942d6',
     'parakeet.stream_handler._NemoRNNTStreamingDecoder.decode_pcm': '37cecadaf2adcc0650d318d4ac7adb316dade33610927e6ac663f9d386c9edd6',
-    'routers.desktop_proxy._read_request_body': 'e71ed271b768274df479a8429ce363d1152a85073b59c8d034445bd8fc87c6b7',
+    'utils.llm.desktop_proxy_lifetime.read_body': '2c4a2dc281f1af068e6d0da229683697afbdb29d97fc250628fc03e1955be2b9',
     'utils.multipart._size_limited_stream': '9d743f14fb64633072a7b3e213236643e3bd74825c4bc73221f1fdbd867fc7b6',
     'utils.multipart.parse_multipart_form': 'bf33b0fe208c6ed0fceb935908a2396c47596bc730543543b4c0bb3c10435495',
     'utils.memory.canonical_graph._build_canonical_graph_items_query': '55a8b4ccfc9b7e98d6482495590fdf15f04a6f325485b2345043419846862bbd',
@@ -99,16 +101,11 @@ def _keyframes(client, combo, trial):
 def _inventory_cursors(client, combo, trial):
     if not trial:
         return
-    for path in (
-        'daily_memory_sweep_control/retry_cursor',
-        'daily_memory_sweep_control/canonical_inventory_cursor',
-        'daily_memory_sweep_control/onboarding_inventory_cursor',
-        'canonical_memory_maintenance_control/cursor',
-    ):
+    for path in ('canonical_memory_maintenance_control/cursor',):
         client.documents[path] = {'schema_version': 1, 'last_uid': UID, 'generation': 0}
     seed = f'users/{UID}/memory_state/apply_control'
     client.documents[seed] = {'uid': UID, 'account_generation': 1, 'source_generation': 1}
-    for path in ('daily_memory_sweep_control/seed_cursor', 'canonical_memory_maintenance_control/seed_cursor'):
+    for path in ('canonical_memory_maintenance_control/seed_cursor',):
         client.documents[path] = {'schema_version': 1, 'last_uid': seed, 'last_path': seed, 'generation': 0}
     client.documents['knowledge_ledger_migration_control/inventory_cursor'] = {
         'schema_version': 1,
@@ -138,45 +135,6 @@ def _graph(client, combo, trial):
         )
 
 
-def _candidate(client, combo, trial):
-    module = importlib.import_module('utils.memory.daily_memory_sweep')
-    slot, entity = combo['candidate']
-    combo['candidate'] = module.DailySweepCandidate(
-        candidate_id='candidate-1',
-        kind='fact',
-        content='shape fact',
-        source_id='source-1',
-        source_type='daily_summary',
-        slot=slot,
-        subject_entity_id=entity,
-    )
-
-
-def _window(client, combo, trial):
-    module = importlib.import_module('utils.memory.daily_memory_sweep')
-    combo['window'] = module.CompletedLocalDayWindow(T0, T1, 'window-1')
-
-
-def _summary(client, combo, trial):
-    module = importlib.import_module('utils.memory.daily_memory_sweep')
-    combo['model_authority'] = module.DailySweepModelAuthority()
-    combo['control'] = importlib.import_module('models.memory_apply').MemoryControlState(
-        uid=UID, head_commit_id='head-1', account_generation=1, source_generation=1, updated_at=T0
-    )
-    _control(client, combo, trial)
-
-
-def _onboarding(client, combo, trial):
-    combo['model_authority'] = importlib.import_module('utils.memory.daily_memory_sweep').DailySweepModelAuthority()
-
-
-def _entity(client, combo, trial):
-    combo['entity'] = importlib.import_module('utils.retrieval.tools.entity_timeline_tools').EntityReference(
-        kind='person', identifier='person-1'
-    )
-    client.documents[f'users/{UID}/people/person-1'] = {'name': 'Shape Person'}
-
-
 def _purge(client, combo, trial):
     client.documents[f'account_deletions/{UID}'] = {'wipe_status': 'pending'}
     client.queue_results([client.snapshot(f'users/{UID}/memory_outbox/processing-1', {'status': 'processing'})])
@@ -200,38 +158,6 @@ def _purge_patcher(client):
 def _rejected_cache(client):
     return unittest.mock.patch.object(
         importlib.import_module('utils.memory.rejected_memory_feedback'), '_feedback_cache', {}
-    )
-
-
-def _mirror_fence(client):
-    module = importlib.import_module('utils.memory.jit_ledger_mirror_snapshot')
-    return unittest.mock.patch.object(
-        module, '_read_fence', return_value=module.LedgerMirrorFence(UID, 1, 1, 0, 'head-1', 1)
-    )
-
-
-def _mirror_cursor(client, combo, trial):
-    if combo.get('cursor'):
-        module = importlib.import_module('utils.memory.jit_ledger_mirror_snapshot')
-        combo['cursor'] = module._encode_cursor(
-            uid=UID,
-            epoch_id=module.LedgerMirrorFence(UID, 1, 1, 0, 'head-1', 1).epoch_id,
-            last_memory_id='memory-1',
-            chain_revision='a' * 64,
-            scanned_count=1,
-            projected_count=0,
-            secret=b'shape-secret',
-            now_epoch_seconds=int(T0.timestamp()),
-        )
-
-
-def _mirror_cursor_clock(client):
-    module = importlib.import_module('utils.memory.jit_ledger_mirror_snapshot')
-    original = module._decode_cursor
-    return unittest.mock.patch.object(
-        module,
-        '_decode_cursor',
-        lambda cursor, **kwargs: original(cursor, **{**kwargs, 'now_epoch_seconds': int(T0.timestamp())}),
     )
 
 
@@ -353,24 +279,16 @@ _driver(
     profile='scheduled-feedback-report',
 )
 _driver(
-    'utils.memory.belief_backfill._default_item_reader',
+    'utils.memory.canonical_consolidation._required_intake_page',
     base={'uid': UID},
-    domains={'start_after': [None, 'memory-1']},
-    neutrals={'limit': LIMIT},
-    profile='operational-belief-backfill',
-    serving=False,
-)
-_driver(
-    'utils.memory.canonical_consolidation.list_pending_consolidation_items',
-    base={'uid': UID},
-    domains={'start_after': [None, (T0, 'memory-1')]},
-    neutrals={'now': NOW, 'limit': LIMIT},
-    profile='maintenance-consolidation',
+    domains={'cursor': [None, {'captured_at': T0, 'memory_id': 'memory-1'}], 'captured_after': [None, T0]},
+    profile='maintenance-required-intake',
     serving=False,
 )
 _driver(
     'utils.memory.canonical_required_processing.list_pending_required_processing_items',
     base={'uid': UID},
+    domains={'captured_after': [None, T0]},
     neutrals={'limit': LIMIT},
     profile='maintenance-required-processing',
     serving=False,
@@ -389,35 +307,13 @@ _driver(
     profile='maintenance-global-expiry',
     serving=False,
 )
-_driver(
-    'utils.memory.canonical_short_term_maintenance_cron.count_active_short_term',
-    base={'uid': UID},
-    neutrals={'cap': (11, 'caps tally only')},
-    profile='maintenance-short-term-count',
-    serving=False,
-)
 for function in (
     'utils.memory.canonical_short_term_maintenance_cron._seed_registry_from_existing_memory_states',
     'utils.memory.canonical_short_term_maintenance_cron.bounded_canonical_memory_uid_inventory',
-    'utils.memory.daily_memory_sweep_inventory._read_retry_uids',
-    'utils.memory.daily_memory_sweep_inventory._seed_registry',
-    'utils.memory.daily_memory_sweep_inventory.bounded_canonical_daily_sweep_uids',
-    'utils.memory.daily_memory_sweep_inventory.bounded_daily_memory_sweep_uid_inventory',
-    'utils.memory.knowledge_ledger_drain.bounded_ledger_drain_inventory',
 ):
     neutrals = {'limit': LIMIT}
-    if function.endswith(
-        (
-            'bounded_canonical_memory_uid_inventory',
-            'bounded_canonical_daily_sweep_uids',
-            'bounded_daily_memory_sweep_uid_inventory',
-        )
-    ):
+    if function.endswith(('bounded_canonical_memory_uid_inventory',)):
         neutrals['persist_cursor'] = (False, 'controls point-write persistence, not query shape')
-    if function.endswith('bounded_daily_memory_sweep_uid_inventory'):
-        neutrals['return_page'] = (False, 'return packaging only')
-    if function.endswith('bounded_ledger_drain_inventory'):
-        neutrals['uid_allowlist'] = (None, 'collection-group scan profile; allowlisted mode uses point reads only')
     _driver(
         function,
         neutrals=neutrals,
@@ -442,17 +338,20 @@ _driver(
 _driver(
     'utils.memory.canonical_memory_adapter.read_canonical_scan_page',
     base={'uid': UID},
-    domains={'start_after': [None, (T0, 'memory-1')]},
+    domains={
+        'start_after': [None, (T0, 'memory-1')],
+        'include_pending_processing': [False, True],
+        'include_archive': [False, True],
+    },
+    patchers=(_stub('utils.memory.canonical_memory_adapter.indexed_list_reads_enabled', True),),
     neutrals={
         'limit': LIMIT,
         'device_scope_request': (None, 'post-read visibility only'),
-        'include_pending_processing': (False, 'post-read visibility only'),
-        'include_archive': (False, 'post-read visibility only'),
         'now': NOW,
+        'as_of': (None, 'internal scan-time override; does not select a history view'),
         'budget': BUDGET,
-        'view': ('released', 'post-read temporal visibility only'),
-        'as_of': (None, 'post-read temporal visibility only'),
         'item_filter': (None, 'post-read predicate only'),
+        'candidate_snapshots': (None, 'injected candidate snapshots bypass the serving query; policy unchanged'),
     },
 )
 _driver(
@@ -461,122 +360,6 @@ _driver(
     setup=_purge,
     patchers=(_purge_patcher,),
     profile='account-deletion-leased-work-probe',
-)
-_driver(
-    'utils.memory.daily_memory_sweep.cleanup_expired_daily_memory_sweep_stages',
-    base={'uid': UID},
-    neutrals={'now': NOW, 'limit': LIMIT},
-    profile='maintenance-stage-retention',
-    serving=False,
-)
-_driver(
-    'utils.memory.daily_memory_sweep.assert_no_live_pre_lock_claims',
-    base={'now': T0},
-    neutrals={'uids': (None, 'post-read scope filter only')},
-    profile='operational-rollout-audit',
-    serving=False,
-)
-_driver(
-    'utils.memory.daily_memory_sweep._invoke_model_once_claimed',
-    base={'uid': UID, 'invocation_id': 'invocation-1', 'candidate_builder': lambda: ()},
-    domains={
-        'account_generation': [1],
-        'source_generation': [1],
-        'sweep_generation': [1],
-        'window_id': ['window-1'],
-        'input_digest': ['digest-1'],
-    },
-    neutrals={
-        'now': NOW,
-        'admission_id': ('admission-1', 'point-write identity only'),
-        'invocation_evidence': (None, 'output diagnostics only'),
-        'before_provider_dispatch': (None, 'non-query provider callback'),
-    },
-    setup=_control,
-    profile='maintenance-fenced-model-claim',
-    serving=False,
-)
-_driver(
-    'utils.memory.daily_memory_sweep._consume_attested_window_skip',
-    base={'uid': UID, 'account_generation': 1, 'source_generation': 1, 'sweep_generation': 1, 'window_id': 'window-1'},
-    setup=_control,
-    profile='maintenance-attested-window',
-    serving=False,
-)
-_driver(
-    'utils.memory.daily_memory_sweep._pending_receipt_dates',
-    base={'uid': UID, 'through': D0, 'account_generation': 1, 'source_generation': 1},
-    neutrals={'sweep_generation': (1, 'post-read generation check only')},
-    profile='maintenance-receipt-recovery',
-    serving=False,
-)
-_driver(
-    'utils.memory.daily_memory_sweep._find_active_slot_or_subject',
-    base={'uid': UID},
-    domains={'candidate': [(None, None), ('role', None), (None, 'person-1'), ('role', 'person-1')]},
-    setup=_candidate,
-    profile='maintenance-occupant-proof',
-    serving=False,
-)
-_driver(
-    'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
-    base={'uid': UID, 'max_conversations': 8, 'max_summary_characters': 1000},
-    domains={'window': [None]},
-    setup=_window,
-    profile='maintenance-completed-day',
-    serving=False,
-)
-_driver(
-    'utils.memory.daily_memory_sweep._produce_onboarding_sources',
-    base={'uid': UID, 'max_candidates': 8},
-    domains={'model_authority': [None]},
-    neutrals={
-        'model_extractor': (None, 'provider callback is unreachable for an exhausted source scan'),
-        'account_generation': (1, 'receipt point-read fence only'),
-        'source_generation': (1, 'point-read/write fence only'),
-        'sweep_generation': (1, 'point-read/write fence only'),
-    },
-    setup=_onboarding,
-    profile='maintenance-onboarding',
-    serving=False,
-)
-_driver(
-    'utils.memory.daily_memory_sweep._read_daily_sweep_folder_options',
-    base={'uid': UID},
-    profile='maintenance-folder-taxonomy',
-    serving=False,
-)
-_driver(
-    'utils.memory.daily_memory_sweep.produce_completed_day_daily_summary_sources',
-    base={'uid': UID, 'local_date': D0, 'timezone_name': 'UTC'},
-    domains={'control': [None], 'model_authority': [None]},
-    neutrals={
-        'agent_runner': (None, 'no provider call for an exhausted source scan'),
-        'window_override': (None, 'uses the supplied local-date window'),
-        'sweep_generation': (1, 'fixed production generation'),
-        'qa_run_id': (None, 'production profile, not QA'),
-    },
-    setup=_summary,
-    profile='maintenance-completed-day-summary',
-    serving=False,
-)
-_driver(
-    'utils.memory.daily_memory_sweep._iter_active_standing_triggers',
-    base={'uid': UID},
-    profile='maintenance-standing-triggers',
-    serving=False,
-)
-_driver(
-    'utils.memory.jit_ledger_mirror_snapshot.read_authoritative_ledger_mirror_page',
-    base={'uid': UID},
-    domains={'cursor': [None, 'resumed']},
-    neutrals={'page_size': LIMIT},
-    setup=_mirror_cursor,
-    patchers=(
-        _mirror_fence,
-        _mirror_cursor_clock,
-        _stub('utils.memory.jit_ledger_mirror_snapshot.cursor_secret', b'shape-secret'),
-    ),
 )
 _driver(
     'utils.memory.non_active_route_audit._fetch_non_active_route_docs',
@@ -612,12 +395,6 @@ _driver(
     base={'uid': UID},
     neutrals={'now': NOW},
     patchers=(_rejected_cache,),
-)
-_driver(
-    'utils.retrieval.tools.entity_timeline_tools._resolve_entity_aliases',
-    base={'uid': UID},
-    domains={'entity': [None]},
-    setup=_entity,
 )
 _driver(
     'utils.retrieval.tools.screen_activity_tools._keyword_screen_matches',
@@ -701,9 +478,22 @@ COVERED_BY['utils.memory.canonical_graph._build_canonical_graph_items_query'] = 
     body_digest=BODY_DIGEST['utils.memory.canonical_graph._build_canonical_graph_items_query'],
 )
 for key, reason in {
+    'routers.fleet_telemetry.read_summary': 'AST false positive: Request.stream reads the incoming fleet HTTP body',
     'parakeet.stream_handler._NemoRNNTStreamingDecoder.decode_pcm': 'AST false positive: torch.where selects tensor elements, not a Firestore query',
-    'routers.desktop_proxy._read_request_body': 'AST false positive: Request.stream reads the incoming HTTP body',
+    'utils.llm.desktop_proxy_lifetime.read_body': 'AST false positive: Request.stream reads the incoming HTTP body',
     'utils.multipart._size_limited_stream': 'AST false positive: Request.stream reads the incoming multipart HTTP body',
     'utils.multipart.parse_multipart_form': 'AST false positive: Request.stream reads the incoming multipart HTTP body',
 }.items():
     SKIPS[key] = SkipEntry(key, reason, BODY_DIGEST[key])
+
+
+def _completed_status_enabled(client):
+    return unittest.mock.patch.dict(os.environ, {'SYNC_DURABLE_STATUS_RECONCILIATION': 'true', 'OMI_ENV_STAGE': 'prod'})
+
+
+_driver(
+    'utils.sync.completed_status.get_completed_legacy_status',
+    base={'job_id': 'legacy-job', 'uid': UID, 'job': None},
+    patchers=(_completed_status_enabled,),
+    profile='expired-legacy-handle',
+)

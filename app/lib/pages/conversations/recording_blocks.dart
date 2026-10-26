@@ -21,8 +21,29 @@ class RecordingBlock {
   int get startSeconds => oldest.timerStart;
 
   int get seconds {
-    final end = wals.map((w) => w.timerStart + w.seconds).reduce((a, b) => a > b ? a : b);
-    return end - startSeconds;
+    final intervals = <_AudioInterval>[
+      for (final w in wals)
+        if (w.seconds > 0) _AudioInterval(w.timerStart, w.timerStart + w.seconds),
+    ];
+    if (intervals.isEmpty) return 0;
+    intervals.sort((a, b) {
+      final byStart = a.start.compareTo(b.start);
+      return byStart != 0 ? byStart : a.end.compareTo(b.end);
+    });
+    var total = 0;
+    var currentStart = intervals.first.start;
+    var currentEnd = intervals.first.end;
+    for (var i = 1; i < intervals.length; i++) {
+      final next = intervals[i];
+      if (next.start <= currentEnd) {
+        if (next.end > currentEnd) currentEnd = next.end;
+      } else {
+        total += currentEnd - currentStart;
+        currentStart = next.start;
+        currentEnd = next.end;
+      }
+    }
+    return total + (currentEnd - currentStart);
   }
 
   /// The piece whose state the row shows: the most serious one, so a block is
@@ -30,6 +51,13 @@ class RecordingBlock {
   Wal get representative => wals.reduce((a, b) => _rank(b.syncDisplayState) > _rank(a.syncDisplayState) ? b : a);
 
   WalSyncDisplayState get state => representative.syncDisplayState;
+}
+
+class _AudioInterval {
+  const _AudioInterval(this.start, this.end);
+
+  final int start;
+  final int end;
 }
 
 /// Higher is more serious. A switch, not a list, so a new state cannot compile
@@ -49,16 +77,23 @@ int _rank(WalSyncDisplayState state) => switch (state) {
 
 bool _onDevice(Wal wal) => wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
 
+bool _copiedFromDevice(Wal wal) =>
+    wal.originalStorage == WalStorage.sdcard || wal.originalStorage == WalStorage.flashPage;
+
 /// Groups [newestFirst] into recordings. A file joins the open block from the
 /// same device and the same place (on the device or on the phone — the same
 /// audio can exist in both) when it ends within [recordingBlockGapSeconds] of
 /// where that block's oldest file starts. Each device and place keeps its own
 /// open block, because their files interleave in newest-first order.
-List<RecordingBlock> groupRecordingBlocks(List<Wal> newestFirst) {
+///
+/// With [joinDeviceCopies], a phone copy of device audio counts as on the device: a device drain
+/// that stopped part way leaves copied pieces beside the rest still on the device, and both are one
+/// recording still on its way.
+List<RecordingBlock> groupRecordingBlocks(List<Wal> newestFirst, {bool joinDeviceCopies = false}) {
   final blocks = <List<Wal>>[];
   final open = <(String, bool), List<Wal>>{};
   for (final wal in newestFirst) {
-    final key = (wal.device, _onDevice(wal));
+    final key = (wal.device, _onDevice(wal) || (joinDeviceCopies && _copiedFromDevice(wal)));
     final current = open[key];
     final next = current?.last;
     final joins = next != null &&

@@ -7,6 +7,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 from pydantic.json_schema import SkipJsonSchema
 
 import config.speaker_match_scores as match_scores
+import config.owner_recognition_diagnostics as owner_diagnostics
 
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
@@ -16,6 +17,7 @@ from models.chat import Message
 from models.client_processing import ClientProcessing
 from models.conversation_enums import (
     CategoryEnum,
+    ContentKind,
     ConversationProcessingState,
     ConversationSource,
     ConversationStatus,
@@ -31,6 +33,7 @@ from pydantic import field_serializer
 from models.other import Person
 from models.structured import MeetingType, Structured
 from models.transcript_segment import legacy_conversation_segment_id, TranscriptSegment
+from utils.capture_evidence import ledger_bound_incomplete
 
 # Only locally-defined symbols are exported. Use canonical modules for moved types:
 #   models.conversation_enums, models.structured, models.audio_file, etc.
@@ -151,13 +154,14 @@ class SharedActionItem(BaseModel):
 
 
 class SharedSection(BaseModel):
-    """Public note content, without internal transcript evidence IDs."""
+    """Public note content linked to the transcript segments on the same share payload."""
 
     model_config = {'extra': 'ignore'}
 
     heading: str
     body_markdown: str
     kind: Literal['main', 'side_notes'] = 'main'
+    source_segment_ids: List[str] = Field(default_factory=list)
 
 
 class SharedEvent(BaseModel):
@@ -191,7 +195,9 @@ class SharedStructured(BaseModel):
 
     title: str = ''
     overview: str = ''
-    emoji: str = '🧠'
+    # NEUTRAL_EMOJI (models.conversation_emoji): a shared row that never carried
+    # an emoji shows the neutral one, not the "unset" brain sentinel.
+    emoji: str = '💬'
     category: CategoryEnum = CategoryEnum.other
     sections: List[SharedSection] = Field(default_factory=list)
     action_items: List[SharedActionItem] = Field(default_factory=list)
@@ -232,12 +238,20 @@ class SharedTranscriptSegment(BaseModel):
 
     id: Optional[str] = None
     text: str
+    original_text: Optional[str] = None
     speaker: Optional[str] = 'SPEAKER_00'
     speaker_id: Optional[int] = None
     is_user: bool
     person_id: Optional[str] = None
     start: float
     end: float
+
+    @model_serializer(mode='wrap')
+    def omit_absent_original(self, handler):
+        data = handler(self)
+        if self.original_text is None:
+            data.pop('original_text', None)
+        return data
 
 
 class SharedAppResult(BaseModel):
@@ -432,9 +446,14 @@ class CaptureEvidenceMetadata(BaseModel):
     runs: Optional[List[Dict[str, Any]]] = None
     receipts: Optional[List[Dict[str, Any]]] = None
     conflicts: Optional[int] = None
+    proof: Optional[str] = None
+    lifetime: Optional[Dict[str, Any]] = None
 
 
 class Conversation(BaseModel):
+    notes_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
+    notes_llm_output_hash: Optional[str] = Field(default=None, exclude=True)
+    l1_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
     sync_content_revision: Optional[int] = None
     sync_relevance: Optional[Literal['keep', 'review']] = None
     id: str
@@ -454,6 +473,8 @@ class Conversation(BaseModel):
     # the isolated fair-use lane and the conversation-processing credit gate:
     # custom-STT still hits LLM/post-processing metering (#7690).
     uses_custom_stt: bool = False
+    # Server route arbitration; canonical writers preserve the durable value.
+    record_lane_owner: SkipJsonSchema[str | None] = Field(default=None, exclude=True)
 
     structured: Structured
 
@@ -501,6 +522,11 @@ class Conversation(BaseModel):
             coverage = (
                 evidence.get('coverage') if isinstance(evidence, Mapping) else getattr(evidence, 'coverage', None)
             )
+            if coverage == 'incomplete' and ledger_bound_incomplete(evidence):
+                # Clients render 'incomplete' as lost audio. A live committed
+                # proof whose only incompleteness is evicted ledger runs
+                # observed no loss, so it must not surface as a partial recording.
+                coverage = 'mapped'
             if coverage in ('unknown', 'incomplete', 'mapped'):
                 return {**data, 'capture_coverage': coverage}
         return data
@@ -508,6 +534,13 @@ class Conversation(BaseModel):
     # Absent on conversations processed before speakers were resolved: count no ids as people.
     speaker_resolution: Optional[ConversationSpeakers] = None
     speaker_match_scores: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
+
+    owner_recognition_diagnostics: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
+
+    @field_validator('owner_recognition_diagnostics', mode='before')
+    @classmethod
+    def _validate_owner_diagnostics(cls, value):
+        return owner_diagnostics.normalize(value) or None
 
     @field_validator('speaker_match_scores', mode='before')
     @classmethod
@@ -537,6 +570,13 @@ class Conversation(BaseModel):
     @model_serializer(mode='wrap')
     def _serialize_match_scores(self, handler, info):
         data = handler(self)
+        if not self.processing_deferred and 'processing_deferred' not in self.model_fields_set:
+            data.pop('processing_deferred', None)
+        if info.mode == 'python' and self.owner_recognition_diagnostics:
+            excluded = info.exclude or ()
+            included = info.include
+            if owner_diagnostics.FIELD not in excluded and (included is None or owner_diagnostics.FIELD in included):
+                data[owner_diagnostics.FIELD] = owner_diagnostics.normalize(self.owner_recognition_diagnostics)
         if info.mode == 'python' and self.speaker_match_scores is not None:
             excluded = info.exclude or ()
             included = info.include
@@ -575,6 +615,7 @@ class Conversation(BaseModel):
     # Cross-surface event membership (#3244). Read-only for every writer except database.capture_groups.
     capture_group: Optional[CaptureGroup] = None
 
+    content_kind: Optional[ContentKind] = None
     discarded: bool = False
     # True for conversations created via an external data import (e.g. Limitless ZIP).
     # Distinct from source=limitless, which also covers pendant/sync uploads of Limitless audio.
@@ -593,8 +634,15 @@ class Conversation(BaseModel):
     # raw transcript with no LLM enrichment yet — enrichment runs on first open
     # (get_conversation_by_id → process_conversation). Cleared once enriched.
     deferred: bool = False
+    # Stored transcripts waiting for an explicit, budgeted backlog choice.
+    processing_deferred: bool = False
     data_protection_level: Optional[str] = None
     folder_id: Optional[str] = Field(default=None, description="ID of the folder this conversation belongs to")
+    is_call: Optional[bool] = None
+    call_platform: Optional[str] = None
+    calendar_event_id: Optional[str] = None
+    geolocation_scope: Optional[Literal['owner']] = None
+    other_participants_location: Optional[Literal['remote']] = None
     call_id: Optional[str] = Field(default=None, description="Twilio call SID for phone call conversations")
 
     # Calendar event link - set when conversation overlaps with a Google Calendar event
@@ -738,6 +786,15 @@ class ConversationSyncConflictResponse(BaseModel):
 
 
 class CreateConversation(BaseModel):
+    content_kind: SkipJsonSchema[Optional[ContentKind]] = None
+
+    @field_validator('content_kind', mode='before')
+    @classmethod
+    def ignore_client_content_kind(cls, value):
+        # Only the server evidence authority may classify a capture. Assignment
+        # after validation carries that decision through the existing conversion.
+        return None
+
     started_at: datetime
     finished_at: datetime
     transcript_segments: List[TranscriptSegment]
@@ -750,6 +807,7 @@ class CreateConversation(BaseModel):
 
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+    folder_id: Optional[str] = None
     is_locked: bool = False
     private_cloud_sync_enabled: bool = False
 
@@ -772,6 +830,15 @@ class CreateConversation(BaseModel):
 
 
 class ExternalIntegrationCreateConversation(BaseModel):
+    content_kind: SkipJsonSchema[Optional[ContentKind]] = None
+
+    @field_validator('content_kind', mode='before')
+    @classmethod
+    def ignore_client_content_kind(cls, value):
+        # Only the server evidence authority may classify a capture. Assignment
+        # after validation carries that decision through the existing conversion.
+        return None
+
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     text: str

@@ -29,14 +29,12 @@ ENV_IDENTITY_DEFAULTS = {
     },
 }
 
-# The chart must serve exactly the policy-owned default routes; deriving the
-# expected literals from the policy keeps this guard from drifting when the
-# serving order changes there.
-SAFE_STREAMING_ROUTE = ','.join(DEFAULT_MODELS_BY_SURFACE[STTServingSurface.STREAMING])
-DEV_CANARY_STREAMING_ROUTE = 'parakeet-window,' + SAFE_STREAMING_ROUTE.removesuffix(',parakeet')
+# Keep these deployed routes as ordered subsets of the broader policy; the
+# unused Deepgram provider stays available in code but is absent from runtime lists.
+DEV_CANARY_STREAMING_ROUTE = 'parakeet-window,modulate-velma-2,soniox'
 # Soniox-first was rolled back on 2026-10-02: a Parakeet failover replays its
 # ring into Soniox's bounded send queue, which overflowed and ended the session.
-CANARY_STREAMING_ROUTE = 'parakeet-window,modulate-velma-2,soniox,dg-nova-3'
+CANARY_STREAMING_ROUTE = 'parakeet-window,modulate-velma-2,soniox'
 SAFE_PRERECORDED_ROUTE = ','.join(DEFAULT_MODELS_BY_SURFACE[STTServingSurface.PRERECORDED])
 
 
@@ -89,7 +87,14 @@ def test_backend_listen_helm_template_uses_runtime_project_for_google_cloud_proj
     assert f'name: GOOGLE_CLOUD_PROJECT\n              value: "{expected["runtime_gcp_project_id"]}"' in rendered
     assert 'name: OMI_FIRESTORE_DATA_PLANE_PROJECT\n              value: "based-hardware"' in rendered
     assert 'name: POSTHOG_PROJECT_API_KEY' in rendered
+    if env_name == 'prod':
+        token = _env_value(_load_values(expected['values_file']), 'POSTHOG_PRODUCT_CAPTURE_TOKEN')
+        assert token and f'name: POSTHOG_PRODUCT_CAPTURE_TOKEN\n              value: "{token}"' in rendered
     assert f'image: "{expected["image_repository"]}:abc1234"' in rendered
+    assert _env_value(_load_values(expected["values_file"]), "TRANSLATION_CACHE_TTL") == "86400"
+    assert _env_value(_load_values(expected["values_file"]), "TRANSLATION_NEGATIVE_CACHE_TTL") == "21600"
+    assert 'name: TRANSLATION_CACHE_TTL\n              value: "86400"' in rendered
+    assert 'name: TRANSLATION_NEGATIVE_CACHE_TTL\n              value: "21600"' in rendered
 
 
 def test_backend_listen_helm_template_requires_image_tag():
@@ -112,6 +117,40 @@ def test_backend_listen_helm_template_requires_image_tag():
 
     assert result.returncode != 0
     assert "image.tag is required" in result.stderr
+
+
+@pytest.mark.parametrize("chart", ["backend-listen", "llm-gateway"])
+def test_role_image_digest_opt_in_renders_repository_at_digest(chart: str):
+    """Plan B B2: deploy-backend-stack service_images sets image.digest; image.tag stays the build identity."""
+    helm = shutil.which("helm")
+    if helm is None:
+        pytest.skip("helm is not installed")
+    chart_dir = ROOT / "backend" / "charts" / chart
+    values = chart_dir / (
+        "prod_omi_backend_listen_values.yaml" if chart == "backend-listen" else "prod_omi_llm_gateway_values.yaml"
+    )
+    digest = "sha256:" + "c" * 64
+    rendered = subprocess.run(
+        [
+            helm,
+            "template",
+            chart,
+            str(chart_dir),
+            "-f",
+            str(values),
+            "--set",
+            "image.repository=gcr.io/based-hardware/backend-role",
+            "--set-string",
+            f"image.digest={digest}",
+            "--set-string",
+            "image.tag=abc1234",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert f'image: "gcr.io/based-hardware/backend-role@{digest}"' in rendered
+    assert ':abc1234"' not in rendered
 
 
 def test_dev_parity_pack_emptydir_is_writable_by_the_non_root_backend_image():
@@ -212,3 +251,51 @@ def test_windowed_live_rollout_is_prod_canary_and_bounded():
         assert _env_value(values, 'PARAKEET_WINDOW_PACE_SECONDS') == '6'
         assert _env_value(values, 'PARAKEET_WINDOW_MAX_CONTEXT_SECONDS') == '24'
         assert _env_value(values, 'STT_CIRCUIT_HALF_OPEN_PROBES') == '1'
+
+
+def test_prod_listen_hpa_scales_on_cpu_with_socket_guards():
+    """D0b: CPU drives listen scaling; socket metrics stay as a floor against stranding."""
+    helm = shutil.which('helm')
+    if helm is None:
+        pytest.skip('helm is not installed')
+
+    rendered = subprocess.run(
+        [
+            helm,
+            'template',
+            'backend-listen',
+            str(CHART_DIR),
+            '-f',
+            str(ENV_IDENTITY_DEFAULTS['prod']['values_file']),
+            '--set-string',
+            'image.tag=abc1234',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    hpa = next(
+        doc
+        for doc in yaml.safe_load_all(rendered)
+        if isinstance(doc, dict) and doc.get('kind') == 'HorizontalPodAutoscaler'
+    )
+    metrics = hpa['spec']['metrics']
+    cpu = [m['resource']['target'] for m in metrics if m['type'] == 'Resource' and m['resource']['name'] == 'cpu']
+    external = {
+        m['external']['metric']['name']: m['external']['target']['value'] for m in metrics if m['type'] == 'External'
+    }
+
+    # HPA ignores ratios within 10% of target; on 2026-10-19 mean listen CPU
+    # peaked at 0.56-0.65 while hot pods saturated, so a target at or above 60%
+    # could not have scaled out of that incident.
+    assert cpu == [{'type': 'Utilization', 'averageUtilization': 55}]
+    # Dropping a socket guard, or raising it until it never binds, lets a CPU
+    # dip strand live sockets on too few pods. Changing these is a reviewed retune.
+    assert external == {
+        'backend_listen_requests_per_pod': 16,
+        'backend_listen_active_ws_connections_per_pod': 35,
+    }
+    # 2026-10-24 right-sizing: the night fleet needs only ~31 pods at the 55%
+    # target, so the floor returns to its pre-#22623 value of 30; the peak
+    # path (max 60, requests, guards) is unchanged.
+    assert (hpa['spec']['minReplicas'], hpa['spec']['maxReplicas']) == (30, 60)

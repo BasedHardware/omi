@@ -1,4 +1,7 @@
-# JEV keep-rescue pilot
+# JEV keep-rescue pilot — historical record
+
+**Status:** Retired 2026-10-18. The production keep-rescue path, metric, and replay harness were deleted under David's ruling. This note preserves the earlier benchmark result only.
+
 
 Offline Architecture 3 pilot approved 2026-10-09. Production rescue mode is **off**
 when unset or invalid. No chart/workflow enables it. `shadow` scores R03/R08

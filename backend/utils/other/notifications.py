@@ -1,3 +1,5 @@
+from utils.generated_compute import generated_compute_allowed, require_generated_compute
+
 # async-blockers: no-import-scope
 # async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 import asyncio
@@ -19,8 +21,12 @@ from database.redis_db import release_daily_summary_lock, try_acquire_daily_summ
 from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.summary_selection import select_primary_summary
-from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.executors import db_executor, open_loops_executor, postprocess_executor, run_blocking
+from utils.conversations.relevance_content import exclude_from_derived
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
+from config.refactor_modes import serving_for
+from utils.llm.daily_recap_fingerprint import input_fingerprint, FINGERPRINT_FIELD
+from utils.llm.notes_refactor_metrics import shadow as record_notes_shadow
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.notifications import send_bulk_notification, send_notification_result
 from utils.other import daily_summary_metrics
@@ -80,6 +86,9 @@ def _display_date_for_now(tz_name: Optional[str], at: Optional[datetime] = None)
 # queries on holes it cannot fill.
 _DECLINE_LOCKED = 'locked'
 _DECLINE_NO_CONVERSATIONS = 'no_conversations'
+# daily_recap.generate's budget decline; a budget-declined recap spends no
+# sibling-step tokens either.
+_DECLINE_USAGE_BUDGET = 'usage_budget_exhausted'
 # The window held conversations, but none this job may summarize (all ``is_locked``, none
 # carried transcript content, or nothing carried summary body content — titles alone).
 # Distinct from ``no_conversations`` because the owner *was*
@@ -87,6 +96,8 @@ _DECLINE_NO_CONVERSATIONS = 'no_conversations'
 _DECLINE_NOTHING_TO_SUMMARIZE = 'nothing_to_summarize'
 # Public name for the one decline a caller outside this module has to act on differently.
 DAILY_SUMMARY_DECLINE_LOCKED = _DECLINE_LOCKED
+DAILY_SUMMARY_DECLINE_NO_CONVERSATIONS = _DECLINE_NO_CONVERSATIONS
+DAILY_SUMMARY_DECLINE_NOTHING_TO_SUMMARIZE = _DECLINE_NOTHING_TO_SUMMARIZE
 
 
 def _conversation_has_summary_content(conversation: Any) -> bool:
@@ -110,10 +121,13 @@ def _conversation_has_summary_content(conversation: Any) -> bool:
     return bool(getattr(structured, 'events', None))
 
 
+conversation_has_summary_content = _conversation_has_summary_content
+
+
 def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc) -> Optional[dict]:
     """Generate one day's summary, or return the one already stored.
 
-    Guard order is the existing contract and must not be reordered:
+    Legacy guard order is the existing contract and must not be reordered:
 
     1. best-effort Redis lock
     2. durable by-date idempotency (existing record → return it, no LLM)
@@ -124,6 +138,9 @@ def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc
        result, action items, or events — the body fields the recap renderer
        shows
     6. LLM generate → persist
+
+    Serving recap revisions/states live in daily_recap. User-initiated partial-day
+    generation is explicit through generate_daily_summary_on_demand.
 
     Returns the stored record (or the pre-existing one), or ``None`` when a guard declined.
     """
@@ -140,11 +157,31 @@ def generate_daily_summary_on_demand(
     this day" apart from "another writer is mid-generation" — the first is the answer, the
     second is a retry.
     """
-    record, _created, declined = _generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc)
+    require_generated_compute(uid, 'daily_summary')
+    record, _created, declined = _generate_and_store_daily_summary(
+        uid, date_str, start_date_utc, end_date_utc, user_initiated=True
+    )
     return record, declined
 
 
 def _generate_and_store_daily_summary(
+    uid, date_str, start_date_utc, end_date_utc, *, prepare_delivery=None, user_initiated=False
+):
+    from utils.other.daily_recap import generate
+
+    return generate(
+        uid,
+        date_str,
+        start_date_utc,
+        end_date_utc,
+        legacy=_legacy_generate_and_store_daily_summary,
+        prepare_delivery=prepare_delivery,
+        user_initiated=user_initiated,
+    )
+
+
+# refactor: superseded by utils.other.daily_recap when CALLS_RECAP_MODE=serve
+def _legacy_generate_and_store_daily_summary(
     uid, date_str, start_date_utc, end_date_utc, *, prepare_delivery: Optional[Callable[[], None]] = None
 ) -> Tuple[Optional[dict], bool, Optional[str]]:
     """Like ``generate_and_store_daily_summary``, plus whether this call persisted a new record
@@ -160,6 +197,10 @@ def _generate_and_store_daily_summary(
     pressed on — press it at 21:30 on a quiet day and the 22:00 cron tick lost the lock and
     the day never got a recap at all.
     """
+    from utils.other.daily_recap import delivery_allowed, finish_legacy_stub
+
+    if not generated_compute_allowed(uid, 'daily_summary'):
+        return None, False, 'usage_budget_exhausted'
     if not try_acquire_daily_summary_lock(uid, date_str):
         return None, False, _DECLINE_LOCKED
 
@@ -169,7 +210,8 @@ def _generate_and_store_daily_summary(
         # tick can persist a SECOND summary for the same date. If one already exists, skip before spending
         # any LLM tokens. The regenerate flow stays in-place via update_daily_summary.
         existing_summary = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
-        if existing_summary:
+        existing_complete = bool(existing_summary and delivery_allowed(uid, existing_summary))
+        if existing_summary and existing_complete and not serving_for('NOTES_PACKET_V2_MODE', uid):
             logger.info(
                 f"Daily summary already exists for uid={uid} date={date_str} "
                 f"id={existing_summary.get('id')}; skipping duplicate generation"
@@ -179,6 +221,14 @@ def _generate_and_store_daily_summary(
         conversations_data = conversations_db.get_conversations(
             uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
         )
+        fingerprint = None
+        if serving_for('NOTES_PACKET_V2_MODE', uid):
+            fingerprint = input_fingerprint(conversations_data or [])
+            if existing_summary and existing_complete and existing_summary.get(FINGERPRINT_FIELD) == fingerprint:
+                release_daily_summary_lock(uid, date_str)
+                record_notes_shadow('daily_recap_inputs', 'agree')
+                return existing_summary, False, None
+            record_notes_shadow('daily_recap_inputs', 'disagree')
         if not conversations_data or len(conversations_data) == 0:
             release_daily_summary_lock(uid, date_str)
             return None, False, _DECLINE_NO_CONVERSATIONS
@@ -186,6 +236,7 @@ def _generate_and_store_daily_summary(
         conversations = deserialize_conversations(
             [convo_data for convo_data in conversations_data if not convo_data.get('is_locked')]
         )
+        conversations = [c for c in conversations if not exclude_from_derived(uid, c, consumer='daily_summary')]
         if not conversations:
             release_daily_summary_lock(uid, date_str)
             return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
@@ -218,6 +269,7 @@ def _generate_and_store_daily_summary(
         if prepare_delivery is not None:
             prepare_delivery()
 
+        _record_summary_generation_status(uid, date_str, 'pending')
         summary_data = generate_comprehensive_daily_summary(
             uid,
             conversations,
@@ -226,7 +278,23 @@ def _generate_and_store_daily_summary(
             end_date_utc,
             memories_learned=memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
         )
-        summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
+        summary_data = finish_legacy_stub(existing_summary, summary_data)
+        if fingerprint is not None:
+            summary_data[FINGERPRINT_FIELD] = fingerprint
+        if existing_summary:
+            summary_id = existing_summary['id']
+            # Preserve the existing deep link and completed-delivery marker on refresh.
+            # Content refresh must not send the same day's push again.
+            summary_data.update(
+                {
+                    key: existing_summary[key]
+                    for key in ('visibility', 'notification_delivery_completed')
+                    if key in existing_summary
+                }
+            )
+            daily_summaries_db.update_daily_summary(uid, summary_id, summary_data)
+        else:
+            summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
         # The stored id rides on the returned record so the delivery step can build the
         # `/daily-summary/{id}` deep link without a second read.
         return {**summary_data, 'id': summary_id}, True, None
@@ -234,8 +302,16 @@ def _generate_and_store_daily_summary(
     except Exception:
         # We own this day lock. Failed reads/generation/persistence must permit
         # the saved cohort to retry on the next tick, even after the due hour.
+        _record_summary_generation_status(uid, date_str, 'failed')
         release_daily_summary_lock(uid, date_str)
         raise
+
+
+def _record_summary_generation_status(uid: str, date: str, status: str) -> None:
+    try:
+        daily_summaries_db.set_daily_summary_generation_status(uid, date, status)
+    except Exception:
+        _record_daily_summary_fallback(from_mode='status_marker', to_mode='none', reason='other', outcome='degraded')
 
 
 def _env_float(name: str, default: float) -> float:
@@ -271,6 +347,20 @@ DAILY_SUMMARY_USER_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_USER_BUDGET_SECOND
 # and can abort the rest of the hour group. A developer webhook must never be able to
 # cost anyone else their recap, so it is bounded well inside the budget it now shares.
 DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS', 20.0)
+# The open-loops daily pass runs AFTER the recap's own work (push, backfill,
+# webhook) is fully done, on its own executor under this deadline. It is a
+# separate budget on purpose: a slow or failing pass must never spend the
+# user's recap budget, delay the webhook, mark a recipient timed_out or count
+# toward DAILY_SUMMARY_MAX_ABANDONED_USERS — recap metrics and ordering are
+# untouched by everything below this line.
+OPEN_LOOPS_PASS_BUDGET_SECONDS = _env_float('OPEN_LOOPS_PASS_BUDGET_SECONDS', 45.0)
+# Passes admitted to open_loops_executor at once (its worker count), so a
+# large hour group queues here instead of tripping the executor's bounded
+# queue; the per-pass budget starts only once a pass holds a slot.
+OPEN_LOOPS_PASS_CONCURRENCY = 4
+# One drain per job, after every cohort: whatever has not finished by then is
+# cancelled and counted. Keeps the job well inside its 15-minute tick.
+OPEN_LOOPS_DRAIN_BUDGET_SECONDS = _env_float('OPEN_LOOPS_DRAIN_BUDGET_SECONDS', 240.0)
 # Rendered-character budget for the conversation material fed to the summary
 # prompt. ~360k chars is roughly 90k tokens, comfortably inside the 272k-token
 # model limit even alongside the prompt scaffolding and the user's memories.
@@ -340,6 +430,14 @@ class DailySummaryJobStats:
     retry_recipients: Dict[str, bool] = field(default_factory=dict)
     retry_hour: Optional[int] = None
     retry_uid: Optional[str] = None
+    # Recipients already carrying a failure from the previous pass. A second
+    # failure is final, so one dead recipient cannot hold the cohort open.
+    prior_retry_uids: frozenset = frozenset()
+    retry_pending: int = 0
+    retries_exhausted: int = 0
+    # Set when the pass did not reach every recipient (budget, read failure).
+    # Only then does the next pass need to re-walk the cohort.
+    walk_incomplete: bool = False
 
     def as_log(self) -> str:
         return (
@@ -347,7 +445,7 @@ class DailySummaryJobStats:
             f'attempted={self.attempted} succeeded={self.succeeded} failed={self.failed} '
             f'timed_out={self.timed_out} skipped_for_budget={self.skipped_for_budget} '
             f'recipient_docs_selected={self.recipient_docs_selected} recipient_queries={self.recipient_queries} '
-            f'retry_recipients={len(self.retry_recipients)}'
+            f'retry_recipients={len(self.retry_recipients)} retries_exhausted={self.retries_exhausted}'
         )
 
 
@@ -408,6 +506,14 @@ async def start_cron_job() -> None:
 
 
 async def send_daily_summary_notification() -> DailySummaryCronOutcome:
+    """Run the due cohorts, then drain their open-loops passes once."""
+    try:
+        return await _send_daily_summary_cohorts()
+    finally:
+        await _drain_open_loops_passes()
+
+
+async def _send_daily_summary_cohorts() -> DailySummaryCronOutcome:
     """Resume the original due cohort before selecting the current local hours.
 
     A cursor without its UTC selection instant only reorders *today's* query;
@@ -478,7 +584,13 @@ async def _send_daily_summary_cohort(
       job-end line with attempted/succeeded/failed/skipped counts.
     """
     deadline = monotonic() + DAILY_SUMMARY_JOB_BUDGET_SECONDS
-    stats = DailySummaryJobStats(retry_recipients=dict((cursor or {}).get('retry_recipients', {})))
+    saved_retries = dict((cursor or {}).get('retry_recipients', {}))
+    stats = DailySummaryJobStats(retry_recipients=saved_retries, prior_retry_uids=frozenset(saved_retries))
+    # A pass that walked the whole cohort and left only failures behind is resumed
+    # by retrying those recipients alone. Re-walking every served recipient made
+    # each resume as slow as the original pass, so it ended near the deadline,
+    # produced a fresh timeout, and pinned the cohort again until the 2h cutoff.
+    retry_only = summary_budget.cursor_retry_only(cursor) and bool(saved_retries)
     cursor_key = summary_budget.job_cursor_key()
 
     try:
@@ -504,6 +616,7 @@ async def _send_daily_summary_cohort(
         target_hour, timezones = group
         if stop_processing or monotonic() >= deadline:
             completed_all = False
+            stats.walk_incomplete = True
             stop_processing = True
             await _checkpoint(cursor_key, target_hour, None, cohort_utc, stats.retry_recipients)
             _record_daily_summary_fallback(
@@ -520,6 +633,7 @@ async def _send_daily_summary_cohort(
             # One hour group's read failing must not cost the other 23 groups.
             stats.groups_failed += 1
             completed_all = False
+            stats.walk_incomplete = True
             await _checkpoint(cursor_key, target_hour, None, cohort_utc, stats.retry_recipients)
             logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, e)
             return ProcessOutcome.reject(str(e), reason='user_query')
@@ -527,6 +641,7 @@ async def _send_daily_summary_cohort(
         if query_error and not users:
             stats.groups_failed += 1
             completed_all = False
+            stats.walk_incomplete = True
             await _checkpoint(cursor_key, target_hour, None, cohort_utc, stats.retry_recipients)
             logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, query_error)
             return ProcessOutcome.reject(str(query_error), reason='user_query')
@@ -538,10 +653,14 @@ async def _send_daily_summary_cohort(
             # job never even listed. Keep the run resumable and point the next
             # execution at this hour.
             completed_all = False
+            stats.walk_incomplete = True
             await _checkpoint(cursor_key, target_hour, None, cohort_utc, stats.retry_recipients)
             _record_daily_summary_fallback(
                 from_mode='full_run', to_mode='resumable_tail', reason='other', outcome='degraded'
             )
+
+        if retry_only:
+            users = [user for user in users if str(user[0]) in stats.prior_retry_uids]
 
         stats.recipient_docs_selected += len(users)
         daily_summary_metrics.RECIPIENTS.labels(outcome='selected').inc(len(users))
@@ -555,8 +674,7 @@ async def _send_daily_summary_cohort(
         resume_uid = None
 
         logger.info(f"Sending daily summary to {len(ordered_users)} users at local hour {target_hour}")
-        failed_before = stats.failed
-        timed_out_before = stats.timed_out
+        pending_before = stats.retry_pending
         finished_group = await _send_bulk_summary_notification(
             [
                 (
@@ -575,9 +693,12 @@ async def _send_daily_summary_cohort(
         )
         if not finished_group:
             completed_all = False
+            stats.walk_incomplete = True
             stop_processing = True
             return ProcessOutcome.retry('daily summary group budget exhausted', reason='timeout')
-        hour_send_failures = (stats.failed - failed_before) + (stats.timed_out - timed_out_before)
+        # Exhausted retries are logged and final; only failures still owed a
+        # retry keep the cohort open.
+        hour_send_failures = stats.retry_pending - pending_before
         if hour_send_failures:
             completed_all = False
             return ProcessOutcome.reject(
@@ -605,7 +726,14 @@ async def _send_daily_summary_cohort(
         # failed recipient and the original cohort after the entire pass, so a
         # final-tick failure survives both those writes and the local-hour boundary.
         completed_all = False
-        await _checkpoint(cursor_key, stats.retry_hour, stats.retry_uid, cohort_utc, stats.retry_recipients)
+        await _checkpoint(
+            cursor_key,
+            stats.retry_hour,
+            stats.retry_uid,
+            cohort_utc,
+            stats.retry_recipients,
+            retry_only=not stats.walk_incomplete,
+        )
     if completed_all:
         await run_blocking(db_executor, summary_budget.clear_job_cursor, cursor_key)
 
@@ -643,10 +771,14 @@ async def _checkpoint(
     uid: Optional[str],
     cohort_utc: Optional[datetime] = None,
     retry_recipients: Optional[Dict[str, bool]] = None,
+    *,
+    retry_only: bool = False,
 ) -> None:
     cursor = summary_budget.make_cursor(target_hour, uid, cohort_utc)
     if retry_recipients:
         cursor['retry_recipients'] = dict(retry_recipients)
+        if retry_only:
+            cursor['retry_only'] = True
     await run_blocking(
         db_executor,
         summary_budget.write_job_cursor,
@@ -680,7 +812,14 @@ def _reduce_daily_summary_chunks(
     return users, chunk_errors[0] if chunk_errors else None, every_chunk_read
 
 
-async def _get_users_for_daily_summary(
+async def _get_users_for_daily_summary(timezones, target_hour):
+    from utils.other.daily_recap import select_recipients
+
+    return await select_recipients(timezones, target_hour, _legacy_get_users_for_daily_summary)
+
+
+# refactor: superseded by utils.other.daily_recap when CALLS_RECAP_MODE=serve
+async def _legacy_get_users_for_daily_summary(
     timezones: List[str], target_hour: int
 ) -> Tuple[List[Tuple[str, Any, Any]], Optional[BaseException], bool]:
     """Read one hour group's users.
@@ -813,7 +952,164 @@ def _backfill_recent_daily_summaries(uid, display_date, tz_name: Optional[str]) 
             generated += 1
 
 
-def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
+def _run_open_loops_daily_pass(uid, date_str, start_date_utc, end_date_utc, tz_name) -> None:
+    """The open-loops daily pass as a sibling step of the recap (fail-open).
+
+    One structured call per user per local day, dispatched only after the
+    recap's own work for that user fully finished (see
+    ``_start_open_loops_passes``): it reuses the recap's conversation
+    render, updates the loop store and stores the day's Review cards (not
+    served in this PR). Its own guards — ``OPEN_LOOPS_ENABLED``, the per-day
+    claim/cards marker and the no-signal cost check — decide whether the model
+    call happens at all. A user whose recap was budget-declined spends nothing
+    here either; a locked day belongs to the worker that holds the lock, and
+    that worker runs the pass. Every failure is contained — including the pass
+    module's own import — the recap must never notice this step.
+    """
+    try:
+        from utils.open_loops.daily import run_daily_pass
+
+        outcome = run_daily_pass(uid, date_str=date_str, start_utc=start_date_utc, end_utc=end_date_utc, tz=tz_name)
+        if outcome != 'ran':
+            logger.info('open_loops_daily_pass_skipped uid=%s date=%s reason=%s', uid, date_str, outcome)
+    except Exception as error:
+        # Fail-open, and counted: a skipped pass day is a degrade the owner
+        # never sees, not a silent drop.
+        try:
+            _record_daily_summary_fallback(
+                from_mode='open_loops_daily_pass', to_mode='skipped', reason='error', outcome='degraded'
+            )
+        except Exception:
+            logger.exception('open_loops_daily_pass_fallback_metric_failed')
+        logger.error('open_loops_daily_pass_failed uid=%s date=%s error=%s', uid, date_str, error, exc_info=error)
+
+
+@dataclass
+class _OpenLoopPassQueue:
+    loop: Any
+    slots: asyncio.Semaphore
+    tasks: List['asyncio.Task[None]'] = field(default_factory=list)
+
+
+_open_loop_pass_queue: Optional[_OpenLoopPassQueue] = None
+
+
+def _current_open_loop_pass_queue() -> _OpenLoopPassQueue:
+    global _open_loop_pass_queue
+    loop = asyncio.get_running_loop()
+    if _open_loop_pass_queue is None or _open_loop_pass_queue.loop is not loop:
+        _open_loop_pass_queue = _OpenLoopPassQueue(loop=loop, slots=asyncio.Semaphore(OPEN_LOOPS_PASS_CONCURRENCY))
+    return _open_loop_pass_queue
+
+
+def _is_executor_saturated(error: BaseException) -> bool:
+    # Imported lazily: import-isolation harnesses stub utils.executors.
+    try:
+        from utils.executors import ExecutorSaturatedError
+    except ImportError:
+        return False
+    return isinstance(error, ExecutorSaturatedError)
+
+
+def _start_open_loops_passes(pass_requests: List[Tuple[Any, ...]]) -> List['asyncio.Task[None]']:
+    """Queue the day's open-loops passes off the recap critical path; returns their tasks.
+
+    Each request is ``(uid, date_str, start_utc, end_utc, tz_name)`` returned
+    by ``_send_summary_notification`` after that user's recap work — summary,
+    push, backfill and webhook — completed. Nothing here is awaited by the
+    recap loop: passes wait for one of ``OPEN_LOOPS_PASS_CONCURRENCY`` slots,
+    then run on ``open_loops_executor`` under ``OPEN_LOOPS_PASS_BUDGET_SECONDS``
+    (past it the coroutine abandons the worker; a thread cannot be cancelled).
+    ``_drain_open_loops_passes`` settles them once per job. Nothing here ever
+    touches a recap recipient metric, ``counters.timed_out``,
+    ``DAILY_SUMMARY_MAX_ABANDONED_USERS`` or user ordering. The pass's own
+    per-day claim bounds what an abandoned worker can spend.
+    """
+    if not pass_requests:
+        return []
+    queue = _current_open_loop_pass_queue()
+
+    async def one_pass(request: Tuple[Any, ...]) -> None:
+        uid, date_str, start_date_utc, end_date_utc, tz_name = request
+        try:
+            async with queue.slots:
+                await asyncio.wait_for(
+                    run_blocking(
+                        open_loops_executor,
+                        _run_open_loops_daily_pass,
+                        uid,
+                        date_str,
+                        start_date_utc,
+                        end_date_utc,
+                        tz_name,
+                    ),
+                    timeout=OPEN_LOOPS_PASS_BUDGET_SECONDS,
+                )
+        except (asyncio.TimeoutError, TimeoutError):
+            logger.error(
+                'open_loops_daily_pass_abandoned uid=%s date=%s budget_seconds=%s',
+                uid,
+                date_str,
+                OPEN_LOOPS_PASS_BUDGET_SECONDS,
+            )
+        except Exception as error:
+            if _is_executor_saturated(error):
+                # Only reachable if something else fills the executor. The user's
+                # loops stay in the store and the next day's pass sees them.
+                _record_daily_summary_fallback(
+                    from_mode='open_loops_daily_pass', to_mode='skipped', reason='capacity_full', outcome='degraded'
+                )
+                logger.error('open_loops_daily_pass_dropped uid=%s date=%s reason=executor_saturated', uid, date_str)
+            else:
+                logger.error('open_loops_daily_pass_dispatch_failed uid=%s date=%s error=%s', uid, date_str, error)
+
+    tasks = [asyncio.ensure_future(one_pass(request)) for request in pass_requests]
+    queue.tasks.extend(tasks)
+    return tasks
+
+
+async def _drain_open_loops_passes(budget_seconds: Optional[float] = None) -> None:
+    """Wait once for every queued pass; cancel and count what misses the budget."""
+    global _open_loop_pass_queue
+    queue = _open_loop_pass_queue
+    if queue is None or queue.loop is not asyncio.get_running_loop():
+        return
+    _open_loop_pass_queue = None
+    if not queue.tasks:
+        return
+    budget = OPEN_LOOPS_DRAIN_BUDGET_SECONDS if budget_seconds is None else budget_seconds
+    _done, pending = await asyncio.wait(queue.tasks, timeout=budget)
+    if pending:
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        _record_daily_summary_fallback(
+            from_mode='open_loops_daily_pass', to_mode='skipped', reason='timeout', outcome='degraded'
+        )
+        logger.error(
+            'open_loops_daily_passes_dropped reason=drain_budget count=%d queued=%d budget_seconds=%s',
+            len(pending),
+            len(queue.tasks),
+            budget,
+        )
+
+
+def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str, str, Any, Any, Optional[str]]]:
+    """One user's recap work. Returns the open-loops pass request, or None.
+
+    The recap's own steps — generation, push, backfill walk, webhook — all
+    complete (or raise) inside this function. The open-loops daily pass is
+    deliberately NOT among them: it runs on its own executor and budget after
+    this worker finishes (see ``_start_open_loops_passes``), so a slow pass
+    can never delay the webhook, spend the user's 90 s recap budget or defer
+    another user's recap. The return value carries
+    ``(uid, date_str, start_utc, end_utc, tz_name)`` only when the pass should
+    run — never for a day another worker owns or a budget already declined.
+    """
+    if not serving_for('CALLS_RECAP_MODE', user_data[0]) and not generated_compute_allowed(
+        user_data[0], 'daily_summary'
+    ):
+        return
     uid = user_data[0]
     user_tz_name = user_data[2] if len(user_data) > 2 else None
 
@@ -825,6 +1121,9 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     # trial only gates desktop features, not the recap the mobile app renders.
 
     display_date = _display_date_for_now(user_tz_name, user_data[3] if len(user_data) > 3 else None)
+    from utils.other.daily_recap import scheduled_date, delivery_allowed
+
+    display_date = scheduled_date(uid, user_tz_name, user_data[3] if len(user_data) > 3 else None, display_date)
     start_date_utc, end_date_utc = local_day_bounds_utc(display_date, user_tz_name)
     date_str = display_date.strftime('%Y-%m-%d')
 
@@ -849,13 +1148,25 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     # recap can also fail delivery; these are distinct recipient outcomes.
     if created:
         daily_summary_metrics.RECIPIENTS.labels(outcome='generated_retry' if retry_attempt else 'generated').inc()
+        # Durable outcome token for the daily_summary_recap_generated log metric. The
+        # job's in-process counters depend on a scrape sidecar; this line does not.
+        logger.info('daily_summary_generated uid=%s retry=%s', uid, retry_attempt)
     elif summary_data:
         daily_summary_metrics.RECIPIENTS.labels(outcome='suppressed_existing').inc()
     pending_webhook: Optional[dict] = None
     if retry_attempt and declined == _DECLINE_LOCKED:
         # A timed-out worker may still own the day. Keep its recipient pending
         # until that worker finishes, rather than treating contention as delivery.
-        raise RuntimeError('daily summary retry still locked')
+        # A worker that finished *after* its timeout keeps the lock for the full
+        # TTL by design, so the durable record is the only proof it is done; without
+        # this read the recipient stayed "locked" for 2h and pinned the whole saved
+        # cohort, starving every current cohort behind it (2026-10-12).
+        summary_data = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
+        if not summary_data or not delivery_allowed(uid, summary_data):
+            raise RuntimeError('daily summary retry still locked')
+        declined = None
+    if summary_data and not delivery_allowed(uid, summary_data):
+        raise RuntimeError('daily summary not generated')
     if summary_data and summary_data.get('notification_delivery_completed'):
         # An abandoned worker may have delivered after wait_for timed out and
         # after its coordinator saved an uncertain outcome. The receipt wins.
@@ -876,8 +1187,16 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         # Deferred to the end of this user's work. See _deliver_day_summary_webhook.
         pending_webhook = summary_data
 
-    try:
+    # Sibling step intent: the open-loops daily pass for this user's local
+    # day. Only the *request* is produced here, after the recap's own outcome
+    # is settled — the coordinator dispatches it off the recap budget once
+    # this worker's push, backfill and webhook have all finished. Never for a
+    # day another worker owns or a budget already declined.
+    pass_request: Optional[Tuple[str, str, Any, Any, Optional[str]]] = None
+    if declined not in (_DECLINE_LOCKED, _DECLINE_USAGE_BUDGET):
+        pass_request = (uid, date_str, start_date_utc, end_date_utc, user_tz_name)
 
+    try:
         # Backfill only for owners who are actually still recording. Dropping the FCM-token filter in
         # get_users_for_daily_summary_indexed widened this fan-out to every user in the timezone, and an
         # unconditional 7-day walk would spend 7 lock writes + 7 by-date reads + 7 conversation queries
@@ -892,7 +1211,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         # earlier days most need walking back — so `_DECLINE_NOTHING_TO_SUMMARIZE` is deliberately
         # absent from this set.
         if declined in (_DECLINE_LOCKED, _DECLINE_NO_CONVERSATIONS):
-            return
+            return pass_request
 
         _backfill_recent_daily_summaries(uid, display_date, user_tz_name)
     finally:
@@ -902,6 +1221,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         # exists to stop -- just moved to a different exit.
         if pending_webhook is not None:
             _deliver_day_summary_webhook(uid, pending_webhook)
+    return pass_request
 
 
 async def _send_bulk_summary_notification(
@@ -966,11 +1286,21 @@ async def _send_bulk_summary_notification(
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for j, result in enumerate(results):
             uid = str(batch[j][0])
-            if isinstance(result, BaseException):
+            if isinstance(result, BaseException) and uid in counters.prior_retry_uids:
+                counters.retry_recipients.pop(uid, None)
+                counters.retries_exhausted += 1
+                logger.warning(
+                    'daily_summary_retry_exhausted uid=%s hour=%s error_type=%s',
+                    uid,
+                    target_hour,
+                    type(result).__name__,
+                )
+            elif isinstance(result, BaseException):
                 counters.retry_recipients[uid] = not delivery_completed[j].is_set() and (
                     counters.retry_recipients.get(uid, False)
                     or isinstance(result, (DailySummaryDeliveryError, asyncio.TimeoutError, TimeoutError))
                 )
+                counters.retry_pending += 1
                 if counters.retry_uid is None:
                     counters.retry_hour, counters.retry_uid = target_hour, uid
             else:
@@ -999,6 +1329,26 @@ async def _send_bulk_summary_notification(
                 )
             else:
                 counters.succeeded += 1
+
+        # Open-loops passes for the users whose recaps just completed — after
+        # the batch barrier, so recap ordering and metrics are already
+        # settled. Queued, not awaited: the next batch runs while they do, and
+        # send_daily_summary_notification drains them once after every cohort.
+        # Past the job deadline they are dropped loudly and not retried (the
+        # next tick serves a different local hour); the user's loops stay in
+        # the store for the next day's pass.
+        pass_requests = [result for result in results if not isinstance(result, BaseException) and result is not None]
+        if pass_requests and (deadline is None or monotonic() < deadline):
+            _start_open_loops_passes(pass_requests)
+        elif pass_requests:
+            _record_daily_summary_fallback(
+                from_mode='open_loops_daily_pass', to_mode='skipped', reason='timeout', outcome='degraded'
+            )
+            logger.info(
+                'open_loops_daily_passes_dropped reason=job_budget count=%d hour=%s',
+                len(pass_requests),
+                target_hour,
+            )
 
         if cursor_key and i + _BATCH_SIZE < len(users):
             await _checkpoint(

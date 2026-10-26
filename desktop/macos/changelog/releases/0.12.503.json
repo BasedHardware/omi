@@ -1,0 +1,9 @@
+{
+  "version": "0.12.503",
+  "date": "2026-10-18",
+  "changes": [
+    "Added yearly plan confirmations and contextual plan choices",
+    "Prepared a new Plans section in Settings that shows plans and prices from Omi's servers (not yet turned on)",
+    "Chat shows when it resumes and how to upgrade after using the monthly budget"
+  ]
+}

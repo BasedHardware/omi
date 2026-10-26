@@ -1,4 +1,4 @@
-# Backend unit-test node IDs grandfathered against BACKEND_FAST_UNIT_FAIL_SECONDS (default 0.12s locally).
+# Backend unit-test node IDs grandfathered against BACKEND_FAST_UNIT_FAIL_SECONDS (default 1.0s, local and CI).
 #
 # The duration guard measures per-test CPU time (call phase). CPU time is load-independent, so the
 # guard is deterministic regardless of parallelism. The entries below are genuine unit tests whose
@@ -18,6 +18,8 @@ tests/unit/test_desktop_proxy.py::test_proxy_dispatches_server_paid_bodies_with_
 tests/unit/test_pusher_conversation_ledger_instrument.py::test_conversation_lane_gateway_client_is_attributed
 # Renders all eight first-party charts in dev and prod; still hermetic and required in the unit lane.
 tests/unit/test_llm_gateway_deploy_contract.py::test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract
+# Parses the full deploy/runtime_env.yaml manifest (grew ~230 lines in #21803); measured 0.32s CPU locally.
+tests/unit/test_llm_gateway_deploy_contract.py::test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_injection
 tests/unit/test_rendered_deployment_contract.py::test_repository_charts_render_the_full_contract_when_helm_is_available
 # Builds 10,001 in-memory records to prove universal export has no historical-data cap.
 tests/unit/test_universal_memory_service.py::test_export_has_no_silent_record_cap
@@ -152,8 +154,6 @@ tests/unit/test_chat_stream_error_fallback.py::test_voice_stream_emits_fallback_
 # exceed the local CPU budget; keep each assertion running under the duration guard.
 tests/unit/test_chat_followup_block.py::test_failed_turn_persists_no_followup_block
 tests/unit/test_chat_followup_block.py::test_persisted_message_carries_the_followup_block
-tests/unit/test_jit_citation_envelope_router.py::test_numbered_jit_citation_delivers_matching_stable_evidence_envelope
-tests/unit/test_jit_citation_envelope_router.py::test_second_jit_tool_call_index_resolves_to_second_global_conversation
 tests/unit/test_client_device_provenance.py::test_record_client_device_upserts_and_throttles
 tests/unit/test_conversation_search_date_validation.py::test_bad_start_date_returns_400_not_500
 tests/unit/test_conversation_model_split.py::TestPhase4RuntimeBehavior::test_trends_extractor_signature_callable
@@ -231,7 +231,7 @@ tests/unit/test_parakeet_nim.py::TestNimTranscribe::test_nim_text_only_fallback
 tests/unit/test_parakeet_prerecorded.py::TestProviderClass::test_provider_transcribe_url_delegates
 tests/unit/test_parakeet_stream_session.py::TestStreamSessionFeed::test_silence_produces_no_segments
 tests/unit/test_parakeet_stream_session.py::TestStreamSessionRNNTStreaming::test_streaming_utterance_does_not_call_batch_transcribe_when_text_not_ready
-tests/unit/test_payment_promotion_codes.py::test_checkout_invalid_promo_returns_400
+ tests/unit/test_payment_promotion_codes.py::test_checkout_invalid_promo_returns_400
 tests/unit/test_payment_promotion_codes.py::test_release_attached_schedules_releases_only_matching_active
 tests/unit/test_payment_promotion_codes.py::test_release_attached_schedules_noop_without_customer
 tests/unit/test_people_conversations_500s.py::TestGetPeopleDocIdInjection::test_get_people_injects_doc_id
@@ -302,6 +302,7 @@ tests/unit/test_ws_l_surface_routing.py::TestMcpSseLegacySearchParity::test_lega
 tests/unit/test_sync_cloud_tasks.py::test_sync_post_enqueue_cleanup_does_not_unstage
 # File-isolation amortizes router/STT/VAD imports across different node IDs per run.
 tests/unit/test_sync_cloud_tasks.py
+tests/unit/test_legacy_dark_router.py
 tests/unit/test_fallback_observability.py
 tests/unit/test_task_recommendations.py::test_no_production_branch_consumes_debug_summary_or_reason_codes
 tests/unit/test_utils_import_boundary.py::test_utils_modules_do_not_import_routers
@@ -358,10 +359,6 @@ tests/unit/test_client_processing_trust_boundary.py
 # (0.19-0.26s CPU), so they keep guard suppression against a busier host. Every
 # other runtime_env validator and rollout test touched by this change measured
 # under 0.10s CPU even saturated and stays guard-visible.
-tests/unit/test_backend_runtime_env_validator.py::test_jit_admission_surface_omission_fails_compose[dev]
-tests/unit/test_backend_runtime_env_validator.py::test_jit_admission_surface_omission_fails_compose[prod]
-tests/unit/test_backend_runtime_env_validator.py::test_jit_admission_surfaces_require_posthog_and_listen_data_plane[dev]
-tests/unit/test_backend_runtime_env_validator.py::test_jit_admission_surfaces_require_posthog_and_listen_data_plane[prod]
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog[dev]
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog[prod]
 # First route test in its file: amortizes the routers.users FastAPI/pydantic import into its call
@@ -405,3 +402,145 @@ tests/unit/test_mobile_client_journeys.py::test_sync_visible_conversation_accept
 # First live speaker-collapse test in the file pays the routers.listen.speakers
 # import under file isolation. Measured 0.44s CPU during pre-push (2026-10-07).
 tests/unit/test_live_speaker_collapse.py::test_controller_emits_metric_and_log_without_changing_speaker_maps
+
+tests/unit/test_client_telemetry.py::test_voice_actor_capacity_sharded_across_documents
+# 2,200-actor sharding capacity regression; volume is the property under test (~0.86s CPU)
+
+# Takeover-mapping route tests import the full routers.conversations module graph
+# under file isolation (pydantic/pydub/audioop chain). Measured 2.78s / 2.25s CPU
+# during pre-push (2026-10-14).
+tests/unit/test_account_gate_busy_http.py::test_conversation_delete_route_maps_takeover_to_409
+tests/unit/test_account_gate_busy_http.py::test_account_gate_cascade_purge_maps_fence_before_generic_failure[DestructiveGateTakeover]
+tests/unit/test_account_gate_busy_http.py
+# First reclaim in the file deep-copies the fake Firestore state and pays the cold
+# lazy import in its call phase under file isolation. Measured 0.29s quiet and
+# 0.31-0.32s beside another unit file (2026-10-15), straddling the 0.30s guard.
+tests/unit/test_dream_lease_reclamation.py::test_only_strictly_older_leases_are_reclaimed[1-bounded]
+# First test in the file: one lease plus settlement transaction on the fake
+# Firestore, paying the cold lazy import in its call phase. 0.41s during the
+# loaded pre-push gate (2026-10-15).
+tests/unit/test_dream_budget_settlement.py::test_known_cost_and_lease_finish_share_one_transaction
+# The file's tests pay the task sync module graph under file isolation; up to 0.39s CPU
+# during pre-push (2026-10-15, strict local fail limit 0.30s).
+tests/unit/test_task_sync_apple_async_boundary.py::test_single_apple_reminder_sync_offloads_batch_update_and_preserves_result
+tests/unit/test_task_sync_apple_async_boundary.py::test_batch_apple_reminder_sync_offloads_batch_update_and_preserves_per_item_results
+tests/unit/test_task_sync_apple_async_boundary.py::test_apple_reminder_sync_failure_hides_exception_text_in_single_and_batch_results
+
+# These behavioral import-contract tests deliberately load the real chat_file module
+# against fresh router/database stubs. Both assertions pass; the required import
+# graph costs 0.44-0.60s CPU per call in file isolation (serial and parallel runs).
+# Keep both contracts in the unit selection without weakening the global budget.
+tests/unit/test_chat_file_gateway_stub_import_contract.py::test_chat_file_imports_against_the_suite_gateway_stub
+tests/unit/test_chat_file_gateway_stub_import_contract.py::test_a_stale_stub_fails_on_the_exact_missing_attribute
+# Compares the runtime manifest, ingress chart and deployment workflow declarations
+# in dev and prod; all assertions pass, but YAML parsing costs 0.30-0.31s CPU.
+tests/unit/test_llm_gateway_deploy_contract.py::test_gateway_runtime_static_address_matches_helm_ingress_declaration
+# The first real translation quality check loads langdetect's local profiles.
+# Assertions pass in isolation, but the cold profile load costs 0.32-0.34s CPU.
+tests/unit/test_translation_negative_cache_detection.py::test_negative_cached_segment_does_not_vote_for_target_language
+# First test in the file pays yaml.safe_load of deploy/runtime_env.yaml in the
+# call phase. Measured 0.31s alone and 0.32-0.47s inside pre-push (local fail
+# limit 0.30s). The pusher release contract selects this file whenever
+# verify_pusher_live_alert_route.py changes. Assertions still run.
+# 2026-10-16: parses the full runtime-env manifest per env (0.41-0.49s CPU at load avg ~4). Assertions still run.
+tests/unit/test_plan_quota_env_retirement.py::test_manifest_forbids_plan_quota_overlays_on_every_cloud_run_conversation_service[dev]
+tests/unit/test_plan_quota_env_retirement.py::test_manifest_forbids_plan_quota_overlays_on_every_cloud_run_conversation_service[prod]
+# 2026-10-16: parses the full listen chart values plus rendered runtime env (0.30-0.34s CPU at load avg ~20 on the pre-push host). Assertions still run.
+tests/unit/test_backend_listen_helm_defaults.py::test_windowed_live_rollout_is_prod_canary_and_bounded
+# 2026-10-16: builds both Vertex cache request shapes through the provider boundary (0.30s CPU at load avg ~20). Assertions still run.
+tests/unit/test_vertex_content_cache.py::test_provider_boundary_caches_both_traffic_types[False-dedicated]
+# 2026-10-16: scripted 8-turn hunt with 26 proposals, verification and exact undo (0.32-0.41s CPU under load). Assertions still run.
+tests/unit/test_dream_replay.py::test_hunt_finds_90_summary_typos_resubmits_and_applies_25_with_exact_undo
+# 2026-10-17: parses runtime and fixture manifests to reject a false live-bucket validation claim (0.7-1.1s CPU under runner load). Assertions still run.
+tests/unit/test_frame_request_bucket_contract.py::test_runtime_manifest_alone_cannot_claim_live_bucket_validation
+# Full synthetic evaluator contract: two arms, two independent judges, and a durable cache-resume pass.
+# It exercises the Pydantic report/schema path plus eight cache records; measured 0.41-0.56s CPU in isolated local runs (2026-10-18).
+tests/unit/test_episode_writer.py::test_two_judges_reuse_candidates_and_reference
+# The first import of the destructive-operation fence happens inside this test under file isolation.
+tests/unit/test_executors.py::test_submit_with_context_defers_destructive_operation_fence_without_traceback
+# 2026-10-18: the enabled non-BYOK admission call pays the funded-processing import
+# in its call phase. 0.33s CPU inside the loaded pre-push (local fail limit 0.30s).
+# Assertions still run.
+tests/unit/test_compute_admission_import_purity.py::test_enabled_non_byok_call_uses_real_budget_owner_without_importing_byok
+# 2026-10-18: lane-metering shadow merge imports usage_units in the call phase.
+# 0.32-0.36s CPU on the saturated pre-push host (local fail limit 0.30s).
+# Assertions still run.
+tests/unit/test_ladder_v1_cutover.py::test_live_batch_and_on_device_are_disjoint
+# 2026-10-18: authenticated backlog process pays the conversation import in the
+# call phase. 0.27s in a quiet 40-file run, 0.33s twice inside loaded pre-push
+# (local fail limit 0.30s). Assertions still run.
+tests/unit/test_processing_backlog.py::test_authenticated_process_endpoint_requires_replay_key_and_preserves_backend_estimate
+# 2026-10-18: runs the hermetic finalization worker and self-heal verifier end to end
+# to prove short real speech persists as a quiet terminal minimum without attention.
+# The required durability/attention assertions pass; the full lifecycle costs ~0.69s CPU.
+tests/unit/test_recovery_discard_pipeline.py::test_short_contentful_recovery_keeps_minimum_instead_of_creating_attention
+# 2026-10-17: parses deploy/runtime_env.yaml in the call phase (1.01s CPU under runner load, #22000). Assertions still run.
+# Product search through the HTTP surface on a short-term/archive fixture; measured 0.37-0.47s CPU on m5 (unchanged test, 2026-10-19).
+tests/unit/test_product_memory_router.py::test_product_search_endpoint_keeps_expired_unadjudicated_short_term_and_excludes_archive
+# First test to import utils.sync.files / utils.sync.pipeline in this file under file isolation (import graph, ~1s / ~7s CPU); hermetic.
+tests/unit/test_sync_input_limits.py::test_opus_disk_full_mid_file_raises_capacity_pressure_and_keeps_no_prefix
+tests/unit/test_sync_input_limits.py::test_batch_storage_pressure_removes_earlier_local_files_but_not_staged_objects
+# Builds the whole chat router's OpenAPI document in the call phase; measures 0.30-0.34s CPU locally, at the guard.
+tests/unit/test_chat_openapi_operation_ids.py::test_v1_chat_operation_ids_remain_compatible_after_handler_renames
+# Real FFmpeg: 48 per-target seeks plus loading the frames (~0.6s CPU); exercises the all-intra fallback.
+tests/unit/test_chat_video.py::test_all_intra_long_clip_falls_back_to_per_target_seeks
+# Lane-1 flake rule (2nd local guard trip in 48h, 2026-10-21): 0.31s twice under a loaded pre-push, passes alone. Debt: bus lane01 flake-guard-s14; owner lane 1 (main test).
+tests/unit/test_focus_sessions_read_boundary.py::TestFocusSessionsRouterBoundary::test_get_focus_sessions_returns_200_and_filters_poisoned_docs
+# Lane-1 flake rule (2nd local guard trip in 48h, 2026-10-21): 0.39s/0.36s under a loaded pre-push, passes alone; scheduler HTTP app wiring in the call phase. Debt: bus lane01 flake-guard-s14; owner lane 8 (cap-hold).
+tests/unit/test_cap_hold_durability.py::test_scheduler_http_endpoint_awaits_work_and_requires_oidc
+# First test in its file (pays the module import) and evaluates 4000 cohort decisions across three policies;
+# measured 1.03-1.06s CPU on CI shard 2 (PR #22920, three runs), at the 1.0s guard.
+tests/unit/test_batch_live_preview.py::test_all_three_cohorts_share_batch_bucket_and_summary_survives_admission_rollback
+# First import of utils.other.raw_audio/pydub happens in the call phase after main sync 15 (1.2-1.4s CPU on m5; whole file 0.47s on integration before the merge). Owner lane 1 (flakes); remove once that import moves to module scope or the guard measures per-file imports.
+tests/unit/test_summary_delivery.py::test_empty_model_output_retains_debt_and_prior_good_output
+# Main #23085's heavy-pass Dream retry cases: 1.16-1.28s CPU on integration CI shard 2 in two runs (PR #23133,
+# 10-21), 0.25s locally and green on main's CI shards. Owner lane 1 (flakes); remove after M3 when main's shard timing applies.
+tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_not_fill_receipt_cap[False-bare_429]
+tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_not_fill_receipt_cap[False-no_dispatch]
+tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_not_fill_receipt_cap[True-bare_429]
+tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_not_fill_receipt_cap[True-no_dispatch]
+# Main #23176's short-probe worker-barrier case (zh 6s PCM16 decode): 1.05s then 1.00s CPU vs the
+# 1.00s fail limit on PR #23100's shard-6 runners (two attempts, 10-22), under the limit on main's
+# --all shards and locally. Same boundary shape as the Dream retry entries above; the decode is the
+# test's real work, so keep it in the unit lane via the allowlist rather than a global threshold bump.
+tests/unit/test_batch_audio_language.py::test_admitted_short_false_permission_cannot_bypass_worker_barrier[zh-clean_speech-6s-pcm16]
+# 2026-10-22 #23358 regression proving the batch retry policy stays off Cloud Tasks: walks the
+# batch-pipeline-worker closure twice (first_party_import_closure + third_party_dependency_modules
+# over the same 109-module AST walk). Measured 0.98-1.15s CPU on four consecutive CI shard runs of
+# the same code (#23358 head shard 2, 0.98s pass then 1.07s fail; main-merge run 39876683920 shard 2
+# 1.13s; PR #23356 run 39878478985 shard 3, 1.15s; 10-22/23) vs the 1.0s guard -- right on the
+# budget, flaking by 0.02s margins; 0.28s on a quiet host. Both walks are the assertion's real
+# contract work (same shape as the closure-walk entries above), not sleeps or hidden setup.
+# Assertions passed in every run; keep the test in the unit lane via the allowlist rather than a
+# global threshold bump.
+tests/unit/test_runtime_image_contracts.py::test_gpu_batch_retry_cap_does_not_reach_cloud_tasks
+# PR #22861 shard 2: the production callback drives LiveChainSession.connect, which
+# imports dream vocabulary and builds a VAD gate in the call phase. Measured 3.99s
+# then 6.63s CPU vs the 1.00s fail limit (two CI runs, 10-23). The assertions are
+# the dedupe contract; the cost is connect setup, not a loop.
+tests/unit/test_live_speaker_renumber_dedup.py::test_production_callback_deduplication_against_last_end[asyncio]
+# PR #22861 shard 1: 1.06s and 1.05s CPU vs the 1.00s fail limit on this PR's shard
+# runner. Same boundary shape as the other PR-shard overruns above.
+tests/unit/test_task_sync_cloud_export_dedup.py::test_retried_cloud_sync_does_not_create_a_second_external_task
+tests/unit/test_task_sync_cloud_export_dedup.py::test_batch_cloud_sync_isolates_a_failing_item_from_the_rest
+# Main run 40063148564 shard 5 (10-24, 4b4e35fdc9d6): 1.04s CPU vs the 1.00s fail limit.
+# First test of its file; pays the file-isolation import amortization plus importlib
+# drop/install machinery in the call phase. Assertions passed; same boundary shape as
+# the entries above.
+tests/unit/test_memory_import_isolation_order_independence.py::test_drop_then_install_stubs_a_module_that_was_imported_first
+# Feeds 50k unplaced segments through the real record_moment/receipts path (25 moments
+# plus a whole-transcript finalization tail): the volume is the contract under test
+# (receipt documents must shard; no document may approach the 1 MiB Firestore limit).
+# Hermetic; the CPU sits in the id volume itself (~0.6-0.7s), close enough to the 1.00s
+# fail limit that a saturated runner would flake without this entry.
+tests/unit/test_episodes_service.py::test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_reprocess
+# PR #23504 shard 6 (run 40118527240, 10-24, f4165e1b): 1.64/1.44/1.29s CPU and
+# the prior run's shard 6 (40115474313, 444a17bc): 1.95/1.77/1.62s CPU vs the
+# 1.00s fail limit. The file landed on main by direct train push (612b01861b,
+# #23416) without the fast-unit CPU guard ever measuring it; the first test of
+# the file amortizes the payment router/app import graph under file isolation
+# and the 402-snapshot cases build full subscription/stripe objects. Assertions
+# pass; same boundary shape as the entries above.
+tests/unit/test_payment_declined_proration.py::test_declined_proration_card_error_returns_402_and_preserves_paid_plan
+tests/unit/test_payment_declined_proration.py::test_declined_proration_past_due_snapshot_returns_402_and_never_projects_basic
+tests/unit/test_payment_declined_proration.py::test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify

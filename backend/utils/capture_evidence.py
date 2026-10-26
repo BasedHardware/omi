@@ -13,7 +13,7 @@ import json
 import re
 import uuid
 from bisect import bisect_right
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from utils.committed_capture import PROOF_KIND, CommittedCaptureMap
 
@@ -190,7 +190,39 @@ def bounded_envelope(payload: dict) -> dict:
     return {'version': 1, 'capability': 'unknown', 'coverage': 'incomplete', 'reason': 'overflow'}
 
 
+def evidence_field(evidence: object, name: str):
+    """Read one receipt field from either the stored mapping or its model."""
+    if isinstance(evidence, Mapping):
+        return evidence.get(name)
+    return getattr(evidence, name, None)
+
+
+def ledger_bound_incomplete(evidence: object) -> bool:
+    """True when an 'incomplete' receipt states a ledger bound, not observed loss.
+
+    Two receipt shapes say 'incomplete' without any observed audio gap. The
+    live committed proof latches 'incomplete' once its in-process run ledger
+    evicts its oldest runs — runs cap at 30 seconds each and only 32 are
+    kept, so a continuous capture grows a new run every 30 seconds and any
+    capture beyond ~16 minutes latches the flag even with zero gaps, zero
+    conflicts, and a complete lifetime. Observed loss never takes the committed shape:
+    missing claims and conflicting ordinals fail the snapshot to None before
+    an envelope exists. Sync receipts keep 'incomplete' meaning real missing
+    frames (intake compares decoded frames against the claimed count), and the
+    bounded_envelope overflow stub can replace such a sync receipt, so an
+    overflow stub is never treated as a ledger bound.
+    """
+    lifetime = evidence_field(evidence, 'lifetime')
+    lifetime_complete = evidence_field(lifetime, 'complete') if lifetime is not None else None
+    return (
+        evidence_field(evidence, 'proof') == PROOF_KIND
+        and lifetime_complete is True
+        and not evidence_field(evidence, 'conflicts')
+    )
+
+
 def unknown_envelope(reason: str, *, origin: str) -> dict:
+    """Unbounded unknown reasons stay explicit; capability abstains."""
     if reason not in {'missing_source_position', 'untrusted_clock', 'multichannel_mix', 'compacted_lineage', 'legacy'}:
         raise ValueError('unbounded unknown reason')
     return {'version': 1, 'capability': 'unknown', 'coverage': 'unknown', 'origin': origin, 'reason': reason}
@@ -350,21 +382,30 @@ class SourcePositionMap:
 
 def parse_sync_file_claims(value: str | None, filenames: Iterable[str]) -> dict[str, dict]:
     """Validate a bounded, versioned upload header; absent/invalid claims abstain."""
-    if not value or len(value.encode()) > MAX_ENVELOPE_BYTES:
+    if not isinstance(value, str) or not value or len(value.encode()) > MAX_ENVELOPE_BYTES:
         return {}
     try:
         parsed = json.loads(value)
-        if (
-            type(parsed.get('version')) is not int
-            or parsed['version'] != 1
-            or not isinstance(parsed.get('files'), list)
-        ):
+        if type(parsed.get('version')) is not int or parsed['version'] != 1:
             return {}
+        return validate_sync_file_claims(parsed.get('files'), filenames)
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return {}
+
+
+def validate_sync_file_claims(files: object, filenames: Iterable[str]) -> dict[str, dict]:
+    """Validate parsed claims without reapplying the HTTP wire-byte budget.
+
+    HTTP parsing can normalize UUID spellings into longer canonical strings.
+    Revalidation shares the exact schema and basename checks, not a new wire
+    representation of metadata already admitted at the boundary.
+    """
+    if not isinstance(files, list) or len(files) > 20:
+        return {}
+    try:
         allowed = set(filenames)
-        if len(parsed['files']) > 20:
-            return {}
         result = {}
-        for item in parsed['files']:
+        for item in files:
             name = item['name']
             root = str(uuid.UUID(item['capture_root']))
             epoch, start, count, rate = (

@@ -34,12 +34,14 @@ from routers import memories as mem_mod
 import routers.action_items as action_items_router
 import routers.conversations as conversations_router
 
+from database.firestore_retry import FIRESTORE_NO_RETRY
 from utils.other.list_budget import (
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
     LIST_READ_DEFAULT_BUDGET_SECONDS,
     ListReadBudget,
     ListReadBudgetExhausted,
+    budgeted_document_get,
     budgeted_get_all,
     budgeted_stream_iter,
     budgeted_stream_list,
@@ -176,6 +178,9 @@ def test_budgeted_stream_list_passes_derived_timeout_and_charges():
     docs = budgeted_stream_list(query, budget)
     assert len(docs) == 3
     assert query.stream_kwargs['timeout'] == pytest.approx(10.0)
+    # One attempt inside the derived timeout: the shared no-retry policy must
+    # reach the SDK stream hook (retry=None crashes it with AttributeError).
+    assert query.stream_kwargs['retry'] is FIRESTORE_NO_RETRY
     assert budget.docs_scanned == 3
     assert not budget.truncated
 
@@ -228,6 +233,19 @@ def test_budgeted_get_all_charges_returned_snapshots():
     assert len(snapshots) == 2
     assert budget.docs_scanned == 2
     assert client.get_all.call_args.kwargs.get('timeout') == pytest.approx(24.0)
+    assert client.get_all.call_args.kwargs.get('retry') is FIRESTORE_NO_RETRY
+
+
+def test_budgeted_document_get_passes_shared_no_retry_policy():
+    clock = FakeClock()
+    budget = _budget(clock)
+    reference = MagicMock()
+    reference.get.return_value = SimpleNamespace(exists=True)
+    snapshot = budgeted_document_get(reference, budget)
+    assert snapshot is reference.get.return_value
+    assert reference.get.call_args.kwargs.get('timeout') == pytest.approx(24.0)
+    assert reference.get.call_args.kwargs.get('retry') is FIRESTORE_NO_RETRY
+    assert budget.docs_scanned == 1
 
 
 # ---------------------------------------------------------------------------

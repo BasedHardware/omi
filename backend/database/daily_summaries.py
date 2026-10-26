@@ -26,10 +26,15 @@ users/{uid}/desktop_daily_usage/{date}__{client_device_id}
 """
 
 from datetime import datetime, timezone
+from collections.abc import Mapping
 from typing import Any, Dict, List, Optional, cast
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
+from google.api_core.exceptions import FailedPrecondition
+from utils.observability.fallback import record_fallback
+from database.firestore_index_registry import MCP_DAILY_RECORDINGS_QUERY
+import logging
 from ._client import db, get_firestore_client
 from . import redis_db
 
@@ -45,13 +50,21 @@ DESKTOP_DAILY_USAGE_COUNTER_FIELDS = (
 
 
 def upsert_desktop_daily_usage(
-    uid: str,
+    uid: object,
     date: str,
     timezone_name: str,
     client_device_id: str,
-    counters: Dict[str, int],
+    counters: Mapping[str, object],
 ) -> None:
     """Atomically merge one device's running daily counters by maximum value."""
+    # An empty uid/date/client_device_id makes a malformed doc path/id; the
+    # counters dict may legitimately omit a counter field. Reject the path
+    # inputs and read each counter with a default so neither crashes.
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError('uid must be a non-empty string')
+    if not date or not client_device_id:
+        raise ValueError('date and client_device_id are required')
+    counters = counters or {}
     user_ref = db.collection('users').document(uid)
     usage_ref = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).document(f'{date}__{client_device_id}')
     transaction = db.transaction()
@@ -70,7 +83,9 @@ def upsert_desktop_daily_usage(
         for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS:
             previous = existing.get(field, 0)
             previous_value = previous if isinstance(previous, int) and not isinstance(previous, bool) else 0
-            payload[field] = max(previous_value, counters[field])
+            current = counters.get(field, 0)
+            current_value = current if isinstance(current, int) and not isinstance(current, bool) else 0
+            payload[field] = max(previous_value, current_value)
         write_transaction.set(usage_ref, payload)
 
     merge_running_totals(transaction)
@@ -259,3 +274,48 @@ def get_summaries_count(uid: str) -> int:
     count_query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).count()
     result = count_query.get()
     return int(result[0][0].value or 0)
+
+
+def get_day_recording_count(uid: str, start: datetime, end: datetime, *, firestore_client: Any = None) -> int:
+    """Aggregate all non-discarded recordings by started_at, independent of list caps."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    collection = client.collection('users').document(uid).collection('conversations')
+    query = MCP_DAILY_RECORDINGS_QUERY.build(
+        collection, {'start': start, 'end': end, 'discarded': False}, field_filter_factory=FieldFilter
+    )
+    try:
+        return int(query.count().get()[0][0].value or 0)
+    except FailedPrecondition:
+        record_fallback(
+            component='daily_summary',
+            from_mode='indexed',
+            to_mode='scan',
+            reason='other',
+            outcome='degraded',
+            log=logging.getLogger(__name__),
+        )
+        # Single-field fallback works during index rollout. Never turn a capped
+        # scan into a count: fail explicitly if this fallback cannot finish.
+        snapshots = list(
+            collection.where(filter=FieldFilter('started_at', '>=', start))
+            .where(filter=FieldFilter('started_at', '<=', end))
+            .select(['discarded'])
+            .limit(10001)
+            .stream()
+        )
+        if len(snapshots) > 10000:
+            raise RuntimeError('daily_recording_count_incomplete: required index is not ready')
+        return sum(1 for snapshot in snapshots if (snapshot.to_dict() or {}).get('discarded') is False)
+
+
+def get_daily_summary_generation_status(uid: str, date: str, *, firestore_client: Any = None) -> Optional[dict]:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshot = client.collection('users').document(uid).collection('daily_summary_generation').document(date).get()
+    return snapshot.to_dict() if snapshot.exists else None
+
+
+def set_daily_summary_generation_status(uid: str, date: str, status: str, *, firestore_client: Any = None) -> None:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    client.collection('users').document(uid).collection('daily_summary_generation').document(date).set(
+        {'status': status, 'updated_at': datetime.now(timezone.utc), 'generated_at': None}
+    )

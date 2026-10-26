@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from itertools import count
+
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 from unittest.mock import MagicMock
@@ -38,6 +40,13 @@ def service_mod(monkeypatch):
     monkeypatch.setenv("MEMORY_ENABLED", "on")
     monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "unit-test-universal-list-cursor-secret")
     module = _load_memory_service(monkeypatch)
+    from utils.memory import read_resilience
+
+    # Pagination tests issue independent page requests without wall-clock gaps.
+    # Model one second of refill per admission, keeping the actual default
+    # burst/in-flight policy and the request budgets intact. Isolate cases too.
+    ticks = count()
+    monkeypatch.setattr(read_resilience, "_retry_allowance", read_resilience.RetryAllowance(clock=lambda: next(ticks)))
     missing = object()
     original_seams = {
         name: getattr(module, name, missing)
@@ -208,6 +217,59 @@ def _install_streams(service, service_mod, *, canonical, historical, statuses=No
     if statuses is not None:
         service.canonical_statuses = MagicMock(return_value=statuses)
     return service_mod.read_canonical_scan_page, updated_mock, created_mock
+
+
+@pytest.mark.parametrize('cursor_mode', [False, True])
+def test_demand_sized_raw_scan_preserves_mixed_pages_without_index_gate(service_mod, monkeypatch, cursor_mode):
+    monkeypatch.setenv('OMI_INDEXED_LIST_READS_ENABLED', 'false')
+    canonical = [_dated_memory(service_mod, f'c-{i:03}', day=1000 - i * 2) for i in range(120)]
+    historical = [_dated_historical(service_mod, f'h-{i:03}', day=999 - i * 2) for i in range(120)]
+
+    def run(enabled):
+        monkeypatch.setenv('OMI_CANONICAL_DEMAND_WINDOW_ENABLED', 'true' if enabled else 'false')
+        service = service_mod.MemoryService(db_client=_Db())
+        scan, _, _ = _install_streams(service, service_mod, canonical=canonical, historical=historical)
+        if cursor_mode:
+            cursor, rows = None, []
+            for _ in range(3):
+                page = service.read_page('uid-test', limit=10, cursor=cursor)
+                assert not page.truncated
+                rows.extend(memory.model_dump() for memory in page.memories)
+                cursor = page.next_cursor
+                assert cursor is not None
+        else:
+            rows = [memory.model_dump() for memory in service.read('uid-test', limit=10, offset=13)]
+        return rows, sum(call.kwargs['limit'] for call in scan.call_args_list)
+
+    old_rows, old_reads = run(False)
+    new_rows, new_reads = run(True)
+    assert new_rows == old_rows
+    assert new_reads < old_reads
+
+
+def test_demand_scan_refills_filtered_prefix_and_retains_last_page(service_mod, monkeypatch):
+    monkeypatch.setenv('OMI_INDEXED_LIST_READS_ENABLED', 'false')
+    service = service_mod.MemoryService(db_client=_Db())
+    visible = [_dated_memory(service_mod, f'c-{i:03}', day=100 - i) for i in range(6)]
+    slots = [(None, (datetime(2026, 12, 1, tzinfo=timezone.utc), f'filtered-{i}')) for i in range(23)]
+    slots += [(memory, _scan_cursor_for(memory)) for memory in visible]
+
+    def run(enabled):
+        monkeypatch.setenv('OMI_CANONICAL_DEMAND_WINDOW_ENABLED', 'true' if enabled else 'false')
+        _install_streams(service, service_mod, canonical=[], historical=[])
+
+        def scan(_uid, *, limit, start_after=None, **kwargs):
+            start = 0 if start_after is None else next(i + 1 for i, slot in enumerate(slots) if slot[1] == start_after)
+            return slots[start : start + limit], start + limit >= len(slots)
+
+        service_mod.read_canonical_scan_page = MagicMock(side_effect=scan)
+        page = service.read_page('uid-test', limit=10)
+        assert not page.truncated and page.next_cursor is None
+        if enabled:
+            assert [call.kwargs['limit'] for call in service_mod.read_canonical_scan_page.call_args_list] == [11, 50]
+        return [memory.model_dump() for memory in page.memories]
+
+    assert run(True) == run(False) == [memory.model_dump() for memory in visible]
 
 
 def test_cursor_pages_beyond_6000_historical_with_bounded_calls_no_cap(service_mod):
@@ -1574,7 +1636,9 @@ class _ChargingLegacyDb:
             yield _LegacySnapshot(payload, exists=payload is not None, reference=ref)
 
 
-def _budgeted_unhydrated_legacy_read(service_mod, monkeypatch, *, max_documents: Optional[int] = None):
+def _budgeted_unhydrated_legacy_read(
+    service_mod, monkeypatch, *, max_documents: Optional[int] = None, spend_before_hydration=False
+):
     """Canonical keyset down, one unhydrated legacy row, real id-hydration that charges."""
     from tests.unit.test_memory_service_parity import _sample_memory_dict
     from utils.other.list_budget import ListReadBudget
@@ -1587,7 +1651,13 @@ def _budgeted_unhydrated_legacy_read(service_mod, monkeypatch, *, max_documents:
     before = {path: dict(payload) for path, payload in db.docs.items()}
     monkeypatch.setattr(service_mod.memories_db, "get_memories_by_ids", service_mod._prod_get_memories_by_ids)
     service = service_mod.MemoryService(db_client=db)
-    service_mod.read_canonical_scan_page = MagicMock(side_effect=RuntimeError("canonical index unavailable"))
+
+    def unavailable_scan(*args, **kwargs):
+        if spend_before_hydration and budget.remaining_documents:
+            budget.charge(1)
+        raise RuntimeError("canonical index unavailable")
+
+    service_mod.read_canonical_scan_page = MagicMock(side_effect=unavailable_scan)
     service_mod.read_canonical_memories = MagicMock(side_effect=AssertionError("offset read must not full-fetch"))
     stub = service_mod.HistoricalMemoryRecord(
         memory=_memory(service_mod, memory_id, content=""),
@@ -1623,11 +1693,16 @@ def test_budgeted_legacy_hydration_returns_the_row_truncated(service_mod, monkey
 
 def test_budgeted_legacy_hydration_keeps_rows_when_the_charge_exhausts(service_mod, monkeypatch):
     """Hydration that spends the last document still ships that row, truncated."""
-    rows, budget = _budgeted_unhydrated_legacy_read(service_mod, monkeypatch, max_documents=0)
+    # Admission now requires a positive entry budget. Spend its final document
+    # in the failed scan so the real hydration charge still exhausts it mid-read.
+    rows, budget = _budgeted_unhydrated_legacy_read(
+        service_mod, monkeypatch, max_documents=1, spend_before_hydration=True
+    )
 
     assert [memory.id for memory in rows] == ["leg-budget-1"]
     assert rows[0].content == "Legacy row hydrated under a live list budget"
     assert budget.truncated is True
+    assert budget.docs_scanned == 2, "scan plus real hydration must charge past the last document"
     service_mod.read_canonical_memories.assert_not_called()
 
 

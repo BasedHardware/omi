@@ -543,7 +543,8 @@ actor SuggestionAssistant: ProactiveAssistant {
   @discardableResult
   private func resolveDelivery(
     _ result: AssistantResult,
-    sendEvent: @escaping @Sendable (String, [String: Any]) -> Void
+    sendEvent: @escaping @Sendable (String, [String: Any]) -> Void,
+    onPresentation: (@Sendable (Bool) -> Void)? = nil
   ) async -> SuggestionAssistantTelemetry.DeliveryOutcome? {
     guard let result = result as? SuggestionResult else { return nil }
     guard result.hasSuggestion, let suggestion = result.suggestion else {
@@ -579,7 +580,9 @@ actor SuggestionAssistant: ProactiveAssistant {
       return outcome
     case .filteredDuplicate:
       await emitDeliveryOutcome(.filteredDuplicate, identity: telemetryIdentity)
-      log("Suggestion: duplicate of a recent suggestion — \"\(suggestion.suggestion)\"")
+      log(
+        "Suggestion: duplicate of a recent suggestion [\(suggestion.category.rawValue)] — \"\(suggestion.suggestion)\""
+      )
       return outcome
     case .filteredUngroundedCommitment:
       await emitDeliveryOutcome(.filteredUngroundedCommitment, identity: telemetryIdentity)
@@ -587,6 +590,11 @@ actor SuggestionAssistant: ProactiveAssistant {
         "Suggestion: ungrounded commitment [\(percent)%] — "
           + "no open commitment matches \"\(suggestion.suggestion)\""
       )
+      return outcome
+    case .suppressedPresenting, .suppressedSnoozed:
+      // The pure decision never yields these. Presence and snooze are evaluated further
+      // down, after the owner re-check, so both are read as late as possible before the
+      // card and neither reaches the dedup window.
       return outcome
     case .delivered:
       break
@@ -599,17 +607,43 @@ actor SuggestionAssistant: ProactiveAssistant {
       return .rejectedOwner
     }
 
-    recentSuggestions = SuggestionDeduplication.remembering(
-      .init(text: suggestion.suggestion, category: suggestion.category),
-      in: recentSuggestions,
-      frequencyLevel: cachedFrequencyLevel
-    )
+    // Presenting is checked here, before the suggestion is remembered — not only at
+    // delivery. `recentSuggestions` gates every later evaluation, so recording a
+    // suggestion that the screen-share guard in NotificationService is about to withhold
+    // would retire it permanently: the user never sees it, and every regeneration after
+    // the call is filtered as a duplicate of a card that was never shown. Returning before
+    // the write leaves it eligible once the share ends.
+    if NotificationService.shouldSuppressForSnooze(
+      respectFrequency: true,
+      snoozedUntil: NotificationService.currentSnoozeExpiry(),
+      now: Date())
+    {
+      log(
+        "Suggestion: withheld while notifications are silenced [\(suggestion.category.rawValue)] — "
+          + "\"\(suggestion.suggestion)\""
+      )
+      await emitDeliveryOutcome(.suppressedSnoozed, identity: telemetryIdentity)
+      return .suppressedSnoozed
+    }
+
+    if NotificationService.shouldSuppressForPresence(
+      respectFrequency: true,
+      presence: NotificationService.currentPresence())
+    {
+      log(
+        "Suggestion: withheld while the screen is shared [\(suggestion.category.rawValue)] — "
+          + "\"\(suggestion.suggestion)\""
+      )
+      await emitDeliveryOutcome(.suppressedPresenting, identity: telemetryIdentity)
+      return .suppressedPresenting
+    }
 
     await deliver(
       suggestion,
       result: result,
       ownerID: ownerID,
-      telemetryIdentity: telemetryIdentity
+      telemetryIdentity: telemetryIdentity,
+      onPresentation: onPresentation
     )
     return .delivered
   }
@@ -628,7 +662,8 @@ actor SuggestionAssistant: ProactiveAssistant {
     _ suggestion: ExtractedSuggestion,
     result: SuggestionResult,
     ownerID: String,
-    telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
+    telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?,
+    onPresentation: (@Sendable (Bool) -> Void)? = nil
   ) async {
     let taskId = SuggestionCommitmentGuard.groundedTaskId(
       suggestion: suggestion.suggestion,
@@ -650,7 +685,12 @@ actor SuggestionAssistant: ProactiveAssistant {
       detail: detail
     )
 
-    log("Suggestion: delivering [\(Int(suggestion.confidence * 100))%] \"\(suggestion.suggestion)\"")
+    // The category is model-chosen and decides the dedup depth this suggestion gets
+    // (`SuggestionPacing.dedupMemory`), so a repeat that should have been suppressed is
+    // only explainable with the label in hand.
+    log(
+      "Suggestion: delivering [\(Int(suggestion.confidence * 100))%] [\(suggestion.category.rawValue)] \"\(suggestion.suggestion)\""
+    )
 
     await MainActor.run {
       NotificationService.shared.sendNotification(
@@ -659,13 +699,37 @@ actor SuggestionAssistant: ProactiveAssistant {
         message: suggestion.suggestion,
         assistantId: identifier,
         context: context,
-        suggestionTelemetryIdentity: telemetryIdentity
-      )
-      if NegativeFeedbackRemediationFeature.isEnabled, let taskId {
-        var ledger = SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).load()
-        SuggestionTaskNudgePolicy.recordingDelivery(taskId: taskId, in: &ledger, now: Date())
-        SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).save(ledger)
-      }
+        suggestionTelemetryIdentity: telemetryIdentity,
+        onPresented: { [weak self] in
+          onPresentation?(true)
+          Task {
+            await self?.recordPresentedSuggestion(
+              suggestion,
+              taskId: taskId,
+              ownerID: ownerID)
+          }
+        },
+        onDropped: { onPresentation?(false) })
+    }
+  }
+
+  /// Advances dedup and remediation state only after a real presentation receipt.
+  /// Queue admission is intentionally insufficient: snooze, screen sharing, or an
+  /// owner change can still reject the card before it reaches the user.
+  private func recordPresentedSuggestion(
+    _ suggestion: ExtractedSuggestion,
+    taskId: String?,
+    ownerID: String
+  ) async {
+    recentSuggestions = SuggestionDeduplication.remembering(
+      .init(text: suggestion.suggestion, category: suggestion.category),
+      in: recentSuggestions,
+      frequencyLevel: cachedFrequencyLevel)
+    let remediationEnabled = await MainActor.run { NegativeFeedbackRemediationFeature.isEnabled }
+    if remediationEnabled, let taskId {
+      var ledger = SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).load()
+      SuggestionTaskNudgePolicy.recordingDelivery(taskId: taskId, in: &ledger, now: Date())
+      SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).save(ledger)
     }
   }
 
@@ -738,19 +802,46 @@ actor SuggestionAssistant: ProactiveAssistant {
       ]
     }
 
-    // Report what delivery actually did, not that a suggestion existed. `outcome` is
-    // "delivered" only when a card reached NotificationService.
-    let delivery = await resolveDelivery(result, sendEvent: sendEvent)
+    // Report what delivery actually did, not that a suggestion existed. Handing a card to
+    // NotificationService is not delivery: snooze, presence, category and frequency gates and
+    // the bar can still withhold it, so `delivered` waits for the real presentation outcome.
+    let (presentations, reportPresentation) = AsyncStream.makeStream(of: Bool.self)
+    let delivery = await resolveDelivery(result, sendEvent: sendEvent) { presented in
+      reportPresentation.yield(presented)
+      reportPresentation.finish()
+    }
+    let presented =
+      delivery == .delivered ? await Self.awaitPresentation(presentations, timeout: .seconds(10)) : false
+    let outcome =
+      delivery == .delivered && !presented ? "handed_off_not_presented" : delivery?.rawValue ?? "no_delivery_decision"
 
     return [
-      "outcome": delivery?.rawValue ?? "no_delivery_decision",
-      "delivered": delivery == .delivered ? "true" : "false",
+      "outcome": outcome,
+      "delivered": presented ? "true" : "false",
       "suggestion": suggestion.suggestion,
       "category": suggestion.category.rawValue,
       "confidence": "\(Int(suggestion.confidence * 100))",
       "commitments": "\(grounding.openCommitments.count)",
       "goals": "\(grounding.goals.count)",
     ]
+  }
+
+  /// The first presentation outcome the notification service reports, or `false` when none
+  /// arrives within `timeout` (for example, a card still queued behind another one).
+  static func awaitPresentation(_ outcomes: AsyncStream<Bool>, timeout: Duration) async -> Bool {
+    await withTaskGroup(of: Bool.self) { group in
+      group.addTask {
+        for await presented in outcomes { return presented }
+        return false
+      }
+      group.addTask {
+        try? await Task.sleep(for: timeout)
+        return false
+      }
+      let first = await group.next() ?? false
+      group.cancelAll()
+      return first
+    }
   }
 
   // MARK: - Lifecycle

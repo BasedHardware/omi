@@ -74,19 +74,43 @@ def arrival_order(seed):
     return order
 
 
-@pytest.mark.parametrize('seed', range(12))
-def test_capture_partition_and_content_are_permutation_invariant(seed):
+@pytest.fixture(scope='module')
+def canonical_capture_partition():
     expected = StrictFirestore()
-    actual = StrictFirestore()
     rows = [capture(i) for i in range(45)]
     for row in rows:
         intake(expected, row)
+    return rows, signature(expected)
+
+
+@pytest.mark.parametrize('seed', range(12))
+def test_capture_partition_and_content_are_permutation_invariant(seed, canonical_capture_partition):
+    template, expected_signature = canonical_capture_partition
+    rows = deepcopy(template)
+    actual = StrictFirestore()
     order = arrival_order(seed)
     for i in order:
         intake(actual, rows[i])
-    assert signature(actual) == signature(expected)
+    assert signature(actual) == expected_signature
     assert len(conversations(actual)) == 1
     assert len(conversations(actual)[0]['transcript_segments']) == 45
+
+
+@pytest.fixture
+def captured_replay_case(request, canonical_capture_partition):
+    template, expected_signature = canonical_capture_partition
+    rows = deepcopy(template)
+    order = arrival_order(request.param)
+    actual = StrictFirestore()
+    for i in order:
+        intake(actual, rows[i])
+    assert signature(actual) == expected_signature
+    return actual, rows, order
+
+
+@pytest.mark.parametrize('captured_replay_case', range(12), indirect=True)
+def test_capture_replay_is_idempotent_for_every_arrival_order(captured_replay_case):
+    actual, rows, order = captured_replay_case
     before = signature(actual)
     for i in order:
         intake(actual, rows[i])
@@ -179,7 +203,7 @@ def test_realtime_and_sync_share_exact_gap_boundary(gap):
 
 
 def test_both_paths_consult_the_policy_function(monkeypatch):
-    from utils import conversation_continuity
+    from models import conversation_continuity
 
     calls = []
 

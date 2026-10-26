@@ -157,8 +157,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'hardware_revision': device?.hardwareRevision,
       'firmware': device?.firmwareRevision,
       'timezone_offset_minutes': DateTime.now().timeZoneOffset.inMinutes,
-      'battery': deviceProvider.batteryLevel,
-      'charging': deviceProvider.isCharging,
+      // Live readings, only valid while the link is up: onDeviceDisconnected() forces
+      // isCharging false on link loss, so report null (unknown) instead of a stale snapshot.
+      'battery': deviceProvider.isConnected ? deviceProvider.batteryLevel : null,
+      'charging': deviceProvider.isConnected ? deviceProvider.isCharging : null,
       'connected_at': diagnostics.connectedAt,
       'reconnection_count': diagnostics.reconnectionCount,
       'fail_to_connect_count': diagnostics.failToConnectCount,
@@ -201,6 +203,11 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'firmware_diagnostics_latest': (extended['firmware_diagnostics'] as List?)?.lastOrNull,
       'lifecycle_events': extended['lifecycle_events'] ?? [],
       'ble_log': extended['ble_log'] ?? [],
+      'connect_pending_since_ms': extended['connect_pending_since_ms'],
+      'saved_reconnect_enabled': extended['saved_reconnect_enabled'],
+      'reconnect_suppressed': extended['reconnect_suppressed'],
+      'reconnect_scan_active': extended['reconnect_scan_active'],
+      'reconnect_scan_results_seen': extended['reconnect_scan_results_seen'],
       'capture_health': extended['capture_health'] ?? {},
       'capture_health_history': extended['capture_health_history'] ?? [],
     };
@@ -430,7 +437,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
 
   Widget _buildRightNow() {
     final l10n = context.l10n;
-    final battery = context.watch<DeviceProvider>().batteryLevel;
+    // batteryLevel keeps the last value seen after the link drops (only isCharging is reset), so a
+    // disconnected pendant has no "right now" reading; the support bundle nulls it the same way.
+    final device = context.watch<DeviceProvider>();
+    final battery = device.isConnected ? device.batteryLevel : -1;
     final latestRssi = _rssiPoints.isNotEmpty ? _rssiPoints.last.rssi : null;
     return OmiSettingsGroup(
       header: l10n.diagnosticsRightNow,

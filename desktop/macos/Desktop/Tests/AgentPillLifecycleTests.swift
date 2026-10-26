@@ -1487,8 +1487,8 @@ import XCTest
           "DesktopDiagnosticsManager.shared.recordRealtimeProviderCloseResolution(\n        closeAttemptID: closeAttemptID,"
         )
         && hubSource.contains(
-          "if shouldCaptureProviderCloseToSentry {\n        logError(reportingPlan.sentryMessage)"),
-      "Credential close reporting must record the bounded recovery decision before Sentry captures its attachment")
+          "if isActionableProviderClose {\n        logError(reportingPlan.boundedErrorMessage)"),
+      "Credential close reporting must record the bounded recovery decision before the actionable-close error log")
     XCTAssertTrue(
       hubSource.contains("func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool"),
       "Provider switching must be centralized and limited to stable credential/quota failures")
@@ -1977,26 +1977,12 @@ import XCTest
     XCTAssertFalse(source.contains("Copy table"))
   }
 
-  func testNonProductionBundlesDoNotInstallNativeSentryHandlers() throws {
+  func testOmiAppNoLongerInitializesSentry() throws {
     let source = try omiAppSource()
-    let loggerSource = try loggerSource()
 
-    XCTAssertTrue(source.contains("options.enableAutoSessionTracking = !isDev"))
-    XCTAssertTrue(source.contains("options.enableCrashHandler = !isDev"))
-    XCTAssertTrue(source.contains("options.enableAppHangTracking = !isDev"))
-    XCTAssertTrue(source.contains("options.enableWatchdogTerminationTracking = !isDev"))
-    XCTAssertTrue(source.contains("options.appHangTimeoutInterval = isDev ? 0 : 3.0"))
-    XCTAssertTrue(source.contains("guard !AnalyticsManager.isDevBuild else { return }"))
-    XCTAssertTrue(source.contains("let breadcrumb = Breadcrumb(level: .info, category: \"lifecycle\")"))
-    XCTAssertTrue(source.contains("breadcrumb.message = \"App Terminating\""))
-    XCTAssertFalse(source.contains("SentrySDK.capture(message: \"App Terminating\")"))
     XCTAssertFalse(
-      loggerSource.contains("breadcrumb.message = message"),
-      "free-form local log messages must not be sent as Sentry breadcrumbs")
-    XCTAssertTrue(
-      loggerSource.contains("writeIncidentDiagnosticsAttachment("),
-      "actionable errors must send bounded redacted diagnostics instead")
-    XCTAssertTrue(loggerSource.contains("guard !isDevBuild else { return }"))
+      source.contains("SentrySDK"),
+      "Sentry has been removed; OmiApp must not initialize or touch it")
   }
 
   func testFloatingVoicePlaybackIgnoresStaleBargeInCallbacks() throws {
@@ -2027,6 +2013,57 @@ import XCTest
     XCTAssertTrue(source.contains("frameAnimationToken += 1"))
     XCTAssertTrue(source.contains("pendingFrameAnimationTarget = frame"))
     XCTAssertTrue(source.contains("private static func framesEquivalent(_ lhs: NSRect, _ rhs: NSRect) -> Bool"))
+  }
+
+  /// Replaces `testTypedSendDelegatesResponseSizingToWindow`, which was retired with
+  /// `AskAIInputView` when main's typed-send rewrite landed. That test was the only thing
+  /// pinning the quiet-answer latch, and the wake-word feature depends on it: a typed
+  /// question must present the response panel, while a wake-word answer stays in the notch.
+  ///
+  /// Everything pinned here lives in `FloatingControlBarWindow.swift` now, so this survives
+  /// the view-layer churn that killed the previous pin.
+  // omi-test-quality: source-inspection -- static contract: the one-shot quiet-answer latch
+  // is armed and consumed only at the shared typed/wake-word dispatch boundary.
+  func testQuietAnswerLatchContractSurvivesTheTypedSendRewrite() throws {
+    let windowSource = try floatingControlBarWindowSource()
+
+    // Defaulting to true is what keeps an ordinary typed send presenting the panel.
+    XCTAssertTrue(windowSource.contains("func beginVisibleMainQuery("))
+    XCTAssertTrue(
+      windowSource.contains(
+        "_ message: String, fromVoice: Bool, animated: Bool = true, presentsSurface: Bool = true"))
+
+    // beginVisibleMainQuery may only ever *set* quiet. It runs twice per query, so clearing
+    // here would let the second call undo the first and reopen the panel mid-answer.
+    XCTAssertTrue(windowSource.contains("if !presentsSurface { state.answersQuietly = true }"))
+
+    // The one-shot latch: armed by the wake word, consumed by the visible path.
+    // Request-scoped (`QuietSurfaceLatch`): a request rejected before presenting
+    // releases only its own arm, and an older request can never consume a newer one's.
+    XCTAssertTrue(windowSource.contains("private static var quietSurface = QuietSurfaceLatch()"))
+    XCTAssertTrue(windowSource.contains("Self.quietSurface.arm(request.id)"))
+    XCTAssertTrue(windowSource.contains("let presentsSurface = Self.quietSurface.presentsSurface(for: request?.id)"))
+
+    // Every exit that abandons the query has to release its own request's arm, or an
+    // abandoned wake-word command quiets the next typed question instead. This includes
+    // both submission APIs, their synchronous guard exits, the asynchronous owner
+    // recheck, and `.voiceOnly`.
+    XCTAssertEqual(windowSource.components(separatedBy: "Self.quietSurface.release(request?.id)").count - 1, 8)
+
+    // A typed question is never quiet, whatever a preceding wake-word answer left behind.
+    // Both onSendQuery wirings must reset it — the default one installed at setup and the
+    // one re-wired in openAIInputWithQuery.
+    XCTAssertTrue(windowSource.contains("barWindow.state.answersQuietly = false"))
+    XCTAssertTrue(windowSource.contains("window.state.answersQuietly = false"))
+
+    // The quiet answer's own presentation sites stay closed for the whole query. Both the
+    // streaming sink and the completion tail present `.mainResponse` on their own; presenting
+    // against a quiet-blocked resize left an open conversation flag on an island-sized
+    // window (notifications suppressed, hover menu dead, surface floor deferred) long after
+    // the answer settled. Exactly these two sites carry the guard.
+    XCTAssertEqual(
+      windowSource.components(separatedBy: "if !barWindow.state.showingAIResponse, !barWindow.state.answersQuietly {")
+        .count - 1, 2)
   }
 
   private func agentPillSource() throws -> String {

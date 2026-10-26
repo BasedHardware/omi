@@ -1,7 +1,8 @@
-# App (Flutter) — Operational Playbook
+# App (Flutter)
 
-Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
-UI rules: [docs/ux-contract.md](docs/ux-contract.md).
+UI: [contract](docs/ux-contract.md).
+
+Speakers: `SpeakerNames`/`DiarizationLabel` (`lib/ui/format/`); `EpisodePresentation.participants` counts names.
 
 ## Build Bootstrap
 
@@ -14,7 +15,7 @@ UI rules: [docs/ux-contract.md](docs/ux-contract.md).
 `pubspec.yaml` (`1.0.543+992`) is the local placeholder. Store binaries ignore it: Codemagic sets `BUILD_NAME` from the latest store version and `BUILD_NUMBER` to max(store)+1 (pubspec seeds only with no store history). Analytics/Crashlytics `build_number` is `OMI_BUILD_NUMBER`. Authoritative: stores = Codemagic; local/dev = pubspec; analytics = `OMI_BUILD_NUMBER`.
 
 ### Release
-Daily train (`scripts/mobile_daily_train.py`, 14:00 UTC): newest TestFlight build → App Review (MANUAL release), newest Play build → production draft; a human releases. `--dry-run` = plan only. Contract: `.github/agent-docs/mobile-release-process.md`.
+GREEN gate (13:15 UTC) → train: iOS phased 100% after 12h; Android 1%→10%→50%→100%; rollout-advance every 4h on a ≤26h GREEN receipt. **Never withdraw an iOS version Apple has to ship a newer one.** `.github/agent-docs/mobile-release-process.md`.
 
 ### Generated Files (never edit)
 envied, json_serializable, pigeon (`lib/pigeon_interfaces.dart` → `lib/gen/` + iOS/Android stubs), and flutter_gen: `flutter pub run build_runner build`. ARB → `flutter gen-l10n` (`lib/l10n/app_localizations*.dart`). Never edit `*.g.dart` / `*.gen.dart`.
@@ -60,7 +61,7 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - Modules: iOS `ios/Runner/PhoneMic/` (self-healing AVAudioEngine capture; interruptions/routes recover natively); Android `android/app/src/main/kotlin/com/friend/ios/phonemic/` (AudioRecord with self-healing rebuild + silencing detection; `PhoneMicForegroundService` keeps background capture alive; batch opus encode via a JNI shim over the plugin-shipped libopus)
 - Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` arbitrates the two stacks
 - Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops foreign-id events, `start()` onto a live session adopts the new id and re-emits state, and `stop()` always forwards to native then tears down locally once
-- Two capture modes fixed at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Selection: `CaptureController.streamRecording` (explicit or offline fallback); `omibatchphoneauto` auto-uploads on reconnect
+- Two capture modes fixed at `start(mode)`: `stream` (frames → Dart → socket/WAL) and `batch` (Transcribe Later — opus → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = `onBatchProgress`: iOS 4s healthy/1s fault, Android 1Hz; Dart 10s unchanged). Selection: `CaptureController.streamRecording` (explicit/offline); `omibatchphoneauto` uploads on reconnect
 
 On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-device-speech.md).
 
@@ -101,13 +102,15 @@ make mobile-verify ARGS="fast --all"                   # full hermetic journey s
 
 Native: `ruby ios/test/batch_audio_energy_test.rb`; [phone/BLE replay](../scripts/dev-harness/IPHONE_HARNESS.md).
 
-CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
+### Performance
+UI: `bash app/tool/perf_gate.sh` ([guide](integration_test/perf/README.md)); red blocks shipping.
+Heavy: `bash app/tool/perf_device_run.sh` ([never-uninstall guide](tool/perf/README.md)).
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes.
 - HTTP result/consumer migration: [C3 contract](lib/backend/http/API_RESULTS.md).
-- Test state machine logic via minimal abstractions mirroring production flow
+- Mind Map identity: [contract](docs/memory-graph-identity.md).
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
 - Chat transcript layout: pumping only `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs; chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes) — it is the Mobile App Checks contract for this class.
 - Tests needing a live service/device/real API go under `integration_test/` (plain `test.sh` skips them); the hermetic seeded journeys there run in CI via `mobile-verify fast --all` with loopback fixtures only. Local-backend tests set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`.
@@ -128,9 +131,8 @@ CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analy
 4. 401 responses trigger automatic refresh + retry
 
 ### Auth Methods
-- Google Sign In (`google_sign_in` package)
-- Apple Sign In (`sign_in_with_apple` package, includes PKCE via nonce+sha256)
-- Firebase Auth as the identity layer
+- Google `google_sign_in`; Apple `sign_in_with_apple` (nonce+SHA256 PKCE).
+- Firebase Auth; browser flows: [mobile auth](docs/mobile-browser-auth.md).
 
 ### Request Headers
 All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash, X-App-Version, plus Bearer token.

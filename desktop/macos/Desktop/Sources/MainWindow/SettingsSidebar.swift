@@ -139,6 +139,15 @@ struct SettingsSearchItem: Identifiable {
       section: .notifications, icon: "bell",
       settingId: "notifications.integrationsuggestions"),
     SettingsSearchItem(
+      name: "Connect an Agent",
+      subtitle: "Setup prompts plus MCP and Developer API keys for Claude, ChatGPT, Codex, Cursor",
+      keywords: [
+        "agent", "mcp", "api key", "developer", "claude", "chatgpt", "codex", "cursor", "openclaw",
+        "hermes",
+      ],
+      section: .advanced, icon: "point.3.connected.trianglepath.dotted",
+      settingId: "advanced.connectagent"),
+    SettingsSearchItem(
       name: "Reset Integration Suggestions",
       subtitle: "Clear every integration's suggestion history so Omi can offer them again",
       keywords: ["reset", "integration", "suggestions", "history", "again"],
@@ -329,7 +338,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["startup", "login", "boot"], section: .advanced, icon: "slider.horizontal.3",
       settingId: "advanced.preferences.launchatlogin"),
     SettingsSearchItem(
-      name: "Report an Issue", subtitle: "Send app logs and report a problem",
+      name: "Report an Issue", subtitle: "Save a redacted report on this Mac to share manually",
       keywords: ["bug", "feedback", "logs", "report", "issue"], section: .advanced,
       icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.reportissue"),
     SettingsSearchItem(

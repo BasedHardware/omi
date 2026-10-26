@@ -13,6 +13,11 @@ from fastapi import HTTPException
 import utils.other.notifications as notif
 
 
+@pytest.fixture(autouse=True)
+def isolate_generation_status_store(monkeypatch):
+    monkeypatch.setattr(notif.daily_summaries_db, 'set_daily_summary_generation_status', MagicMock())
+
+
 class _FakeConvo:
     """A conversation whose day has something to summarize (non-empty overview).
 
@@ -877,6 +882,22 @@ def test_contended_retry_stays_pending_without_releasing_another_workers_lock(mo
     assert sent == released == []
 
 
+@pytest.mark.parametrize('push_receipt', [True, False])
+def test_retry_locked_by_a_finished_worker_resolves_from_the_durable_record(monkeypatch, push_receipt):
+    _generated, created, sent, released, _webhooks = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif, '_backfill_recent_daily_summaries', lambda *_a: None)
+    monkeypatch.setattr(notif, 'try_acquire_daily_summary_lock', lambda *_a: False)
+    stored = {'id': 'sum1', 'date': '2026-10-12', 'notification_delivery_completed': push_receipt}
+    monkeypatch.setattr(notif.daily_summaries_db, 'get_daily_summary_by_date', lambda *_a: stored)
+    delivered = notif.Event()
+
+    notif._send_summary_notification(('uid1', ['tok1'], 'UTC', None, not push_receipt, True, delivered))
+
+    assert delivered.is_set()
+    assert created == []
+    assert len(sent) == (0 if push_receipt else 1)
+
+
 @pytest.mark.parametrize('late_push_succeeds', [False, True])
 def test_timeout_after_persistence_retries_uncertain_push_and_honors_late_receipt(monkeypatch, late_push_succeeds):
     generated, created, sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
@@ -1001,3 +1022,21 @@ def test_retry_push_acknowledged_before_later_work_cannot_be_sent_again(monkeypa
     asyncio.run(notif._send_bulk_summary_notification([user], stats=retry_stats, target_hour=11))
     assert retry_stats.retry_recipients == {}
     assert len(sent) == 1
+
+
+def test_generation_status_is_persisted_before_model_call(monkeypatch):
+    _install_generation_fakes(monkeypatch)
+    notif.generate_and_store_daily_summary('synthetic-owner', '2026-10-20', None, None)
+    notif.daily_summaries_db.set_daily_summary_generation_status.assert_called_once_with(
+        'synthetic-owner', '2026-10-20', 'pending'
+    )
+
+
+def test_generation_failure_persists_failed_status(monkeypatch):
+    _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(
+        notif, 'generate_comprehensive_daily_summary', MagicMock(side_effect=RuntimeError('synthetic failure'))
+    )
+    with pytest.raises(RuntimeError, match='synthetic failure'):
+        notif.generate_and_store_daily_summary('synthetic-owner', '2026-10-20', None, None)
+    assert notif.daily_summaries_db.set_daily_summary_generation_status.call_args.args[-1] == 'failed'

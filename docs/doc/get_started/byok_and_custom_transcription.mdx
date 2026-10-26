@@ -1,0 +1,51 @@
+---
+title: "Your Own Keys & Custom Transcription"
+icon: "key"
+description: "How Bring Your Own Keys works on the Mac app, how to choose your own transcription on the phone app, and what each one does and does not change."
+---
+
+Omi has two separate features for people who want to use their own providers:
+
+| | Bring Your Own Keys (BYOK) | Custom transcription |
+|---|---|---|
+| **App** | Omi for Mac | Omi phone app (iOS and Android) |
+| **What it changes** | Mac requests use your OpenAI, Anthropic, Gemini or OpenRouter key instead of Omi's (Deepgram keys are no longer used — retired 2026-08-27) | Live transcription runs on your phone, on your own server, or with your own provider key |
+| **Where** | Settings → AI & Automation → Advanced → Model Provider Keys | Settings → Developer Settings → Transcription |
+
+Neither one makes Omi fully local. Summaries, titles, memories and chat are still produced by Omi's servers. The sections below cover what each feature does and does not change.
+
+## Bring Your Own Keys (Mac)
+
+Open **Settings → AI & Automation**, expand **Advanced**, and find **Model Provider Keys**.
+
+- **Language model key** (OpenAI, Anthropic, Gemini or OpenRouter) is used for supported memory and insight features. Desktop chat uses **Anthropic** keys; other language model keys do not remove Omi's chat limit.
+- **Deepgram keys are retired** (2026-08-27): Omi no longer routes transcription through Deepgram, so an enrolled Deepgram key no longer changes anything. Transcription uses Omi's providers and counts toward your plan.
+- Keys are saved on your Mac and sent with each request. Omi's servers keep only a fingerprint to check that a request uses the key you enrolled; they never store the key itself.
+- When you sign in, the Mac app re-checks your saved keys with the provider and with Omi. BYOK stays active for 7 days after the last successful check, and a key the provider rejects turns it off.
+
+<Note>
+Your keys live on your Mac, so **requests from the phone app do not carry them**. Live recording through Omi's transcription, recordings synced later from your device, and summaries of those conversations use Omi's keys and count toward your plan, even while BYOK is active on your Mac.
+</Note>
+
+## Custom transcription (phone)
+
+Open **Settings → Developer Settings → Transcription** and choose a provider:
+
+| Provider | Where transcription runs |
+|---|---|
+| OpenAI Whisper, OpenAI GPT-4o Transcribe Diarize | OpenAI, with your API key |
+| Deepgram, Google Gemini | Deepgram or Google, with your API key (live) |
+| Local Whisper | Your own Whisper-compatible server |
+| On-Device | Whisper running on your phone (models from tiny to large-v2) |
+| Custom | Your own real-time transcription endpoint |
+
+**Send raw audio to Omi** controls whether the audio itself also goes to Omi. Turning it off stops raw audio uploads, but transcripts and the data cloud features need are still sent so Omi can build your conversations.
+
+### What custom transcription covers
+
+- **Live transcription only.** It applies to audio transcribed as you record. Recordings that are stored on your device and synced later (for example a pendant's offline storage, or the 15-minute chunks from a Limitless pendant) are uploaded and transcribed by Omi. That is why those recordings show **Uploaded · processing on Omi**, and why they count toward your plan.
+- **Summaries still come from Omi.** Once a conversation ends, Omi's servers write its title, summary, action items and memories. With custom transcription these count against your plan's monthly conversation processing allowance. When that allowance is used up, new conversations keep their transcript but get no summary until the allowance resets or you upgrade.
+
+## Running everything yourself
+
+If you want transcription, summaries and storage to run on infrastructure you control, you can run your own Omi backend. See [Backend Setup](/doc/developer/backend/Backend_Setup).

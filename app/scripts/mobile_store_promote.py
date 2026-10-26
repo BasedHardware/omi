@@ -19,6 +19,27 @@ APP_ID = "6502156163"
 PACKAGE_NAME = "com.friend.ios"
 VERSION_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 BUILD_RE = re.compile(r"^[1-9][0-9]*$")
+# Play currently rejects this app's automated review submission ("Changes
+# cannot be sent for review automatically"), so every commit holds its
+# changes for the Play Console -> Publishing overview -> Send for review
+# press. The daily train reads this flag to park the exposure ladder (a
+# held hop is invisible to the API). Flip to False only after a commit
+# without the parameter succeeds again, and park-free the ladder then.
+CHANGES_NOT_SENT_FOR_REVIEW = True
+
+
+# A version in any of these states is in Apple's hands or approved and waiting.
+# Withdrawing it to submit a newer build sends the app to the back of the review
+# queue (2026-10-23: three overnight withdrawals kept 1.0.572-1.0.574 out of the
+# store), so a newer build waits until the in-flight version is released.
+IOS_REVIEW_HOLD_STATES = (
+    "WAITING_FOR_REVIEW",
+    "IN_REVIEW",
+    "WAITING_FOR_EXPORT_COMPLIANCE",
+    "PENDING_APPLE_RELEASE",
+    "PROCESSING_FOR_APP_STORE",
+    "PENDING_DEVELOPER_RELEASE",
+)
 
 
 class PromotionError(ValueError):
@@ -94,8 +115,52 @@ def cli_json(*args: str) -> object:
     try:
         result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=60)
         return json.loads(result.stdout)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, ValueError) as exc:
+    except subprocess.CalledProcessError as exc:
+        raise PromotionError(f"App Store Connect lookup failed: {' '.join(args[:3])}\n{(exc.stderr or '')[-2000:]}") from exc
+    except (subprocess.TimeoutExpired, OSError, ValueError) as exc:
         raise PromotionError("App Store Connect build lookup failed") from exc
+
+
+def _resources(payload: object) -> list[dict]:
+    if isinstance(payload, dict):
+        payload = payload.get("data", payload)
+    if isinstance(payload, dict):
+        payload = [payload]
+    return [r for r in payload if isinstance(r, dict)] if isinstance(payload, list) else []
+
+
+def _resource_attrs(resource: dict) -> dict:
+    attrs = resource.get("attributes", resource)
+    return attrs if isinstance(attrs, dict) else {}
+
+
+def ios_live_locales() -> list[str]:
+    """Every locale of the live App Store version.
+
+    Apple rejects a submission whose new version lacks What's New for any locale the app
+    ships in; a bare --whats-new covers only the primary one (seen live 2026-10-16:
+    1.0.564 was refused). The daily train has always passed these; manual promotion must too.
+    """
+    live = _resources(cli_json("apps", "app-store-versions", APP_ID, "--platform", "IOS", "--state", "READY_FOR_SALE"))
+    newest = None
+    for resource in live:
+        version = _resource_attrs(resource).get("versionString")
+        # Old live versions can be loose ("1.0"); like the train, only strict X.Y.Z can be newest.
+        if isinstance(version, str) and VERSION_RE.fullmatch(version) and resource.get("id"):
+            if newest is None or version_parts(version) > version_parts(newest[0]):
+                newest = (version, str(resource["id"]))
+    if newest is None:
+        raise PromotionError("App Store Connect reports no live iOS version to copy locales from")
+    locales = sorted(
+        {
+            locale
+            for resource in _resources(cli_json("app-store-versions", "localizations", newest[1]))
+            if isinstance(locale := _resource_attrs(resource).get("locale"), str) and locale
+        }
+    )
+    if not locales:
+        raise PromotionError(f"live iOS version {newest[0]} has no localizations")
+    return locales
 
 
 def select_ios_build(payload: object, version: str, build_number: str) -> IOSBuild:
@@ -123,11 +188,33 @@ def select_ios_build(payload: object, version: str, build_number: str) -> IOSBui
     return matches[0]
 
 
+def check_no_ios_version_in_review(version: str) -> None:
+    """Refuse to submit while another version is in review or approved and unreleased.
+
+    Submitting the same version again is fine (nothing is withdrawn); anything else
+    would need the in-flight version withdrawn first, which this pipeline never does.
+    """
+    held = []
+    for state in IOS_REVIEW_HOLD_STATES:
+        for resource in _resources(
+            cli_json("apps", "app-store-versions", APP_ID, "--platform", "IOS", "--state", state)
+        ):
+            other = _resource_attrs(resource).get("versionString")
+            if other != version:
+                held.append(f"{other} {state}")
+    if held:
+        raise PromotionError(
+            f"iOS {', '.join(held)} is already with Apple; never withdraw it to submit {version}. "
+            "Wait until it is released, then promote the newer build"
+        )
+
+
 def prepare_ios(version: str, build_number: str) -> IOSBuild:
     for name in ("APP_STORE_CONNECT_ISSUER_ID", "APP_STORE_CONNECT_KEY_IDENTIFIER", "APP_STORE_CONNECT_PRIVATE_KEY"):
         if not os.environ.get(name):
             raise PromotionError(f"missing Codemagic iOS integration credential: {name}")
     check_live_ios_version(version)
+    check_no_ios_version_in_review(version)
     builds = cli_json(
         "builds",
         "list",
@@ -156,7 +243,27 @@ def ios_localizations(locales: Sequence[str], notes: str) -> list[dict[str, str]
     return [{"locale": locale, "whats_new": notes} for locale in unique]
 
 
-def submit_ios(build: IOSBuild, notes: str, *, locales: Sequence[str] | None = None) -> None:
+def submit_ios(
+    build: IOSBuild,
+    notes: str,
+    *,
+    locales: Sequence[str] | None = None,
+    release_type: str = "MANUAL",
+    phased: bool = False,
+) -> None:
+    """Submit a processed build for review.
+
+    release_type MANUAL holds the approved version for an explicit developer
+    release command (App Store Connect has no API to issue that command, so
+    MANUAL versions pile up approved-but-unreleased); AFTER_APPROVAL lets
+    Apple release on approval. phased=True (AFTER_APPROVAL only) requests the
+    7-day automatic phased rollout, which is pausable from App Store Connect
+    as a post-release brake.
+    """
+    if release_type not in ("MANUAL", "AFTER_APPROVAL"):
+        raise PromotionError("iOS release type must be MANUAL or AFTER_APPROVAL")
+    if phased and release_type != "AFTER_APPROVAL":
+        raise PromotionError("phased release requires release type AFTER_APPROVAL")
     command = [
         "app-store-connect",
         "builds",
@@ -166,7 +273,7 @@ def submit_ios(build: IOSBuild, notes: str, *, locales: Sequence[str] | None = N
         "--platform",
         "IOS",
         "--release-type",
-        "MANUAL",
+        release_type,
         "--version-string",
         build.version,
     ]
@@ -178,11 +285,15 @@ def submit_ios(build: IOSBuild, notes: str, *, locales: Sequence[str] | None = N
         with handle:
             json.dump(ios_localizations(locales, notes), handle)
         localizations_file = Path(handle.name)
-        command += ["--no-phased-release", "--app-store-version-localizations", f"@file:{localizations_file}"]
+        command += ["--app-store-version-localizations", f"@file:{localizations_file}"]
+    command += ["--phased-release"] if phased else ["--no-phased-release"]
     command.append(build.id)
     try:
         subprocess.run(command, capture_output=True, text=True, check=True, timeout=600)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "")[-2000:]
+        raise PromotionError(f"App Store Connect rejected the selected build for review\n{detail}") from exc
+    except (subprocess.TimeoutExpired, OSError) as exc:
         raise PromotionError("App Store Connect rejected the selected build for review") from exc
     finally:
         if localizations_file is not None:
@@ -283,21 +394,68 @@ def prepare_android(version: str, build_number: str) -> tuple[object, str]:
     return client, edit_id
 
 
-PLAY_RELEASE_STATUSES = ("completed", "draft")
+PLAY_RELEASE_STATUSES = ("completed", "draft", "inProgress", "halted")
 
 
 def submit_android(
-    client: object, edit_id: str, version: str, build_number: str, notes: str, *, status: str = "completed"
+    client: object,
+    edit_id: str,
+    version: str,
+    build_number: str,
+    notes: str,
+    *,
+    status: str = "completed",
+    user_fraction: float | None = None,
+    extra_codes: Sequence[str] = (),
+    base_release: dict[str, object] | None = None,
+    release_name: str | None = None,
 ) -> None:
-    """Write one production release for an existing code: live ("completed") or a Play Console draft."""
+    """Write one production release for the given code(s).
+
+    status "completed" = fully live; "draft" = Play Console draft; "inProgress"
+    = staged rollout (with user_fraction, e.g. 0.05) that is haltable from the
+    Play Console as a post-release brake. userFraction is rejected for
+    completed/draft releases; a completed release cannot later be halted, so
+    decide the exposure path before writing. extra_codes carries any
+    additional versionCodes an existing in-flight release already had (a
+    multi-APK rollout must not lose its variants when the track is rewritten).
+    base_release is that existing server-returned release: advancing it keeps
+    its metadata (countryTargeting, localized releaseNotes,
+    inAppUpdatePriority, ...) and changes only name/codes/status/fraction —
+    the derived single-locale notes are used only when it carries none.
+    release_name overrides the written name (defaults to the bare version);
+    the daily train uses it to stamp a gate receipt into the name.
+    """
     if status not in PLAY_RELEASE_STATUSES:
-        raise PromotionError("Play release status must be completed or draft")
-    release = {
-        "name": version,
-        "versionCodes": [build_number],
-        "status": status,
-        "releaseNotes": [{"language": "en-US", "text": notes}],
-    }
+        raise PromotionError("Play release status must be completed, draft, inProgress or halted")
+    if user_fraction is not None and status not in ("inProgress", "halted"):
+        raise PromotionError("userFraction requires a staged (inProgress) release")
+    if status == "inProgress" and user_fraction is None:
+        # fraction-less inProgress is the HALTED representation, not a writable
+        # release; halting is an explicit Play Console (or halted) operation
+        raise PromotionError("a staged (inProgress) release requires a userFraction")
+    codes = [build_number, *extra_codes]
+    if len(set(codes)) != len(codes):
+        raise PromotionError("Play release version codes must be unique")
+    existing_notes = base_release.get("releaseNotes") if isinstance(base_release, dict) else None
+    preserved_notes = existing_notes if isinstance(existing_notes, list) and existing_notes else None
+    release: dict[str, object] = dict(base_release) if isinstance(base_release, dict) else {}
+    release["name"] = release_name if release_name is not None else version
+    release["versionCodes"] = codes
+    release["status"] = status
+    release["releaseNotes"] = preserved_notes if preserved_notes is not None else [
+        {"language": "en-US", "text": notes}
+    ]
+    release.pop("userFraction", None)
+    if status != "inProgress" and "countryTargeting" in release:
+        # Google permits countryTargeting only on an inProgress release;
+        # carrying it into a completion PUT makes tracks.update reject the
+        # whole request and wedges the rollout at its final hop.
+        release.pop("countryTargeting", None)
+    if user_fraction is not None:
+        if not 0 < float(user_fraction) < 1:
+            raise PromotionError("userFraction must be strictly between 0 and 1 (full rollout is status=completed)")
+        release["userFraction"] = float(user_fraction)
     try:
         client.edits().tracks().update(
             packageName=PACKAGE_NAME,
@@ -305,9 +463,23 @@ def submit_android(
             track="production",
             body={"track": "production", "releases": [release]},
         ).execute()
-        client.edits().commit(packageName=PACKAGE_NAME, editId=edit_id).execute()
+        # changesNotSentForReview: Play rejects this app's automated commits
+        # ("Changes cannot be sent for review automatically"); every committed
+        # edit is held until a human clicks Send for review in Play Console ->
+        # Publishing overview, which is the runbook's only manual step.
+        client.edits().commit(
+            packageName=PACKAGE_NAME,
+            editId=edit_id,
+            changesNotSentForReview=CHANGES_NOT_SENT_FOR_REVIEW,
+        ).execute()
     except Exception as exc:
-        raise PromotionError("Google Play rejected exact-code promotion to production") from exc
+        # Surface Play's own API message (error code + field-level detail) inside
+        # the train log; a bare "rejected" line cost a 2026-10-19 1%->10% ladder
+        # hop its root cause — the train only printed this static string.
+        detail = f": {exc}" if str(exc).strip() else ""
+        raise PromotionError(
+            f"Google Play rejected exact-code promotion to production{detail}"
+        ) from exc
 
 
 def main() -> int:
@@ -338,7 +510,7 @@ def main() -> int:
         ios_build = prepare_ios(args.version, args.ios_build) if ios else None
         android_target = prepare_android(args.version, args.android_build) if android else None
         if ios_build:
-            submit_ios(ios_build, ios_notes)
+            submit_ios(ios_build, ios_notes, locales=ios_live_locales())
         if android_target:
             submit_android(*android_target, args.version, args.android_build, android_notes)
     except PromotionError as exc:

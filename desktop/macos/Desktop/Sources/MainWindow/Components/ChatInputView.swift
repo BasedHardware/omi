@@ -283,7 +283,7 @@ struct ChatInputView: View {
     panel.allowedContentTypes = [
       .image, .jpeg, .png, .gif, .heic, .heif, .webP, .tiff, .bmp,
       .pdf, .plainText, .json, .commaSeparatedText, .html,
-      .text, .content,
+      .text, .content, .movie,
     ]
     if panel.runModal() == .OK {
       let remaining = max(0, kMaxChatAttachments - currentAttachments.count)

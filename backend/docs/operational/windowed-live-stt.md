@@ -1,5 +1,33 @@
 # Windowed TDT live rollout
 
+## Funded window finalize and local-send attribution
+
+The funded cap proxy advertises the underlying window class. Managed VAD pauses
+therefore call `finalize(vad_pause=True)` through that proxy. The proxy must
+forward the provider arguments; a narrower signature raises a local `TypeError`,
+which the send boundary reports as `send_failed` even though no HTTP request or
+WebSocket failed. The cap proxy preserves this call with
+`STT_CAP_FINALIZE_FORWARD_ENABLED` on by default. `false`, `0`, or `off` selects
+generic no-argument finalize as an emergency fallback without recreating the
+signature exception. Held providers remain unopened in either mode.
+Generic finalize omits the ordinary-speech guard, so sub-second speech blips
+may flush earlier in that emergency mode.
+
+`omi_stt_local_send_failures_total{provider,phase,exception_class}` and the
+`event=live_stt_local_send_failure` log distinguish raw send/refusal, usage
+accounting, capture mapping, finalize and the caller boundary. Labels and log
+fields are bounded; exception messages, content, IDs and endpoints are omitted.
+Logs also record raw dead/closed state and whether the socket is a cap proxy.
+These diagnostics do not change provider-health classification, routing stages,
+admission caps, deadlines or GPU placement. They count local boundary events,
+not unique failed sessions; caller and inner diagnostics can overlap.
+
+For a listen train carrying this fix, compare the new finalize/TypeError count,
+`send_failed` settlements, gate recovery stages, transcript availability and
+window POST latency against the previous release. Preserve the automatic gate;
+do not delete health keys or force an unbench. Deploy only in the approved
+22:00–13:00Z window unless the lead rules otherwise.
+
 The September 2026 live-chain incident exposed three different contracts:
 configured order did not govern connection fallback; account-state refusals were
 retried as transient failures; the healthy batch TDT model was not a live leg.
@@ -119,12 +147,13 @@ the fallback chain. Keep the merged 5% allocation for this code release; a later
 configuration rollout advances it only after the gates below pass.
 
 The headless Service selects ready Parakeet pods. `utils/stt/batch_pressure.py`
-polls each replica every five seconds with its own one-second HTTP and wall-clock
-deadline. A failed fetch does not discard the other responses: each replica
+polls each replica every five seconds with its own three-second wall-clock
+deadline and two-second HTTP phase budgets. A failed fetch does not discard the other responses: each replica
 keeps its last valid sample and original timestamp for **at most 15 seconds**.
-Departed replicas are removed. DNS failure immediately stands down; admission
-never performs DNS or HTTP. Poll/cache fan-out is bounded at **64 ready pods**,
-well above the seven-pod HPA maximum; fleets above that bound still stand down.
+Departed replicas are removed. DNS failure retains the last discovery only for
+the bounded admission grace below; admission
+never performs DNS or HTTP. Poll/cache fan-out is bounded at **64 ready pods**;
+fleets above that bound still stand down.
 
 Fresh telemetry must cover **both** `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` and a
 strict majority (`floor(ready / 2) + 1`) of the current ready pool. Pressure is
@@ -140,6 +169,8 @@ not. Small two-pod pools retain the conservative one-hot-pod stand-down.
 | `PARAKEET_BATCH_PRESSURE_MAX_LIVE_PENDING_PER_REPLICA` | `4` | Busy when live pending reaches this count |
 | `PARAKEET_BATCH_PRESSURE_MAX_LIVE_OLDEST_SECONDS` | `0.75` | Busy when oldest live queue wait reaches this many seconds |
 | `PARAKEET_BATCH_PRESSURE_BUSY_REPLICA_SHARE` | `0.5` | Stand down when busy plus unknown reaches this ready-pool share |
+| `PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS` | `60` | Maximum age of each last-good observation used at admission, configurable from `15` through `60` seconds; set `15` to restore strict freshness/DNS behavior |
+| `PARAKEET_BATCH_PRESSURE_RESET_AFTER_FAILURES` | `3` | Consecutive sweeps without a newly received quorum before closing/recreating the HTTP pool and rediscovering |
 
 Invalid configuration stands down. Invalid, negative, non-finite or old-revision
 responses leave that replica's timestamp unchanged; it becomes unknown after
@@ -148,7 +179,36 @@ its cached sample expires. Refusal labels stay `unconfigured`, `missing`,
 failed fetches, including when the remaining pressure decision stands down;
 quorum loss is `unavailable`. The bounded gauge
 `omi_stt_window_batch_pressure_replicas{state="fresh"|"ready"}` exposes coverage.
-A stalled poller still stands down after 15 seconds.
+Freshness stays at 15 seconds for telemetry. If strict freshness/discovery fails,
+admission may use the retained discovery and per-replica observations up to the
+configured age (inclusive). The same minimum, majority and busy-plus-unknown math
+still applies. Failed sweeps never renew an observation, and newer busy samples
+override older healthy values. Cold start without a quorum still refuses; data
+older than 60 seconds cannot supply headroom. Grace also requires a previously
+usable fresh quorum; disjoint partial cold-start sweeps cannot bootstrap it.
+Grace admissions emit shared
+`omi_fallback_total{component="stt_selection",reason="timeout",outcome="degraded"}`.
+
+Repeated fetch failures used to leave the same HTTP client alive indefinitely,
+with no recorded failure cause. The sampler now replaces it after three failed
+sweeps, even while old cache entries remain fresh, and resolves discovery again.
+Cold HTTP setup has a bounded three-second budget rather than one second. This
+removes the reproducible retry trap for requests taking longer than one second;
+the original incident's exact transport trigger was not captured by the old
+telemetry. `omi_stt_window_batch_pressure_fetch_failures_total{cause}` separates
+`connect_timeout`, `pool_timeout`, `read_timeout`, `deadline`, `transport`,
+`http_status`, `invalid_sample` and `other` without logging
+response bodies or addresses. Refresh outcome `reset_client` counts pool repair.
+
+The default-on `omi-stt-pressure-sampler-stuck` alert in the monitoring chart's
+live-STT exports fires per namespace/pod when `fresh == 0` continuously for five
+minutes, without an admission-volume floor. The progress timestamp (sampler start
+or last valid response) also detects a stalled loop with a frozen positive gauge
+after 15 seconds plus five minutes. Critical delivery adds the existing 30-second
+Telegram grouping wait. Provision the alert through the existing authorized
+monitoring workflow; source changes alone do not install it. Inspect failure
+causes and resets, check discovery/network health, and ask the rollout lead to
+replace affected pods if automatic repair does not restore samples.
 
 Using a pool share follows the scheduler: live requests have priority at each
 dispatch, with one aged backfill turn after four live batches. An isolated wait
@@ -331,21 +391,36 @@ accelerated replay contract, so it also receives the conservative default.
 
 Each replacement target gets a **5s per-target setup budget** (dial plus
 serving check) and a **20s replay prefix wall**, both spent from the session's
-single **60s episode** total rather than restarting per target. Unanswered
-capture exceeding 20s is cut to the newest 20s (135s becomes 20s; 115s skipped),
-with `omi_stt_replay_skipped_seconds_total{source,successor}` recording the loss.
+single **60s episode** total rather than restarting per target. The retained
+prefix is the wall less a **1s margin** (`LISTEN_REPLAY_PREFIX_MARGIN_SECONDS`,
+`0` restores the exact-wall prefix), scaled by the target's declared rate:
+paced delivery at exactly 1x into a wall of the same length left only the last
+packet's write-confirm (~30ms) as slack, and ~1,050 prefixes/day landed past the
+wall as `replay_send_stalled` (2026-10-21, `omi_stt_replay_wall_seconds` 20–25s
+bucket). Unanswered capture exceeding that budget is cut to the newest 19s
+(135s becomes 19s; 116s skipped), with
+`omi_stt_replay_skipped_seconds_total{source,successor}` recording the loss.
 Emitted capture prefixes remain excluded. This is an intentional bounded-loss
 tradeoff; do not describe it as full-ring transcript preservation. Partial
 replay rejection retains the remaining obligation for the next eligible leg.
 
 Live ingestion does not await the failover lock. A supervisor-owned ordered tail
 holds at most **26s PCM** (832,000 bytes at 16 kHz), behind the replay prefix.
-At 1x live input the lag stays fixed until admitted audio actually pauses;
-silence still forwarded as PCM does not let it catch up. The
-healthy 20ms/packet test bounds delay by 20.532s after setup; allowing the full
-5s setup budget gives **25.532s at 16 kHz** (26.044s at 8 kHz, because a 16KiB
-packet represents 1.024s). This is audio delivery delay, not a vendor transcript
-latency guarantee. A nonresponsive transport is rejected: the replay helper
+While the tail holds more than **1s** of audio the pump drains it at the
+catch-up rate: `LISTEN_LIVE_TAIL_CATCHUP_RATE` (default **1.5**) times the
+endpoint's declared sustained rate, capped per successor family (Soniox,
+Modulate and Deepgram 2x; the Parakeet window, which has no wire, 4x), then
+returns to the sustained rate. `1` restores the exact-rate tail, whose lag
+stayed fixed until admitted audio paused and grew by every missed pump slot.
+Against real-time input the worst-case tail below drains to about 1s in ~47s at
+1.5x (half a second of backlog per second), a 750ms pump slip in a couple of
+seconds; `omi_stt_live_tail_catchup_seconds_total{successor}` counts the audio
+seconds delivered above the sustained rate and stays 0 with the switch off.
+The replay prefix itself is never accelerated. The
+healthy 20ms/packet test bounds delay by 19.532s after setup; allowing the full
+5s setup budget gives **24.532s at 16 kHz** (25.044s at 8 kHz, because a 16KiB
+packet represents 1.024s). This is the peak audio delivery delay, not a vendor
+transcript latency guarantee. A nonresponsive transport is rejected: the replay helper
 admits at most two packets counting queued plus in-flight audio and waits at most 2s for space; prefix wall
 admission also has a 20s deadline. Ordinary live sends retain the 2,000-item
 queue. Setup timeout skips its requested family and continues within that
@@ -390,8 +465,10 @@ Recovery legs opt into per-leg writer pacing at the transport, not just
 admission: the armed slot advances from the previously armed slot, so
 sub-frame timer oversleep is compensated against the accumulated slot instead
 of drifting, while a stall of one frame or longer rebases on the clock and
-discards missed-slot credit (sustained ≤1x, no catch-up burst on a
-stalled-then-resumed transport), with each `ws.send` bounded by `min(2s,
+discards missed-slot credit. The writer runs at the leg's tail catch-up
+ceiling and admission sets the sustained wire rate, so a stalled-then-resumed
+transport can close up only the packets the queue already held, never bank
+credit; each `ws.send` is bounded by `min(2s,
 episode remaining)`. The observable burst
 allowance is bounded queue+in-flight bytes (at most two 16KiB frames); that
 bound never grows. Prefix delivery — replay enqueues plus the frozen transport
@@ -400,8 +477,9 @@ episode, so `REPLAY_WALL` measures actual prefix delivery. Live audio carries
 first-admission birth time through tail→snapshot→successor; a bounded interval
 `BirthLedger` (8192 entries, adjacent coalescing by earliest birth) prunes at
 the retained ring head. Live-audio birth is the first capture acceptance,
-preserved across retry; contiguous silence arriving as PCM does not itself
-allow catch-up. Retained recovery-tail frames have a strict 28s maximum capture
+preserved across retry; catch-up is driven only by the bytes the tail holds,
+never by elapsed time, so contiguous silence arriving as PCM is drained like
+any other audio and earns no credit. Retained recovery-tail frames have a strict 28s maximum capture
 age: expired cuts are metered, queued writes already past that age reject as
 `capacity_full`, and intervals older than the bound are retired and metered
 once rather than replayed again. Stalls or repeated failures do not promise
@@ -421,7 +499,8 @@ Metrics use only bounded source/successor families (`parakeet`, `modulate`,
 first post-scrape event is visible to `increase()`/`rate()`:
 `omi_stt_replay_wall_seconds`, `omi_stt_replay_audio_seconds_total`,
 `omi_stt_replay_queue_high_water`, `omi_stt_replay_skipped_seconds_total`,
-`omi_stt_replay_successor_closed_total`, plus
+`omi_stt_replay_successor_closed_total`,
+`omi_stt_live_tail_catchup_seconds_total{successor}`, plus
 `omi_stt_recovery_attempts_total{source,successor}` on each real recovery dial
 and `omi_live_session_terminal_after_text_total{provider}` once when a session
 delivered text and still terminated on an STT failure. The wall histogram
@@ -458,8 +537,83 @@ would advance the anchor by less than one 6-second pace. Earlier windows keep
 their sentence boundary, and windows with enough progress still hold the last
 segment. This extends the forced cut already used for one unfinished segment.
 Fallback logs keep `reason=capacity_full` and add a bounded `subtype` of
-`buffer_cap`, `replay_ring_cap`, or `admission` (or `unknown`); the shared
-fallback metric gains no new label.
+`buffer_cap`, `admission`, or `queue_timeout` (or `unknown`); the shared
+fallback metric gains no new label. A capture replay ring that outgrows its
+90-second horizon before the leg emits is session-local replay lag, not
+provider capacity: it fails over with its own bounded reason
+`replay_ring_overflow` (formerly `capacity_full` subtype `replay_ring_cap`),
+so capacity alerts and dashboards do not count it, and it is censored from
+provider health like other session causes.
+
+A long-silence stranded flush is the last POST a quiet span selects. When its
+answer carries text whose TDT timestamps fall in the silence envelope added to
+the short fragment (dropped as `timestamp_beyond_window`), the leg settles that
+fragment like an answered-empty one: when nothing was emitted the POST anchor
+stays, its PCM remains context for the next window, and its replay copy ages
+out only at the natural ring horizon. When some text was placed, the existing
+beyond-window anchoring applies and the remainder is accounted the same way. Before 2026-10-19 the anchor waited for a repost that no job
+would select, so ~90 s of near-silence overflowed the ring into failover (prod
+signature `posts_since_anchor=1 empty_posts_since_anchor=0 cut_pending=1
+post_in_flight=0`). `omi_stt_window_stranded_flushes_total{outcome="settled_unplaced"}`
+counts these settlements. `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED`
+(default on; `false` is the kill switch) restores the held anchor.
+
+Non-window replacement legs (Soniox, Modulate) inherit the session's replay
+obligation once a demand-eligible session starts the window ring. They have no
+POST anchor: any VAD-positive chunk (noise, a cough, hangover) extends their
+tracked speech, and only text segments that carry a capture end sample advance
+their emitted boundary. Before 2026-10-20 a blip the provider correctly ignored
+held the ring until it overflowed into a `replay_ring_overflow` failover
+(about 110–120 per 10 min in prod, 75% Soniox, 25% Modulate). Placement alone
+cannot fix this: in prod about 62% of Soniox segments are refused as
+`outside_accepted_sends`/`after_last_send` and carry no capture end, while
+Modulate utterances are placed (8,311 mapped versus 80 refused per hour on
+2026-10-20). Now, when the ring would overflow, the leg settles capture older
+than the ring horizon like an answered-empty window if all of these hold: the
+leg is serving, the provider owes no output (`has_pending_provider_output()`:
+Soniox has no non-final or unflushed final token; Modulate has no buffered
+partial, which only a text utterance or drain flush emits), and every speech or
+replayed send before the horizon is at least 15 s old, so a replay the provider
+has not answered keeps its obligation even where this leg's VAD scores it
+silent. Providers without that hook keep the old behavior.
+Speech inside the horizon stays pending and ages out at the ring horizon.
+`omi_stt_nonwindow_replay_settles_total{provider}` counts settle episodes.
+`LISTEN_NONWINDOW_REPLAY_SETTLE_ENABLED` (default on; `false`/`0`/`off` is the
+kill switch) restores overflow failover. A non-window overflow's diagnostics
+line adds `leg=nonwindow speech_unemitted_seconds text_segments
+placed_text_segments provider_output_pending` (`-1` when the provider has no
+hook).
+
+Active Soniox transcription still overflowed: on 2026-10-20 overflow lines
+showed a median 224 text segments but 11 placed, last text 2.9 s earlier,
+`provider_output_pending=1`, and about 85 s of speech unaccounted. Soniox
+finalizes tokens in stream order within seconds, so any final text now
+accounts every tracked speech or replayed send older than the 15 s grace,
+placed or not. Only the unresolved-speech boundary moves: ring retention, the
+replay anchor and the settle rule above are unchanged, and Modulate keeps the
+placed-text rule. `LISTEN_NONWINDOW_EMITTED_TEXT_ACCOUNTING_ENABLED` (default
+on) is the kill switch.
+
+A replay overflow is session-local. The provider that overflowed is excluded
+from the replacement selection it triggers, then re-admitted once a successor
+is adopted, so that successor's next ordinary death can return to it.
+Without this, a session whose healthy Soniox leg overflowed later exhausted
+with no candidate whenever Modulate was benched and the window was full. Any
+later provider-evidence death of that family keeps it excluded, and the
+recovery dial ledger and episode cap still bound re-dials.
+`LISTEN_SESSION_LOCAL_EXCLUSION_RELEASE_ENABLED` (default on) is the kill
+switch; `omi_stt_session_local_exclusion_releases_total{provider}` counts
+releases.
+
+`stt_selection` hops: a chain whose origin route was skipped without a dial
+reports why (`session_excluded`, `recovery_budget`, `circuit_open`,
+`capacity_full`, `policy`, `unconfigured`, `last_resort`). Previously the
+chain's `circuit_open` sentinel went through the live reason vocabulary and
+came out as `connection_lost`. That made recovery chains that skipped a
+session-excluded Soniox the largest untyped exhaustion bucket
+(`soniox->unavailable`, 454 of 489 Soniox selection `connection_lost` lines
+with no Soniox dial). An exhausted chain also logs
+`live_stt_chain_exhausted origin= reason= skips=family:cause,...`.
 Growing windows re-post overlapping context. A minimum 6 s interval between
 POST starts bounds sustained requests to eight per listen pod per 6 s, with
 up to 216–320 synchronized sessions fleet-wide at the current pod count.
@@ -468,7 +622,41 @@ remain in series; allocation 0 sends no window traffic. Monitor real traffic
 before every increase because local memory headroom does not prove GPU
 throughput or transcript quality.
 
-A 503 or a timeout on an *acquired* POST kills the window leg, releases
+`PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` defaults on. For the internal HTTP
+family endpoint, each live-window POST selects a fresh DNS-ready GPU IP from
+the existing pressure poller. A 5xx, transport error, malformed response, or
+acquired POST timeout quarantines only that GPU in this listener process for
+120 seconds, then 240, capped at 300. One half-open POST may probe each pod;
+a valid model response heals it. Stale completions cannot heal a newer fault.
+Failed/cancelled probes release their admission. Disappeared DNS identities
+are removed and the table is capped at 64 pods. Account conditions still use
+the existing family/account breaker.
+
+Before vendor failover, one other ready pod may receive the same PCM. The
+first attempt reserves half the original POST budget for this retry; neither
+the eight-second total budget nor the existing first-text deadline expands.
+An empty response gets one alternate-pod retry per empty episode; another
+empty remains visible and never quarantines a GPU. Text resets the empty
+retry allowance. Retries never advance the PCM/replay anchor or emit either
+attempt separately. Queue-timeout capacity refusals, local semaphore waits,
+auth/quota, rate limits, and bad input never retry. No ready unbenched pod
+means normal bounded failover, with no family-wide selection quarantine.
+When fresh discovery alone is unavailable, an already active direct-pod leg
+may make one VIP POST only if the pressure owner's public admission check
+still permits its bounded cached grace. This never routes to stale IPs or
+bypasses known pod quarantines, never retries the VIP, and never renews the
+grace timestamp. `service_*` attempt outcomes expose that degraded transport.
+`omi_stt_window_replica_attempts_total{outcome}` counts actual attempts,
+including failed/empty ones; successful recovery also emits `omi_fallback_total`.
+Monitor these with first-text p95, no-text outcomes and vendor failovers.
+
+Rollback: set `PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED=false` (also `0/off`).
+New sockets restore service-VIP routing and the historical behavior below.
+TLS/custom endpoints and sockets without a fresh discovery inventory retain
+that behavior; admission still owns whether a window may start. No Modulate
+credential, quota or account-bench settings change.
+
+With replica recovery disabled, a 503 or a timeout on an *acquired* POST kills the window leg, releases
 admission, and opens the Parakeet serve-error circuit (existing default 180
 seconds). A malformed 200, HTTP 413, or a timeout spent waiting on the shared
 STT semaphore is session-local: the leg dies, the process circuit does not.
@@ -645,6 +833,13 @@ headline session-outcome page below.
 - `omi_stt_provider_circuit_open{provider,kind=selection|account}` — per-pod
   mirror of the process-local breakers; sum across the listen job for "pods
   with this provider benched".
+- `omi_stt_provider_circuit_trip_total{provider,kind,error_class,reason}` —
+  actual transitions into open, retaining the detailed bounded `error_class`.
+  `reason` groups causes as `auth|quota|5xx|latency|no_text|connect`; `capacity`
+  and `unknown` prevent pressure or missing evidence being called an outage.
+  Existing queries that sum by provider/kind/error_class continue to work
+  across mixed old/new listener revisions; do not require `reason` until all
+  receiving traffic reports it. Adding the label does not alter admission.
 - `omi_stt_provider_retired{provider}` — deployment config
   (`STT_RETIRED_PROVIDERS`, default `deepgram` per the 2026-09 cost ruling:
   hosted Deepgram is intentionally unfunded). The per-provider budget page

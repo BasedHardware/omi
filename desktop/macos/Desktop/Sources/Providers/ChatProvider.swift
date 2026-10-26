@@ -1311,12 +1311,23 @@ class ChatProvider: ObservableObject {
   @Published var claudeAuthUrl: String?
   /// Prevent duplicate browser launches for the same explicit User Claude flow.
   private var claudeAuthLaunchRequested = false
+  /// When Settings' Connect Claude last asked the runtime for a sign-in URL.
+  private var claudeConnectRequestedAt: Date?
   /// The current process has observed a successful explicit OAuth callback.
   /// Passive settings refreshes must not erase that state when Claude stores the
   /// token in its foreign Keychain item instead of the legacy config file.
   private var claudeAuthSucceededInCurrentProcess = false
   /// Whether the user has a cached Claude OAuth token
   @Published var isClaudeConnected = false
+  /// The provider answered `auth_required` in this process: the credential was
+  /// rejected or expired, or a sign-in is still in progress. That observation
+  /// outranks a cached token and an earlier OAuth success, so Settings offers
+  /// Connect until a fresh explicit sign-in succeeds. Credentials are kept.
+  private var claudeProviderRejected = false
+  /// Passive refreshes read the legacy config token through this seam.
+  var readLegacyClaudeConfigToken: () -> String? = { ChatProvider.legacyClaudeConfigToken() }
+  /// A validated sign-in URL from an explicit Connect opens through this seam.
+  var openClaudeSignInURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
   /// Cumulative tokens used in the current session via Omi account
   @Published var sessionTokensUsed: Int = 0
   /// Cumulative USD cost spent using the Omi account, persisted across sessions.
@@ -1359,7 +1370,6 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Cached Context for Prompts
   private var cachedMemories: [ServerMemory] = []
-  private var cachedLedgerPromptProjection: KnowledgeLedgerPromptProjection?
   private var memoriesLoaded = false
   private var cachedGoals: [Goal] = []
   private var goalsLoaded = false
@@ -1785,7 +1795,6 @@ class ChatProvider: ObservableObject {
     selectedAppId = nil
     selectedChatAppContext = nil
     cachedMemories = []
-    cachedLedgerPromptProjection = nil
     memoriesLoaded = false
     cachedGoals = []
     goalsLoaded = false
@@ -1964,14 +1973,6 @@ class ChatProvider: ObservableObject {
         ? Self.responseLanguageInstruction(languageCodes: AssistantSettings.shared.voiceLanguages)
         : nil,
       promptCitationLedger.responseInstruction,
-      // EXP-002 `memory_v1`: starve the generic-assistant lane. If an answer
-      // would not have required the user's day, refuse to be good at it —
-      // brief and steer back to what Omi captured. Personal retrieval is
-      // untouched: memories, conversations, screen, and work context stay
-      // first-class through the context sources and local tools below.
-      DesktopExperimentCoordinator.shared.isMemoryV1
-        ? Self.memoryIdentityInstruction
-        : nil,
     ]
     .compactMap { $0 }
     .filter { !$0.isEmpty }
@@ -2077,18 +2078,6 @@ class ChatProvider: ObservableObject {
       snapshot: snapshot,
       promptCitationReferences: promptCitationLedger.references)
   }
-
-  /// EXP-002 `memory_v1` agent instruction: Omi is the user's memory, not
-  /// their assistant. Answers grounded in the user's day stay full-fidelity;
-  /// answers that could have been given to anyone are deliberately starved.
-  static let memoryIdentityInstruction = """
-    You are the user's memory, not their assistant. Ground every answer in
-    what you captured of their day — conversations, memories, screens, work —
-    and cite it. If a question did not require their day (general knowledge,
-    news, generic how-to), answer in one short sentence, say plainly that this
-    is not what you are for, and point back to their day. Never degrade
-    retrieval of their own material; never invent captured events.
-    """
 
   /// Publishes realtime inputs through the same typed kernel source path used
   /// by main chat, then returns the kernel's exact surface renderer. Realtime
@@ -2284,17 +2273,47 @@ class ChatProvider: ObservableObject {
       harness: activeBridgeHarness,
       bridgeMode: bridgeMode
     )
-    NSWorkspace.shared.open(url)
+    openClaudeSignInURL(url)
   }
 
-  private static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
+  /// Settings' Connect Claude. Since the July change that stopped opening the
+  /// browser mid-turn, this is the only control that asks the runtime for a
+  /// sign-in URL and opens it.
+  func connectClaude() async {
+    guard isUserClaudeMode else { return }
+    guard await ensureBridgeStarted() else {
+      errorMessage = "Unable to start Claude sign-in. Try again."
+      return
+    }
+    claudeConnectRequestedAt = Date()
+    await resolvedAgentClient().requestProviderAuth()
+  }
+
+  /// The runtime answers Connect within a second or two. A request it never answered
+  /// must not let a later, unrelated `auth_required` open the browser.
+  nonisolated static let claudeConnectAnswerWindow: TimeInterval = 30
+
+  /// A turn's `auth_required` never opens the browser by itself; only a recent Connect does.
+  nonisolated static func opensClaudeSignIn(connectRequestedAt: Date?, now: Date, authUrl: String?) -> Bool {
+    guard let connectRequestedAt, authUrl != nil else { return false }
+    return now.timeIntervalSince(connectRequestedAt) <= claudeConnectAnswerWindow
+  }
+
+  nonisolated static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
     if isUserClaudeMode {
       return "Claude sign-in is required. Reconnect Claude, then try again."
     }
-    return "This chat uses Claude and needs sign-in. Start a new chat with Omi AI or reconnect Claude in Settings."
+    // The chat-first shell has no "new chat": clearing is what moves this chat to the selected provider.
+    return "This chat uses Claude and needs sign-in. Clear the chat to switch to your selected AI provider, "
+      + "or reconnect Claude in Settings."
   }
 
-  private func handleClaudeAuthRequired(methods: [[String: Any]], authUrl: String?) {
+  func handleClaudeAuthRequired(methods: [[String: Any]], authUrl: String?) {
+    // Claude is not authenticated right now. Expose Connect without signing out
+    // of Omi or deleting the Claude credential, and never open the browser here.
+    claudeProviderRejected = true
+    claudeAuthSucceededInCurrentProcess = false
+    isClaudeConnected = false
     // A fresh bridge-issued authorization URL represents a new OAuth
     // attempt (for example after the bounded callback timeout). Reset the
     // launch latch so a retry can open the new URL, while duplicate events
@@ -2306,6 +2325,13 @@ class ChatProvider: ObservableObject {
     claudeAuthUrl = authUrl
     // Provider auth is distinct from the Pro upgrade sheet.
     isClaudeAuthRequired = false
+    let opensSignIn = Self.opensClaudeSignIn(
+      connectRequestedAt: claudeConnectRequestedAt, now: Date(), authUrl: authUrl)
+    if authUrl != nil { claudeConnectRequestedAt = nil }
+    if opensSignIn {
+      claudeAuthLaunchRequested = false
+      startClaudeAuth()
+    }
 
     let sessionAdapterId = activeChatTelemetryAttempt?.attempt.resolvedSessionAdapterId
     AnalyticsManager.shared.providerAuthRequired(
@@ -2316,7 +2342,7 @@ class ChatProvider: ObservableObject {
     )
   }
 
-  private func handleClaudeAuthSuccess() {
+  func handleClaudeAuthSuccess() {
     isClaudeAuthRequired = false
     claudeAuthLaunchRequested = false
     claudeAuthUrl = nil
@@ -2331,15 +2357,19 @@ class ChatProvider: ObservableObject {
   /// Keychain item. The bridge owns that credential and the success event is
   /// the authoritative signal for this process.
   func markClaudeAuthSucceeded() {
+    claudeProviderRejected = false
     claudeAuthSucceededInCurrentProcess = true
     isClaudeConnected = true
   }
 
+  /// A provider rejection observed in this process wins over a cached token and an
+  /// earlier OAuth success; only a later verified sign-in clears it.
   nonisolated static func claudeConnectionStatus(
     configToken: String?,
-    explicitAuthSucceeded: Bool
+    explicitAuthSucceeded: Bool,
+    providerRejected: Bool
   ) -> Bool {
-    explicitAuthSucceeded || (configToken?.isEmpty == false)
+    !providerRejected && (explicitAuthSucceeded || (configToken?.isEmpty == false))
   }
 
   nonisolated static func validatedClaudeOAuthURL(_ urlString: String?) -> URL? {
@@ -2394,19 +2424,21 @@ class ChatProvider: ObservableObject {
   func checkClaudeConnectionStatus() {
     // Check the legacy config file, but preserve a successful explicit OAuth
     // event when the current Claude flow stores credentials only in Keychain.
-    let configPath = NSString(string: "~/Library/Application Support/Claude/config.json").expandingTildeInPath
-    var configToken: String?
-    if FileManager.default.fileExists(atPath: configPath),
-      let data = FileManager.default.contents(atPath: configPath),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let tokenCache = json["oauth:tokenCache"] as? String
-    {
-      configToken = tokenCache
-    }
+    // A rejection observed since then still wins over both.
     isClaudeConnected = Self.claudeConnectionStatus(
-      configToken: configToken,
-      explicitAuthSucceeded: claudeAuthSucceededInCurrentProcess
+      configToken: readLegacyClaudeConfigToken(),
+      explicitAuthSucceeded: claudeAuthSucceededInCurrentProcess,
+      providerRejected: claudeProviderRejected
     )
+  }
+
+  nonisolated static func legacyClaudeConfigToken() -> String? {
+    let configPath = NSString(string: "~/Library/Application Support/Claude/config.json").expandingTildeInPath
+    guard FileManager.default.fileExists(atPath: configPath),
+      let data = FileManager.default.contents(atPath: configPath),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return nil }
+    return json["oauth:tokenCache"] as? String
   }
 
   /// Disconnect from Claude: clear OAuth token, switch back to free mode via serialized path
@@ -2470,12 +2502,8 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Load Context (Memories)
 
-  /// Loads prompt knowledge on every turn. The canonical path activates only
-  /// from an owner-pinned dedicated server receipt; any disabled/unknown
-  /// rollout, kill switch, incomplete migration, mixed schema, or auth race
-  /// retains the released local-cache behavior for rollback compatibility.
+  /// Loads prompt knowledge from the released local memory and profile stores.
   private func refreshMemoriesForPrompt() async {
-    cachedLedgerPromptProjection = nil
     do {
       cachedMemories = try await MemoryStorage.shared.getLocalMemories(limit: 50)
       memoriesLoaded = true
@@ -2485,59 +2513,11 @@ class ChatProvider: ObservableObject {
       // Continue without memories - non-critical
     }
 
-    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
-      await loadAIProfileIfNeeded()
-      return
-    }
-    do {
-      let snapshot = try await APIClient.shared.getKnowledgeLedgerPromptSnapshot(
-        authorizationSnapshot: authorization)
-      guard snapshot.isAuthoritative else {
-        await loadAIProfileIfNeeded()
-        return
-      }
-      Task {
-        do {
-          _ = try await KnowledgeLedgerMirrorCoordinator.shared.sync(
-            authorizationSnapshot: authorization)
-        } catch {
-          log("ChatProvider: exhaustive ledger mirror convergence deferred")
-        }
-      }
-      let projection = KnowledgeLedgerPromptProjection(
-        memories: snapshot.memories,
-        hasAuthoritativeSnapshot: true)
-      guard projection.isCompleteLedgerSnapshot else {
-        log("ChatProvider: canonical ledger prompt snapshot rejected as incomplete or mixed-version")
-        await loadAIProfileIfNeeded()
-        return
-      }
-      try await MemoryStorage.shared.syncAuthoritativeKnowledgeLedgerSnapshot(
-        snapshot.memories,
-        authorizationSnapshot: authorization)
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
-      cachedLedgerPromptProjection = projection
-      // Authoritative empty and non-empty ledgers both replace the independent
-      // synthesized profile. Mark it reloadable so a later flag-off or stale
-      // receipt can intentionally restore compatibility on the next turn.
-      cachedAIProfile = ""
-      aiProfileLoaded = false
-      log("ChatProvider: adopted authoritative ledger prompt snapshot (\(snapshot.memories.count) rows)")
-    } catch {
-      logError("ChatProvider: authoritative ledger prompt refresh failed closed", error: error)
-      await loadAIProfileIfNeeded()
-    }
+    await loadAIProfileIfNeeded()
   }
 
   /// Formats cached memories into a string for the prompt
   private func formatMemoriesSection(citations: ChatPromptCitationLedger) -> String {
-    if let projection = cachedLedgerPromptProjection,
-      let rendered = projection.render(
-        userName: AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.givenName,
-        marker: { citations.marker(kind: .memory, sourceID: $0) })
-    {
-      return "<user_facts>\n\(rendered)</user_facts>"
-    }
     guard !cachedMemories.isEmpty else { return "" }
 
     let userName = AuthService.shared.displayName.isEmpty ? "the user" : AuthService.shared.givenName
@@ -2558,16 +2538,14 @@ class ChatProvider: ObservableObject {
     additionalSources: [ChatPromptCitationSource] = []
   ) -> ChatPromptCitationLedger {
     let formatter = ISO8601DateFormatter()
-    var sources =
-      cachedLedgerPromptProjection?.citationSources
-      ?? cachedMemories.prefix(30).map {
-        ChatPromptCitationSource(
-          kind: .memory,
-          sourceID: $0.id,
-          title: $0.headline ?? "Memory",
-          preview: $0.content,
-          createdAt: formatter.string(from: $0.createdAt))
-      }
+    var sources = cachedMemories.prefix(30).map {
+      ChatPromptCitationSource(
+        kind: .memory,
+        sourceID: $0.id,
+        title: $0.headline ?? "Memory",
+        preview: $0.content,
+        createdAt: formatter.string(from: $0.createdAt))
+    }
     if includesLegacyGoals {
       sources.append(
         contentsOf: cachedGoals.filter(\.isActive).map {
@@ -2692,11 +2670,6 @@ class ChatProvider: ObservableObject {
 
   /// Fetches the latest AI-generated user profile from local database
   private func loadAIProfileIfNeeded() async {
-    guard promptKnowledgeSelection.shouldLoadLegacyAIProfile else {
-      cachedAIProfile = ""
-      aiProfileLoaded = false
-      return
-    }
     guard !aiProfileLoaded else { return }
 
     if let profile = await AIUserProfileService.shared.getLatestProfile() {
@@ -2708,11 +2681,9 @@ class ChatProvider: ObservableObject {
 
   /// Formats AI profile into a prompt section
   private func formatAIProfileSection() -> String {
-    promptKnowledgeSelection.legacyAIProfileSection(profileText: cachedAIProfile)
-  }
-
-  private var promptKnowledgeSelection: ChatPromptKnowledgeSelection {
-    ChatPromptKnowledgeSelection(authoritativeLedger: cachedLedgerPromptProjection)
+    let trimmed = cachedAIProfile.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "" }
+    return "\n<ai_user_profile>\n\(cachedAIProfile)\n</ai_user_profile>"
   }
 
   // MARK: - Load Database Schema
@@ -3710,6 +3681,11 @@ class ChatProvider: ObservableObject {
           self.pendingAttachments.first(where: { $0.id == id })
         })
       else { return }
+
+      if attachment.isVideo, let videoURL = attachment.localFileURL {
+        await self.uploadVideoAttachment(id: id, url: videoURL, fileName: attachment.fileName, appId: appId)
+        return
+      }
 
       // For non-image files we still need bytes — load them lazily here
       // (we skipped this at add-time to keep the UI responsive).
@@ -5574,7 +5550,7 @@ class ChatProvider: ObservableObject {
       }
 
       // Preserve only a bounded error class in analytics. Raw details stay
-      // in the local log and Sentry error above.
+      // in the local error log above.
       if isOnboarding {
         let onboardingRole: String
         if !watchdogFired, !toolStallAbortFired, let explicitStopReason {
@@ -6614,9 +6590,73 @@ class ChatProvider: ObservableObject {
       return
     }
     log("Cleared default chat messages")
+    await moveClearedMainChatToSelectedProvider(surface: surface)
 
     log("Chat cleared")
     AnalyticsManager.shared.chatCleared()
+  }
+
+  /// The main chat is one long-lived session pinned to the provider it was created on, and the
+  /// chat-first shell has no "new chat", so choosing another AI Provider in Settings never reached
+  /// it. Clearing is the explicit, idle point where that choice can apply: the emptied chat adopts
+  /// the selected provider. A refused migration (a revoked turn still finishing) keeps the old one.
+  private func moveClearedMainChatToSelectedProvider(surface: AgentSurfaceReference) async {
+    let harness = bridgeHarnessOverride?.rawValue ?? activeBridgeHarness
+    guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: harness),
+      await ensureBridgeStarted()
+    else { return }
+    let session: AgentSurfaceSession
+    do {
+      session = try await resolveKernelQuerySession(surface: surface, requestedModelProfile: nil)
+    } catch {
+      logError("ChatProvider: cleared main chat could not resolve its session", error: error)
+      return
+    }
+    let client = resolvedAgentClient()
+    let modelProfile =
+      modelOverride ?? AgentRuntimeRouting.defaultModelProfile(harnessMode: harness, chatBridgeMode: bridgeMode)
+    let workingDirectory = effectiveAgentWorkingDirectory()
+    let outcome = await Self.moveSessionToSelectedProvider(
+      pinnedAdapterId: session.profile.adapterId,
+      selectedAdapterId: adapterId
+    ) {
+      try await client.migrateSessionExecutionProfile(
+        sessionId: session.sessionId,
+        expectedProfileGeneration: session.profile.profileGeneration,
+        adapterId: adapterId,
+        modelProfile: modelProfile,
+        workingDirectory: workingDirectory
+      ).profile.adapterId
+    }
+    switch outcome {
+    case .unchanged:
+      break
+    case .moved(let from, let to):
+      log("ChatProvider: cleared main chat moved from \(from) to \(to)")
+    case .refused(let error):
+      logError("ChatProvider: cleared main chat kept its pinned provider", error: error)
+    }
+  }
+
+  enum ClearedChatProviderMove {
+    case unchanged
+    case moved(from: String, to: String)
+    case refused(Error)
+  }
+
+  /// The decision behind Clear Chat's provider move: no call when the chat is already on the
+  /// selected adapter; otherwise migrate, and a refused migration leaves the pinned provider.
+  static func moveSessionToSelectedProvider(
+    pinnedAdapterId: String,
+    selectedAdapterId: String,
+    migrate: () async throws -> String
+  ) async -> ClearedChatProviderMove {
+    guard pinnedAdapterId != selectedAdapterId else { return .unchanged }
+    do {
+      return .moved(from: pinnedAdapterId, to: try await migrate())
+    } catch {
+      return .refused(error)
+    }
   }
 
   // MARK: - App Selection

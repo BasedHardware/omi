@@ -9,7 +9,11 @@ re-reading the environment, so a session never changes mode mid-flight.
 
 from __future__ import annotations
 
+from config.refactor_switches import default_off as rollout_default_off
+
 import os
+
+from config.policy.listen import current_listen_policy
 from contextvars import ContextVar
 from typing import Any
 
@@ -22,7 +26,14 @@ def recovery_enabled() -> bool:
     pinned = current_recovery_enabled.get()
     if pinned is not None:
         return pinned
-    return os.getenv(STT_FAILOVER_RECOVERY_ENV, 'false').lower() == 'true'
+    policy = current_listen_policy.get()
+    return (
+        policy.failover_recovery_enabled
+        if policy is not None
+        else rollout_default_off(
+            STT_FAILOVER_RECOVERY_ENV, os.getenv(STT_FAILOVER_RECOVERY_ENV, 'false').lower() == 'true'
+        )
+    )
 
 
 def session_recovery_enabled(owner: Any) -> bool:

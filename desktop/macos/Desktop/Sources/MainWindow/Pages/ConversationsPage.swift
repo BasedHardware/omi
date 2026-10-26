@@ -1,3 +1,4 @@
+import Combine
 import OmiTheme
 import SwiftUI
 
@@ -13,6 +14,7 @@ enum ConversationSearchResultFilter {
     starredOnly: Bool,
     date: Date?,
     folderId: String?,
+    includeDiscarded: Bool = false,
     calendar: Calendar = .current
   ) -> [ServerConversation] {
     let dateRange: (start: Date, end: Date)? = date.flatMap { selectedDate in
@@ -22,6 +24,7 @@ enum ConversationSearchResultFilter {
     }
 
     return conversations.filter { conversation in
+      if conversation.deleted || (!includeDiscarded && conversation.discarded) { return false }
       if starredOnly && !conversation.starred { return false }
       if let folderId, conversation.folderId != folderId { return false }
       if let dateRange {
@@ -49,6 +52,11 @@ struct ConversationsPage: View {
   var onDiscussInChat: ((ServerConversation) -> Void)? = nil
   var onOpenLinkedTask: ((String) -> Void)? = nil
   @ObservedObject private var automation = ConversationDetailAutomationState.shared
+  @AppStorage(DefaultsKey.meetingMemoryBriefsEnabled.rawValue) private var meetingMemoryBriefsEnabled = false
+  @AppStorage(DefaultsKey.meetingMemoryBriefDismissedKey.rawValue) private var dismissedMeetingBriefKey = ""
+  @State private var meetingBrief: MeetingMemoryBrief?
+  @State private var meetingBriefOwner: RuntimeOwnerAuthorizationSnapshot?
+  @State private var meetingBriefLoadGeneration = 0
 
   /// When true, renders without internal ScrollViews (for embedding in an outer ScrollView)
   var embedded: Bool = false
@@ -165,6 +173,15 @@ struct ConversationsPage: View {
         }
         consumePendingAutomationOpenConversation()
       }
+      .task(id: meetingMemoryBriefsEnabled) {
+        await refreshMeetingBrief()
+      }
+      .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        Task { await refreshMeetingBrief() }
+      }
+      .onReceive(Timer.publish(every: 300, on: .main, in: .common).autoconnect()) { _ in
+        Task { await refreshMeetingBrief() }
+      }
       .onReceive(automation.$pendingOpenRequest.compactMap { $0 }) { _ in
         consumePendingAutomationOpenConversation()
       }
@@ -202,6 +219,9 @@ struct ConversationsPage: View {
         isMerging = false
         mergeError = nil
         isLiveTranscriptExpanded = false
+        meetingBriefLoadGeneration += 1
+        meetingBrief = nil
+        meetingBriefOwner = nil
       }
       .onReceive(appState.$conversations) { conversations in
         guard let selectedConversation,
@@ -209,6 +229,9 @@ struct ConversationsPage: View {
         else { return }
         guard Self.shouldReplaceSelectedConversation(selectedConversation, with: refreshed) else { return }
         self.selectedConversation = refreshed
+      }
+      .onReceive(appState.conversationRestored) { restored in
+        searchResults = searchResults.map { $0.id == restored.id ? restored : $0 }
       }
       .dismissableSheet(isPresented: $showCreateFolderSheet) {
         FolderFormSheet(folder: nil, onDismiss: { showCreateFolderSheet = false })
@@ -376,6 +399,10 @@ struct ConversationsPage: View {
         isLiveTranscriptExpanded = false
       }
     }
+    .onChange(of: appState.showDiscardedConversations) { _, _ in
+      searchResults = []
+      if !searchQuery.isEmpty { performSearch(query: searchQuery) }
+    }
     // A row that becomes hidden behind its event's row must not stay selected for
     // a merge or delete the user can no longer see.
     .onChange(of: collapsedAwayConversationIds) { _, hidden in
@@ -433,6 +460,29 @@ struct ConversationsPage: View {
           .transition(.opacity)
       }
 
+      if let meetingBrief, meetingMemoryBriefsEnabled, !appState.isLiveCapturing,
+        !appState.isFinalizingCapture, searchQuery.isEmpty, !appState.hasActiveConversationFilters,
+        !isMultiSelectMode
+      {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+          if meetingBrief.startsAt > context.date,
+            let owner = meetingBriefOwner, RuntimeOwnerIdentity.isAuthorizationCurrent(owner),
+            dismissedMeetingBriefKey != meetingBriefDismissalKey(meetingBrief, ownerID: owner.ownerID)
+          {
+            MeetingMemoryBriefCard(
+              brief: meetingBrief,
+              onOpenSource: { fact in Task { await openMeetingBriefSource(fact) } },
+              onDismiss: {
+                dismissedMeetingBriefKey = meetingBriefDismissalKey(meetingBrief, ownerID: owner.ownerID)
+              }
+            )
+            .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
+            .padding(.top, OmiSpacing.md)
+            .padding(.bottom, OmiSpacing.md)
+          }
+        }
+      }
+
       conversationListSection
     }
     .omiAnimation(.easeInOut(duration: 0.25), value: appState.isLiveCapturing)
@@ -453,6 +503,75 @@ struct ConversationsPage: View {
         }
         .glassScrollFade()
       }
+    }
+  }
+
+  private func meetingBriefDismissalKey(_ brief: MeetingMemoryBrief, ownerID: String) -> String {
+    "\(ownerID)|\(brief.eventID)|\(brief.startsAt.timeIntervalSince1970)|\(brief.sourceConversationID)"
+  }
+
+  @MainActor
+  private func refreshMeetingBrief() async {
+    meetingBriefLoadGeneration += 1
+    let generation = meetingBriefLoadGeneration
+    guard meetingMemoryBriefsEnabled,
+      let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    else {
+      meetingBrief = nil
+      meetingBriefOwner = nil
+      return
+    }
+
+    let now = Date()
+    let events = await SystemCalendarMeetingContextService.shared.upcomingAuthorizedEvents(
+      now: now, horizon: MeetingMemoryBriefComposer.leadWindow)
+    guard generation == meetingBriefLoadGeneration, RuntimeOwnerIdentity.isAuthorizationCurrent(owner),
+      !events.isEmpty
+    else {
+      if generation == meetingBriefLoadGeneration {
+        meetingBrief = nil
+        meetingBriefOwner = nil
+      }
+      return
+    }
+
+    do {
+      let conversations = try await APIClient.shared.getConversations(
+        limit: 100, statuses: [.completed],
+        startDate: now.addingTimeInterval(-MeetingMemoryBriefComposer.lookback), endDate: now,
+        authorizationSnapshot: owner)
+      guard generation == meetingBriefLoadGeneration,
+        RuntimeOwnerIdentity.isAuthorizationCurrent(owner), meetingMemoryBriefsEnabled
+      else { return }
+      meetingBrief = MeetingMemoryBriefComposer.compose(events: events, conversations: conversations, now: now)
+      meetingBriefOwner = meetingBrief == nil ? nil : owner
+    } catch {
+      // This is optional context, not a reason to interrupt the user or block Conversations.
+      guard generation == meetingBriefLoadGeneration else { return }
+      log("Meeting brief unavailable: \(type(of: error))")
+    }
+  }
+
+  @MainActor
+  private func openMeetingBriefSource(_ fact: MeetingMemoryBriefFact) async {
+    let conversationID = fact.sourceConversationID
+    guard let owner = meetingBriefOwner, RuntimeOwnerIdentity.isAuthorizationCurrent(owner),
+      meetingBrief?.sourceConversationID == conversationID, !fact.sourceSegmentIDs.isEmpty
+    else { return }
+    do {
+      let conversation = try await APIClient.shared.getConversation(
+        id: conversationID, authorizationSnapshot: owner)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner), !conversation.isLocked,
+        !conversation.discarded && !conversation.deleted
+      else { return }
+      automation.prepareCitationFocus(
+        conversationId: conversationID, transcriptSegmentIds: fact.sourceSegmentIDs)
+      selectedConversation = conversation
+    } catch {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { return }
+      OmiToastCenter.shared.notice(
+        "Couldn't open the source conversation. Try again from Conversations.",
+        systemImage: "exclamationmark.triangle")
     }
   }
 
@@ -520,7 +639,8 @@ struct ConversationsPage: View {
       searchResults,
       starredOnly: appState.showStarredOnly,
       date: appState.selectedDateFilter,
-      folderId: appState.selectedFolderId
+      folderId: appState.selectedFolderId,
+      includeDiscarded: appState.showDiscardedConversations
     )
   }
 
@@ -821,6 +941,13 @@ struct ConversationsPage: View {
 
       Section("Refine") {
         Button {
+          Task { await appState.toggleDiscardedConversations() }
+        } label: {
+          Text(appState.showDiscardedConversations ? "Hide Discarded" : "Show Discarded")
+        }
+        .accessibilityIdentifier("conversations-show-discarded")
+
+        Button {
           Task {
             isFilteringStarred = true
             await appState.toggleStarredFilter()
@@ -873,7 +1000,7 @@ struct ConversationsPage: View {
     .popover(isPresented: $showDatePicker) {
       datePickerPopover
     }
-    .help("Filter conversations by collection, starred status, or date")
+    .help("Filter conversations by collection, starred status, date, or show discarded")
     .accessibilityIdentifier("conversations-filter-menu")
   }
 
@@ -902,6 +1029,13 @@ struct ConversationsPage: View {
   private var activeConversationFilters: [PageActiveFilter] {
     var filters: [PageActiveFilter] = []
 
+    if appState.showDiscardedConversations {
+      filters.append(
+        PageActiveFilter(id: "discarded", title: "Including discarded") {
+          Task { await appState.toggleDiscardedConversations() }
+        })
+    }
+
     if appState.showStarredOnly {
       filters.append(
         PageActiveFilter(id: "starred", title: "Starred") {
@@ -928,6 +1062,7 @@ struct ConversationsPage: View {
 
   private var activeConversationFilterCount: Int {
     (appState.showStarredOnly ? 1 : 0)
+      + (appState.showDiscardedConversations ? 1 : 0)
       + (appState.selectedDateFilter == nil ? 0 : 1)
       + (appState.selectedFolderId == nil ? 0 : 1)
   }

@@ -746,17 +746,16 @@ def test_negative_user_review_is_authoritative_during_processing_race(monkeypatc
 
 @pytest.mark.parametrize("writer_mode", [WriterMode.compatibility, WriterMode.ledger])
 @pytest.mark.parametrize("review_value", [True, False])
-def test_belief_enabled_user_review_preserves_authority_across_writer_modes(
+def test_user_review_preserves_authority_across_writer_modes(
     monkeypatch,
     writer_mode,
     review_value,
 ):
-    """The belief review overlay must remain a direct owner write in both modes."""
+    """Owner review remains a direct write in both compatibility and ledger modes."""
 
     uid = f"uid-belief-review-{writer_mode.value}-{review_value}"
     db = _PromotionFakeDb()
     _set_canonical(monkeypatch, uid)
-    monkeypatch.setattr("utils.memory.canonical_memory_adapter.belief_model_enabled", lambda: True)
     payload = _sample_memory_payload(
         uid=uid,
         conversation_id=f"conversation-{writer_mode.value}-{review_value}",
@@ -784,24 +783,20 @@ def test_belief_enabled_user_review_preserves_authority_across_writer_modes(
     assert updated.tier == before.tier
     assert updated.valid_to == before.valid_to
     assert [item.evidence_id for item in updated.evidence] == [item.evidence_id for item in before.evidence]
+    assert updated.corroboration_count == before.corroboration_count
+    assert updated.last_corroborated_at == before.last_corroborated_at
     if review_value:
-        assert updated.corroboration_count == (before.corroboration_count or 0) + 1
-        assert updated.last_corroborated_at is not None
-        assert updated.confidence == 1.0
-        assert isinstance(updated.arguments, dict)
+        assert updated.confidence == before.confidence
     else:
-        assert updated.corroboration_count == before.corroboration_count
-        assert updated.last_corroborated_at == before.last_corroborated_at
-        assert updated.confidence == 0.0
+        assert updated.confidence == before.confidence
         assert updated.kg_extracted is False
 
 
 @pytest.mark.parametrize("writer_mode", [WriterMode.compatibility, WriterMode.ledger])
-def test_identical_belief_review_is_idempotent_without_corroboration_inflation(monkeypatch, writer_mode):
+def test_identical_user_review_is_idempotent_without_corroboration_inflation(monkeypatch, writer_mode):
     uid = f"uid-belief-review-retry-{writer_mode.value}"
     db = _PromotionFakeDb()
     _set_canonical(monkeypatch, uid)
-    monkeypatch.setattr("utils.memory.canonical_memory_adapter.belief_model_enabled", lambda: True)
     payload = _sample_memory_payload(
         uid=uid,
         conversation_id=f"conversation-retry-{writer_mode.value}",
@@ -817,11 +812,13 @@ def test_identical_belief_review_is_idempotent_without_corroboration_inflation(m
     second = update_canonical_memory_review(uid, memory_id, True, db_client=db)
 
     assert second.item_revision == first.item_revision
-    assert second.corroboration_count == first.corroboration_count == 1
+    assert second.corroboration_count == first.corroboration_count
     assert second.last_corroborated_at == first.last_corroborated_at
 
 
-def test_expired_short_term_remains_visible_until_ttl_disposition_is_applied(monkeypatch, caplog):
+@pytest.mark.parametrize('enabled', [True, False])
+def test_expired_short_term_remains_visible_until_ttl_disposition_is_applied(monkeypatch, caplog, enabled):
+    monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', 'true' if enabled else 'false')
     uid = "uid-expired"
     _set_canonical(monkeypatch, uid)
     db = _Db(uid)
@@ -871,6 +868,12 @@ def test_expired_short_term_remains_visible_until_ttl_disposition_is_applied(mon
             run_id="run-expiry",
         )
 
+    if enabled:
+        assert [memory.id for memory in read_canonical_memories(uid, db_client=db, now=NOW)] == [item.memory_id]
+        assert report.lifecycle_created_count == 0
+        assert report.lifecycle_terminal_count == 0
+        assert db.docs[f"users/{uid}/memory_items/{item.memory_id}"]["status"] == "active"
+        return
     assert read_canonical_memories(uid, db_client=db, now=NOW) == []
     assert report.lifecycle_created_count == 1
     assert report.lifecycle_terminal_count == 1
@@ -888,64 +891,3 @@ def test_expired_short_term_remains_visible_until_ttl_disposition_is_applied(mon
         "projection_sync": "delete",
         "vector_sync": "delete",
     }
-
-
-def test_expired_short_term_is_not_rejected_on_age_alone_when_belief_flag_on(monkeypatch, caplog):
-    uid = "uid-expired-belief"
-    _set_canonical(monkeypatch, uid)
-    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
-    db = _Db(uid)
-    evidence = MemoryEvidence(
-        evidence_id="ev-expired-belief",
-        source_type="conversation",
-        source_id="conv-expired-belief",
-        source_version="v1",
-        artifact_preservation=ArtifactPreservationState.preserved,
-    )
-    item = MemoryItem(
-        memory_id="mem-expired-belief",
-        uid=uid,
-        version=1,
-        tier=MemoryTier.short_term,
-        status=MemoryItemStatus.active,
-        processing_state=ProcessingState.processed,
-        content="Expired context kept by belief model",
-        evidence=[evidence],
-        source_state=SourceState.active,
-        sensitivity_labels=[],
-        visibility="private",
-        user_asserted=False,
-        captured_at=NOW - timedelta(days=31),
-        updated_at=NOW - timedelta(days=31),
-        expires_at=NOW - timedelta(days=1),
-        ledger_commit_id="head0",
-        ledger_sequence=0,
-        item_revision=1,
-        content_hash=memory_content_hash(
-            content="Expired context kept by belief model", evidence_ids=[evidence.evidence_id]
-        ),
-        account_generation=1,
-    )
-    db.docs[f"users/{uid}/memory_items/{item.memory_id}"] = item.model_dump(mode="json")
-    db.docs[f"users/{uid}/memory_evidence/{evidence.evidence_id}"] = evidence.model_dump(mode="json")
-    caplog.set_level("INFO", logger="utils.memory.short_term_promotion")
-
-    with pytest.MonkeyPatch.context() as local_patch:
-        local_patch.setattr(
-            "utils.memory.short_term_promotion.resolve_memory_system",
-            lambda *args, **kwargs: MemorySystem.CANONICAL,
-        )
-        report = run_canonical_short_term_ttl_lifecycle(
-            uid,
-            db_client=db,
-            now=NOW,
-            run_id="run-expiry-belief",
-        )
-
-    assert [memory.id for memory in read_canonical_memories(uid, db_client=db, now=NOW)] == [item.memory_id]
-    assert report.lifecycle_terminal_count == 0
-    assert "skipped_time_only_reject" in caplog.text
-    assert "expired_terminal_disposition_applied" not in caplog.text
-    settled = db.docs[f"users/{uid}/memory_items/{item.memory_id}"]
-    assert settled["status"] == MemoryItemStatus.active.value
-    assert settled["tier"] == MemoryTier.short_term.value

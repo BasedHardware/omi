@@ -29,6 +29,7 @@ LOCAL_NON_REST_SCHEMA_FILES = frozenset(
     {
         APP_SCHEMA_DIR / 'bt_device' / 'bt_device.dart',
         APP_SCHEMA_DIR / 'message_event.dart',  # local SSE/WS event schema, not a REST DTO
+        APP_SCHEMA_DIR / 'capture_committed_event.dart',  # exact-frame WS receipt; covered by L5 parser tests
     }
 )
 
@@ -48,6 +49,7 @@ STREAM_PROTOCOL_DECODER_FUNCTIONS = frozenset(
 NON_REST_RESPONSE_DECODER_FUNCTIONS = frozenset(
     {
         (APP_API_DIR / 'conversations.dart', 'isSyncRecoveryWindowExceededResponse'),
+        (APP_API_DIR / 'conversations.dart', 'separateConversationFromCaptureGroup'),
         (APP_API_DIR / 'speech_profile.dart', '_errorDetail'),
     }
 )

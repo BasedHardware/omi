@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
 export const dynamic = "force-dynamic";
 
@@ -8,6 +8,10 @@ export const dynamic = "force-dynamic";
 // Submitted` chart stays as the daily trend feed — PostHog has no comments,
 // so this is the read path for them. One rating doc per `{platform}_{uid}`,
 // newest-first, computed in memory (no composite index needed at this scale).
+//
+// content:read gates the page this feeds; the free-text `comment` rows are
+// private user content, stripped by the field wall (lib/sensitive-fields.ts)
+// unless the caller also holds users:read.
 
 type CsatRatingRow = {
   uid: string;
@@ -62,7 +66,7 @@ export function summarizeCsatRatings(
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "content:read");
   if (authResult instanceof NextResponse) return authResult;
   const requested = parseInt(
     request.nextUrl.searchParams.get("limit") || "500",
@@ -78,14 +82,14 @@ export async function GET(request: NextRequest) {
       .limit(limit)
       .get();
     const rows = snapshot.docs.map((d) => row(d.data()));
-    return NextResponse.json({
+    return authResult.json({
       available: true,
       ...summarizeCsatRatings(rows),
     });
   } catch (error) {
     console.error("CSAT stats error:", error);
     // Never invent zeros while claiming success.
-    return NextResponse.json({
+    return authResult.json({
       available: false,
       total: 0,
       histogram: {},

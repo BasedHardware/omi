@@ -1,6 +1,5 @@
 import AppKit
 import Foundation
-import Sentry
 
 /// Closed reason a presented notification left the screen. Auto-hide and explicit
 /// close must not share a single "dismissed" bucket — that made engagement
@@ -623,13 +622,7 @@ class AnalyticsManager {
   /// Report when ScreenCaptureKit broken state is detected (TCC granted but capture failing).
   func screenCaptureBrokenDetected() {
     guard !Self.isDevBuild else { return }
-    let breadcrumb = Breadcrumb(level: .warning, category: "screen_capture")
-    breadcrumb.message = "Screen Capture Broken Detected"
-    SentrySDK.addBreadcrumb(breadcrumb)
-    SentrySDK.capture(message: "Screen Capture Broken Detected") { scope in
-      scope.setLevel(.warning)
-      scope.setTag(value: "screen_capture_broken", key: "diagnostic")
-    }
+    log("Analytics: Screen Capture Broken Detected")
   }
 
   /// Track when user clicks reset button or notification to reset screen capture
@@ -686,32 +679,9 @@ class AnalyticsManager {
 
     if hadPreviousSession && !lastCleanExit {
       log("Analytics: Previous session did not exit cleanly — reporting crash")
-      let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
-      let attachmentURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
-        area: "crash",
-        failureClass: "unknown",
-        phase: "startup")
-      defer {
-        if let attachmentURL {
-          try? FileManager.default.removeItem(at: attachmentURL)
-        }
-      }
-      SentrySDK.capture(message: "App Crash Detected") { scope in
-        scope.setLevel(.warning)
-        scope.setTag(value: "app_crash_detected", key: "diagnostic")
-        scope.setContext(
-          value: [
-            "app_version": version,
-            "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
-          ], key: "crash")
-        if let attachmentURL {
-          scope.addAttachment(
-            Attachment(
-              path: attachmentURL.path,
-              filename: "desktop-incident-diagnostics.json",
-              contentType: "application/json"))
-        }
-      }
+      log(
+        "Analytics: App Crash Detected; version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown")"
+      )
     }
   }
 
@@ -751,14 +721,6 @@ class AnalyticsManager {
     if let timeToInteractiveMs {
       properties["time_to_interactive_ms"] = round(timeToInteractiveMs)
     }
-
-    // Also a Sentry breadcrumb so the numbers stay attached to a same-session
-    // crash report. Sentry is a per-issue view; it cannot answer "is startup
-    // getting slower across the fleet", which is why this is in PostHog too.
-    let breadcrumb = Breadcrumb(level: .info, category: "app.startup")
-    breadcrumb.message = "App Startup Timing"
-    breadcrumb.data = properties
-    SentrySDK.addBreadcrumb(breadcrumb)
 
     PostHogManager.shared.track("App Startup Timing", properties: properties)
   }
@@ -993,6 +955,7 @@ class AnalyticsManager {
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)
+    ClientTelemetryShadow.captureFloatingVoice(event)
     questionAnswered(forChatEvent: event)
     if case .failed(_, _, let errorClass, _, _, _) = event {
       DesktopDiagnosticsManager.shared.recordChatFailure(errorClass: errorClass.rawValue)
@@ -1271,6 +1234,7 @@ class AnalyticsManager {
   }
 
   func suggestionAssistantGateOutcome(_ outcome: SuggestionAssistantTelemetry.GateOutcome) {
+    guard outcome.emitsAnalytics else { return }
     let payload = SuggestionAssistantTelemetry.gateOutcomePayload(outcome)
     captureSuggestionAssistantTelemetryForTests(
       SuggestionAssistantTelemetry.gateOutcomeEventName,
@@ -1648,4 +1612,93 @@ class AnalyticsManager {
     PostHogManager.shared.track("knowledge_graph_build_failed", properties: props)
   }
 
+  // MARK: - Subscription funnel
+  //
+  // Same wire names as mobile. `Upgrade Succeeded` stays property-less because
+  // that released registry id cannot gain properties; tier and interval are on
+  // `Upgrade Succeeded Attributed`, emitted with it.
+
+  func paywallOpened(source: String, currentPlan: String) {
+    PostHogManager.shared.track(
+      "Paywall Opened",
+      properties: SubscriptionFunnelWire.paywallProperties(source: source, currentPlan: currentPlan))
+  }
+
+  func upgradePlanSelected(plan: String, billingInterval: String, source: String) {
+    PostHogManager.shared.track(
+      "Upgrade Plan Selected",
+      properties: SubscriptionFunnelWire.planSelectedProperties(
+        plan: plan, billingInterval: billingInterval, source: source))
+  }
+
+  func upgradeSucceeded(plan: String, billingInterval: String) {
+    let properties = SubscriptionFunnelWire.upgradeSucceededProperties(plan: plan, billingInterval: billingInterval)
+    PostHogManager.shared.track("Upgrade Succeeded Attributed", properties: properties)
+    PostHogManager.shared.track("Upgrade Succeeded")
+  }
+
+  func upgradeCancelled() {
+    PostHogManager.shared.track("Upgrade Cancelled")
+  }
+
+}
+
+enum SubscriptionFunnelWire {
+  static func plan(_ raw: String?) -> String {
+    switch raw?.trimmingCharacters(in: .whitespacesAndNewlines) {
+    case "free":
+      return "basic"
+    case "pro":
+      return "unknown"
+    case "basic", "plus", "unlimited", "unlimited_v2", "operator", "architect", "unknown":
+      return (raw ?? "unknown").trimmingCharacters(in: .whitespacesAndNewlines)
+    default:
+      return "unknown"
+    }
+  }
+
+  static func interval(_ raw: String?) -> String {
+    switch raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+    case "month", "monthly":
+      return "month"
+    case "year", "yearly", "annual":
+      return "year"
+    default:
+      return "unknown"
+    }
+  }
+
+  static func source(_ raw: String) -> String {
+    switch raw {
+    case "chat_quota_exceeded", "freemium_switch", "locked_conversation", "locked_memory", "chat_apps",
+      "usage_page", "transcription_settings", "unlimited_deeplink", "macos_billing", "macos_usage_limit",
+      "macos_chat_quota_banner", "windows_billing", "windows_usage_limit", "web_plans",
+      "macos_settings_view", "windows_settings_view", "unknown":
+      return raw
+    default:
+      return "unknown"
+    }
+  }
+
+  static func paywallProperties(source: String, currentPlan: String) -> [String: String] {
+    [
+      "source": self.source(source),
+      "current_plan": plan(currentPlan),
+    ]
+  }
+
+  static func planSelectedProperties(plan: String, billingInterval: String, source: String) -> [String: String] {
+    [
+      "plan": self.plan(plan),
+      "billing_interval": interval(billingInterval),
+      "source": self.source(source),
+    ]
+  }
+
+  static func upgradeSucceededProperties(plan: String, billingInterval: String) -> [String: String] {
+    [
+      "plan": self.plan(plan),
+      "billing_interval": interval(billingInterval),
+    ]
+  }
 }

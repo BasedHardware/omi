@@ -321,12 +321,45 @@ def test_detail_redirect_follows_only_live_survivor(monkeypatch: pytest.MonkeyPa
         'get_conversation',
         lambda uid, cid, **_: _rows_from_store(store).get(cid) if uid == 'u' else None,
     )
+    # Keep real redirect/owner/deletion validation; replace only the hydration
+    # leaf, just as get_conversation above replaced photo/codec IO previously.
+    monkeypatch.setattr(
+        conversations_db,
+        '_hydrate_sync_conversation_snapshot',
+        lambda uid, row, **_: _rows_from_store(store).get(row['id']) if uid == 'u' else None,
+    )
     result = routes._get_valid_conversation_by_id('u', donor_id, follow_sync_bridge=True)
     assert result['id'] == survivor_id
     assert conversations_db.resolve_sync_conversation_redirect('other', donor_id) is None
 
     store.rows[('users', 'u', 'conversations', survivor_id)]['deleted'] = True
     assert conversations_db.resolve_sync_conversation_redirect('u', donor_id) is None
+
+
+@pytest.mark.parametrize(
+    'invalid', ['path', 'cycle', 'owner', 'id', 'missing', 'user_deleted_donor', 'user_deleted_target']
+)
+def test_sync_redirect_validation_never_crosses_owner_or_user_deletion(monkeypatch, invalid):
+    from database import conversations as conversations_db
+
+    store, survivor, donor = _merge_pair()
+    monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
+    source = store.rows['users', 'u', 'conversations', donor]
+    target = store.rows['users', 'u', 'conversations', survivor]
+    if invalid == 'path':
+        source['sync_merged_into'] = 'users/other/conversations/target'
+    elif invalid == 'cycle':
+        source['sync_merged_into'] = donor
+    elif invalid == 'owner':
+        target['owner_uid'] = 'other'
+    elif invalid == 'id':
+        target['id'] = 'different'
+    elif invalid == 'missing':
+        source['sync_merged_into'] = 'missing'
+    else:
+        deleted = donor if invalid == 'user_deleted_donor' else survivor
+        store.rows['users', 'u', 'deleted_conversations', deleted] = {'deleted': True}
+    assert conversations_db.resolve_sync_conversation_redirect('u', donor) is None
 
 
 def test_budgeted_include_discarded_page_does_not_count_donor_against_limit(

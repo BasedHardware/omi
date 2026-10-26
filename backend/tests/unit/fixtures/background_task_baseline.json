@@ -1,0 +1,347 @@
+{
+  "entries": [
+    {
+      "path": "routers/sync.py",
+      "function": "_run_sync_job_attempt",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe (#22184): best-effort owner prefetch into a local cache; holds no task slot, job lock, ledger claim or conversation authority, so losing it only costs a cache miss"
+    },
+    {
+      "path": "routers/sync.py",
+      "function": "run_sync_job",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe: UID-sequencer lease heartbeat; stop.set() and awaited in finally before the response, so it never outlives the request"
+    },
+    {
+      "path": "routers/sync.py",
+      "function": "sync_local_files",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "pre-existing; unreviewed; deprecated v1: fair-use soft-cap classifier (advisory LLM) may be lost at SIGKILL"
+    },
+    {
+      "path": "routers/sync.py",
+      "function": "sync_local_files_v2",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "pre-existing; unreviewed; LIVE RISK: inline fallback (BYOK, dispatch disabled, enqueue failure) runs the full sync pipeline (STT + conversation writes) after the 202; a revision replacement kills it and recovery depends on lease expiry/retry claim"
+    },
+    {
+      "path": "services/users/account_deletion.py",
+      "function": "enqueue_deletion_wipe",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "dev/test-only inline dispatch (assert_inline_account_deletion_permitted); prod uses the durable Cloud Tasks enqueue"
+    },
+    {
+      "path": "services/users/account_deletion.py",
+      "function": "run_deletion_wipe_with_lease",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "lease-renewal heartbeat; awaited via shielded worker inside the same request (see finally: stop.set())"
+    },
+    {
+      "path": "services/users/account_deletion.py",
+      "function": "run_deletion_wipe_with_lease.run",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "lease-renewal heartbeat for the awaited wipe worker; stopped in finally"
+    },
+    {
+      "path": "utils/batch_pipeline/projection.py",
+      "function": "Projector._start_candidate",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "reviewed safe: read-only candidate hint lookup awaited by the same assignment via _parallel_candidate; if lost or unused the assignment redoes it inline, and the transaction rereads every candidate"
+    },
+    {
+      "path": "utils/batch_pipeline/projection.py",
+      "function": "Projector.schedule_index_flush",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed fail-open: deferred Typesense/people-stats convergence after durable commits; losing it at SIGKILL is the same search staleness as a Typesense outage, and any later write to the conversation reconverges it"
+    },
+    {
+      "path": "utils/batch_pipeline/projection_drain.py",
+      "function": "OwnerDrains.launch",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed recoverable: an owner drain is only a wakeup; every row it walks commits in its own fenced transaction, and unprojected rows stay pending in the durable result log for the next serving sweep after restart"
+    },
+    {
+      "path": "utils/batch_pipeline/projection_followup.py",
+      "function": "ProjectionFollowups.launch",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed recoverable: unfinished follow-ups stay in the durable projection_pending query and are re-launched by the next serving pass after restart"
+    },
+    {
+      "path": "utils/batch_pipeline/projection_prefetch.py",
+      "function": "ChainPrefetch._scout",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "reviewed safe: read-only read-ahead of immutable row inputs; the walk awaits it via take() or reads inline on any miss, and close() cancels the rest"
+    },
+    {
+      "path": "utils/batch_pipeline/projection_prefetch.py",
+      "function": "ChainPrefetch.advance",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "reviewed safe: read-only successor-link scout; nothing is written, and a lost scout only means the walk reads its own successor"
+    },
+    {
+      "path": "utils/batch_pipeline/serving.py",
+      "function": "start_serving_from_env",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "pre-existing; unreviewed; LIVE RISK: startup supervisor (not request-backed) runs reconcile(recover_quarantine=True); QuarantineRecovery.dispatch falls back to inline paid recover() on enqueue failure, and BATCH_PIPELINE_RECOVERY_TASKS_ENABLED=false restores the pre-#22149 shape"
+    },
+    {
+      "path": "utils/batch_pipeline/shadow_intake.py",
+      "function": "offer_upload",
+      "kind": "start_background_task",
+      "count": 3,
+      "why": "reviewed safe (#23003): best-effort shadow reserve, late-reserve drop and staging of private copies; legacy keeps its own paths, ledger and processing, so a loss at SIGKILL drops one shadow sample. A stranded shadow job is settled as error by the worker reaper after 1h and its control rows carry TTLs; copies live in the dying container's temp directory"
+    },
+    {
+      "path": "utils/batch_pipeline/shadow_worker.py",
+      "function": "ShadowRunner._run_idle",
+      "kind": "start_background_task",
+      "count": 3,
+      "why": "reviewed safe (#23003): shadow idle take, late-take drop and at-most-once recovery RPC; shadow work never projects, publishes or charges a user, so a loss at SIGKILL drops one sample. The reaper settles stale shadow jobs by created_at (active recovery by recovery_started_at) and paid reservations are counted before the call, so the spend cap stays conservative"
+    },
+    {
+      "path": "utils/conversations/action_item_refresh.py",
+      "function": "preserve",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/lifecycle.py",
+      "function": "processing_admission_guard",
+      "kind": "threading.Thread",
+      "count": 1,
+      "why": "reviewed safe: daemon processing-lease heartbeat stopped in finally; if killed the lease ages out and the crash-orphan sweep recovers the row"
+    },
+    {
+      "path": "utils/conversations/merge_conversations_job.py",
+      "function": "run",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Reviewed safe: renewable merge-lease heartbeat only; stop is set and the task is awaited in finally before the coordinator returns. SIGKILL leaves an indexed durable outbox job whose expired epoch reconciles; the heartbeat owns no transcript or completion side effect."
+    },
+    {
+      "path": "utils/conversations/process_conversation.py",
+      "function": "_write_action_items",
+      "kind": "submit_with_context",
+      "count": 2,
+      "why": "pre-existing; unreviewed; action-item integration auto-sync is fire-and-forget"
+    },
+    {
+      "path": "utils/conversations/process_conversation.py",
+      "function": "process_conversation._emit_derived_effects",
+      "kind": "submit_with_context",
+      "count": 5,
+      "why": "pre-existing; unreviewed; durability risk: structured vector, action items, goal progress and created webhook are fire-and-forget on postprocess_executor; the created webhook is submitted from one of two mutually exclusive sites (directly, or by the merge via created_webhook_observer once it can no longer roll back, #22415), so still at most once per run"
+    },
+    {
+      "path": "utils/conversations/process_conversation.py",
+      "function": "trigger_conversation_apps",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/enrichment/outbox.py",
+      "function": "_heartbeat",
+      "kind": "threading.Thread",
+      "count": 1,
+      "why": "reviewed safe: request-scoped CAS lease heartbeat stopped when the request exits; a lost lease cannot resurrect"
+    },
+    {
+      "path": "utils/episodes/live.py",
+      "function": "on_realtime_segments",
+      "kind": "start_background_task",
+      "count": 2,
+      "why": "reviewed safe (Episodes v1/v1.1): best-effort moment update and the structural attach on the episode overlay; neither holds conversation, task or memory authority. A moment lost at SIGKILL is re-applied by the conversation's finalization tail (record_moment over segments past the episode's applied offset), and a lost attach is redone by the next batch on any replica (the attach is idempotent) or by that moment/finalization, which opens or joins the episode itself"
+    },
+    {
+      "path": "utils/episodes/finalize.py",
+      "function": "schedule_after_finalization",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "reviewed safe (Episodes finalize): the synchronous POST /v1/conversations route's post-processing episode hook (tail notes and provisional-item reconciliation on the episode overlay), which holds no conversation, task or memory authority; the conversation, its tasks and the episode close are all committed before it is submitted. Lost at SIGKILL, the closed episode only misses its last tail bullets and that conversation's shadow items stay unreconciled; awaiting it would add a model call to the user's finalize request"
+    },
+    {
+      "path": "utils/episodes/finalize.py",
+      "function": "schedule_synced_intake_attach",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "reviewed safe (Episodes sync intake): folds a just-persisted offline-sync clip into the live episode overlay so Home hides it under the live row; holds no conversation, task or memory authority and runs after intake committed the row. Lost at SIGKILL, the clip still joins at its sync_update finalize (on_conversation_finalized -> _attach_synced), so the only cost is the old minutes-late fold; awaiting it would put episode Firestore reads on every sync segment's hot path"
+    },
+    {
+      "path": "utils/episodes/live.py",
+      "function": "on_session_end",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe (Episodes v1.1): the session-end flush is itself the recovery for an in-process buffer; if it is lost at SIGKILL the conversation's finalization tail applies the same segments past the episode's applied offset"
+    },
+    {
+      "path": "utils/llm/byok_errors.py",
+      "function": "handle_llm_error_async",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "best-effort BYOK error telemetry"
+    },
+    {
+      "path": "utils/observability/sync_phases.py",
+      "function": "_BackgroundFlush.__init__",
+      "kind": "threading.Thread",
+      "count": 1,
+      "why": "reviewed safe: metrics export thread; loss drops telemetry only"
+    },
+    {
+      "path": "utils/other/deferred_delete.py",
+      "function": "DeferredDeleter.schedule",
+      "kind": "threading.Thread",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/other/storage.py",
+      "function": "download_audio_chunks_and_merge._submit_job",
+      "kind": "executor.submit",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/other/storage.py",
+      "function": "get_or_create_merged_audio",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "reviewed safe: best-effort cache upload of merged audio; source of truth is unaffected"
+    },
+    {
+      "path": "utils/other/storage.py",
+      "function": "precache_conversation_audio",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "reviewed safe: best-effort playback cache warming"
+    },
+    {
+      "path": "utils/retrieval/agentic.py",
+      "function": "_run_routed_chat_stream",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/retrieval/rag.py",
+      "function": "retrieve_memories_for_topics",
+      "kind": "executor.submit",
+      "count": 2,
+      "why": "parallel fan-out whose futures are gathered by the caller"
+    },
+    {
+      "path": "utils/retrieval/rag.py",
+      "function": "retrieve_rag_conversation_context",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "single bounded prefetch submit; result consumed downstream"
+    },
+    {
+      "path": "utils/speaker_learning_jobs.py",
+      "function": "schedule_person_voice_learning_retry",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/speaker_learning_jobs.py",
+      "function": "schedule_reprocessed_learning",
+      "kind": "BackgroundTasks.add_task",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_health.py",
+      "function": "FleetHealth._drain_pending_benches.launch",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_health.py",
+      "function": "FleetHealth.schedule.launch",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/provider_resilience.py",
+      "function": "_register_published_breaker",
+      "kind": "threading.Thread",
+      "count": 1,
+      "why": "reviewed safe: circuit gauge refresh daemon; telemetry only"
+    },
+    {
+      "path": "utils/stt/soniox_usage.py",
+      "function": "start_if_configured",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe: telemetry-only vendor sample; losing it only leaves the gauge stale and has no listen-request or admission effect"
+    },
+    {
+      "path": "utils/sync/pipeline.py",
+      "function": "_reprocess_conversation_after_update",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/sync/pipeline.py",
+      "function": "_run_full_pipeline_background_async",
+      "kind": "start_background_task",
+      "count": 2,
+      "why": "pre-existing; unreviewed; one site is the inline lease heartbeat (awaited in finally, safe); the other is the fair-use soft-cap classifier (advisory LLM)"
+    },
+    {
+      "path": "utils/sync/playback.py",
+      "function": "_get_audio_urls_inline",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "reviewed safe: best-effort playback cache warming"
+    },
+    {
+      "path": "utils/sync/playback.py",
+      "function": "_run_parallel_precache",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/sync/playback.py",
+      "function": "precache_audio_files",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "reviewed safe: best-effort playback cache warming"
+    },
+    {
+      "path": "utils/sync/wal_audio_coverage.py",
+      "function": "_submit_orphan_cleanup",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "reviewed safe: deletes local temp files that die with the instance anyway"
+    },
+    {
+      "path": "utils/task_intelligence/candidate_service.py",
+      "function": "_dispatch_task_integration",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    }
+  ]
+}

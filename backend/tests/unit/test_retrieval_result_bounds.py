@@ -52,14 +52,22 @@ class TestCapItemsForLlm:
     def test_empty_list(self):
         assert rb.cap_items_for_llm([], 300) == ([], 0, False)
 
+    def test_zero_or_negative_max_items_returns_empty_without_negative_slicing(self):
+        assert rb.cap_items_for_llm([1, 2, 3], 0) == ([], 3, True)
+        assert rb.cap_items_for_llm([1, 2, 3], -1) == ([], 3, True)
+        assert rb.cap_items_for_llm([], -5) == ([], 0, False)
+
+    def test_none_items_returns_empty(self):
+        assert rb.cap_items_for_llm(None, 10) == ([], 0, False)
+
 
 class TestBoundedResult:
-    def test_truncated_appends_summarize_and_narrow_note(self):
+    def test_truncated_note_does_not_claim_relevance_or_absence(self):
         out = rb.bounded_result("User Memories (300 shown):\n- a fact", True, noun="memories")
         # No definitive total is claimed (the page length is not the true total); it says more may exist.
         assert "more may exist" in out
-        assert "most relevant memories" in out
-        assert "Summarize what is shown" in out
+        assert "most relevant" not in out
+        assert "omitted data is not evidence of absence" in out
         assert "narrower" in out
 
     def test_not_truncated_short_result_unchanged(self):
@@ -70,8 +78,20 @@ class TestBoundedResult:
         big = "x" * (rb.MAX_RESULT_CHARS + 5000)
         out = rb.bounded_result(big, False, noun="memories")
         assert len(out) <= rb.MAX_RESULT_CHARS + 400  # budget plus the appended note
-        assert "Summarize what is shown" in out
+        assert "omitted data is not evidence of absence" in out
 
     def test_default_noun(self):
         out = rb.bounded_result("body", True)
-        assert "most relevant results" in out
+        assert "more may exist" in out
+        assert "most relevant" not in out
+
+    def test_none_or_non_string_result_is_coerced_safely(self):
+        assert rb.bounded_result(None, False) == ""
+        out_none_trunc = rb.bounded_result(None, True, noun="items", shown=0)
+        assert "0 items" in out_none_trunc
+        assert rb.bounded_result(12345, False) == "12345"
+
+    def test_negative_shown_is_clamped_to_zero(self):
+        out = rb.bounded_result("some text", True, noun="memories", shown=-3)
+        assert "0 memories" in out
+        assert "-3 memories" not in out

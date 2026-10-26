@@ -18,13 +18,16 @@ import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/providers/native_link_reconciler.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
@@ -38,6 +41,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
+import 'package:uuid/uuid.dart';
 import 'package:omi/ui/feedback/omi_dialogs.dart';
 
 typedef BleDiagnosticsLoader = Future<BleDeviceDiagnostics> Function(String deviceId);
@@ -61,6 +65,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
 
+  /// Whether the app remembers any device, including before [getDeviceInfo] hydrates
+  /// [pairedDevice] on the connect path. A cold start with a pendant that never reconnects
+  /// still has the persisted pairing in `SharedPreferencesUtil().btDevice`.
+  bool get hasRememberedDevice => pairedDevice?.id.isNotEmpty ?? SharedPreferencesUtil().btDevice.id.isNotEmpty;
+
   /// Capability-normalized identity for capture/home restarts.
   ///
   /// `getDeviceInfo()` reclassifies image-stream hardware as
@@ -77,6 +86,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   DateTime? _deviceSessionStartedAt;
+  String? _deviceSessionOperationId;
   final BleDiagnosticsLoader _bleDiagnosticsLoader;
   final FindDeviceRunner _findDeviceRunner;
   final Future<DeviceConnection?> Function(String) _chargingConnectionLoader;
@@ -144,6 +154,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// coordinator wake, and capture streaming must use this token, not
   /// `_sessionGeneration` at callback time. -1 means no admitted connect.
   int _admittedConnectGeneration = -1;
+  late final NativeLinkReconciler nativeLink = NativeLinkReconciler(this);
+  (DeviceConnection, int)? _admittedLink;
+  // When a resume reconcile arms a readoption, admissions for that device are
+  // constrained to the pairing the reconcile probed: the persisted pairing
+  // must still name that device when an admission or its async continuation
+  // runs, or a pairing persisted in the windows between (an input picker
+  // seeding another microphone) is silently overwritten. Armed before the
+  // link starts forming, so the constraint holds for whichever connected
+  // event queues the admission.
+  String? _readoptExpectedPair;
 
   DeviceProvider({
     BleDiagnosticsLoader? bleDiagnosticsLoader,
@@ -202,7 +222,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// is hardware and is not torn down; WAL attach, coordinator wake, and other
   /// account publication from the retired generation must not land.
   void clearUserData() {
+    ServiceManager.instance().device.savedReconnect.stop();
     _sessionGeneration++;
+    _admittedLink = null;
+    _readoptExpectedPair = null;
     _deviceHealthTimer?.cancel();
     _deviceHealthTimer = null;
     _admittedConnectGeneration = -1;
@@ -276,7 +299,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     present();
   }
 
+  /// Called from the proxy provider on every CaptureProvider notify (each
+  /// transcript segment). The references only change when the providers are
+  /// recreated; notifying otherwise rebuilds every device listener per segment.
   void setProviders(CaptureProvider provider, LocalRecordingsProvider recordingsProvider) {
+    if (identical(captureProvider, provider) && identical(localRecordingsProvider, recordingsProvider)) return;
     captureProvider = provider;
     localRecordingsProvider = recordingsProvider;
     notifyListeners();
@@ -286,6 +313,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final generation = _sessionGeneration;
     final endedDevice = device == null ? (pairedDevice ?? connectedDevice) : null;
     final sessionStartedAt = _deviceSessionStartedAt;
+    final sessionOperationId = _deviceSessionOperationId;
     final now = DateTime.now();
     final capture = captureProvider;
     final liveCaptureDevice = capture?.recordingDevice;
@@ -305,9 +333,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _firmwareUpdateDeviceId = device.id;
       _firmwareUpdateCheckSessionGuard.start(device.id);
       _deviceSessionStartedAt = now;
+      _deviceSessionOperationId = const Uuid().v4();
     } else if (device == null) {
       _firmwareUpdateCheckSessionGuard.invalidate();
       _deviceSessionStartedAt = null;
+      _deviceSessionOperationId = null;
     }
     await getDeviceInfo();
     if (!_isCurrent(generation)) return;
@@ -346,14 +376,26 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Native diagnostics are best-effort; local timing still makes the event useful.
       }
       if (!_isCurrent(generation)) return;
+      final sessionDuration = disconnect != null && disconnect.connectionDurationMs > 0
+          ? Duration(milliseconds: disconnect.connectionDurationMs)
+          : now.difference(sessionStartedAt);
       PlatformManager.instance.analytics.deviceSessionEnded(
         device: endedDevice,
-        duration: disconnect != null && disconnect.connectionDurationMs > 0
-            ? Duration(milliseconds: disconnect.connectionDurationMs)
-            : now.difference(sessionStartedAt),
+        duration: sessionDuration,
         reason: disconnect?.reason,
         hciReasonCode: disconnect?.reasonCode,
       );
+      try {
+        ClientTelemetry.instance.observeDeviceSession(
+          operationId: sessionOperationId ?? const Uuid().v4(),
+          analyticsVendor: endedDevice.type.analyticsVendor,
+          duration: sessionDuration,
+          reason: disconnect?.reason,
+          hciReasonCode: disconnect?.reasonCode,
+          intentional: endedSessionWasIntentional,
+          recoveryOutcome: endedSessionWasIntentional ? 'none' : 'unknown',
+        );
+      } catch (_) {}
     }
     if (!_isCurrent(generation)) return;
     Logger.debug('setConnectedDevice: $device');
@@ -387,14 +429,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (connectedDevice != null) {
       if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
         if (!_isCurrent(generation)) return;
-        SharedPreferencesUtil().btDevice = pairedDevice!;
+        _persistPairedDevice();
         return;
       }
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
       if (!_isCurrent(generation)) return;
       pairedDevice = await connectedDevice?.getDeviceInfo(connection);
       if (!_isCurrent(generation)) return;
-      SharedPreferencesUtil().btDevice = pairedDevice!;
+      _persistPairedDevice();
     } else {
       if (!_isCurrent(generation)) return;
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
@@ -406,6 +448,23 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!_isCurrent(generation)) return;
     notifyListeners();
   }
+
+  /// Publishes the paired device to preferences unless a readoption armed a
+  /// pairing constraint and the persisted pairing has since moved on: the
+  /// armed publication belongs to the probe-time pairing, and writing here
+  /// would silently overwrite the newer choice (an input picker's selection).
+  void _persistPairedDevice() {
+    if (_readoptPairMovedOn(pairedDevice!.id)) {
+      Logger.debug('Skipping paired-device persist: pairing moved on from $_readoptExpectedPair');
+      return;
+    }
+    SharedPreferencesUtil().btDevice = pairedDevice!;
+  }
+
+  /// True when a readoption armed a pairing constraint for [deviceId] and the
+  /// persisted pairing no longer names it.
+  bool _readoptPairMovedOn(String deviceId) =>
+      _readoptExpectedPair == deviceId && SharedPreferencesUtil().btDevice.id != deviceId;
 
   /// Hardware find-device LED. Not account publication; left unfenced.
   Future<bool> findDevice() {
@@ -693,6 +752,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
 
+    // Arm recovery even if native restoration connected before the home frame.
+    if (pairedDeviceId.isNotEmpty && SharedPreferencesUtil().btDevice.locator?.kind == TransportKind.bluetooth) {
+      await ServiceManager.instance().device.reconnectSavedDevice('launch');
+      return;
+    }
+
     // Already connected — nothing to do
     if (isConnected || connectedDevice != null) return;
 
@@ -795,6 +860,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void setIsConnected(bool value) {
     isConnected = value;
+    // Every path that drops the mirror must allow the live link to be re-admitted.
+    if (!value) _admittedLink = null;
     if (isConnected) {
       _discoveryTimer?.cancel();
     }
@@ -803,8 +870,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @override
   void dispose() {
+    ServiceManager.instance().device.savedReconnect.stop();
     _isDisposed = true;
     _sessionGeneration++;
+    nativeLink.dispose();
     _deviceHealthTimer?.cancel();
     _deviceHealthTimer = null;
     _admittedConnectGeneration = -1;
@@ -910,6 +979,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     );
   }
 
+  /// The paired device's connection history from the phone's native BLE diagnostics (newest last).
+  /// Best-effort: no device or no history is an empty list.
+  Future<List<BleDisconnectEvent>> disconnectHistory() async {
+    final id = (pairedDevice?.id.isNotEmpty ?? false) ? pairedDevice!.id : connectedDevice?.id;
+    if (id == null || id.isEmpty) return const [];
+    final diagnostics = await _bleDiagnosticsLoader(id);
+    return diagnostics.disconnectHistory;
+  }
+
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
     if (pairedDevice == null || connectedDevice == null) {
       return ('No paired device is connected', false, '', {});
@@ -948,6 +1026,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       Logger.debug('Discarding device setup continuation from a stale connection session');
       return;
     }
+    // A readoption's authorization is only as fresh as its last check: device
+    // setup awaits BLE work, and a pairing persisted during that window (an
+    // input picker seeding another microphone) must not get battery, capture,
+    // and WAL side effects started for the retired pairing.
+    if (_readoptPairMovedOn(device.id)) {
+      Logger.debug('Discarding device setup continuation of ${device.id}: pairing moved on during setup');
+      return;
+    }
 
     final normalizedDevice = pairedDevice ?? device;
     if (captureProvider != null) {
@@ -961,6 +1047,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Read initial battery level
     int currentLevel = await _retrieveBatteryLevel(device.id);
     if (!_isCurrent(generation)) return;
+    if (_readoptPairMovedOn(device.id)) {
+      Logger.debug('Discarding readoption of ${device.id}: pairing moved on before side effects');
+      return;
+    }
     if (currentLevel != -1) {
       batteryLevel = currentLevel;
       BatteryWidgetService().updateBatteryInfo(
@@ -981,11 +1071,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _hasLowBatteryAlerted = false;
     }
     updateConnectingStatus(false);
-    if (!syncOnly) await captureProvider?.streamDeviceRecording(device: normalizedDevice);
+    await captureProvider?.streamDeviceRecording(device: normalizedDevice);
     if (!_isCurrent(generation)) return;
 
     await getDeviceInfo();
     if (!_isCurrent(generation)) return;
+    if (_readoptPairMovedOn(device.id)) {
+      Logger.debug('Discarding readoption of ${device.id}: pairing moved on before final publication');
+      return;
+    }
     SharedPreferencesUtil().deviceName = device.name;
 
     // getDeviceInfo() may have reclassified the discovery object — an Omi-typed
@@ -1170,14 +1264,28 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
   }
 
-  void _handleDeviceConnected(String deviceId, int generation) async {
-    if (!_isCurrent(generation)) return;
+  void _handleDeviceConnected(String deviceId, int generation, {bool requirePersistedPair = false}) async {
+    if (!_isCurrent(generation) || !ServiceManager.instance().device.canAutoReconnectDevice(deviceId)) return;
     _admittedConnectGeneration = generation;
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (!_isCurrent(generation)) return;
+    if (!_isCurrent(generation) || !ServiceManager.instance().device.canAutoReconnectDevice(deviceId)) return;
     if (connection == null) {
       return;
     }
+    // A readoption authorized the persisted pairing at probe time, but this
+    // admission waited on DeviceService: pairing may have moved on (an input
+    // picker persisting a different microphone) and publishing the old device
+    // would overwrite that choice in preferences and start its side effects.
+    if ((requirePersistedPair || _readoptExpectedPair == deviceId) && SharedPreferencesUtil().btDevice.id != deviceId) {
+      Logger.debug('Discarding readoption of $deviceId: pairing moved on before admission');
+      return;
+    }
+    // One admission per physical connect: overlapping connected events (a
+    // native connect still initializing, a resume reconcile) must not run
+    // connect side effects twice.
+    final link = (connection, connection.connectionEpoch);
+    if (_admittedLink == link) return;
+    _admittedLink = link;
     _onDeviceConnected(connection.device, generation);
   }
 
@@ -1429,6 +1537,31 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
+  /// Readopts a service link native already holds while the mirror shows the
+  /// persisted pairing disconnected. The reconciler authorizes this at probe
+  /// time — and arms the pairing constraint before the link forms — so every
+  /// admission for this device revalidates the persisted pairing at admission
+  /// and through the publication continuation.
+  void readoptServiceLink(String deviceId) {
+    if (_isDisposed) return;
+    _readoptExpectedPair = deviceId;
+    final generation = _sessionGeneration;
+    _disconnectDebouncer.cancel();
+    _connectDebouncer.run(() {
+      if (!_isCurrent(generation)) return;
+      _handleDeviceConnected(deviceId, generation, requirePersistedPair: true);
+    });
+  }
+
+  /// Arms the readoption pairing constraint for [deviceId] before the link
+  /// starts forming: whichever connected event queues the admission — the
+  /// transport's own event or the reconciler's — it must still match the
+  /// persisted pairing when it and its continuation run.
+  void armReadoptPairConstraint(String deviceId) {
+    if (_isDisposed) return;
+    _readoptExpectedPair = deviceId;
+  }
+
   @override
   void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) async {
     Logger.debug("provider > device connection state changed...$deviceId...$state...${connectedDevice?.id}");
@@ -1474,12 +1607,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   // Reset firmware update state when update completes or fails
   void resetFirmwareUpdateState() {
     _isFirmwareUpdateInProgress = false;
+    ServiceManager.instance().device.reconnectPaused = false;
+    unawaited(ServiceManager.instance().device.reconnectSavedDevice('resume'));
     notifyListeners();
   }
 
   // Set firmware update state when starting an update
   void setFirmwareUpdateInProgress(bool inProgress) {
     _isFirmwareUpdateInProgress = inProgress;
+    ServiceManager.instance().device.reconnectPaused = inProgress;
     if (inProgress) {
       _firmwareUpdatePromptCoordinator.invalidatePresentation();
     }

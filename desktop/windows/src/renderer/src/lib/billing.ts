@@ -155,7 +155,7 @@ export function isCurrentSubscriptionOperator(
   const priceId = sub.current_price_id
   if (!priceId) return false
   return (availablePlans ?? [])
-    .filter((p) => p.title === 'Operator')
+    .filter((p) => p.id === 'operator')
     .some((p) => (p.prices ?? []).some((price) => price.id === priceId))
 }
 
@@ -176,7 +176,7 @@ export function resolvePlanTitle(
   if (!planId) return planDisplayName(sub.plan)
   if ((sub.features ?? []).includes('byok')) return 'Free (BYOK)'
   const owning = owningCatalogPlan(sub, availablePlans)
-  if (owning) return owning.title
+  if (owning) return planDisplayName(owning.id)
   return planDisplayName(planId)
 }
 
@@ -212,7 +212,7 @@ export function currentPlanSubtitle(
   if (paid && sub.current_price_id) {
     const plan = owningCatalogPlan(sub, availablePlans)
     const price = (plan?.prices ?? []).find((p) => p.id === sub.current_price_id)
-    if (plan && price) return `${plan.title} ${price.title} • ${price.price_string}`
+    if (plan && price) return `${planDisplayName(plan.id)} ${price.title} • ${price.price_string}`
   }
   return paid ? 'Your paid plan is active.' : 'You are currently on the free tier.'
 }
@@ -223,8 +223,11 @@ export function currentPlanSubtitle(
  */
 export function currentPlanPeriodText(sub: BillingSubscription): string {
   if (!hasPaidSubscription(sub) || !sub.current_period_end) return ''
-  const prefix = sub.cancel_at_period_end ? 'Access ends' : 'Renews'
-  return `${prefix} on ${formatMediumDate(sub.current_period_end)}`
+  const date = formatMediumDate(sub.current_period_end)
+  if (sub.cancel_at_period_end) {
+    return `Your ${planDisplayName(sub.plan)} plan ends ${date}.`
+  }
+  return `Renews on ${date}`
 }
 
 export function formatMediumDate(epochSeconds: number | null | undefined): string {
@@ -483,9 +486,19 @@ export function trialTimeTone(remainingSeconds: number): 'amber' | 'yellow' | 'g
 
 // ── Checkout orchestration (BillingHelpers.startCheckout) ───────────────────
 
+export const RESUBSCRIBE_FIRST = 'Resubscribe first to change plans.'
+export const EXISTING_SUBSCRIPTION =
+  'You already have a subscription. Manage your existing subscription instead of starting a new checkout.'
+
+function isConflict(e: unknown): boolean {
+  return (e as { response?: { status?: number } } | null)?.response?.status === 409
+}
+
 export type StartCheckoutResult =
   | { kind: 'upgraded' }
-  | { kind: 'reactivated' }
+  | { kind: 'reactivated'; message?: string }
+  | { kind: 'blocked' }
+  | { kind: 'existing_subscription' }
   | { kind: 'completed' }
   | { kind: 'refresh_lagging' }
   | { kind: 'cancelled' }
@@ -522,14 +535,39 @@ export async function startCheckout(
 ): Promise<StartCheckoutResult> {
   const { priceId, promotionCode, currentSubscription: sub } = args
 
+  if (sub.cancel_at_period_end) {
+    const current = sub.current_price_id
+    if (!current || priceId !== current) return { kind: 'blocked' }
+  }
+
   const upgradeInPlace = hasPaidSubscription(sub) && sub.cancel_at_period_end === false
+  // The two routes use 409 for different refusals: upgrade means a pending
+  // cancellation, checkout means the account already has a subscription.
   if (upgradeInPlace) {
-    await deps.upgradeSubscription(priceId, promotionCode)
+    try {
+      await deps.upgradeSubscription(priceId, promotionCode)
+    } catch (e) {
+      if (isConflict(e)) return { kind: 'blocked' }
+      throw e
+    }
     return { kind: 'upgraded' }
   }
 
-  const session = await deps.createCheckoutSession(priceId, promotionCode)
-  if (session.status === 'reactivated') return { kind: 'reactivated' }
+  let session: PaymentCheckoutSessionResponse
+  try {
+    session = await deps.createCheckoutSession(priceId, promotionCode)
+  } catch (e) {
+    if (isConflict(e)) return { kind: 'existing_subscription' }
+    throw e
+  }
+  if (session.status === 'reactivated') {
+    const seconds = session.next_billing_date ?? sub.current_period_end
+    const date = formatMediumDate(seconds)
+    return {
+      kind: 'reactivated',
+      ...(date ? { message: `Your ${planDisplayName(sub.plan)} plan will renew on ${date}.` } : {})
+    }
+  }
   if (!session.url) return { kind: 'cancelled' }
 
   const outcome = await deps.openCheckout(session.url)

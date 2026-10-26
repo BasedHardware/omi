@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-web-onboarding-name.png",
+      "platform": "mobile-ios",
+      "description": "Web onboarding (flag onboarding-webview): page rendered in the app after sign-in and consent; name pre-filled through the bridge URL",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-web-onboarding-permissions.png",
+      "platform": "mobile-ios",
+      "description": "Web onboarding step 2 after Continue: set_name reached native (greeting uses it)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-web-onboarding-permission-roundtrip.png",
+      "platform": "mobile-ios",
+      "description": "Permission round trip: page asked for Location, native requested it and posted the status back; page re-labelled the button",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-onboarding-outline-paywall.png",
+      "platform": "mobile-ios",
+      "description": "After Start using Omi: native completion ran and the end-of-onboarding placement showed the Outline paywall with prod catalog prices (Unlimited $269.91/yr, $29.99/mo, Save ~25%)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-outline-stripe-checkout.png",
+      "platform": "mobile-ios",
+      "description": "Outline paywall \u2192 Upgrade to Unlimited: real Stripe Checkout session for Omi Unlimited v2 at $269.91/yr in the shared payment webview (cancelled, not paid)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-home-after-use-free-plan.png",
+      "platform": "mobile-ios",
+      "description": "Use Free Plan: paywall dismissed, onboarding complete, Home",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "007-mobile-ios-plan-usage-outline-paywall.png",
+      "platform": "mobile-ios",
+      "description": "In-app entry: Settings \u2192 Plan & Usage \u2192 Upgrade opens the Outline paywall (source usage_page); X returned to Plan & Usage",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "008-mobile-ios-plan-usage-web-paywall.png",
+      "platform": "mobile-ios",
+      "description": "Variant web: the same entry opens the webview paywall (omi-paywall.vercel.app) with prices and name passed by the bridge; native close overlay",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "009-mobile-ios-web-paywall-stripe-checkout.png",
+      "platform": "mobile-ios",
+      "description": "Web paywall \u2192 Upgrade to Unlimited: the page's checkout message opened the same native Stripe session (cancelled, not paid)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "010-mobile-ios-web-paywall-use-free-plan.png",
+      "platform": "mobile-ios",
+      "description": "Web paywall \u2192 Use Free Plan: dismissed back to Plan & Usage",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "011-web-web-paywall-page-headless.png",
+      "platform": "web",
+      "description": "Deployed web paywall rendered headless at phone width (clipped by headless Chrome's minimum window; full layout is in 19)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "012-web-web-onboarding-page-headless.png",
+      "platform": "web",
+      "description": "Deployed web onboarding page rendered headless",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-trial-paywall-after-signup.png",
+      "platform": "mobile-ios",
+      "description": "After-sign-up placement on prod (api.omi.me), eligibility from the real /v1/users/me/subscription, no injected state: Omi Pro trial paywall opens right after sign-in",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-trial-paywall-carousel.png",
+      "platform": "mobile-ios",
+      "description": "Fourth carousel card (Ask questions across conversations) with width-adaptive bubbles after the FittedBox layout fix",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-trial-paywall-plans.png",
+      "platform": "mobile-ios",
+      "description": "Scrolled to the bottom: timeline (Today / +7 days free / In 7 days charged unless cancelled, no reminder row), feature list, Monthly $29.99 and Yearly $269.91 (save $89.97) from the live catalog",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-trial-paywall-dismiss-to-name.png",
+      "platform": "mobile-ios",
+      "description": "Continue with the free plan returns to the next onboarding step (What's your name?)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-trial-paywall-stripe-checkout.png",
+      "platform": "mobile-ios",
+      "description": "Start for $0.00 on prod opens the live Stripe Checkout: 7 days free, then $269.91 per year starting Oct 26, 2026 (Stripe session amount_total 0)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

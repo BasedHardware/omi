@@ -85,8 +85,9 @@ struct DesktopHomeView: View {
   /// Server-authoritative capability for the one shell. It never decides which
   /// shell mounts — only whether the capability-gated kernel features engage.
   @State private var chatFirstCapability = ChatFirstCapabilitySample()
-  /// EXP-002 arm state; the body gate holds the shell until it resolves.
-  @ObservedObject private var desktopExperiment = DesktopExperimentCoordinator.shared
+  /// App-scheme item links (`<scheme>://items?…`, `<scheme>://task/<id>`, …).
+  /// Consumed only here, inside the signed-in shell.
+  @ObservedObject private var itemLinks = ItemLinkPresenter.shared
 
   // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
   private static let heroLogoImage: NSImage? = {
@@ -339,13 +340,6 @@ struct DesktopHomeView: View {
             .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
               await resolveChatFirstCapabilityIfNeeded()
             }
-            // EXP-002: enrollment (both arms, one server code path) resolves
-            // alongside the capability. `isMemoryV1` stays false (control)
-            // until it completes, so treatment UI never renders ahead of
-            // assignment.
-            .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
-              await resolveDesktopExperimentIfNeeded()
-            }
 
           if !viewModelContainer.isInitialLoadComplete {
             TransparentWindowStatusPanel {
@@ -443,9 +437,6 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
       reconcileOnboardingCompletionOwner()
       chatFirstCapability.ownerDidChange(to: RuntimeOwnerIdentity.currentOwnerId())
-      // EXP-002: the previous owner's arm must not leak into the next
-      // owner's chrome; the body gate re-resolves from pending.
-      DesktopExperimentCoordinator.shared.ownerDidChange()
       // The provider's owner-bound gate rejects the previous sample for this
       // owner; no replacement sample is persisted or inferred locally.
       reportAutomationState()
@@ -1086,20 +1077,6 @@ struct DesktopHomeView: View {
     reportAutomationState()
   }
 
-  /// EXP-002: resolve the identity-experiment arm for this owner before the
-  /// main shell paints. Non-production bundles use the local environment
-  /// override (never enrolled); the Beta bundle enrolls server-side
-  /// (idempotent); every other channel paints control. Failures resolve
-  /// control — a treatment arm is never applied unconfirmed.
-  private func resolveDesktopExperimentIfNeeded() async {
-    guard DesktopExperimentCoordinator.shared.phase == .pending else { return }
-    if AppBuild.isNonProduction {
-      DesktopExperimentCoordinator.shared.resolveFromLaunchEnvironment()
-      return
-    }
-    await DesktopExperimentCoordinator.shared.resolveForCurrentOwner()
-  }
-
   private func navigateAfterOnboarding() {
     chatFirstNavigation.selectPrimary(.chat)
     log("DesktopHomeView: Onboarding just completed — opening Chat")
@@ -1142,6 +1119,18 @@ struct DesktopHomeView: View {
       .overlay {
         // Goal completion celebration overlay
         GoalCelebrationView()
+      }
+      .sheet(item: $itemLinks.sheet) { state in
+        ItemLinkListSheet(
+          state: state,
+          onOpen: { itemLinks.open($0) },
+          onDismiss: { itemLinks.dismiss() }
+        )
+      }
+      .task(id: itemLinks.pendingGeneration) {
+        // Runs on mount too, so a link received at cold launch or while
+        // signed out resolves once this signed-in shell exists.
+        await itemLinks.consumePending()
       }
       .overlay(alignment: .bottom) {
         // One-time rating ask, due after the user's 3rd question. Remote

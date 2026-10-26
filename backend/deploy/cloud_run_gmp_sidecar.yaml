@@ -12,7 +12,7 @@ spec:
         - action: keep
           sourceLabels:
             - __name__
-          regex: omi_.*
+          regex: omi_.*|conversation_llm_input_dedupe_.*
   targetLabels:
     metadata:
       - service

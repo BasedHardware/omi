@@ -26,6 +26,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ROUTERS_DIR = ROOT / "backend" / "routers"
+APP_ROLES = ROOT / "backend" / "app_roles.py"
+# app_roles.ROUTER_MOUNTS rows: Mount(module) or Mount(module, attr='named_router', ...)
+ROLE_MOUNT = re.compile(r"^\s+Mount\(\s*(\w+)(?:\s*,\s*attr\s*=\s*['\"](\w+)['\"])?", re.M)
 ENTRYPOINTS = {
     "main": ROOT / "backend" / "main.py",
     "desktop_backend": ROOT / "backend" / "desktop_backend.py",
@@ -174,6 +177,17 @@ def mounted_routers(entry_text: str, aliases: dict):
     return mounted
 
 
+def role_mounted_routers(entry_text: str):
+    """Routers an entrypoint mounts through app_roles.mount_routers (B8 OMI_ROLE map).
+
+    Duplicates are judged on the `all` role, the union of every role, in ROUTER_MOUNTS order.
+    """
+    if "mount_routers(" not in entry_text or not APP_ROLES.exists():
+        return []
+    text = APP_ROLES.read_text(encoding="utf-8", errors="replace")
+    return [(module, attr or "router") for module, attr in ROLE_MOUNT.findall(text)]
+
+
 def import_aliases(entry_text: str):
     """Map local var name -> routers module name from an entrypoint's imports."""
     aliases = {}
@@ -211,7 +225,7 @@ def main() -> int:
             continue
         text = entry.read_text(encoding="utf-8", errors="replace")
         aliases = import_aliases(text)
-        for module, var in mounted_routers(text, aliases):
+        for module, var in mounted_routers(text, aliases) + role_mounted_routers(text):
             for method, path in module_routers.get(module, {}).get(var, []):
                 registered[(app, method, path)].append(module)
 

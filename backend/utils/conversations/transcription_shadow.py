@@ -1,9 +1,9 @@
-"""Opt-in, bounded Parakeet final-pass comparison. Never mutates the record.
+"""Opt-in, bounded final-pass comparison and separately gated record promotion.
 
-Admission is deliberately cheap on the finalizer's path. A tracked background
-task waits for the pusher's 60-second upload flush, then a dedicated two-worker
-pool does storage, transcription and comparison. A restart can lose a shadow
-sample; it cannot lose finalization or alter the conversation.
+The default shadow path never mutates the record. A tracked background task
+waits for upload flush, then a bounded pool performs storage, transcription and
+comparison. Authoritative mode requires a safe remap and current record revision.
+A restart can lose a sample; finalization admission remains independent.
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ import asyncio
 import hashlib
 import logging
 import os
+
+from config.rollout_cohorts import in_rollout_cohort
 import re
 import threading
 import time
@@ -23,6 +25,9 @@ from google.cloud import firestore
 from prometheus_client import Counter, Histogram
 
 from database import conversations as conversations_db
+from config.batch_pipeline import RecordOwnerContention
+from config.policy import resolve_batch_policy
+from utils.manual_speaker_assignments import manual_owner_reserved
 from database._client import db
 from database.redis_db import r as redis_client
 from models.conversation import Conversation, ConversationSpeakers
@@ -39,13 +44,23 @@ from utils.executors import start_background_task
 from utils.other.audio_chunks import iter_audio_chunk_pcm
 from utils.speaker_tag_prompts.clips import pcm_to_wav, trim_pcm16
 from utils.stt.conversation_speakers import resolve_conversation_speakers
+from utils.stt.local_vad import offline_pcm_speech_segments
+from utils.stt.vad_compaction import transcribe_with_speech_compaction
 from utils.stt.pre_recorded import parakeet_prerecorded_from_bytes, postprocess_words
+from utils.stt.parakeet_request_metrics import parakeet_caller
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
 from utils.sync.speaker_identity import build_person_embeddings_cache, identify_speakers_for_segments
 
 logger = logging.getLogger(__name__)
 _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='transcription-shadow')
 _slots = threading.BoundedSemaphore(2)
+
+
+def _shadow_parakeet(speech_pcm: bytes) -> Any:
+    with parakeet_caller('shadow'):
+        return parakeet_prerecorded_from_bytes(speech_pcm, diarize=True, attempts=1, encoding='linear16')
+
+
 _OUTCOMES = {'ok', 'failed', 'timeout', 'partial_audio', 'no_audio', 'skipped_budget'}
 _PCM_BYTES_PER_SECOND = 32000
 _SILENCE_FRAME_BYTES = 3200  # 100 ms of 16 kHz mono PCM16
@@ -101,12 +116,11 @@ def _enabled(uid: str, conversation: Conversation) -> bool:
         return False
     if os.getenv('TRANSCRIPTION_SHADOW_ENABLED', 'false').lower() != 'true':
         return False
+    if getattr(conversation, 'record_lane_owner', None) in {'batch_live_v1', 'batch_sync_v1'}:
+        return False
     if not conversation.private_cloud_sync_enabled or conversation.discarded or conversation.uses_custom_stt:
         return False
-    allowlist = {
-        item.strip() for item in os.getenv('TRANSCRIPTION_SHADOW_UID_ALLOWLIST', '').split(',') if item.strip()
-    }
-    if uid in allowlist:
+    if in_rollout_cohort(uid, 'transcription-shadow'):
         return True
     percent = max(0.0, min(100.0, float(os.getenv('TRANSCRIPTION_SHADOW_PERCENT', '0'))))
     bucket = int.from_bytes(hashlib.sha256(uid.encode()).digest()[:4], 'big') / 2**32 * 100
@@ -134,7 +148,14 @@ async def _run_later(uid: str, conversation_id: str) -> None:
     try:
         await asyncio.sleep(max(0.0, float(os.getenv('TRANSCRIPTION_SHADOW_UPLOAD_GRACE_SECONDS', '70'))))
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(_pool, _run_shadow, uid, conversation_id)
+        for attempt in range(3):
+            try:
+                await loop.run_in_executor(_pool, _run_shadow, uid, conversation_id)
+                break
+            except RecordOwnerContention:
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(0.1 * (attempt + 1))
     except asyncio.CancelledError:
         raise
     except Exception as error:
@@ -245,9 +266,17 @@ def _audio_windows(pcm: bytes) -> list[tuple[int, int, int]]:
 
 
 def _make_pass(
-    uid: str, conversation: Conversation, *, deadline: float, reserved_seconds: float
+    uid: str,
+    conversation: Conversation,
+    *,
+    deadline: float,
+    reserved_seconds: float,
+    final_result: dict[str, Any] | None = None,
 ) -> tuple[list[TranscriptSegment], dict[str, float]]:
     cache = build_person_embeddings_cache(uid)
+    final_pcm = bytearray() if final_result is not None else None
+    final_words = []
+    resolution = None
     origin: float | None = None
     last_end: float | None = None
     covered = 0.0
@@ -268,7 +297,10 @@ def _make_pass(
         # playback MP3's dense clock is never used as a transcript clock.
         overlap = max(0.0, (last_end or chunk_start) - chunk_start)
         if overlap:
-            pcm = pcm[min(len(pcm), int(overlap * 32000)) :]
+            # The v2 PCM contract trims complete 16-bit samples. Float wall
+            # clocks can otherwise truncate an even frame offset to an odd byte.
+            trim_bytes = round(overlap * 16000) * 2 if final_result is not None else int(overlap * 32000)
+            pcm = pcm[min(len(pcm), trim_bytes) :]
             chunk_start += overlap
         if not pcm:
             continue
@@ -277,12 +309,25 @@ def _make_pass(
             if _reserve_budget(f'{conversation.id}:extra:{chunk_count}', extra) != 'reserved':
                 raise _BudgetExceeded('decoded audio exceeds daily budget')
             reserved_seconds += extra
+        if final_pcm is not None:
+            position = round((chunk_start - audio_origin) * 16000) * 2
+            if position + len(pcm) > 7200 * 32000:
+                assert final_result is not None
+                final_result['metadata'] = {'outcome': 'failed:too_long'}
+                final_pcm = None
+            else:
+                final_pcm.extend(b'\x00' * max(0, position - len(final_pcm)))
+                final_pcm.extend(pcm)
         for offset, end, owned_start in _audio_windows(pcm):
             if time.monotonic() >= deadline:
                 raise TimeoutError('shadow deadline')
             part = pcm[offset:end]
             part_start = chunk_start + offset / 32000
-            words = parakeet_prerecorded_from_bytes(part, diarize=True, attempts=1, encoding='linear16')
+            words = transcribe_with_speech_compaction(
+                part,
+                _shadow_parakeet,
+                offline_pcm_speech_segments,
+            )
             if isinstance(words, tuple):
                 words = words[0]
             # A forced cut re-posts context so TDT can recover the utterance
@@ -290,6 +335,11 @@ def _make_pass(
             # later request, which can hear the complete utterance.
             if owned_start > offset:
                 words = [w for w in words if offset + float(w['timestamp'][1]) * 32000 > owned_start]
+            if final_pcm is not None:
+                final_words.extend(
+                    {**word, 'timestamp': [float(t) + part_start - audio_origin for t in word['timestamp']]}
+                    for word in words
+                )
             slice_segments = postprocess_words(words, 0) if words else []
             first_word = min((float(w['timestamp'][0]) for w in words), default=0.0)
             if slice_segments:
@@ -351,6 +401,23 @@ def _make_pass(
     # to the live capture clock. No wall timestamps leave this process.
     if started_origin is not None:
         audio_result['audio_origin_offset_seconds'] = round(origin - started_origin, 3)
+    if final_result is not None and final_pcm is not None:
+        from utils.conversations.final_pass_pyannote import run_final_pass
+
+        passed, metadata = run_final_pass(
+            bytes(final_pcm),
+            final_words,
+            resolution,
+            cache,
+            deadline=deadline,
+            conversation_id=conversation.id,
+            segments=segments,
+            vectors=vectors,
+            owner_reserved=bool(final_result.get('owner_reserved')),
+        )
+        final_result.update(metadata=metadata, segments=passed)
+        final_pcm.clear()
+        final_words.clear()
     return segments, audio_result
 
 
@@ -400,7 +467,46 @@ def _record_comparison_metrics(result: dict[str, Any], outcome: str) -> None:
     SHADOW_REMAP_SAFE.labels(outcome=outcome, safe='true' if result['remap_safe'] else 'false').inc()
 
 
+def _legacy_final_pass_allowed() -> bool:
+    """Blocking (the pass runs on its own executor): new legacy final-pass work only at ``on``."""
+    from utils.sync import legacy_dark
+
+    return legacy_dark.legacy_admission_allowed()
+
+
+def _claim_shadow_owner(uid: str, conversation_id: str, raw: dict, *, policy=None) -> dict | None:
+    policy = policy or resolve_batch_policy(uid)
+    for _ in range(3):
+        owner = raw.get('record_lane_owner')
+        if owner in {'batch_live_v1', 'batch_sync_v1'}:
+            return None
+        if owner == 'legacy_final_pass_v1':
+            return raw
+        # Once legacy sync is draining/dark no new legacy final-pass owner (and no new
+        # final pass) may start: the conversation stays unowned for batch admission to
+        # claim (M3 re-review; final_pass_rehome moves the owners that already exist).
+        if not _legacy_final_pass_allowed():
+            return None
+        if not policy.live_admission_enabled:
+            return raw
+        revision = conversations_db.claim_record_lane_owner(
+            uid, conversation_id, 'legacy_final_pass_v1', raw.get('updated_at')
+        )
+        if revision is not None:
+            return {**raw, 'record_lane_owner': 'legacy_final_pass_v1', 'updated_at': revision}
+        refreshed = conversations_db.get_conversation(uid, conversation_id)
+        if not refreshed:
+            return None
+        raw = refreshed
+    if raw.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}:
+        return None
+    if raw.get('record_lane_owner') == 'legacy_final_pass_v1':
+        return raw
+    raise RecordOwnerContention('shadow owner claim remains contended after three refreshed revisions')
+
+
 def _run_shadow(uid: str, conversation_id: str) -> None:
+    policy = resolve_batch_policy(uid)
     began = time.monotonic()
     outcome = 'failed'
     result: dict[str, Any] = {}
@@ -408,6 +514,11 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
     try:
         raw = conversations_db.get_conversation(uid, conversation_id)
         if not raw:
+            return
+        if not _enabled(uid, deserialize_conversation(raw)):
+            return
+        raw = _claim_shadow_owner(uid, conversation_id, raw, policy=policy)
+        if raw is None:
             return
         conversation = deserialize_conversation(raw)
         if not _enabled(uid, conversation):
@@ -434,7 +545,11 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
                 deadline = began + max(30.0, float(os.getenv('TRANSCRIPTION_SHADOW_TIMEOUT_SECONDS', '600')))
                 receipt = conversations_db.get_manual_speaker_receipt(uid, conversation_id)
                 live_conversation = conversation.model_copy(deep=True)
-                passed, audio = _make_pass(uid, conversation, deadline=deadline, reserved_seconds=estimated)
+                final_result: dict[str, Any] | None = (
+                    {'owner_reserved': manual_owner_reserved(receipt)} if policy.final_pass_enabled else None
+                )
+                kwargs = {'final_result': final_result} if final_result is not None else {}
+                passed, audio = _make_pass(uid, conversation, deadline=deadline, reserved_seconds=estimated, **kwargs)
                 if not passed:
                     outcome = 'no_audio'
                     result = audio
@@ -442,6 +557,28 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
                     result = _compare(live_conversation, passed, audio, receipt)
                     outcome = 'partial_audio' if audio['tail_gap_seconds'] > 5 or audio['coverage'] < 0.95 else 'ok'
                     _record_comparison_metrics(result, outcome)
+                    if final_result is not None:
+                        metadata = final_result.get('metadata', {'outcome': 'failed:no_audio'})
+                        candidate = final_result.get('segments')
+                        if candidate is not None:
+                            metadata['comparison'] = _compare(live_conversation, candidate, audio, receipt)
+                            if (
+                                outcome == 'ok'
+                                and metadata['comparison']['remap_safe']
+                                and policy.final_pass_authoritative
+                            ):
+                                metadata['promoted'] = conversations_db.promote_final_pass_if_current(
+                                    uid,
+                                    conversation_id,
+                                    candidate,
+                                    expected_updated_at=raw.get('updated_at'),
+                                    clock_offset=metadata['comparison']['clock_offset_seconds'],
+                                )
+                        _store_result(uid, conversation_id, metadata, version='v2')
+    except RecordOwnerContention:
+        # Retry ownership before reserving provider budget or doing acoustic
+        # work. A metadata race must not silently discard the selected pass.
+        raise
     except TimeoutError:
         outcome = 'timeout'
     except _BudgetExceeded:
@@ -465,9 +602,9 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
                 )
 
 
-def _store_result(uid: str, conversation_id: str, result: dict[str, Any]) -> None:
+def _store_result(uid: str, conversation_id: str, result: dict[str, Any], *, version: str = 'v1') -> None:
     parent = db.collection('users').document(uid).collection('conversations').document(conversation_id)
-    child = parent.collection('transcription_shadow_results').document('v1')
+    child = parent.collection('transcription_shadow_results').document(version)
     deletion_marker = db.collection('account_deletions').document(uid)
 
     @firestore.transactional

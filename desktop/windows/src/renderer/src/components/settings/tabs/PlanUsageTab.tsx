@@ -8,6 +8,13 @@ import { ChatUsageCard } from '../billing/ChatUsageCard'
 import { OverageCard } from '../billing/OverageCard'
 import { TrialCard } from '../billing/TrialCard'
 import { PlanGrid } from '../billing/PlanGrid'
+import { canonicalPlanId } from '../../../lib/billingPlans'
+import {
+  trackPaywallOpened,
+  trackUpgradeCancelled,
+  trackUpgradePlanSelected,
+  trackUpgradeSucceeded
+} from '../../../lib/analytics'
 import {
   fetchSubscription,
   fetchChatQuota,
@@ -19,7 +26,9 @@ import {
   createCheckoutSession,
   upgradeSubscription,
   openCustomerPortal,
-  OPERATOR_DEPRECATION_FALLBACK_PRICE
+  OPERATOR_DEPRECATION_FALLBACK_PRICE,
+  RESUBSCRIBE_FIRST,
+  EXISTING_SUBSCRIPTION
 } from '../../../lib/billing'
 import type {
   UserSubscriptionResponse,
@@ -58,6 +67,15 @@ export function PlanUsageTab(): React.JSX.Element {
   const [portalBusy, setPortalBusy] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
   const plansRef = useRef<HTMLDivElement | null>(null)
+  const paywallTracked = useRef(false)
+
+  useEffect(() => {
+    if (paywallTracked.current || !sub?.subscription) return
+    paywallTracked.current = true
+    // The plan grid lives on this settings tab. This is a settings impression,
+    // not a blocked purchase gate. The usage-limit popup keeps its own source.
+    trackPaywallOpened('windows_settings_view', canonicalPlanId(sub.subscription.plan) ?? 'unknown')
+  }, [sub])
 
   const load = useCallback(async (): Promise<void> => {
     setError(null)
@@ -115,6 +133,12 @@ export function PlanUsageTab(): React.JSX.Element {
   const onBuy = async (priceId: string, promotionCode?: string): Promise<void> => {
     if (!subscription || activePriceId) return
     setActivePriceId(priceId)
+    const selected = catalog.find((item) =>
+      (item.prices ?? []).some((price) => price.id === priceId)
+    )
+    const priceTitle = selected?.prices?.find((price) => price.id === priceId)?.title ?? 'unknown'
+    const tier = selected?.id ?? 'unknown'
+    trackUpgradePlanSelected(tier, priceTitle, 'windows_settings_view')
     try {
       const result = await startCheckout(
         { priceId, promotionCode, currentSubscription: subscription },
@@ -132,20 +156,32 @@ export function PlanUsageTab(): React.JSX.Element {
           // force-closed in the gap AFTER Stripe charged but BEFORE the success
           // redirect fired, the webhook has (or will have) granted the plan
           // server-side, and this pickup keeps the tab from showing stale state.
+          trackUpgradeCancelled()
           void load()
           return
         case 'refresh_lagging':
           toast('Payment received', { tone: 'warn', body: REFRESH_LAGGING_MSG })
-          break
+          setSelectedPlanId(null)
+          await load()
+          return
         case 'upgraded':
           toast('Plan updated', { tone: 'success' })
+          // In-place upgrade: the API accepted a scheduled change. The current
+          // price id does not move until the period rolls.
           break
         case 'reactivated':
-          toast('Subscription reactivated', { tone: 'success' })
+          toast(result.message ?? 'Your plan will renew.', { tone: 'success' })
           break
+        case 'blocked':
+          toast(RESUBSCRIBE_FIRST, { tone: 'error' })
+          return
+        case 'existing_subscription':
+          toast(EXISTING_SUBSCRIPTION, { tone: 'error' })
+          return
         default:
           toast("You're all set", { tone: 'success' })
       }
+      trackUpgradeSucceeded(tier, priceTitle)
       setSelectedPlanId(null)
       await load()
     } catch (e) {
@@ -155,11 +191,10 @@ export function PlanUsageTab(): React.JSX.Element {
     }
   }
 
-  // Deprecation "Try Operator" + trial "View Plans": select the Operator card
+  // Deprecation "Try Pro" + trial "View Plans": select the Operator card
   // (or first available) and scroll the grid into view.
   const jumpToOperator = (): void => {
-    const operator =
-      catalog.find((p) => p.id === 'operator' || p.title === 'Operator') ?? catalog[0]
+    const operator = catalog.find((p) => p.id === 'operator') ?? catalog[0]
     if (operator) setSelectedPlanId(operator.id)
     plansRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
@@ -226,12 +261,12 @@ export function PlanUsageTab(): React.JSX.Element {
           title="Plan Retiring"
           subtitle={
             subscription.deprecation_message ??
-            `Your Unlimited plan is being retired. Try the new Operator plan — same great features at ${OPERATOR_DEPRECATION_FALLBACK_PRICE}.`
+            `Your Unlimited plan is being retired. Try the new Pro plan — same great features at ${OPERATOR_DEPRECATION_FALLBACK_PRICE}.`
           }
           trailing={
             showCatalog ? (
               <button onClick={jumpToOperator} className="btn-ghost">
-                Try Operator
+                Try Pro
               </button>
             ) : undefined
           }

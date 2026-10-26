@@ -18,6 +18,7 @@ from utils.encryption import decrypt_audio_file, encrypt_audio_chunk
 from utils.live_owner_continuity import OwnerContinuity
 from utils.observability.owner_recognition import OWNER_RECONNECT
 from utils.speaker_assignment import process_speaker_assigned_segments
+from utils.speakers.display import display_participants
 
 OWNER = np.array([[1.0, 0.0]], dtype=np.float32)
 DEVICE = 'ios_12345678'
@@ -157,6 +158,33 @@ async def test_short_reconnect_joint_arbitration_withdraws_owner(monkeypatch, re
     await speak(matcher, 1, 2, start=3)
     assert not visible_owner(matcher, 0) and not visible_owner(matcher, 1)
     assert any(args[0] == 0 and args[1] == '' for args in emitted)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('split_first_epoch', [False, True])
+async def test_short_reopen_keeps_both_owner_epochs_after_reconnect(monkeypatch, redis, split_first_epoch):
+    # Reviewer probe: a listen handoff, six seconds in epoch a, then an idle
+    # reopen with only two seconds in epoch b. Both must still render as You.
+    await seed(monkeypatch)
+    matcher, _, _ = await connect(monkeypatch, [OWNER] * 4)
+    if split_first_epoch:
+        await speak(matcher, 0, 2, scope='a')
+        assert visible_owner(matcher, 0)
+        await speak(matcher, 0, 4, start=3, scope='a')
+    else:
+        await speak(matcher, 0, 6, scope='a')
+    assert visible_owner(matcher, 0)
+    await speak(matcher, 5, 2, start=20, scope='b')
+    assert visible_owner(matcher, 0)
+    assert visible_owner(matcher, 5)
+    # Short continuity proof supplies no cross-epoch grouping evidence.
+    assert matcher._provider_epoch_voice_groups() == {0: 0, 5: 5}
+    await matcher._reevaluate_loaded_owner()
+    assert visible_owner(matcher, 0) and visible_owner(matcher, 5)
+    rows = [TranscriptSegment(id=f'line-{v}', text='Okay', start=0, end=2, speaker_id=v, is_user=False) for v in (0, 5)]
+    process_speaker_assigned_segments(rows, matcher.segment_assignments, matcher.speaker_to_person)
+    display = display_participants(rows)
+    assert [display.label(row) for row in rows] == ['You', 'You']
 
 
 @pytest.mark.anyio

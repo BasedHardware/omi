@@ -191,22 +191,24 @@ Future<bool> setUserWebhookUrl({required String type, required String url}) asyn
   return false;
 }
 
-Future<String> getUserWebhookUrl({required String type}) async {
+/// The webhook URL saved for [type], `''` when none is set, or null when it could not be read: a
+/// failed read is not an unset webhook, and saving it back as empty turns the webhook off.
+Future<String?> getUserWebhookUrl({required String type}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return '';
+  if (response == null) return null;
   if (response.statusCode == 200) {
     final data = wire.GeneratedUserWebhookUrlResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     return data.url ?? '';
   }
-  return '';
+  return null;
 }
 
-Future disableWebhook({required String type}) async {
+Future<bool> disableWebhook({required String type}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type/disable',
     headers: {},
@@ -214,11 +216,11 @@ Future disableWebhook({required String type}) async {
     body: '',
   );
   if (response == null) return false;
-  if (response.statusCode == 204) return true;
+  if (response.statusCode == 200) return true;
   return false;
 }
 
-Future enableWebhook({required String type}) async {
+Future<bool> enableWebhook({required String type}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type/enable',
     headers: {},
@@ -226,7 +228,7 @@ Future enableWebhook({required String type}) async {
     body: '',
   );
   if (response == null) return false;
-  if (response.statusCode == 204) return true;
+  if (response.statusCode == 200) return true;
   return false;
 }
 
@@ -583,6 +585,20 @@ Future<bool> setPreferredSummarizationAppServer(String appId) async {
   return data.status == 'ok';
 }
 
+/// Clears the server preferred summary template, so automatic processing uses Omi's own summary.
+Future<bool> clearPreferredSummarizationAppServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/preferences/app',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
+}
+
 Future<String?> getUsageDeviceTimeZone() async {
   try {
     return (await FlutterTimezone.getLocalTimezone()).identifier;
@@ -693,6 +709,23 @@ Future<UserSubscriptionResponse?> getUserSubscription() async {
   return null;
 }
 
+/// Explicit, authenticated and idempotent backlog choice. Reset alone never calls this.
+Future<ProcessingBacklog?> processProcessingBacklog({required String idempotencyKey}) async {
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 128) {
+    throw ArgumentError.value(idempotencyKey, 'idempotencyKey', 'Must contain 8..128 characters');
+  }
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/processing-backlog/process',
+    headers: {'Idempotency-Key': idempotencyKey},
+    method: 'POST',
+    body: '{}',
+  );
+  if (response == null || response.statusCode != 200) return null;
+  return ProcessingBacklog.fromGenerated(
+    subscription_wire.GeneratedProcessingBacklog.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+  );
+}
+
 // Daily Summary Settings
 
 class DailySummarySettings {
@@ -762,6 +795,9 @@ Future<({List<DailySummary> items, bool ok})> getDailySummaries({int limit = 30,
 
   try {
     final data = wire.GeneratedDailySummariesResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    if (data.summaries == null) {
+      throw const FormatException('Invalid daily recap list response');
+    }
     return (items: data.summaries?.map(DailySummary.fromGenerated).toList() ?? <DailySummary>[], ok: true);
   } catch (e) {
     Logger.debug('Error parsing daily summaries: $e');
@@ -857,26 +893,6 @@ Future<bool> deleteDailySummary(String summaryId) async {
   if (response.statusCode != 200) return false;
   final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   return data.status == 'ok';
-}
-
-/// Generate a daily summary for a specific date (or today if not specified)
-/// Returns the summary_id on success, null on failure
-Future<String?> generateDailySummary({String? date}) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/daily-summary-settings/test',
-    headers: {},
-    method: 'POST',
-    body: date != null ? jsonEncode({'date': date}) : '',
-  );
-  if (response == null || response.statusCode != 200) return null;
-
-  try {
-    final data = wire.GeneratedDailySummaryTestResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return data.summaryId;
-  } catch (e) {
-    Logger.debug('Error parsing generate summary response: $e');
-    return null;
-  }
 }
 
 // Onboarding State

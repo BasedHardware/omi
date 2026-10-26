@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from llm_gateway.gateway.accounting import ProviderResponseMetadata, ProviderUsage
+from llm_gateway.gateway.accounting import CacheStatus, ProviderResponseMetadata, ProviderUsage
 from llm_gateway.gateway.schemas import FailureClass, ProviderRejection
 
 GENERIC_PROVIDER_FAILURE_MESSAGE = 'provider request failed'
@@ -31,6 +31,7 @@ class ProviderFailure(Exception):
     retry_after_seconds: float | None = None
     # HTTP status only; never carry a response body into terminal telemetry.
     upstream_http_status: int | None = None
+    accounting: ProviderResponseMetadata | None = None
 
     def __str__(self) -> str:
         return self.safe_message
@@ -58,7 +59,11 @@ def _openai_usage_payload(usage: ProviderUsage) -> dict[str, Any]:
         'prompt_tokens': usage.prompt_tokens,
         'completion_tokens': usage.output_tokens + usage.reasoning_tokens,
         'total_tokens': usage.total_tokens,
-        'prompt_tokens_details': {'cached_tokens': usage.cached_input_tokens},
+        'prompt_tokens_details': (
+            {'cached_tokens': usage.cached_input_tokens}
+            if usage.cache_status not in {CacheStatus.NOT_REPORTED, CacheStatus.NOT_APPLICABLE}
+            else {}
+        ),
         'completion_tokens_details': {'reasoning_tokens': usage.reasoning_tokens},
     }
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -45,6 +46,7 @@ from models.product_memory import (
     MemoryLayer,
     ProcessingState,
 )
+from utils.executors import db_executor, llm_executor, run_blocking
 from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.required_promotion import (
     REQUIRED_PROCESSING_STATUS_FAILED_RETRYABLE,
@@ -68,6 +70,29 @@ REQUIRED_PROCESSING_RETRY_BASE_SECONDS = 300
 REQUIRED_PROCESSING_RETRY_MAX_SECONDS = 3600
 REQUIRED_PROCESSING_RETRY_STATE_SCHEMA_VERSION = "canonical_required_processing_retry.v1"
 REQUIRED_PROCESSING_STATUS_BLOCKED = "processing_blocked"
+MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV = "MEMORY_MAINTENANCE_CAPTURED_AFTER"
+
+
+def maintenance_captured_after() -> Optional[datetime]:
+    """Forward-only maintenance window start (UTC), or None when unset.
+
+    Prod sets this to the maintenance-job deploy timestamp so required
+    processing and observation intake only decide post-deploy items; unset
+    preserves the pre-window behavior for dev and tests. An unparseable or
+    offset-less value fails the run closed instead of silently replaying the
+    pre-window backlog.
+    """
+    raw = os.getenv(MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV, "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV} must be an RFC3339 timestamp, got {raw!r}") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"{MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV} must carry a UTC offset, got {raw!r}")
+    return parsed.astimezone(timezone.utc)
+
 
 REQUIRED_PROCESSING_SYSTEM_PROMPT = """
 You normalize an explicit, authoritative memory submission before Omi admits it
@@ -477,6 +502,7 @@ def list_pending_required_processing_items(
     *,
     db_client: Any = None,
     limit: int = 25,
+    captured_after: Optional[datetime] = None,
 ) -> List[MemoryItem]:
     client = db_client if db_client is not None else default_db_client
     requested_limit = max(1, min(limit, MAX_REQUIRED_PROCESSING_QUERY_SCAN))
@@ -498,6 +524,11 @@ def list_pending_required_processing_items(
         },
         field_filter_factory=FieldFilter,
     )
+    if captured_after is not None:
+        # The captured_at range rides the same composite index: equality
+        # prefix plus one range on the first ordered field stays within the
+        # declared index contract.
+        query = query.where(filter=FieldFilter("captured_at", ">=", captured_after))
     snapshots = query.order_by("captured_at").order_by("memory_id").limit(scan_limit).stream()
     pending: List[MemoryItem] = []
     for snapshot in snapshots:
@@ -915,26 +946,34 @@ def _quarantine_exhausted_state(
     )
 
 
-def process_required_memory_item(
+@dataclass(frozen=True)
+class RequiredProcessingAttempt:
+    result: RequiredMemoryProcessingResult | None = None
+    context: tuple[MemoryItem, RequiredProcessingRetryState, str, datetime] | None = None
+
+
+def _begin_required_processing(
     uid: str,
     memory_id: str,
     *,
     db_client: Any = None,
-    processor: Optional[RequiredMemoryProcessor] = None,
     now: Optional[datetime] = None,
     attempt_lease_seconds: int = REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
-    result_guard: Optional[Callable[[], None]] = None,
-) -> RequiredMemoryProcessingResult:
+) -> RequiredProcessingAttempt:
     client = db_client if db_client is not None else default_db_client
     snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
     payload = _snapshot_payload(snapshot)
     if not payload:
-        return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="memory_not_found")
+        return RequiredProcessingAttempt(
+            result=(RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="memory_not_found"))
+        )
     item = MemoryItem(**payload)
     if not is_pending_required_processing(item):
-        return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="not_pending_required_processing")
-    if processor is None:
-        return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="processor_not_configured")
+        return RequiredProcessingAttempt(
+            result=(
+                RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="not_pending_required_processing")
+            )
+        )
 
     current_time = _coerce_utc(now or datetime.now(timezone.utc))
     lease_owner = f"required-processing:{uuid.uuid4().hex}"
@@ -948,27 +987,46 @@ def process_required_memory_item(
             lease_seconds=attempt_lease_seconds,
         )
     except Exception as exc:
-        return RequiredMemoryProcessingResult(
-            memory_id=memory_id,
-            error_code=f"retry_claim_{type(exc).__name__}",
+        return RequiredProcessingAttempt(
+            result=(
+                RequiredMemoryProcessingResult(
+                    memory_id=memory_id,
+                    error_code=f"retry_claim_{type(exc).__name__}",
+                )
+            )
         )
     if not claim.claimed:
         if claim.state is not None and claim.item is not None and claim.reason == "retry_exhausted":
-            return _quarantine_exhausted_state(
-                uid,
-                claim.item,
-                claim.state,
-                now=current_time,
-                db_client=client,
+            return RequiredProcessingAttempt(
+                result=(
+                    _quarantine_exhausted_state(
+                        uid,
+                        claim.item,
+                        claim.state,
+                        now=current_time,
+                        db_client=client,
+                    )
+                )
             )
-        return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason=claim.reason)
+        return RequiredProcessingAttempt(
+            result=(RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason=claim.reason))
+        )
     assert claim.state is not None
     assert claim.item is not None
     state = claim.state
     item = claim.item
 
+    return RequiredProcessingAttempt(context=(item, state, lease_owner, current_time))
+
+
+def _settle_required_processing(uid, context, *, db_client, processed=None, error=None, result_guard=None):
+    item, state, lease_owner, current_time = context
+    memory_id = item.memory_id
+    client = db_client
     try:
-        processed = processor(item)
+        if error is not None:
+            raise error
+        assert processed is not None
         if result_guard is not None:
             result_guard()
         status = _apply_processed_result(
@@ -1044,6 +1102,113 @@ def process_required_memory_item(
     return RequiredMemoryProcessingResult(memory_id=memory_id, processed=True, attempted=True)
 
 
+def process_required_memory_item(
+    uid,
+    memory_id,
+    *,
+    db_client=None,
+    processor=None,
+    now=None,
+    attempt_lease_seconds=REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
+    result_guard=None,
+):
+    if processor is None:
+        return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="processor_not_configured")
+    client = db_client if db_client is not None else default_db_client
+    context = _begin_required_processing(
+        uid, memory_id, db_client=client, now=now, attempt_lease_seconds=attempt_lease_seconds
+    )
+    if context.result is not None:
+        return context.result
+    assert context.context is not None
+    context = context.context
+    processed, error = None, None
+    try:
+        processed = processor(context[0])
+    except Exception as exc:
+        error = exc
+    return _settle_required_processing(
+        uid, context, db_client=client, processed=processed, error=error, result_guard=result_guard
+    )
+
+
+async def run_required_memory_processing_async(
+    uid,
+    *,
+    db_client,
+    processor,
+    now=None,
+    limit=25,
+    attempt_lease_seconds=REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
+    result_guard=None,
+    job_budget_guard=None,
+):
+    """Claim on the DB pool, normalize on the model pool, then fence and settle.
+
+    No worker holds a database thread across a provider wait. Retry/quarantine,
+    source and generation fences are identical to explicit synchronous intake.
+    """
+    report = RequiredMemoryProcessingReport(uid=uid)
+    if limit <= 0:
+        return report
+    items = await run_blocking(
+        db_executor,
+        list_pending_required_processing_items,
+        uid,
+        db_client=db_client,
+        limit=MAX_REQUIRED_PROCESSING_QUERY_SCAN,
+        captured_after=maintenance_captured_after(),
+    )
+    for item in items:
+        if report.attempted_count >= min(limit, MAX_REQUIRED_PROCESSING_ITEMS_PER_PASS):
+            break
+        if job_budget_guard is not None:
+            job_budget_guard()
+        context = await run_blocking(
+            db_executor,
+            _begin_required_processing,
+            uid,
+            item.memory_id,
+            db_client=db_client,
+            now=now,
+            attempt_lease_seconds=attempt_lease_seconds,
+        )
+        if context.result is not None:
+            result = context.result
+        else:
+            assert context.context is not None
+            context = context.context
+            processed, error = None, None
+            try:
+                processed = await run_blocking(llm_executor, processor, context[0])
+            except Exception as exc:
+                error = exc
+            result = await run_blocking(
+                db_executor,
+                _settle_required_processing,
+                uid,
+                context,
+                db_client=db_client,
+                processed=processed,
+                error=error,
+                result_guard=result_guard,
+            )
+        report.attempted_count += int(result.attempted)
+        if result.processed:
+            report.processed_memory_ids.append(item.memory_id)
+        elif result.error_code:
+            report.failed_memory_ids.append(item.memory_id)
+            if result.retryable:
+                report.retryable_memory_ids.append(item.memory_id)
+            if result.quarantined:
+                report.quarantined_memory_ids.append(item.memory_id)
+            if result.error_code == "flex_deferred":
+                raise PromotionFlexDeferred("required_intake_deferred")
+        else:
+            report.skipped_memory_ids.append(item.memory_id)
+    return report
+
+
 def commit_required_processing(
     item: MemoryItem,
     processed: ProcessedRequiredMemory,
@@ -1092,6 +1257,7 @@ def run_required_memory_processing(
         uid,
         db_client=client,
         limit=MAX_REQUIRED_PROCESSING_QUERY_SCAN,
+        captured_after=maintenance_captured_after(),
     )
     for item in items:
         if report.attempted_count >= attempt_limit:

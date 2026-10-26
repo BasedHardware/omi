@@ -1,3 +1,4 @@
+from utils.generated_compute import generated_compute_allowed, generated_compute_configured
 import asyncio
 import hashlib
 import math
@@ -77,6 +78,7 @@ from utils.conversations.render import conversations_to_string
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.llm.usage_tracker import track_usage, Features
+from utils.plugin_transport import plugin_transport
 from utils.executors import run_blocking, db_executor, llm_executor
 from utils.social import get_twitter_timeline
 from utils.marketplace_reviewers import parse_marketplace_reviewers, is_marketplace_reviewer
@@ -134,7 +136,21 @@ def validate_app_endpoints_for_reenable(app_dict: Dict[str, Any], update_dict: D
     seen_urls: Set[str] = set()
     webhook_url: Any = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
     if webhook_url:
-        endpoints_to_check.append(('webhook', str(webhook_url), 'POST', True))
+        try:
+            transport = plugin_transport(app_id)
+            if transport is not None:
+                transport.validate_url(str(webhook_url))
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail='Webhook does not match this app\'s trusted connection. Fix it before re-enabling.',
+            )
+        if transport is not None:
+            # An authenticated delivery endpoint rejects an unsigned empty POST by
+            # design; its service exposes a non-mutating health probe instead.
+            endpoints_to_check.append(('webhook', transport.health_url(), 'GET', True))
+        else:
+            endpoints_to_check.append(('webhook', str(webhook_url), 'POST', True))
         seen_urls.add(str(webhook_url))
     mcp_url: Any = updated_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
     if mcp_url:
@@ -387,9 +403,20 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     tester_apps: List[Dict[str, Any]] = cast(List[Dict[str, Any]], user_slice.get('tester_apps', []))
 
     user_enabled: Set[str] = set(get_enabled_apps(uid))
-    all_apps: List[Dict[str, Any]] = _records_with_ids(
-        private_data + public_approved_data + public_unapproved_data + tester_apps
+    public_approved_ids = {app.get('id') for app in public_approved_data if app.get('id')}
+    combined_records = (
+        [app for app in private_data if app.get('id') not in public_approved_ids]
+        + public_approved_data
+        + public_unapproved_data
+        + tester_apps
     )
+    seen_ids: Set[str] = set()
+    all_apps: List[Dict[str, Any]] = []
+    for record in _records_with_ids(combined_records):
+        app_id = record['id']
+        if app_id not in seen_ids:
+            seen_ids.add(app_id)
+            all_apps.append(record)
     apps: List[App] = []
 
     app_ids = [app['id'] for app in all_apps]
@@ -480,39 +507,21 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> Dict[s
 
 
 def get_public_unapproved_apps(uid: str) -> List[Dict[str, Any]]:
-    data = get_public_unapproved_apps_db(uid)
-    return data
+    return get_public_unapproved_apps_db(uid)
 
 
 def get_private_apps(uid: str) -> List[Dict[str, Any]]:
-    data = get_private_apps_db(uid)
-    return data
+    return get_private_apps_db(uid)
 
 
 def invalidate_approved_apps_cache() -> None:
-    """
-    Invalidate the approved apps cache across all backend instances.
-
-    This function:
-    1. Invalidates memory cache on local instance
-    2. Invalidates Redis cache
-    3. Publishes invalidation message to all other instances via pub/sub
-    """
-    # Get cache instances
+    """Invalidate the approved apps cache across all backend instances (local memory, Redis, and pub/sub)."""
     memory_cache = get_memory_cache()
     pubsub_manager = get_pubsub_manager()
-
-    # Invalidate both cache key variants (with and without reviews)
-    cache_keys = [f'{PUBLIC_APPROVED_APPS_CACHE_KEY}:reviews={n}' for n in (0, 1)]
-
-    # Clear local memory cache
+    cache_keys = [PUBLIC_APPROVED_APPS_CACHE_KEY, *(f'{PUBLIC_APPROVED_APPS_CACHE_KEY}:reviews={n}' for n in (0, 1))]
     for key in cache_keys:
         memory_cache.delete(key)
-
-    # Clear Redis cache
     delete_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY)
-
-    # Notify all other instances to clear their memory cache
     pubsub_manager.publish_invalidation(cache_keys)
 
 
@@ -936,6 +945,8 @@ def _persona_gate_zone(uid: str):
 
 
 def update_personas_async(uid: str):
+    if not generated_compute_allowed(uid, 'persona_clone', allow_byok=False):
+        return
     if not can_update_persona(uid):
         logger.info(f"[PERSONAS] Rate limited - uid={uid} already updated today")
         return
@@ -963,6 +974,10 @@ def update_personas_async(uid: str):
 
 async def update_persona_prompt(persona: Dict[str, Any]):
     """Update a persona's chat prompt with latest memories and conversations."""
+    if generated_compute_configured() and not await run_blocking(
+        db_executor, generated_compute_allowed, persona['uid'], 'persona_clone', allow_byok=False
+    ):
+        return
     uid = persona['uid']
     universal_memories = await run_blocking(
         db_executor,
@@ -1612,10 +1627,15 @@ def fetch_app_chat_tools_from_manifest(
         if isinstance(chat_messages_raw, dict):
             chat_messages: Dict[str, Any] = cast(Dict[str, Any], chat_messages_raw)
             if chat_messages.get('enabled', False):
+                # A present null (or out-of-contract value) must behave like absent: the stored
+                # doc feeds ExternalIntegration.chat_messages_target: Literal['main','app'] and
+                # chat_messages_notify: bool, so a raw null poisons every App(**doc) read.
+                target = chat_messages.get('target')
+                notify = chat_messages.get('notify')
                 chat_messages_config = {
                     'enabled': True,
-                    'target': chat_messages.get('target', 'app'),  # 'main' or 'app', default 'app'
-                    'notify': chat_messages.get('notify', True),  # send push notification, default True
+                    'target': target if target in ('main', 'app') else 'app',  # 'main' or 'app', default 'app'
+                    'notify': notify if isinstance(notify, bool) else True,  # send push notification, default True
                 }
 
         logger.info(

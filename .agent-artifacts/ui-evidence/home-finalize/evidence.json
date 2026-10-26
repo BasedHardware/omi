@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-after-wrap-up.png",
+      "platform": "mobile-ios",
+      "description": "Home right after Wrap up or a pendant double-tap: a fresh live row counting from 0 and the ended conversation as a Processing row",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-live-page-paused-resume.png",
+      "platform": "mobile-ios",
+      "description": "Live page while paused: one-tap Resume first, Wrap Up Now beneath it",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

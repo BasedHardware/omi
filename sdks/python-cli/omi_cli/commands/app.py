@@ -20,6 +20,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 import typer
+from rich.markup import escape
 
 from omi_cli import webhook_events as events_mod
 from omi_cli import webhook_target
@@ -231,7 +232,8 @@ def send_event(
             }
         )
         if note:
-            ctx.renderer.info(note)
+            # The note quotes the receiver's reply; print it as text, not Rich markup.
+            ctx.renderer.info(escape(note))
         if ok:
             ctx.renderer.success("Delivery accepted.")
 
@@ -394,7 +396,7 @@ def serve(
     typer_ctx: typer.Context,
     port: int = typer.Option(8787, "--port", min=0, max=65535, help="Port to listen on. 0 picks a free one."),
     host: str = typer.Option("127.0.0.1", "--host", help="Interface to bind."),
-    status: int = typer.Option(200, "--status", min=100, max=599, help="Status code to answer with."),
+    status: int = typer.Option(200, "--status", min=200, max=599, help="Final status code to answer with."),
     reply: str = typer.Option("{}", "--reply", help='JSON body to answer with, e.g. {"message": "Got it"}.'),
     requests: int = typer.Option(0, "--requests", min=0, help="Exit after this many deliveries. 0 waits forever."),
 ) -> None:

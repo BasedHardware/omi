@@ -19,10 +19,13 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
+from models.transcript_segment import legacy_conversation_segment_id
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
+from utils.model_text import DisplayClock, truncation_note
 from utils.observability.fallback import record_fallback
+from utils.speakers.display import display_participants
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +114,7 @@ def chat_transcript_excerpts(
     *,
     max_excerpts: int = 5,
     max_chars: int = 1200,
+    clock: DisplayClock = DisplayClock.utc(),
 ) -> Dict[str, str]:
     """Rebuild only authorized, non-discarded chunk hits from hydrated conversations."""
     allowed = {
@@ -127,15 +131,38 @@ def chat_transcript_excerpts(
             continue
         if cid not in chunks_by_id:
             conv = allowed[cid]
+            # Chunk windows depend on segment count, not text length. Adding refs
+            # here preserves indexed chunk positions and leaves embedding text unchanged.
+            segments = [
+                (
+                    {
+                        **segment,
+                        'text': f"#{segment.get('id') or legacy_conversation_segment_id(cid, index)} {segment['text']}",
+                    }
+                    if (segment.get('text') or '').strip()
+                    else segment
+                )
+                for index, segment in enumerate(conv.get('transcript_segments') or [])
+            ]
             chunks_by_id[cid] = {
                 chunk['chunk_index']: chunk['text']
                 for chunk in build_transcript_chunks(
-                    conv.get('transcript_segments') or [], conv.get('started_at') or conv.get('created_at')
+                    segments,
+                    conv.get('started_at') or conv.get('created_at'),
+                    clock=clock,
+                    finished_at=conv.get('finished_at'),
                 )
             }
         excerpt = chunks_by_id[cid].get(chunk_index)
         if excerpt:
-            excerpts[cid] = excerpt[:max_chars]
+            clipped = excerpt[:max_chars]
+            note = truncation_note(
+                shown=len(clipped),
+                total=len(excerpt),
+                unit='characters of this transcript excerpt',
+                how_to_get_more='Request the conversation transcript with a higher max_transcript_segments limit.',
+            )
+            excerpts[cid] = clipped + (f'\n{note}' if note else '')
             if len(excerpts) >= max_excerpts:
                 break
     return excerpts
@@ -213,6 +240,7 @@ def build_transcript_match_snippets(
 
     snippets: List[Dict[str, Any]] = []
     used_centers: set[int] = set()
+    display = display_participants(segs, owner_name='You')
     for center in match_idxs:
         if len(snippets) >= max_snippets:
             break
@@ -228,10 +256,7 @@ def build_transcript_match_snippets(
             text = (seg.get("text") or "").strip()
             if not text:
                 continue
-            speaker = seg.get("speaker_id")
-            prefix = f"Speaker {speaker}: " if speaker is not None else ""
-            if seg.get("is_user"):
-                prefix = "User: "
+            prefix = f"{display.label(seg)}: "
             lines.append(f"{prefix}{text}")
         if not lines:
             continue
@@ -263,7 +288,9 @@ def build_transcript_match_snippets(
                 "end": end_f,
                 "start_ms": _seconds_to_ms(start_f),
                 "end_ms": _seconds_to_ms(end_f),
-                "speaker_id": hit.get("speaker_id"),
+                "speaker_id": None,
+                "speaker_key": display.for_segment(hit).key,
+                "speaker_label": display.label(hit),
             }
         )
     return snippets
@@ -360,6 +387,8 @@ def resolve_mcp_conversation_search_ids(
     """Search summary vectors; transcript snippets are rebuilt after hydration."""
     limit = max(1, min(int(limit or 10), 250))
     shared_vector: Optional[List[float]] = embed_query(query) if embed_query is not None else None
+    if embed_query is not None and not shared_vector:
+        return []
     vector_kw: Dict[str, Any] = {"query_vector": shared_vector} if shared_vector is not None else {}
     return query_vectors(query, uid, starts_at=starts_at, ends_at=ends_at, k=limit, **vector_kw) or []
 

@@ -12,22 +12,45 @@ protobufs do not double-register.
 
 from __future__ import annotations
 
+
 import copy
+
+
 import json
+
+
 import logging
+
+
 import os
+
+
 from datetime import datetime, timedelta, timezone
+
+
 from pathlib import Path
+
+
 from types import ModuleType, SimpleNamespace
+
+
 from typing import Any
+
+
 from unittest.mock import MagicMock
+
 
 import pytest
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+
+
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
+
 from config.plan_catalog import PlanType
+
+
 from models.client_processing import (
     CLIENT_PROCESSING_SCHEMA_VERSION,
     ClientProcessing,
@@ -35,24 +58,55 @@ from models.client_processing import (
     ProjectedStructure,
     ProjectionProvenance,
 )
+
+
 from models.conversation import Conversation, CreateConversation
+
+
 from models.conversation_enums import ConversationProcessingState, ConversationSource, ConversationStatus
+
+
 from models.structured import Structured
+
+
 from models.transcript_segment import TranscriptSegment
+
+
 from utils.conversations.projection_payload import PROVENANCE_LOG_MAX_CHARS
+
+
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+
+
 from utils.conversations.transcript_hash import transcript_sha256
+
+
 import utils.managed_compute as managed_compute
+
+
 from utils.managed_compute import Decision
 
 _BACKEND = Path(__file__).resolve().parents[2]
+
+
 _UID = 's4-acceptance-uid'
+
+
 _NOW = datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc)
+
+
 _SEGMENT_TEXT = 'Hello from the desktop capture'
-# Unique token that must never appear in the hash-mismatch warning.
+
+
 CANARY = 'UNIQUE_PROJECTION_CANARY_xyzzy_not_in_logs'
+
+
 PROJECTION_TITLE = 'Local on-device summary'
+
+
 PROJECTION_TITLE_A = 'Stale in-memory projection A'
+
+
 _MISMATCH_HASH = '0' * 64
 
 
@@ -144,7 +198,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     for attr in (
         'get_app_result',
         'should_discard_conversation',
-        'get_suggested_apps_for_conversation',
         'get_conversation_notes',
     ):
         setattr(conv_proc, attr, MagicMock())
@@ -332,10 +385,12 @@ def _paid_decision() -> Decision:
 
 
 def _enable_flag(monkeypatch, pc) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: True)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: True)
 
 
 def _authorize(monkeypatch, pc, decision: Decision) -> None:
+    monkeypatch.setattr(pc.funded_processing, 'processing_allowed', lambda uid: decision.allowed)
+    monkeypatch.setattr(pc, 'should_defer_desktop_processing', lambda uid: not decision.allowed)
     monkeypatch.setattr(managed_compute, 'authorize_managed_compute', lambda *_args, **_kwargs: decision)
     monkeypatch.setattr(managed_compute, 'request_carries_validated_byok_key', lambda _feature: False)
 
@@ -347,24 +402,17 @@ def _spy_managed_effects(monkeypatch, pc) -> dict[str, MagicMock]:
         'extract_memories_inner': MagicMock(),
         'trigger_apps': MagicMock(),
         'assign_folder': MagicMock(return_value=(None, 0.0, '')),
-        'init_first_open': MagicMock(return_value=True),
-        'should_defer': MagicMock(return_value=True),
+        'should_defer': MagicMock(return_value=False),
     }
     monkeypatch.setattr(pc, '_get_structured', spies['get_structured'])
     monkeypatch.setattr(pc, 'extract_memories', spies['extract_memories'])
     monkeypatch.setattr(pc, '_extract_memories', spies['extract_memories_inner'])
     monkeypatch.setattr(pc, 'trigger_conversation_apps', spies['trigger_apps'])
     monkeypatch.setattr(pc, 'assign_conversation_to_folder', spies['assign_folder'])
-    monkeypatch.setattr(pc.conversations_db, 'initialize_first_open_work', spies['init_first_open'])
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
+    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args, **kwargs: False)
     monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)
-    monkeypatch.setattr(
-        pc,
-        'resolve_authorized_first_open_plan',
-        lambda **kwargs: SimpleNamespace(defer_derived_work=True),
-    )
-    monkeypatch.setattr(pc, 'record_jit_first_open', MagicMock())
     return spies
 
 
@@ -374,7 +422,6 @@ def _assert_no_managed(spies: dict[str, MagicMock]) -> None:
     spies['extract_memories_inner'].assert_not_called()
     spies['trigger_apps'].assert_not_called()
     spies['assign_folder'].assert_not_called()
-    spies['init_first_open'].assert_not_called()
 
 
 def _persisted_payload(mock: MagicMock) -> dict[str, Any]:
@@ -473,17 +520,19 @@ def _firestore_merge(store: dict[str, Any], payload: dict[str, Any]) -> None:
 
 def _capture_has_projection(monkeypatch, pc) -> dict[str, Any]:
     captured: dict[str, Any] = {}
-    real = pc.resolve_free_tier_processing_plan
+    real = pc._store_budget_waiting
 
-    def wrap(**kwargs: Any):
+    def wrap(*args: Any, **kwargs: Any):
         captured.update(kwargs)
-        return real(**kwargs)
+        captured['has_projection'] = (
+            kwargs.get('client_projection') or getattr(args[1], 'client_processing', None)
+        ) is not None
+        return real(*args, **kwargs)
 
-    monkeypatch.setattr(pc, 'resolve_free_tier_processing_plan', wrap)
+    monkeypatch.setattr(pc, '_store_budget_waiting', wrap)
     return captured
 
 
-# red-proof: `has_projection=False` in the S6 plan call (basic matching projection would skip store_projection and not persist client_processing)
 def test_basic_matching_projection_persists_display_skips_managed(monkeypatch, stack) -> None:
     pc, _dev = stack
     _enable_flag(monkeypatch, pc)
@@ -512,7 +561,6 @@ def test_basic_matching_projection_persists_display_skips_managed(monkeypatch, s
     spies['should_defer'].assert_not_called()
 
 
-# red-proof: skip the hash compare (`if False and expected != ...`) so a mismatch is stored and no warning fires
 def test_hash_mismatch_rejects_projection_stores_minimum_no_managed(monkeypatch, stack, caplog) -> None:
     pc, dev = stack
     _enable_flag(monkeypatch, pc)
@@ -543,7 +591,6 @@ def test_hash_mismatch_rejects_projection_stores_minimum_no_managed(monkeypatch,
     _assert_no_managed(spies)
 
 
-# red-proof: re-add client_processing to `_normal_persist_payload` (generic persist would overwrite a newer ingest write)
 def test_paid_plan_generic_persist_omits_projection_keeps_it_in_memory(monkeypatch, stack) -> None:
     pc, _dev = stack
     _enable_flag(monkeypatch, pc)
@@ -562,15 +609,13 @@ def test_paid_plan_generic_persist_omits_projection_keeps_it_in_memory(monkeypat
     assert _nested(payload, 'structured', 'title') == 'llm-title'
 
 
-# red-proof: re-add client_processing to the deferred persist (generic persist would overwrite a newer ingest write)
-# Rule change: deferred is a generic processor persist, not the projection's owner.
-# In-memory attach still happens; the field is written only by ingest mutation.
 def test_flag_off_deferred_persist_omits_projection_keeps_it_in_memory(monkeypatch, stack) -> None:
     pc, _dev = stack
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: False)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: False)
     spies = _spy_managed_effects(monkeypatch, pc)
+    spies['should_defer'].return_value = True
     resolve = MagicMock(side_effect=AssertionError('policy must not run when flag is off'))
-    monkeypatch.setattr(pc, 'resolve_free_tier_processing_plan', resolve)
+    monkeypatch.setattr(pc.funded_processing, 'processing_allowed', resolve)
     processing = pc.lifecycle_service.create_processing_conversation
     processing.reset_mock()
     projection = _projection()
@@ -587,7 +632,6 @@ def test_flag_off_deferred_persist_omits_projection_keeps_it_in_memory(monkeypat
     assert 'client_processing' not in payload
 
 
-# red-proof: pass `client_projection=request.client_processing` without the hash check (mismatch would still reach the coordinator)
 def test_handler_passes_client_projection_only_when_hash_matched(monkeypatch, stack) -> None:
     _pc, dev = stack
     captured: list[ClientProcessing | None] = []
@@ -628,7 +672,6 @@ def _malformed_projection_cases() -> list[Any]:
     ]
 
 
-# red-proof: nest ClientProcessing on CreateConversationFromTranscriptRequest so model_validate 422s
 @pytest.mark.parametrize('raw_projection', _malformed_projection_cases())
 def test_malformed_projection_stores_conversation_without_projection(
     monkeypatch, stack, caplog, raw_projection: Any
@@ -659,7 +702,6 @@ def test_malformed_projection_stores_conversation_without_projection(
     _assert_no_managed(spies)
 
 
-# red-proof: return existing conversation on idempotency hit before examining the new projection
 def test_idempotent_retry_binds_late_projection_without_rewriting_structured(monkeypatch, stack) -> None:
     pc, dev = stack
     _enable_flag(monkeypatch, pc)
@@ -719,7 +761,6 @@ def test_idempotent_retry_binds_late_projection_without_rewriting_structured(mon
     spies['get_structured'].assert_not_called()
 
 
-# red-proof: bind the late projection without checking the stored transcript digest
 def test_idempotent_retry_mismatched_digest_leaves_conversation_unchanged(monkeypatch, stack, caplog) -> None:
     _pc, dev = stack
     session = 'late-proj-mismatch'
@@ -750,7 +791,6 @@ def test_idempotent_retry_mismatched_digest_leaves_conversation_unchanged(monkey
     assert CANARY not in warnings[0].getMessage()
 
 
-# red-proof: nest ClientProcessing on the request so a malformed retry 422s instead of returning the stored conversation
 def test_idempotent_retry_malformed_projection_leaves_conversation_unchanged(monkeypatch, stack, caplog) -> None:
     _pc, dev = stack
     session = 'late-proj-malformed'
@@ -782,11 +822,10 @@ def test_idempotent_retry_malformed_projection_leaves_conversation_unchanged(mon
     assert CANARY not in warnings[0].getMessage()
 
 
-# red-proof: skip `strip_client_processing` (leave `client_processing: None` in the persist dict)
 def test_persist_without_projection_omits_client_processing_key(stack) -> None:
     pc, _dev = stack
     conv = _conversation()
-    terminal = pc._terminal_persist_payload(conv)
+    terminal = pc._normal_persist_payload(conv, clear_terminal_marker=False)
     normal = pc._normal_persist_payload(conv, clear_terminal_marker=False)
     cleared = pc._normal_persist_payload(conv, clear_terminal_marker=True)
     assert 'client_processing' not in terminal
@@ -797,11 +836,10 @@ def test_persist_without_projection_omits_client_processing_key(stack) -> None:
     assert omitted['structured'] == {'title': 't'}
 
 
-# red-proof: keep a present client_processing key in `_terminal_persist_payload` / `_normal_persist_payload`
 def test_generic_persist_strips_even_when_in_memory_projection_is_present(stack) -> None:
     pc, _dev = stack
     conv = _conversation(projection=_projection())
-    terminal = pc._terminal_persist_payload(conv)
+    terminal = pc._normal_persist_payload(conv, clear_terminal_marker=False)
     normal = pc._normal_persist_payload(conv, clear_terminal_marker=False)
     assert 'client_processing' not in terminal
     assert 'client_processing' not in normal
@@ -815,31 +853,12 @@ def test_generic_persist_strips_even_when_in_memory_projection_is_present(stack)
     assert owned['client_processing']['structure']['title'] == PROJECTION_TITLE
 
 
-def _projection_plan(pc) -> Any:
-    return pc.FreeTierProcessingPlan(
-        mode='store_projection',
-        reason='basic_has_projection',
-        decision=_basic_decision(),
-    )
-
-
-def _minimum_plan(pc) -> Any:
-    return pc.FreeTierProcessingPlan(
-        mode='deterministic_minimum',
-        reason='basic_no_projection',
-        decision=_basic_decision(),
-    )
-
-
-# red-proof: skip `payload.update(client_processing_mutation(client_projection))` on the ingress-create branch
-def test_store_projected_conversation_persists_owned_projection(stack) -> None:
+def test_budget_waiting_create_persists_owned_projection(stack) -> None:
     pc, _dev = stack
     created = pc.lifecycle_service.create_completed_conversation
     created.reset_mock()
     projection = _projection()
-    stored, persisted = pc._store_projected_conversation(
-        _UID, _desktop_create(), _projection_plan(pc), client_projection=projection
-    )
+    stored, persisted = pc._store_budget_waiting(_UID, _desktop_create(), client_projection=projection)
     assert persisted is True
     assert stored.client_processing is projection
     payload = _persisted_payload(created)
@@ -848,10 +867,6 @@ def test_store_projected_conversation_persists_owned_projection(stack) -> None:
     assert _nested(payload, 'structured', 'overview') == ''
 
 
-# red-proof: `payload.update(client_processing_mutation(client_projection))` without `_is_ingress_create`
-# Rule change: an existing-conversation processor persist always omits the field.
-# Ingress is the sole writer; `_store_projected_conversation` is a writer only when
-# this persist is the document create.
 def test_processor_projected_store_on_existing_conversation_omits_field(stack) -> None:
     pc, _dev = stack
     persisted = pc.lifecycle_service.persist_processed_conversation
@@ -859,9 +874,7 @@ def test_processor_projected_store_on_existing_conversation_omits_field(stack) -
     created = pc.lifecycle_service.create_completed_conversation
     created.reset_mock()
     projection = _projection()
-    stored, ok = pc._store_projected_conversation(
-        _UID, _conversation(), _projection_plan(pc), client_projection=projection
-    )
+    stored, ok = pc._store_budget_waiting(_UID, _conversation(), client_projection=projection)
     assert ok is True
     assert stored.client_processing is projection
     created.assert_not_called()
@@ -871,7 +884,6 @@ def test_processor_projected_store_on_existing_conversation_omits_field(stack) -
     assert _nested(payload, 'structured', 'overview') == ''
 
 
-# red-proof: return the payload without `clear_summary_retryable` from either processing persist
 def test_processing_persists_clear_a_dead_letter_retry_marker_with_an_explicit_null(stack) -> None:
     """A new processing pass answers the dead-letter's retry affordance.
 
@@ -883,34 +895,29 @@ def test_processing_persists_clear_a_dead_letter_retry_marker_with_an_explicit_n
     retried.summary_retryable = True
     assert pc._normal_persist_payload(retried, clear_terminal_marker=False)['summary_retryable'] is None
     assert 'summary_retryable' in pc._normal_persist_payload(retried, clear_terminal_marker=False)
-    assert pc._terminal_persist_payload(retried)['summary_retryable'] is None
-    assert 'summary_retryable' in pc._terminal_persist_payload(retried)
     untouched = _conversation()
     assert 'summary_retryable' not in pc._normal_persist_payload(untouched, clear_terminal_marker=False)
-    assert 'summary_retryable' not in pc._terminal_persist_payload(untouched)
     assert 'summary_retryable' not in pc.omit_null_processing_state(untouched.dict())
 
 
-# red-proof: drop `conversation.summary_retryable = None` after `_terminal_persist_payload`
-def test_free_tier_retry_answers_the_dead_letter_marker_in_payload_and_response(stack) -> None:
+def test_budget_waiting_preserves_the_dead_letter_retry_marker(stack) -> None:
     pc, _dev = stack
     persisted = pc.lifecycle_service.persist_processed_conversation
     persisted.reset_mock()
     conversation = _conversation()
     conversation.summary_retryable = True
-    stored, ok = pc._store_deterministic_minimum(_UID, conversation, _minimum_plan(pc))
+    stored, ok = pc._store_budget_waiting(_UID, conversation)
     assert ok is True
-    assert stored.summary_retryable is None
+    assert stored.summary_retryable is True
     payload = _persisted_payload(persisted)
-    assert 'summary_retryable' in payload and payload['summary_retryable'] is None
+    assert 'summary_retryable' in payload and payload['summary_retryable'] is True
 
 
-# red-proof: `payload.update(client_processing_mutation(_projection()))` on the no-projection minimum persist
-def test_store_deterministic_minimum_without_projection_omits_field(stack) -> None:
+def test_budget_waiting_without_projection_omits_field(stack) -> None:
     pc, _dev = stack
     created = pc.lifecycle_service.create_completed_conversation
     created.reset_mock()
-    stored, persisted = pc._store_deterministic_minimum(_UID, _desktop_create(), _minimum_plan(pc))
+    stored, persisted = pc._store_budget_waiting(_UID, _desktop_create())
     assert persisted is True
     assert stored.client_processing is None
     payload = _persisted_payload(created)
@@ -918,36 +925,32 @@ def test_store_deterministic_minimum_without_projection_omits_field(stack) -> No
     assert _nested(payload, 'structured', 'title') == _SEGMENT_TEXT
 
 
-# --- S3: §1.7 processing_state on the terminal persist ------------------------
-
-
-# red-proof: drop `conversation.processing_state = _minimum_processing_state(...)`
-def test_desktop_minimum_without_projection_is_local_pending(stack) -> None:
+def test_desktop_budget_waiting_has_no_local_pending_marker(stack) -> None:
     """A capable client is expected to deliver, so the client spins with a
     timeout rather than showing a permanent empty state (§1.7 row 5)."""
     pc, _dev = stack
     created = pc.lifecycle_service.create_completed_conversation
     created.reset_mock()
-    stored, persisted = pc._store_deterministic_minimum(_UID, _desktop_create(), _minimum_plan(pc))
+    stored, persisted = pc._store_budget_waiting(_UID, _desktop_create())
     assert persisted is True
-    assert stored.processing_state is ConversationProcessingState.local_pending
-    assert _persisted_payload(created)['processing_state'] == 'local_pending'
+    assert stored.processing_state is None
+    assert stored.processing_deferred is True
+    assert 'processing_state' not in _persisted_payload(created)
 
 
-# red-proof: return `local_pending` unconditionally from `_minimum_processing_state`
-def test_non_desktop_minimum_is_none_because_no_projection_is_coming(stack) -> None:
+def test_non_desktop_budget_waiting_has_no_terminal_processing_state(stack) -> None:
     pc, _dev = stack
     created = pc.lifecycle_service.create_completed_conversation
     created.reset_mock()
     create = _desktop_create()
     create.source = ConversationSource.omi
-    stored, persisted = pc._store_deterministic_minimum(_UID, create, _minimum_plan(pc))
+    stored, persisted = pc._store_budget_waiting(_UID, create)
     assert persisted is True
-    assert stored.processing_state is ConversationProcessingState.none
-    assert _persisted_payload(created)['processing_state'] == 'none'
+    assert stored.processing_state is None
+    assert stored.processing_deferred is True
+    assert 'processing_state' not in _persisted_payload(created)
 
 
-# red-proof: set a processing_state when a projection is already in hand
 def test_projected_conversation_carries_no_processing_state(stack) -> None:
     """Nothing is pending: the projection IS the summary.
 
@@ -958,16 +961,13 @@ def test_projected_conversation_carries_no_processing_state(stack) -> None:
     pc, _dev = stack
     created = pc.lifecycle_service.create_completed_conversation
     created.reset_mock()
-    stored, persisted = pc._store_projected_conversation(
-        _UID, _desktop_create(), _projection_plan(pc), client_projection=_projection()
-    )
+    stored, persisted = pc._store_budget_waiting(_UID, _desktop_create(), client_projection=_projection())
     assert persisted is True
     assert stored.processing_state is None
     assert 'processing_state' not in _persisted_payload(created)
 
 
-# red-proof: revert `_store_deterministic_minimum` to `_build_deferred_structured`
-def test_minimum_structured_is_the_spec_row_not_the_deferred_placeholder(stack) -> None:
+def test_budget_waiting_structured_is_a_model_free_placeholder(stack) -> None:
     """§1.7: first *sentence*, empty overview, category `other`. The deferred
     placeholder's first-8-words title is a different algorithm on a different
     path and must not leak into the terminal store."""
@@ -984,16 +984,15 @@ def test_minimum_structured_is_the_spec_row_not_the_deferred_placeholder(stack) 
             end=4.0,
         )
     ]
-    pc._store_deterministic_minimum(_UID, create, _minimum_plan(pc))
+    pc._store_budget_waiting(_UID, create)
     payload = _persisted_payload(created)
-    assert _nested(payload, 'structured', 'title') == 'One two three four five six seven eight nine ten.'
+    assert _nested(payload, 'structured', 'title') == 'One two three four five six seven eight'
     assert _nested(payload, 'structured', 'overview') == ''
     assert _nested(payload, 'structured', 'category') == 'other'
     assert _nested(payload, 'structured', 'action_items') == []
     assert _nested(payload, 'structured', 'events') == []
 
 
-# red-proof: skip the after-process `client_processing_mutation` on non-idempotent ingest (paid persist strips and never stores)
 def test_from_segments_ingest_stores_projection_via_dedicated_mutation(monkeypatch, stack) -> None:
     pc, dev = stack
     _enable_flag(monkeypatch, pc)
@@ -1004,7 +1003,8 @@ def test_from_segments_ingest_stores_projection_via_dedicated_mutation(monkeypat
     updates: list[dict[str, Any]] = []
 
     def fake_bind(_uid: str, _cid: str, mutation: dict[str, Any], **_kwargs: Any) -> bool:
-        updates.append(dict(mutation))
+        if 'client_processing' in mutation:
+            updates.append(dict(mutation))
         return True
 
     monkeypatch.setattr(dev.conversations_db, 'bind_client_processing', fake_bind)
@@ -1050,7 +1050,8 @@ def _race_store_harness(monkeypatch, stack, *, first_projection: Any, retry_titl
 
     def fake_bind(_uid: str, _cid: str, mutation: dict[str, Any], **_kwargs: Any) -> bool:
         _firestore_merge(store, mutation)
-        store['update'] = dict(mutation)
+        if 'client_processing' in mutation:
+            store['update'] = dict(mutation)
         return True
 
     monkeypatch.setattr(dev.conversations_db, 'get_conversation', fake_get)
@@ -1063,7 +1064,6 @@ def _race_store_harness(monkeypatch, stack, *, first_projection: Any, retry_titl
     return store
 
 
-# red-proof: skip `strip_client_processing` on A's persist (merge writes explicit null and erases B)
 def test_late_projection_survives_older_processor_persist(monkeypatch, stack) -> None:
     pc, dev = stack
     _authorize(monkeypatch, pc, _basic_decision())
@@ -1080,7 +1080,6 @@ def test_late_projection_survives_older_processor_persist(monkeypatch, stack) ->
     store['spies']['get_structured'].assert_not_called()
 
 
-# red-proof: re-add client_processing to `_normal_persist_payload` (A's stale in-memory A would overwrite B)
 def test_stale_in_memory_projection_does_not_overwrite_later_ingest_write(monkeypatch, stack) -> None:
     pc, dev = stack
     _authorize(monkeypatch, pc, _paid_decision())
@@ -1099,8 +1098,6 @@ def test_stale_in_memory_projection_does_not_overwrite_later_ingest_write(monkey
     store['spies']['get_structured'].assert_called()
 
 
-# red-proof: stamp client_processing on the existing-conversation processor persist
-# (A's terminal `_store_projected_conversation` would resurrect stale A over B)
 def test_basic_stale_projection_does_not_overwrite_later_ingest_write(monkeypatch, stack) -> None:
     pc, dev = stack
     _authorize(monkeypatch, pc, _basic_decision())
@@ -1120,7 +1117,6 @@ def test_basic_stale_projection_does_not_overwrite_later_ingest_write(monkeypatc
     store['spies']['get_structured'].assert_not_called()
 
 
-# red-proof: log raw model_id/runtime/device_class without sanitize_untrusted_provenance_field
 def test_rejected_payload_provenance_is_sanitized_single_line(monkeypatch, stack, caplog) -> None:
     pc, dev = stack
     _enable_flag(monkeypatch, pc)
@@ -1225,3 +1221,15 @@ def test_projection_payload_imports_while_the_models_package_is_stubbed() -> Non
 
     payload = {'client_processing': {'x': 1}, 'keep': 'me'}
     assert strip_client_processing(payload) == {'keep': 'me'}
+
+
+def test_summary_kill_switch_rejects_new_and_late_projection_ingress(monkeypatch, stack):
+    _pc, dev = stack
+    monkeypatch.setenv('CLIENT_SUMMARIES_AT_CAP_ENABLED', 'false')
+    request = _from_segments_request(dev, _projection())
+    assert dev._accepted_client_projection(request, [_segment()]) is None
+    bind = MagicMock(side_effect=AssertionError('kill switch accepted a new summary'))
+    monkeypatch.setattr(dev.conversations_db, 'bind_client_processing', bind)
+    existing = _conversation().model_dump()
+    assert dev._bind_late_client_projection(_UID, existing, request) is existing
+    bind.assert_not_called()

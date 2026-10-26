@@ -2,7 +2,9 @@
 
 Invoke through ``run.sh`` so Firebase owns a fresh Firestore emulator.  The
 supervisor starts private Redis plus independent admission and worker ASGI
-processes; it never probes, reuses, or stops developer services.
+processes; it never probes, reuses, or stops developer services.  The
+batch-lane scenarios (``batch.py``) add a serving ASGI process and a batch
+worker process; ``--only sync|batch`` selects one family.
 """
 
 from __future__ import annotations
@@ -33,6 +35,8 @@ import redis
 from google.auth import credentials as google_auth_credentials
 from google.cloud import firestore
 
+from .local_oidc import local_oidc_token
+
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / 'backend'
 PYTHON = BACKEND / '.venv' / 'bin' / 'python'
@@ -40,13 +44,13 @@ PROJECT = 'demo-omi-sync-cloud-tasks-stack'
 ADMIN_KEY = 'omi-sync-cloud-tasks-stack-admin-'
 LOCAL_OIDC_AUDIENCE = 'https://sync-stack.local/v2/sync-jobs/run'
 LOCAL_INVOKER_SA = 'sync-stack-invoker@demo-omi-sync-cloud-tasks-stack.iam.gserviceaccount.com'
-LOCAL_OIDC_TOKEN = f'local-sync-oidc:{LOCAL_INVOKER_SA}'
+LOCAL_OIDC_TOKEN = local_oidc_token(LOCAL_OIDC_AUDIENCE, LOCAL_INVOKER_SA)
 SYNC_QUEUE = 'sync-jobs'
 SENSITIVE_UID = 'sync-stack-sensitive-uid'
 TRANSCRIPT_TOKEN = 'Sync stack transcript verified.'
 DEVICE_HASH = '01234567'
 DEVICE_ID = f'ios_{DEVICE_HASH}'
-ENCRYPTION_SECRET = 'omi_sync_cloud_tasks_stack_test_secret_32_bytes'
+ENCRYPTION_SECRET = 'omi_sync_cloud_tasks_stack_test_secret_32_bytes'  # pragma: allowlist secret
 
 
 class StackFailure(AssertionError):
@@ -70,10 +74,28 @@ def _anonymous_google_credentials(
 google.auth.default = _anonymous_google_credentials
 
 
+def _free_ports(count: int) -> list[int]:
+    """Reserve and return `count` distinct ephemeral ports on loopback.
+
+    Holding all probe sockets open simultaneously guarantees that the kernel
+    allocates non-conflicting, unique port numbers across the stack's services (#20322).
+    """
+    probes = []
+    ports = []
+    try:
+        for _ in range(count):
+            probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            probe.bind(('127.0.0.1', 0))
+            probes.append(probe)
+            ports.append(int(probe.getsockname()[1]))
+        return ports
+    finally:
+        for probe in probes:
+            probe.close()
+
+
 def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.bind(('127.0.0.1', 0))
-        return int(probe.getsockname()[1])
+    return _free_ports(1)[0]
 
 
 def _wait_for_port(port: int, *, label: str, timeout: float = 30.0) -> None:
@@ -127,6 +149,10 @@ def _read_events(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def postgres_requested() -> bool:
+    return os.getenv('OMI_STACK_POSTGRES', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 class Stack:
     def __init__(
         self,
@@ -144,10 +170,13 @@ class Stack:
         self.logs_dir = state_dir / 'logs'
         self.evidence_dir = state_dir / 'evidence'
         self.storage_dir = state_dir / 'local-storage'
-        self.gate_dir = state_dir / 'processor-gate' if hold_processor else None
-        self.redis_port = _free_port()
-        self.admission_port = _free_port()
-        self.worker_port = _free_port()
+        # A retained --state-dir may contain an earlier run's entered/release
+        # markers. Keep that evidence, but never treat it as this run's gate.
+        self.gate_dir = state_dir / f'processor-gate-{secrets.token_hex(8)}' if hold_processor else None
+        ports = _free_ports(3)
+        self.redis_port = ports[0]
+        self.admission_port = ports[1]
+        self.worker_port = ports[2]
         self.task_ack_failures = task_ack_failures
         self.worker_failures = worker_failures
         self.pre_ledger_failures = pre_ledger_failures
@@ -191,6 +220,14 @@ class Stack:
                 'CLOUDSDK_CONFIG': str(isolated_config / 'gcloud'),
                 'NO_PROXY': '127.0.0.1,localhost',
                 'no_proxy': '127.0.0.1,localhost',
+                # Match test.sh: several isolated backend processes must not
+                # each create a host-sized native pool on a shared runner.
+                'OMP_NUM_THREADS': '1',
+                'OPENBLAS_NUM_THREADS': '1',
+                'MKL_NUM_THREADS': '1',
+                'VECLIB_MAXIMUM_THREADS': '1',
+                'NUMEXPR_NUM_THREADS': '1',
+                'BLIS_NUM_THREADS': '1',
                 'FIRESTORE_EMULATOR_HOST': firestore_host,
                 'FIREBASE_AUTH_EMULATOR_HOST': '127.0.0.1:9099',
                 'OMI_HARNESS_INSTANCE': 'sync-cloud-tasks-stack',
@@ -216,12 +253,15 @@ class Stack:
                 'SYNC_TASKS_INVOKER_SA': LOCAL_INVOKER_SA,
                 'SYNC_TASKS_MAX_ATTEMPTS': '2',
                 'HTTP_SYNC_JOBS_RUN_TIMEOUT': '30',
+                'SYNC_JOB_HANDLER_BUDGET_SECONDS': '20',
                 'FAIR_USE_ENABLED': 'true',
                 'MAX_DAILY_AUDIO_HOURS': '30',
                 'STT_PRERECORDED_MODEL': 'parakeet',
                 'STT_SERVICE_MODELS': 'parakeet',
                 'HOSTED_PARAKEET_API_URL': 'http://127.0.0.1:1',
                 'BUCKET_TEMPORAL_SYNC_LOCAL': 'sync-temporal',
+                'AUDIO_ARCHIVE_SYNC_ENABLED': 'true',
+                'AUDIO_ARCHIVE_PERCENT': '100',
                 'BUCKET_SPEECH_PROFILES': 'speech-profiles',
                 'BUCKET_POSTPROCESSING': 'postprocessing',
                 'BUCKET_PRIVATE_CLOUD_SYNC': 'omi-private-cloud-sync',
@@ -260,12 +300,22 @@ class Stack:
         return {'X-Omi-Sync-Stack-Control': self.control_token}
 
     def _start(self, name: str, command: list[str], *, role: str | None = None) -> Child:
+        if sys.platform == 'darwin' and command[1:3] == ['-m', 'uvicorn']:
+            # Darwin uvloop can use a different clock epoch than Python's
+            # monotonic request stamp, expiring absolute handler budgets at
+            # once. Match that stamp locally; Linux CI keeps production's loop.
+            command = [*command, '--loop', 'asyncio']
         if name in self.children:
             raise StackFailure(f'{name} is already running')
         log_path = self.logs_dir / f'{name}.log'
         process_env = self.env.copy()
         if role:
             process_env['OMI_SYNC_STACK_ROLE'] = role
+        if sys.platform == 'darwin' and command[1:3] == ['-m', 'uvicorn']:
+            # macOS uvloop may use an epoch distinct from time.monotonic()
+            # after host sleep. Keep the real, unchanged request deadlines in
+            # one clock domain; Linux CI retains its default runtime loop.
+            command = [*command, '--loop', 'asyncio']
         output = log_path.open('wb')
         process = subprocess.Popen(
             command,
@@ -295,6 +345,17 @@ class Stack:
         # can exceed 20s). Give the strong check the generous budget.
         _wait_until(healthy, label=f'Sync {role} health endpoint', timeout=60.0)
 
+    def _start_postgres(self) -> None:
+        """Opt-in (``OMI_STACK_POSTGRES=1``): a private-socket Postgres 16 with the job-store schema, for roles
+        that select the Postgres job store. Its DSN reaches children as ``JOBSTORE_POSTGRES_DSN``. Nothing in
+        the default stack reads it, so the stack is unchanged unless asked."""
+        from testing.store_fixtures import BackendUnavailable, postgres_dsn
+
+        try:
+            self.env['JOBSTORE_POSTGRES_DSN'] = postgres_dsn()
+        except BackendUnavailable as exc:
+            raise StackFailure(f'OMI_STACK_POSTGRES=1 but Postgres is unavailable: {exc}') from exc
+
     def start(self) -> None:
         redis_binary = shutil.which('redis-server')
         if not redis_binary:
@@ -317,6 +378,8 @@ class Stack:
         )
         _wait_for_port(self.redis_port, label='isolated Redis')
         redis.Redis(host='127.0.0.1', port=self.redis_port).ping()
+        if postgres_requested():
+            self._start_postgres()
         self._start(
             'worker',
             [
@@ -366,6 +429,10 @@ class Stack:
     def close(self) -> None:
         for name in list(self.children):
             self.stop(name)
+        if postgres_requested():
+            from testing.store_fixtures import stop_local_postgres
+
+            stop_local_postgres()
         for port, label in (
             (self.redis_port, 'isolated Redis'),
             (self.worker_port, 'Sync worker'),
@@ -460,8 +527,10 @@ def _seed_capture_conversation(stack: Stack, uid: str, conversation_id: str) -> 
         raise StackFailure(f'isolated capture provenance seed returned HTTP {response.status_code}')
 
 
-def _submit_and_capture_task(stack: Stack, uid: str) -> tuple[str, dict[str, Any]]:
+def _submit_and_capture_task(stack: Stack, uid: str, *, archive: bool = False) -> tuple[str, dict[str, Any]]:
     stack.seed_user(uid)
+    if archive:
+        stack.firestore.collection('users').document(uid).update({'private_cloud_sync_enabled': True})
     filename = _fresh_pcm_filename()
     audio = _pcm16_upload_bytes()
     capture_conversation_id = f'sync-stack-capture-{uuid.uuid4().hex}'
@@ -714,8 +783,8 @@ def _cleanup_retry_preserves_terminal_work(stack: Stack) -> None:
     retry = _deliver_task(task, retry_count=1)
     if retry.status_code != 200 or retry.json().get('status') != 'acked':
         raise StackFailure('terminal cleanup retry was not ACKed')
-    if staged_path.exists() or _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('terminal cleanup retry did not clean exact material without reprocessing')
+    if not staged_path.exists() or _stt_invocation_count(stack, job_id) != 1:
+        raise StackFailure('terminal cleanup retry released unarchived input or reprocessed it')
     _assert_metered_once(stack, uid)
 
 
@@ -806,8 +875,38 @@ def _final_attempt_post_ledger_failure_converges(stack: Stack) -> None:
     _assert_metered_once(stack, uid)
     if _stt_invocation_count(stack, job_id) != 1:
         raise StackFailure('final durable-ledger convergence re-ran the provider pipeline')
-    if stack.staged_blob_path(task['body']['raw_blob_paths'][0]).exists():
-        raise StackFailure('final durable-ledger convergence did not clean staged input')
+    if not stack.staged_blob_path(task['body']['raw_blob_paths'][0]).exists():
+        raise StackFailure('final durable-ledger convergence released unarchived input')
+
+
+def _archived_success_releases_only_staging(stack: Stack) -> None:
+    uid = stack.scenario_uid('archived-success')
+    job_id, task = _submit_and_capture_task(stack, uid, archive=True)
+    response = _deliver_task(task, retry_count=0)
+    if response.status_code != 200:
+        raise StackFailure('archived worker did not finish successfully')
+    _assert_durable_success(stack, uid, job_id)
+    body = task['body']
+    ledger = (
+        stack.firestore.collection('users')
+        .document(uid)
+        .collection('sync_content_ledger_offline')
+        .document(body['content_id'])
+        .get()
+        .to_dict()
+        or {}
+    )
+    receipt = ledger.get('staging_custody') or {}
+    if receipt.get('version') != 1 or not receipt.get('originals'):
+        raise StackFailure('completed ledger lacks original archive custody proof')
+    for original in receipt['originals']:
+        if not (stack.storage_dir / 'omi-private-cloud-sync' / original['archive']).is_file():
+            raise StackFailure('successful staging cleanup removed its durable archive')
+    if any(stack.staged_blob_path(path).exists() for path in body['raw_blob_paths']):
+        raise StackFailure('proven archived success retained redundant staging')
+    duplicate = _deliver_task(task, retry_count=1)
+    if duplicate.status_code != 200 or _stt_invocation_count(stack, job_id) != 1:
+        raise StackFailure('archived terminal duplicate reprocessed audio')
 
 
 def _retry_budget_terminalizes_truthfully(stack: Stack) -> None:
@@ -822,8 +921,8 @@ def _retry_budget_terminalizes_truthfully(stack: Stack) -> None:
     status = _poll_terminal_job(stack, uid, job_id)
     if status.get('status') != 'failed':
         raise StackFailure('retry-budget exhaustion did not publish truthful failed job state')
-    if stack.staged_blob_path(task['body']['raw_blob_paths'][0]).exists():
-        raise StackFailure('terminal failure did not release staged material')
+    if not stack.staged_blob_path(task['body']['raw_blob_paths'][0]).exists():
+        raise StackFailure('terminal failure released staged material without durable custody')
     _assert_not_metered(stack, uid)
     duplicate = _deliver_task(task, retry_count=2)
     if duplicate.status_code != 200 or duplicate.json().get('status') != 'acked':
@@ -979,6 +1078,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-dir', type=Path, help='directory for sanitized evidence and private process logs')
     parser.add_argument('--keep', action='store_true', help='preserve state after a successful run')
+    parser.add_argument(
+        '--only',
+        choices=('all', 'sync', 'batch'),
+        default='all',
+        help='run only the legacy Sync Cloud Tasks scenarios or only the batch-lane scenarios',
+    )
     args = parser.parse_args()
     if not PYTHON.exists():
         raise SystemExit(f'missing backend virtual environment: {PYTHON}; run backend/scripts/sync-python-deps.sh')
@@ -987,25 +1092,39 @@ def main() -> int:
     state_dir.mkdir(parents=True, exist_ok=True)
     succeeded = False
     try:
-        _run_scenario(state_dir / 'happy-duplicate', scenario=_happy_path_and_terminal_duplicate)
-        _run_scenario(state_dir / 'cleanup-retry', cleanup_failures=1, scenario=_cleanup_retry_preserves_terminal_work)
-        _run_scenario(state_dir / 'pre-ledger-retry', pre_ledger_failures=1, scenario=_pre_ledger_failure_retries_once)
-        _run_scenario(
-            state_dir / 'post-ledger-retry', post_ledger_failures=1, scenario=_post_ledger_failure_converges_once
-        )
-        _run_scenario(
-            state_dir / 'final-attempt-ledger',
-            worker_failures=1,
-            post_ledger_failures=1,
-            scenario=_final_attempt_post_ledger_failure_converges,
-        )
-        _run_scenario(state_dir / 'terminal-failure', worker_failures=2, scenario=_retry_budget_terminalizes_truthfully)
-        _run_scenario(state_dir / 'concurrent', hold_processor=True, scenario=_concurrent_delivery_is_lease_fenced)
-        _run_scenario(
-            state_dir / 'nonprod-legacy-backfill',
-            scenario=_nonprod_legacy_backfill_is_acked_before_worker_state,
-        )
-        _run_scenario(state_dir / 'lost-ack-expired', task_ack_failures=1, scenario=_ambiguous_enqueue_and_expired_blob)
+        if args.only in {'all', 'sync'}:
+            _run_scenario(state_dir / 'happy-duplicate', scenario=_happy_path_and_terminal_duplicate)
+            _run_scenario(state_dir / 'archived-success', scenario=_archived_success_releases_only_staging)
+            _run_scenario(
+                state_dir / 'cleanup-retry', cleanup_failures=1, scenario=_cleanup_retry_preserves_terminal_work
+            )
+            _run_scenario(
+                state_dir / 'pre-ledger-retry', pre_ledger_failures=1, scenario=_pre_ledger_failure_retries_once
+            )
+            _run_scenario(
+                state_dir / 'post-ledger-retry', post_ledger_failures=1, scenario=_post_ledger_failure_converges_once
+            )
+            _run_scenario(
+                state_dir / 'final-attempt-ledger',
+                worker_failures=1,
+                post_ledger_failures=1,
+                scenario=_final_attempt_post_ledger_failure_converges,
+            )
+            _run_scenario(
+                state_dir / 'terminal-failure', worker_failures=2, scenario=_retry_budget_terminalizes_truthfully
+            )
+            _run_scenario(state_dir / 'concurrent', hold_processor=True, scenario=_concurrent_delivery_is_lease_fenced)
+            _run_scenario(
+                state_dir / 'nonprod-legacy-backfill',
+                scenario=_nonprod_legacy_backfill_is_acked_before_worker_state,
+            )
+            _run_scenario(
+                state_dir / 'lost-ack-expired', task_ack_failures=1, scenario=_ambiguous_enqueue_and_expired_blob
+            )
+        if args.only in {'all', 'batch'}:
+            from .batch import run_batch_scenarios
+
+            run_batch_scenarios(state_dir / 'batch')
         succeeded = True
         print(f'Sync Cloud Tasks stack gauntlet passed; sanitized evidence: {state_dir}')
         return 0

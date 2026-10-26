@@ -113,7 +113,7 @@ describe('claude code sign-in + omi pro upsell', () => {
     const dialog = page.getByRole('dialog')
     await dialog.waitFor({ state: 'visible', timeout: 8000 })
     await dialog
-      .getByText('Unlock Omi Pro for $199/month')
+      .getByText('Unlock Omi Pro')
       .waitFor({ state: 'visible', timeout: 8000 })
     assert.ok(
       (await dialog.getByRole('button', { name: 'Upgrade to Omi Pro' }).count()) >= 1,

@@ -1,0 +1,368 @@
+{
+  "version": "v2",
+  "unit_usd_micros": 1000,
+  "loading": {
+    "numerator_usd": "24450.274588023036",
+    "denominator_usd": "11812.180030023044",
+    "factor": "2.069920584166319783906855281",
+    "window": [
+      "2026-09-22",
+      "2026-10-09"
+    ],
+    "source": "based-hardware.omi_finops.unit_cost_user_day",
+    "numerator": "SUM(fully_loaded + stt_vendor_low - shared_headcount)",
+    "denominator": "SUM(llm_openai_measured + llm_direct_residual + llm_gemini_list_memo + stt_vendor_low)",
+    "components_usd": {
+      "openai_measured": "3282.3604880000025",
+      "direct_residual": "181.18446948500042",
+      "gemini_list": "1254.848389",
+      "stt_list": "7093.786683538033",
+      "non_llm_variable": "7876.328762999999",
+      "reservation": "5315.725154",
+      "vertex_paygo": "700.8890299999998"
+    },
+    "limitation": "Vendor denominator includes modeled STT, historical Gemini memo and direct residual proxies; numerator retains allocated reservation and paygo. Flat request charges overlap loaded infra; provisional until request-level allocation exists."
+  },
+  "models": {
+    "openrouter:typesafe/jev-1.13": {
+      "rate_card_id": "openrouter.typesafe-jev-1.13.2026-09",
+      "provider": "openrouter",
+      "model": "typesafe/jev-1.13",
+      "input_micro_usd_per_million": 42000,
+      "cached_input_micro_usd_per_million": 42000,
+      "output_micro_usd_per_million": 0,
+      "source": "backend/llm_gateway/config/cost_rate_cards.yaml@b8076bab847",
+      "status": "card"
+    },
+    "openai:gpt-5-nano": {
+      "rate_card_id": "openai.gpt-5-nano.2026-07-17",
+      "provider": "openai",
+      "model": "gpt-5-nano",
+      "input_micro_usd_per_million": 50000,
+      "cached_input_micro_usd_per_million": 5000,
+      "output_micro_usd_per_million": 400000,
+      "source": "backend/llm_gateway/config/cost_rate_cards.yaml@b8076bab847",
+      "status": "card"
+    },
+    "openai:gpt-5.4-nano": {
+      "rate_card_id": "openai.gpt-5.4-nano.2026-07-17",
+      "provider": "openai",
+      "model": "gpt-5.4-nano",
+      "input_micro_usd_per_million": 200000,
+      "cached_input_micro_usd_per_million": 20000,
+      "output_micro_usd_per_million": 1250000,
+      "source": "backend/llm_gateway/config/cost_rate_cards.yaml@b8076bab847",
+      "status": "card"
+    },
+    "openai:gpt-6-luna": {
+      "rate_card_id": "openai.gpt-6-luna.2026-09-22",
+      "provider": "openai",
+      "model": "gpt-6-luna",
+      "input_micro_usd_per_million": 100000,
+      "cached_input_micro_usd_per_million": 10000,
+      "output_micro_usd_per_million": 600000,
+      "cache_write_micro_usd_per_million": 125000,
+      "long_context_threshold_tokens": 272000,
+      "long_context_input_micro_usd_per_million": 200000,
+      "long_context_cached_input_micro_usd_per_million": 20000,
+      "long_context_output_micro_usd_per_million": 900000,
+      "long_context_cache_write_micro_usd_per_million": 250000,
+      "source": "backend/llm_gateway/config/cost_rate_cards.yaml@b8076bab847",
+      "status": "provisional"
+    },
+    "openai:gpt-5.6-sol": {
+      "rate_card_id": "openai.gpt-5.6-sol.2026-07-30",
+      "provider": "openai",
+      "model": "gpt-5.6-sol",
+      "input_micro_usd_per_million": 5000000,
+      "cached_input_micro_usd_per_million": 500000,
+      "output_micro_usd_per_million": 30000000,
+      "cache_write_micro_usd_per_million": 6250000,
+      "long_context_threshold_tokens": 272000,
+      "long_context_input_micro_usd_per_million": 10000000,
+      "long_context_cached_input_micro_usd_per_million": 1000000,
+      "long_context_output_micro_usd_per_million": 45000000,
+      "long_context_cache_write_micro_usd_per_million": 12500000,
+      "source": "backend/llm_gateway/config/cost_rate_cards.yaml@b8076bab847",
+      "status": "card"
+    },
+    "openai:gpt-5.6-terra": {
+      "rate_card_id": "openai.gpt-5.6-terra.2026-07-30",
+      "provider": "openai",
+      "model": "gpt-5.6-terra",
+      "input_micro_usd_per_million": 2000000,
+      "cached_input_micro_usd_per_million": 200000,
+      "output_micro_usd_per_million": 12000000,
+      "cache_write_micro_usd_per_million": 2500000,
+      "long_context_threshold_tokens": 272000,
+      "long_context_input_micro_usd_per_million": 4000000,
+      "long_context_cached_input_micro_usd_per_million": 400000,
+      "long_context_output_micro_usd_per_million": 18000000,
+      "long_context_cache_write_micro_usd_per_million": 5000000,
+      "source": "backend/llm_gateway/config/cost_rate_cards.yaml@b8076bab847",
+      "status": "card"
+    },
+    "gemini:gemini-2.5-flash": {
+      "model": "gemini-2.5-flash",
+      "provider": "gemini",
+      "input_micro_usd_per_million": 300000,
+      "cached_input_micro_usd_per_million": 30000,
+      "output_micro_usd_per_million": 2500000,
+      "source": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
+      "observed": "2026-10-18",
+      "status": "card"
+    },
+    "anthropic:claude-sonnet-5": {
+      "rate_card_id": "anthropic.claude-sonnet-5.intro.2026-07-17",
+      "provider": "anthropic",
+      "model": "claude-sonnet-5",
+      "input_micro_usd_per_million": 2000000,
+      "cached_input_micro_usd_per_million": 200000,
+      "output_micro_usd_per_million": 10000000,
+      "cache_write_micro_usd_per_million": 2500000,
+      "cache_write_1h_micro_usd_per_million": 4000000,
+      "source": "backend/llm_gateway/config/cost_rate_cards.yaml@b8076bab847",
+      "status": "provisional"
+    },
+    "gemini:gemini-2.5-pro": {
+      "model": "gemini-2.5-pro",
+      "provider": "gemini",
+      "input_micro_usd_per_million": 1250000,
+      "cached_input_micro_usd_per_million": 125000,
+      "output_micro_usd_per_million": 10000000,
+      "source": "https://ai.google.dev/gemini-api/docs/pricing",
+      "observed": "2026-10-13",
+      "status": "card",
+      "long_context_threshold_tokens": 200000,
+      "long_context_input_micro_usd_per_million": 2500000,
+      "long_context_cached_input_micro_usd_per_million": 250000,
+      "long_context_output_micro_usd_per_million": 15000000
+    },
+    "gemini:gemini-2.5-flash-lite": {
+      "model": "gemini-2.5-flash-lite",
+      "provider": "gemini",
+      "input_micro_usd_per_million": 100000,
+      "cached_input_micro_usd_per_million": 10000,
+      "output_micro_usd_per_million": 400000,
+      "source": "https://ai.google.dev/gemini-api/docs/pricing",
+      "observed": "2026-10-13",
+      "status": "card"
+    },
+    "perplexity:sonar-pro": {
+      "model": "sonar-pro",
+      "provider": "perplexity",
+      "input_micro_usd_per_million": 3000000,
+      "cached_input_micro_usd_per_million": 3000000,
+      "output_micro_usd_per_million": 15000000,
+      "source": "https://vercel.com/ai-gateway/models/sonar-pro/about",
+      "status": "provisional",
+      "limitation": "Legacy Sonar rate; request fees are separate and are not derivable from token counts."
+    },
+    "gemini:gemini-3.8-flash": {
+      "model": "gemini-3.8-flash",
+      "provider": "gemini",
+      "input_micro_usd_per_million": 1500000,
+      "cached_input_micro_usd_per_million": 150000,
+      "output_micro_usd_per_million": 7500000,
+      "source": "backend/llm_gateway/config/cost_rate_cards.yaml@vertex.gemini-3.8-flash.2027-01-01",
+      "observed": "2026-10-15",
+      "status": "card"
+    }
+  },
+  "realtime_models": {
+    "openai:gpt-realtime-2": {
+      "rates_micro_usd_per_million": {
+        "input_text": 4000000,
+        "cached_text": 400000,
+        "input_audio": 32000000,
+        "cached_audio": 400000,
+        "input_image": 5000000,
+        "cached_image": 500000,
+        "output_text": 24000000,
+        "output_audio": 64000000
+      },
+      "reference_rate_card_id": "openai.gpt-realtime-2.modality.2026-09-01",
+      "source": "backend/utils/llm/realtime_usage.py@b8076bab847",
+      "status": "card"
+    },
+    "gemini:gemini-3.1-flash-live-preview": {
+      "rates_micro_usd_per_million": {
+        "input_text": 750000,
+        "cached_text": 750000,
+        "input_audio": 3000000,
+        "cached_audio": 3000000,
+        "input_image": 1000000,
+        "cached_image": 1000000,
+        "output_text": 4500000,
+        "output_audio": 12000000
+      },
+      "reference_rate_card_id": "gemini.gemini-3.1-flash-live-preview.modality.2026-09-01",
+      "source": "backend/utils/llm/realtime_usage.py@b8076bab847",
+      "status": "card"
+    },
+    "gemini:gemini-2.5-flash-native-audio-preview-12-2025": {
+      "rates_micro_usd_per_million": {
+        "input_text": 500000,
+        "cached_text": 500000,
+        "input_audio": 3000000,
+        "cached_audio": 3000000,
+        "input_image": 3000000,
+        "cached_image": 3000000,
+        "output_text": 2000000,
+        "output_audio": 12000000
+      },
+      "reference_rate_card_id": "gemini.gemini-2.5-flash-native-audio-preview-12-2025.modality.2026-09-01",
+      "source": "backend/utils/llm/realtime_usage.py@b8076bab847",
+      "status": "card"
+    }
+  },
+  "images": [
+    {
+      "rate_card_id": "openai.gpt-image-1.auto.estimate.2026-07-17",
+      "provider": "openai",
+      "model": "gpt-image-1",
+      "size": "auto",
+      "quality": "auto",
+      "micro_usd_per_image": 42000
+    },
+    {
+      "rate_card_id": "openai.gpt-image-1.low.1024x1024.2026-07-17",
+      "provider": "openai",
+      "model": "gpt-image-1",
+      "size": "1024x1024",
+      "quality": "low",
+      "micro_usd_per_image": 11000
+    },
+    {
+      "rate_card_id": "openai.gpt-image-1.low.1024x1536.2026-07-17",
+      "provider": "openai",
+      "model": "gpt-image-1",
+      "size": "1024x1536",
+      "quality": "low",
+      "micro_usd_per_image": 16000
+    },
+    {
+      "rate_card_id": "openai.gpt-image-1.low.1536x1024.2026-07-17",
+      "provider": "openai",
+      "model": "gpt-image-1",
+      "size": "1536x1024",
+      "quality": "low",
+      "micro_usd_per_image": 16000
+    },
+    {
+      "rate_card_id": "openai.gpt-image-1.medium.1024x1024.2026-07-17",
+      "provider": "openai",
+      "model": "gpt-image-1",
+      "size": "1024x1024",
+      "quality": "medium",
+      "micro_usd_per_image": 42000
+    },
+    {
+      "rate_card_id": "openai.gpt-image-1.medium.1024x1536.2026-07-17",
+      "provider": "openai",
+      "model": "gpt-image-1",
+      "size": "1024x1536",
+      "quality": "medium",
+      "micro_usd_per_image": 63000
+    },
+    {
+      "rate_card_id": "openai.gpt-image-1.medium.1536x1024.2026-07-17",
+      "provider": "openai",
+      "model": "gpt-image-1",
+      "size": "1536x1024",
+      "quality": "medium",
+      "micro_usd_per_image": 63000
+    },
+    {
+      "rate_card_id": "openai.gpt-image-1.high.1024x1024.2026-07-17",
+      "provider": "openai",
+      "model": "gpt-image-1",
+      "size": "1024x1024",
+      "quality": "high",
+      "micro_usd_per_image": 167000
+    },
+    {
+      "rate_card_id": "openai.gpt-image-1.high.1024x1536.2026-07-17",
+      "provider": "openai",
+      "model": "gpt-image-1",
+      "size": "1024x1536",
+      "quality": "high",
+      "micro_usd_per_image": 250000
+    },
+    {
+      "rate_card_id": "openai.gpt-image-1.high.1536x1024.2026-07-17",
+      "provider": "openai",
+      "model": "gpt-image-1",
+      "size": "1536x1024",
+      "quality": "high",
+      "micro_usd_per_image": 250000
+    }
+  ],
+  "transcription": {
+    "parakeet": {
+      "micro_usd_per_hour": 20000,
+      "status": "provisional",
+      "source": "backend/config/live_stt_registry.py@b8076bab847 compute-card $0.02/audio-hour"
+    },
+    "modulate": {
+      "micro_usd_per_hour": 60000,
+      "status": "card",
+      "source": "https://platform.modulate.ai/pricing Multilingual Transcription streaming WebSocket $0.06/hour; live SKU velma-2-stt-streaming (not Velma Triage $0.75/hour)"
+    },
+    "soniox": {
+      "micro_usd_per_hour": 120000,
+      "status": "estimated",
+      "source": "https://soniox.com/pricing streaming approximate $0.12/hour"
+    },
+    "deepgram": {
+      "micro_usd_per_hour": 468000,
+      "status": "card",
+      "source": "https://deepgram.com/pricing Nova-3 multilingual streaming $0.0058/min + Speaker Diarization $0.0020/min = $0.468/hour; streaming.py always sets diarize=True; optional keyterm prompting excluded"
+    },
+    "unknown": {
+      "micro_usd_per_hour": 258000,
+      "status": "provisional",
+      "source": "backend/scripts/finops/assemble_unit_cost.py $0.0043/minute provider-unknown proxy"
+    }
+  },
+  "speech_ratio": "0.32",
+  "default_speech_provider": "deepgram",
+  "requests": {
+    "mcp_api": {
+      "micro_usd_per_request": 1000,
+      "status": "provisional",
+      "source": "Coordinator-authorized conservative $0.001/request placeholder: $7876.328763 non-LLM cost in window; complete MCP/API/web-tool volume absent from finops tables. This is infra only; search vendor request fees remain a completeness gap."
+    },
+    "web_search_tool": {
+      "micro_usd_per_request": 1000,
+      "status": "provisional",
+      "source": "Coordinator-authorized conservative $0.001/request placeholder: $7876.328763 non-LLM cost in window; complete MCP/API/web-tool volume absent from finops tables. This is infra only; search vendor request fees remain a completeness gap."
+    }
+  },
+  "standard_chat": {
+    "provider": "openai",
+    "model": "gpt-6-luna",
+    "uncached_input_tokens": 3,
+    "cached_input_tokens": 11667,
+    "output_tokens": 49,
+    "status": "measured",
+    "source": "Read-only 2026-10-01..09 sample: first 4000 UUID-ordered metadata attempts/day, 36000 documents, 215 Omi-funded confirmed chat_agent gpt-6-luna first attempts (retry ordinal <=1); componentwise median tokens [3,11667,49]. No user identifiers or content projected."
+  },
+  "speech_ratio_source": "Coordinator ruling 2026-10-13 and W0: approximate measured 32% speech ratio",
+  "free_speech_basis": {
+    "kind": "most_expensive_free_routable_managed_provider",
+    "provider": "deepgram",
+    "source": "origin/main@f876d1cf324 config/stt_provider_policy.py STREAMING includes Modulate, Soniox, Deepgram, Parakeet; live_stt_registry.py ramps/env and utils/stt/live_router.py language, health, capacity prevent a fixed Free share; no plan-specific provider restriction",
+    "note": "Use conservative maximum because expected Free accepted-speech routing shares are not determinable from configuration. Display callers may supply their routed speech_provider_shares."
+  },
+  "recording": {
+    "background_share": "0.98",
+    "units_per_recorded_hour": {
+      "live": "130",
+      "batch": "130"
+    },
+    "on_device_transcription_units_per_hour": 0,
+    "status": "provisional",
+    "source": "David ruling 2026-10-14; replace batch with measured fully loaded worn-hour rate only after batch is live; includes LLM/infra overhead, not just STT"
+  }
+}

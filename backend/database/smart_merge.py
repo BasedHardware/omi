@@ -26,6 +26,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database import conversations as conversations_db
 from database import smart_merge_audit as audit_db
+from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client, run_transactional
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY
 from database.people_stats_cache import invalidate_people_stats_cache
@@ -292,6 +293,10 @@ def absorb_conversation(
             return AbsorbResult('rejected', 'conversation_not_eligible')
         if not survivor_raw or survivor_raw.get('deleted'):
             return AbsorbResult('rejected', 'survivor_changed')
+        # Corrections own captured segment anchors. Intake must not absorb or
+        # re-key either side underneath an encrypted correction receipt.
+        if survivor_raw.get('has_transcript_corrections') or donor_raw.get('has_transcript_corrections'):
+            return AbsorbResult('rejected', 'conversation_not_eligible')
         if int((survivor_raw.get(SMART_MERGE_FIELD) or {}).get('revision') or 0) != expected_revision:
             return AbsorbResult('rejected', 'survivor_changed')
         flatten = smart_merge_flatten_enabled()
@@ -340,7 +345,7 @@ def absorb_conversation(
         audit = audit_db.SKIPPED_ERROR if audit_unavailable else audit_db.gate_skip(transaction, client, uid)
         level = survivor_update.get('data_protection_level') or 'enhanced'
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
-        conversations_db._guard_match_score_size(payload, survivor_raw)  # pyright: ignore[reportPrivateUsage]
+        conversations_db.guard_match_score_size(payload, survivor_raw)
         if (
             'speaker_match_scores' in survivor_raw
             and 'speaker_match_scores' not in payload
@@ -393,6 +398,8 @@ def absorb_conversation(
         logger.warning('event=smart_merge_audit_restart reason=io_failed uid=%s', uid)
         result = run_transactional(client, absorb, audit_unavailable=True)
     if result.outcome == 'absorbed':
+        for retired_id in (donor_id, survivor_id):
+            stop_quiet_check_for_conversation(uid, retired_id, firestore_client=client)
         invalidate_people_stats_cache(uid)
         # The same fail-open search-index hooks the conversation adapter runs after its writes.
         conversations_db._sync_conversation_search_index(uid, survivor_id)  # pyright: ignore[reportPrivateUsage]

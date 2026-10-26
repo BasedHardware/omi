@@ -26,6 +26,14 @@ import re
 from typing import Any, Optional
 
 SCHEMA = "omi-mobile-distribution/v1"
+# Play holds this app's automated edits for manual review submission
+# (changesNotSentForReview), so a settled Android publishing action proves the
+# edit committed, not that testers received it. The baseline still advances on
+# that settled action — a held publish is not a failed publish, and rebuilding
+# the same source would not unhold it — but dispatchers must say so every run.
+# Flip together with mobile_store_promote.CHANGES_NOT_SENT_FOR_REVIEW and the
+# codemagic.yaml changes_not_sent_for_review flags.
+ANDROID_HELD_CHANGES_MODE = True
 PLATFORMS = frozenset({"ios", "android"})
 SUCCESS_STATUSES = frozenset({"finished", "success", "succeeded"})
 SETTLED_STATUSES = SUCCESS_STATUSES | {"skipped"}

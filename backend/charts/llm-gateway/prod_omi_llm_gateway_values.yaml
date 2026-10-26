@@ -83,25 +83,22 @@ env:
         key: REDIS_DB_PASSWORD
   - name: PROACTIVITY_REDIS_PORT
     value: "13151"
-  # Reservation evidence retains its optional pre-Phase-A store.
+  # Share reservation state with the other production GKE services.
   - name: REDIS_DB_HOST
     valueFrom:
       configMapKeyRef:
-        name: prod-omi-reservation-runtime-config
+        name: prod-omi-backend-config
         key: REDIS_DB_HOST
-        optional: true
   - name: REDIS_DB_PASSWORD
     valueFrom:
       secretKeyRef:
         name: prod-omi-backend-secrets
-        key: VERTEX_RESERVATION_REDIS_PASSWORD
-        optional: true
+        key: REDIS_DB_PASSWORD
   - name: REDIS_DB_PORT
-    valueFrom:
-      configMapKeyRef:
-        name: prod-omi-reservation-runtime-config
-        key: REDIS_DB_PORT
-        optional: true
+    value: "13151"
+  # Retired order: skip desktop 2.5 inference/probes; 3.8 discovery stays automatic for Dream.
+  - name: OMI_VERTEX_RESERVATION_STATES
+    value: '{"gemini-2.5-flash":"inactive"}'
   - name: OMI_LLM_GATEWAY_PROD
     value: "true"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -152,6 +149,9 @@ env:
     value: "1"
   - name: LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES
     value: "1000"
+  # Dream's on-demand 3.8 lane also requires the backend's per-request allowlist assertion.
+  - name: DREAM_ON_DEMAND_ENABLED
+    value: "true"
 
 resources:
   requests:

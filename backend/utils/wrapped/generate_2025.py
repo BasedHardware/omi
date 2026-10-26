@@ -4,6 +4,8 @@ Wrapped 2025 generation logic.
 Computes analytics from user's 2025 data and generates LLM-based insights.
 """
 
+from utils.generated_compute import generated_compute_allowed, generated_compute_scoped
+
 from collections import Counter
 from datetime import datetime, timezone, date
 from typing import List, Dict, Any, Set, cast
@@ -97,7 +99,7 @@ def _compute_conversation_duration(conv: Conversation) -> float:
     """Compute conversation duration in seconds."""
     # Try to get duration from transcript segments
     if conv.transcript_segments:
-        max_end = max((seg.end for seg in conv.transcript_segments), default=0)
+        max_end = max((seg.end or 0 for seg in conv.transcript_segments), default=0)
         if max_end > 0:
             return max_end
 
@@ -109,8 +111,9 @@ def _find_signature_phrases(conversations: List[Conversation], sample_size: int 
     """Find signature phrases in user's conversations (sample for performance)."""
     phrase_counts: Counter[str] = Counter()
 
+    unlocked = [c for c in conversations if not getattr(c, "is_locked", False)]
     # Sample conversations
-    sampled = conversations[:sample_size] if len(conversations) > sample_size else conversations
+    sampled = unlocked[:sample_size] if len(unlocked) > sample_size else unlocked
 
     for conv in sampled:
         # Only look at user segments
@@ -252,7 +255,7 @@ def _build_conversations_context(conversations: List[Conversation], max_chars: i
     total_chars = 0
 
     for conv in conversations:
-        if not conv.created_at:
+        if getattr(conv, "is_locked", False) or not conv.created_at:
             continue
 
         date_str = conv.created_at.strftime("%Y-%m-%d %H:%M")
@@ -743,6 +746,7 @@ Be specific and empathetic. These should feel personal and meaningful."""
         }
 
 
+@generated_compute_scoped
 def generate_wrapped_2025(uid: str, year: int = 2025):
     """
     Generate Wrapped 2025 for a user.
@@ -750,6 +754,8 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
     This fetches all 2025 data, computes analytics, generates LLM insights,
     and stores the result in Firestore.
     """
+    if not generated_compute_allowed(uid, 'wrapped_analysis', allow_byok=False):
+        return
     import time
 
     start_time = time.time()
@@ -772,8 +778,9 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
             start_date=YEAR_2025_START,
             end_date=YEAR_2025_END,
         )
+        conversations_data = [c for c in conversations_data if not c.get("is_locked")]
 
-        conversations = deserialize_conversations(conversations_data)
+        conversations = [c for c in deserialize_conversations(conversations_data) if not getattr(c, "is_locked", False)]
         logger.info(
             f"[Wrapped] Step 1 complete: Found {len(conversations)} conversations for 2025 (took {time.time() - step_start:.2f}s)"
         )
@@ -787,12 +794,16 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         _update_progress(uid, year, "Fetching action items...", 0.2)
         logger.info(f"[Wrapped] Step 2: Fetching action items...")
 
-        action_items = action_items_db.get_action_items(
-            uid=uid,
-            start_date=YEAR_2025_START,
-            end_date=YEAR_2025_END,
-            limit=10000,
-        )
+        action_items = [
+            item
+            for item in action_items_db.get_action_items(
+                uid=uid,
+                start_date=YEAR_2025_START,
+                end_date=YEAR_2025_END,
+                limit=10000,
+            )
+            if not item.get("is_locked")
+        ]
         logger.info(
             f"[Wrapped] Step 2 complete: Found {len(action_items)} action items for 2025 (took {time.time() - step_start:.2f}s)"
         )
@@ -836,15 +847,15 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         _update_progress(uid, year, "Finding your memorable days...", 0.65)
         logger.info(f"[Wrapped] Step 6: Analyzing memorable days with Gemini...")
 
-        memorable_days = _analyze_memorable_days_with_llm(conversations)
+        memorable_days = _analyze_memorable_days_with_llm(conversations) or {}
         result["memorable_days"] = memorable_days
         logger.info(f"[Wrapped] Step 6 complete: Memorable days analyzed (took {time.time() - step_start:.2f}s)")
-        logger.info(f"[Wrapped]   - Most fun day: {memorable_days.get('most_fun_day', {}).get('title', 'N/A')}")
+        logger.info(f"[Wrapped]   - Most fun day: {(memorable_days.get('most_fun_day') or {}).get('title', 'N/A')}")
         logger.info(
-            f"[Wrapped]   - Most productive day: {memorable_days.get('most_productive_day', {}).get('title', 'N/A')}"
+            f"[Wrapped]   - Most productive day: {(memorable_days.get('most_productive_day') or {}).get('title', 'N/A')}"
         )
         logger.info(
-            f"[Wrapped]   - Most stressful day: {memorable_days.get('most_stressful_day', {}).get('title', 'N/A')}"
+            f"[Wrapped]   - Most stressful day: {(memorable_days.get('most_stressful_day') or {}).get('title', 'N/A')}"
         )
 
         # Step 7: Find funniest event with Gemini
@@ -902,9 +913,9 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         _update_progress(uid, year, "Finding your wins and struggles...", 0.94)
         logger.info(f"[Wrapped] Step 12: Finding struggles and wins with Gemini...")
 
-        struggles_wins = _find_struggles_and_wins_with_llm(conversations)
-        result["struggle"] = struggles_wins.get("struggle", {})
-        result["personal_win"] = struggles_wins.get("personal_win", {})
+        struggles_wins = _find_struggles_and_wins_with_llm(conversations) or {}
+        result["struggle"] = struggles_wins.get("struggle") or {}
+        result["personal_win"] = struggles_wins.get("personal_win") or {}
         logger.info(f"[Wrapped] Step 12 complete: Struggles and wins found (took {time.time() - step_start:.2f}s)")
 
         # Step 13: Save result

@@ -44,22 +44,29 @@ private final class MemoryDeleteStatusStub: URLProtocol, @unchecked Sendable {
     let status = Self._status
     Self.lock.unlock()
 
-    guard let url = request.url,
+    var headerFields = ["Content-Type": "application/json"]
+    var payload = Data("{\"status\":\"ok\"}".utf8)
+    if status == 404 {
+      payload = Data("{\"detail\":\"Memory not found\"}".utf8)
+    } else if status == 409 {
+      // Mirrors `account_gate_busy_http_exception`: 409 account_gate_busy
+      // plus a Retry-After header.
+      headerFields["Retry-After"] = "2"
+      payload = Data("{\"detail\":\"account_gate_busy\"}".utf8)
+    }
+    guard
+      let url = request.url,
       let response = HTTPURLResponse(
         url: url,
         statusCode: status,
         httpVersion: nil,
-        headerFields: ["Content-Type": "application/json"]
+        headerFields: headerFields
       )
     else {
       client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
       return
     }
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-    let payload =
-      status == 404
-      ? Data("{\"detail\":\"Memory not found\"}".utf8)
-      : Data("{\"status\":\"ok\"}".utf8)
     client?.urlProtocol(self, didLoad: payload)
     client?.urlProtocolDidFinishLoading(self)
   }
@@ -141,6 +148,21 @@ final class APIClientMemoryDeleteIdempotencyTests: XCTestCase {
       XCTFail("A 403 must surface as an error rather than reading as a completed delete")
     } catch APIError.httpError(let statusCode, _) {
       XCTAssertEqual(statusCode, 403)
+    }
+  }
+
+  /// The account-gate-busy 409 must arrive as a typed, retryable error that
+  /// carries the server's Retry-After, so the Memories page can back off and
+  /// retry instead of resurrecting the row it just removed.
+  func testDeleteSurfacesGateBusy409WithRetryAfter() async throws {
+    let client = await makeClient()
+    MemoryDeleteStatusStub.status = 409
+
+    do {
+      try await client.deleteMemory(id: "gated-memory")
+      XCTFail("A gate-busy 409 must surface as a retryable error, not a completed delete")
+    } catch APIError.memoryDeleteGateBusy(let retryAfterSeconds) {
+      XCTAssertEqual(retryAfterSeconds, 2, "the Retry-After header must survive the transport")
     }
   }
 }

@@ -16,9 +16,9 @@ private final class WeakMeetingDetector: @unchecked Sendable {
 /// conversations at call boundaries while Always mode keeps the microphone live. It exists only
 /// while microphone transcription is active, so there is zero overhead otherwise.
 ///
-/// Transitions **on** as soon as a call is detected, but transitions **off** only after a grace
-/// period of sustained "no meeting" (hysteresis) to avoid flapping when a call window briefly
-/// disappears (focus changes, screen-share popups, etc.).
+/// Capture opens provisionally on first evidence; conversation boundaries wait for sustained
+/// confirmation. Capture closes after sustained "no meeting"; confirmation survives a bounded resume window. The notice
+/// additionally waits out short meetings and a successful conversation rotation.
 ///
 /// Polls every 1s while a native call app or browser holds the microphone, and every 4s
 /// otherwise. The off grace stays a fixed 8s, so the faster poll does not shorten it.
@@ -27,6 +27,31 @@ final class MeetingDetector {
 
   /// Current meeting state. Updated on the main actor by `applyDetected(_:)`.
   private(set) var isMeetingActive: Bool = false
+  /// Confirmed level for conversation boundaries, independent of provisional capture gating.
+  private(set) var isMeetingConfirmed = false
+  private var pendingOnSince: Date?
+  private var confirmedSince: Date?
+  private var noticeRequested = false
+  private var noticePresented = false
+  private let confirmationPeriod: TimeInterval
+  private let noticeDelay: TimeInterval
+  private let onConfirmedChange: (Bool) -> Void
+  private let onNoteTakingNoticeReady: () -> Void
+  private let onConfirmedEvidence: (MeetingDetectionEvidence) -> Void
+  private var latestEvidence: MeetingDetectionEvidence?
+  private var confirmedApps: Set<String> = []
+  private var lastNativeOutputAt: [String: Date] = [:]
+  private var confirmedCallIDs: Set<String> = []
+  private var confirmedCalendarIDs: Set<String> = []
+  private(set) var resumeOffAt: Date?
+  private(set) var lastMeetingEndedAt: Date?
+  private(set) var lastPositiveEvidenceDescription = "none"
+  private let resumeWindow: TimeInterval
+  private let calendarEventIDs: @Sendable () async -> Set<String>
+  private var latestCalendarEventIDs: Set<String> = []
+  private var calendarTask: Task<Void, Never>?
+  private var calendarProbeStartedAt: Date?
+  private var calendarProbeGeneration: UInt64 = 0
   /// True after at least one async probe has reported. Until then, `isMeetingActive == false`
   /// means "unknown", not "no meeting".
   private(set) var hasObservedState: Bool = false
@@ -82,12 +107,28 @@ final class MeetingDetector {
     processInputAPIAvailable: Bool? = nil,
     snapshot: (@Sendable () -> CallAudioSnapshot)? = nil,
     callConfirmationPeriod: TimeInterval = 8.0,
+    confirmationPeriod: TimeInterval = MeetingDetectionTiming.confirmationPeriod,
+    noticeDelay: TimeInterval = MeetingDetectionTiming.noticeDelay,
+    resumeWindow: TimeInterval = MeetingDetectionTiming.resumeWindow,
+    calendarEventIDs: @escaping @Sendable () async -> Set<String> = { [] },
     now: @escaping () -> Date = { Date() },
     audioLedgerDefaults: UserDefaults = .standard,
     calendar: Calendar = .current,
     onInitialStateObserved: @escaping () -> Void = {},
     onCallChanged: @escaping () -> Void = {},
     onChange: @escaping (Bool) -> Void,
+    onConfirmedChange: @escaping (Bool) -> Void = { _ in },
+    onNoteTakingNoticeReady: @escaping () -> Void = {},
+    onConfirmedEvidence: @escaping (MeetingDetectionEvidence) -> Void = {
+      PostHogManager.shared.track(MeetingDetectionEvidence.eventName, properties: $0.properties)
+      if !$0.titlesReadable, $0.processInputAPIAvailable,
+        $0.bundleIDs.contains(where: { MeetingCallObservation.browserFamily($0) != nil })
+      {
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "screen_capture", from: "browser_title_corroboration", to: "browser_microphone",
+          reason: "capability_mismatch", outcome: .recovered)
+      }
+    },
     onAudioSummaries: @escaping ([CallAppAudioSummary]) -> Void = { summaries in
       for summary in summaries {
         PostHogManager.shared.callAppAudioSummary(summary)
@@ -116,11 +157,18 @@ final class MeetingDetector {
     self.onInitialStateObserved = onInitialStateObserved
     self.onCallChanged = onCallChanged
     self.onChange = onChange
+    self.confirmationPeriod = confirmationPeriod
+    self.noticeDelay = noticeDelay
+    self.resumeWindow = resumeWindow
+    self.calendarEventIDs = calendarEventIDs
+    self.onConfirmedChange = onConfirmedChange
+    self.onNoteTakingNoticeReady = onNoteTakingNoticeReady
+    self.onConfirmedEvidence = onConfirmedEvidence
     self.onAudioSummaries = onAudioSummaries
   }
 
-  /// Begin observing app launch/terminate/activation and polling. Emits the initial state
-  /// synchronously so callers can read `isMeetingActive` immediately after `start()`.
+  /// Begin observing app changes and polling. The first off-main probe asynchronously
+  /// establishes readiness and provisional capture state.
   func start() {
     guard !started else { return }
     started = true
@@ -155,6 +203,12 @@ final class MeetingDetector {
     probeGeneration &+= 1
     probeTask?.cancel()
     probeTask = nil
+    calendarTask?.cancel()
+    calendarTask = nil
+    calendarProbeStartedAt = nil
+    calendarProbeGeneration &+= 1
+    latestCalendarEventIDs = []
+    lastNativeOutputAt = [:]
 
     timer?.invalidate()
     timer = nil
@@ -165,6 +219,8 @@ final class MeetingDetector {
     }
     workspaceObservers.removeAll()
     pendingOffDeadline = nil
+    pendingOnSince = nil
+    noticeRequested = false
     log("MeetingDetector: stopped")
   }
 
@@ -174,6 +230,7 @@ final class MeetingDetector {
     let probe = snapshot
     probeGeneration &+= 1
     let generation = probeGeneration
+    refreshCalendarEvents()
     let weakSelf = WeakMeetingDetector(self)
     probeTask?.cancel()
     probeTask = Task.detached(priority: .utility) {
@@ -183,8 +240,35 @@ final class MeetingDetector {
           detector.started,
           detector.probeGeneration == generation
         else { return }
-        detector.applySnapshot(shot)
+        detector.applySnapshot(shot, calendarEventIDs: detector.latestCalendarEventIDs)
       }
+    }
+  }
+
+  private func refreshCalendarEvents() {
+    // Do not use a task group: it would await an EventKit call that ignores cancellation.
+    // The regular audio poll retires the request and fences out any late result, even
+    // across stop/start. Clear cached IDs so stale calendar evidence cannot resume a call.
+    if let since = calendarProbeStartedAt,
+      now().timeIntervalSince(since) >= MeetingDetectionTiming.calendarProbeTimeout
+    {
+      calendarTask?.cancel()
+      calendarTask = nil
+      calendarProbeStartedAt = nil
+      latestCalendarEventIDs = []
+      log("MeetingDetector: calendar probe timed out; retrying")
+    }
+    guard calendarTask == nil else { return }
+    calendarProbeGeneration &+= 1
+    let generation = calendarProbeGeneration
+    calendarProbeStartedAt = now()
+    let events = calendarEventIDs
+    calendarTask = Task { [weak self] in
+      let ids = await events()
+      guard !Task.isCancelled, let self, self.started, self.calendarProbeGeneration == generation else { return }
+      self.latestCalendarEventIDs = ids
+      self.calendarProbeStartedAt = nil
+      self.calendarTask = nil
     }
   }
 
@@ -202,7 +286,7 @@ final class MeetingDetector {
 
   /// Apply one probe. Updates the mic-session ledger and the poll cadence, then the meeting
   /// state. Exposed for tests; the timer and workspace notifications drive it via `tick()`.
-  func applySnapshot(_ snapshot: CallAudioSnapshot) {
+  func applySnapshot(_ snapshot: CallAudioSnapshot, calendarEventIDs: Set<String> = []) {
     let timestamp = now()
     emitAudioSummaries(audioLedger.ingest(snapshot, at: timestamp))
     let desired = MeetingCallObservation.pollInterval(
@@ -211,39 +295,108 @@ final class MeetingDetector {
       pollInterval = desired
       if started { scheduleTimer() }
     }
+    let maySustain = resumeOffAt.map { timestamp.timeIntervalSince($0) < resumeWindow } ?? isMeetingConfirmed
+    for process in snapshot.processes where process.isRunningOutput {
+      if let app = ConferencingApps.nativeCallAppID(bundleID: process.bundleID) {
+        lastNativeOutputAt[app] = timestamp
+      }
+    }
+    let sustainingApps: Set<String> =
+      maySustain
+      ? confirmedApps.filter { app in
+        lastNativeOutputAt[app].map {
+          timestamp.timeIntervalSince($0) < MeetingDetectionTiming.inputOnlySustainPeriod
+        } ?? false
+      } : []
     let detected = MeetingCallObservation.isDetected(
-      snapshot: snapshot, mode: mode, processInputAPIAvailable: processInputAPIAvailable)
+      snapshot: snapshot, mode: mode, processInputAPIAvailable: processInputAPIAvailable,
+      sustainingApps: sustainingApps)
     let callIDs =
       detected
       ? MeetingCallObservation.identities(
         snapshot: snapshot,
         processInputAPIAvailable: processInputAPIAvailable,
+        sustainingApps: sustainingApps,
         nativeIdentity: { self.audioLedger.nativeCallIdentity(bundleID: $0) })
       : []
-    applyDetected(detected, callIDs: callIDs)
+    latestEvidence = MeetingDetectionEvidence(
+      snapshot: snapshot, mode: mode, processInputAPIAvailable: processInputAPIAvailable)
+    if detected {
+      let apps = MeetingCallObservation.nativeApps(snapshot: snapshot, sustainingApps: sustainingApps)
+      let flags = apps.sorted().map { app in
+        let processes = snapshot.processes.filter { ConferencingApps.nativeCallAppID(bundleID: $0.bundleID) == app }
+        return
+          "\(app)(input=\(processes.contains(where: \.isRunningInput)),output=\(processes.contains(where: \.isRunningOutput)))"
+      }
+      lastPositiveEvidenceDescription =
+        "at=\(timestamp.timeIntervalSince1970) apps=[\(flags.joined(separator: ","))] browserTitle=\(latestEvidence?.titleMatched == true)"
+    }
+    applyDetected(detected, callIDs: callIDs, calendarEventIDs: calendarEventIDs)
   }
 
   /// Apply a boolean detection result, honoring the off-hysteresis. Exposed for tests; normally
   /// driven by the poll timer and workspace notifications via `tick()`.
-  func applyDetected(_ detected: Bool, callIDs: Set<String> = []) {
+  func applyDetected(_ detected: Bool, callIDs: Set<String> = [], calendarEventIDs: Set<String> = []) {
     let hadObservedState = hasObservedState
     hasObservedState = true
+
+    if let offAt = resumeOffAt {
+      let expired = now().timeIntervalSince(offAt) >= resumeWindow
+      let matches =
+        !confirmedCallIDs.isDisjoint(with: callIDs)
+        || !confirmedCalendarIDs.isDisjoint(with: calendarEventIDs)
+      if expired || (detected && !matches) {
+        endConfirmedMeeting(at: offAt)
+      } else if detected {
+        // The call survived the capture gap. Re-adopt identities (including a new
+        // audio-helper generation) without publishing another conversation boundary.
+        resumeOffAt = nil
+        adoptConfirmedCall(callIDs, calendarEventIDs: calendarEventIDs)
+        callTracker.reset()
+        _ = callTracker.observe(callIDs, at: now())
+        log("MeetingDetector: meeting RESUMED")
+      }
+    }
 
     if detected {
       // Meeting present: cancel any pending-off and ensure we're active.
       pendingOffDeadline = nil
       setActive(true)
-      if callTracker.observe(callIDs, at: now()) {
+      if !isMeetingConfirmed {
+        if pendingOnSince == nil { pendingOnSince = now() }
+        if let since = pendingOnSince, now().timeIntervalSince(since) >= confirmationPeriod {
+          isMeetingConfirmed = true
+          lastMeetingEndedAt = nil
+          adoptConfirmedCall(callIDs, calendarEventIDs: calendarEventIDs)
+          confirmedSince = now()
+          noticePresented = false
+          pendingOnSince = nil
+          if let latestEvidence { onConfirmedEvidence(latestEvidence) }
+          onConfirmedChange(true)
+        }
+      }
+      if isMeetingConfirmed, confirmedCallIDs.isEmpty, !callIDs.isEmpty {
+        adoptConfirmedCall(callIDs, calendarEventIDs: calendarEventIDs)
+      }
+      if isMeetingConfirmed, confirmedCalendarIDs.isEmpty { confirmedCalendarIDs = calendarEventIDs }
+      if isMeetingConfirmed, callTracker.observe(callIDs, at: now()) {
+        adoptConfirmedCall(callIDs, calendarEventIDs: calendarEventIDs)
         log("MeetingDetector: call CHANGED (now \(callIDs.sorted().joined(separator: ",")))")
         hasPendingCallChange = true
+        confirmedSince = now()
+        noticeRequested = false
+        noticePresented = false
         onCallChanged()
       }
+      deliverNoteTakingNoticeIfReady()
     } else if isMeetingActive {
+      pendingOnSince = nil
       // Meeting undetected while active: arm or honor the off grace period.
-      callTracker.noteMicrophoneGap(at: now())
+      if isMeetingConfirmed { callTracker.noteMicrophoneGap(at: now()) }
       if let deadline = pendingOffDeadline {
         if now() >= deadline {
           pendingOffDeadline = nil
+          if isMeetingConfirmed { resumeOffAt = now() }
           setActive(false)
         }
       } else {
@@ -252,6 +405,7 @@ final class MeetingDetector {
     } else {
       // Already inactive and still no meeting.
       pendingOffDeadline = nil
+      pendingOnSince = nil
     }
 
     if !hadObservedState {
@@ -263,17 +417,72 @@ final class MeetingDetector {
     guard active != isMeetingActive else { return }
     isMeetingActive = active
     if !active {
+      pendingOnSince = nil
+      // A committed notice remains owed while this confirmed session can resume.
+      // Already delivered notices stay disarmed, and inactive capture cannot present one.
+      if !isMeetingConfirmed {
+        confirmedSince = nil
+        noticeRequested = false
+        noticePresented = false
+      }
       callTracker.reset()
       hasPendingCallChange = false
     }
-    log("MeetingDetector: meeting \(active ? "STARTED" : "ENDED")")
+    log(
+      "MeetingDetector: meeting \(active ? "STARTED" : "ENDED")\(active ? "" : " lastPositive=\(lastPositiveEvidenceDescription) resumePending=\(resumeOffAt != nil)")"
+    )
     onChange(active)
+  }
+
+  private func adoptConfirmedCall(_ callIDs: Set<String>, calendarEventIDs: Set<String>) {
+    confirmedCallIDs = callIDs
+    confirmedCalendarIDs = calendarEventIDs
+    confirmedApps = Set(
+      callIDs.compactMap { id in
+        guard id.hasPrefix("app:"), let bundle = id.dropFirst(4).split(separator: "#").first else { return nil }
+        return String(bundle)
+      })
+  }
+
+  private func endConfirmedMeeting(at offAt: Date) {
+    resumeOffAt = nil
+    lastMeetingEndedAt = offAt
+    isMeetingConfirmed = false
+    confirmedSince = nil
+    noticeRequested = false
+    noticePresented = false
+    confirmedApps = []
+    confirmedCallIDs = []
+    confirmedCalendarIDs = []
+    callTracker.reset()
+    hasPendingCallChange = false
+    onConfirmedChange(false)
+  }
+
+  /// Called only after a successful rotation. A late commit can owe a notice during
+  /// a resume hold, but retired meetings cannot arm one and inactive capture cannot show it.
+  func requestNoteTakingNotice() {
+    guard isMeetingConfirmed, !noticePresented, isMeetingActive || resumeOffAt != nil else { return }
+    noticeRequested = true
+    deliverNoteTakingNoticeIfReady()
+  }
+
+  private func deliverNoteTakingNoticeIfReady() {
+    guard noticeRequested, !noticePresented, isMeetingConfirmed, isMeetingActive, pendingOffDeadline == nil,
+      let since = confirmedSince, now().timeIntervalSince(since) >= noticeDelay
+    else { return }
+    noticeRequested = false
+    noticePresented = true
+    onNoteTakingNoticeReady()
   }
 
   func clearPendingCallChange() { hasPendingCallChange = false }
   func restorePendingCallChange() { hasPendingCallChange = true }
 
   #if DEBUG
+    var currentCalendarTaskForTesting: Task<Void, Never>? { calendarTask }
+    var calendarEventIDsForTesting: Set<String> { latestCalendarEventIDs }
+
     var currentProbeTaskForTesting: Task<Void, Never>? {
       probeTask
     }

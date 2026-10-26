@@ -26,7 +26,6 @@ typedef FetchMemoriesCursorRequest = Future<GetMemoriesResult> Function({
   int offset,
   bool thisDeviceOnly,
   String? cursor,
-  MemoryReadView? view,
 });
 typedef FetchLedgerHistoryRequest = Future<GetLedgerHistoryResult> Function({int limit, int offset});
 typedef FetchLedgerHistoryCursorRequest = Future<GetLedgerHistoryResult> Function(
@@ -34,26 +33,10 @@ typedef FetchLedgerHistoryCursorRequest = Future<GetLedgerHistoryResult> Functio
 typedef ReviewMemoryRequest = Future<bool> Function(String memoryId, bool value);
 typedef EditMemoryRequest = Future<EditMemoryResult> Function(String memoryId, String value);
 typedef RevertMemoryRequest = Future<RevertMemoryResult> Function(String memoryId, String operationId);
-typedef MemoryUseRequest = Future<MemoryUseResult> Function({
-  required String memoryId,
-  required MemoryUseAction action,
-  required String feedbackId,
-});
 
-/// The default memory collection is useful-now. History is an explicit owner
-/// action and remains available without changing the underlying records.
+/// The default memory collection contains current memories. Ledger history is
+/// an explicit owner view over retained historical rows.
 enum MemoryCollectionView { usefulNow, history, all }
-
-MemoryReadView _serverViewForCollection(MemoryCollectionView view) {
-  switch (view) {
-    case MemoryCollectionView.usefulNow:
-      return MemoryReadView.usefulNow;
-    case MemoryCollectionView.history:
-      return MemoryReadView.history;
-    case MemoryCollectionView.all:
-      return MemoryReadView.all;
-  }
-}
 
 Future<GetLedgerHistoryResult> _noLedgerHistory({int limit = 500, int offset = 0}) async =>
     const GetLedgerHistoryResult([], supported: false);
@@ -71,7 +54,6 @@ class MemoriesProvider extends ChangeNotifier {
   bool _ledgerHistoryHasMore = false;
   int _ledgerHistoryOffset = 0;
   String? _ledgerHistoryNextCursor;
-  bool? _beliefEnabled = memoryBeliefCapability;
   MemoryCollectionView _collectionView = MemoryCollectionView.usefulNow;
   bool _loadFailed = false;
   bool _hasLoaded = false;
@@ -98,11 +80,8 @@ class MemoriesProvider extends ChangeNotifier {
   final ReviewMemoryRequest _reviewMemoryRequest;
   final EditMemoryRequest _editMemoryRequest;
   final RevertMemoryRequest _revertMemoryRequest;
-  final MemoryUseRequest _memoryUseRequest;
   final Set<String> _revertingMemoryIds = {};
   final Map<String, String> _revertOperationIds = {};
-  final Set<String> _memoryUseInFlight = {};
-  final Map<String, String> _memoryUseFeedbackIds = {};
 
   /// Verdicts persisted this session for ids the loaded list does not resolve
   /// (cold provider, truncated bulk list, or rows GET /v3/memories filters
@@ -122,7 +101,6 @@ class MemoriesProvider extends ChangeNotifier {
   Future<void>? _inFlightLoad;
   int _inFlightLoadLimit = 100;
   bool _inFlightLoadDeviceScoped = false;
-  MemoryCollectionView _inFlightLoadView = MemoryCollectionView.usefulNow;
 
   /// True while a history continuation is in flight. A second concurrent
   /// load-more must not read the same offset page and advance the offset
@@ -142,7 +120,6 @@ class MemoriesProvider extends ChangeNotifier {
     ReviewMemoryRequest? reviewMemoryRequest,
     EditMemoryRequest? editMemoryRequest,
     RevertMemoryRequest? revertMemoryRequest,
-    MemoryUseRequest? memoryUseRequest,
     ReadRetry? memoriesReadRetry,
   })  : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
         _memoriesReadRetry = memoriesReadRetry ?? ReadRetry(),
@@ -156,8 +133,7 @@ class MemoriesProvider extends ChangeNotifier {
         _updateMemoryVisibilityRequest = updateMemoryVisibilityRequest ?? updateMemoryVisibilityServer,
         _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer,
         _editMemoryRequest = editMemoryRequest ?? editMemoryServer,
-        _revertMemoryRequest = revertMemoryRequest ?? revertMemoryServer,
-        _memoryUseRequest = memoryUseRequest ?? useMemoryServer {
+        _revertMemoryRequest = revertMemoryRequest ?? revertMemoryServer {
     _fetchMemoriesCursorRequest =
         fetchMemoriesCursorRequest ?? (fetchMemoriesRequest == null ? _getMemoriesCursorPage : null);
   }
@@ -178,7 +154,6 @@ class MemoriesProvider extends ChangeNotifier {
   bool get ledgerHistoryTruncated => _ledgerHistoryTruncated;
   bool get ledgerHistoryHasMore => _ledgerHistoryHasMore;
   String? get ledgerHistoryNextCursor => _ledgerHistoryNextCursor;
-  bool get memoryBeliefEnabled => _beliefEnabled == true;
   MemoryCollectionView get collectionView => _collectionView;
   bool get showHistory => _collectionView == MemoryCollectionView.history;
   bool get showAll => _collectionView == MemoryCollectionView.all;
@@ -214,8 +189,6 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   bool isRevertingMemory(String memoryId) => _revertingMemoryIds.contains(memoryId);
-
-  bool isApplyingMemoryUse(String memoryId) => _memoryUseInFlight.contains(memoryId);
 
   bool canRevertSupersededFact(Memory memory) {
     if (!_isEligibleSupersededFact(memory)) return false;
@@ -274,20 +247,11 @@ class MemoriesProvider extends ChangeNotifier {
 
   List<Memory> get filteredMemories {
     return _memories.where((memory) {
-      // Historical rows remain in the provider so review/revert and an
-      // explicit history view can use the authoritative record. The default
-      // list keeps them out of the useful-now experience.
-      // A missing/false capability means the server returned the legacy
-      // combined projection; preserve every row until a true header opts this
-      // client into temporal filtering.
-      final temporalMatch = _beliefEnabled != true ||
-          switch (_collectionView) {
-            MemoryCollectionView.usefulNow => memory.isUsefulNow && memory.memoryUseSuppressed != true,
-            // The server owns the history/all projection. Keep these rows
-            // visible locally so retained dated and suppressed rows returned
-            // by the requested view are not filtered back out.
-            MemoryCollectionView.history || MemoryCollectionView.all => true,
-          };
+      final collectionMatch = switch (_collectionView) {
+        MemoryCollectionView.usefulNow => memory.isUsefulNow,
+        MemoryCollectionView.history => memory.isHistoricalKnowledgeLedgerRow,
+        MemoryCollectionView.all => true,
+      };
 
       // Apply search filter
       final matchesSearch =
@@ -295,7 +259,11 @@ class MemoriesProvider extends ChangeNotifier {
 
       // Apply category filter or exclusion logic
       bool categoryMatch;
-      if (_showOnlyManual) {
+      if (_searchQuery.isNotEmpty) {
+        // A search looks in every category, as Global Search does when it opens this list filtered
+        // by its query. A category filter saved on an earlier visit must not hide the tapped memory.
+        categoryMatch = true;
+      } else if (_showOnlyManual) {
         // Show only manual memories (exclude system and interesting)
         categoryMatch = memory.category == MemoryCategory.manual;
       } else if (_selectedCategories.isNotEmpty) {
@@ -316,7 +284,7 @@ class MemoriesProvider extends ChangeNotifier {
             captureDeviceIds: memory.captureDeviceIds,
           );
 
-      return temporalMatch && matchesSearch && categoryMatch && deviceMatch;
+      return collectionMatch && matchesSearch && categoryMatch && deviceMatch;
     }).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
@@ -325,9 +293,8 @@ class MemoriesProvider extends ChangeNotifier {
     if (_collectionView == view) return;
     _collectionView = view;
     notifyListeners();
-    // Each server view owns a different cursor stream. Start a new bounded
-    // traversal rather than applying a local filter to the previous view.
-    unawaited(loadMemories());
+    // The collection view changes only local presentation. The current list
+    // and the owner-scoped ledger history are already loaded independently.
   }
 
   void setFilterThisDeviceOnly(bool enabled) {
@@ -355,21 +322,38 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void setSearchQuery(String query) {
-    _searchQuery = query.toLowerCase();
+    // Kept as typed so the Memories search field can show it again; filteredMemories ignores case.
+    _searchQuery = query;
     notifyListeners();
   }
 
-  void toggleCategoryFilter(MemoryCategory category) async {
+  Future<void> toggleCategoryFilter(MemoryCategory category) async {
     if (_selectedCategories.contains(category)) {
       _selectedCategories.remove(category);
     } else {
       _selectedCategories.add(category);
     }
     _showOnlyManual = false; // Reset manual-only filter when setting a category filter
+    _selectedCategories = normalizeCategorySelection(_selectedCategories);
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('memories_filter_categories', _selectedCategories.map((e) => e.name).toList());
+    if (_selectedCategories.isEmpty) {
+      // Selecting every category is All; persist that as no filter so the
+      // sheet keeps showing All checked on the next open.
+      await prefs.remove('memories_filter_categories');
+    } else {
+      await prefs.setStringList('memories_filter_categories', _selectedCategories.map((e) => e.name).toList());
+    }
+  }
+
+  /// An empty set means All. Selecting every category is the same "show
+  /// everything" state, so it collapses to empty instead of leaving All
+  /// unchecked with a category row ticked.
+  @visibleForTesting
+  static Set<MemoryCategory> normalizeCategorySelection(Iterable<MemoryCategory> selection) {
+    final normalized = selection.toSet();
+    return normalized.length == MemoryCategory.values.length ? <MemoryCategory>{} : normalized;
   }
 
   void clearCategoryFilter() async {
@@ -393,7 +377,6 @@ class MemoriesProvider extends ChangeNotifier {
     _inFlightLoad = null;
     _inFlightLoadLimit = 100;
     _inFlightLoadDeviceScoped = false;
-    _inFlightLoadView = MemoryCollectionView.usefulNow;
     _memories = [];
     _selectedCategories = {};
     _showOnlyManual = false;
@@ -404,7 +387,6 @@ class MemoriesProvider extends ChangeNotifier {
     _ledgerHistoryHasMore = false;
     _ledgerHistoryOffset = 0;
     _ledgerHistoryNextCursor = null;
-    _beliefEnabled = null;
     _collectionView = MemoryCollectionView.usefulNow;
     categories = [];
     selectedCategory = null;
@@ -414,8 +396,6 @@ class MemoriesProvider extends ChangeNotifier {
     _isSyncing = false;
     _revertingMemoryIds.clear();
     _revertOperationIds.clear();
-    _memoryUseInFlight.clear();
-    _memoryUseFeedbackIds.clear();
     _settledUnresolvedReviews.clear();
     _externalHydrateAttempts.clear();
     _cancelDeletionTimer();
@@ -471,10 +451,7 @@ class MemoriesProvider extends ChangeNotifier {
     // caller with different parameters gets its own load, which supersedes the
     // in-flight one via the sequence guard as before.
     final inFlight = _inFlightLoad;
-    if (inFlight != null &&
-        _inFlightLoadLimit == limit &&
-        _inFlightLoadDeviceScoped == _filterThisDeviceOnly &&
-        _inFlightLoadView == _collectionView) {
+    if (inFlight != null && _inFlightLoadLimit == limit && _inFlightLoadDeviceScoped == _filterThisDeviceOnly) {
       try {
         await inFlight;
       } catch (_) {}
@@ -483,19 +460,11 @@ class MemoriesProvider extends ChangeNotifier {
     await _startMemoryLoad(limit: limit);
   }
 
-  /// Start a new read even when an older request is still in flight. This is
-  /// reserved for mutations whose confirmation must come from a post-action
-  /// server projection rather than a request that started before the action.
-  Future<void> _loadMemoriesFresh({int limit = 100}) {
-    return _startMemoryLoad(limit: limit);
-  }
-
   Future<void> _startMemoryLoad({required int limit}) async {
     final loadFuture = _loadMemoriesInternal(limit: limit);
     _inFlightLoad = loadFuture;
     _inFlightLoadLimit = limit;
     _inFlightLoadDeviceScoped = _filterThisDeviceOnly;
-    _inFlightLoadView = _collectionView;
     try {
       await loadFuture;
     } finally {
@@ -525,7 +494,6 @@ class MemoriesProvider extends ChangeNotifier {
           ledgerProjectionRevision != _ledgerProjectionRevision) {
         return;
       }
-      _beliefEnabled = result.beliefEnabled;
       if (!result.supported) return;
 
       final existing = _memories.map((memory) => memory.id).toSet();
@@ -571,16 +539,15 @@ class MemoriesProvider extends ChangeNotifier {
     final filterList = prefs.getStringList('memories_filter_categories');
 
     if (filterList == null) {
-      _selectedCategories = {
-        MemoryCategory.system,
-        MemoryCategory.interesting,
-        MemoryCategory.manual,
-        MemoryCategory.workflow,
-      };
+      // Nothing saved is the All view. Seeding every category here left All
+      // unchecked and every category row ticked, so tapping a category removed
+      // it from the view instead of filtering to it.
+      _selectedCategories = {};
     } else {
-      _selectedCategories = filterList
-          .map((e) => MemoryCategory.values.firstWhere((c) => c.name == e, orElse: () => MemoryCategory.system))
-          .toSet();
+      // Drop names this build no longer knows instead of silently checking System.
+      _selectedCategories = normalizeCategorySelection(
+        filterList.map((e) => MemoryCategory.values.where((c) => c.name == e).firstOrNull).whereType<MemoryCategory>(),
+      );
     }
     notifyListeners();
   }
@@ -710,72 +677,6 @@ class MemoriesProvider extends ChangeNotifier {
     }
     SiriIntegration.current.queueUpsertMemories([memory]);
     return true;
-  }
-
-  /// Record an owner decision about whether this memory may be used by agents.
-  ///
-  /// The feedback id is minted once per memory/action and retained across
-  /// retries so a lost response cannot create a second durable receipt. The
-  /// response is followed by a normal list refresh; the local argument bag is
-  /// only a short-lived fallback for offline/error rendering and is replaced
-  /// by the next authenticated server projection when available.
-  Future<bool> setMemoryUse(Memory memory, MemoryUseAction action) async {
-    if (memory.isLocked ||
-        memory.deleted ||
-        memory.invalidAt != null ||
-        (memory.supersededBy ?? '').trim().isNotEmpty ||
-        (memory.ledgerStatus != null && memory.ledgerStatus != 'active') ||
-        (memory.isKnowledgeLedger && !memory.isCurrentKnowledgeLedgerRow) ||
-        _beliefEnabled != true) {
-      return false;
-    }
-    final operationKey = '${memory.id}:${action.apiValue}';
-    if (!_memoryUseInFlight.add(memory.id)) return false;
-    final generation = _sessionGeneration;
-    final feedbackId = _memoryUseFeedbackIds.putIfAbsent(operationKey, () => const Uuid().v4());
-    notifyListeners();
-
-    try {
-      final result = await _memoryUseRequest(memoryId: memory.id, action: action, feedbackId: feedbackId);
-      if (!result.persisted || generation != _sessionGeneration) return false;
-
-      final index = _memories.indexWhere((candidate) => candidate.id == memory.id);
-      if (index != -1 && result.suppressed != null) {
-        final live = _memories[index];
-        final arguments = Map<String, dynamic>.from(live.arguments ?? const {});
-        final existing = arguments['memory_use'];
-        final use = existing is Map ? Map<String, dynamic>.from(existing) : <String, dynamic>{};
-        use['suppressed'] = result.suppressed;
-        use['last_action'] = (result.action ?? action).apiValue;
-        use['state'] = result.suppressed == true
-            ? 'suppressed'
-            : ((result.action ?? action) == MemoryUseAction.useful ? 'useful' : 'allowed');
-        use['feedback_id'] = result.feedbackId ?? feedbackId;
-        arguments['memory_use'] = use;
-        live.arguments = arguments;
-      }
-      // Preserve the confirmed receipt if a refresh is unavailable, then
-      // replace it with the server's full current projection when it is.
-      SharedPreferencesUtil().cachedMemories = List<Memory>.unmodifiable(_memories);
-      try {
-        // A load may already be in flight from before this owner action. It
-        // cannot be reused as confirmation because it predates the mutation.
-        await _loadMemoriesFresh();
-        // A later click is a distinct user action; only retries of an
-        // unacknowledged action reuse its id. Keep it when refresh fails so a
-        // retry still converges on the acknowledged server receipt.
-        if (!_loadFailed) _memoryUseFeedbackIds.remove(operationKey);
-      } catch (error) {
-        Logger.warning('MemoriesProvider: memory-use refresh failed for ${memory.id}: $error');
-      }
-      return true;
-    } catch (error) {
-      Logger.warning('MemoriesProvider: memory-use persistence failed for ${memory.id}: $error');
-      return false;
-    } finally {
-      _memoryUseInFlight.remove(memory.id);
-      notifyListeners();
-    }
   }
 
   /// Append an authoritative current replacement for one superseded v1 fact.

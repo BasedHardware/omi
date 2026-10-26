@@ -130,7 +130,11 @@ that file can stay under the line ratchet; the functions keep one-line
 pointers back to this section.
 
 `connect_stt_socket_with_fallback` connects the selected primary before audio
-starts, walking the configured fallbacks. `STT_SERVICE_MODELS` states an ordered
+starts, walking the configured fallbacks. Deepgram is retired (2026-08-27, no
+contract): it is absent from `config/stt_provider_policy.py`, selection never
+admits a `dg-*` model, and startup logs an error if a chain still lists one.
+The incident narratives below that name Deepgram are history.
+`STT_SERVICE_MODELS` states an ordered
 preference, so a primary that cannot open a socket must advance to the next
 configured provider instead of failing the session — a Deepgram account
 rejecting every connect with HTTP 402 otherwise takes the whole deployment's
@@ -341,7 +345,9 @@ behavior relative to the merged serving-owned settlement implementation.
 | Connect transport/server failure | provider/path | provider_5xx or timeout | provider_failure, same cause, path=connect |
 | Quota / authentication | account/us | quota / auth | censored/provider_budget_exhausted or provider_auth_rejected (connect auth remains auth) |
 | Window first-text deadline / empty streak | unresolved audio/recognizer | first_text_deadline / empty_streak | censored, same cause |
-| Admission, capability/allocation, PCM/replay/send-queue capacity | us/capacity | capacity_full / allocation_rejected / capability_mismatch | censored, same cause |
+| Admission, capability/allocation, PCM/replay capacity | us/capacity | capacity_full / allocation_rejected / capability_mismatch | censored, same cause |
+| Soniox/Modulate local delivery bound: send queue or tail buffer full, replay pacing/wall budget not kept, frame delivery deadline expired | us/local delivery | send_queue_full / replay_send_stalled / delivery_expired (were all capacity_full; split 2026-10-21 P34) | censored, same cause |
+| Window capture replay ring outgrows its horizon before emission | us/session replay lag | replay_ring_overflow | censored, same cause |
 | VAD / invalid request or audio / loop misuse | us/audio | vad_failed / other | censored, same cause |
 | Soniox 400 no-audio / 408 request timeout | client/input timing | soniox_idle_timeout / soniox_request_timeout | censored, same cause |
 | Soniox duration rotation | protocol lifecycle | soniox_rotation | censored/soniox_rotation |

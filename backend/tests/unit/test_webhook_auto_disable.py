@@ -750,7 +750,9 @@ class TestChatToolCircuitBreaker:
 
             result = await mod._call_tool_endpoint({}, config, tool, "app-1")
 
-        assert result == "ok"
+        assert result.startswith('<untrusted source="test_tool_app_result">')
+        assert "ok" in result
+        assert "never instructions" in result
         mock_cb.record_success.assert_called_once()
         mock_success.assert_called_once_with("app-1", "chat_tool")
 
@@ -1484,7 +1486,9 @@ class TestMCPToolHealthTracking:
             patch.object(mod, "record_app_webhook_success") as mock_success,
         ):
             result = await structured_tool.coroutine()
-        assert result == "result ok"
+        assert result.startswith('<untrusted source="testmcpapp_mcp_test_mcp_result">')
+        assert "result ok" in result
+        assert "never instructions" in result
         mock_success.assert_called_once_with("app-mcp-1", "mcp_tool")
 
     @pytest.mark.asyncio

@@ -75,11 +75,13 @@ from utils.chat import (
     transcribe_pcm_bytes,
 )
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
+from routers import chat_video
 from utils.stt.streaming import STTService, connect_stt_socket_with_fallback, drain_stt_socket
 from utils.stt.streaming import get_stt_service_for_language, process_audio_modulate, process_audio_parakeet
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.pre_recorded import get_prerecorded_service
 from config.prerecorded_stt import TranscriptionOutcome
+from models.transcription_wire import TranscriptionOutcome as WireTranscriptionOutcome
 from config.stt_provider_policy import MODULATE_PROVIDER, STTServingSurface, provider_for_service
 from utils.stt.outcomes import TranscriptionFailure, bounded_provider, failure_from_exception
 from utils.observability.transcription import TranscriptionAttempt
@@ -120,6 +122,7 @@ from utils.voice_duration_limiter import (
     settle_reserved_duration,
     record_actual_duration,
 )
+from utils.stt.failure_diagnostics import transcription_failure_categories
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 import logging
 
@@ -141,12 +144,14 @@ class VoiceMessageTranscriptionResponse(BaseModel):
     language: Optional[str] = None
     stt_provider: Optional[str] = None
     stt_model: Optional[str] = None
-    outcome: Optional[TranscriptionOutcome] = None
+    # Wire vocabulary frozen by the released app-client contract; internal-only
+    # outcome values map onto their public counterpart (models/transcription_wire).
+    outcome: Optional[WireTranscriptionOutcome] = None
 
 
 class TranscriptionErrorDetail(BaseModel):
     error: str
-    outcome: TranscriptionOutcome
+    outcome: WireTranscriptionOutcome
     provider: str
     retryable: bool
     message: str
@@ -156,12 +161,11 @@ class TranscriptionErrorResponse(BaseModel):
     detail: TranscriptionErrorDetail
 
 
-def _transcription_http_error(failure: TranscriptionFailure) -> HTTPException:
+def _transcription_http_error(failure: TranscriptionFailure, error: BaseException | None = None) -> HTTPException:
+    stage, kind = transcription_failure_categories(error if error is not None else failure)
     logger.warning(
-        'Transcription request failed: outcome=%s provider=%s retryable=%s',
-        failure.outcome.value,
-        failure.provider,
-        failure.retryable,
+        f'Transcription request failed: outcome={failure.outcome.value} provider={failure.provider} '
+        f'retryable={failure.retryable} stage={stage} error_kind={kind}'
     )
     return HTTPException(status_code=failure.status_code, detail=failure.as_detail())
 
@@ -475,12 +479,12 @@ def create_voice_message_stream(
             retryable=False,
         )
         _record_preparation_failure(failure)
-        raise _transcription_http_error(failure) from error
+        raise _transcription_http_error(failure, error=error) from error
     except Exception as error:
         failure = failure_from_exception(error, provider=stt_provider)
         _record_preparation_failure(failure)
         _cleanup_temp_voice_wavs(paths + wav_paths, uid)
-        raise _transcription_http_error(failure) from error
+        raise _transcription_http_error(failure, error=error) from error
 
     # process
     async def generate_stream():
@@ -586,7 +590,7 @@ async def transcribe_voice_message(
                     provider=None,
                     retryable=False,
                 )
-                raise _transcription_http_error(failure) from error
+                raise _transcription_http_error(failure, error=error) from error
             if parsed_content_length > _MAX_PCM_BODY_BYTES:
                 raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_PCM_BODY_BYTES} bytes)')
 
@@ -694,7 +698,7 @@ async def transcribe_voice_message(
         except Exception as error:
             failure = failure_from_exception(error, provider=stt_provider)
             attempt.finish(failure.outcome)
-            raise _transcription_http_error(failure) from error
+            raise _transcription_http_error(failure, error=error) from error
         finally:
             if not attempt.finished:
                 attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
@@ -845,14 +849,14 @@ async def transcribe_voice_message(
             _record_multipart_preparation_failure(failure)
         else:
             attempt.finish(failure.outcome)
-        raise _transcription_http_error(failure) from error
+        raise _transcription_http_error(failure, error=error) from error
     except Exception as error:
         failure = failure_from_exception(error, provider=stt_provider)
         if attempt is None:
             _record_multipart_preparation_failure(failure)
         else:
             attempt.finish(failure.outcome)
-        raise _transcription_http_error(failure) from error
+        raise _transcription_http_error(failure, error=error) from error
     finally:
         if attempt is not None and not attempt.finished:
             attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
@@ -1462,6 +1466,7 @@ def upload_file_chat(
     thumbs_name = []
     thumb_source_by_name = {}
     files_chat = []
+    stored_videos: dict[int, FileChat] = {}  # by upload position; answered in that order
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
         safe_suffix = Path(file.filename).name if file.filename else "upload"
@@ -1469,6 +1474,12 @@ def upload_file_chat(
         try:
             with temp_file.open("wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
+
+            if chat_video.is_video_upload(safe_suffix, file.content_type):
+                stored_videos[len(files_chat) + len(stored_videos)] = chat_video.store_uploaded_clip(
+                    uid, temp_file, safe_suffix
+                )
+                continue
 
             try:
                 result = FileChatTool.upload(temp_file, file_name=safe_suffix)
@@ -1512,7 +1523,10 @@ def upload_file_chat(
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.model_dump() for fc in files_chat]
+    ordered = iter(files_chat)
+    response = [
+        (stored_videos.get(i) or next(ordered)).client_dump() for i in range(len(files_chat) + len(stored_videos))
+    ]
 
     return response
 

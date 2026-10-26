@@ -15,7 +15,6 @@ import logging
 import threading
 from typing import Callable, Optional
 
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from utils.capture_evidence import (
     bounded_envelope,
     merge_track_receipts,
@@ -23,9 +22,32 @@ from utils.capture_evidence import (
     unknown_envelope,
 )
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
+from utils.observability.fallback import record_fallback
 from utils.stt.outcomes import TranscriptionOutcome
+from utils.sync.assignment_telemetry import CREATED_UNKNOWN_REASONS
 
 logger = logging.getLogger(__name__)
+
+
+def log_sync_lineage_created(observation: dict) -> None:
+    """One id-free gate-3 observation after a successful assignment commit."""
+    try:
+        suffix = ''
+        if observation['outcome'] == 'created_unknown':
+            reason = observation.get('incomplete_reason')
+            if reason not in CREATED_UNKNOWN_REASONS:
+                reason = 'not_recorded'
+            suffix = f' incomplete_reason={reason}'
+        logger.info(
+            'event=sync_lineage_resolve outcome=%s stage=assignment '
+            'checked_live_candidates_bucket=%s lookup_complete=%s%s',
+            observation['outcome'],
+            observation['checked_live_candidates_bucket'],
+            str(observation['lookup_complete']).lower(),
+            suffix,
+        )
+    except Exception:
+        pass
 
 
 def acknowledge_processed_segment(
@@ -65,8 +87,6 @@ def apply_capture_evidence_dark_write(
     incoming: dict, source_position_map: Optional[tuple[dict, int]], transcript_segments: list
 ) -> None:
     """Populate ``incoming['capture_evidence']`` from the pre-ingest receipts."""
-    if not capture_evidence_dark_write_enabled():
-        return
     receipt = unknown_envelope('missing_source_position', origin='sync_vad')
     if source_position_map is not None:
         frame_map, derivative_start = source_position_map
@@ -90,11 +110,10 @@ def apply_capture_evidence_dark_write(
 
 def record_capture_evidence_metric(incoming: dict) -> None:
     """Emit the post-ingest envelope metric for a dark-written capture receipt."""
-    if capture_evidence_dark_write_enabled():
-        OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
-            path='sync',
-            status='mapped' if incoming['capture_evidence']['capability'] == 'source_position' else 'unknown',
-        ).inc()
+    OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
+        path='sync',
+        status='mapped' if incoming['capture_evidence']['capability'] == 'source_position' else 'unknown',
+    ).inc()
 
 
 def log_sync_lineage_append(stats: dict, existing_completion: bool = False) -> None:
@@ -122,6 +141,22 @@ def log_sync_lineage_stamp_append(span_delta_bucket: str) -> None:
         pass
 
 
+def log_sync_lineage_stamp_gap_refused() -> None:
+    """Both legacy and batch projection report a committed stamp-gap reroute."""
+    try:
+        logger.info('event=sync_lineage_stamp_append outcome=stamp_gap_refused span_delta_bucket=0')
+    except Exception:
+        pass
+    record_fallback(
+        component='sync_dispatch',
+        from_mode='explicit_target',
+        to_mode='temporal_assignment',
+        reason='policy',
+        outcome='degraded',
+        log=logger,
+    )
+
+
 def complete_sync_intake(
     *,
     uid: str,
@@ -136,6 +171,7 @@ def complete_sync_intake(
     finish: Callable,
     mark_finalize: Callable[[], None],
     acknowledge: Callable[[], None],
+    attach_episode: Optional[Callable[[str, str, dict], str]] = None,
 ) -> str:
     """Enroll the intake result, store audio, run enrichment and log telemetry.
 
@@ -144,11 +180,15 @@ def complete_sync_intake(
     ``finish`` or the response. ``store_audio`` receives the canonical id and
     decides itself whether anything is uploaded; ``mark_finalize`` and
     ``acknowledge`` keep the caller's phase and outcome bookkeeping order.
+    ``attach_episode``, when handed in, joins the landed row to the live
+    episode covering it before anything downstream can fail; it never raises
+    and never changes the intake result.
     """
     repeat_only = bool(assigned.pop('_sync_lineage_repeat_only', False))
     completion_pending = bool(assigned.pop('_sync_lineage_completion_pending', False))
     stats = assigned.pop('_sync_lineage_dedupe', None)
     stamp_bucket = assigned.pop('_sync_lineage_stamp_append', None)
+    stamp_gap_refused = assigned.pop('_sync_lineage_stamp_gap_refused', False)
     # An exact sync-scoped retry may owe enrichment from an earlier partial
     # run. That existing debt still enrolls and finishes even though this
     # upload wrote nothing; pristine live repeats invent no new debt.
@@ -166,6 +206,12 @@ def complete_sync_intake(
         log_sync_lineage_append(stats, existing_completion=existing_completion and repeat_only)
     if stamp_bucket is not None:
         log_sync_lineage_stamp_append(stamp_bucket)
+    if stamp_gap_refused:
+        log_sync_lineage_stamp_gap_refused()
+    if attach_episode is not None and (not repeat_only or existing_completion):
+        # The row is visible in Home from this moment; fold it under the live
+        # episode before audio storage or enrichment can stall behind it.
+        attach_episode(uid, conversation_id, assigned)
     store_audio(conversation_id)
     mark_finalize()
     if not repeat_only or existing_completion:

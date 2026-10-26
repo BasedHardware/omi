@@ -1,0 +1,3 @@
+{
+  "change": "Offline Sync now uploads your oldest unsynced recordings first, so interrupted syncs no longer leave old audio stuck until it can no longer be recovered, and pauses briefly when the server asks it to wait"
+}
