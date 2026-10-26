@@ -23,6 +23,9 @@ from utils.executors import ExecutorSaturatedError
 from utils.other import notifications as notif
 
 UID = 'u1'
+# This wiring suite exercises a current-day recap. Before noon, a live clock
+# selects yesterday instead; pass the same explicit instant to the producer.
+RECAP_AT = datetime(2026, 10, 24, 13, tzinfo=timezone.utc)
 
 
 async def _dispatch(pass_requests):
@@ -38,7 +41,7 @@ async def _bulk_then_drain(users, **kwargs):
 
 @pytest.fixture
 def recap_env(monkeypatch):
-    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    today = RECAP_AT.strftime('%Y-%m-%d')
 
     pass_calls = []
 
@@ -96,7 +99,7 @@ def recap_env(monkeypatch):
 
 def _user_data():
     # (uid, tokens, tz, at, retry_delivery, retry_attempt, delivery_completed)
-    return (UID, None, 'UTC', None, False, False, None)
+    return (UID, None, 'UTC', RECAP_AT, False, False, None)
 
 
 def test_recap_returns_the_pass_request_after_its_own_work(recap_env):

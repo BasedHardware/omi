@@ -7021,3 +7021,12 @@ Worker handoffs also carry a separate `worker_vad_receipt` with `version: 1`,
 `sample_rate_hz: 16000` and `input_uri_sha256` binding the staged input URI.
 The lease CAS validates its input, duration and agreement with measured seconds
 before storing it. `worker_empty_evidence` retains its existing exact shape.
+
+Migration qualification for these custody/evidence rules is shared across the
+Firestore emulator, Postgres and simulator in
+`tests/integration/test_recovery_custody_conformance.py` (PL-049/050). Run with
+`OMI_REQUIRE_STORE_BACKENDS=all`; a skipped store does not establish parity.
+The suite exercises the real scheduler and recovery coordinator with synthetic
+provider/audio/artifact boundaries. Postgres customer documents use the existing
+harness-only tables; this does not qualify the serving cross-database A4 bridge
+or real ASR quality. The emulator proof runner includes these tests.
