@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 import yaml
@@ -71,6 +73,33 @@ def test_control_cannot_be_promoted_mid_session(lease):
     assert route.resolve() is None
     lease(percent=5)
     assert route.resolve() is None
+
+
+def test_replacement_threads_cannot_see_half_initialized_assignment(lease, monkeypatch):
+    entered, release, second_finished = threading.Event(), threading.Event(), threading.Event()
+
+    def draw(_):
+        entered.set()
+        assert release.wait(5)
+        return 0
+
+    monkeypatch.setattr(routing.secrets, 'randbelow', draw)
+    route = routing.ShapeRoute()
+
+    def second():
+        result = route.resolve()
+        second_finished.set()
+        return result
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(route.resolve)
+        assert entered.wait(5)
+        another = pool.submit(second)
+        try:
+            assert not second_finished.wait(0.05)
+        finally:
+            release.set()
+        assert first.result() == another.result() == routing.CANDIDATE
 
 
 def test_fraction_not_replica_fraction(lease, monkeypatch):
