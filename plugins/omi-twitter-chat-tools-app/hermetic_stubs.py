@@ -54,6 +54,10 @@ def ensure_fastapi() -> None:
     except ImportError:
         pass
 
+    class _Status:
+        HTTP_401_UNAUTHORIZED = 401
+        HTTP_503_SERVICE_UNAVAILABLE = 503
+
     class _App:
         def __init__(self, *args, **kwargs):
             pass
@@ -70,6 +74,7 @@ def ensure_fastapi() -> None:
         Query=lambda *a, **k: None,
         Header=lambda *a, **k: None,
         Depends=lambda d=None, **k: d,
+        status=_Status,
         HTTPException=StubHTTPException,
     )
     sys.modules["fastapi.responses"] = _module(
@@ -121,6 +126,10 @@ def load_main(app_dir: str):
     import os
     from unittest.mock import patch
 
+    class _Status:
+        HTTP_401_UNAUTHORIZED = 401
+        HTTP_503_SERVICE_UNAVAILABLE = 503
+
     class _App:
         def __init__(self, *args, **kwargs):
             pass
@@ -138,6 +147,7 @@ def load_main(app_dir: str):
             Query=lambda *a, **k: None,
             Header=lambda *a, **k: None,
             Depends=lambda d=None, **k: d,
+            status=_Status,
             HTTPException=http_exception(),
         ),
         "fastapi.responses": _module(

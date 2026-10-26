@@ -18,9 +18,9 @@ if APP_DIR not in sys.path:
 import hermetic_stubs
 
 hermetic_stubs.ensure_fastapi()
-HTTPException = hermetic_stubs.http_exception()
-
 import twitter_tools_auth as auth
+
+HTTPException = getattr(auth, "HTTPException", hermetic_stubs.http_exception())
 
 TEST_SECRET = "test-twitter-tools-secret-key-12345"
 
