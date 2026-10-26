@@ -62,6 +62,7 @@ def candidate():
         'content_id': 'content',
         'lane': 'fresh',
         'ledger_fence_mode': 'active',
+        'result': {'failed_segments': 1, 'total_segments': 2, 'errors': ['sync_persistence_failed']},
         'status': 'partial_failure',
         'policy': {'version': 'admitted'},
         'dispatch_mode': 'cloud_tasks',
@@ -414,3 +415,37 @@ def test_apply_refusal_records_job_and_exits_nonzero_before_next_canary(candidat
     history = {'runs': [{'mode': 'dry_run', 'results': [operator.result_record(row, evidence, 'ready')]}]}
     assert operator.run(args, [row], tmp_path / 'results.json', history) == 2
     assert history['runs'][-1]['results'][0]['reason'] == 'plan_changed'
+
+
+@pytest.mark.parametrize(
+    'result,processed,reason',
+    [
+        (None, ['landed'], 'failure_manifest_incomplete'),
+        (
+            {'failed_segments': 11, 'total_segments': 12, 'errors': ['sync_persistence_failed'] * 10},
+            ['landed'],
+            'failure_manifest_incomplete',
+        ),
+        (
+            {'failed_segments': 1, 'total_segments': 2, 'errors': ['sync_finalize_failed']},
+            ['landed'],
+            'finalize_receipt_replay_required',
+        ),
+        (
+            {'failed_segments': 1, 'total_segments': 2, 'errors': ['sync_firestore_contention_exhausted']},
+            ['landed'],
+            'failure_manifest_incomplete',
+        ),
+        ({'failed_segments': 1, 'total_segments': 2, 'errors': ['sync_persistence_failed']}, [], 'checkpoint_missing'),
+        (
+            {'failed_segments': 3, 'total_segments': 2, 'errors': ['sync_persistence_failed']},
+            ['landed'],
+            'failure_manifest_incomplete',
+        ),
+    ],
+)
+def test_complete_failure_phases_and_all_successful_checkpoints_are_required(candidate, result, processed, reason):
+    row, evidence = candidate
+    evidence.job['result'] = result
+    evidence.ledger['processed_segment_ids'] = processed
+    assert classify(row, evidence) == reason

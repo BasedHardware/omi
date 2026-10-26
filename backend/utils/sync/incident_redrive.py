@@ -78,6 +78,7 @@ REASONS = frozenset(
         'ledger_not_retryable',
         'ledger_owner_changed',
         'checkpoint_missing',
+        'failure_manifest_incomplete',
         'finalize_receipt_replay_required',
         'runtime_probe_required',
         'job_missing',
@@ -228,13 +229,36 @@ def classify(row: dict, evidence: Evidence) -> str:
         # after an old uncertain acknowledgement could outlive its tombstone.
         if time.time() >= marker.get('enqueue_until', 0):
             return 'dispatch_uncertain'
-    if 'sync_finalize_failed' in (job.get('result') or {}).get('errors', []):
-        return 'finalize_receipt_replay_required'
     if any(job.get(k) != payload[k] for k in ('uid', 'job_id', 'content_id', 'lane', 'ledger_fence_mode')):
         return 'identity_conflict'
     # Never pin policy from this operator's laptop environment.
     if not isinstance(job.get('policy'), dict) or job.get('dispatch_mode') != 'cloud_tasks':
         return 'job_changed'
+    result = job.get('result')
+    if not isinstance(result, dict):
+        return 'failure_manifest_incomplete'
+    failed, total, errors = result.get('failed_segments'), result.get('total_segments'), result.get('errors')
+    if (
+        type(failed) is not int
+        or type(total) is not int
+        or not 0 < failed <= total
+        or not isinstance(errors, list)
+        or len(errors) != failed
+    ):
+        return 'failure_manifest_incomplete'
+    if 'sync_finalize_failed' in errors:
+        return 'finalize_receipt_replay_required'
+    if any(error != 'sync_persistence_failed' for error in errors):
+        return 'failure_manifest_incomplete'
+    # Terminal errors retain at most ten entries. A first-failure population
+    # label cannot prove that a later sibling did not fail AFTER persistence.
+    # Nor may a lost checkpoint cause an acknowledged sibling to run again.
+    processed = ledger['processed_segment_ids']
+    if any(not isinstance(value, str) for value in processed) or len(set(processed)) < total - failed:
+        return 'checkpoint_missing'
+    partial = ledger['partial_result']
+    if total > failed and any(not isinstance(partial.get(key), list) for key in ('new_memories', 'updated_memories')):
+        return 'checkpoint_missing'
     if not evidence.sources_present:
         return 'source_missing'
     return 'ready'

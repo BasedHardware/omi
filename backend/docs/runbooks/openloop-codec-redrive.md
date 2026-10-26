@@ -24,6 +24,7 @@ Redis `partial_result`; terminal cleanup deletes its processed-path set.
 | Lane, capture trust/age, enqueue time, fence mode | Original payload, cross-checked against the Redis job. No laptop policy pinning or protocol downgrade. |
 | Language | Admission does **not** store language in the task. The normal worker reads current transcription preferences; the tool never reads user profiles or invents an original language snapshot. |
 | Policy | Original Redis admission policy; missing policy blocks. |
+| Failed-segment phases and counts | Complete Redis terminal result errors/counts; a truncated or ambiguous outcome list blocks. |
 
 Discovery checks `sync_redrive_required`, `sync_backfill_pending`, matching
 `sync_backfill_sequencer.active_payload`, and the exact named Cloud Tasks in the
@@ -76,7 +77,11 @@ Re-transcribing that segment is unsafe; the tool emits
 `finalize_receipt_replay_required` once its original payload/checkpoints can be
 read. Receipt-only repair evidence is required before its canary can proceed.
 A persistence-population job whose terminal errors also include finalize
-failure is refused for the same reason.
+failure is refused for the same reason. Terminal errors are truncated to ten
+entries: if the retained outcomes cannot cover every failed segment,
+`failure_manifest_incomplete` blocks the job. Its durable processed-ID set must
+also cover every successful sibling; a missing marker blocks rather than
+re-transcribing already-persisted work.
 
 ## Exact commands and canary checks
 
