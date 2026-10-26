@@ -172,7 +172,17 @@ def _worker_without_independent_recovery() -> dict[str, str]:
     lines = original.splitlines(keepends=True)
     kept = [line for line in lines if 'name: BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED,' not in line]
     assert len(kept) == len(lines) - 1
-    return {path: ''.join(kept)}
+    # Defaults are now off. Simulate a future source-default change as well:
+    # the explicit worker setting must still prevent a reader split while the
+    # CPU deployment remains pinned off.
+    config_path = 'backend/config/batch_language_recovery.py'
+    source = (REPO_ROOT / config_path).read_text(encoding='utf-8')
+    changed = source.replace(
+        "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')",
+        "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')",
+    )
+    assert changed != source
+    return {path: ''.join(kept), config_path: changed}
 
 
 MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {

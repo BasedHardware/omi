@@ -896,7 +896,8 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         'backend-sync': common
         | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
         'backend-sync-backfill': common,
-        'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
+        # David approved this recovery-only existing-secret binding via ce5485.
+        'backend-integration': common | {'POSTHOG_EVENTS_API_KEY', 'SONIOX_API_KEY'},
     }
     prod = _MANIFEST['environments']['prod']
     for service, names in baseline.items():
