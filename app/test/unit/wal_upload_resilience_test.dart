@@ -778,7 +778,7 @@ void main() {
         sleep: (duration) async => pauses.add(duration),
       );
       // Distinct conversations/sessions so each WAL forms its own batch.
-      final base = 2000000000 - 7 * 24 * 60 * 60;
+      const base = 2000000000 - 7 * 24 * 60 * 60;
       sync.testWals = [
         for (var i = 0; i < 4; i++)
           () {
