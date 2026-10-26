@@ -832,7 +832,8 @@ def test_helm_state_configmaps_keep_job_owned_fields_out_of_apply(environment, b
         }
 
 
-def test_first_parakeet_state_write_preserves_helm_annotations(monkeypatch):
+@pytest.mark.parametrize('has_annotations', [False, True])
+def test_first_parakeet_state_write_preserves_helm_annotations(monkeypatch, has_annotations):
     client = FakeClient()
     original_kube = client.kube
     annotations = {
@@ -843,14 +844,19 @@ def test_first_parakeet_state_write_preserves_helm_annotations(monkeypatch):
 
     def kube(path, patch=None):
         if path == 'state' and patch is None:
-            return {'metadata': {'resourceVersion': '7', 'annotations': deepcopy(annotations)}}
+            metadata = {'resourceVersion': '7'}
+            if has_annotations:
+                metadata['annotations'] = deepcopy(annotations)
+            return {'metadata': metadata}
         return original_kube(path, patch)
 
     monkeypatch.setattr(client, 'kube', kube)
     assert guard.run(client, False, 0) == 0
     state_patch = next(patch for path, patch in client.patches if path == 'state')
     persisted = state_patch[2]['value']
-    assert all(persisted[key] == value for key, value in annotations.items())
+    if has_annotations:
+        assert all(persisted[key] == value for key, value in annotations.items())
+    assert persisted['helm.sh/resource-policy'] == 'keep'
     assert persisted['omi.me/parakeet-guard-verdict'] == 'WARMUP'
     assert client.state['since'] == 0
 

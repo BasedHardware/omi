@@ -41,6 +41,8 @@ with `helm.sh/resource-policy: keep` and **no data field** (not even `{}` or
 its first resourceVersion-guarded write. Names and get/patch-only Job RBAC stay
 unchanged. The Parakeet Job preserves existing annotations when adding verdicts,
 including the retention policy and Helm release identity.
+It also restores the keep policy if an older in-flight Job erased it during
+the upgrade; it never restores or changes the state data on Helm's behalf.
 
 The 0.3.1 deployment failed because server-side apply tried to set `data.state`
 back to `'{}'`, after `Python-urllib` had taken ownership through the Job's

@@ -721,6 +721,7 @@ def run(client, dry_run, now=None):
                 'path': '/metadata/annotations',
                 'value': {
                     **cm.get('metadata', {}).get('annotations', {}),
+                    'helm.sh/resource-policy': 'keep',
                     'omi.me/batch-safety-verdict': batch['verdict'],
                     'omi.me/parakeet-guard-verdict': verdict,
                 },
