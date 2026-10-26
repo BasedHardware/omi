@@ -502,8 +502,19 @@ All available environment variables:
 HUME_API_KEY=your_hume_api_key_here          # From platform.hume.ai
 OMI_APP_ID=your_omi_app_id_here              # From Omi mobile app
 OMI_API_KEY=your_omi_api_key_here            # From Omi mobile app
+HUME_TOOLS_SECRET=change-me                  # Shared secret guarding the service routes (see below)
 EMOTION_NOTIFICATION_CONFIG={"notification_enabled":true,"emotion_thresholds":{}}  # Emotion notification settings (JSON)
 ```
+
+### Service Authentication
+
+The `/audio`, `/save-emotion-memory` and `/force-send-notification` routes act
+on a caller-supplied `uid` and write memories into a user's Omi account or push
+notifications to a user. They require a shared secret so only the trusted Omi
+backend can invoke them. Present `HUME_TOOLS_SECRET` either as an
+`Authorization: Bearer <secret>` header or a `hume_tools_token` query parameter.
+Requests without a valid secret are rejected with `401` (or `503` when the
+secret is not configured).
 
 ### API Endpoints
 
