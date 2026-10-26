@@ -6,6 +6,7 @@ import logging
 import time
 from collections import OrderedDict
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from config.batch_pipeline import MAX_PUBLISH_CONCURRENCY, publish_concurrency as configured_publish_concurrency
@@ -329,11 +330,13 @@ class Pump:
                             time.time(),
                             retries.get(lease.item.segment_id, 30),
                             held_reason=held_reason.get(lease.item.segment_id),
+                            admission_refused=True,
                         )
                 leases = [v for v in leases if v.item.segment_id not in lost]
                 if not leases:
                     return 0
             dispatch_kwargs = {}
+            dispatch_retries = {}
             if any(cap_dispatch_enabled(v.item.owner_id, 'batch') for v in leases):
 
                 def authorize_dispatch(segments):
@@ -352,6 +355,10 @@ class Pump:
                             receipt = {}
                     permitted = set(receipt.get('allowed') or [])
                     held = receipt.get('held_reason') or {}
+                    retries = receipt.get('retry_after') or {}
+                    for segment in segments:
+                        if segment not in permitted and segment in retries:
+                            dispatch_retries[segment] = retries[segment]
                     return {segment: (None if segment in permitted else held.get(segment, '')) for segment in segments}
 
                 dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
@@ -421,6 +428,9 @@ class Pump:
                 logger.error('event=batch_chain outcome=retry exception_type=%s', type(error).__name__)
                 results = []
             result_map = {v.segment_id: v for v in results}
+            for segment, result in result_map.items():
+                if isinstance(result, HeldWork) and segment in dispatch_retries:
+                    result_map[segment] = replace(result, retry_after=dispatch_retries[segment])
             if len(result_map) != len(results) or not set(result_map).issubset(v.item.segment_id for v in leases):
                 raise ValueError('worker returned duplicate or foreign results')
             await self._publish_flight(leases, result_map, lost)
@@ -539,6 +549,7 @@ class Pump:
                     time.time(),
                     result.retry_after,
                     held_reason=result.reason or None,
+                    admission_refused=True,
                 )
                 return False
             if isinstance(result, ValidationFailureWork):

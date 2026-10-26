@@ -5841,6 +5841,18 @@ admission paused until accepted-work completion, visible synthetic canary and at
 of correctness sentinels pass. Scaling all integration traffic to one instance is a temporary
 capacity tradeoff, not a distributed projection fence (revision overlap remains possible).
 
+## Batch worker admission refusals
+
+GPU admission refusals use a durable per-unit backoff of 30, 60, 120, 240 then 300
+seconds, while honoring longer policy retry delays through 24 hours. Both the
+initial admission and the pre-ASR recheck retain those delays. A successful
+authorization alone does not reset the streak; a completed worker result does.
+Refusals refund the provider attempt and retain audio. Shutdown/GPU-abort refunds
+do not increment the streak. Unevaluated authority removes a stale prior allow
+and stays BLIND. The worker's explicit metrics registry exposes fixed
+`admission_policy_deferred` and `admission_unevaluated_deferred` event counts
+only after a fenced defer commits; no identities or dynamic reason labels.
+
 ## Durable live and desktop record admission (dark)
 
 `BATCH_PIPELINE_LIVE_ADMISSION_ENABLED=false` is the sole new producer control.
