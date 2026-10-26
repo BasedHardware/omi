@@ -121,6 +121,16 @@ class BrakeTests(unittest.TestCase):
             if "track" in args:
                 self.assertEqual(args["track"], "production")
 
+    def test_held_mode_follows_the_shared_constant(self):
+        # With the account-level hold lifted (constant False), a brake commit
+        # must not hold its changes: only the in-review guard stays.
+        play = FakePlay()
+        with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", False):
+            self.assertIn("status_after=halted", self.run_action(play))
+        query = parse_qs(urlsplit(play.commit_request.uri).query)
+        self.assertEqual(query["changesInReviewBehavior"], ["ERROR_IF_IN_REVIEW"])
+        self.assertNotIn("changesNotSentForReview", query)
+
     def test_status_never_updates_or_commits(self):
         play = FakePlay()
         self.assertIn("status_after=inProgress", self.run_action(play, "status", confirm=""))

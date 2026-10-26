@@ -58,10 +58,15 @@ is neither live nor in review, so treat an un-pressed Publishing overview as
 the release hold. Two consequences:
 
 - Distribution evidence: a settled Codemagic publishing action only proves
-  the edit committed — testers cannot install a held change. The operator
-  gate treats Android internal distribution as done only after the press
-  (and Play's review where applicable), not on the publishing action alone,
-  and the Android baseline advances only then.
+  the edit committed — testers cannot install a held change. The internal
+  dispatcher's Android baseline still advances on that settled action
+  (deliberately: a held publish is not a failed publish, and rebuilding the
+  same source would not unhold it — it would drift back to a build per
+  scheduled run); while the mode is on, every scheduled dispatcher run
+  prints an `android_distribution=held-changes-mode` line so a held
+  distribution cannot stall silently. The press itself is operator
+  evidence: the release gate treats Android internal distribution as done
+  only after it.
 - The press submits every pending change together, not just ours: check
   Publishing overview for unrelated pending changes (listing edits, store
   listings, other apps' automated edits) before pressing, exactly as the
@@ -74,7 +79,8 @@ held changes and one press would then release full exposure with no
 observation windows. The train still stages a new candidate (the press plus
 review gate its first exposure step); exposure then advances in Play
 Console. When a commit without the parameter succeeds again, flip the
-constant to `False`, drop the Codemagic flags, and the ladder resumes.
+constant to `False` (the brake's commit and the dispatcher's held-mode
+reminder follow it), drop the Codemagic flags, and the ladder resumes.
 
 ## Release notes
 
