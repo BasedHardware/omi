@@ -56,7 +56,7 @@ def test_each_transactional_writer_bumps_same_owner_generation(store, operation)
     elif operation == 'pin':
         assert people.set_person_pinned('owner', 'p', True, firestore_client=store)
     elif operation == 'sample_add':
-        assert users._add_sample_transaction(tx, ref, 'two.wav', 'two', 5)
+        assert users.add_sample_transaction(tx, ref, 'two.wav', 'two', 5)
     elif operation == 'sample_remove':
         assert users._remove_sample_transaction(tx, ref, 'one.wav')
     elif operation == 'profile_replace':
@@ -90,7 +90,7 @@ def test_generation_bumps_are_unconditional_and_compose(store, monkeypatch):
 def test_rejected_and_idempotent_writes_do_not_bump(store):
     ref = store.collection('users').document('owner').collection('people').document('p')
     assert not person_aliases.update_person_name_transaction(store.transaction(), ref, ' ')
-    assert not users._add_sample_transaction(store.transaction(), ref, 'two.wav', 'two', 1)
+    assert not users.add_sample_transaction(store.transaction(), ref, 'two.wav', 'two', 1)
     assert store.rows[GENERATION]['generation'] == 7
 
 

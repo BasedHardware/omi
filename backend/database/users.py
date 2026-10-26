@@ -1,4 +1,5 @@
 from database.people_generation import bump_people_generation, write_person
+from database.person_speech_samples import add_sample_transaction
 from config.refactor_modes import serving_for
 from utils.speakers.person_pool import (
     pool_profile,
@@ -1060,50 +1061,13 @@ def delete_person(uid: str, person_id: str):
     write_person(db, person_ref, 'delete')
 
 
-@transactional
-def _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples):
-    """Transaction to atomically add sample and transcript."""
-    snapshot = person_ref.get(transaction=transaction)
-    if not snapshot.exists:
-        return False
-
-    person_data = snapshot.to_dict()
-    samples = person_data.get('speech_samples', [])
-
-    if len(samples) >= max_samples:
-        return False
-
-    samples.append(sample_path)
-    update_data = {
-        'speech_samples': samples,
-        'updated_at': datetime.now(timezone.utc),
-    }
-
-    if transcript is not None:
-        transcripts = person_data.get('speech_sample_transcripts', [])
-        # Ensure transcript array alignment with samples:
-        # If we're adding a transcript but existing samples don't have transcripts,
-        # pad with empty strings for the existing samples first (Dart expects non-null)
-        existing_sample_count = len(samples) - 1  # samples already has new one appended
-        if len(transcripts) < existing_sample_count:
-            # Pad with empty strings for each existing sample without a transcript
-            transcripts.extend([''] * (existing_sample_count - len(transcripts)))
-        transcripts.append(transcript)
-        update_data['speech_sample_transcripts'] = transcripts
-        update_data['speech_samples_version'] = 3
-
-    transaction.update(person_ref, update_data)
-    bump_people_generation(transaction, person_ref)
-    return True
-
-
 def add_person_speech_sample(
     uid: str, person_id: str, sample_path: str, transcript: Optional[str] = None, max_samples: int = 5
 ) -> bool:
     """Atomically append a sample; return False for a missing person or a full sample list."""
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     transaction = db.transaction()
-    return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples)
+    return add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples)
 
 
 def get_person_speech_samples_count(uid: str, person_id: str) -> int:

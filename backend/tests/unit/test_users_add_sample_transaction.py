@@ -140,7 +140,7 @@ def test_add_sample_transaction_pads_transcripts_for_v1_samples(users_db):
     person_ref = _FakePersonRef(person_data)
     transaction = _FakeTransaction()
 
-    result = users_db._add_sample_transaction(
+    result = users_db.add_sample_transaction(
         transaction,
         person_ref,
         "sample-c.wav",
@@ -171,7 +171,7 @@ def test_add_sample_transaction_already_aligned_transcripts(users_db):
     person_ref = _FakePersonRef(person_data)
     transaction = _FakeTransaction()
 
-    result = users_db._add_sample_transaction(
+    result = users_db.add_sample_transaction(
         transaction,
         person_ref,
         "sample-c.wav",
@@ -219,7 +219,7 @@ def test_add_sample_transaction_max_samples_reached(users_db):
     person_ref = _FakePersonRef(person_data)
     transaction = _FakeTransaction()
 
-    result = users_db._add_sample_transaction(
+    result = users_db.add_sample_transaction(
         transaction,
         person_ref,
         "c.wav",
@@ -235,7 +235,7 @@ def test_add_sample_transaction_person_not_found(users_db):
     person_ref = _FakePersonRef({}, exists=False)
     transaction = _FakeTransaction()
 
-    result = users_db._add_sample_transaction(
+    result = users_db.add_sample_transaction(
         transaction,
         person_ref,
         "sample-x.wav",
