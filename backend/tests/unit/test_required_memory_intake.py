@@ -234,6 +234,23 @@ def test_dispatch_metadata_failure_defers_without_quality_retry(db, monkeypatch)
     assert len(receipts) == 1 and receipts[0]['attempt_count'] == 0 and receipts[0]['lease_owner'] is None
 
 
+def test_dispatch_metadata_wait_cannot_start_provider_after_deadline(db, monkeypatch):
+    clock = {'now': 0, 'reads': 0}
+    actual = intake.assert_account_active
+
+    def slow_final_read(*args):
+        actual(*args)
+        clock['reads'] += 1
+        if clock['reads'] == 2:
+            clock['now'] = 11
+
+    monkeypatch.setattr(intake, 'time', SimpleNamespace(monotonic=lambda: clock['now']))
+    monkeypatch.setattr(intake, 'assert_account_active', slow_final_read)
+    monkeypatch.setattr(intake, 'normalize', lambda *a, **k: pytest.fail('deadline passed'))
+    with pytest.raises(processing.RequiredProcessingDeferred, match='deadline'):
+        intake.normalize_at_dispatch(stored(db), db_client=db, deadline=10)
+
+
 @pytest.mark.asyncio
 async def test_account_deletion_blocks_backlog_before_embedding(db):
     historical_candidate(db)

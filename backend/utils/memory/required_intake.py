@@ -97,8 +97,8 @@ def _assert_dispatch_current(item, *, db_client, deadline):
     )
     if control.account_generation != item.account_generation:
         raise RequiredIntakeSourceChanged('required_intake_dispatch_generation_changed')
-    result_guard(deadline)
     assert_account_active(item.uid, None, db_client)
+    result_guard(deadline)
 
 
 def normalize_at_dispatch(item, *, db_client, deadline, request_timeout=None):
