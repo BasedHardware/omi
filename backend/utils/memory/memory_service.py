@@ -136,6 +136,7 @@ from utils.memory.read_resilience import (
 )
 from utils.memory.rejected_memory_feedback import clear_rejected_memory_feedback_cache
 from utils.memory.required_promotion import required_processing_payload
+from utils.memory.required_intake import capture_budget as required_intake_capture_budget
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import memory_matches_device
@@ -746,7 +747,8 @@ class CanonicalMemoryBackend:
         return memory_item_to_memorydb(item)
 
     def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
-        return [self.write(uid, item) for item in items]
+        with required_intake_capture_budget():
+            return [self.write(uid, item) for item in items]
 
     def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
         item = update_canonical_memory_content(uid, memory_id, content, db_client=self._db_client)
@@ -3956,7 +3958,11 @@ class MemoryService:
         item = read_canonical_memory_item(uid, committed_id or str(data.get("id") or ""), db_client=self.db_client)
         if item is None:
             raise HTTPException(status_code=503, detail="Canonical memory write readback unavailable")
-        return memory_item_to_memorydb(item)
+        result = memory_item_to_memorydb(item)
+        from utils.memory.required_intake import register_capture_view
+
+        register_capture_view(uid, item, result, self._invalidate_prompt_cache)
+        return result
 
     def write(self, uid: str, data: Dict[str, Any]) -> str:
         self.ensure_canonical_mutation_ready(uid)
@@ -4616,7 +4622,11 @@ class MemoryService:
                     status_code=503,
                     detail="Canonical memory write readback unavailable",
                 )
-            results.append(memory_item_to_memorydb(item))
+            result = memory_item_to_memorydb(item)
+            from utils.memory.required_intake import register_capture_view
+
+            register_capture_view(uid, item, result, self._invalidate_prompt_cache)
+            results.append(result)
         self._write_historical_overrides(uid, ids, MemoryItemStatus.active)
         self._invalidate_prompt_cache(uid)
         return results
