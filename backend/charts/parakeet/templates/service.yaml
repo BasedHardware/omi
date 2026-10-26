@@ -1,3 +1,4 @@
+{{- if not .Values.internalOnly }}
 apiVersion: cloud.google.com/v1
 kind: BackendConfig
 metadata:
@@ -13,15 +14,18 @@ spec:
     type: HTTP
     requestPath: /health  # Ensure this path returns 200 OK
 ---
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "parakeet.fullname" . }}
   labels:
     {{- include "parakeet.labels" . | nindent 4 }}
+  {{- if not .Values.internalOnly }}
   annotations:
     cloud.google.com/neg: '{"ingress": true}'
     cloud.google.com/backend-config: '{"default": "parakeet-backend-config"}'  # Link to BackendConfig
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:

@@ -89,6 +89,28 @@ WINDOW_REPLICA_ATTEMPTS = Counter(
     'omi_stt_window_replica_attempts_total', 'Direct GPU pod POST attempts with bounded causes', ['outcome']
 )
 WINDOW_LATENCY = Histogram('omi_stt_window_post_seconds', 'Window POST latency', buckets=(0.1, 0.5, 1, 2, 4, 8, 15))
+SHAPE_FIRST_TEXT = Histogram(
+    'omi_stt_shape_first_text_seconds',
+    'First VAD speech to emitted text, pinned shape experiment arm',
+    ['arm'],
+    buckets=(2, 5, 10, 15, 20, 25, 30, 45, 60),
+)
+SHAPE_POST = Histogram(
+    'omi_stt_shape_post_seconds',
+    'Window POST wall latency, actual shape destination',
+    ['arm'],
+    buckets=(0.1, 0.5, 1, 2, 3, 4, 8, 15),
+)
+SHAPE_OUTCOME = Counter('omi_stt_shape_posts_total', 'Window POST result by actual destination', ['arm', 'outcome'])
+SHAPE_SESSIONS = Counter('omi_stt_shape_sessions_total', 'Admitted window legs by pinned experiment arm', ['arm'])
+SHAPE_INFLIGHT = Gauge('omi_stt_shape_posts_inflight', 'Accepted listener POSTs by shape destination', ['arm'])
+for _shape_arm in ('control', 'canary'):
+    SHAPE_FIRST_TEXT.labels(arm=_shape_arm)
+    SHAPE_POST.labels(arm=_shape_arm)
+    SHAPE_SESSIONS.labels(arm=_shape_arm)
+    SHAPE_INFLIGHT.labels(arm=_shape_arm)
+    for _shape_outcome in ('success', 'empty', 'error', 'queue_timeout', 'cancelled'):
+        SHAPE_OUTCOME.labels(arm=_shape_arm, outcome=_shape_outcome)
 WINDOW_FIRST_TEXT = Histogram(
     'omi_stt_window_first_text_seconds',
     'Wall seconds from first VAD speech sent to first nonempty windowed transcript',

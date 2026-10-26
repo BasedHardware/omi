@@ -7114,3 +7114,13 @@ Worker handoffs also carry a separate `worker_vad_receipt` with `version: 1`,
 `sample_rate_hz: 16000` and `input_uri_sha256` binding the staged input URI.
 The lease CAS validates its input, duration and agreement with measured seconds
 before storing it. `worker_empty_evidence` retains its existing exact shape.
+# Shape-only Parakeet experiment
+
+An optional `PARAKEET_SHAPE_CANARY_FILE` projected ConfigMap selects up to 5%
+of managed windowed sessions for a separate internal g2-standard-4 service.
+The assignment survives replacement legs. Default/missing/stale/0% leases
+route baseline; an identity change drains the old assignment before its next
+POST without cancelling accepted work. Companion shape-arm metrics keep
+candidate first-text/POST observations separate from fleet measurements.
+The [g24 operator packet](runbooks/parakeet-g24-canary.md) owns the 15-minute
+watcher, strict matched-load acceptance, ramp and drain sequence.

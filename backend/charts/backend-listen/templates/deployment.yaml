@@ -80,6 +80,10 @@ spec:
           */}}
           {{- $privateEnv := .Values.privateEnv | default dict }}
           env:
+            {{- if (.Values.parakeetShapeCanary | default dict).enabled }}
+            - name: PARAKEET_SHAPE_CANARY_FILE
+              value: /var/run/parakeet-shape/route.json
+            {{- end }}
             {{- range .Values.env }}
             {{- if not (hasKey $privateEnv .name) }}
             - name: {{ .name }}
@@ -123,13 +127,27 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.volumeMounts }}
+          {{- if or .Values.volumeMounts (.Values.parakeetShapeCanary | default dict).enabled }}
           volumeMounts:
+            {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if (.Values.parakeetShapeCanary | default dict).enabled }}
+            - name: parakeet-shape-route
+              mountPath: /var/run/parakeet-shape
+              readOnly: true
+            {{- end }}
           {{- end }}
-      {{- with .Values.volumes }}
+      {{- if or .Values.volumes (.Values.parakeetShapeCanary | default dict).enabled }}
       volumes:
+        {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if (.Values.parakeetShapeCanary | default dict).enabled }}
+        - name: parakeet-shape-route
+          configMap:
+            name: parakeet-shape-route
+        {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

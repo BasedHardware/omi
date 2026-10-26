@@ -1,0 +1,36 @@
+# Apply AFTER prod_omi_parakeet_values.yaml. No baseline capacity is changed.
+# Operator must override image.digest with the verified baseline serving digest.
+fullnameOverride: prod-omi-parakeet-g24
+internalOnly: true
+replicaCount: 1
+image:
+  digest: ""
+ingress:
+  enabled: false
+gateway:
+  enabled: false
+autoscaling:
+  enabled: false
+resources:
+  requests:
+    cpu: 2
+    memory: 8Gi
+    nvidia.com/gpu: 1
+  limits:
+    cpu: 3
+    memory: 12Gi
+    nvidia.com/gpu: 1
+nodeSelector:
+  cloud.google.com/gke-nodepool: parakeet-g24-canary
+  node.kubernetes.io/instance-type: g2-standard-4
+tolerations:
+  - key: omi.ai/parakeet-shape-canary
+    operator: Equal
+    value: g24
+    effect: NoSchedule
+# Dedicated pool intentionally lacks baseline's service=parakeet label.
+affinity: null
+topologySpreadConstraints: []
+strategy:
+  type: Recreate
+  rollingUpdate: null
