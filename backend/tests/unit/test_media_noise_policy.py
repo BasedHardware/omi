@@ -48,7 +48,7 @@ def screens(seconds=120, **fields):
             timestamp=(START + timedelta(seconds=n)).isoformat(),
             appName='Chrome',
             windowTitle='Synthetic tutorial - YouTube',
-            **fields
+            **fields,
         )
         for n in range(0, seconds, 30)
     ]
@@ -63,7 +63,7 @@ def classify(segments=None, *, seconds=120, owner=0, screen_rows=(), **kwargs):
         finished_at=START + timedelta(seconds=seconds),
         evidence=ev,
         screen_rows=screen_rows,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -206,6 +206,102 @@ def test_manual_excerpt_counts_only_its_own_duration_in_real_evidence(excerpt_se
 def test_older_unscoped_manual_evidence_abstains_instead_of_expanding_to_a_voice():
     rows = [segment()]
     ev = evidence(rows, owner=10, source='manual')
+    assert owner_speech_seconds(ev, rows) is None
+
+
+@pytest.mark.parametrize('first_excerpt_seconds', [1, 6])
+def test_surplus_merge_retains_every_manual_owner_excerpt(first_excerpt_seconds):
+    from utils.speakers.evidence import build_evidence
+
+    durations = [first_excerpt_seconds, 7 - first_excerpt_seconds, 400, 400, 393]
+    rows, offset = [], 0
+    for index, duration in enumerate(durations):
+        rows.append(
+            dict(
+                segment(' '.join(['synthetic'] * 12), id=f's{index}'),
+                speaker_id=index,
+                speaker_id_scope='live:1',
+                start=offset,
+                end=offset + duration,
+            )
+        )
+        offset += duration
+    result = SimpleNamespace(
+        speaker_ids={row['id']: row['speaker_id'] for row in rows},
+        voice_centroids={index: [1, 0] if index < 2 else [0, 1] for index in range(5)},
+        voice_distances={},
+        voice_identities={},
+        voice_identity_statuses={},
+        coverage=1,
+    )
+    receipt = {
+        'segments': {f's{index}': {'generation': 1, 'is_user': True, 'segment_only': True} for index in range(2)}
+    }
+    ev = build_evidence(rows, result, receipt=receipt, roster=[{'name': 'Synthetic attendee'}])
+    assert len(ev.clusters) == 2
+    assert owner_speech_seconds(ev, rows) == 7
+    assert classify(rows, seconds=1200, evidence=ev).content_kind == 'conversation'
+
+
+@pytest.mark.parametrize('manual_excerpt', [False, True])
+def test_likely_acoustic_owner_protects_capture_independently_of_manual_excerpt(manual_excerpt):
+    from math import sqrt
+    from utils.speakers.evidence import build_evidence, project_labels
+    from utils.stt.conversation_speakers import resolve_conversation_speakers
+
+    rows = [
+        dict(segment(id='excerpt'), speaker_id=0, speaker_id_scope='live:1', start=0, end=1),
+        dict(segment(id='voice-rest'), speaker_id=0, speaker_id_scope='live:1', start=1, end=600),
+        dict(segment(id='other'), speaker_id=1, speaker_id_scope='live:1', start=600, end=1200),
+    ]
+    result = resolve_conversation_speakers(
+        rows,
+        {'excerpt': [1, 0], 'voice-rest': [1, 0], 'other': [-1, 0]},
+        voiceprints={'user': [0.45, sqrt(1 - 0.45**2)]},
+    )
+    receipt = (
+        {'segments': {'excerpt': {'generation': 1, 'is_user': True, 'segment_only': True}}} if manual_excerpt else {}
+    )
+    ev = build_evidence(rows, result, receipt=receipt)
+    plausible = [candidate for cluster in ev.clusters for candidate in cluster.candidates if candidate.band == 'likely']
+    assert len(plausible) == 1
+    assert plausible[0].source == 'voice' and not plausible[0].label_eligible
+    assert project_labels(ev, receipt) == ({'excerpt': (True, None)} if manual_excerpt else {})
+    # A plausible acoustic owner protects against false exclusion without
+    # granting owner attribution; the manual excerpt does not cause this.
+    assert owner_speech_seconds(ev, rows) == 600
+    assert classify(rows, seconds=1200, evidence=ev).content_kind == 'conversation'
+
+
+@pytest.mark.parametrize('unscoped_cluster', [0, 1])
+def test_surplus_merge_preserves_unknown_manual_scope_from_either_side(unscoped_cluster):
+    from utils.speakers.refinement import merge_surplus
+
+    rows = [dict(segment(id=f's{i}'), start=i * 6, end=(i + 1) * 6) for i in range(5)]
+    clusters = [
+        VoiceCluster(
+            id=f'v{i}',
+            segment_ids=[row['id']],
+            speech_seconds=6,
+            candidates=(
+                [
+                    SpeakerCandidate(
+                        person_id='owner',
+                        probability=1,
+                        band='confident',
+                        source='manual',
+                        segment_ids=None if i == unscoped_cluster else [row['id']],
+                    )
+                ]
+                if i < 2
+                else []
+            ),
+        )
+        for i, row in enumerate(rows)
+    ]
+    merged, _, _ = merge_surplus(clusters, {f'v{i}': [1, 0] if i < 2 else [0, 1] for i in range(5)}, 2)
+    ev = SpeakerEvidence(status='resolved', policy_version='synthetic', clusters=merged)
+    assert len(merged) == 2
     assert owner_speech_seconds(ev, rows) is None
 
 

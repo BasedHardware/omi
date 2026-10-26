@@ -2778,6 +2778,12 @@ def process_conversation(
     conversation.status = ConversationStatus.completed
     content_excluded = exclude_from_derived(uid, conversation, consumer='notes')
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
+    if user_kept and not conversation.discarded:
+        # Commit restore authority with visibility, before derived work can fail.
+        payload['sync_relevance_user_kept'] = True
+        if conversation.sync_relevance == 'review':
+            conversation.sync_relevance = 'keep'
+            payload['sync_relevance'] = 'keep'
     if serving_for('MEDIA_NOISE_MODE', uid):
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True if content_excluded else None
     from config.sync_reprocess import dedupe_enabled

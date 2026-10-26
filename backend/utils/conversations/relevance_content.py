@@ -50,7 +50,9 @@ def owner_speech_seconds(evidence: SpeakerEvidence | None, segments: Sequence[An
     """Consume producer bands, without re-thresholding probability or legacy is_user.
 
     Missing/partial/stale evidence is unknown, never evidence of owner absence.
-    Any plausible acoustic/manual owner candidate protects its entire cluster.
+    A plausible acoustic owner protects its whole cluster against exclusion,
+    without granting owner attribution. Manual decisions protect only their
+    explicitly bound segments.
     """
     if evidence is None or evidence.status != 'resolved' or not evidence.clusters:
         return None
