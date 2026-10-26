@@ -67,6 +67,12 @@ When creating/updating the Omi app, use these URLs:
 
 ### Chat Tools (POST)
 
+All ten `/tools/*` chat-tool routes require caller authentication using `TWITTER_TOOLS_SECRET`. Present the secret as either:
+- Header: `Authorization: Bearer <secret>`
+- Query parameter: `twitter_tools_token=<secret>`
+
+Requests without a valid secret return `HTTP 401 Unauthorized`. If `TWITTER_TOOLS_SECRET` is unset or blank, all tool routes fail closed with `HTTP 503 Service Unavailable`.
+
 | Endpoint | Description |
 |----------|-------------|
 | `/tools/post_tweet` | Post a new tweet |
@@ -107,7 +113,7 @@ When creating/updating the Omi app, use these URLs:
 |----------|-------------|----------|
 | `TWITTER_CLIENT_ID` | Twitter OAuth2 Client ID | Yes |
 | `TWITTER_CLIENT_SECRET` | Twitter OAuth2 Client Secret | Yes |
-| `TWITTER_TOOLS_SECRET` | HMAC secret for the disconnect link. Unset, disconnect fails closed | Yes |
+| `TWITTER_TOOLS_SECRET` | Shared secret guarding both the `/disconnect` HMAC link and all ten `/tools/*` routes (via `Authorization: Bearer <secret>` or `twitter_tools_token=<secret>`). Unset, guarded routes fail closed with HTTP 503. | Yes |
 | `TWITTER_REDIRECT_URI` | OAuth callback URL | Yes |
 | `PORT` | Server port (default: 8080) | No |
 | `REDIS_URL` | Redis connection URL | No (uses file storage if not set) |
