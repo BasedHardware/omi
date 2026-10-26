@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/paywall/paywall_checkout.dart';
+import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -39,6 +40,7 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
   @override
   void initState() {
     super.initState();
+    PaywallPacing.markShown();
     if (widget.offer == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;

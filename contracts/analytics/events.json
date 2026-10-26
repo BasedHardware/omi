@@ -3701,7 +3701,9 @@
             "screen_context_gate",
             "mcp_daily_cap",
             "budget_80",
-            "onboarding"
+            "onboarding",
+            "aha_first_summary",
+            "free_cap"
           ]
         },
         "currentPlan": {
@@ -3779,7 +3781,9 @@
             "screen_context_gate",
             "mcp_daily_cap",
             "budget_80",
-            "onboarding"
+            "onboarding",
+            "aha_first_summary",
+            "free_cap"
           ]
         }
       },
@@ -4274,7 +4278,9 @@
             "screen_context_gate",
             "mcp_daily_cap",
             "budget_80",
-            "onboarding"
+            "onboarding",
+            "aha_first_summary",
+            "free_cap"
           ]
         }
       },
