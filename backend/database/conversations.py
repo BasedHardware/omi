@@ -600,6 +600,16 @@ def _reveal_user_corrections_for_read(data: Dict[str, Any], uid: str) -> None:
         data['user_corrections'] = _reveal_json_value(data.get('user_corrections'), uid, True)
 
 
+def decode_open_loop_extractions(uid: str, raw: Any, compressed: bool) -> Optional[dict]:
+    """Strict write-side round trip; unreadable retained content must abort the write."""
+    if raw is None:
+        return None
+    value = _reveal_json_value(raw, uid, compressed)
+    if not isinstance(value, dict):
+        raise ValueError('open_loop_extractions must be an object')
+    return value
+
+
 def get_open_loop_extractions(uid: str, conversation_data: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """Decode the server-only open-loop extractions from one raw conversation document.
 
@@ -765,6 +775,15 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
     """A processor owns content, never the receipt read in its commit transaction."""
     write_data.pop('manual_speaker_assignments', None)
     write_data.pop('manual_speaker_assignments_compressed', None)
+    level = existing.get('data_protection_level') or write_data.get('data_protection_level') or 'standard'
+    if OPEN_LOOP_EXTRACTIONS_FIELD in write_data and write_data.get('data_protection_level') != level:
+        # Processing may have encoded fresh extractions before a protection
+        # migration committed. Re-protect that output at the transaction's level.
+        extracted = decode_open_loop_extractions(
+            uid, write_data[OPEN_LOOP_EXTRACTIONS_FIELD], bool(write_data.get(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD))
+        )
+        write_data.update(_prepare_conversation_for_write({OPEN_LOOP_EXTRACTIONS_FIELD: extracted}, uid, level))
+        write_data['data_protection_level'] = level
     if 'transcript_segments' not in write_data:
         return
     if existing.get('has_transcript_corrections'):
@@ -774,7 +793,6 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
             if field in existing:
                 write_data[field] = existing[field]
         return
-    level = existing.get('data_protection_level') or write_data.get('data_protection_level') or 'standard'
     receipt = decode_manual_speaker_assignments(
         uid, existing.get('manual_speaker_assignments'), bool(existing.get('manual_speaker_assignments_compressed'))
     )
@@ -2559,6 +2577,12 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                 _reveal_match_scores_for_read(current, uid)
                 if match_scores.FIELD in current:
                     payload[match_scores.FIELD] = current[match_scores.FIELD]
+            if OPEN_LOOP_EXTRACTIONS_FIELD in current:
+                payload[OPEN_LOOP_EXTRACTIONS_FIELD] = decode_open_loop_extractions(
+                    uid,
+                    current[OPEN_LOOP_EXTRACTIONS_FIELD],
+                    bool(current.get(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD)),
+                )
             if 'manual_speaker_assignments' in current:
                 payload['manual_speaker_assignments'] = decode_manual_speaker_assignments(
                     uid,
@@ -4258,6 +4282,10 @@ def assign_sync_conversation(
             )
         else:
             result.pop('manual_speaker_assignments', None)
+        if OPEN_LOOP_EXTRACTIONS_FIELD in raw:
+            result[OPEN_LOOP_EXTRACTIONS_FIELD] = decode_open_loop_extractions(
+                uid, raw[OPEN_LOOP_EXTRACTIONS_FIELD], bool(raw.get(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD))
+            )
         _reveal_match_scores_for_read(result, uid)
         return result
 

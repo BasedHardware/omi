@@ -411,6 +411,31 @@ def test_merge_at_threshold_absorbs_redirects_and_refreshes_once(world):
     assert conversations_db.resolve_sync_conversation_redirect(UID, 'n') == 'p'
 
 
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('upgrade', [False, True])
+def test_absorb_preserves_open_loop_blobs_and_upgrades_retained_content(world, level, upgrade):
+    field, marker = 'open_loop_extractions', 'open_loop_extractions_compressed'
+    extracted = {'version': 1, 'delegated_by_user': [], 'commitments_by_others': []}
+    survivor = world.add('p', 0, 10)
+    survivor.update(data_protection_level=level, **{field: extracted})
+    world.store.rows[_path('p')] = conversations_db.encode_conversation_for_write(UID, survivor, level)
+    donor_level = 'enhanced' if upgrade else level
+    donor = world.add('n', 15, 10)
+    donor.update(data_protection_level=donor_level, **{field: extracted})
+    world.store.rows[_path('n')] = conversations_db.encode_conversation_for_write(UID, donor, donor_level)
+    before_survivor, before_donor = deepcopy(world.raw('p')), deepcopy(world.raw('n'))
+    world.jev_answers = [0.35]
+
+    assert world.finish('n') is True
+    saved, donor = world.raw('p'), world.raw('n')
+    assert saved['data_protection_level'] == donor_level
+    assert isinstance(saved[field], str if donor_level == 'enhanced' else bytes)
+    assert conversations_db.decode_open_loop_extractions(UID, saved[field], saved[marker]) == extracted
+    if level == donor_level:
+        assert saved[field] == before_survivor[field]
+    assert donor[field] == before_donor[field] and donor[marker] == before_donor[marker]
+
+
 def test_merge_below_threshold_keeps_both(world):
     world.add('p', 0, 10)
     world.add('n', 15, 10)

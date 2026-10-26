@@ -592,6 +592,31 @@ def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, er
 
 
 @pytest.mark.parametrize(
+    'error,reason',
+    [
+        (ValueError('open_loop_extractions must be an object'), 'open_loop_extractions_not_object'),
+        (ValueError('synthetic confidential detail'), 'other_value_error'),
+        (ValueError('open_loop_extractions must be an object synthetic confidential detail'), 'other_value_error'),
+        (RuntimeError('synthetic confidential detail'), 'none'),
+    ],
+)
+@pytest.mark.parametrize('phase', ['persistence', 'finalize'])
+def test_value_error_diagnostics_use_only_closed_tokens(pipeline, caplog, error, reason, phase):
+    module, _ = pipeline
+    if phase == 'persistence':
+        module.ingest_test_seam.ingest_sync_conversation = MagicMock(side_effect=error)
+    else:
+        module.finish_sync_segment = MagicMock(side_effect=error)
+    module.get_prerecorded_service = lambda language: ('deepgram', None, 'nova-3')
+    module.process_segment(
+        '1000.wav', 'u', {'new_memories': set(), 'updated_memories': set()}, threading.Lock(), [], deferred_outcome={}
+    )
+    event = next(r.message for r in caplog.records if f'event=sync_{phase}_exception' in r.message)
+    assert f'value_error_reason={reason}' in event
+    assert 'confidential' not in event and 'must be an object' not in event
+
+
+@pytest.mark.parametrize(
     ('error', 'code', 'reason'),
     [
         (FirestoreContentionExhausted('busy'), 'sync_firestore_contention', 'firestore_contention'),
