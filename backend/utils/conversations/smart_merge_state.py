@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import datetime, tzinfo
+from datetime import datetime, timezone, tzinfo
 from typing import Any, Mapping, Optional, Sequence
 
 from config.conversation_smart_merge import (
@@ -37,6 +37,22 @@ from config.conversation_smart_merge import (
     TRANSCRIPT_EXCERPT_CHARS,
 )
 from utils.speakers.display import display_participants
+
+
+def _coerce_utc_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        try:
+            parsed = datetime.fromisoformat(cleaned.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    return None
+
 
 QUESTION_NAME = 'decision'
 QUESTIONS: dict[str, dict[str, Any]] = {
@@ -87,6 +103,14 @@ class Fragment:
     title: str
     overview: str
 
+    def __post_init__(self) -> None:
+        started = _coerce_utc_datetime(self.started_at)
+        finished = _coerce_utc_datetime(self.finished_at)
+        if started is not None:
+            object.__setattr__(self, 'started_at', started)
+        if finished is not None:
+            object.__setattr__(self, 'finished_at', finished)
+
     def as_ledger_entry(self) -> dict[str, Any]:
         return {
             'id': self.id,
@@ -98,8 +122,9 @@ class Fragment:
 
     @classmethod
     def from_ledger_entry(cls, entry: Mapping[str, Any]) -> Optional['Fragment']:
-        started, finished = entry.get('started_at'), entry.get('finished_at')
-        if not isinstance(started, datetime) or not isinstance(finished, datetime) or not entry.get('id'):
+        started = _coerce_utc_datetime(entry.get('started_at'))
+        finished = _coerce_utc_datetime(entry.get('finished_at'))
+        if started is None or finished is None or not entry.get('id'):
             return None
         return cls(
             id=str(entry['id']),
@@ -111,7 +136,8 @@ class Fragment:
 
 
 def _clock(value: datetime, tz: tzinfo) -> str:
-    return value.astimezone(tz).strftime('%a %Y-%m-%d %H:%M')
+    aware = _coerce_utc_datetime(value) or value
+    return aware.astimezone(tz).strftime('%a %Y-%m-%d %H:%M')
 
 
 def _minutes(seconds: float) -> int:
