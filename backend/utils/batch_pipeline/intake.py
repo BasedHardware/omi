@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from config.batch_pipeline import priority_for
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
-from config.prerecorded_language import language_guard_enabled, language_class
+from config.prerecorded_language import effective_sync_language, language_guard_enabled, language_class
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -424,7 +424,9 @@ async def accept_upload(
         # promise that the audio is monolingual. Do this only before new custody;
         # previous batch receipts above always stay owned by their original lane.
         prefs = user.get('transcription_preferences') or {}
-        input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
+        input_language = normalized_stt_language(
+            effective_sync_language(user.get('language'), bool(prefs.get('single_language_mode')))
+        )
         if mode is LegacySyncMode.ON and language_guard_enabled() and language_class(input_language) == 'unsupported':
             # Main's prerecorded language guard; with legacy draining or dark the C8
             # provider-STT route below serves unsupported speech instead of legacy.

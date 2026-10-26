@@ -1508,7 +1508,9 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         user_language = prefs.get('language', '') or ''
         single_language_mode = prefs.get('single_language_mode', False)
 
-        req_language = user_language if (single_language_mode and user_language) else 'multi'
+        from config.prerecorded_language import effective_sync_language
+
+        req_language = effective_sync_language(user_language, bool(single_language_mode))
         recovery_dispatch = {}
         if cap_enforced() and cap_recovery and cap_recovery_service is not None:
             # The durable pre-dispatch intent owns this provider/model. Pin
@@ -3019,10 +3021,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
 
             # --- Phase 4: Fetch prefs & embeddings ---
             job_phase = 'provider_select'
+            from config.prerecorded_language import effective_sync_language
+
             transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
             user_language = transcription_prefs.get('language', '') or ''
-            req_language = (
-                user_language if transcription_prefs.get('single_language_mode', False) and user_language else 'multi'
+            req_language = effective_sync_language(
+                user_language, bool(transcription_prefs.get('single_language_mode', False))
             )
             sync_provider, _, sync_model = (
                 minimal_redrive.parakeet_service(req_language)

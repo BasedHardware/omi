@@ -10,7 +10,7 @@ import pytest
 
 from config.policy import BatchUnitPolicy
 
-from config.prerecorded_language import language_class, language_guard_enabled
+from config.prerecorded_language import effective_sync_language, language_class, language_guard_enabled
 from config.prerecorded_stt import TranscriptionOutcome
 from tests.unit.test_batch_pipeline_worker import item, setup_worker
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
@@ -139,7 +139,16 @@ def test_gauntlet_worker_uses_real_frozen_language_adapter(monkeypatch, proof):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     'language,single,escapes',
-    [(None, False, False), ('und', True, False), ('vi', True, True), ('en', False, False), ('en', True, False)],
+    [
+        (None, False, False),
+        ('und', True, False),
+        ('vi', True, True),
+        ('vi', False, True),
+        ('ja', False, True),
+        ('ja-JP', False, True),
+        ('en', False, False),
+        ('en', True, False),
+    ],
 )
 async def test_new_batch_intake_routes_by_effective_sync_language(monkeypatch, language, single, escapes):
     from utils.batch_pipeline import intake
@@ -172,6 +181,30 @@ async def test_new_batch_intake_routes_by_effective_sync_language(monkeypatch, l
     )
     assert (result is None) == escapes
     assert staged.call_count == (0 if escapes else 1)
+
+
+@pytest.mark.parametrize(
+    'user_language,single_language_mode,expected',
+    [
+        ('ja', False, 'ja'),
+        ('ja-JP', False, 'ja'),
+        ('zh-TW', False, 'zh'),
+        ('ko', False, 'ko'),
+        ('vi', False, 'vi'),
+        ('ja', True, 'ja'),
+        ('en', False, 'multi'),
+        ('en', True, 'en'),
+        ('', False, 'multi'),
+        (None, False, 'multi'),
+    ],
+)
+def test_effective_sync_language_preserves_parakeet_unsupported_primary_language(
+    monkeypatch, user_language, single_language_mode, expected
+):
+    assert effective_sync_language(user_language, single_language_mode) == expected
+    if not single_language_mode and language_class(user_language) == 'unsupported':
+        monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', 'false')
+        assert effective_sync_language(user_language, single_language_mode) == 'multi'
 
 
 @pytest.mark.asyncio

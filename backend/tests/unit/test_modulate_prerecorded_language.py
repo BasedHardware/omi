@@ -49,6 +49,20 @@ def reply(http):
             'en',
         ),
         ([utterance('one two three', None), utterance('yes', 'en')], 'multi'),
+        (
+            [
+                utterance('今日は友達と会って楽しく話しました', 'ja', 3000),
+                utterance('one two three', 'en', 1000),
+            ],
+            'ja',
+        ),
+        (
+            [
+                utterance('We will review tomorrow', 'en', 2000),
+                utterance('はい', 'ja', 500),
+            ],
+            'en',
+        ),
     ],
 )
 def test_word_majority_duration_ties_and_short_noise(reply, utterances, expected):

@@ -26,6 +26,23 @@ from config.prerecorded_stt import (
 )
 from config.prerecorded_language import language_class, language_guard_enabled
 from config.prerecorded_vendor import vendor_fail_fast_enabled
+
+NON_SPACE_DELIMITED_LANGUAGES = frozenset({'zh', 'ja', 'th'})
+
+
+def _utterance_word_units(text: str, lang: str | None) -> int:
+    """Estimate word-equivalent units for Modulate language-vote weighting.
+
+    Chinese, Japanese, and Thai do not separate words with whitespace, so
+    `len(text.split())` collapses an entire sentence to 1 word and causes the
+    short-noise filter (`word_count < 3`) to discard full utterances whenever a
+    3-word space-delimited utterance is also present.
+    """
+    words = len(text.split())
+    if lang in NON_SPACE_DELIMITED_LANGUAGES:
+        non_ws_chars = sum(1 for ch in text if not ch.isspace())
+        return max(words, non_ws_chars // 2)
+    return words
 from config.stt_provider_policy import (
     MODULATE_PROVIDER,
     PARAKEET_PROVIDER,
@@ -703,7 +720,7 @@ def modulate_prerecorded_from_bytes(
             lang = utt.get('language')
             if lang:
                 lang = lang.split('-')[0].split('_')[0].lower()
-                language_votes.append((lang, len(text.split()), max(0, duration_ms)))
+                language_votes.append((lang, _utterance_word_units(text, lang), max(0, duration_ms)))
 
         top_text = result.get('text')
         if not words and isinstance(top_text, str) and top_text.strip():
@@ -713,7 +730,14 @@ def modulate_prerecorded_from_bytes(
         if return_language:
             # Tiny acknowledgments are noisy detection evidence. Only use them
             # when the provider supplied no longer transcribed utterance.
-            has_long_utterance = any(len(utt.get('text', '').split()) >= 3 for utt in utterances)
+            has_long_utterance = any(
+                _utterance_word_units(
+                    utt.get('text', '').strip(),
+                    (utt.get('language') or '').split('-')[0].split('_')[0].lower() or None,
+                )
+                >= 3
+                for utt in utterances
+            )
             totals: Dict[str, Tuple[int, float]] = {}
             for lang, word_count, duration in language_votes:
                 if has_long_utterance and word_count < 3:

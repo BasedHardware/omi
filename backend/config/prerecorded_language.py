@@ -53,6 +53,24 @@ def requires_multilingual(language: str | None) -> bool:
     return language_guard_enabled() and language_class(language) != 'supported'
 
 
+def effective_sync_language(user_language: str | None, single_language_mode: bool) -> str:
+    """Resolve the prerecorded/sync STT language for a user's primary language and mode.
+
+    When single_language_mode is enabled, the user's primary language is used directly.
+    When single_language_mode is disabled (Automatic Translation enabled), Parakeet-supported
+    primary languages use 'multi' so multilingual speech is not assumed monolingual, while
+    primary languages unsupported by Parakeet (e.g., 'ja', 'zh', 'ko', 'vi') preserve their
+    language code when the language guard is enabled so batch/sync routes directly to the
+    multilingual provider instead of misclassifying as 'unknown' or Parakeet.
+    """
+    raw = user_language.strip() if isinstance(user_language, str) else ''
+    if single_language_mode and raw:
+        return raw
+    if raw and language_guard_enabled() and language_class(raw) == 'unsupported':
+        return normalized_stt_language(raw) or raw
+    return 'multi'
+
+
 # Self-hosted gate (Parakeet /v2/language, Whisper-base). The statistic is
 # P(supported) summed over the Parakeet-25 languages, not a vendor's top-1.
 # Offline maxima on unsupported speech: 0.922 at >=6 s, 0.978 for 3 s crops.

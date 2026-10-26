@@ -11,6 +11,7 @@ import time
 
 from typing import Any, Awaitable, Callable
 
+from config.prerecorded_language import effective_sync_language
 from config.rate_card import recording_units_per_hour
 from config.stt_cap_dispatch import recovery_admission_enabled as enabled, any_recovery_admission_enabled, hold_lane
 from database import users as users_db
@@ -217,7 +218,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                         ((receipt or {})['provider'], None, (receipt or {})['model'])
                         if cached_result
                         else get_prerecorded_service(
-                            language if prefs.get('single_language_mode') and language else 'multi'
+                            effective_sync_language(language, bool(prefs.get('single_language_mode')))
                         )
                     )
                 except Exception as error:
