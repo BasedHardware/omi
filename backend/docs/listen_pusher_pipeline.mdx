@@ -6816,8 +6816,8 @@ packet incorrectly named Michael Liebmann as an unresolved counterpart.
 
 Live durability → coverage ledger → committed event is the custody ordering.
 LISTEN's raw archive commits at its 60-second/boundary/4096-frame windows and
-disconnect tail. The one-second relay gate only awaits already scheduled
-commits; it does not flush an active pack. Transcript persistence and live STT
+disconnect tail. The one-second relay neither awaits storage commits nor
+flushes an active pack. Transcript persistence and live STT
 delivery continue at their existing cadence. Coverage snapshots coalesce by
 conversation and reach the coverage ledger/client only after all original
 frames accepted at that snapshot's checkpoint have immutable receipts. This

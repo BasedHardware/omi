@@ -14,7 +14,7 @@ For consented capture, listen retains original packs through capacity pressure,
 upload errors and cancellation. Four commits can run at once; the fifth waits
 before removing its active pack. LISTEN commits at the pack's own 60-second,
 conversation/hour/size boundary, 4096-frame cap, or disconnect tail. The relay
-gate awaits scheduled commits without flushing an active window. Transcript
+path neither awaits uploads nor flushes an active window. Transcript
 persistence and live STT delivery continue immediately; coverage ledger writes
 and `capture_committed` events wait for the accepted original-audio checkpoint.
 Snapshots coalesce per conversation (at most 32 queued conversations); overflow
