@@ -7,7 +7,7 @@ def test_memory_contracts_dead_exports_removed():
         code = f.read()
 
     tree = ast.parse(code)
-    
+
     # Check classes defined
     class_names = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
     assert 'SourceBackedMemoryCandidate' not in class_names, "SourceBackedMemoryCandidate should be deleted"
@@ -31,7 +31,7 @@ def test_memory_contracts_dead_exports_removed():
                     all_node = node
                     break
     assert all_node is not None, "__all__ must exist"
-    
+
     exported_names = [elt.value for elt in all_node.value.elts if isinstance(elt, ast.Constant)]
     assert 'SourceBackedMemoryCandidate' not in exported_names
     assert 'L2MemoryRoute' not in exported_names
