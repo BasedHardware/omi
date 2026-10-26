@@ -12,7 +12,7 @@ import asyncio
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -38,7 +38,14 @@ async def _bulk_then_drain(users, **kwargs):
 
 @pytest.fixture
 def recap_env(monkeypatch):
-    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    # Pin the recap day: the job's noon split makes "today" yesterday before
+    # 12:00 local, so a wall-clock date here fails half of every day.
+    recap_day = date(2026, 10, 20)
+    today = recap_day.strftime('%Y-%m-%d')
+    monkeypatch.setattr(notif, '_display_date_for_now', lambda tz_name, at=None: recap_day)
+    import utils.other.daily_recap as daily_recap
+
+    monkeypatch.setattr(daily_recap, 'scheduled_date', lambda uid, tz_name, at, legacy_date: legacy_date)
 
     pass_calls = []
 
