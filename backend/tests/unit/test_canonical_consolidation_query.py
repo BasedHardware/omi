@@ -111,6 +111,8 @@ class _Query:
                 rows = [row for row in rows if _nested_value(row[1], field_path) == expected]
             elif op_string == "in":
                 rows = [row for row in rows if _nested_value(row[1], field_path) in expected]
+            elif op_string == ">=":
+                rows = [row for row in rows if _nested_value(row[1], field_path) >= expected]
             else:
                 raise AssertionError(f"unexpected operator: {op_string}")
         for field_path in reversed(self._order_fields):
@@ -267,6 +269,21 @@ def test_observation_recovery_forward_window_skips_pre_window_rows(monkeypatch):
     db = _CursorDb(_db_for([*backlog, *fresh]).rows)
 
     assert _pending_observation_ids(UID, db_client=db) == ['new00', 'new01']
+    assert ('captured_at', '>=', window_start) in db.filters
+
+
+def test_observation_recovery_window_binds_the_query_so_backlog_cannot_consume_the_page(monkeypatch):
+    """Luna r1 P2: 250 pre-window observations must not delay one fresh row."""
+    from utils.memory.canonical_consolidation import _pending_observation_ids
+
+    window_start = NOW - timedelta(days=1)
+    monkeypatch.setenv('MEMORY_MAINTENANCE_CAPTURED_AFTER', window_start.isoformat().replace('+00:00', 'Z'))
+    backlog = [_item(f'old{i:03}', captured_at=NOW - timedelta(days=5, minutes=i)) for i in range(250)]
+    fresh = _item('new', captured_at=NOW - timedelta(hours=12))
+    db = _CursorDb(_db_for([*backlog, fresh]).rows)
+
+    assert _pending_observation_ids(UID, db_client=db) == ['new']
+    assert db.streamed_count == 1
 
 
 def test_recovery_checkpoint_cannot_recreate_metadata_during_account_deletion(monkeypatch):
