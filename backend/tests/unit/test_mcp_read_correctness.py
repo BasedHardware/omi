@@ -89,6 +89,12 @@ def test_mcp_snippet_seconds_and_milliseconds_use_the_same_nonnegative_projectio
     assert source['start'] == -2.5 and source['start_ms'] == -2500
 
 
+@pytest.mark.parametrize('unknown', [None, False, 'unplaced'])
+def test_mcp_timing_projection_does_not_invent_unknown_clock_metadata(unknown):
+    source = {'text': 'synthetic', 'start': unknown, 'end': 1.25}
+    assert public_transcript_timing(source) == source
+
+
 def test_updated_filter_runs_before_the_old_200_row_scan(monkeypatch):
     rows = [{'id': 'new', 'content': 'Synthetic fact', 'updated_at': NOW, 'created_at': NOW}]
     read = MagicMock(return_value=(rows, 237))

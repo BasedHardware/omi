@@ -102,12 +102,12 @@ def public_transcript_timing(fields: Dict[str, Any]) -> Dict[str, Any]:
     projected = dict(fields)
     for clock_key in ("start", "end", "start_ms", "end_ms"):
         raw_offset = projected.get(clock_key)
-        if isinstance(raw_offset, bool):
+        if raw_offset is None or isinstance(raw_offset, bool):
             continue
         try:
             if float(raw_offset) < 0:
                 projected[clock_key] = 0
-        except (TypeError, ValueError):
+        except (OverflowError, TypeError, ValueError):
             continue
     return projected
 
