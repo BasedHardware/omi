@@ -51,10 +51,10 @@ def users_db():
 
     firestore_stub.transactional = lambda func: func
     firestore_stub.DELETE_FIELD = object()
+    firestore_stub.Increment = MagicMock()
 
     fv1_stub = ModuleType("google.cloud.firestore_v1")
     fv1_stub.FieldFilter = MagicMock()
-    fv1_stub.Increment = MagicMock()
     fv1_stub.transactional = lambda func: func
 
     fakes = {

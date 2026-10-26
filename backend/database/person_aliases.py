@@ -15,6 +15,7 @@ from typing import Any, Optional
 from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from utils.speakers import auto_enroll
+from utils.observability.fallback import record_fallback
 
 
 class _PeopleScanMemo:
@@ -248,7 +249,16 @@ def list_people(
                     entry = memo.entries.get(key)
                     # Capture BEFORE the scan, never after: a write during a fill
                     # must retire that fill on the next hit. Hits cost one lookup.
-                    people_generation = read_people_generation(db_client, uid)
+                    try:
+                        people_generation = read_people_generation(db_client, uid)
+                    except Exception:
+                        record_fallback(
+                            component='other',
+                            from_mode='cached',
+                            to_mode='uncached',
+                            reason='dependency_unavailable',
+                            outcome='recovered',
+                        )
                     if entry is not None:
                         stored_generation, payload = entry
                         if people_generation is not None and stored_generation == people_generation:

@@ -60,12 +60,12 @@ def main():
             ),
         )
 
-    def check(label, operation):
+    def check(label, operation, *, delta=1):
         before = count()
         with person_aliases.people_scan_attempt():
             person_aliases.list_people(client, uid, memoize=True)
             Context().run(operation)
-            assert count() > before, label
+            assert count() == before + delta, label
             hinted = person_aliases.list_people(client, uid, memoize=True)
             assert hinted == person_aliases.list_people(client, uid), label
         checks.append(label)
@@ -222,7 +222,7 @@ def main():
             ),
         )
         check('auto_enroll_revoke', lambda: speaker_auto_enroll.revoke_person(uid, 'p', firestore_client=client))
-        check('delete_person', lambda: users.delete_person(uid, 'p'))
+        check('delete_person', lambda: users.delete_person(uid, 'p'), delta=2)
         seed_person()
         check(
             'recursive_people_delete',

@@ -7,9 +7,7 @@ writers. update_time also fences deletion/recreation of the metadata document.
 
 from typing import Any
 
-from google.cloud.firestore_v1 import Increment, transactional
-
-from utils.observability.fallback import record_fallback
+from google.cloud import firestore
 
 
 def generation_ref(owner_ref: Any) -> Any:
@@ -18,34 +16,24 @@ def generation_ref(owner_ref: Any) -> Any:
 
 def bump_people_generation(writer: Any, person_ref: Any) -> None:
     """Stage alongside a People mutation in the SAME transaction/atomic batch."""
-    writer.set(generation_ref(person_ref.parent.parent), {'generation': Increment(1)}, merge=True)
+    writer.set(generation_ref(person_ref.parent.parent), {'generation': firestore.Increment(1)}, merge=True)
 
 
 def read_people_generation(db_client: Any, uid: str) -> tuple | None:
     """One document read; unavailable/uninitialized metadata never authorizes reuse."""
-    try:
-        snapshot = generation_ref(db_client.collection('users').document(uid)).get()
-        if not snapshot.exists:
-            return None
-        value = (snapshot.to_dict() or {}).get('generation')
-        if type(value) is not int or value < 0:
-            return None
-        return value, snapshot.update_time
-    except Exception:
-        record_fallback(
-            component='other',
-            from_mode='cached',
-            to_mode='uncached',
-            reason='dependency_unavailable',
-            outcome='recovered',
-        )
+    snapshot = generation_ref(db_client.collection('users').document(uid)).get()
+    if not snapshot.exists:
         return None
+    value = (snapshot.to_dict() or {}).get('generation')
+    if type(value) is not int or value < 0:
+        return None
+    return value, snapshot.update_time
 
 
 def write_person(db_client: Any, person_ref: Any, operation: str, *args: Any, **kwargs: Any) -> None:
     """Convert a standalone mutation to an atomic People+generation commit."""
 
-    @transactional
+    @firestore.transactional
     def apply(transaction):
         getattr(transaction, operation)(person_ref, *args, **kwargs)
         bump_people_generation(transaction, person_ref)
