@@ -14,7 +14,77 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    limiter.clockForTesting = null;
     limiter.clear();
+  });
+
+  test('dispatch holds double Retry-After to one hour and clear resets the backoff', () {
+    for (final seconds in [60, 120, 240, 480, 960, 1920, 3600, 3600]) {
+      limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+      expect(limiter.activeRetryAfterSeconds, inInclusiveRange(seconds - 1, seconds));
+    }
+
+    // Successful uploads call clear() on the account limiter.
+    limiter.clear();
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.activeRetryAfterSeconds, inInclusiveRange(59, 60));
+  });
+
+  test('a hold right after the cooldown expires keeps growing the backoff', () {
+    // Real flow: the next upload only runs once the cooldown has expired, so a
+    // fence that is still held answers just after expiry.
+    var now = DateTime(2026, 10, 26);
+    limiter.clockForTesting = () => now;
+    for (final seconds in [60, 120, 240, 480]) {
+      limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+      expect(limiter.activeRetryAfterSeconds, seconds);
+      now = now.add(Duration(seconds: seconds + 1));
+    }
+  });
+
+  test('dispatch hold backoff resets after a quiet gap of twice the last cooldown', () {
+    var now = DateTime(2026, 10, 26);
+    limiter.clockForTesting = () => now;
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    now = now.add(const Duration(seconds: 61));
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.activeRetryAfterSeconds, 120);
+
+    now = now.add(const Duration(seconds: 120 + 241));
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.activeRetryAfterSeconds, 60);
+  });
+
+  test('successful upload resets the dispatch hold backoff', () async {
+    var now = DateTime(2026, 10, 26);
+    limiter.clockForTesting = () => now;
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.dispatchHoldBackoffLevelForTesting, 2);
+    now = now.add(const Duration(seconds: 121));
+
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (
+        files, {
+        onUploadProgress,
+        conversationId,
+        captureEvidence,
+        recordingSessionId,
+        audioStartSeconds,
+        audioEndSeconds,
+        claimLiveCapture = false,
+        geolocation,
+      }) async =>
+          UploadFilesResult.queued('job-after-hold'),
+    );
+
+    await gate.upload([]);
+
+    expect(limiter.dispatchHoldBackoffLevelForTesting, 0);
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.activeRetryAfterSeconds, 60);
   });
 
   test('stale persisted fair-use cooldown self-heals before upload', () async {

@@ -46,6 +46,7 @@ class ReasonFamily(StrEnum):
     SPEAKER_EVIDENCE = 'speaker_evidence'
     NOTES_AGENT_FORCE = 'notes_agent_force'
     NOTES_AGENT_TRANSPORT = 'notes_agent_transport'
+    SYNC_DISPATCH = 'sync_dispatch'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -137,6 +138,14 @@ class StagingRetryOutcome(StrEnum):
     EXHAUSTED = 'exhausted'
     PERMANENT = 'permanent'
     RETAINED = 'retained'
+
+
+class SyncDispatchFailureReason(StrEnum):
+    """Closed reasons for a sync v2 staging/dispatch refusal."""
+
+    UNKNOWN = 'unknown'
+    DISPATCH_HOLD = 'dispatch_hold'
+    STAGING_FAILED = 'staging_failed'
 
 
 class WorkOutcome(StrEnum):

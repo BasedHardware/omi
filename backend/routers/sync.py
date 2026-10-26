@@ -1,5 +1,6 @@
 from database import sync_redrive
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
+from database.legal_holds import DestructiveOperationInProgress
 from utils.sync import minimal_redrive, redrive_policy, playback_build
 from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
@@ -127,9 +128,11 @@ from utils.fair_use import (
     trigger_classifier_if_needed,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import ReasonFamily, SyncDispatchFailureReason, reason_label
 from utils.multipart import MultipartMaxPartSizeRoute, SYNC_AUDIO_MAX_PART_SIZE, max_part_size
 from utils.metrics import (
     OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL,
+    OMI_SYNC_DISPATCH_FAILURES_TOTAL,
     OMI_SYNC_JOB_POLL_REQUESTS_TOTAL,
     OMI_SYNC_JOB_POLL_THROTTLED_TOTAL,
     OMI_SYNC_LANE_JOBS_TOTAL,
@@ -222,6 +225,26 @@ from utils.sync.provenance import capture_matches_server_conversation as _captur
 from utils.sync import cap_hold_redrive
 
 logger = logging.getLogger(__name__)
+
+# Give short account-operation fences a chance to clear before asking the
+# client to pause. Persistent holds use a short, bounded in-request recheck.
+SYNC_DISPATCH_HOLD_RETRY_AFTER_SECONDS = 60
+SYNC_DISPATCH_HOLD_RECHECK_SECONDS = 2.0
+SYNC_DISPATCH_HOLD_RECHECK_INTERVAL_SECONDS = 0.1
+
+
+async def _stage_files_to_gcs_with_hold_recheck(paths: List[str]) -> None:
+    deadline = time.monotonic() + SYNC_DISPATCH_HOLD_RECHECK_SECONDS
+    while True:
+        try:
+            await run_blocking(sync_executor, _stage_files_to_gcs, paths)
+            return
+        except DestructiveOperationInProgress:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise
+            await asyncio.sleep(min(SYNC_DISPATCH_HOLD_RECHECK_INTERVAL_SECONDS, remaining))
+
 
 # Audio constants
 AUDIO_SAMPLE_RATE = 16000
@@ -1486,10 +1509,23 @@ async def sync_local_files_v2(
                 # sync_executor, NOT storage_executor — same reasoning as the
                 # file save above (#7372): a saturated storage pool would queue
                 # the staging upload and delay the 202.
-                await run_blocking(sync_executor, _stage_files_to_gcs, owned_paths)
+                await _stage_files_to_gcs_with_hold_recheck(owned_paths)
             except Exception as e:
-                logger.error(
-                    'event=sync_dispatch outcome=staging_failed lane=%s exception_type=%s',
+                dispatch_hold = isinstance(e, DestructiveOperationInProgress)
+                dispatch_reason = (
+                    SyncDispatchFailureReason.DISPATCH_HOLD
+                    if dispatch_hold
+                    else SyncDispatchFailureReason.STAGING_FAILED
+                )
+                failure_reason = dispatch_reason.value
+                OMI_SYNC_DISPATCH_FAILURES_TOTAL.labels(
+                    reason=reason_label(ReasonFamily.SYNC_DISPATCH, dispatch_reason, SyncDispatchFailureReason)
+                ).inc()
+                logger.log(
+                    logging.INFO if dispatch_hold else logging.ERROR,
+                    'event=sync_dispatch outcome=%s reason=%s lane=%s exception_type=%s',
+                    'held' if dispatch_hold else 'staging_failed',
+                    failure_reason,
                     lane_decision.lane.value,
                     type(e).__name__,
                 )
@@ -1502,7 +1538,7 @@ async def sync_local_files_v2(
                     job_id=job_id,
                     uid=uid,
                     content_id=content_id,
-                    error_code='sync_dispatch_staging_failed',
+                    error_code='dispatch_hold' if dispatch_hold else 'sync_dispatch_staging_failed',
                     outcome=TranscriptionOutcome.UPSTREAM_ERROR,
                     provider='unknown',
                     model='unknown',
@@ -1511,6 +1547,18 @@ async def sync_local_files_v2(
                 if backfill_slot_acquired:
                     await run_blocking(db_executor, release_backfill_slot, uid, job_id)
                     backfill_slot_acquired = False
+                if dispatch_hold:
+                    return JSONResponse(
+                        status_code=503,
+                        headers={
+                            'Retry-After': str(SYNC_DISPATCH_HOLD_RETRY_AFTER_SECONDS),
+                            'X-Omi-Rate-Limit-Reason': failure_reason,
+                        },
+                        content={
+                            'code': 'dispatch_hold',
+                            'detail': 'Sync dispatch is temporarily paused; local audio was not consumed',
+                        },
+                    )
                 return JSONResponse(
                     status_code=503,
                     headers={'Retry-After': '30'},

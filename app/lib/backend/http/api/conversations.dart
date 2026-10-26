@@ -914,7 +914,9 @@ int? _parseRetryAfterSeconds(http.Response response) {
 SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) {
   final reason = syncRateLimitReasonCode(response);
   if (reason == 'fair_use') return SyncRateLimitKind.fairUse;
-  if (reason == 'backfill_capacity' || reason == 'backfill_paced') return SyncRateLimitKind.backendCapacity;
+  if (reason == 'backfill_capacity' || reason == 'backfill_paced' || reason == 'dispatch_hold') {
+    return SyncRateLimitKind.backendCapacity;
+  }
   return SyncRateLimitKind.edgeThrottle;
 }
 
@@ -925,15 +927,15 @@ String? syncRateLimitReasonCode(http.Response response) {
   return reason;
 }
 
-/// Historical-recovery pacing the backend asks the client to wait out.
+/// Account-scoped admission pacing the backend asks the client to wait out.
 ///
-/// One predicate for the upload response and the job reconciler. `backfill_paced`
-/// and `backfill_capacity` stay pending and retry on Retry-After; they are not
-/// a second failure taxonomy.
-bool isPacedBackfillReasonCode(String? reasonCode) {
+/// These reasons stay pending and retry on Retry-After without spending a WAL
+/// retry; they are not a second failure taxonomy.
+bool isPacedSyncAdmissionReasonCode(String? reasonCode) {
   switch (reasonCode?.trim().toLowerCase()) {
     case 'backfill_paced':
     case 'backfill_capacity':
+    case 'dispatch_hold':
       return true;
     default:
       return false;
@@ -943,11 +945,11 @@ bool isPacedBackfillReasonCode(String? reasonCode) {
 /// Upload responses that are admission throttles rather than processing failures.
 ///
 /// Every 429 is a throttle. A 503 is a throttle only when the backend scopes it
-/// with `backfill_capacity`. An unscoped 503, including job-status finalization
-/// retry and `sync_dispatch_unavailable`, is not this predicate.
+/// with a recognized admission reason. Unknown 503 reasons remain generic,
+/// including job-status finalization retry and `sync_dispatch_unavailable`.
 bool isSyncUploadRateLimitResponse(http.Response response) {
   if (response.statusCode == 429) return true;
-  return response.statusCode == 503 && syncRateLimitReasonCode(response) == 'backfill_capacity';
+  return response.statusCode == 503 && isPacedSyncAdmissionReasonCode(syncRateLimitReasonCode(response));
 }
 
 /// The server still owns these bytes; wait without spending recording retries.
