@@ -14,6 +14,7 @@ from database.firestore_transaction_retry import (
     FirestoreAborted,
     FirestoreContentionExhausted,
     equal_jitter_delay,
+    is_expired_transaction_error,
 )
 from database.google_credentials import (
     customer_data_service_account,
@@ -329,21 +330,6 @@ def get_data_plane_firestore_client() -> Any:
     return _data_plane_firestore_client
 
 
-_EXPIRED_TRANSACTION_MARKER = "transaction has expired"
-
-
-def is_expired_transaction_error(error: BaseException) -> bool:
-    """True when Firestore has retired the transaction id mid-flight.
-
-    A commit reports that as ``InvalidArgument`` 400. A streaming read
-    (``BatchGetDocuments`` / ``RunQuery``) reports the same retirement as
-    ``Aborted`` 409, raised from ``google.api_core.grpc_helpers``. The SDK
-    retries ``Aborted`` only when ``_commit`` raises it, and that retry reuses
-    the dead id, so the read-path ``Aborted`` has to be recognized here.
-    """
-    return isinstance(error, (InvalidArgument, Aborted)) and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
-
-
 _DOCUMENT_SIZE_LIMIT_MARKER = "exceeds the maximum allowed size"
 
 # Google RPC codes whose rejections do not change when the same write is
@@ -520,7 +506,9 @@ def run_transactional(
     commit can be ambiguous, so the callable must re-read and refuse a second
     increment. Backoff runs in this helper, after the callable has returned, so a
     lock held only inside the callable is not held during the sleep. The default
-    path still retries only an expired transaction id and does not sleep.
+    path still retries only an expired transaction id, now with the same
+    equal-jitter backoff so an inner restart does not land inside the same
+    contention spike that retired the previous id.
     ``outcome`` receives ``retried_ok`` or ``exhausted`` when set.
     """
     predicate = is_retryable_firestore_transaction_error if transient else is_expired_transaction_error
@@ -547,10 +535,10 @@ def run_transactional(
                     attempts,
                     firestore_failure_reason(error),
                 )
-                delay = equal_jitter_delay(attempt, random_value or random.random)
-                (sleep or time.sleep)(delay)
             else:
                 logger.warning('Firestore transaction expired, restarting attempt=%d/%d', attempt, attempts)
+            delay = equal_jitter_delay(attempt, random_value or random.random)
+            (sleep or time.sleep)(delay)
 
 
 class _LazyFirestoreClient:

@@ -19,6 +19,8 @@ from tests.unit.test_conversation_persistence_transaction_expiry import _FakeFir
 from tests.unit.test_sync_cross_job_assignment import chunk
 from utils.sync import assignment
 
+EXPIRED_MESSAGE = '400 The referenced transaction has expired or is no longer valid.'
+
 
 @pytest.fixture
 def sdk_assignment(monkeypatch):
@@ -127,6 +129,38 @@ def test_expiry_restarts_still_work_inside_outer_contention_retry(sdk_assignment
     )
     persist(store)
     assert len(store.transactions) == 3
+    assert reads == store.transactions
+    assert len(store.commits) == 1
+
+
+def test_contention_classifier_owns_expired_transaction_ids():
+    assert firestore_transaction_retry._is_transaction_contention(InvalidArgument(EXPIRED_MESSAGE))
+    wrapped = RuntimeError('synthetic wrapper')
+    wrapped.__cause__ = InvalidArgument(EXPIRED_MESSAGE)
+    assert firestore_transaction_retry._is_transaction_contention(wrapped)
+    assert not firestore_transaction_retry._is_transaction_contention(InvalidArgument('bad payload'))
+    assert not firestore_transaction_retry._is_transaction_contention(RuntimeError('synthetic wrapper'))
+
+
+def test_inner_expiry_exhaustion_is_bounded_by_outer_contention_budget(sdk_assignment, monkeypatch):
+    # An expired id escaping the inner restart budget is contention: the outer
+    # bounded equal-jitter budget governs it instead of the error leaking to
+    # the job as an expired transaction.
+    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
+    store, reads = sdk_assignment(commit_errors=[InvalidArgument(EXPIRED_MESSAGE) for _ in range(15)])
+    with pytest.raises(FirestoreContentionExhausted):
+        persist(store)
+    assert len(store.transactions) == 15
+    assert len(reads) == 15
+    assert store.commits == []
+
+
+def test_inner_expiry_exhaustion_recovers_within_outer_contention_budget(sdk_assignment, monkeypatch):
+    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
+    store, reads = sdk_assignment(commit_errors=[InvalidArgument(EXPIRED_MESSAGE) for _ in range(6)])
+    result, created, _ = persist(store)
+    assert created and result['id'] == 'canonical'
+    assert len(store.transactions) == 7
     assert reads == store.transactions
     assert len(store.commits) == 1
 

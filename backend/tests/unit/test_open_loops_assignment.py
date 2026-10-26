@@ -67,6 +67,54 @@ def test_sync_append_and_retry_preserve_encoded_extractions(level):
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_sync_assignment_same_level_never_decodes_and_writes_blob_byte_identical(monkeypatch, level):
+    store = StrictFirestore()
+    before = seed(store, 'existing', 1000, level, **{FIELD: EXTRACTIONS})
+    decode_calls = []
+    real_decode = db.decode_open_loop_extractions
+
+    def counting_decode(uid, raw, compressed):
+        decode_calls.append((raw, compressed))
+        return real_decode(uid, raw, compressed)
+
+    monkeypatch.setattr(db, 'decode_open_loop_extractions', counting_decode)
+    incoming = dict(chunk('append', 1060), data_protection_level=level)
+    for _ in range(2):
+        row, created, _ = db.assign_sync_conversation('u', incoming, candidate_id='existing', firestore_client=store)
+        assert not created and row['id'] == 'existing'
+        # A replayed transaction body must not pay decrypt/decompress either.
+        assert decode_calls == []
+    raw = store.rows[path('existing')]
+    assert raw[FIELD] == before[FIELD] and raw[MARKER] == before[MARKER]
+    assert_retained(raw, level)
+
+
+def test_sync_assignment_level_change_reprotects_retained_extractions(monkeypatch):
+    store = StrictFirestore()
+    before = seed(store, 'existing', 1000, 'standard', **{FIELD: EXTRACTIONS})
+    decode_calls = []
+    real_decode = db.decode_open_loop_extractions
+
+    def counting_decode(uid, raw, compressed):
+        decode_calls.append((raw, compressed))
+        return real_decode(uid, raw, compressed)
+
+    monkeypatch.setattr(db, 'decode_open_loop_extractions', counting_decode)
+    row, created, _ = db.assign_sync_conversation(
+        'u',
+        dict(chunk('append', 1060), data_protection_level='enhanced'),
+        candidate_id='existing',
+        firestore_client=store,
+    )
+    assert not created and row['id'] == 'existing'
+    assert len(decode_calls) == 1 and decode_calls[0][0] == before[FIELD]
+    raw = store.rows[path('existing')]
+    assert raw['data_protection_level'] == 'enhanced'
+    assert raw[FIELD] != before[FIELD]
+    assert_retained(raw, 'enhanced')
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
 @pytest.mark.parametrize('upgrade', [False, True])
 def test_sync_donor_merge_preserves_both_rows_and_stronger_protection(level, upgrade):
     store = StrictFirestore()
@@ -105,7 +153,9 @@ def test_new_row_encodes_logical_extractions_and_keeps_absent_null_controls(leve
 
 
 @pytest.mark.parametrize('bad', [b'not compressed', ['not an object']])
-def test_unreadable_existing_extractions_abort_before_any_transaction_write(bad):
+def test_unreadable_existing_extractions_abort_a_reprotecting_write(bad):
+    # Only a protection-level change must read the stored blob; an unreadable
+    # one then aborts before any transaction write instead of being emptied.
     store = StrictFirestore()
     seed(store, 'existing', 1000, 'standard', **{FIELD: EXTRACTIONS})
     store.rows[path('existing')][FIELD] = bad
@@ -113,11 +163,32 @@ def test_unreadable_existing_extractions_abort_before_any_transaction_write(bad)
     with pytest.raises((ValueError, zlib.error)):
         db.assign_sync_conversation(
             'u',
-            dict(chunk('append', 1060), data_protection_level='standard'),
+            dict(chunk('append', 1060), data_protection_level='enhanced'),
             candidate_id='existing',
             firestore_client=store,
         )
     assert store.rows == before
+
+
+@pytest.mark.parametrize('bad', [b'not compressed', ['not an object']])
+def test_unreadable_existing_extractions_at_unchanged_level_are_carried_untouched(bad):
+    # The same-level write never decodes the blob, so it cannot be blocked by
+    # one either: the corrupt bytes ride along verbatim for the tolerant read
+    # path to handle, and the append itself still lands.
+    store = StrictFirestore()
+    seed(store, 'existing', 1000, 'standard', **{FIELD: EXTRACTIONS})
+    store.rows[path('existing')][FIELD] = bad
+    row, created, _ = db.assign_sync_conversation(
+        'u',
+        dict(chunk('append', 1060), data_protection_level='standard'),
+        candidate_id='existing',
+        firestore_client=store,
+    )
+    assert not created and row['id'] == 'existing'
+    raw = store.rows[path('existing')]
+    assert raw[FIELD] == bad and raw[MARKER] is True
+    segments = db._decode_transcript_segments_strict('u', raw['transcript_segments'], True)
+    assert len(segments) == 2
 
 
 @pytest.mark.parametrize('source,target', [('standard', 'enhanced'), ('enhanced', 'standard')])

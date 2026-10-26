@@ -5,6 +5,10 @@ raised while the decorated transaction body performs reads.  A fresh outer
 transaction is therefore required for read-time contention.  Keep this helper
 narrow: ambiguous commit outcomes and unrelated provider failures must not be
 replayed.
+
+A server-side transaction-chain expiry (``InvalidArgument`` "transaction has
+expired") is classified as contention here too: nothing was written and only a
+fresh transaction can succeed, which is exactly what this bounded budget does.
 """
 
 import logging
@@ -13,11 +17,15 @@ import time
 from typing import Any, Callable, TypeVar
 
 try:
-    # The fallback class below rebinds this name in lightweight stub environments.
+    # The fallback classes below rebind these names in lightweight stub environments.
     from google.api_core.exceptions import Aborted as FirestoreAborted  # type: ignore[reportAssignmentType]
+    from google.api_core.exceptions import InvalidArgument as FirestoreInvalidArgument  # type: ignore[reportAssignmentType]
 except Exception:  # pragma: no cover - lightweight tests may stub only google.cloud
 
     class FirestoreAborted(Exception):
+        """Stub-safe fallback for test environments without google-api-core."""
+
+    class FirestoreInvalidArgument(Exception):
         """Stub-safe fallback for test environments without google-api-core."""
 
 
@@ -29,9 +37,28 @@ DEFAULT_MAX_ATTEMPTS = 5
 _INITIAL_MAX_DELAY_SECONDS = 0.2
 _MAX_DELAY_SECONDS = 1.0
 
+# Same server-side retirement message ``database._client`` matches; this module
+# cannot import that one (``_client`` imports the retry helpers defined here).
+_EXPIRED_TRANSACTION_MARKER = "transaction has expired"
+
 
 class FirestoreContentionExhausted(RuntimeError):
     """Raised after every bounded transaction-contention attempt is used."""
+
+
+def is_expired_transaction_error(error: BaseException) -> bool:
+    """True when Firestore has retired the transaction id mid-flight.
+
+    A commit reports the retirement as ``InvalidArgument`` 400. A streaming read
+    (``BatchGetDocuments`` / ``RunQuery``) reports the same retirement as
+    ``Aborted`` 409, raised from ``google.api_core.grpc_helpers``. The SDK
+    retries ``Aborted`` only when ``_commit`` raises it, and that retry reuses
+    the dead id, so both surfaces need a fresh transaction.
+    """
+    return (
+        isinstance(error, (FirestoreAborted, FirestoreInvalidArgument))
+        and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
+    )
 
 
 def _is_transaction_contention(error: BaseException) -> bool:
@@ -39,6 +66,8 @@ def _is_transaction_contention(error: BaseException) -> bool:
     seen: set[int] = set()
     while current is not None and id(current) not in seen:
         if isinstance(current, FirestoreAborted):
+            return True
+        if is_expired_transaction_error(current):
             return True
         seen.add(id(current))
         current = current.__cause__
@@ -71,9 +100,9 @@ def run_with_transaction_contention_retry(
     """Run a decorated Firestore transaction with bounded equal-jitter retry.
 
     A new transaction is created for every outer attempt.  Only explicit
-    ``Aborted`` contention, including the SDK's exhausted-attempt wrapper, is
-    replayed.  Firestore aborts are atomic, so callers must keep all writes and
-    idempotency checks inside ``operation``.
+    ``Aborted`` contention (including the SDK's exhausted-attempt wrapper) and
+    an expired transaction id are replayed.  Firestore aborts are atomic, so
+    callers must keep all writes and idempotency checks inside ``operation``.
     """
 
     if max_attempts < 1:
