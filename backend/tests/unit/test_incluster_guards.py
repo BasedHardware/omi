@@ -669,6 +669,82 @@ def test_scheduled_lower_defers_while_the_reading_cannot_measure(monkeypatch, ca
     )
 
 
+def test_rollback_expires_after_one_full_clean_lookback_window(caplog):
+    # 2026-10-25 21:06Z: the 13:50Z rollback kept the floor schedule deferred
+    # every hour with a healthy fleet and no in-band clear. A rolled-back HPA
+    # with one full window of consecutive clean readings clears itself; the
+    # floor stays at the cap and the arming/usable gates own any reduction.
+    client = FakeClient()
+    client.hpa['spec']['minReplicas'] = 12
+    client.hpa['spec']['metrics'].append(guard.LATENCY)
+    assert guard.run(client, False, 1000) == 0  # seeds since/clean_since
+    client.patches = []
+    assert guard.run(client, False, 1899) == 0  # clean streak 899s: not yet
+    assert all(path == 'state' for path, _ in client.patches)
+    assert guard.run(client, False, 1900) == 0  # full window clean: expire
+    hpa_writes = [patch for path, patch in client.patches if path == 'hpa']
+    assert hpa_writes == [guard.build_rollback_clear(client.hpa['spec'])]
+    assert 'parakeet_rollback_expired' in caplog.text
+    assert hpa_writes[0][1]['value'] == [
+        m for m in client.hpa['spec']['metrics'] if m is not guard.LATENCY
+    ]  # workload-only metrics restored; minReplicas untouched at 12
+
+
+def test_rollback_expiry_restarts_on_any_unusable_reading(caplog):
+    client = FakeClient()
+    client.hpa['spec']['minReplicas'] = 12
+    client.hpa['spec']['metrics'].append(guard.LATENCY)
+    assert guard.run(client, False, 1000) == 0  # clean seed
+    client.signals = dict(values(), first_p95=None)  # blind reading mid-window
+    assert guard.run(client, False, 1500) == 0
+    assert not any(path == 'hpa' for path, _ in client.patches)
+    client.signals = values()
+    assert guard.run(client, False, 2400) == 0  # streak restarted at 2400
+    assert not any(
+        path == 'hpa' and any(p.get('op') == 'replace' and p['path'] == '/spec/metrics' for p in patch)
+        for path, patch in client.patches
+    )
+    assert guard.run(client, False, 3300) == 0  # 900s since the restart: expire
+    assert 'parakeet_rollback_expired' in caplog.text
+
+
+def test_rollback_expiry_survives_parked_decide_passes_and_restarts(monkeypatch, caplog):
+    # Review r3 P1: with the schedule installed (production shape), a
+    # rolled-back HPA takes decide()'s parked path, whose advance() rebuilds
+    # the state dict - the clean streak must survive those rebuilds across Job
+    # restarts, or the rollback never expires. A spec change restarts it.
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [12] * 24)
+    client = FakeClient()
+    client.hpa['spec']['minReplicas'] = 12
+    client.hpa['spec']['metrics'].append(guard.LATENCY)
+    for now in (1000, 1300, 1600):  # three separate Jobs, same parked spec
+        assert guard.run(client, False, now) == 0
+    assert not any(path == 'hpa' for path, _ in client.patches)
+    assert guard.run(client, False, 1900) == 0  # 900s of clean parked readings
+    assert 'parakeet_rollback_expired' in caplog.text
+    assert any(
+        path == 'hpa' and any(p.get('op') == 'replace' and p['path'] == '/spec/metrics' for p in patch)
+        for path, patch in client.patches
+    )
+
+
+def test_batch_safety_trips_are_isolated_evidence_not_job_failures(caplog):
+    # 2026-10-25 21:06Z ruling: a batch trip or unknown inputs must not fail
+    # the whole Job or block the Parakeet schedule. The batch section still
+    # logs its TRIP verdict; the exit code belongs to the Parakeet section.
+    client = FakeClient()
+
+    def sample(expr):
+        if 'first_p95' in expr:
+            return client.signals
+        return {'oldest_age': 94643.0, 'retry_age': 0.0, 'freshness': 0.0, 'scrape_age': 0.0}
+
+    client.sample = sample
+    assert guard.run(client, False, 0) == 0  # parakeet WARMUP/clean; batch TRIP isolated
+    assert '"verdict": "TRIP"' in caplog.text  # batch_safety still reports TRIP
+    assert 'uncommitted_job_age_over_30m' in caplog.text
+
+
 def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
     prod = next(
         obj
