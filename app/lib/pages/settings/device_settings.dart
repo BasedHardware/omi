@@ -716,33 +716,44 @@ extension _DeviceLiveSections on _DeviceSettingsState {
   }
 
   /// Speech heard today: transcript time inside today's local day across the
-  /// loaded conversations, plus the running live episode since midnight. A
-  /// pendant that streams without a break files its conversations under the
-  /// session's start day, so bucketing by that day hid today's speech.
+  /// loaded conversations, plus the active live episode's own interval since
+  /// its start or anchor, merged so nothing is counted twice. A pendant that
+  /// streams without a break files its conversations under the session's start
+  /// day, so bucketing by that day hid today's speech.
   int _heardTodaySeconds(BuildContext context) {
-    final fromConversations = context.select<ConversationProvider?, int>((conversations) {
-      if (conversations == null) return 0;
+    final liveEpisodeStart = _liveEpisodeStart(context);
+    return context.select<ConversationProvider?, int>((conversations) {
       return heardTodaySpeechSeconds(
-        conversations: [
-          ...conversations.groupedConversations.values.expand((group) => group),
-          ...conversations.processingConversations,
-        ],
+        conversations: conversations == null
+            ? const []
+            : [
+                ...conversations.groupedConversations.values.expand((group) => group),
+                ...conversations.processingConversations,
+              ],
         now: DateTime.now(),
+        liveEpisodeStart: liveEpisodeStart,
       );
     });
-    return fromConversations + _liveEpisodeSecondsToday(context);
   }
 
-  /// The live episode's runtime that falls inside today: the whole elapsed
-  /// time when it started today, only the part since midnight otherwise.
-  int _liveEpisodeSecondsToday(BuildContext context) {
-    final startedAt = context.select<CaptureProvider?, DateTime?>((c) => c?.liveCaptureStartedAt);
-    if (startedAt == null) return 0;
-    final now = DateTime.now();
-    final elapsed = now.difference(startedAt);
-    if (elapsed.isNegative) return 0;
-    final midnight = DateTime(now.year, now.month, now.day);
-    return elapsed.inSeconds.clamp(0, now.difference(midnight).inSeconds);
+  /// The active live episode's own start: the server episode's start, kept
+  /// stable by the shared anchor across reconnects and restarts. Null when no
+  /// episode is live. Never the capture session's origin
+  /// (`liveCaptureStartedAt`): a pendant that streams without a break never
+  /// resets it, so it would name the whole session as heard.
+  DateTime? _liveEpisodeStart(BuildContext context) {
+    final episodes = _maybeProvider<EpisodeProvider>(context, listen: false);
+    if (episodes == null || !episodes.enabled) return null;
+    final capture = _maybeProvider<CaptureProvider>(context, listen: false);
+    return context.select<EpisodeProvider, DateTime?>((e) => _anchoredLiveEpisodeStart(e, capture, DateTime.now()));
+  }
+
+  static DateTime? _anchoredLiveEpisodeStart(EpisodeProvider e, CaptureProvider? capture, DateTime now) {
+    final episode = e.live;
+    if (episode == null) return null;
+    if (capture == null) return episode.startedAt.isAfter(now) ? null : episode.startedAt;
+    final elapsed = EpisodePresentation.elapsed(episode, capture, now, anchor: e.liveAnchor);
+    return elapsed.inSeconds <= 0 ? null : now.subtract(elapsed);
   }
 
   DeviceRightNowGroup _rightNow(BuildContext context,

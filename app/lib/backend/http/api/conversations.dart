@@ -915,6 +915,21 @@ String? syncUploadErrorReason(http.Response response) {
   return null;
 }
 
+/// The exact detail the deployed upload route puts on a 400 whose filename
+/// timestamp it refuses (`utils/sync/pipeline.py`, before the bounded `code`
+/// field existed). Matched verbatim — never a substring of other refusals.
+const String _kInvalidCaptureTimeDetail = 'Invalid sync file format: invalid timestamp';
+
+/// Whether a sync-upload 400 refuses the recording's claimed capture time.
+/// The server names this refusal two ways: the bounded `code`
+/// `invalid_capture_time` (server PR #23746) or, on the currently deployed
+/// route, the exact detail line above with no code at all.
+@visibleForTesting
+bool isInvalidCaptureTimeResponse(http.Response response) {
+  if (syncUploadErrorCode(response) == 'invalid_capture_time') return true;
+  return syncUploadErrorReason(response) == _kInvalidCaptureTimeDetail;
+}
+
 /// Thrown when the server refuses an upload because its filename carries a
 /// capture time it will not accept (HTTP 400 `invalid_capture_time`): before
 /// 2024-01-01 or in the future. The audio is fine — only its claimed time is
@@ -1092,7 +1107,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     return UploadFilesResult.queued(start.jobId, pollAfterMs: start.pollAfterMs);
   }
   if (response.statusCode == 400) {
-    if (syncUploadErrorCode(response) == 'invalid_capture_time') {
+    if (isInvalidCaptureTimeResponse(response)) {
       throw SyncInvalidCaptureTimeException(serverReason: syncUploadErrorReason(response));
     }
     // Other 400s stay terminal, but the server's own reason travels with the

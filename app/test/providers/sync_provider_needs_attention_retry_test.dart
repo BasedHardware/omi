@@ -229,4 +229,25 @@ void main() {
     expect(wal.status, WalStatus.uploaded);
     expect(File('${tempDir.path}/audio_card_retry.bin').existsSync(), isTrue);
   });
+
+  test('a too-large refusal needs attention but is never re-offered by the retry-all', () async {
+    // 413 is deterministic: the same bytes are the same size, so the card's
+    // retry-all must skip it and leave it to the row's Delete.
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final tooLarge = (await diskWal('audio_too_large.bin', timerStart: now - 600))
+      ..markUploadRejected(reasonCode: WalUploadRejection.tooLarge);
+    final invalidDate = (await diskWal('audio_bad_date.bin', timerStart: now - 900))
+      ..markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime);
+    final syncProvider = await start([tooLarge, invalidDate]);
+
+    expect(syncProvider.needsAttentionWalsCount, 2);
+    expect(syncProvider.retryableAttentionWals, [invalidDate]);
+
+    await syncProvider.retryNeedsAttentionWals();
+
+    expect(uploads, [
+      ['audio_bad_date.bin']
+    ]);
+    expect(tooLarge.status, WalStatus.uploadRejected, reason: 'a retry cannot change the bytes');
+  });
 }

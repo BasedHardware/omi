@@ -90,7 +90,10 @@ class _StatTile extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 84),
         padding: const EdgeInsets.all(OmiSpacing.sm),
         decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+        // Min, not max: under loose parent constraints the tile sizes to its
+        // own lines (floored at 84), never to whatever height is left over.
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),

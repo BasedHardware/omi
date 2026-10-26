@@ -113,6 +113,16 @@ WalSyncDisplayState? worstSessionSyncState(Iterable<Wal> wals) {
 bool isRetryableSyncState(WalSyncDisplayState state) =>
     state == WalSyncDisplayState.failed || state == WalSyncDisplayState.uploadRejected;
 
+/// Whether a deliberate retry of this recording can change its outcome. A
+/// `too_large` refusal (413) is deterministic — the same bytes are the same
+/// size — so its row offers Delete only, never a Retry that is guaranteed to
+/// fail. A local-only recording never joins a cloud drain. Every other
+/// retryable state keeps its Retry.
+bool walRetryCanHelp(Wal wal) =>
+    !wal.onDeviceOnly &&
+    isRetryableSyncState(wal.syncDisplayState) &&
+    wal.uploadRejectionReason != WalUploadRejection.tooLarge;
+
 int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
       WalSyncDisplayState.failed => 4,
       WalSyncDisplayState.corrupted => 4,

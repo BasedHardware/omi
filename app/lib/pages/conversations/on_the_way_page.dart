@@ -163,8 +163,16 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
             clock: widget.clock,
           );
           void openDetails() => openOfflineSyncDetails(context, p, multiFileSync: widget.multiFileSync);
-          void retryWal(Wal wal) => p.syncWal(wal);
-          Future<void> deleteWal(Wal wal) async {
+          // A row stands for one recording made of several WALs, so its actions
+          // go over every member WAL — like the Offline Sync block action — not
+          // just the representative the label came from.
+          void retryWals(List<Wal> wals) {
+            for (final wal in wals.where(walRetryCanHelp)) {
+              p.syncWal(wal);
+            }
+          }
+
+          Future<void> deleteWals(List<Wal> wals) async {
             final confirmed = await showOmiConfirm(
               context,
               title: l.deleteRecording,
@@ -172,7 +180,10 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
               confirmLabel: l.delete,
               destructive: true,
             );
-            if (confirmed && mounted) await p.deleteWal(wal);
+            if (!confirmed || !mounted) return;
+            for (final wal in wals) {
+              await p.deleteWal(wal);
+            }
           }
 
           const gutter = EdgeInsets.symmetric(horizontal: OmiSpacing.md);
@@ -188,8 +199,8 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
                       items: undated,
                       dates: dates,
                       onAttentionTap: openDetails,
-                      onRetry: retryWal,
-                      onDelete: deleteWal,
+                      onRetry: retryWals,
+                      onDelete: deleteWals,
                     ),
                   ),
                 ),
@@ -221,8 +232,8 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
                               items: days[i].items,
                               dates: dates,
                               onAttentionTap: openDetails,
-                              onRetry: retryWal,
-                              onDelete: deleteWal,
+                              onRetry: retryWals,
+                              onDelete: deleteWals,
                             ),
                           ),
                         ),
@@ -300,7 +311,8 @@ class _PendingItem {
         seconds = conversation.getDurationInSeconds(),
         label = l.processing,
         step = 3,
-        wal = null;
+        wal = null,
+        actionWals = null;
 
   /// A recording block's start, or null when no device clock value in the block
   /// is plausible: a never-set clock shows no time rather than a bogus one.
@@ -314,13 +326,15 @@ class _PendingItem {
   _PendingItem.block(RecordingBlock block, {required this.label, required this.step})
       : start = _blockStart(block),
         seconds = block.seconds,
-        wal = block.representative;
+        wal = block.representative,
+        actionWals = block.wals;
 
   /// A stage with no recording to name yet: only the label shows.
   const _PendingItem.status({required this.label, required this.step})
       : start = null,
         seconds = 0,
-        wal = null;
+        wal = null,
+        actionWals = null;
 
   /// Server-reported work's start, or null when unreported or before the
   /// plausibility floor (a device clock that was never set).
@@ -337,7 +351,8 @@ class _PendingItem {
         seconds = work.durationSeconds ?? 0,
         label = work.state == 'transcribing' ? l.transcribing : l.processing,
         step = work.state == 'summarizing' ? 3 : 2,
-        wal = null;
+        wal = null,
+        actionWals = null;
 
   final DateTime? start;
   final int seconds;
@@ -346,6 +361,10 @@ class _PendingItem {
   /// The recording a needs-attention row stands for, for its row actions.
   /// Null for stages with no recording to act on (server work, status lines).
   final Wal? wal;
+
+  /// Every WAL of the recording the row stands for: the block's members, so
+  /// row actions cover the whole recording. Null when there is nothing to act on.
+  final List<Wal>? actionWals;
 
   /// 1: still syncing, 2: transcribing, 3: writing the conversation, 0: refused, needs attention.
   final int step;
@@ -486,9 +505,10 @@ class _Group extends StatelessWidget {
   final VoidCallback? onAttentionTap;
 
   /// Row actions for recordings that need attention, reusing the Offline Sync
-  /// page's actions: Retry where a deliberate retry can help, Delete always.
-  final void Function(Wal wal)? onRetry;
-  final void Function(Wal wal)? onDelete;
+  /// page's actions over the whole recording: Retry where a deliberate retry
+  /// can help, Delete always.
+  final void Function(List<Wal> wals)? onRetry;
+  final Future<void> Function(List<Wal> wals)? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -523,8 +543,8 @@ class _Row extends StatelessWidget {
   final _PendingItem item;
   final OmiDateFormat dates;
   final VoidCallback? onTap;
-  final void Function(Wal wal)? onRetry;
-  final void Function(Wal wal)? onDelete;
+  final void Function(List<Wal> wals)? onRetry;
+  final Future<void> Function(List<Wal> wals)? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -533,8 +553,10 @@ class _Row extends StatelessWidget {
       if (item.start != null) dates.time(item.start!),
       if (item.seconds > 0) OmiDuration.compact(item.seconds, l),
     ].join(' · ');
-    final wal = item.wal;
-    final retryable = wal != null && !wal.onDeviceOnly && isRetryableSyncState(wal.syncDisplayState) && onRetry != null;
+    final members = item.actionWals;
+    // The recording can be re-offered when any of its members can be; a
+    // too-large member keeps its own guaranteed-fail upload out of the batch.
+    final retryable = members != null && members.any(walRetryCanHelp) && onRetry != null;
     return Semantics(
       liveRegion: true,
       button: true,
@@ -569,12 +591,12 @@ class _Row extends StatelessWidget {
                   ],
                 ),
               ),
-              if (item.needsAttention && wal != null) ...[
+              if (item.needsAttention && members != null) ...[
                 if (retryable) ...[
                   OmiButton.secondary(
                     label: l.tryAgain,
                     size: OmiButtonSize.compact,
-                    onPressed: () => onRetry!(wal),
+                    onPressed: () => onRetry!(members),
                   ),
                   const SizedBox(width: OmiSpacing.xs),
                 ],
@@ -582,7 +604,7 @@ class _Row extends StatelessWidget {
                   OmiButton.destructive(
                     label: l.delete,
                     size: OmiButtonSize.compact,
-                    onPressed: () => onDelete!(wal),
+                    onPressed: () => onDelete!(members),
                   ),
               ] else
                 _Steps(step: item.step),

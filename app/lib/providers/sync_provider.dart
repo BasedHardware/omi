@@ -278,9 +278,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       );
 
   /// Spent retry budgets and request refusals can be explicitly retried.
-  /// Missing files and permanent audio/lookback verdicts remain excluded.
-  List<Wal> get retryableAttentionWals =>
-      _allWals.where((w) => !w.onDeviceOnly && isRetryableSyncState(w.syncDisplayState)).toList();
+  /// Missing files, permanent audio/lookback verdicts and the deterministic
+  /// too-large refusal remain excluded.
+  List<Wal> get retryableAttentionWals => _allWals.where(walRetryCanHelp).toList();
 
   /// Retry every recording in [retryableAttentionWals]. The automatic drain
   /// skips a recording once its budget is spent, so a plain [syncWals] from

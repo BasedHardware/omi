@@ -11,7 +11,7 @@
     {
       "file": "002-mobile-ios-on-the-way-rows-after.png",
       "platform": "mobile-ios",
-      "description": "On the Way after: rows show time and length, short reasons (Invalid recording date, Too large, too old) and Retry/Delete actions, including the undated never-set-clock row",
+      "description": "On the Way after: rows show time and length, short reasons (Invalid recording date, Too large, too old) and Retry/Delete actions over the whole recording; the too-large row offers Delete only, including the undated never-set-clock row",
       "captured_by": "agent",
       "source": "visual-audit"
     },

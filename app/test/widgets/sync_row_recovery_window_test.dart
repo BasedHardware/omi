@@ -198,4 +198,21 @@ void main() {
       expect(find.text('Try Again'), findsNothing, reason: '$status cannot be retried into success');
     }
   });
+
+  testWidgets('a too-large refusal names itself and offers Delete, not a guaranteed-fail Retry', (tester) async {
+    await pumpRow(tester, makeWal(WalStatus.uploadRejected)..uploadRejectionReason = WalUploadRejection.tooLarge);
+
+    expect(find.text('Too large'), findsOneWidget);
+    expect(find.text('Try Again'), findsNothing, reason: 'the same bytes are the same size');
+    expect(find.text('Delete'), findsOneWidget);
+  });
+
+  testWidgets('an invalid-date refusal keeps its Retry: it resends and stays honest', (tester) async {
+    await pumpRow(
+        tester, makeWal(WalStatus.uploadRejected)..uploadRejectionReason = WalUploadRejection.invalidCaptureTime);
+
+    expect(find.text('Invalid recording date'), findsOneWidget);
+    expect(find.text('Try Again'), findsOneWidget, reason: 'a manual retry may still be what the user wants');
+    expect(find.text('Delete'), findsNothing);
+  });
 }

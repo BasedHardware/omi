@@ -156,7 +156,8 @@ void main() {
     expect(find.text('Invalid recording date'), findsNWidgets(2));
     expect(find.text('Too large'), findsOneWidget);
     expect(find.text('Too old to sync — Omi can\'t accept it'), findsOneWidget);
-    expect(find.text('Try Again'), findsNWidgets(3));
+    // The invalid-date rows keep Retry; the too-large row offers Delete only.
+    expect(find.text('Try Again'), findsNWidgets(2));
     expect(find.text('3m'), findsOneWidget, reason: 'the undated row still shows its length');
     // The 7:58 uploading piece and the 8:00 refused piece are one recording;
     // the undated 1985 row lists outside the day totals.
@@ -173,16 +174,22 @@ void main() {
 
     await tester.pumpWidget(
       app(
-        home: const RepaintBoundary(
-          key: Key('sync_attention_device_stats'),
-          child: Padding(
-            padding: EdgeInsets.all(16),
-            child: DeviceStatsRow(
-              batteryLevel: 72,
-              isCharging: true,
-              heardTodaySeconds: 33 * 60,
-              onDeviceSeconds: 0,
-              phoneQueueSeconds: 7 * 3600 + 45 * 60,
+        // Shrink-wrapped so the captured frame is the tiles' real height, not
+        // the viewport: the body's tight constraints would otherwise stretch
+        // the boundary to full height with empty space under the tiles.
+        home: const Align(
+          alignment: Alignment.topCenter,
+          child: RepaintBoundary(
+            key: Key('sync_attention_device_stats'),
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: DeviceStatsRow(
+                batteryLevel: 72,
+                isCharging: true,
+                heardTodaySeconds: 33 * 60,
+                onDeviceSeconds: 0,
+                phoneQueueSeconds: 7 * 3600 + 45 * 60,
+              ),
             ),
           ),
         ),
@@ -193,6 +200,10 @@ void main() {
     expect(find.text('33m'), findsOneWidget);
     expect(find.text('7h 45m on phone'), findsOneWidget);
     expect(find.text('0s'), findsOneWidget, reason: 'on-device audio reads 0s only when none is left');
+
+    final statsHeight =
+        tester.renderObject<RenderBox>(find.byKey(const Key('sync_attention_device_stats'))).size.height;
+    expect(statsHeight, lessThan(200), reason: 'the captured frame is the tiles, not the viewport');
 
     await writeFrame(tester, const Key('sync_attention_device_stats'), 'device-stats');
   });

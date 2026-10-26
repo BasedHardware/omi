@@ -119,6 +119,17 @@ void main() {
     expect(sync.deleted, [wal]);
   });
 
+  testWidgets('a too-large row offers Delete only: a retry cannot change the bytes', (tester) async {
+    final sync = await _pump(tester, [
+      _wal(DateTime(2026, 10, 18, 7), 2 * 60, WalStatus.uploadRejected, rejectionReason: WalUploadRejection.tooLarge),
+    ]);
+
+    expect(find.text('Too large'), findsOneWidget);
+    expect(find.text('Try Again'), findsNothing, reason: 'the same bytes are the same size');
+    expect(find.text('Delete'), findsOneWidget);
+    expect(sync.retried, isEmpty);
+  });
+
   testWidgets('a row that cannot be retried offers only Delete', (tester) async {
     final sync = await _pump(tester, [
       _wal(DateTime(2026, 10, 18, 7), 60, WalStatus.outsideRecoveryWindow),
@@ -127,6 +138,34 @@ void main() {
     expect(find.text('Try Again'), findsNothing);
     expect(find.text('Delete'), findsOneWidget);
     expect(sync.retried, isEmpty);
+  });
+
+  testWidgets('a recording made of several WALs acts as one row over every member', (tester) async {
+    // One 75-second-chunk recording the pendant handed over in three files:
+    // 7:56, 7:57:15, 7:58:30, each refused for its claimed date.
+    final wals = [
+      _wal(DateTime(2026, 10, 18, 7, 58, 30), 75, WalStatus.uploadRejected,
+          rejectionReason: WalUploadRejection.invalidCaptureTime),
+      _wal(DateTime(2026, 10, 18, 7, 57, 15), 75, WalStatus.uploadRejected,
+          rejectionReason: WalUploadRejection.invalidCaptureTime),
+      _wal(DateTime(2026, 10, 18, 7, 56), 75, WalStatus.uploadRejected,
+          rejectionReason: WalUploadRejection.invalidCaptureTime),
+    ];
+    final sync = await _pump(tester, wals);
+
+    expect(find.text('Invalid recording date'), findsOneWidget, reason: 'the block reads as one recording');
+    expect(_row('7:56 AM · 3m 45s'), findsOneWidget, reason: 'the row names the whole recording\'s length');
+
+    await tester.tap(find.text('Try Again'));
+    await tester.pump();
+    expect(sync.retried, containsAll(wals), reason: 'Retry goes over every member WAL');
+    expect(sync.retried, hasLength(3));
+
+    await tester.tap(find.text('Delete'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Delete').last); // one confirmation for the whole block
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(sync.deleted, containsAll(wals), reason: 'Delete removes every member WAL');
   });
 
   testWidgets('an undated refused row shows its length, reason and actions like dated ones', (tester) async {

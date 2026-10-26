@@ -75,32 +75,61 @@ void main() {
     );
   });
 
-  test('the live episode counts since local midnight, including a start before it', () {
+  test('overlapping segments are counted once, not once per row', () {
+    // 10:00–10:30 and 10:20–10:40 share 10:20–10:30: the union is 40 minutes.
+    final midday = DateTime(2026, 10, 18, 10, 41);
+    final conversation = _conversation(
+      startedAt: DateTime(2026, 10, 18, 10),
+      segments: [
+        _segment(0, 30 * 60),
+        _segment(20 * 60, 40 * 60),
+      ],
+    );
+
+    expect(heardTodaySpeechSeconds(conversations: [conversation], now: midday), 40 * 60);
+  });
+
+  test('the live episode counts its own interval since local midnight, including a start before it', () {
     // now is 00:30: an episode running 33 minutes began before midnight, so
     // only its 30 minutes after midnight are today's.
     expect(
-      heardTodaySpeechSeconds(conversations: const [], now: now, liveEpisodeElapsed: const Duration(minutes: 33)),
+      heardTodaySpeechSeconds(
+          conversations: const [], now: now, liveEpisodeStart: now.subtract(const Duration(minutes: 33))),
       30 * 60,
     );
     // A 33-hour episode that began two days ago: the same 30 minutes after
     // midnight are today's.
     expect(
       heardTodaySpeechSeconds(
-        conversations: const [],
-        now: now,
-        liveEpisodeElapsed: const Duration(minutes: 33 * 60),
-      ),
+          conversations: const [], now: now, liveEpisodeStart: now.subtract(const Duration(minutes: 33 * 60))),
       30 * 60,
     );
     // Started after midnight: the whole elapsed time is today's.
     final midday = DateTime(2026, 10, 18, 12);
     expect(
       heardTodaySpeechSeconds(
-        conversations: const [],
-        now: midday,
-        liveEpisodeElapsed: const Duration(minutes: 33),
-      ),
+          conversations: const [], now: midday, liveEpisodeStart: midday.subtract(const Duration(minutes: 33))),
       33 * 60,
+    );
+  });
+
+  test('the live episode does not double-count speech its segments already counted', () {
+    // Earlier today a conversation holds 10:00–10:10; the live episode began
+    // at 10:05 and is still running at 10:15. The union is 10:00–10:15: 15
+    // minutes — not 10 + 10 with the overlap counted twice.
+    final nowAt = DateTime(2026, 10, 18, 10, 15);
+    final earlier = _conversation(
+      startedAt: DateTime(2026, 10, 18, 10),
+      segments: [_segment(0, 10 * 60)],
+    );
+
+    expect(
+      heardTodaySpeechSeconds(
+        conversations: [earlier],
+        now: nowAt,
+        liveEpisodeStart: DateTime(2026, 10, 18, 10, 5),
+      ),
+      15 * 60,
     );
   });
 
