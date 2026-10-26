@@ -29,9 +29,15 @@ private final class RestoreConversationURLStub: URLProtocol, @unchecked Sendable
       request.url?.path.hasSuffix("/count") == true
       ? #"{"count":1}"#
       : #"{"id":"restore-fixture","created_at":"2026-10-26T05:00:00Z","structured":{"title":"Restored conversation","overview":"Restored notes","emoji":"","category":"other","action_items":[],"events":[]},"status":"completed","source":"desktop","discarded":false,"deleted":false}"#
-    let response = HTTPURLResponse(
-      url: request.url!, statusCode: 200, httpVersion: nil,
-      headerFields: ["Content-Type": "application/json"])!
+    guard
+      let url = request.url,
+      let response = HTTPURLResponse(
+        url: url, statusCode: 200, httpVersion: nil,
+        headerFields: ["Content-Type": "application/json"])
+    else {
+      client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+      return
+    }
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: Data(payload.utf8))
     client?.urlProtocolDidFinishLoading(self)
