@@ -222,8 +222,9 @@ async def shadow_recover(body: RedriveRequest):
     from utils.batch_pipeline.shadow_recovery import recover_async
 
     store = body.service().store
+    repository = await run_blocking(db_executor, ShadowStore, store)
     artifacts = await run_blocking(sync_executor, artifacts_for, store)
-    outcome = await recover_async(ShadowStore(store), artifacts, body.segment_id)
+    outcome = await recover_async(repository, artifacts, body.segment_id)
     return {'status': outcome}
 
 
