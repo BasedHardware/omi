@@ -141,6 +141,38 @@ def bounded_normalize(item, *, deadline, db_client):
         raise required.RequiredProcessingDeferred('required_intake_timeout') from error
 
 
+# Closed set for the required_intake_inline reason token. Skip reasons mirror
+# the literal skipped_reason values constructed in canonical_required_processing;
+# attempted failures collapse to flex_deferred/failed (their error_code already
+# reaches required_intake_deferred).
+INLINE_SKIP_REASONS = frozenset(
+    {
+        'memory_not_found',
+        'not_pending_required_processing',
+        'account_generation_changed',
+        'writer_mode_owned',
+        'newer_revision_pending',
+        'retry_backoff',
+        'attempt_leased',
+        'retry_exhausted',
+        'processor_not_configured',
+    }
+)
+INLINE_REASON_TOKENS = INLINE_SKIP_REASONS | {'processed', 'flex_deferred', 'failed', 'unclassified'}
+
+
+def inline_reason(result) -> str:
+    if result.processed:
+        return 'processed'
+    if result.skipped_reason is not None:
+        return result.skipped_reason if result.skipped_reason in INLINE_SKIP_REASONS else 'unclassified'
+    if result.error_code == 'flex_deferred':
+        return 'flex_deferred'
+    if result.error_code is not None:
+        return 'failed'
+    return 'unclassified'
+
+
 def record_deferred(error=None):
     record_fallback(
         component='agent_tools',
@@ -190,7 +222,12 @@ def after_capture(uid, item: MemoryItem, *, db_client):
                 processor=partial(bounded_normalize, deadline=deadline, db_client=db_client),
                 result_guard=partial(result_guard, deadline),
             )
-        logger.info('required_intake_inline processed=%s attempted=%s', result.processed, result.attempted)
+        logger.info(
+            'required_intake_inline processed=%s attempted=%s reason=%s',
+            result.processed,
+            result.attempted,
+            inline_reason(result),
+        )
         if result.error_code:
             record_deferred()
         return result
@@ -236,7 +273,12 @@ async def after_capture_async(uid, item, *, db_client, deadline, views=None):
                 timeout_seconds=max(0, deadline - time.monotonic()),
                 result_guard=partial(result_guard, deadline),
             )
-        logger.info('required_intake_inline processed=%s attempted=%s', result.processed, result.attempted)
+        logger.info(
+            'required_intake_inline processed=%s attempted=%s reason=%s',
+            result.processed,
+            result.attempted,
+            inline_reason(result),
+        )
         if views and (result.processed or result.skipped_reason == 'not_pending_required_processing'):
             await run_blocking(db_executor, _refresh_views, uid, item.memory_id, views, db_client)
         if result.error_code:
