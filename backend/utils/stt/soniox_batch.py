@@ -1,10 +1,12 @@
 """Single-submit Soniox async adapter for bounded, independent held recovery.
 
-This synchronous leaf runs in the recovery executor, never on an event loop.
+Serving awaits async HTTP/polling outside the shared sync executor. The private
+operator CLI retains a synchronous entrypoint in its own process.
 No SDK retries, public audio URLs, user identifiers, or disk audio copies.
 """
 
 import logging
+import asyncio
 import math
 import os
 import time
@@ -13,6 +15,7 @@ from uuid import UUID
 import httpx
 from config.batch_language_recovery import allowed
 from config.prerecorded_stt import SONIOX_HELD_RECOVERY_MODEL, require_provider_environment
+from utils.http_client import get_stt_client, get_stt_semaphore
 
 from config.stt_provider_policy import (
     normalized_stt_language,
@@ -35,6 +38,27 @@ class SonioxBatchError(ValueError):
 def resource_id(value):
     # Never interpolate provider-controlled paths or URLs into an authed request.
     return str(UUID(value))
+
+
+def transcription_body(file_id, language):
+    body: dict[str, object] = {
+        'model': MODEL,
+        'file_id': file_id,
+        'enable_speaker_diarization': True,
+        'enable_language_identification': True,
+    }
+    hint = normalized_stt_language(language)
+    if hint and soniox_accepts_language_hint(hint):
+        body['language_hints'] = [hint]
+        body['language_hints_strict'] = False
+    return body
+
+
+def authorization(duration):
+    if not allowed(duration) or not provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY):
+        raise SonioxBatchError()
+    require_provider_environment('soniox')
+    return {'Authorization': 'Bearer ' + os.environ['SONIOX_API_KEY']}
 
 
 def transcript_words(payload, duration):
@@ -78,14 +102,9 @@ def transcript_words(payload, duration):
 
 
 def transcribe(audio, duration, *, language=None, client_factory=httpx.Client, clock=time.monotonic, sleep=time.sleep):
-    if not allowed(duration):
-        raise SonioxBatchError()
-    if not provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY):
-        raise SonioxBatchError()
-    require_provider_environment('soniox')
+    headers = authorization(duration)
     file_id, transcription_id = None, None
     deadline = clock() + DEADLINE_SECONDS
-    headers = {'Authorization': 'Bearer ' + os.environ['SONIOX_API_KEY']}
     # HTTP transport defaults to zero retries. Each paid POST occurs once.
     with client_factory(headers=headers, timeout=20, follow_redirects=False) as client:
 
@@ -100,16 +119,7 @@ def transcribe(audio, duration, *, language=None, client_factory=httpx.Client, c
 
         try:
             file_id = resource_id(request('POST', '/files', files={'file': ('recovery.wav', audio, 'audio/wav')})['id'])
-            body: dict[str, object] = {
-                'model': MODEL,
-                'file_id': file_id,
-                'enable_speaker_diarization': True,
-                'enable_language_identification': True,
-            }
-            hint = normalized_stt_language(language)
-            if hint and soniox_accepts_language_hint(hint):
-                body['language_hints'] = [hint]
-                body['language_hints_strict'] = False
+            body = transcription_body(file_id, language)
             created = request('POST', '/transcriptions', json=body)
             transcription_id = resource_id(created['id'])
             state = created
@@ -142,3 +152,72 @@ def transcribe(audio, duration, *, language=None, client_factory=httpx.Client, c
                             logger.warning('event=soniox_batch_cleanup outcome=failed')
                     except Exception:
                         logger.warning('event=soniox_batch_cleanup outcome=failed')
+
+
+async def transcribe_async(
+    audio, duration, *, language=None, client=None, semaphore=None, clock=time.monotonic, sleep=asyncio.sleep
+):
+    """Serving path: individual requests borrow a shared async HTTP permit only."""
+    headers = authorization(duration)
+    client = get_stt_client() if client is None else client
+    semaphore = get_stt_semaphore() if semaphore is None else semaphore
+    deadline, file_id, transcription_id = clock() + DEADLINE_SECONDS, None, None
+
+    async def request(method, path, **kwargs):
+        remaining = deadline - clock()
+        if remaining <= 0:
+            raise SonioxBatchError()
+        async with asyncio.timeout(remaining):
+            async with semaphore:
+                remaining = deadline - clock()
+                if remaining <= 0:
+                    raise SonioxBatchError()
+                response = await client.request(
+                    method,
+                    BASE_URL + path,
+                    headers=headers,
+                    timeout=min(20, remaining),
+                    follow_redirects=False,
+                    **kwargs,
+                )
+        if not 200 <= response.status_code < 300:
+            raise SonioxBatchError()
+        return response.json()
+
+    try:
+        file_id = resource_id(
+            (await request('POST', '/files', files={'file': ('recovery.wav', audio, 'audio/wav')}))['id']
+        )
+        state = await request('POST', '/transcriptions', json=transcription_body(file_id, language))
+        transcription_id = resource_id(state['id'])
+        for _ in range(60):
+            if state['status'] == 'completed':
+                return transcript_words(
+                    await request('GET', f'/transcriptions/{transcription_id}/transcript'), duration
+                )
+            if state['status'] not in {'queued', 'processing'}:
+                raise SonioxBatchError()
+            remaining = deadline - clock()
+            if remaining <= 0:
+                raise SonioxBatchError()
+            await sleep(min(2, remaining))
+            state = await request('GET', f'/transcriptions/{transcription_id}')
+        raise SonioxBatchError()
+    except Exception:
+        raise SonioxBatchError() from None
+    finally:
+        for path in (
+            f'/transcriptions/{transcription_id}' if transcription_id else None,
+            f'/files/{file_id}' if file_id else None,
+        ):
+            if path:
+                try:
+                    async with asyncio.timeout(5):
+                        async with semaphore:
+                            response = await client.request(
+                                'DELETE', BASE_URL + path, headers=headers, timeout=5, follow_redirects=False
+                            )
+                    if response.status_code not in {200, 204, 404}:
+                        logger.warning('event=soniox_batch_cleanup outcome=failed')
+                except Exception:
+                    logger.warning('event=soniox_batch_cleanup outcome=failed')

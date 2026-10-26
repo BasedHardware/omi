@@ -10,6 +10,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_silence_allowed
 from utils.batch_pipeline.recovery_disposition import inspect_audio, MultilingualEmpty, padded_empty
 from utils.batch_pipeline.recovery_recognizers import recognizer_attempt, independent_ready
+from utils.batch_pipeline.recovery_steps import ProviderStep, run_sync, run_async
 
 
 def guarded_recovery(repository, segment, item, job, audio, duration, spans, stt, second_stt, ready):
@@ -42,7 +43,14 @@ def guarded_recovery(repository, segment, item, job, audio, duration, spans, stt
     if not allowed(duration) or not ready() or not repository.paid(segment, 'soniox'):
         receipt('soniox', 'refused', None)
         return 'failed_held', receipts
-    payload, second, count = recognizer_attempt(lambda: second_stt(item, audio, MultilingualEmpty(duration, spans)))
+    from utils.batch_pipeline.recovery_recognizers import second_transcribe, second_transcribe_async
+
+    reply = yield ProviderStep(
+        second_stt,
+        (item, audio, MultilingualEmpty(duration, spans)),
+        second_transcribe_async if second_stt is second_transcribe else None,
+    )
+    payload, second, count = recognizer_attempt(reply.result)
     receipt('soniox', second, count)
     if payload is not None:
         return 'recovered', receipts
@@ -52,13 +60,24 @@ def guarded_recovery(repository, segment, item, job, audio, duration, spans, stt
 
 
 def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspect=inspect_audio):
+    """Synchronous synthetic/operator adapter; serving uses the async coordinator."""
+    return run_sync(_recover_steps(repository, artifacts, segment, stt=stt, second_stt=second_stt, inspect=inspect))
+
+
+async def recover_async(repository, artifacts, segment, *, stt=None, second_stt=None, inspect=inspect_audio):
+    return await run_async(
+        _recover_steps(repository, artifacts, segment, stt=stt, second_stt=second_stt, inspect=inspect)
+    )
+
+
+def _recover_steps(repository, artifacts, segment, *, stt=None, second_stt=None, inspect=inspect_audio):
     # These import the provider clients only at invocation, on the CPU backend.
     from utils.batch_pipeline.quarantine_recovery import (
         second_provider_eligible,
         SECOND_PROVIDER,
     )
 
-    from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe
+    from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe, second_transcribe_async
 
     stt, second_stt = stt or transcribe, second_stt or second_transcribe
     job = repository.start_recovery(segment)
@@ -72,7 +91,7 @@ def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspec
         _, duration, spans = inspect(item, audio)
         speech, vad = sum(span['end'] - span['start'] for span in spans), 'strict'
         if language_guarded(job):
-            outcome, receipts = guarded_recovery(
+            outcome, receipts = yield from guarded_recovery(
                 repository,
                 segment,
                 item,
@@ -104,7 +123,12 @@ def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspec
                         outcome = 'paid_skipped'
                     else:
                         try:
-                            payload = second_stt(item, audio, empty)
+                            reply = yield ProviderStep(
+                                second_stt,
+                                (item, audio, empty),
+                                second_transcribe_async if second_stt is second_transcribe else None,
+                            )
+                            payload = reply.result()
                             outcome = 'recovered' if payload.get('words') else 'failed_held'
                         except MultilingualEmpty:
                             outcome = (

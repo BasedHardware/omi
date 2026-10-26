@@ -60,7 +60,8 @@ batch re-ramp will clear.
 
 ## Spend and rollback
 
-`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults **on**; `false`
+`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults **off** per lead
+ruling 404ca5. Explicit `true` enables the capped path; `false`
 stops new Soniox attempts. It never falls back to another Modulate call. Rollback:
 set it false on the recovery role/operator, retaining all held obligations.
 
@@ -73,6 +74,12 @@ also rechecks company funding. Larger units stay held
 for a separately reviewed recovery plan. Polling has a 120 s budget and 60-GET
 ceiling; individual requests have at most a 20 s I/O timeout. Cleanup uses two
 bounded requests. Recovery never automatically resubmits a timed-out job.
+
+Serving recovery suspends its fenced continuation during Soniox HTTP requests
+and polling sleeps. It uses the shared async STT client and semaphore, releasing
+the permit between requests; no shared sync-executor slot or database transaction
+remains borrowed during this provider wait. The private operator CLI uses its
+own synchronous driver. Existing primary Modulate execution is unchanged.
 
 Soniox's published async estimate is **$0.10/audio hour**: approximately
 **$0.000556 per 20 s unit**, **$0.001667 at the 60 s cap**. The ten RCA units total
@@ -105,13 +112,14 @@ No live provider acceptance or cleanup has been tested using customer content.
 
 Deploy the CPU backend role that runs `QuarantineRecovery` and use the same source
 for the operator CLI. The GPU worker itself does not contain this adapter. Verify
-`SONIOX_API_KEY` availability without printing it. This PR does not change secret
-bindings or deploy workflows. The dev/prod CPU recovery manifests pin the
-kill switch false until David approves access to the existing secret (lead
-ruling 01d584); code still defaults on. The lead owns the 2026-10-26 morning
-approval/ramp review. After approval, op1 canaries one exact unit and expands
-only with clean T1/T2/T4 plus lead approval; flag activation and key binding
-belong to a separate approved config change. A missing key refuses the operator before starting
+`SONIOX_API_KEY` availability without printing it. David approved binding the
+existing secret to production backend-integration (lead ruling ce5485), and this
+PR adds only that production binding. Dev remains unbound. No IAM or deploy
+workflow change is included. Op1 owns live pre-bind and service-account accessor
+verification; if an IAM grant is needed, stop for separate approval. Code and
+CPU/worker manifests remain off under ruling 404ca5. The lead owns the
+2026-10-26 morning activation/ramp review. Op1 canaries one exact unit and expands
+only with clean T1/T2/T4 plus lead approval. A missing key refuses the operator before starting
 its paid intent and leaves automatic recovery held with a `refused` receipt.
 It does not consume the independent attempt, so explicit recovery can proceed
 after the runtime configuration is corrected.

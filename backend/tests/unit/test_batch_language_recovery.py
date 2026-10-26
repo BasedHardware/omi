@@ -1,7 +1,7 @@
 """Synthetic language-guard recovery, paid-intent fencing and measured receipts."""
 
 from copy import deepcopy
-from unittest.mock import Mock
+from unittest.mock import Mock, AsyncMock
 
 import pytest
 
@@ -21,7 +21,7 @@ WORDS = [{'text': 'Synthetic.', 'timestamp': [1, 2], 'speaker': '0'}]
 def guarded(setup, monkeypatch, legacy_dependencies, *, speech=1, automatic=True):
     client, store, binding, artifacts, legacy, modulate, old = enabled(setup, monkeypatch, legacy_dependencies)
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
-    monkeypatch.delenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', raising=False)
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')
     monkeypatch.delenv('BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS', raising=False)
     job = row(client)
     job['worker_failure'] = {'stage': 'vad_windows', 'reason': 'unsupported_language'}
@@ -36,6 +36,7 @@ def guarded(setup, monkeypatch, legacy_dependencies, *, speech=1, automatic=True
 
     soniox = Mock(return_value=([], 'multi'))
     monkeypatch.setattr(soniox_batch, 'transcribe', soniox)
+    monkeypatch.setattr(soniox_batch, 'transcribe_async', AsyncMock(side_effect=soniox))
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-only-key')
     monkeypatch.setattr('utils.batch_pipeline.quarantine_recovery.sync_allowed', lambda *a, **kw: True)
     monkeypatch.setattr('utils.batch_pipeline.speech_redrive.sync_allowed', lambda *a, **kw: True)
@@ -156,7 +157,7 @@ def test_default_on_spend_guards_leave_explicit_unattempted_receipt(
 
 
 def test_hard_cost_and_sample_bounds(monkeypatch):
-    monkeypatch.delenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', raising=False)
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS', '7200')
     assert allowed(60) and not allowed(60.001)
     assert below_silence_threshold(511 / 16000)

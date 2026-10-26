@@ -1,4 +1,4 @@
-"""Ship-on independent recognition; hard one-minute per-intent spend bound."""
+"""Controlled independent recognition; hard one-minute per-intent spend bound."""
 
 import math
 import os
@@ -12,7 +12,7 @@ ESTIMATED_USD_PER_AUDIO_HOUR = 0.10
 
 
 def enabled():
-    return os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true').strip().lower() != 'false'
+    return os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false').strip().lower() == 'true'
 
 
 def allowed(seconds):

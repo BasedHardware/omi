@@ -1442,6 +1442,11 @@ overlay:
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-integration:
+        # Approved recovery-only binding; op1 pre-binds and verifies access before deploy.
+        secrets:
+          SONIOX_API_KEY:
+            secret: SONIOX_API_KEY
+            version: latest
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL

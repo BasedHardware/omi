@@ -1454,6 +1454,18 @@ def test_parakeet_cloud_run_surface_requires_hosted_endpoint():
         ]
 
 
+def test_approved_soniox_binding_is_only_prod_recovery_and_gate_stays_off():
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    for stage in ('dev', 'prod'):
+        services = manifest['environments'][stage]['cloud_run']['services']
+        holders = {name for name, service in services.items() if 'SONIOX_API_KEY' in service.get('secrets', {})}
+        assert holders == ({'backend-integration'} if stage == 'prod' else set())
+        assert (
+            services['backend-integration']['env']['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED']['value']
+            == 'false'
+        )
+
+
 @pytest.mark.parametrize('binding', [None, {'value': ' '}, {'secret': 'SONIOX_API_KEY', 'version': 'latest'}])
 @pytest.mark.parametrize('disabled', [False, True])
 def test_recovery_host_requires_shared_soniox_contract(binding, disabled):

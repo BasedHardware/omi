@@ -28,6 +28,7 @@ def repository(monkeypatch):
 
     monkeypatch.setattr(_qr, 'SECOND_PROVIDER', 'deepgram')
     monkeypatch.setenv('BATCH_PIPELINE_SHADOW_PERCENT', '100')
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false')
     monkeypatch.setattr(storage, 'assert_batch_write_allowed', lambda *args, **kwargs: 0)

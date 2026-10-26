@@ -63,7 +63,7 @@ class ShadowStore:
         if job.get('shadow') is not True or job.get('state') == 'settled':
             return None
         context = {'duration_seconds': (job.get('item') or {}).get('duration_seconds'), **job}
-        measured = speech if vad == 'strict' else None
+        measured = speech if vad in {'strict', 'worker'} else None
         census = held_vad_census(context, measured)
         independent = (
             isinstance(recognizers, dict)
@@ -84,7 +84,9 @@ class ShadowStore:
             and not held_silence_allowed(context, measured, independent=independent)
         ):
             outcome = 'failed_held'
-        speech, vad = census or 0.0, 'strict' if census is not None else 'unknown'
+        speech, vad = census or 0.0, (
+            vad if measured is not None and census == measured else 'strict' if census is not None else 'unknown'
+        )
         row = {
             'shadow': True,
             'state': 'settled',

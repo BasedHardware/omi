@@ -7,6 +7,7 @@ from config.batch_pipeline import empty_asr_disposition_enabled
 from config.policy import RecoveryPolicy
 from config.prerecorded_stt import missing_provider_environment
 from config.stt_provider_policy import provider_is_enabled, STTServingSurface
+from utils.executors import run_blocking, sync_executor
 from utils.batch_pipeline.contracts import projection_speech_spans
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
@@ -83,19 +84,38 @@ def second_transcribe(item, audio, empty):
     from utils.stt.soniox_batch import transcribe as soniox_transcribe
 
     # Reuse the first call's strict VAD instead of running it again.
-    pcm, duration, spans = inspect_audio(item, audio, vad=lambda _: empty.spans)
-    output = canonical_wav(pcm)
+    output, duration, spans = independent_audio(item, audio, empty)
     response = at_stage(
         'provider',
         'provider_failed',
         lambda: soniox_transcribe(output, duration),
     )
+    return independent_payload(response, duration, spans)
+
+
+def independent_audio(item, audio, empty):
+    pcm, duration, spans = inspect_audio(item, audio, vad=lambda _: empty.spans)
+    return canonical_wav(pcm), duration, spans
+
+
+def independent_payload(response, duration, spans):
     words, language = at_stage(
         'response_validation',
         'invalid_response',
         lambda: validate_response(response, duration, spans, multilingual=True),
     )
     return {**words_payload(duration, spans, words, language), 'words_provider': 'soniox'}
+
+
+async def second_transcribe_async(item, audio, empty):
+    from utils.stt.soniox_batch import transcribe_async as soniox_transcribe_async
+
+    output, duration, spans = await run_blocking(sync_executor, independent_audio, item, audio, empty)
+    try:
+        response = await soniox_transcribe_async(output, duration)
+    except Exception:
+        raise RecoveryFailure('provider', 'provider_failed') from None
+    return await run_blocking(sync_executor, independent_payload, response, duration, spans)
 
 
 def canonical_wav(pcm):

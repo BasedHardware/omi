@@ -39,9 +39,11 @@ from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_silen
 from utils.batch_pipeline.recovery_recognizers import (
     transcribe,
     second_transcribe,
+    second_transcribe_async,
     recognizer_attempt,
     independent_ready,
 )
+from utils.batch_pipeline.recovery_steps import ProviderStep, run_sync, run_async
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     silence_payload,
@@ -167,7 +169,12 @@ class QuarantineRecovery:
                     reason='other',
                     outcome='degraded',
                 )
-                payload, outcome, word_count = recognizer_attempt(lambda: self.second_stt(item, audio, empty))
+                reply = yield ProviderStep(
+                    self.second_stt,
+                    (item, audio, empty),
+                    second_transcribe_async if self.second_stt is second_transcribe else None,
+                )
+                payload, outcome, word_count = recognizer_attempt(reply.result)
         except (BatchPrivacyBlocked, ProjectionBlocked):
             raise
         except Exception:
@@ -207,6 +214,13 @@ class QuarantineRecovery:
         return payload
 
     def recover(self, segment_id, owner_id):
+        """Synchronous operator/test entrypoint; serving uses recover_async."""
+        return run_sync(self._recover_steps(segment_id, owner_id))
+
+    async def recover_async(self, segment_id, owner_id):
+        return await run_async(self._recover_steps(segment_id, owner_id))
+
+    def _recover_steps(self, segment_id, owner_id):
         try:
             job, policy = load_stage_policy(self.store, segment_id, 'recovery')
             if not job or job.get('owner_id') != owner_id:
@@ -409,7 +423,7 @@ class QuarantineRecovery:
                 if first_empty and language_guarded(job):
                     record_recognizer(self.store, segment_id, token, 'recovery', 'modulate', 'empty', 0, measured_vad)
                 if failure and self._second_eligible(job, empty):
-                    payload = self._second_multilingual(
+                    payload = yield from self._second_multilingual(
                         item,
                         owner_id,
                         audio,
@@ -481,6 +495,12 @@ class QuarantineRecovery:
         except ProjectionBlocked:
             return 'held'
         except Exception as error:
+            # A broken queue must not move a guarded Soniox poll into a
+            # maintenance thread. Keep the prepared obligation for dispatch.
+            job, _ = load_stage_policy(self.store, segment_id, 'recovery')
+            if job and language_guarded(job):
+                logger.warning('event=batch_quarantine_recovery action=dispatch outcome=held')
+                return 'held'
             # A lost create-task acknowledgement can race delivery. Both paths
             # adopt the SAME intent; only RecoveryStore.start may spend it.
             logger.warning(

@@ -29,6 +29,7 @@ def client(handler):
 @pytest.fixture
 def key(monkeypatch):
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-only-key')
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')
 
 
 @pytest.mark.parametrize('hint,expected', [('vi-VN', ['vi']), ('xx-unsupported', None), (None, None)])
@@ -161,6 +162,7 @@ def test_deadline_bounds_polling_without_resubmission(key):
 
 def test_missing_key_refuses_before_http(monkeypatch):
     monkeypatch.delenv('SONIOX_API_KEY', raising=False)
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')
     factory = Mock()
     with pytest.raises(PrerecordedSTTConfigurationError):
         module.transcribe(b'synthetic', 5, client_factory=factory)
