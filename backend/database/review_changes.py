@@ -405,7 +405,14 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
                 # A full-row fence permits exact replacement without DELETE_FIELD
                 # transforms. Missing fields stay missing, including after Redo.
                 exact_restores[target.path] = review_exact_undo.restored_row(current, edit[destination])
-            rows.append((target, {key: write_field_state(value) for key, value in edit[destination].items()}, current))
+            rows.append(
+                (
+                    edit['collection'],
+                    target,
+                    {key: write_field_state(value) for key, value in edit[destination].items()},
+                    current,
+                )
+            )
         change = dict(data['change'], undone=undone)
         result['change'] = change
         merge = data.get('entity_merge')
@@ -413,7 +420,7 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
         if merge:
             if undone:
                 restored = []
-                for target, patch, current in rows:
+                for _, target, patch, current in rows:
                     restored_doc = copy.deepcopy(current)
                     for key, value in patch.items():
                         if value is firestore.DELETE_FIELD:
@@ -426,8 +433,8 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
                 mutations = [memory_ledger.merge_entities(*merge, evidence={'review_change_id': change_id})]
 
         def write(transaction):
-            for target, patch, _ in rows:
-                if target.parent.id == 'people':
+            for collection, target, patch, _ in rows:
+                if collection == 'people':
                     bump_people_generation(transaction, target)
                 identity = target.path
                 if identity in exact_restores:
