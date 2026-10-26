@@ -782,6 +782,7 @@ def reprocess_conversation(
 
     input_generation = attention_db.generation(conversation)
     was_discarded = bool(conversation.get('discarded'))
+    user_kept = was_discarded or bool(conversation.get('sync_relevance_user_kept'))
     # A hidden conversation's derived effects are not trusted to be current.
     effects_transcript = None if was_discarded else conversation.get(DERIVED_EFFECTS_TRANSCRIPT_FIELD)
     conversation = deserialize_conversation(conversation)
@@ -815,6 +816,7 @@ def reprocess_conversation(
             background_tasks,
             response,
             first_party_only=first_party_only,
+            user_kept=user_kept,
             derived_effects_transcript_sha256=effects_transcript if isinstance(effects_transcript, str) else None,
         )
     except Exception:
@@ -857,6 +859,7 @@ def execute_reprocess(
     response,
     *,
     first_party_only: bool = False,
+    user_kept: bool = False,
     derived_effects_transcript_sha256: Optional[str] = None,
 ):
     receipt_applied: list = []
@@ -866,6 +869,7 @@ def execute_reprocess(
         language_code,
         conversation,
         trigger=ProcessingTrigger.USER_REPROCESS,
+        user_kept=was_discarded or user_kept,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(

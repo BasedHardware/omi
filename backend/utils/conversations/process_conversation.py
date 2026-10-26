@@ -69,6 +69,7 @@ from config.refactor_modes import serving_for
 from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
+from utils.conversations.relevance_media_metrics import observe_owner_memory_admission
 from utils.llm.notes_short_clip import quiet_minimum
 from utils.llm.output_language import resolve_output_language
 from utils.conversations.deterministic_minimum import (
@@ -1023,8 +1024,9 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     # configuration contract that Pusher qualification is meant to exercise.
     db_client = getattr(db_client_module, 'db', None)
     MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
-    if conversation.source != ConversationSource.external_integration:
+    if serving_for('SPEAKER_EVIDENCE_MODE', uid) and conversation.source != ConversationSource.external_integration:
         owner_segments = confident_owner_segments(conversation.transcript_segments)
+        observe_owner_memory_admission(len(conversation.transcript_segments), len(owner_segments))
         if not owner_segments:
             # No new memory and no empty replacement of earlier memories. A
             # later confident resolution/manual correction may retry normally.

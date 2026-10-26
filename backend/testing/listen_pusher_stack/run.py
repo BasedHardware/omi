@@ -163,6 +163,7 @@ class Stack:
         recording_lifecycle_fault: dict[str, str] | None = None,
         memory_enabled: str | None = 'on',
         finalization_worker_memory_enabled: str | None = 'on',
+        owner_memory_pilot: bool = False,
     ):
         if finalization_mode not in {'inline', 'cloud_tasks'}:
             raise ValueError(f'unsupported finalization mode: {finalization_mode}')
@@ -198,6 +199,7 @@ class Stack:
         self.recording_lifecycle_fault = recording_lifecycle_fault
         self.memory_enabled = memory_enabled
         self.finalization_worker_memory_enabled = finalization_worker_memory_enabled
+        self.owner_memory_pilot = owner_memory_pilot
         self.recording_lifecycle_retry_file = self.state_dir / 'release-recording-lifecycle-retry'
         ports = _free_ports(5)
         self.redis_port = ports[0]
@@ -234,6 +236,7 @@ class Stack:
                 'OMI_HARNESS_INSTANCE': 'listen-pusher-stack',
                 'OMI_ENV_STAGE': 'offline',
                 'PROVIDER_MODE': 'offline',
+                'SPEAKER_EVIDENCE_MODE': 'serve' if self.owner_memory_pilot else 'shadow',
                 'FIREBASE_PROJECT_ID': PROJECT,
                 'GOOGLE_CLOUD_PROJECT': PROJECT,
                 'GCLOUD_PROJECT': PROJECT,
@@ -1758,6 +1761,7 @@ def _run_stack_scenario(
     recording_lifecycle_fault: dict[str, str] | None = None,
     memory_enabled: str | None = 'on',
     finalization_worker_memory_enabled: str | None = 'on',
+    owner_memory_pilot: bool = False,
     scenario: Callable[[Stack], Any],
 ) -> None:
     stack = Stack(
@@ -1771,6 +1775,7 @@ def _run_stack_scenario(
         recording_lifecycle_fault=recording_lifecycle_fault,
         memory_enabled=memory_enabled,
         finalization_worker_memory_enabled=finalization_worker_memory_enabled,
+        owner_memory_pilot=owner_memory_pilot,
     )
     try:
         stack.start()
@@ -1836,6 +1841,7 @@ def main() -> int:
             finalizer_failures=None,
             rest_finalization_race_uid='stack-cloud-rest-restart',
             rest_finalization_race_parties=4,
+            owner_memory_pilot=True,
             scenario=_rest_finalization_survives_listener_restart,
         )
         _run_stack_scenario(
@@ -1854,6 +1860,7 @@ def main() -> int:
             state_dir / 'cloud-integration-retry',
             finalization_mode='cloud_tasks',
             finalizer_failures={'integration': 1},
+            owner_memory_pilot=True,
             scenario=_integration_retry_preserves_processed_conversation,
         )
         _run_stack_scenario(

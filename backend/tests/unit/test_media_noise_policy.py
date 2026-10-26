@@ -171,9 +171,42 @@ def test_expired_call_does_not_protect_bystander():
 )
 def test_owner_candidates_use_producer_bands_not_probabilities(band, source, expected):
     segments = [segment()]
+    segments[0]['end'] = 10
     ev = evidence(segments, owner=10, band=band, source=source)
+    if source == 'manual':
+        ev.clusters[0].candidates[0].segment_ids = [segments[0]['id']]
     ev.clusters[0].candidates[0].probability = 0.01
     assert owner_speech_seconds(ev, segments) == expected
+
+
+@pytest.mark.parametrize('excerpt_seconds,kind', [(1, 'noise'), (6, 'conversation')])
+def test_manual_excerpt_counts_only_its_own_duration_in_real_evidence(excerpt_seconds, kind):
+    from utils.speakers.evidence import build_evidence
+    from utils.stt.conversation_speakers import resolve_conversation_speakers
+
+    segments = [
+        dict(segment(id='excerpt'), speaker_id=0, speaker_id_scope='live:1', start=0, end=excerpt_seconds),
+        dict(segment(id='bystander-a'), speaker_id=0, speaker_id_scope='live:1', start=excerpt_seconds, end=600),
+        dict(segment(id='bystander-b'), speaker_id=1, speaker_id_scope='live:1', start=600, end=1200),
+    ]
+    for row in segments:
+        row['text'] = ' '.join(['synthetic'] * 12)
+    resolution = resolve_conversation_speakers(
+        segments,
+        {'excerpt': [1, 0], 'bystander-a': [1, 0], 'bystander-b': [0, 1]},
+        voiceprints={'user': [-1, -1]},
+    )
+    receipt = {'segments': {'excerpt': {'generation': 1, 'is_user': True, 'segment_only': True}}}
+    ev = build_evidence(segments, resolution, receipt=receipt)
+    assert ev.status == 'resolved'
+    assert owner_speech_seconds(ev, segments) == excerpt_seconds
+    assert classify(segments, seconds=1200, evidence=ev).content_kind == kind
+
+
+def test_older_unscoped_manual_evidence_abstains_instead_of_expanding_to_a_voice():
+    rows = [segment()]
+    ev = evidence(rows, owner=10, source='manual')
+    assert owner_speech_seconds(ev, rows) is None
 
 
 def test_nonfinite_or_uncovered_evidence_abstains():

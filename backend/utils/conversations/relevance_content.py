@@ -62,11 +62,35 @@ def owner_speech_seconds(evidence: SpeakerEvidence | None, segments: Sequence[An
     for cluster in evidence.clusters:
         if not math.isfinite(cluster.speech_seconds) or cluster.speech_seconds < 0:
             return None
-        if any(
-            c.person_id == OWNER and c.band in ('confident', 'likely') and c.source != 'roster'
+        owners = [
+            c
             for c in cluster.candidates
-        ):
+            if c.person_id == OWNER and c.band in ('confident', 'likely') and c.source != 'roster'
+        ]
+        if any(c.source != 'manual' for c in owners):
             seconds += cluster.speech_seconds
+        elif owners:
+            # A one-second manual excerpt cannot turn twenty minutes of a
+            # bystander's voice into owner speech. Older unscoped evidence is
+            # unknown and therefore conservatively abstains from exclusion.
+            if any(c.segment_ids is None for c in owners):
+                return None
+            manual_ids = {sid for c in owners for sid in c.segment_ids or ()}
+            if not manual_ids or not manual_ids.issubset(cluster.segment_ids):
+                return None
+            for segment in segments:
+                if str(value(segment, 'id')) not in manual_ids:
+                    continue
+                start, end = value(segment, 'start'), value(segment, 'end')
+                if (
+                    not isinstance(start, (int, float))
+                    or not isinstance(end, (int, float))
+                    or not math.isfinite(start)
+                    or not math.isfinite(end)
+                    or end < start
+                ):
+                    return None
+                seconds += end - start
     return seconds
 
 

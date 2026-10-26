@@ -5,6 +5,7 @@ from typing import Any, Literal, Optional, Sequence
 
 OwnerTrust = Literal["unique_owner", "no_owner", "multi_owner", "no_speaker_ids"]
 ClusterKey = tuple[Optional[str], Any]
+OWNER_MATCH_SOURCES = frozenset(('conversation_voice', 'speaker_evidence_v2'))
 
 
 def speaker_cluster_key(segment: Any) -> Optional[ClusterKey]:
@@ -82,15 +83,24 @@ def confident_owner_segments(segments: Sequence[Any]) -> list[Any]:
     a current user decision do not authorize memory formation. An explicit
     manual label is a positive owner decision too.
     """
-    evidence = OwnerAttributionEvidence.from_segments(segments)
-    return [
+    # TranscriptSegment supplies status='user' for a legacy is_user payload.
+    # That compatibility default is not an identity decision. Require the
+    # producer's positive-match provenance (or the explicit manual authority).
+    trusted = [
         segment
         for segment in segments
         if getattr(segment, 'is_user', False)
         and not getattr(segment, 'person_id', None)
-        and may_attribute_to_owner(evidence, segment=segment)
         and (
-            getattr(segment, 'speaker_identity_status', None) == 'user'
-            or getattr(segment, 'speaker_label_source', None) == 'manual'
+            getattr(segment, 'speaker_label_source', None) == 'manual'
+            or (
+                getattr(segment, 'speaker_identity_status', None) == 'user'
+                and getattr(segment, 'speaker_match_source', None) in OWNER_MATCH_SOURCES
+                and getattr(segment, 'speaker_label_source', None) != 'carried'
+            )
         )
     ]
+    # An unproven legacy boolean on another voice must not veto a real manual
+    # confirmation. Ambiguity is measured across trusted owner decisions only.
+    evidence = OwnerAttributionEvidence.from_segments(trusted)
+    return [segment for segment in trusted if may_attribute_to_owner(evidence, segment=segment)]

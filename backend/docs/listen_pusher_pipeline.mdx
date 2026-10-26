@@ -6857,15 +6857,33 @@ ones. Digest admission remains additive; `off` overrides both. Other mode
 families and sampled shadow writers retain their existing salts. Deploy this
 parser consistently before a percentage ramp.
 
-Conversation memory formation accepts only a prompt-local copy of segments
-with a unique owner cluster and a positive `speaker_identity_status=user` or
-explicit manual owner label. A legacy `is_user` boolean, unavailable/ambiguous
+For accounts serving `SPEAKER_EVIDENCE_MODE`, conversation memory formation
+accepts only a prompt-local copy of segments with a unique trusted owner cluster
+and a positive producer match (`conversation_voice` or
+`speaker_evidence_v2`) plus `speaker_identity_status=user`, or an explicit manual
+owner label. A legacy `is_user` boolean, carried label, unavailable/ambiguous
 identity or contradictory owner clusters cannot authorize memory formation.
 No eligible speech means no paid eager extraction and no empty replacement of
 earlier memories. Quote grounding and the extraction fingerprint see the same
 filtered input; notes, tasks, retained transcripts/audio and explicit external
-text intake keep their own inputs and authorities. This is one source-admission
-policy for every account, independent of the wave-2 cohort.
+text intake keep their own inputs and authorities. Shadow/off and accounts
+outside the aligned serve cohort retain their existing memory input. Measure
+admitted and withheld memory sources per day before expanding the cohort.
+The deployment-wide canonical mutation readiness fence remains unconditional.
+The looser live-embedding operating point alone is insufficient; V2 provenance
+requires its actual owner candidate to be label-eligible and confident.
+In `omi_media_noise_shadow_total`, `check=owner_memory_source` counts admitted
+(`agree`) versus fully withheld (`disagree`) serving-cohort source attempts.
+`check=owner_memory_segments` counts included/excluded segments with the same
+outcomes. These are aggregate attempt volumes, including retries, not unique
+created memories or labeled speaker correctness. Compare daily windows and
+existing memory creation telemetry before expanding; an absent series is unknown.
+
+V2 manual evidence records the segment IDs its receipt binds. A short excerpt
+contributes only its own speech duration to media admission, never its whole
+voice's duration. Old evidence without that scope abstains from exclusion.
+Explicit restore and its persisted user-kept marker reach classification before
+the media minimum, so later reprocessing cannot hide a restored card again.
 
 Notes do not bind a likely speaker suggestion to a name: likely and unknown
 voices remain anonymous, with statements attributed as "someone said".

@@ -191,12 +191,23 @@ def test_owner_boolean_without_positive_identity_stays_anonymous(status, expecte
             'speaker_id': 0,
             'is_user': True,
             'speaker_identity_status': status,
+            'speaker_match_source': 'conversation_voice' if status == 'user' else None,
         }
     ]
     text, mapping = render_cluster_transcript(rows, names={}, owner_name='Morgan')
     assert mapping['c0'] == expected
     assert ('Morgan' in text) == (expected == 'Morgan')
     assert rows[0]['is_user'] is True
+
+
+def test_unproven_legacy_owner_cannot_veto_a_manual_owner_on_another_voice():
+    rows = [
+        dict(id='legacy', speaker_id=0, text='Uncertain speech.', is_user=True, speaker_identity_status='user'),
+        dict(id='manual', speaker_id=1, text='Confirmed speech.', is_user=True, speaker_label_source='manual'),
+    ]
+    _, mapping = render_cluster_transcript(rows, names={}, owner_name='Morgan')
+    assert list(mapping.values()) == [None, 'Morgan']
+    assert all(row['is_user'] for row in rows)
 
 
 @pytest.mark.parametrize('band,expected', [('confident', 'Nik'), ('likely', None), ('unknown', None)])

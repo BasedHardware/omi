@@ -378,13 +378,13 @@ def render_cluster_transcript(
     Copies are prompt-only. It never rewrites stored segment labels or infers an
     identity from calendar, contacts, story content or a numeric speaker key.
     """
-    safe, owner_note = owner_safe_transcript_segments(segments)
-    rows = [SimpleNamespace(**dict(row)) if isinstance(row, Mapping) else row for row in safe]
+    rows = [SimpleNamespace(**{'is_user': False, **dict(row)}) if isinstance(row, Mapping) else row for row in segments]
     trusted_owner_rows = {id(row) for row in confident_owner_segments(rows)}
     rows = [
         _clear_owner_claim(row) if getattr(row, 'is_user', False) and id(row) not in trusted_owner_rows else row
         for row in rows
     ]
+    rows, owner_note = owner_safe_transcript_segments(rows)
     display = display_participants(
         rows,
         names=names,
