@@ -1,1 +1,1 @@
-{"change": "Conversations merging rows settle when the merge finishes on the server even if the push notification is not delivered to the running app"}
+{"change":"Merged conversations settle without restarting the app when a notification is missed, and completed merges remove old source rows from the local cache."}

@@ -1,5 +1,9 @@
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:omi/env/env.dart';
+import 'package:omi/services/conversation_merge_watch.dart';
 
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 
@@ -124,7 +128,12 @@ class ConversationProvider extends ChangeNotifier {
   // A merge settles on the server and its push says so ([onMergeCompleted]). A push can arrive late
   // or not at all (notifications off, a build without push), which left rows on "Merging…" until a
   // manual refresh, so the involved rows are also probed until the merge settles ([watchMerge]).
-  final Map<String, Timer> _mergeWatchers = {};
+  final Map<String, ConversationMergeWatch> _mergeWatchers = {};
+  final Map<String, ({List<String> ids, String? target})> _pendingMerges = {};
+  final Set<String> _mergedAwayConversationIds = {};
+  String? _mergeJournalOwner;
+  String? _mergeJournalOrigin;
+  final MergeConversationFetcher _mergeConversationFetcher;
 
   @visibleForTesting
   Duration mergeProbeInterval = const Duration(seconds: 4);
@@ -213,7 +222,10 @@ class ConversationProvider extends ChangeNotifier {
     bool Function()? isSignedIn,
     ConversationApi? conversationApi,
     ConversationCacheLoader? conversationCacheLoader,
-  })  : _conversationListFetcher = conversationListFetcher,
+    MergeConversationFetcher? mergeConversationFetcher,
+  })  : _mergeConversationFetcher = mergeConversationFetcher ??
+            (conversationApi?.byId ?? (id) => ConversationApi(baseUrl: Env.apiBaseUrl!).byId(id)),
+        _conversationListFetcher = conversationListFetcher,
         _conversationLifecycleFetcher = conversationLifecycleFetcher ??
             (conversationApi == null
                 ? getConversationByIdResult
@@ -304,7 +316,9 @@ class ConversationProvider extends ChangeNotifier {
 
   void _setupMergeListener() {
     _mergeCompletedSubscription = MergeNotificationHandler.onMergeCompleted.listen((event) {
-      onMergeCompleted(event.mergedConversationId, event.removedConversationIds);
+      unawaited(onMergeCompleted(event.mergedConversationId, event.removedConversationIds).catchError((Object _) {
+        Logger.debug('Merge completion reconciliation failed; retain pending journal for retry');
+      }));
     });
   }
 
@@ -317,6 +331,10 @@ class ConversationProvider extends ChangeNotifier {
       watcher.cancel();
     }
     _mergeWatchers.clear();
+    _pendingMerges.clear();
+    _mergedAwayConversationIds.clear();
+    _mergeJournalOwner = null;
+    _mergeJournalOrigin = null;
     _sessionGeneration++;
     _searchRequestGeneration++;
     _conversationFetchRevision++;
@@ -443,7 +461,7 @@ class ConversationProvider extends ChangeNotifier {
     }
     // Search results are ranked by the server, including transcript-match relevance.
     // Re-sorting by recency would bury older spoken-moment matches.
-    searchedConversations = result.items;
+    searchedConversations = _filterPendingDeletes(result.items);
     currentSearchPage = result.currentPage;
     totalSearchPages = result.totalPages;
     groupSearchConvosByDate();
@@ -494,7 +512,7 @@ class ConversationProvider extends ChangeNotifier {
       _setLoadingConversationSearch(false);
       return;
     }
-    searchedConversations.addAll(result.items);
+    searchedConversations.addAll(_filterPendingDeletes(result.items));
     totalSearchPages = result.totalPages;
     currentSearchPage = result.currentPage;
     groupSearchConvosByDate();
@@ -719,8 +737,9 @@ class ConversationProvider extends ChangeNotifier {
     await _fetchNewConversations();
   }
 
-  Future _fetchNewConversations() async {
+  Future _fetchNewConversations({bool restoreMergeWatches = true}) async {
     if (!_isSignedIn()) return;
+    if (restoreMergeWatches) _restoreMergeWatches();
     final generation = _sessionGeneration;
     final fetchRevision = ++_conversationFetchRevision;
     _conversationLoadingRevision = fetchRevision;
@@ -818,12 +837,13 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> fetchConversations() async {
+  Future<bool> fetchConversations({bool restoreMergeWatches = true}) async {
     if (!_isSignedIn()) {
       _cancelInitialFetchRetry();
       conversationsLoadFailed = false;
       return false;
     }
+    if (restoreMergeWatches) _restoreMergeWatches();
     final generation = _sessionGeneration;
     final fetchRevision = ++_conversationFetchRevision;
     _conversationLoadingRevision = fetchRevision;
@@ -1711,8 +1731,9 @@ class ConversationProvider extends ChangeNotifier {
   /// delete still reaches the server about 5 s after the swipe.
   static const pendingDeleteWindow = Duration(seconds: 10);
   List<ServerConversation> _filterPendingDeletes(List<ServerConversation> items) {
-    if (memoriesToDelete.isEmpty) return items;
-    return items.where((c) => !memoriesToDelete.containsKey(c.id)).toList();
+    return items
+        .where((c) => !memoriesToDelete.containsKey(c.id) && !_mergedAwayConversationIds.contains(c.id))
+        .toList();
   }
 
   /// Hides [conversation] now and deletes it on the server after [pendingDeleteWindow], unless
@@ -2158,12 +2179,21 @@ class ConversationProvider extends ChangeNotifier {
     final idsToMerge = conversationIds ?? selectedConversationIds.toList();
     if (idsToMerge.length < 2) return null;
 
-    // Call merge API
+    final generation = _sessionGeneration;
+    final owner = SharedPreferencesUtil().uid;
+    final origin = Env.apiBaseUrl;
+    // Call merge API. Its admission may succeed even if the response is lost;
+    // an observational watch never resubmits a destructive merge.
     final response = await mergeConversations(idsToMerge);
+    if (generation != _sessionGeneration ||
+        !_isSignedIn() ||
+        SharedPreferencesUtil().uid != owner ||
+        Env.apiBaseUrl != origin) return null;
     PlatformManager.instance.analytics.conversationMergeInitiated(idsToMerge);
 
     if (response == null) {
       PlatformManager.instance.analytics.conversationMergeFailed(idsToMerge);
+      watchMerge(idsToMerge);
       if (conversationIds != null) {
         for (final id in conversationIds) {
           mergingConversationIds.remove(id);
@@ -2176,125 +2206,169 @@ class ConversationProvider extends ChangeNotifier {
         exitSelectionMode();
         notifyListeners();
       }
-      watchMerge(response.conversationIds.length >= 2 ? response.conversationIds : idsToMerge);
+      watchMerge(response.conversationIds.length >= 2 ? response.conversationIds : idsToMerge,
+          targetId: response.mergedConversationId);
     }
 
     return response;
   }
 
-  /// Probes the merging rows every [mergeProbeInterval] until the merge settles: once none is still
-  /// merging (or processing its merged summary), the one that remains replaces them as the push
-  /// would. The push settling it first ends the probe. A merge that never settles within
-  /// [mergeProbeLimit] — or leaves nothing readable (a locked result) — hands the rows back to a
-  /// list refresh, so they are never left on "Merging…".
-  @visibleForTesting
-  void watchMerge(List<String> ids) {
-    if (ids.length < 2) return;
-    final key = ids.join(',');
-    _mergeWatchers.remove(key)?.cancel();
-    final deadline = DateTime.now().add(mergeProbeLimit);
-    var probing = false;
-    late final Timer watcher;
-    void stop() {
-      watcher.cancel();
-      if (identical(_mergeWatchers[key], watcher)) _mergeWatchers.remove(key);
+  void _persistMergeWatches() {
+    final owner = _mergeJournalOwner;
+    final origin = _mergeJournalOrigin;
+    if (owner == null || owner.isEmpty || origin == null || SharedPreferencesUtil().uid != owner) return;
+    final key = 'pendingConversationMerges:$owner';
+    Map<String, dynamic> backends;
+    try {
+      backends =
+          Map<String, dynamic>.from(jsonDecode(SharedPreferencesUtil().getString(key, defaultValue: '{}')) as Map);
+    } catch (_) {
+      backends = {};
     }
-
-    Future<void> handBackToList() async {
-      mergingConversationIds.removeAll(ids);
-      notifyListeners();
-      await forceRefreshConversations();
-    }
-
-    watcher = Timer.periodic(mergeProbeInterval, (_) async {
-      if (probing) return;
-      if (!ids.any(mergingConversationIds.contains)) {
-        stop(); // the push settled it
-        return;
-      }
-      if (DateTime.now().isAfter(deadline)) {
-        stop();
-        await handBackToList();
-        return;
-      }
-      probing = true;
-      try {
-        final results = <String, ({ServerConversation? item, bool ok})>{};
-        for (final id in ids) {
-          try {
-            results[id] = await _conversationLifecycleFetcher(id);
-          } catch (_) {
-            results[id] = (item: null, ok: false);
-          }
-        }
-        if (!ids.any(mergingConversationIds.contains)) {
-          stop();
-          return;
-        }
-        // Unreachable, or still merging: try again next time.
-        if (results.values.any((r) => !r.ok)) return;
-        if (results.values.any((r) => r.item != null && _isActiveProcessingStatus(r.item!.status))) return;
-        stop();
-        final survivors = <ServerConversation>[
-          for (final id in ids)
-            if (results[id]!.item != null) results[id]!.item!,
-        ];
-        if (survivors.length == 1) {
-          final merged = survivors.single;
-          await onMergeCompleted(
-              merged.id,
-              [
-                for (final id in ids)
-                  if (id != merged.id) id
-              ],
-              merged: merged);
-        } else {
-          await handBackToList();
-        }
-      } finally {
-        probing = false;
-      }
-    });
-    _mergeWatchers[key] = watcher;
+    backends[origin] = [
+      for (final pending in _pendingMerges.values) {'ids': pending.ids, 'target': pending.target},
+    ];
+    unawaited(SharedPreferencesUtil().saveString(key, jsonEncode(backends)));
   }
 
-  /// Handle merge completion from FCM notification, or from [watchMerge] with the [merged]
-  /// conversation it already read.
+  void _restoreMergeWatches() {
+    final owner = SharedPreferencesUtil().uid;
+    if (owner.isEmpty) return;
+    final raw = SharedPreferencesUtil().getString('pendingConversationMerges:$owner');
+    if (raw.isEmpty) return;
+    try {
+      final rows = (jsonDecode(raw) as Map)[Env.apiBaseUrl] as List? ?? const [];
+      for (final row in rows) {
+        final ids = (row['ids'] as List).cast<String>();
+        final key = (ids.toList()..sort()).join(',');
+        if (!_mergeWatchers.containsKey(key)) watchMerge(ids, targetId: row['target'] as String?);
+      }
+    } catch (_) {
+      Logger.debug('Ignoring invalid pending merge journal');
+    }
+  }
+
+  /// Observe the actual NEW target allocated by admission. Persist only IDs,
+  /// scoped to the current account/backend, so resume/restart needs no push.
+  @visibleForTesting
+  void watchMerge(List<String> ids, {String? targetId}) {
+    if (ids.length < 2 || ids.toSet().length != ids.length) return;
+    final key = (ids.toList()..sort()).join(',');
+    _mergeWatchers.remove(key)?.cancel();
+    final generation = _sessionGeneration;
+    final owner = SharedPreferencesUtil().uid;
+    final origin = Env.apiBaseUrl;
+    if (_mergeJournalOwner != owner || _mergeJournalOrigin != origin) {
+      for (final watcher in _mergeWatchers.values) {
+        watcher.cancel();
+      }
+      _mergeWatchers.clear();
+      _pendingMerges.clear();
+      _mergedAwayConversationIds.clear();
+      _mergeJournalOwner = owner;
+      _mergeJournalOrigin = origin;
+    }
+    bool current() =>
+        generation == _sessionGeneration &&
+        _isSignedIn() &&
+        SharedPreferencesUtil().uid == owner &&
+        Env.apiBaseUrl == origin;
+    _pendingMerges[key] = (ids: List.of(ids), target: targetId);
+    mergingConversationIds.addAll(ids);
+    _persistMergeWatches();
+    _mergeWatchers[key] = ConversationMergeWatch(
+      sourceIds: List.of(ids),
+      targetId: targetId,
+      fetch: _mergeConversationFetcher,
+      isCurrent: current,
+      interval: mergeProbeInterval,
+      limit: mergeProbeLimit,
+      onCompleted: (merged) async {
+        if (!current()) return;
+        await onMergeCompleted(merged.id, ids, merged: merged);
+      },
+      onRefresh: (sourcesGone) async {
+        if (!current()) return;
+        _mergeWatchers.remove(key);
+        mergingConversationIds.removeAll(ids);
+        notifyListeners();
+        // Do not immediately restore this expired watch through its own
+        // refresh. A later resume/manual refresh can retry the saved journal.
+        if (sourcesGone) {
+          final ok = await fetchConversations(restoreMergeWatches: false);
+          if (ok && current()) {
+            _pendingMerges.remove(key);
+            _persistMergeWatches();
+          }
+        } else {
+          await _fetchNewConversations(restoreMergeWatches: false);
+        }
+      },
+    );
+  }
+
+  /// A completion push and an authoritative probe share one list/cache commit.
+  /// Resolve the target before changing anything; a late/failed read cannot
+  /// remove rows or publish content for a replacement account.
   Future<void> onMergeCompleted(
     String mergedConversationId,
     List<String> removedConversationIds, {
     ServerConversation? merged,
   }) async {
     final generation = _sessionGeneration;
-    // Remove merging status for ALL involved conversations
-    mergingConversationIds.remove(mergedConversationId);
-    for (final id in removedConversationIds) {
-      mergingConversationIds.remove(id);
+    final owner = SharedPreferencesUtil().uid;
+    final origin = _mergeJournalOrigin;
+    bool current() =>
+        generation == _sessionGeneration &&
+        _isSignedIn() &&
+        SharedPreferencesUtil().uid == owner &&
+        (origin == null || Env.apiBaseUrl == origin);
+    final target = merged ?? (await _conversationLifecycleFetcher(mergedConversationId)).item;
+    if (!current() ||
+        target == null ||
+        target.id != mergedConversationId ||
+        target.status != ConversationStatus.completed ||
+        target.isLocked) return;
+    final removed = removedConversationIds.where((id) => id != mergedConversationId).toSet();
+    final cached = await _conversationCacheLoader();
+    if (!current()) return;
+    _conversationFetchRevision++;
+    _searchRequestGeneration++;
+    _mergedAwayConversationIds.addAll(removed);
+    mergingConversationIds.removeAll({...removed, mergedConversationId});
+    conversations.removeWhere((c) => removed.contains(c.id) || c.id == target.id);
+    if (_matchesActiveConversationFilters(target)) conversations.insert(0, target);
+    searchedConversations.removeWhere((c) => removed.contains(c.id));
+    processingConversations.removeWhere((c) => removed.contains(c.id) || c.id == target.id);
+    final cacheRows = {
+      for (final row in cached)
+        if (!removed.contains(row.id)) row.id: row,
+      target.id: target
+    };
+    await SharedPreferencesUtil().cacheConversations(cacheRows.values.toList());
+    if (!current()) return;
+    for (final key in _pendingMerges.keys.toList()) {
+      if (_pendingMerges[key]!.ids.every(removed.contains)) {
+        _mergeWatchers.remove(key)?.cancel();
+        _pendingMerges.remove(key);
+      }
     }
-
-    PlatformManager.instance.analytics.conversationMergeCompleted(mergedConversationId, removedConversationIds);
-
-    // Remove deleted conversations from local state
-    for (final id in removedConversationIds) {
-      conversations.removeWhere((c) => c.id == id);
+    _persistMergeWatches();
+    conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    isFetchingConversations = false;
+    _isLoadingConversationSearch = false;
+    _isLoadingConversationList = false;
+    setLoadingConversations(false);
+    if (hasActiveSearch) {
+      _groupSearchConvosByDateWithoutNotify();
+    } else {
+      _groupConversationsByDateWithoutNotify();
+    }
+    for (final id in removed) {
       SiriIntegration.current.queueDelete('conversation', id);
     }
-
-    // Fetch updated merged conversation
-    ServerConversation? mergedConvo;
-    mergedConvo = merged ?? (await _conversationLifecycleFetcher(mergedConversationId)).item;
-    if (generation != _sessionGeneration) return;
-    if (mergedConvo != null) {
-      final idx = conversations.indexWhere((c) => c.id == mergedConversationId);
-      if (idx != -1) {
-        conversations[idx] = mergedConvo;
-      } else {
-        conversations.insert(0, mergedConvo);
-      }
-      conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    }
-    _groupConversationsByDateWithoutNotify();
+    SiriIntegration.current.queueUpsertConversations([target]);
+    PlatformManager.instance.analytics.conversationMergeCompleted(mergedConversationId, removed.toList());
     notifyListeners();
-    if (mergedConvo != null) SiriIntegration.current.queueUpsertConversations([mergedConvo]);
   }
 }

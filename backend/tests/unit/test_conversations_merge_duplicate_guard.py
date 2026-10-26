@@ -186,3 +186,36 @@ def test_merge_cas_loss_restores_prior_claims_without_scheduling_work(conv, monk
     assert error.value.status_code == 409
     restore.assert_called_once_with('test-account', 'c1')
     assert tasks.tasks == []
+
+
+@pytest.mark.parametrize('durable', [False, True])
+def test_merge_endpoint_returns_the_exact_admitted_target(conv, monkeypatch, durable):
+    """Exercise the HTTP route with synthetic IO, not a handwritten response DTO."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from config import refactor_modes
+    import utils.conversations.merge_conversations as worker
+
+    monkeypatch.setattr(refactor_modes, 'serving_for', lambda _mode, _uid: durable)
+    monkeypatch.setattr(conv.conversations_db, 'get_conversation', lambda _uid, cid: {'id': cid, 'status': 'completed'})
+    monkeypatch.setattr(worker, 'validate_merge_compatibility', lambda _rows: (True, None, None))
+    monkeypatch.setattr(conv.lifecycle_service, 'begin_merge', lambda *_args: True)
+    admitted = {'job_id': 'synthetic-job', 'dispatch_generation': 4, 'merge_target_id': 'durable-target'}
+    monkeypatch.setattr(conv.lifecycle_service.merge_jobs, 'admit', lambda *_args: admitted)
+    calls = []
+    monkeypatch.setattr(conv.lifecycle_service.merge_jobs, 'run', lambda *args: calls.append(args))
+    monkeypatch.setattr(worker, 'perform_merge_async', lambda **kwargs: calls.append(kwargs))
+    app = FastAPI()
+    app.include_router(conv.router)
+    with TestClient(app) as client:
+        response = client.post('/v1/conversations/merge', json={'conversation_ids': ['c1', 'c2']})
+    assert response.status_code == 200, response.text
+    target = response.json()['merged_conversation_id']
+    assert target not in ('c1', 'c2')
+    if durable:
+        assert target == 'durable-target'
+        assert calls == [('synthetic-job', 4)]
+    else:
+        assert calls == [
+            {'uid': 'test-uid', 'conversation_ids': ['c1', 'c2'], 'reprocess': True, 'merge_target_id': target}
+        ]

@@ -22749,6 +22749,18 @@
             "title": "Conversation Ids",
             "type": "array"
           },
+          "merged_conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable target ID allocated at admission; the worker may not have created it yet",
+            "title": "Merged Conversation Id"
+          },
           "message": {
             "default": "Merge started",
             "description": "Status message",

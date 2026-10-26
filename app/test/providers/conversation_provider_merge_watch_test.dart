@@ -1,131 +1,212 @@
+import 'dart:async';
+
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/services/conversation_merge_watch.dart';
 
-/// A merge settles on the server; its push can arrive late or never (notifications off, a build
-/// without push). The list must settle by itself instead of staying on "Merging…" until a refresh.
+ServerConversation row(String id, {ConversationStatus status = ConversationStatus.completed}) => ServerConversation(
+      id: id,
+      createdAt: DateTime.utc(2026, 10, 1),
+      structured: Structured(id, 'summary'),
+      status: status,
+    );
+const missing = ApiFailure<ServerConversation>(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
+
 void main() {
-  setUp(() async {
-    SharedPreferences.setMockInitialValues({});
-    await SharedPreferencesUtil.init();
-  });
-
-  ServerConversation conversation(String id, ConversationStatus status, {String title = 'Title'}) => ServerConversation(
-        id: id,
-        createdAt: DateTime.utc(2026, 9, 26, 10),
-        structured: Structured(title, 'Overview'),
-        status: status,
-      );
-
-  /// A provider whose server answers from [server] (id → lifecycle), counting list refreshes.
-  ({ConversationProvider provider, List<int> refreshes}) merging(
-    Map<String, ({ServerConversation? item, bool ok})> server,
-  ) {
-    final refreshes = <int>[0];
-    final provider = ConversationProvider(
-      conversationListFetcher: () async {
-        refreshes[0]++;
-        return (items: <ServerConversation>[], ok: true);
-      },
-      conversationLifecycleFetcher: (id) async => server[id]!,
-      isSignedIn: () => true,
-    )
-      ..mergeProbeInterval = const Duration(milliseconds: 10)
-      ..conversations = [
-        conversation('a', ConversationStatus.merging),
-        conversation('b', ConversationStatus.merging),
-      ]
-      ..mergingConversationIds = {'a', 'b'};
-    return (provider: provider, refreshes: refreshes);
+  for (final kind in [
+    ApiProblemKind.transport,
+    ApiProblemKind.paymentRequired,
+    ApiProblemKind.forbidden,
+    ApiProblemKind.unprocessable,
+    ApiProblemKind.server,
+    ApiProblemKind.decode
+  ]) {
+    test('$kind is not evidence that a source was deleted', () {
+      fakeAsync((clock) {
+        final server = <String, ApiResult<ServerConversation>>{
+          'a': ApiFailure(ApiProblem(kind)),
+          'b': missing,
+          'target': ApiSuccess(row('target'))
+        };
+        var completed = false;
+        final watch = ConversationMergeWatch(
+            sourceIds: ['a', 'b'],
+            targetId: 'target',
+            fetch: (id) async => server[id]!,
+            isCurrent: () => true,
+            onCompleted: (_) async {
+              completed = true;
+            },
+            onRefresh: (_) async {},
+            interval: const Duration(seconds: 1),
+            limit: const Duration(minutes: 3));
+        clock.elapse(const Duration(seconds: 2));
+        expect(completed, false);
+        server['a'] = missing;
+        clock.elapse(const Duration(seconds: 1));
+        expect(completed, true);
+        watch.cancel();
+      });
+    });
   }
 
-  Future<void> ticks([int count = 4]) => Future<void>.delayed(Duration(milliseconds: 12 * count));
-
-  test('without the push, the rows settle once the server finishes the merge', () async {
-    final server = <String, ({ServerConversation? item, bool ok})>{
-      'a': (item: conversation('a', ConversationStatus.merging), ok: true),
-      'b': (item: conversation('b', ConversationStatus.merging), ok: true),
-    };
-    final (:provider, :refreshes) = merging(server);
-    addTearDown(provider.dispose);
-    provider.watchMerge(['a', 'b']);
-
-    await ticks();
-    expect(provider.mergingConversationIds, {'a', 'b'}, reason: 'still merging on the server');
-
-    // The merge lands: "a" holds the merged conversation, "b" is gone.
-    server['a'] = (item: conversation('a', ConversationStatus.completed, title: 'Merged'), ok: true);
-    server['b'] = (item: null, ok: true);
-    await ticks();
-    expect(provider.mergingConversationIds, isEmpty);
-    expect(provider.conversations.map((c) => c.id), ['a']);
-    expect(provider.conversations.single.structured.title, 'Merged');
-    expect(refreshes[0], 0, reason: 'settled from what it read, no refresh needed');
+  test('a completed original is never mistaken for the new merged target', () {
+    fakeAsync((clock) {
+      final server = <String, ApiResult<ServerConversation>>{
+        'a': ApiSuccess(row('a')),
+        'b': missing,
+        'target': ApiSuccess(row('target'))
+      };
+      final completed = <String>[];
+      final watch = ConversationMergeWatch(
+          sourceIds: ['a', 'b'],
+          targetId: 'target',
+          fetch: (id) async => server[id]!,
+          isCurrent: () => true,
+          onCompleted: (target) async {
+            completed.add(target.id);
+          },
+          onRefresh: (_) async {},
+          interval: const Duration(seconds: 1),
+          limit: const Duration(minutes: 3));
+      clock.elapse(const Duration(seconds: 1));
+      expect(completed, isEmpty);
+      server['a'] = missing;
+      server['target'] = ApiSuccess(row('target', status: ConversationStatus.processing));
+      clock.elapse(const Duration(seconds: 1));
+      expect(completed, isEmpty);
+      server['target'] = ApiSuccess(row('target'));
+      clock.elapse(const Duration(seconds: 1));
+      expect(completed, ['target']);
+      watch.cancel();
+    });
   });
 
-  test('a network hiccup is not mistaken for a finished merge', () async {
-    final server = <String, ({ServerConversation? item, bool ok})>{
-      'a': (item: null, ok: false),
-      'b': (item: null, ok: false),
-    };
-    final (:provider, refreshes: _) = merging(server);
-    addTearDown(provider.dispose);
-    provider.watchMerge(['a', 'b']);
-    await ticks();
-    expect(provider.mergingConversationIds, {'a', 'b'});
-    expect(provider.conversations, hasLength(2));
+  test('old server without target ID refreshes only after every source returns 404', () {
+    fakeAsync((clock) {
+      final refreshes = <bool>[];
+      final watch = ConversationMergeWatch(
+          sourceIds: ['a', 'b'],
+          targetId: null,
+          fetch: (_) async => missing,
+          isCurrent: () => true,
+          onCompleted: (_) async => fail('no target'),
+          onRefresh: (gone) async {
+            refreshes.add(gone);
+          },
+          interval: const Duration(seconds: 1),
+          limit: const Duration(minutes: 3));
+      clock.elapse(const Duration(seconds: 5));
+      expect(refreshes, [true]);
+      watch.cancel();
+    });
   });
 
-  test('the push settling it first ends the probing', () async {
-    var probes = 0;
-    final provider = ConversationProvider(
-      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
-      conversationLifecycleFetcher: (id) async {
-        probes++;
-        return (item: conversation(id, ConversationStatus.merging), ok: true);
-      },
-      isSignedIn: () => true,
-    )
-      ..mergeProbeInterval = const Duration(milliseconds: 10)
-      ..mergingConversationIds = {'a', 'b'};
-    addTearDown(provider.dispose);
-    provider.watchMerge(['a', 'b']);
-    await ticks(2);
-    provider.mergingConversationIds.clear(); // as onMergeCompleted does
-    await ticks(2);
-    final after = probes;
-    await ticks(4);
-    expect(probes, after, reason: 'no probes once the merge is settled');
+  test('deadline cancels probes and requests a nonterminal refresh once', () {
+    fakeAsync((clock) {
+      final refreshes = <bool>[];
+      var reads = 0;
+      final watch = ConversationMergeWatch(
+          sourceIds: ['a', 'b'],
+          targetId: 'target',
+          fetch: (id) async {
+            reads++;
+            return ApiSuccess(row(id));
+          },
+          isCurrent: () => true,
+          onCompleted: (_) async => fail('unfinished'),
+          onRefresh: (gone) async {
+            refreshes.add(gone);
+          },
+          interval: const Duration(seconds: 1),
+          limit: const Duration(seconds: 3));
+      clock.elapse(const Duration(seconds: 4));
+      final stoppedAt = reads;
+      clock.elapse(const Duration(minutes: 2));
+      expect(reads, stoppedAt);
+      expect(refreshes, [false]);
+      watch.cancel();
+    });
   });
 
-  test('a result it cannot read (locked) hands the rows back to a list refresh', () async {
-    final server = <String, ({ServerConversation? item, bool ok})>{
-      'a': (item: null, ok: true), // 402 locked, like 404, is a settled answer with nothing to show
-      'b': (item: null, ok: true),
-    };
-    final (:provider, :refreshes) = merging(server);
-    addTearDown(provider.dispose);
-    provider.watchMerge(['a', 'b']);
-    await ticks();
-    expect(provider.mergingConversationIds, isEmpty);
-    expect(refreshes[0], greaterThanOrEqualTo(1));
+  test('an account/backend fence suppresses a late in-flight read', () {
+    fakeAsync((clock) {
+      final result = Completer<ApiResult<ServerConversation>>();
+      var current = true;
+      final watch = ConversationMergeWatch(
+          sourceIds: ['a', 'b'],
+          targetId: 'target',
+          fetch: (_) => result.future,
+          isCurrent: () => current,
+          onCompleted: (_) async => fail('stale completion'),
+          onRefresh: (_) async => fail('stale refresh'),
+          interval: const Duration(seconds: 1),
+          limit: const Duration(seconds: 3));
+      clock.elapse(const Duration(seconds: 1));
+      current = false;
+      result.complete(missing);
+      clock.elapse(const Duration(seconds: 5));
+      watch.cancel();
+    });
   });
 
-  test('a merge that never settles is handed back to the list after the limit', () async {
-    final server = <String, ({ServerConversation? item, bool ok})>{
-      'a': (item: conversation('a', ConversationStatus.merging), ok: true),
-      'b': (item: conversation('b', ConversationStatus.merging), ok: true),
-    };
-    final (:provider, :refreshes) = merging(server);
-    addTearDown(provider.dispose);
-    provider.mergeProbeLimit = const Duration(milliseconds: 30);
-    provider.watchMerge(['a', 'b']);
-    await ticks(8);
-    expect(provider.mergingConversationIds, isEmpty, reason: 'never left on Merging…');
-    expect(refreshes[0], greaterThanOrEqualTo(1));
+  group('persisted provider watch', () {
+    setUp(() async {
+      Env.overrideApiBaseUrl('http://127.0.0.1:1/');
+      SharedPreferences.setMockInitialValues({'uid': 'merge-owner'});
+      await SharedPreferencesUtil.init();
+    });
+    tearDown(Env.clearApiBaseUrlOverrideForTesting);
+
+    test('reopen resumes the same new target without push and removes originals from cache', () async {
+      var done = false;
+      ApiResult<ServerConversation> fetch(String id) => done && id != 'target' ? missing : ApiSuccess(row(id));
+      ConversationProvider make() => ConversationProvider(
+            mergeConversationFetcher: (id) async => fetch(id),
+            isSignedIn: () => true,
+            conversationListFetcher: () async => (items: [row('a'), row('b')], ok: true),
+          )..mergeProbeInterval = const Duration(milliseconds: 5);
+      final before = make();
+      before.watchMerge(['a', 'b'], targetId: 'target');
+      before.dispose();
+      final reopened = make();
+      addTearDown(reopened.dispose);
+      final completion = Completer<void>();
+      reopened.addListener(() {
+        if (!completion.isCompleted && reopened.conversations.any((c) => c.id == 'target')) completion.complete();
+      });
+      await reopened.fetchConversations();
+      done = true;
+      await completion.future.timeout(const Duration(seconds: 5));
+      expect(reopened.conversations.map((c) => c.id), ['target']);
+      expect((await SharedPreferencesUtil().loadCachedConversations()).map((c) => c.id), ['target']);
+      expect(SharedPreferencesUtil().getString('pendingConversationMerges:merge-owner'), contains('[]'));
+    });
+
+    test('another backend does not restore this backend journal', () async {
+      final before = ConversationProvider(isSignedIn: () => true);
+      before.watchMerge(['a', 'b'], targetId: 'target');
+      before.dispose();
+      Env.overrideApiBaseUrl('http://127.0.0.1:2/');
+      var reads = 0;
+      final reopened = ConversationProvider(
+          isSignedIn: () => true,
+          mergeConversationFetcher: (_) async {
+            reads++;
+            return missing;
+          },
+          conversationListFetcher: () async => (items: <ServerConversation>[], ok: true));
+      addTearDown(reopened.dispose);
+      await reopened.fetchConversations();
+      expect(reopened.mergingConversationIds, isEmpty);
+      expect(reads, 0);
+    });
   });
 }

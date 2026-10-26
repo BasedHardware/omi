@@ -5,6 +5,12 @@ and background processing.
 
 ## Boundaries
 
+- Manual merge admission allocates a new target before dispatch and returns
+  `merged_conversation_id` to clients. Legacy work and durable jobs use that same
+  identity; the optional response remains decodable by released clients. Mobile
+  completion/restart/cache ownership is documented in
+  `app/docs/conversation-merge-recovery.md`.
+
 - `live_continuation.py` coordinates durable reconnect admission through
   `database/listen_continuations.py`. The original recording binding remains
   immutable; its continuation metadata is adopted transactionally. Resume

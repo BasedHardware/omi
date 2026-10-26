@@ -1337,11 +1337,13 @@ class MergeConversationsResponse {
   final String message;
   final String? warning;
   final List<String> conversationIds;
+  final String? mergedConversationId;
 
   MergeConversationsResponse({
     required this.status,
     required this.message,
     this.warning,
+    this.mergedConversationId,
     required this.conversationIds,
   });
 
@@ -1354,6 +1356,7 @@ class MergeConversationsResponse {
       status: generated.status,
       message: generated.message,
       warning: generated.warning,
+      mergedConversationId: generated.mergedConversationId,
       conversationIds: generated.conversationIds,
     );
   }

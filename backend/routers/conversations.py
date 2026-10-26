@@ -1,6 +1,7 @@
 from utils.generated_compute import require_generated_compute, generated_compute_allowed, generated_compute_scope
 import asyncio
 import hashlib
+from uuid import uuid4
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
@@ -2410,6 +2411,7 @@ def merge_conversations(
             message='Merge started',
             warning=warning_message,
             conversation_ids=request.conversation_ids,
+            merged_conversation_id=job['merge_target_id'],
         )
 
     # refactor: superseded by lifecycle.merge_jobs when LIFECYCLE_V2_MODE=serve
@@ -2421,11 +2423,13 @@ def merge_conversations(
             raise HTTPException(status_code=409, detail='Conversation changed during merge admission')
         admitted.append(conv_id)
 
+    target_id = str(uuid4())
     background_tasks.add_task(
         perform_merge_async,
         uid=uid,
         conversation_ids=request.conversation_ids,
         reprocess=request.reprocess,
+        merge_target_id=target_id,
     )
 
     return MergeConversationsResponse(
@@ -2433,4 +2437,5 @@ def merge_conversations(
         message="Merge started",
         warning=warning_message,
         conversation_ids=request.conversation_ids,
+        merged_conversation_id=target_id,
     )
