@@ -690,7 +690,7 @@ def test_batch_intake_enforces_the_self_gate_on_its_uid_cohort(monkeypatch):
         'self_detect',
         Mock(return_value=lid.language_gate.SelfVerdict('en', 0.99, 0.99, 8.0)),
     )
-    decision = lid.resolve_language('multi', wav(), surface='batch', cohort_key='synthetic-owner')
+    decision = lid.resolve_language('multi', wav(8), surface='batch', cohort_key='synthetic-owner')
     assert decision.evidence == 'self_lid' and decision.parakeet_safe
     client.post.assert_not_called()
 
