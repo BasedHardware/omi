@@ -9,7 +9,8 @@ logging the action preview each row would have produced, and never advances
 the persisted sweep cursor.
 
 The optional job uses a ``status == 'in_progress'`` collection-group window;
-the always-on fast reconciler selects the indexed content-bearing due window.
+the candidate-query lever pushes its admission cutoff into that scan. The
+always-on fast reconciler retains the indexed content-bearing due window.
 Both scan at most ``MAX_SCAN`` rows rotating on a Firestore CAS cursor. Every reported
 count describes that scanned window, never the whole fleet.
 """
@@ -384,6 +385,7 @@ def run_selfheal_tick(
             scan = scan_fn(
                 page_size=PAGE_SIZE,
                 max_scan=MAX_SCAN,
+                finished_before=stale_cutoff,
                 resume_after_path=cursor.get('resume_after_path'),
                 firestore_client=firestore_client,
                 **({'content_due_before': stale_cutoff} if content_due_scan else {}),

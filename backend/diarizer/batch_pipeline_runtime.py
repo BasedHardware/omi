@@ -15,7 +15,7 @@ from typing import Any, Callable
 
 from prometheus_client import CollectorRegistry, CONTENT_TYPE_LATEST, generate_latest
 
-from config.stt_cap_dispatch import execution_admission_configured as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_configured as cap_dispatch_enabled, offline_enforcement_enabled
 from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
 from config.batch_pipeline import worker_pipeline_depth
 from config.batch_pipeline_providers import provider_config
@@ -29,10 +29,12 @@ from utils.batch_pipeline.capacity import PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.language_metrics import ROUTES as LANGUAGE_ROUTES
 from utils.batch_pipeline.correctness_metrics import TRANSITIONS, DURATION, LABELS
+from utils.batch_pipeline.gpu_skip_metrics import register_on as register_gpu_skip_counters
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.leader import PUMP_RECOVERY, LeaderLease
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.stage_timings import StageTimings
 from database.batch_pipeline_shadow import ShadowStore
 from utils.batch_pipeline.shadow_worker import ShadowRunner
 from utils.batch_pipeline.shadow_metrics import COLLECTORS as SHADOW_COLLECTORS
@@ -61,11 +63,13 @@ class SynchronizedWorker:
         synchronize: Callable[[], None] = synchronize_gpu,
         on_fatal: Callable[[], None] | None = None,
         memory_probe: Any = None,
+        timings: StageTimings | None = None,
     ):
         self.worker = worker
         self.synchronize = synchronize
         self.on_fatal = on_fatal
         self.memory_probe = memory_probe
+        self.timings = timings or StageTimings()
         self._unavailable = False
 
     def process_batch(self, items, **kwargs):
@@ -78,7 +82,8 @@ class SynchronizedWorker:
             finally:
                 # Python completion is not CUDA completion. Never publish before
                 # quiescence, even for a dedicated GPU with no live reservation.
-                self.synchronize()
+                # Profiling times the existing synchronize; it adds no new one.
+                self.timings.call('cuda_sync', self.synchronize)
                 if self.memory_probe:
                     sample = self.memory_probe.finish(baseline)
                     logger.info(
@@ -100,11 +105,12 @@ def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -
     registry.register(LANGUAGE_ROUTES)
     for collector in SHADOW_COLLECTORS:
         registry.register(collector)
-    if cap_dispatch_enabled():
+    if cap_dispatch_enabled() or offline_enforcement_enabled('batch'):
         registry.register(AUDIO_SECONDS)
     registry.register(TRANSITIONS)
     registry.register(DURATION)
     registry.register(LABELS)
+    register_gpu_skip_counters(registry)  # diarization decisions + per-unit FP32-parity counters
     for collector in shadow_parity_collectors():  # A2 shadow only; empty (no jobstore import) otherwise
         registry.register(collector)
 
@@ -189,6 +195,10 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
         # Startup models off the event loop. Readiness remains closed until the
         # entire BF16 ASR / FP32 segmentation chain and graph policy are ready.
         worker = await asyncio.to_thread(load_worker, artifacts)
+        # One shared stage-timing instance spans the worker chain, its CUDA
+        # quiescence and the pump; samples land on the worker's own registry.
+        timings = StageTimings(registry)
+        worker.timings = timings
         from utils.batch_pipeline.compute_client import shadow_from_env
 
         # Lazy client creation keeps a dark rollout independent of API config.
@@ -202,8 +212,9 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
         )
         pump = Pump(
             Scheduler(store, metrics=metrics, pool='batch'),
-            SynchronizedWorker(worker, on_fatal=fatal, memory_probe=ChainMemoryProbe()),
+            SynchronizedWorker(worker, on_fatal=fatal, memory_probe=ChainMemoryProbe(), timings=timings),
             metrics=metrics,
+            timings=timings,
             batch_size=config.batch_size,
             flights=worker_pipeline_depth(),
             capacity=lambda: PoolCapacity(

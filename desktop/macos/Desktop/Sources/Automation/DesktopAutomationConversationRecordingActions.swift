@@ -16,6 +16,28 @@ extension DesktopAutomationActionRegistry {
 
   func registerConversationRecordingActions() {
     register(
+      name: "conversations_discarded",
+      effects: [.localState, .networkOrModel],
+      summary: "Show/hide discarded conversations using the list filter, or read its current scope",
+      params: ["enabled"]
+    ) { params in
+      guard AppBuild.isNonProduction, let appState = AppState.current else {
+        return ["error": "requires a non-production main window"]
+      }
+      if let enabled = params["enabled"] {
+        guard ["true", "false"].contains(enabled) else { return ["error": "enabled must be true or false"] }
+        if appState.showDiscardedConversations != (enabled == "true") {
+          await appState.toggleDiscardedConversations()
+        }
+      }
+      return [
+        "include_discarded": String(appState.showDiscardedConversations),
+        "discarded_count": String(appState.conversations.filter(\.discarded).count),
+        "visible_count": String(appState.conversations.count),
+      ]
+    }
+
+    register(
       name: "conversation_detail_recording",
       effects: [.localState, .networkOrModel],
       summary:
@@ -55,9 +77,9 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "conversation_detail_prompt",
-      effects: [.localState],
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary:
-        "Raise the open conversation's rename or delete prompt, or press action item N's task control (add_task)",
+        "Raise rename/delete, restore a discarded conversation, or press action item N's task control (add_task)",
       params: ["prompt", "index"]
     ) { params in
       guard AppBuild.isNonProduction else {
@@ -67,8 +89,8 @@ extension DesktopAutomationActionRegistry {
         return ["error": "no open conversation"]
       }
       let prompt = params["prompt"] ?? ""
-      guard ["rename", "delete", "add_task"].contains(prompt) else {
-        return ["error": "prompt must be rename, delete, or add_task"]
+      guard ["rename", "delete", "add_task", "restore"].contains(prompt) else {
+        return ["error": "prompt must be rename, delete, add_task, or restore"]
       }
       let index = Int(params["index"] ?? "0") ?? 0
       NotificationCenter.default.post(

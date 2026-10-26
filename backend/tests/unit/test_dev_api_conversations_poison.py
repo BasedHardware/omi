@@ -320,3 +320,54 @@ def test_create_from_text_still_rejects_a_finish_before_the_start():
 
     assert response.status_code == 422
     assert captured == []
+
+
+@pytest.mark.parametrize('detail', [False, True])
+def test_developer_api_preserves_joinable_ids_and_real_owner_name(monkeypatch, detail):
+    from utils.conversations import render
+    from dependencies import get_auth_with_conversation_detail_read
+
+    conversation = _valid('wire')
+    conversation['transcript_segments'] = [
+        {'id': 's1', 'speaker': 'SPEAKER_0', 'speaker_id': 0, 'is_user': True, 'text': 'Hello', 'start': 0, 'end': 1},
+        {
+            'id': 's2',
+            'speaker': 'SPEAKER_379',
+            'speaker_id': 379,
+            'person_id': 'p1',
+            'is_user': False,
+            'text': 'Hi',
+            'start': 1,
+            'end': 2,
+        },
+        {
+            'id': 's3',
+            'speaker': 'SPEAKER_380',
+            'speaker_id': 380,
+            'is_user': False,
+            'text': 'An unknown voice',
+            'start': 2,
+            'end': 3,
+        },
+    ]
+    monkeypatch.setattr(render, 'get_user_name', lambda *a, **k: 'David Zhang')
+    monkeypatch.setattr(render.users_db, 'get_people_by_ids', lambda *a, **k: [{'id': 'p1', 'name': 'Phong'}])
+    monkeypatch.setattr(developer_module, 'populate_folder_names', lambda *a, **k: None)
+    monkeypatch.setattr(developer_module, 'populate_speaker_names', render.populate_speaker_names)
+    client = _build()
+    client.app.dependency_overrides[get_auth_with_conversation_detail_read] = _read_auth
+    if detail:
+        monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a, **k: conversation)
+        response = client.get('/v1/dev/user/conversations/wire?include_transcript=true')
+    else:
+        monkeypatch.setattr(conversations_db, 'get_conversations_without_photos', lambda *a, **k: [conversation])
+        response = client.get('/v1/dev/user/conversations?include_transcript=true')
+    assert response.status_code == 200, response.text
+    body = response.json() if detail else response.json()[0]
+    assert body['participants'] == [
+        {'speaker_id': 0, 'person_id': None, 'is_user': True},
+        {'speaker_id': 379, 'person_id': 'p1', 'is_user': False},
+        {'speaker_id': 380, 'person_id': None, 'is_user': False},
+    ]
+    assert [row['speaker_id'] for row in body['transcript_segments']] == [0, 379, 380]
+    assert [row['speaker_name'] for row in body['transcript_segments']] == ['David Zhang', 'Phong', 'Speaker A']

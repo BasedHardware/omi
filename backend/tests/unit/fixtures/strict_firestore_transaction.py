@@ -90,8 +90,14 @@ class StrictFirestoreDocument:
         return StrictFirestoreCollection(self._database, (*self.path, name))
 
     def get(
-        self, transaction: StrictFirestoreTransaction | None = None, *, field_paths: list[str] | None = None
+        self,
+        transaction: StrictFirestoreTransaction | None = None,
+        *,
+        field_paths: list[str] | None = None,
+        timeout: float | None = None,
     ) -> StrictFirestoreSnapshot:
+        if timeout is not None:
+            assert 0 < timeout <= 3
         if transaction is not None:
             transaction._assert_reference_belongs(self)
             transaction._assert_read_allowed()

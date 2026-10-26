@@ -69,6 +69,8 @@ class EpisodeLiveResponse(BaseModel):
 
     enabled: bool
     episode: Optional[Episode] = None
+    # Additive: ``episode`` retains its live-only meaning for released clients.
+    last_closed_episode: Optional[Episode] = None
 
 
 class EpisodeLookupResponse(BaseModel):

@@ -80,9 +80,12 @@ _drain_tasks = pusher_router.drain_tasks
 
 
 def _offline_store_audio_chunks(
-    chunks: list[dict[str, Any]], _uid: str, conversation_id: str, _level: str, *, sample_rate: int
+    chunks: list[dict[str, Any]], _uid: str, conversation_id: str, _level: str, *, sample_rate: int, **_kwargs: Any
 ) -> None:
-    """Keep the real pusher queue/flush path local when 101 frames are enabled."""
+    """Keep the real pusher queue/flush path local when 101 frames are enabled.
+
+    The pusher upload path passes flush-policy keywords (reconcile_prefix);
+    this stub records the admission without binding the call signature."""
     _record(
         {
             'event': 'audio_storage_skipped',

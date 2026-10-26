@@ -60,9 +60,9 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TEMPLATE_ENTRY="$REPO_ROOT/backend/modal/memory_maintenance_job.py"
-TEMPLATE_DOCKER="$REPO_ROOT/backend/modal/Dockerfile.memory_maintenance_job"
-TEMPLATE_WORKFLOW="$REPO_ROOT/.github/workflows/gcp_memory_maintenance_job.yml"
+TEMPLATE_ENTRY="$REPO_ROOT/backend/modal/frame_request_retention_job.py"
+TEMPLATE_DOCKER="$REPO_ROOT/backend/modal/Dockerfile.frame_request_retention_job"
+TEMPLATE_WORKFLOW="$REPO_ROOT/.github/workflows/gcp_frame_request_retention_job.yml"
 
 for path in "$TEMPLATE_ENTRY" "$TEMPLATE_DOCKER" "$TEMPLATE_WORKFLOW"; do
   if [[ ! -f "$path" ]]; then
@@ -141,13 +141,12 @@ if __name__ == "__main__":
     main()
 EOF
 
-# Dockerfile: clone memory-maintenance, substitute CMD.
+# Dockerfile: clone the frame-retention template, substitute CMD.
 sed \
-  -e "s/memory_maintenance_job\\.py/${MODULE_NAME}.py/g" \
-  -e "s/ST→LT maintenance is Firestore\\/LLM\\/vector only\\./TODO: document why this image omits ffmpeg\\/curl\\/unzip./" \
+  -e "s/frame_request_retention_job\\.py/${MODULE_NAME}.py/g" \
   "$TEMPLATE_DOCKER" >"$DOCKER_OUT"
 
-# Workflow: light substitution; strip LLM gateway steps (not universal).
+# Workflow: light substitution; strip retention-only steps (not universal).
 python3 - "$TEMPLATE_WORKFLOW" "$WF_OUT" "$JOB_NAME" "$MODULE_NAME" <<'PY'
 import re
 import sys
@@ -155,15 +154,13 @@ from pathlib import Path
 
 src, dest, job_name, module_name = sys.argv[1:5]
 text = Path(src).read_text(encoding="utf-8")
-text = text.replace("memory-maintenance-job", job_name)
-text = text.replace("memory_maintenance_job", module_name)
-text = text.replace("memory-maintenance-hourly", f"{job_name}-schedule")
-text = text.replace("Deploy Memory Maintenance Job to Cloud RUN", f"Deploy {job_name} to Cloud RUN")
-# Drop LLM-gateway-only steps; keep Build / Verify / Push image pipeline intact.
+text = text.replace("frame-request-retention-job", job_name)
+text = text.replace("frame_request_retention_job", module_name)
+text = text.replace("frame-request-retention-hourly", f"{job_name}-schedule")
+text = text.replace("Deploy Frame Request Retention Job to Cloud Run", f"Deploy {job_name} to Cloud Run")
+# Drop retention-only bucket contract steps; keep the build/publish pipeline intact.
 for step_name in (
-    "Get GKE credentials for gateway serving gate",
-    "Verify LLM Gateway serving data plane",
-    "Probe memory L2 gateway lane from the Cloud Run VPC",
+    "Require dedicated permanent and temporary bucket contracts from live GCP",
 ):
     text = re.sub(
         rf"\n      - name: {re.escape(step_name)}\n(?:        .*\n)*",
@@ -172,19 +169,9 @@ for step_name in (
         count=1,
     )
 text = text.replace(
-    "      - name: Render maintenance runtime env from the gated gateway endpoint\n",
+    "      - name: Render retention runtime env\n",
     "      - name: Render runtime env\n",
 )
-# Remove gateway URL env binding while keeping the step-level `run: |` key.
-text = text.replace(
-    "          OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}\n        run: |",
-    "        run: |",
-)
-text = text.replace(
-    "validate_memory_maintenance_scheduler.py",
-    f"validate_{module_name}_scheduler.py",
-)
-text = text.replace("Validate hourly Scheduler trigger", "Validate Scheduler trigger")
 Path(dest).write_text(text, encoding="utf-8")
 PY
 

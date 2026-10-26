@@ -297,6 +297,28 @@ def test_histogram_ignores_absent_and_screen_stage_zero():
     assert series["counters"]["observations_total"] == 1
 
 
+def test_capture_ingress_native_phases_pass_through_without_bucketing():
+    for phase in ["inactive", "unverified", "flowing", "quiet", "repairing", "reconnecting", "action_required"]:
+        observation = {
+            "event_id": "14141414-1414-4414-8414-141414141414",
+            "occurred_at": "2026-10-12T11:00:00Z",
+            "platform": "ios",
+            "channel": "production",
+            "family": "capture_ingress",
+            "attributes": {
+                "operation_id": ATTEMPT,
+                "phase": phase,
+                "reason": "none",
+                "subscription_confirmed": True,
+                "recovery_outcome": "none",
+                "recovery_spent": False,
+                "reconnect_spent": False,
+            },
+        }
+        _, normalized = validate_batch(_batch(observation), NOW)
+        assert normalized[0]["dimensions"]["phase"] == phase
+
+
 def test_aliases_bucket_unknown_without_rejecting_the_batch():
     observation = {
         "event_id": E1,

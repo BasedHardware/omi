@@ -1,15 +1,22 @@
-# Desktop proactivity v2 consumers
+# Desktop proactivity v2 consumers — retired
 
-macOS starts its consumer after the admitted signed-in shell sets up the floating bar. Windows starts alongside shared toast IPC and waits for the existing backend-session relay. Both use generated feed/outcome clients, poll on foreground and every ten minutes while active, and fence asynchronous responses and actions to the initiating owner session. Both desktops treat an identity-only v2 listen event as a feed wakeup; Windows checks its socket owner against the active backend session. Wakeups bypass foreground debounce and coalesce behind a pending request. Push copy cannot bypass feed admission or durable receipts. Without a live listen socket, foreground and periodic polling provide catch-up.
+The macOS and Windows feed consumers documented here were deleted on
+2026-10-26 together with the backend producers that fed them: the macOS
+`ProactivityFeedConsumer`/`ProactivityNotificationAdapter`/`ProactivityReceiptStore`
+and the Windows `src/main/proactivity` consumer. The server's
+`GET /v1/proactivity/feed` and `POST /v1/proactivity/items/{id}/outcomes`
+remain as one-release compatibility stubs (feed reports `enabled=false`,
+outcomes are a recorded no-op) so already-shipped clients keep decoding
+responses; they and the item ledger/budget are removed by the follow-up
+retirement PR.
 
-The card uses the existing notification master, frequency and snooze controls. macOS respects the in-bar preview preference; v2 does not substitute native enqueue success for a render receipt. Windows v2 uses the shared acrylic toast so React can acknowledge a mounted frame. macOS acknowledges its mounted SwiftUI card. Both deduplicate by owner and server item ID, persist `shown` once, and keep that receipt after successful delivery of the outcome.
+Still present on macOS, deliberately:
 
-`opened` follows the destination's visible-source acknowledgement, not the click: macOS observes the conversation detail or acknowledged task focus; Windows waits for the main renderer to report the loaded conversation or focused task row. Only the main window can acknowledge a target and only the toast window can report toast interactions. Thumbs feedback and explicit dismiss use their respective outcomes. Timeout is never enqueued or sent.
-
-The generated wire contract has no expiry field. Notification eligibility matches the backend's 24-hour undelivered-item window from `created_at`, using `server_time` to avoid local clock skew. Queue admission and render boundaries recheck expiry. This is independent of feed-history and server-ledger retention.
-
-Each platform atomically stores an owner-scoped ID-only journal: shown receipts plus unsent generated outcome requests. No notification content or credentials enter the journal. Stable per-item/action event IDs survive retries. Failed requests retain the outbox; the next foreground/active poll retries it. Windows also drains pending outcomes on a 30-second background timer without fetching another feed, respecting longer Retry-After delays. macOS also attempts delivery immediately after recording an interaction. Deleted/expired server items (404) terminalize their pending outcome. Sign-out/account switch purge the journal, revoke callbacks and prevent delayed responses from repopulating it. Relaunch under the same owner restores receipts and pending outcomes.
-
-A poll is bounded: macOS scans at most five pages of 50 items for one eligible card and keeps at most one outstanding presentation; Windows reads the latest 50 and admits at most one toast. Neither consumer queues a page-sized burst before the first card renders. Suppressed cards have no shown receipt and remain eligible on a later poll. Optional desktop feed-list UI is not implemented.
-
-Verification covers receipt persistence/relaunch, owner switch, timeout exclusion, expiry, transport failure/retry, delayed response fencing, visible-render acknowledgements and source-opening callbacks. Native Windows packaging, installed macOS UI and real push delivery remain release acceptance checks.
+- `Rewind/Core/ProactivityRetirementMigration.swift` — forward-only GRDB
+  migration dropping the older legacy proactivity tables; installed databases
+  depend on its registered name, so it stays.
+- The `proactivityV2` notification-kind and provenance cases — they decode
+  historical journaled rows and notifications.
+- The generated `OmiAPI` wire types — generated from the still-published
+  OpenAPI schemas; `ProactivityWireTests` keeps decoding the shared
+  `contracts/parity/proactivity_v2.json` fixture until the routes are removed.

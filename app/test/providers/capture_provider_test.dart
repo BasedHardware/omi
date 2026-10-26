@@ -168,6 +168,7 @@ class _GatedSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     final gate = Completer<void>();
     gates.add(gate);
@@ -198,6 +199,7 @@ class _NullSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async =>
       null;
 }
@@ -217,6 +219,7 @@ class _CountingSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     openCalls++;
     return null;

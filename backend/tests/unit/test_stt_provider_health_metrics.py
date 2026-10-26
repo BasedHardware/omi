@@ -86,6 +86,23 @@ def test_unexpired_account_cooldown_keeps_the_gauge_up_through_a_refresh():
     assert _gauge_value('modulate', 'selection') == 0
 
 
+def test_idle_selection_bench_gauge_expires_without_dial_or_state_change(monkeypatch):
+    clock = [0.0]
+    circuit = _breaker('modulate', clock=lambda: clock[0])
+    monkeypatch.setattr(provider_resilience, '_published_breakers', {circuit})
+    circuit.record_serve_failure(error_class='modulate_serve_error')
+    assert _gauge_value('modulate', 'selection') == 1
+    clock[0] = 179
+    provider_resilience.refresh_published_circuit_gauges()
+    assert _gauge_value('modulate', 'selection') == 1
+    clock[0] = 180
+    provider_resilience.refresh_published_circuit_gauges()
+    assert _gauge_value('modulate', 'selection') == 0
+    assert circuit.state == 'open'
+    assert circuit.allow_request()
+    assert not circuit.allow_request()  # single half-open admission unchanged
+
+
 def test_raising_refresh_iteration_does_not_stop_the_loop():
     # list(_published_breakers) itself can raise (a WeakSet mutated mid-iteration
     # surfaces as RuntimeError). The refresh thread is started once and never

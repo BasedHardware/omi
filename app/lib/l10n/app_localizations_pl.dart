@@ -4430,6 +4430,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get continueText => 'Kontynuuj';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Masz już subskrypcję. Zarządzaj obecną subskrypcją zamiast rozpoczynać nową.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Najpierw subskrybuj ponownie, aby zmienić plan.';
 
   @override
@@ -8613,6 +8617,9 @@ class AppLocalizationsPl extends AppLocalizations {
       'Transkrypcja jest niedostępna — nagrywanie trwa, a dźwięk jest zapisywany.';
 
   @override
+  String get captureNoAudioFromPendant => 'Brak dźwięku z wisiorka';
+
+  @override
   String get capturing => 'Rejestrowanie';
 
   @override
@@ -11121,6 +11128,12 @@ class AppLocalizationsPl extends AppLocalizations {
       'Połączenie Bluetooth z urządzeniem Omi się zawiesiło, więc dźwięk nie dociera do aplikacji. Omi nadal nagrywa na urządzeniu i zsynchronizuje się, gdy połączenie wróci. Ponowienie próby ponownie nawiązuje połączenie; jeśli nadal się nie udaje, sprawdź urządzenie w Ustawienia > Urządzenie.';
 
   @override
+  String get captureConnecting => 'Łączenie…';
+
+  @override
+  String get captureNoAudioDetail => 'Wisior jest połączony, ale żaden dźwięk nie dociera do Twojego telefonu';
+
+  @override
   String get captureIngressNeedsReconnect => 'Dźwięk nie dociera do aplikacji — połącz ponownie urządzenie Omi';
 
   @override
@@ -11149,13 +11162,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Pamięć prawie pełna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi połączy się ponownie samo';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12285,12 +12291,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Sprawdź połączenie';
-
-  @override
-  String get forYou => 'Dla Ciebie';
-
-  @override
-  String get stopThese => 'Zatrzymaj te';
 
   @override
   String get dismiss => 'Ukryj';
@@ -14459,6 +14459,25 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Bieżące notatki nie są aktualizowane. Na razie zobacz transkrypcję.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Nagrywanie · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Poprzedni odcinek';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Oczekujące fragmenty: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Otwórz poprzedni odcinek';
+
+  @override
   String get episodeNotesSoon => 'Notatki pojawią się po pierwszych minutach rozmowy.';
 
   @override
@@ -14595,4 +14614,34 @@ class AppLocalizationsPl extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Gotowe. $percent% rabatu przez kolejne $months miesiące.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Inni';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Gotowe';
+
+  @override
+  String get openLoopAnswerRemind => 'Przypomnij później';
+
+  @override
+  String get openLoopAnswerDrop => 'Odrzuć';
 }

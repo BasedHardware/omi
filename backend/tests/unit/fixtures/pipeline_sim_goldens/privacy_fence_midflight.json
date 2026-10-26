@@ -62,6 +62,7 @@
     "failure": "worker_failed",
     "fresh_capture": false,
     "late_capture": true,
+    "measured_held_vad_speech_seconds": 220.21,
     "merge_pending": false,
     "owner_id": "owner-2",
     "priority": 1,
@@ -91,6 +92,13 @@
     "worker_failure": {
      "reason": "empty_asr",
      "stage": "assemble_words"
+    },
+    "worker_vad_receipt": {
+     "captured_samples": 3523360,
+     "sample_rate_hz": 16000,
+     "speech_samples": 3523360,
+     "state": "measured",
+     "version": 1
     }
    },
    "final_result": {
@@ -262,6 +270,7 @@
     "failure": "worker_failed",
     "fresh_capture": false,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 494.07,
     "merge_pending": false,
     "owner_id": "owner-2",
     "priority": 1,
@@ -291,6 +300,13 @@
     "worker_failure": {
      "reason": "empty_asr",
      "stage": "assemble_words"
+    },
+    "worker_vad_receipt": {
+     "captured_samples": 7905120,
+     "sample_rate_hz": 16000,
+     "speech_samples": 7905120,
+     "state": "measured",
+     "version": 1
     }
    },
    "final_result": {
@@ -350,6 +366,7 @@
     "failure": "worker_failed",
     "fresh_capture": true,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 328.42,
     "merge_pending": false,
     "owner_id": "owner-2",
     "priority": 1,
@@ -379,6 +396,13 @@
     "worker_failure": {
      "reason": "empty_asr",
      "stage": "assemble_words"
+    },
+    "worker_vad_receipt": {
+     "captured_samples": 5254720,
+     "sample_rate_hz": 16000,
+     "speech_samples": 5254720,
+     "state": "measured",
+     "version": 1
     }
    },
    "final_result": {
@@ -438,6 +462,7 @@
     "failure": "worker_failed",
     "fresh_capture": true,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 547.49,
     "merge_pending": false,
     "owner_id": "owner-3",
     "priority": 0,
@@ -467,6 +492,13 @@
     "worker_failure": {
      "reason": "empty_asr",
      "stage": "assemble_words"
+    },
+    "worker_vad_receipt": {
+     "captured_samples": 8759840,
+     "sample_rate_hz": 16000,
+     "speech_samples": 8759840,
+     "state": "measured",
+     "version": 1
     }
    },
    "final_result": {

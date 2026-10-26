@@ -266,20 +266,50 @@ def runtime_manifest():
     return yaml.load(path.read_text(), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader))
 
 
-def test_train1_runtime_flags_are_on_only_for_prod_sync_hosts(runtime_manifest):
-    selected = {'backend-sync', 'backend-sync-backfill'}
-    switches = ('SYNC_REPROCESS_COALESCE_ENABLED', 'CONVERSATION_LLM_INPUT_DEDUPE_ENABLED')
+def test_exact_input_dedupe_and_coalesce_host_pinning(runtime_manifest):
+    prod_on = {
+        # C5 2026-10-26: byte-identical exact-input reuse extends past the sync
+        # pair; time-window coalescing stays sync-only, revision reuse stays off.
+        'SYNC_REPROCESS_COALESCE_ENABLED': {'backend-sync', 'backend-sync-backfill'},
+        'CONVERSATION_LLM_INPUT_DEDUPE_ENABLED': {
+            'backend',
+            'backend-sync',
+            'backend-sync-backfill',
+            'backend-integration',
+        },
+    }
     for stage, environment in runtime_manifest['environments'].items():
         for name, service in environment['cloud_run']['services'].items():
             env = service.get('env', {})
-            for switch in switches:
+            for switch, selected in prod_on.items():
                 enabled = str(env.get(switch, {}).get('value', 'false')).lower() == 'true'
                 assert enabled == (stage == 'prod' and name in selected), (stage, name, switch)
-            if name in selected:
+            if name in prod_on['SYNC_REPROCESS_COALESCE_ENABLED']:
                 assert env['SYNC_REPROCESS_SETTLE_SECONDS']['value'] == '600'
         for name, service in environment['gke'].items():
-            for switch in switches:
+            for switch in prod_on:
                 assert str(service.get('env', {}).get(switch, {}).get('value', 'false')).lower() != 'true'
+    import yaml
+    from pathlib import Path
+
+    listen_values = yaml.load(
+        (Path(__file__).resolve().parents[2] / 'charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text(),
+        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
+    )
+    listen_env = {entry['name']: entry.get('value') for entry in listen_values['env']}
+    assert listen_env['CONVERSATION_LLM_INPUT_DEDUPE_ENABLED'] == 'true'
+    assert listen_env['REPEAT_WORK_REVISION_ENABLED'] == 'false'
+    assert 'SYNC_REPROCESS_COALESCE_ENABLED' not in listen_env
+    # Pusher co-hosts conversation finalization with backend-listen; the
+    # co-host env-diff gate requires the reuse switch to move with it.
+    pusher_values = yaml.load(
+        (Path(__file__).resolve().parents[2] / 'charts/pusher/prod_omi_pusher_values.yaml').read_text(),
+        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
+    )
+    pusher_env = {entry['name']: entry.get('value') for entry in pusher_values['env']}
+    assert pusher_env['CONVERSATION_LLM_INPUT_DEDUPE_ENABLED'] == 'true'
+    assert pusher_env['REPEAT_WORK_REVISION_ENABLED'] == 'false'
+    assert 'SYNC_REPROCESS_COALESCE_ENABLED' not in pusher_env
 
 
 def test_expired_backfill_retirement_is_disabled_for_prod_sync_hosts(runtime_manifest):

@@ -47,6 +47,13 @@ def test_deepgram_is_retired_on_every_surface():
     assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.STREAMING)
     assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.PRERECORDED)
     assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.PTT)
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.HELD_RECOVERY)
+
+
+def test_soniox_async_is_limited_to_held_recovery():
+    assert provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
+    assert not provider_is_enabled('soniox', STTServingSurface.PRERECORDED)
+    assert not provider_is_enabled('soniox', STTServingSurface.PTT)
 
 
 def test_policy_owns_the_safe_model_order_for_every_serving_surface():

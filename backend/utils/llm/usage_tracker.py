@@ -299,3 +299,5 @@ class Features:
     WAKE_WORD_ADJUDICATION = "wake_word_adjudication"
     CONVERSATION_FOLDER = "conv_folder"
     CONVERSATION_APPS = "conv_apps"
+    OPEN_LOOP_CARD = "open_loop_card"
+    OPEN_LOOP_DAILY = "open_loop_daily"

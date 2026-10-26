@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
@@ -41,6 +42,11 @@ enum AuditLive { idle, pendant, pendantPaused, phone, phonePaused, phoneAfterPen
 
 /// A capture provider reporting one fixed live state, with a short transcript.
 class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
+  @override
+  LivePreviewController? get livePreview => null;
+  @override
+  bool get localPreviewAdmitted => false;
+
   AuditCaptureProvider(this.live);
   final AuditLive live;
   @override
@@ -48,6 +54,10 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
 
   @override
   bool get pendantCaptureVerified => true;
+  @override
+  bool get pendantCaptureActionRequired => false;
+  @override
+  bool get pendantReconnectInFlight => false;
 
   /// The outage variant: the pendant streams but the server said transcription cannot run.
   bool get _outage => live == AuditLive.pendantOutage;

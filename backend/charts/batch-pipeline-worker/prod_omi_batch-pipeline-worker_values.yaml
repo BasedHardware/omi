@@ -10,14 +10,19 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-# Fixed floor, no HPA. Each replica requests the one L4 on its own
-# g2-standard-8 node (pool cap 4). Leases, ordered merge and privacy
-# fences are durable per segment/owner; see two-worker emulator test.
-replicaCount: 2
+# Preserve the approved four-worker floor on image-only Helm rolls. Each
+# replica requests one L4; actual ready capacity still gates admission.
+# Higher ladder steps must explicitly reconcile their desired replica count
+# after a roll: the node-pool maximum alone does not create worker demand.
+# Leases, ordered merge and privacy fences stay durable per segment/owner.
+replicaCount: 4
 autoscaling:
   enabled: false
+# The null drops the base chart's pool pin: batch-pipeline-pool and its Spot
+# sibling share the service/env labels and omi.ai taints, so the autoscaler
+# can place replicas on Spot first while the on-demand pool stays the fallback.
 nodeSelector:
-  cloud.google.com/gke-nodepool: batch-pipeline-pool
+  cloud.google.com/gke-nodepool: null
   service: batch-pipeline
   env: prod
 tolerations:

@@ -72,6 +72,8 @@ CLOSED_HELPERS = frozenset(
         'utils.translation_core.metrics._bounded_reason',  # fixed skip-reason set else 'other'
         'utils.stt.local_send_diagnostics.bounded_local_send_provider',  # PROVIDERS (or enum .value) else 'other'
         'utils.episodes.metrics._label',  # value if in the given frozenset vocabulary else 'other'
+        'utils.stt.provider_resilience.circuit_trip_reason',  # fixed auth/quota/5xx/latency/no_text/connect/capacity groups else 'unknown'
+        'utils.other.audio_outbox_metrics.bounded_custody_failure_reason',  # CUSTODY_FAILURE_REASONS else 'other'
     }
 )
 

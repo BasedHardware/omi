@@ -50,6 +50,22 @@ flowchart LR
 
 ## Memory Creation Triggers
 
+### Authenticated backup integrations
+
+The pCloud backup service under development uses an opt-in authenticated plugin
+transport. Its setup links come from the authenticated Omi app-details response;
+a bare `uid` URL is not a login credential. Account-management forms require a
+verified session and CSRF token. Conversation deliveries are signed and admitted
+to durable jobs before acknowledgment; `202` means queued, not uploaded.
+
+Transcripts and saved audio require independent explicit consent. Backup status
+and retry are shared between mobile and desktop. Saved audio is read by canonical
+conversation identity, not reconstructed from unrelated raw-audio callbacks.
+See the [pCloud service setup and release checklist](https://github.com/BasedHardware/omi/tree/main/plugins/omi-pcloud-app).
+This does not change the existing unsigned protocol for unregistered integrations.
+
+### Conversation delivery
+
 These apps are activated when Omi creates a new memory, allowing you to process or store the data externally.
 
 <Note>

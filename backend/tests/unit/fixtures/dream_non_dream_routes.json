@@ -40,6 +40,8 @@
   "route.memory_l2_flex.model_config.001": "27a6e705c0fe08e4ba8d2ad0ec1f7cc3a7549a5296b22431a63c3500fa103764",
   "route.notifications.model_config.001": "12f294406846cf0e477ce48bbe0818a77135625660c3693bc7af44e2ceab1d87",
   "route.onboarding.model_config.001": "babc771c42ee4da55b9e7867203e8453d8fdd9dc4a4248b6fd0f7a099c8d36a5",
+  "route.open_loop_card.model_config.001": "96afc04bf9c3c9fde7370e750ab9e77ca5e6fe3f08dd2d9cdc1372054f7ec52e",
+  "route.open_loop_daily.model_config.001": "f5217e9e8d43d0073b81c642f3c2b042a0235ad3dcf25721f42ca616ff64c2e5",
   "route.openai-embeddings.embeddings.001": "2fa41bcd4885926848ba611466e6b0041fd63d9628216692d9e301d3b228f828",
   "route.openglass.model_config.001": "de9899f0957fff9cd9ea36a797c11f9830e0f3bbc38936c0c49e332ce2ce3e74",
   "route.persona_chat.model_config.001": "2be09a88db6cd819a0455370d2138bd1181c5dc5b2766cbcc5b16d0cd582467e",

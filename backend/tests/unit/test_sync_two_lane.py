@@ -367,14 +367,16 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert 'ops_train.py" render-env --env prod' in action
     # Dispatch concurrency must stay within max instances x concurrency: offering more
     # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
-    # back it off, which previously stranded recordings for hours. A warm
-    # instance keeps a scale-from-zero poke from being rejected outright.
-    assert '--min-instances=3' in action
+    # back it off, which previously stranded recordings for hours. 2026-10-24
+    # right-sizing (lead's live change 06:06Z): the worker idles at min 0; the
+    # bounded queue backoff absorbs scale-from-zero dispatch latency.
+    assert '--min-instances=0' in action
     assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in action
     assert '--max=${{ steps.live-max-scale.outputs.max_scale }}' in action
     assert '--concurrency=6' in action
     assert '--cpu=2' in action
-    assert '--memory=8Gi' in action
+    # 2026-10-24 right-sizing: prod worker 8->4 GiB (live 06:06Z); dev keeps 8 GiB.
+    assert "--memory=${{ inputs.project_id == 'based-hardware' && '4Gi' || '8Gi' }}" in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
     # Runtime ops owns the cap; both deploy paths preserve it rather than reset it.
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
@@ -1044,26 +1046,39 @@ def test_completion_transaction_accepts_success_and_expected_silence():
 
 
 def test_hourly_usage_increment_and_ledger_marker_share_one_transaction():
+    from tests.unit.fixtures.shadow_usage_firestore import Store
+
     transaction = _Transaction()
     marker_ref = _Ref({'status': 'processing'})
-    usage_ref = _Ref()
+    store = Store({'users/uid': {'synthetic': True}})
+    user_ref = store.collection('users').document('uid')
+    usage_ref = user_ref.collection('hourly_usage').document('2026-10-23-15')
+    update = {'id': '2026-10-23-15', 'transcription_seconds': firestore.Increment(5)}
 
     recorded = user_usage._update_hourly_usage_once_transaction.to_wrap(
         transaction,
         marker_ref,
         usage_ref,
-        {'transcription_seconds': 5},
+        update,
+        firestore_client=store,
     )
     duplicate = user_usage._update_hourly_usage_once_transaction.to_wrap(
         _Transaction(),
         _Ref({'usage_committed_at': datetime.now(timezone.utc)}),
         usage_ref,
-        {'transcription_seconds': 5},
+        update,
+        firestore_client=store,
     )
 
     assert recorded is True
-    assert len(transaction.writes) == 2
+    assert len(transaction.writes) == 3
     assert transaction.writes[0][1].get('usage_committed_at') is not None
+    assert transaction.writes[1][0] is usage_ref
+    total_ref, total_update, total_merge = transaction.writes[2]
+    assert total_ref.path == 'users/uid/monthly_usage_totals/2026-10'
+    assert total_update['totals']['transcription_seconds'] is update['transcription_seconds']
+    assert total_update['days']['23']['transcription_seconds'] is update['transcription_seconds']
+    assert total_merge is True
     assert duplicate is False
 
 

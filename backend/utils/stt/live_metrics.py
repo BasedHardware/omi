@@ -71,6 +71,13 @@ WINDOW_ADMISSION = Counter('omi_stt_window_admissions_total', 'Window admission 
 WINDOW_PRESSURE_REFRESH = Counter(
     'omi_stt_window_batch_pressure_refresh_total', 'Batch pressure fleet refresh outcomes', ['outcome']
 )
+WINDOW_PRESSURE_FETCH_FAILURE = Counter(
+    'omi_stt_window_batch_pressure_fetch_failures_total', 'Batch pressure fetch failures by bounded cause', ['cause']
+)
+WINDOW_PRESSURE_PROGRESS_TIME = Gauge(
+    'omi_stt_window_batch_pressure_progress_timestamp_seconds',
+    'Unix time of sampler start or last valid replica response; detects stalled pollers without admissions',
+)
 WINDOW_PRESSURE_REPLICAS = Gauge(
     'omi_stt_window_batch_pressure_replicas', 'Fresh and DNS-ready GPU replicas for window admission', ['state']
 )
@@ -78,6 +85,9 @@ WINDOW_PRESSURE_REFUSAL = Counter(
     'omi_stt_window_batch_pressure_refusals_total', 'Window batch pressure refusals', ['reason']
 )
 WINDOW_POSTS = Counter('omi_stt_window_posts_total', 'Window POST outcomes', ['outcome'])
+WINDOW_REPLICA_ATTEMPTS = Counter(
+    'omi_stt_window_replica_attempts_total', 'Direct GPU pod POST attempts with bounded causes', ['outcome']
+)
 WINDOW_LATENCY = Histogram('omi_stt_window_post_seconds', 'Window POST latency', buckets=(0.1, 0.5, 1, 2, 4, 8, 15))
 WINDOW_FIRST_TEXT = Histogram(
     'omi_stt_window_first_text_seconds',

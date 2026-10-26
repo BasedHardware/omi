@@ -423,6 +423,11 @@ class ServerConversation {
   // local label
   bool isNew = false;
 
+  /// Local, never serialized: the transcript was kept from an earlier detail read because a list
+  /// refresh carried none (see [keepingTranscriptOf]). It may be out of date, so the detail page
+  /// re-reads the conversation instead of trusting it.
+  bool transcriptCarried = false;
+
   ServerConversation({
     required this.id,
     required this.createdAt,
@@ -457,6 +462,52 @@ class ServerConversation {
     this.processingDeferred = false,
     this.captureCoverage,
   });
+
+  /// List rows omit transcript_segments ("unknown/not loaded, not an empty transcript"), while the
+  /// detail page loads the transcript once and reads it back from the provider's list. A refreshed
+  /// row with no transcript therefore keeps the one [loaded] already has. A locked row is redacted
+  /// on purpose and keeps nothing.
+  ServerConversation keepingTranscriptOf(ServerConversation? loaded) {
+    if (transcriptSegments.isNotEmpty || isLocked) return this;
+    if (loaded == null || loaded.transcriptSegments.isEmpty) return this;
+    return withTranscriptSegments(loaded.transcriptSegments)..transcriptCarried = true;
+  }
+
+  /// This conversation with [segments] as its transcript; every other field is carried over.
+  ServerConversation withTranscriptSegments(List<TranscriptSegment> segments) => ServerConversation(
+        id: id,
+        createdAt: createdAt,
+        onDeviceProvenance: onDeviceProvenance,
+        clientProcessing: clientProcessing,
+        structured: structured,
+        startedAt: startedAt,
+        finishedAt: finishedAt,
+        transcriptSegments: segments,
+        appResults: appResults,
+        suggestedSummarizationApps: suggestedSummarizationApps,
+        geolocation: geolocation,
+        photos: photos,
+        audioFiles: audioFiles,
+        conversationAudio: conversationAudio,
+        discarded: discarded,
+        deleted: deleted,
+        source: source,
+        language: language,
+        externalIntegration: externalIntegration,
+        calendarEvent: calendarEvent,
+        status: status,
+        isLocked: isLocked,
+        starred: starred,
+        folderId: folderId,
+        visibility: visibility,
+        siriVisibilityValid: siriVisibilityValid,
+        matchSnippets: matchSnippets,
+        captureGroup: captureGroup,
+        speakerResolution: speakerResolution,
+        summaryRetryable: summaryRetryable,
+        processingDeferred: processingDeferred,
+        captureCoverage: captureCoverage,
+      )..isNew = isNew;
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
     final normalized = Map<String, dynamic>.from(json);

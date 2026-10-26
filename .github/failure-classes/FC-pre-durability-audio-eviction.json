@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-pre-durability-audio-eviction",
+  "violated_contract": "Queue capacity, byte budgets, upload failure and pod loss must never retire the only uncommitted audio copy. A successful socket send or transcript commit is not durable audio custody.",
+  "canonical_prevention": "Commit unchanged audio and an immutable generation-pinned frame manifest before releasing custody. Queue bounded durable references, propagate storage pressure to the producer, retain failed/cancelled raw packs, and gate transcript acknowledgements and audio sends on the archive barrier. Issue separate audio-only receipts, reconcile source ranges/generations, and verify recovered playback bytes under fault injection.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_audio_durable_outbox.py",
+    "backend/tests/unit/utils/test_listen_pusher_session.py"
+  ],
+  "evidence_prs": [23542],
+  "scope_hints": [
+    "backend/routers/pusher.py",
+    "backend/utils/pusher_protocol.py",
+    "backend/utils/other/audio_outbox.py",
+    "backend/utils/other/live_audio_archive.py"
+  ],
+  "status": "open"
+}

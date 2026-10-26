@@ -47,6 +47,12 @@ class _Device extends ChangeNotifier implements DeviceProvider {
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
+  bool get pendantCaptureActionRequired => false;
+  @override
+  bool get pendantCaptureVerified => true;
+  @override
+  bool get pendantReconnectInFlight => false;
+  @override
   bool get isPaused => false;
   @override
   bool get havingRecordingDevice => false;
@@ -97,6 +103,16 @@ Wal _wal({int minutes = 180, WalStatus status = WalStatus.miss}) => Wal(
     codec: BleAudioCodec.opus,
     seconds: minutes * 60,
     status: status,
+    storage: WalStorage.sdcard,
+    device: 'omi');
+
+/// A pendant recording stamped before the device clock was ever set.
+final _unsetClockStart = DateTime(1985, 9, 5, 16, 17);
+Wal _unsetClockWal({int minutes = 1}) => Wal(
+    timerStart: _unsetClockStart.millisecondsSinceEpoch ~/ 1000,
+    codec: BleAudioCodec.opus,
+    seconds: minutes * 60,
+    status: WalStatus.miss,
     storage: WalStorage.sdcard,
     device: 'omi');
 
@@ -198,6 +214,48 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }
+
+  testWidgets('a never-set device clock cannot stretch the catch-up span to 1985', (tester) async {
+    await pump(tester, _Sync(wals: [_unsetClockWal(), _wal(minutes: 180)]));
+    expect(find.text('Catching up'), findsOneWidget);
+    final span = tester.widget<Text>(find.byKey(const Key('device_catching_up_span')));
+    expect(span.data, contains('11'));
+    expect(span.data, isNot(contains('1985')));
+    expect(span.data, isNot(contains('Sep 5')));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a never-set clock recording alone keeps the card but shows no span', (tester) async {
+    await pump(tester, _Sync(wals: [_unsetClockWal()]));
+    expect(find.text('Catching up'), findsOneWidget);
+    expect(find.byKey(const Key('device_catching_up_span')), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('server work stamped before 2024 keeps its card and targets without a 1985 span', (tester) async {
+    final item = PendingWorkItem(
+        id: 'sync:j',
+        kind: 'sync_job',
+        state: 'transcribing',
+        conversationIds: ['a'],
+        startedAt: _unsetClockStart,
+        durationSeconds: 720);
+    final store = await pump(tester, _Sync(), pending: [
+      item
+    ], conversations: [
+      ServerConversation(
+          id: 'a',
+          createdAt: _unsetClockStart,
+          structured: Structured('Before its clock was set', ''),
+          status: ConversationStatus.completed),
+    ]);
+    await store.refresh();
+    await tester.pump();
+    expect(find.text('Catching up'), findsOneWidget);
+    expect(find.byKey(const Key('device_catching_up_span')), findsNothing);
+    expect(find.text('1 conversation · Before its clock was set'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('catch-up clears when local work finishes; terminal failures do not masquerade as progress',
       (tester) async {

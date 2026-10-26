@@ -209,6 +209,10 @@ sweep and legacy playback/enrichment. D checks account/source deletion,
 protection and generation inside each mutation transaction. Encrypted,
 owner-bound, generation-pinned objects have a pre-upload deletion outbox.
 Completion-only retention never expires pending work.
+The optional sync-off `voice_evidence` artifact is an explicit exception:
+[ADR-0004 retention](batch-voice-evidence-retention.md) enforces a capture-based
+24h deadline even for pending work, shortened to completion +1h. It contains no
+audio and never extends accepted-audio retention or incident preservation.
 
 ## Capacity and autoscaling
 
@@ -225,6 +229,68 @@ wait, transition rates/jobs per second, and GPU utilization/headroom. No owner
 labels. Autoscale on ready-age with fresh/recent/deep targets 30/300/3600 seconds;
 reject stale samples. B's dedicated chart documents the external-metric HPA.
 CPU is not the scale signal; non-preemptible batch latency still needs bounds.
+
+## Stage profiling (metrics-only)
+
+`BATCH_PIPELINE_STAGE_PROFILING_ENABLED` gates the dedicated runtime's
+`omi_batch_pipeline_stage_seconds{stage=...}` wall-clock histogram. Default on
+only when `OMI_ENV_STAGE=dev`; prod and an unset stage stay off, and an explicit
+`true`/`false` (1/0, on/off, yes/no; malformed values fall back to the stage
+default) overrides, so local/offline can opt in. The histogram is created once
+at worker startup on the worker's own explicit `CollectorRegistry` — the same
+`/metrics` endpoint as the queue gauges — and a disabled or unwired
+`StageTimings` instance is a pure pass-through: no runtime behavior, precision,
+or concurrency change, and no scrape difference outside dev.
+
+Pump-side stages: `pump_cycle` (one full maintain+flight pass), `maintenance`
+(expired-lease recovery, result_ready sweep, hold pages, leader lease),
+`pull` (the claim transaction), `admission` (compute-admission authorization),
+`renew` (lease heartbeat rechecks), `publication` (every lease-fenced scheduler
+transition: defer/fail/complete/release), `ordered_merge` (per-owner commits),
+`projection` (pending projection and on-committed callbacks), and
+`worker_flight` (executor wait plus the whole GPU chain, including its CUDA
+quiescence `cuda_sync`). The pump's GPU-slot wait precedes `worker_flight`
+and is included only in its parent `pump_cycle`, not the worker timer.
+Worker-chain leaves: `fetch_decode` (download+decrypt+decode of one unit),
+`vad`, `windows` (speech window assembly), `asr` (batched `transcribe_batch`),
+`asr_recovery` (the padded retry, including cap-dispatch callbacks),
+`flight_segment`/`flight_diarize` (packed pyannote segmentation and packed
+embedding+clustering passes), `diarize` (serial per-unit diarization including
+speech compaction), `persist` (encrypt+upload), `cuda_sync` (the pre-existing
+final synchronize; profiling adds no new GPU synchronization).
+
+Timings include failed operations and executor wait; a prefetched fetch/decode
+and a submitted persist are measured where they execute (background IO threads),
+not at the later consuming wait. `pump_cycle` contains the whole pass and
+`worker_flight` contains the worker leaves and CUDA synchronization: never add
+parent and child sums. `asr`, `asr_recovery` and the packed flight stages are
+batched across windows/units of several leased jobs, so one observation is not
+one lease: divide a stage's `_sum` rate by the worker-scoped leased-event rate
+(`omi_batch_pipeline_events_total{event="leased"}`) for an amortized
+seconds-per-leased-job view, and use `_count` for per-call means. Model leaves
+measure host-observed wall time, not isolated CUDA kernel occupancy. Speaker
+embedding is timed at pyannote's existing `get_embeddings` hook (`embedding`),
+and at the shared-trunk packed forward (`flight_embedding`). The latter is
+nested inside `embedding` on a speech-only shared-trunk call; never add them.
+Full-unit packed calls may compute `flight_embedding` before cached per-unit
+hook reads. Both are children of diarization, not additional critical-path time.
+The worker also exposes `download_metadata`, `download`, `decrypt`, `decode`,
+`encrypt`, `artifact_register` and `upload` on the actual artifact IO thread.
+Download metadata is a separate GCS request. Encryption/upload/registration are
+children of `persist`; download/decrypt/decode are children of `fetch_decode`.
+Outside the dedicated worker's active context these artifact timers are no-ops.
+Retained-audio manifests also time each generation-pinned source download,
+framed decryption and codec decode/resample. One lease may contain several
+source objects, so these leaf percentiles are per operation, not per lease.
+Per-call p50/p95 for batched stages are batch percentiles; dividing them by
+batch size does not produce per-lease percentiles. Use the summed-time/leased
+count normalization above for amortized per-lease cost.
+Unattributed worker time includes validation, packing, policy callbacks, the
+live-reuse lookup, silence inspection and left-context assembly. Optional or
+skipped stages (silence units, packed-flight fallbacks, recovery paths not
+taken) emit no samples. No owner, segment, URI, or exception labels exist, and
+a telemetry failure (clock or observe) is swallowed: it can never invalidate
+compute or a durable transition.
 
 ## Flags, rollout and rollback
 

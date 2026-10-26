@@ -31,8 +31,8 @@ def evidence_store(monkeypatch):
     return rows
 
 
-@pytest.mark.parametrize('mode,expected', [('off', 0), ('shadow', 0), ('serve', 4)])
-def test_one_batch_scope_only_blocks_legacy_path(env, monkeypatch, evidence_store, mode, expected):
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+def test_batch_linking_is_independent_of_evidence_mode(env, monkeypatch, evidence_store, mode):
     _, diarizer = env
     monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', mode)
     monkeypatch.setenv('SPEAKER_EVIDENCE_MODE_SERVE_PERCENT', '0')
@@ -46,20 +46,14 @@ def test_one_batch_scope_only_blocks_legacy_path(env, monkeypatch, evidence_stor
         'end': STARTED.timestamp() + tail.end,
     }
     stage.resolve_speakers_for_processing(str(uuid.uuid4()), conversation)
-    assert diarizer.calls == expected
-    if mode == 'shadow':
-        assert evidence_store[-1].abstentions == [
-            'batch_authoritative',
-            'no_compatible_centroid',
-            'no_voice_evidence',
-            'owner_unanchored',
-        ]
-    if mode == 'serve':
+    assert diarizer.calls == 4
+    if mode != 'off':
         assert len(evidence_store[-1].clusters) == 2
         assert conversation.speaker_resolution.status == 'resolved'
 
 
 def test_batch_diagnostic_reason_is_truthful_unflagged(env, monkeypatch):
+    monkeypatch.setenv('BATCH_CONVERSATION_SPEAKERS_ENABLED', 'false')
     monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'off')
     reasons = []
     monkeypatch.setattr(stage.owner_diagnostics, 'resolver_reason', reasons.append)
@@ -113,6 +107,7 @@ def test_unproven_batch_scope_stays_anonymous_beside_resolved_sync(env, monkeypa
     plan = [0, 1, 0, 1]
     _install_audio(monkeypatch, plan)
     conversation = _conversation(plan, scopes=['sync:a', 'sync:b', 'sync:c', 'final:batch:d'])
+    conversation.transcript_segments[-1].audio_alignment = 'unplaced'
     stage.resolve_speakers_for_processing(str(uuid.uuid4()), conversation)
     assert diarizer.calls == 3
     assert evidence_store[-1].status == 'partial'
@@ -121,7 +116,7 @@ def test_unproven_batch_scope_stays_anonymous_beside_resolved_sync(env, monkeypa
     assert not conversation.transcript_segments[-1].is_user
 
 
-def test_all_batch_with_compatible_windows_can_resolve_even_with_authoritative_flag(env, monkeypatch, evidence_store):
+def test_all_batch_with_compatible_windows_preserves_distinct_pyannote_labels(env, monkeypatch, evidence_store):
     monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'serve')
     monkeypatch.setattr(stage, 'authoritative_for', lambda _: True)
     plan = [0, 1, 0, 1]
@@ -135,13 +130,12 @@ def test_all_batch_with_compatible_windows_can_resolve_even_with_authoritative_f
         }
     stage.resolve_speakers_for_processing(str(uuid.uuid4()), conversation)
     assert evidence_store[-1].status == 'resolved'
-    assert len(evidence_store[-1].clusters) == 2
+    assert len(evidence_store[-1].clusters) == 4
 
 
-@pytest.mark.parametrize(
-    'mode,window_start,allowed', [('shadow', 0.0, False), ('serve', 0.0, True), ('serve', 11.0, False)]
-)
-def test_decoded_overlap_refuses_only_affected_windows_in_serve(monkeypatch, mode, window_start, allowed):
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+@pytest.mark.parametrize('window_start,allowed', [(0.0, True), (11.0, False)])
+def test_decoded_overlap_refuses_only_affected_windows_in_all_modes(monkeypatch, mode, window_start, allowed):
     from types import SimpleNamespace
     from utils.conversations.audio_placement import AudioPlacement
 
@@ -174,3 +168,5 @@ def test_decoded_overlap_refuses_only_affected_windows_in_serve(monkeypatch, mod
         str(uuid.uuid4()), _conversation([0]), files, [segment], placements, float('inf')
     )
     assert (result is session) is allowed
+    if allowed:
+        assert result.verified_segment_ids == {segment.id}

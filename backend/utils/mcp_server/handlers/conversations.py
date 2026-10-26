@@ -46,6 +46,7 @@ from utils.mcp_server.errors import ToolExecutionError, raise_conversation_index
 from utils.mcp_server.helpers import (
     bounded_transcript_segments,
     conversation_card,
+    public_transcript_timing,
     select_card_fields,
 )
 from utils.mcp_server.payloads import tool_response_serialized_chars
@@ -577,7 +578,7 @@ def search_conversations(
                 or []
             )
         card = conversation_card(conv)
-        card["match_snippets"] = snippets
+        card["match_snippets"] = [public_transcript_timing(snippet) for snippet in snippets]
         results.append(select_card_fields(card, arguments.get("fields")))
 
     return localize_timestamps(

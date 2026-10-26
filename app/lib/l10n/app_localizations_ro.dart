@@ -4444,6 +4444,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get continueText => 'Continuă';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Ai deja un abonament. Gestionează abonamentul actual în loc să începi unul nou.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Reabonează-te mai întâi ca să schimbi planul.';
 
   @override
@@ -8635,6 +8639,9 @@ class AppLocalizationsRo extends AppLocalizations {
       'Transcrierea nu este disponibilă — înregistrarea continuă, iar audio-ul tău este salvat.';
 
   @override
+  String get captureNoAudioFromPendant => 'Niciun sunet de la pandantiv';
+
+  @override
   String get capturing => 'Se capturează';
 
   @override
@@ -11138,6 +11145,12 @@ class AppLocalizationsRo extends AppLocalizations {
       'Legătura Bluetooth cu Omi-ul tău s-a blocat, deci audioul nu mai ajunge în aplicație. Omi continuă să înregistreze pe dispozitiv și se va sincroniza când legătura revine. Reîncercarea reconectează legătura; dacă continuă să eșueze, verifică dispozitivul în Setări > Dispozitiv.';
 
   @override
+  String get captureConnecting => 'Se conectează…';
+
+  @override
+  String get captureNoAudioDetail => 'Pandantivul este conectat, dar niciun audio nu ajunge la telefonul tău';
+
+  @override
   String get captureIngressNeedsReconnect => 'Audio nu ajunge la aplicație — reconectați-vă Omi';
 
   @override
@@ -11166,13 +11179,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Spațiul e aproape plin';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi se va reconecta singur';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12304,12 +12310,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Verificați conexiunea';
-
-  @override
-  String get forYou => 'Pentru tine';
-
-  @override
-  String get stopThese => 'Oprește acestea';
 
   @override
   String get dismiss => 'Ascunde';
@@ -14478,6 +14478,25 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Notițele live nu se actualizează. Consultați transcrierea deocamdată.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Înregistrare · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episodul anterior';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Fragmente în așteptare: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Deschide episodul anterior';
+
+  @override
   String get episodeNotesSoon => 'Notițele apar după primele minute de conversație.';
 
   @override
@@ -14614,4 +14633,34 @@ class AppLocalizationsRo extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Gata. $percent% reducere în următoarele $months luni.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Alții';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Gata';
+
+  @override
+  String get openLoopAnswerRemind => 'Amintește-mi mai târziu';
+
+  @override
+  String get openLoopAnswerDrop => 'Renunță';
 }

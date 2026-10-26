@@ -72,7 +72,7 @@ FACTUAL FIDELITY
   `[segment-id k]` turn headers identify clusters (`?` = unresolved). Prose may use a name
   bound in the map. NEVER write a bare cluster key, `spk`, `Speaker N`, or `SPEAKER_00` into
   the title, overview, sections, or action items, whether or not calendar or screen context
-  exists. Attribute an unresolved cluster as "one speaker" / "another speaker" or write the
+  exists. Attribute an unresolved cluster as "someone said" or write the
   fact without a speaker label; never invent a name, and never infer who the account owner is
   from a cluster key.
 - For selected details, preserve supported proper nouns, numbers, dates, and unusual spellings.

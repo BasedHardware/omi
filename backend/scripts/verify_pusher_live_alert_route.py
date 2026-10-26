@@ -69,6 +69,7 @@ LIVE_STT_IMPORT_UIDS = (
     "omi-stt-provider-terminal-failure-ratio",
     "omi-stt-chain-exhausted-ratio",
     "omi-stt-no-full-stage-target",
+    "omi-stt-pressure-sampler-stuck",
 )
 DATASOURCE_CANARY_UIDS = ("omi-datasource-prometheus", "omi-datasource-cloud-monitoring")
 REDIS_CACHE_IMPORT_UIDS = ("omi-redis-cache-conn-warn", "omi-redis-cache-conn-page")
@@ -110,6 +111,8 @@ GRAFANA_ASSIGNED_MODEL_DEFAULTS = {"intervalMs": 1000, "maxDataPoints": 43200}
 SINGLE_RULE_SIZE_LIMIT = 1_000_000
 FLEET_LIST_SIZE_LIMIT = 4_000_000
 ALERT_RULE_LIST_PATH = "/api/v1/provisioning/alert-rules"
+MUTE_TIMING_PATH = "/api/v1/provisioning/mute-timings"
+MUTE_TIMINGS_FILE = ROOT / "backend/charts/monitoring/mute-timings.json"
 
 
 class AlertRouteError(ValueError):
@@ -136,7 +139,9 @@ def _token(path: Path) -> str:
     return value
 
 
-def _request_json(base_url: str, path: str, token: str, *, size_limit: int = SINGLE_RULE_SIZE_LIMIT) -> Any:
+def _request_json(
+    base_url: str, path: str, token: str, *, size_limit: int = SINGLE_RULE_SIZE_LIMIT, allow_missing: bool = False
+) -> Any:
     url = base_url.rstrip("/") + path
     request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
     try:
@@ -148,6 +153,8 @@ def _request_json(base_url: str, path: str, token: str, *, size_limit: int = SIN
         # revoked token (401) — two failures with completely different owners and fixes.
         # Status and reason phrase only: the response body can carry Grafana detail we do
         # not want in a public log.
+        if allow_missing and exc.code == 404:
+            return None
         raise AlertRouteError(f"Grafana API request failed for {path}: HTTP {exc.code} {exc.reason}") from exc
     except urllib.error.URLError as exc:
         # Subclass of OSError, superclass of HTTPError, so it has to sit between the two.
@@ -184,6 +191,155 @@ def _write_rule(base_url: str, uid: str, rule: dict[str, Any], token: str, *, ex
         raise AlertRouteError(f"Grafana API request failed for {path}: URLError {exc.reason}") from exc
     except OSError as exc:
         raise AlertRouteError(f"Grafana API request failed for {path}: {type(exc).__name__}") from exc
+
+
+def _create_mute_timing(base_url: str, timing: dict[str, Any], token: str) -> None:
+    # Name the timing in failures: the collection path alone could not say
+    # which interval Grafana refused (the 2026-10-25 HTTP 400 on the first
+    # merge attempt pointed only at /mute-timings).
+    name = timing.get("name")
+    label = name if isinstance(name, str) and name else "unnamed"
+    detail = f"{MUTE_TIMING_PATH}/{label}"
+    request = urllib.request.Request(
+        base_url.rstrip("/") + MUTE_TIMING_PATH,
+        data=json.dumps(timing, separators=(",", ":")).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            response.read(SINGLE_RULE_SIZE_LIMIT + 1)
+    except urllib.error.HTTPError as exc:
+        raise AlertRouteError(f"Grafana API request failed for {detail}: HTTP {exc.code} {exc.reason}") from exc
+    except urllib.error.URLError as exc:
+        raise AlertRouteError(f"Grafana API request failed for {detail}: URLError {exc.reason}") from exc
+    except OSError as exc:
+        raise AlertRouteError(f"Grafana API request failed for {detail}: {type(exc).__name__}") from exc
+
+
+def load_committed_mute_timings() -> dict[str, dict[str, Any]]:
+    loaded: object = json.loads(MUTE_TIMINGS_FILE.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict) or not isinstance(loaded.get("mute_timings"), list):
+        raise AlertRouteError("committed mute timing file must be an object with a mute_timings list")
+    timings: dict[str, dict[str, Any]] = {}
+    for item in loaded["mute_timings"]:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str) or not item["name"]:
+            raise AlertRouteError("committed mute timing entries must carry a non-empty name")
+        if item["name"] in timings:
+            raise AlertRouteError(f"committed mute timing {item['name']} is declared twice")
+        if not isinstance(item.get("time_intervals"), list) or not item["time_intervals"]:
+            raise AlertRouteError(f"committed mute timing {item['name']} has no time_intervals")
+        timings[item["name"]] = item
+    return timings
+
+
+def _referenced_mute_timings(rules: dict[str, dict[str, Any]]) -> tuple[str, ...]:
+    names: set[str] = set()
+    for rule in rules.values():
+        settings = rule.get("notification_settings")
+        referenced = settings.get("mute_time_intervals") if isinstance(settings, dict) else None
+        if isinstance(referenced, list):
+            names.update(name for name in referenced if isinstance(name, str) and name)
+    return tuple(sorted(names))
+
+
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+_ALL_DAY_TIMES = frozenset((("00:00", "24:00"),))
+# Calendar selectors with no enumerable "full" form (years are unbounded, and
+# days_of_month mixes ranges with negatives). They restrict the window when
+# present, so absent-on-both-sides matches and any value on either side alone
+# is a real difference.
+_CALENDAR_SELECTORS = ("days_of_month", "months", "years")
+
+
+def _calendar_selector(interval: dict[str, Any], key: str) -> tuple[str, ...]:
+    values = interval.get(key)
+    if not isinstance(values, list):
+        return ()
+    return tuple(sorted(str(value) for value in values))
+
+
+def _mute_timing_signature(timing: dict[str, Any]) -> tuple:
+    """Order-insensitive mute window, with Grafana's omissions normalized.
+
+    An interval that omits ``weekdays`` or ``times`` covers every day or the
+    whole day respectively — the shape the UI writes for an always-on mute —
+    so it must equal the explicitly enumerated committed form. The calendar
+    selectors (``days_of_month``, ``months``, ``years``) are compared as
+    provided: absent on both sides is the same unrestricted window, any value
+    on either side alone narrows it. Anything else (narrower weekdays,
+    business-hours times, a non-UTC location) stays a real difference and
+    fails the drift comparison.
+    """
+
+    intervals = timing.get("time_intervals")
+    items: set[tuple] = set()
+    if isinstance(intervals, list):
+        for interval in intervals:
+            if not isinstance(interval, dict):
+                return ("invalid",)
+            weekdays = interval.get("weekdays")
+            if not isinstance(weekdays, list) or not weekdays:
+                weekdays = list(_WEEKDAYS)
+            times = interval.get("times")
+            normalized_times: set[tuple[str, str]] = set()
+            if isinstance(times, list) and times:
+                for time_range in times:
+                    if isinstance(time_range, dict):
+                        begin = time_range.get("begin_time")
+                        end = time_range.get("end_time")
+                        if isinstance(begin, str) and isinstance(end, str):
+                            normalized_times.add((begin, end))
+            if not normalized_times:
+                normalized_times = set(_ALL_DAY_TIMES)
+            location = interval.get("location")
+            # Grafana falls back to the server time zone when the interval omits
+            # location; both Grafana instances run UTC, so an omitted location is
+            # the same window as an explicit UTC.
+            if not isinstance(location, str) or location.strip() in ("", "UTC"):
+                location = "UTC"
+            items.add(
+                (
+                    tuple(sorted(weekdays)),
+                    tuple(sorted(normalized_times)),
+                    location,
+                    *(_calendar_selector(interval, key) for key in _CALENDAR_SELECTORS),
+                )
+            )
+    return tuple(sorted(items))
+
+
+def _ensure_mute_timings(base_url: str, rules: dict[str, dict[str, Any]], token: str) -> None:
+    # Grafana rejects a rule whose notification_settings name a mute timing it
+    # does not know, and it answers that validation failure with HTTP 500 on
+    # the rule upsert — not a 4xx naming the interval. On 2026-10-25 the dev
+    # import died that way on its first rule (#23590 shipped rules muted by
+    # omi-tier-silent, which existed only in prod), every following rule was
+    # skipped, and pusher dev qualification went red on label drift. Establish
+    # every referenced timing before the first rule write. A live timing is
+    # never overwritten (prod's predates this file), but its window must equal
+    # the committed one: a drifted narrower mute would let agent-tier rules
+    # page Telegram outside the intended silence.
+    committed = load_committed_mute_timings()
+    for name in _referenced_mute_timings(rules):
+        if name not in committed:
+            raise AlertRouteError(
+                f"alert rules reference mute timing {name} with no committed definition; refusing to import"
+            )
+        path = f"{MUTE_TIMING_PATH}/{urllib.parse.quote(name, safe='')}"
+        live = _request_json(base_url, path, token, allow_missing=True)
+        if live is not None:
+            if not isinstance(live, dict) or _mute_timing_signature(live) != _mute_timing_signature(committed[name]):
+                raise AlertRouteError(f"live mute timing {name} differs from the committed definition")
+            continue
+        _create_mute_timing(base_url, committed[name], token)
+        if _request_json(base_url, path, token, allow_missing=True) is None:
+            raise AlertRouteError(f"mute timing {name} did not become readable after creation")
+        print(f"CREATED mute timing {name}")
 
 
 def load_live_stt_import_rules(*, production: bool = True) -> dict[str, dict[str, Any]]:
@@ -251,6 +407,7 @@ def _run_live_stt_import(grafana_url: str, token: str) -> list[str]:
     contacts = _request_json(grafana_url, "/api/v1/provisioning/contact-points", token)
     if not _has_telegram_receiver(contacts, TELEGRAM_RECEIVER):
         return ["verified Telegram alert receiver is missing or resolve notifications are disabled"]
+    _ensure_mute_timings(grafana_url, rules, token)
     # Establish and read back the replacement pages before KeepLast reaches any
     # business rule. The GMP canary belongs to its separately deployed datasource.
     for uid in canary_uids:

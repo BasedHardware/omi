@@ -572,6 +572,43 @@ def test_cold_start_arbitrates_voices_without_retuning_recall(scores, owner):
 
 
 @pytest.mark.parametrize(
+    'scope,seconds,reserved,accepted',
+    [
+        ('b', 2.0, False, True),
+        ('b', 4.99, False, True),
+        ('b', 5.0, False, False),
+        ('a', 2.0, False, False),
+        ('', 2.0, False, False),
+        ('b', float('nan'), False, False),
+        ('b', 2.0, True, False),
+    ],
+)
+def test_provisional_owner_competition_requires_known_different_scopes(scope, seconds, reserved, accepted):
+    rows = {0: {'user': 0.2}, 5: {'user': 0.2}}
+    decisions = arbitrate_owner_matches(
+        rows,
+        {v: select_speaker_match(row) for v, row in rows.items()},
+        voice_groups={0: 0, 5: 5},
+        voice_scopes={0: 'a', 5: scope},
+        evidence_seconds={0: 6.0, 5: seconds},
+        owner_reserved=reserved,
+    )
+    assert all(d.accepted is accepted for d in decisions.values())
+
+
+def test_short_voice_competes_with_every_same_scope_member_of_an_owner_group():
+    rows = {v: {'user': 0.2} for v in (0, 5, 6)}
+    decisions = arbitrate_owner_matches(
+        rows,
+        {v: select_speaker_match(row) for v, row in rows.items()},
+        voice_groups={0: 0, 5: 0, 6: 6},
+        voice_scopes={0: 'a', 5: 'b', 6: 'b'},
+        evidence_seconds={0: 6.0, 5: 5.0, 6: 2.0},
+    )
+    assert all(d.owner_contended and not d.accepted for d in decisions.values())
+
+
+@pytest.mark.parametrize(
     'status', [SpeakerIdentityStatus.no_match, SpeakerIdentityStatus.ambiguous, SpeakerIdentityStatus.unknown]
 )
 @pytest.mark.parametrize(

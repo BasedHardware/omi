@@ -24,8 +24,30 @@ from utils.capture_evidence import (
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.stt.outcomes import TranscriptionOutcome
+from utils.sync.assignment_telemetry import CREATED_UNKNOWN_REASONS
 
 logger = logging.getLogger(__name__)
+
+
+def log_sync_lineage_created(observation: dict) -> None:
+    """One id-free gate-3 observation after a successful assignment commit."""
+    try:
+        suffix = ''
+        if observation['outcome'] == 'created_unknown':
+            reason = observation.get('incomplete_reason')
+            if reason not in CREATED_UNKNOWN_REASONS:
+                reason = 'not_recorded'
+            suffix = f' incomplete_reason={reason}'
+        logger.info(
+            'event=sync_lineage_resolve outcome=%s stage=assignment '
+            'checked_live_candidates_bucket=%s lookup_complete=%s%s',
+            observation['outcome'],
+            observation['checked_live_candidates_bucket'],
+            str(observation['lookup_complete']).lower(),
+            suffix,
+        )
+    except Exception:
+        pass
 
 
 def acknowledge_processed_segment(
@@ -149,6 +171,7 @@ def complete_sync_intake(
     finish: Callable,
     mark_finalize: Callable[[], None],
     acknowledge: Callable[[], None],
+    attach_episode: Optional[Callable[[str, str, dict], str]] = None,
 ) -> str:
     """Enroll the intake result, store audio, run enrichment and log telemetry.
 
@@ -157,6 +180,9 @@ def complete_sync_intake(
     ``finish`` or the response. ``store_audio`` receives the canonical id and
     decides itself whether anything is uploaded; ``mark_finalize`` and
     ``acknowledge`` keep the caller's phase and outcome bookkeeping order.
+    ``attach_episode``, when handed in, joins the landed row to the live
+    episode covering it before anything downstream can fail; it never raises
+    and never changes the intake result.
     """
     repeat_only = bool(assigned.pop('_sync_lineage_repeat_only', False))
     completion_pending = bool(assigned.pop('_sync_lineage_completion_pending', False))
@@ -182,6 +208,10 @@ def complete_sync_intake(
         log_sync_lineage_stamp_append(stamp_bucket)
     if stamp_gap_refused:
         log_sync_lineage_stamp_gap_refused()
+    if attach_episode is not None and (not repeat_only or existing_completion):
+        # The row is visible in Home from this moment; fold it under the live
+        # episode before audio storage or enrichment can stall behind it.
+        attach_episode(uid, conversation_id, assigned)
     store_audio(conversation_id)
     mark_finalize()
     if not repeat_only or existing_completion:

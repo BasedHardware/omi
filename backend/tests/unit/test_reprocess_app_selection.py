@@ -283,6 +283,30 @@ def test_stored_derived_effects_digest_reaches_processing_unless_the_row_was_hid
 
 
 @pytest.mark.parametrize(
+    'discarded,stored_keep,expected', [(True, False, True), (False, True, True), (False, False, False)]
+)
+def test_http_reprocess_passes_explicit_restore_and_persisted_keep_to_classification(discarded, stored_keep, expected):
+    model, _p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
+    row = {'id': 'c1', 'status': 'completed', 'discarded': discarded, 'sync_relevance_user_kept': stored_keep}
+    model.discarded = False
+    model.sync_relevance = 'review'
+    with (
+        patch.object(conv_router, '_get_valid_conversation_by_id', return_value=row),
+        p2,
+        p3,
+        p4,
+        p5,
+        p6,
+        process_patch as process,
+        patch.object(conv_router.lifecycle_service, 'restore_discarded', return_value=True) as restore,
+    ):
+        result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
+    assert result is model
+    assert process.call_args.kwargs['user_kept'] is expected
+    assert restore.call_count == int(discarded)
+
+
+@pytest.mark.parametrize(
     ('app_id', 'overview', 'apps_results', 'expected'),
     [
         (None, 'Omi notes', [], 'succeeded'),
@@ -351,8 +375,9 @@ def test_hydrate_suggested_app_adds_user_specific_fields(monkeypatch):
     monkeypatch.setattr(
         conv_router, 'get_app_thumbnail_url', lambda thumbnail_id: f'https://cdn.example/{thumbnail_id}'
     )
-    with patch('utils.apps.get_available_app_by_id_with_reviews', return_value=dict(app_data)), patch(
-        'utils.apps.get_is_user_paid_app', return_value=True
+    with (
+        patch('utils.apps.get_available_app_by_id_with_reviews', return_value=dict(app_data)),
+        patch('utils.apps.get_is_user_paid_app', return_value=True),
     ):
         app = conv_router._hydrate_suggested_app('good', 'u1')
     with patch('utils.apps.get_available_app_by_id_with_reviews', return_value=None):

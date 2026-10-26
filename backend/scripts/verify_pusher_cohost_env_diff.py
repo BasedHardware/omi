@@ -178,7 +178,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
             "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
-            "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
             "MEMORY_TYPESENSE_COLLECTION",
             "OMI_FIRESTORE_DATA_PLANE_PROJECT",
             "OMI_PARITY_PACK_ALLOWED_PRINCIPALS",
@@ -235,9 +234,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
             "PARAKEET_WINDOW_PACE_SECONDS",
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
-            # Pusher runs keyless on Workload Identity; listen still mounts the nik-164 key until
-            # its own cut-over (credential hygiene D4 phase 2), which removes this entry.
-            "SERVICE_ACCOUNT_JSON",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
@@ -285,7 +281,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "FAIR_USE_WEEKLY_SPEECH_MS",
             "GCP_LOCATION",
             "GEMINI_API_KEY",
-            "GOOGLE_APPLICATION_CREDENTIALS",
             "HOSTED_PUSHER_API_URL",
             "HOSTED_TRANSLATION_API_URL",
             "HOSTED_VAD_API_URL",
@@ -295,7 +290,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MCP_OAUTH_CLIENTS_JSON",
-            "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
             "MEMORY_TYPESENSE_COLLECTION",
             "MEMORY_V3_CURSOR_SECRET",
             "OMI_FIRESTORE_DATA_PLANE_PROJECT",

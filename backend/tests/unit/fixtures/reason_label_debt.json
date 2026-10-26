@@ -233,6 +233,14 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "utils/batch_pipeline/gpu_skip_metrics.py",
+      "function": "record_unit_diarization",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "batch FP32 flight parity gate (2026-10-25); outcome validated against the UNIT_OUTCOMES frozenset before the call"
+    },
+    {
       "path": "utils/conversations/action_item_extraction.py",
       "function": "filter_extracted_items",
       "label": "reason",

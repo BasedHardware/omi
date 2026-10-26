@@ -165,24 +165,62 @@ def test_merge_rejects_duplicate_ids_in_mixed_list(conv):
     assert "duplicate" in exc_info.value.detail.lower()
 
 
-def test_merge_cas_loss_restores_prior_claims_without_scheduling_work(conv, monkeypatch):
+def test_merge_atomic_admission_loss_schedules_nothing(conv, monkeypatch):
     from models.conversation import MergeConversationsRequest
     from starlette.background import BackgroundTasks
     from unittest.mock import Mock
 
-    conv.conversations_db.get_conversation.side_effect = [
-        {'id': 'c1', 'status': 'completed'},
-        {'id': 'c2', 'status': 'completed'},
-    ]
-    begin = Mock(side_effect=[True, False])
-    restore = Mock(return_value=True)
-    monkeypatch.setattr(conv.lifecycle_service, 'begin_merge', begin)
-    monkeypatch.setattr(conv.lifecycle_service, 'complete', restore)
+    monkeypatch.setattr(conv.conversations_db, 'get_conversation', lambda _uid, cid: {'id': cid, 'status': 'completed'})
+    monkeypatch.setattr(conv.lifecycle_service.merge_jobs, 'admit', Mock(return_value=None))
+    legacy_claim = Mock(side_effect=AssertionError('manual admission must be atomic'))
+    monkeypatch.setattr(conv.lifecycle_service, 'begin_merge', legacy_claim)
     tasks = BackgroundTasks()
     with pytest.raises(HTTPException) as error:
         conv.merge_conversations(
             request=MergeConversationsRequest(conversation_ids=['c1', 'c2']), background_tasks=tasks, uid='test-account'
         )
     assert error.value.status_code == 409
-    restore.assert_called_once_with('test-account', 'c1')
+    legacy_claim.assert_not_called()
+    assert tasks.tasks == []
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+def test_merge_endpoint_always_uses_durable_admission_and_returns_exact_target(conv, monkeypatch, mode):
+    """Exercise the HTTP route; unrelated capture canaries cannot disable recovery."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import utils.conversations.merge_conversations as worker
+
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', mode)
+    monkeypatch.setattr(conv.conversations_db, 'get_conversation', lambda _uid, cid: {'id': cid, 'status': 'completed'})
+    monkeypatch.setattr(worker, 'validate_merge_compatibility', lambda _rows: (True, None, None))
+    monkeypatch.setattr(
+        conv.lifecycle_service, 'begin_merge', lambda *_args: pytest.fail('nonrecoverable admission must not run')
+    )
+    admitted = {'job_id': 'synthetic-job', 'dispatch_generation': 4, 'merge_target_id': 'durable-target'}
+    monkeypatch.setattr(conv.lifecycle_service.merge_jobs, 'admit', lambda *_args: admitted)
+    calls = []
+    monkeypatch.setattr(conv.lifecycle_service.merge_jobs, 'run', lambda *args: calls.append(args))
+    monkeypatch.setattr(worker, 'perform_merge_async', lambda **kwargs: pytest.fail('must run leased coordinator'))
+    app = FastAPI()
+    app.include_router(conv.router)
+    with TestClient(app) as client:
+        response = client.post('/v1/conversations/merge', json={'conversation_ids': ['c1', 'c2']})
+    assert response.status_code == 200, response.text
+    assert response.json()['merged_conversation_id'] == 'durable-target'
+    assert calls == [('synthetic-job', 4)]
+
+
+def test_oversized_merge_is_a_request_rejection_not_an_internal_job_error(conv):
+    from models.conversation import MergeConversationsRequest
+    from starlette.background import BackgroundTasks
+
+    tasks = BackgroundTasks()
+    with pytest.raises(HTTPException) as error:
+        conv.merge_conversations(
+            request=MergeConversationsRequest(conversation_ids=[str(i) for i in range(101)]),
+            background_tasks=tasks,
+            uid='test-account',
+        )
+    assert error.value.status_code == 400
     assert tasks.tasks == []

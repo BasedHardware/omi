@@ -18,8 +18,7 @@ from typing import List, Dict, Any
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import firestore
 import logging
 
 logger = logging.getLogger(__name__)
@@ -27,21 +26,9 @@ logger = logging.getLogger(__name__)
 # Add project root to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from database.action_item_write_fence import install_write_fences
-
-# This standalone writer must fence Developer task pages too.
-install_write_fences()
-
-# Initialize Firebase Admin SDK
-try:
-    cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred)
-except Exception as e:
-    logger.error("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
-    logger.error(e)
-    sys.exit(1)
-
-db = firestore.client()
+# Standalone writer: must go through database._client so action-item write fences
+# and the list-serving/memory projection heads stay maintained on every write.
+from database._client import db
 
 # Configuration
 BATCH_SIZE = 500  # Number of conversations to process per batch

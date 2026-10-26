@@ -11,7 +11,8 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
+from database.released_memory_projection import projected_stream_list, projected_stream_iter
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -117,13 +118,12 @@ def get_mcp_conversation_cards(
     scanned = 0
     window_size = limit
     try:
-        if budget is not None and offset > 0:
-            # Refuse a too-expensive offset before issuing its billed skip.
-            budget.charge(offset)
         while True:
             fetched = 0
             last_doc = None
-            for doc in budgeted_stream_iter(window, budget):
+            for doc in projected_stream_iter(
+                window, budget, surface='mcp_cards', offset_reads=offset if scanned == 0 else 0
+            ):
                 fetched += 1
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
@@ -235,7 +235,7 @@ def get_mcp_conversation_cards_page(
             if not isinstance(after_id, str) or not after_id.strip() or '/' in after_id:
                 raise ValueError('conversation keyset doc id is invalid')
             query = query.start_after({'created_at': after_ts, '__name__': collection.document(after_id)})
-        raw_docs = list(query.stream())
+        raw_docs = projected_stream_list(query, surface='mcp_cards')
         if not raw_docs:
             exhausted = True
             break
