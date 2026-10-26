@@ -102,8 +102,8 @@
       "path": "utils/batch_pipeline/shadow_intake.py",
       "function": "offer_upload",
       "kind": "start_background_task",
-      "count": 3,
-      "why": "reviewed safe (#23003): best-effort shadow reserve, late-reserve drop and staging of private copies; legacy keeps its own paths, ledger and processing, so a loss at SIGKILL drops one shadow sample. A stranded shadow job is settled as error by the worker reaper after 1h and its control rows carry TTLs; copies live in the dying container's temp directory"
+      "count": 4,
+      "why": "reviewed safe (#23003): best-effort shadow reserve, late-reserve drop and staging of private copies; legacy keeps its own paths, ledger and processing, so a loss at SIGKILL drops one shadow sample. A stranded shadow job is settled as error by the worker reaper after 1h and its control rows carry TTLs; copies live in the dying container's temp directory. #23748 adds one tracked pair-only qualification offer, which awaits its pair and cleanup internally: SIGKILL can lose a sample, never serving work, routing, projection or usage. Durable intents prevent repeat spend; occupied slots fail closed after a crash until verified operator drain/reset. Private copies remain only in that container's temp directory. No qualification completeness or automatic slot recovery is promised. Owner astrabatch2/batch lane; lead adfec6 accepts this one task, remove with the temporary qualification mode (review 2026-10-29)."
     },
     {
       "path": "utils/batch_pipeline/shadow_worker.py",

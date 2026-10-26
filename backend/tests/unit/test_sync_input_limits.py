@@ -77,6 +77,34 @@ def test_staged_attempt_revalidates_the_actual_bytes(tmp_path, monkeypatch):
     assert path.exists()  # Validation never deletes durable or local source audio.
 
 
+def test_language_probe_profile_refuses_compressed_expansion_before_decode(tmp_path):
+    path = tmp_path / 'audio_omi_opus_16000_1_fs1920_1710000000.bin'
+    path.write_bytes((struct.pack('<I', 1) + b'\0') * 501)
+    limits.validate_backfill_paths([str(path)])
+    with pytest.raises(limits.BackfillInputLimitExceeded):
+        limits.validate_language_probe_paths([str(path)])
+    assert path.exists()
+
+
+@pytest.mark.parametrize('bound', ['raw', 'files', 'frames', 'duration'])
+def test_language_probe_profile_bounds_the_whole_upload(tmp_path, bound):
+    path = tmp_path / 'audio_phonemic_pcm16_16000_1_fs160_1710000000.bin'
+    paths = [str(path)]
+    if bound == 'raw':
+        path.write_bytes(b'\0' * (limits.PROBE_MAX_RAW_BYTES + 1))
+    elif bound == 'files':
+        path.write_bytes(uploaded().file.read())
+        paths *= limits.PROBE_MAX_FILES + 1
+    elif bound == 'frames':
+        path = tmp_path / 'audio_omi_opus_16000_1_fs40_1710000000.bin'
+        path.write_bytes((struct.pack('<I', 1) + b'\0') * (limits.PROBE_MAX_FRAMES + 1))
+        paths = [str(path)]
+    else:
+        path.write_bytes((struct.pack('<I', 65536) + b'\0' * 65536) * 30)
+    with pytest.raises(limits.BackfillInputLimitExceeded):
+        limits.validate_language_probe_paths(paths)
+
+
 def test_full_tmpfs_is_capacity_pressure_and_other_errors_keep_their_class():
     import errno
 
