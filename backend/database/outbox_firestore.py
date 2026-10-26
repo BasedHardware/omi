@@ -180,6 +180,7 @@ class FirestoreEnrichmentOutbox:
             new_dispatch=new_dispatch,
             snapshot_summary=snapshot_summary,
             stamps=stamps,
+            wake_on_move=self._create_wake is not None,
         )
         if tx is None:
             row, coalesced = self._mutate(dedupe_key, update)
@@ -193,7 +194,7 @@ class FirestoreEnrichmentOutbox:
             outbox.UNBOUND.labels(action='mark').inc()
         token = row.get('task_token') if wake else None
         if wake and tx is None:
-            self._wake(row)  # Failure leaves the obligation durable for the sweep.
+            self._rearmed(row)  # Failure leaves the obligation durable for the sweep (invariant 4).
         return EnqueueResult(row_id=dedupe_key, coalesced=coalesced, wake_token=token)
 
     def _mutate_in(self, tx: Any, document_id: str, update):

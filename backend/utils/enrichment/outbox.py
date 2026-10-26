@@ -326,6 +326,7 @@ def mark_update(
     new_dispatch: Callable[[], dict[str, str] | None] | None = None,
     snapshot_summary: bool = False,
     stamps: list[tuple[str, str]] | None = None,
+    wake_on_move: bool = False,
 ) -> Callable[[Row | None], tuple[Row, tuple[Row, bool]]]:
     """The CAS operation behind ``mark`` and ``Outbox.enqueue``: one obligation per key, coalesced.
 
@@ -405,7 +406,10 @@ def mark_update(
         elif not valid_dispatch_binding(row.get('dispatch')):
             row['dispatch'] = None
         wake = old is None
-        if old is not None and (old.get('dormant') or (row.get('task_due_at') or 0) > row['due_at']):
+        moved = old is not None and (
+            row['due_at'] != old.get('due_at') if wake_on_move else (row.get('task_due_at') or 0) > row['due_at']
+        )
+        if old is not None and (old.get('dormant') or moved):
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             wake = True
         return row, ({**row, '_wake': wake}, old is not None)

@@ -290,3 +290,35 @@ def test_claim_stamps_a_fallback_snapshot_on_a_batch_row_without_one(rows):
     claim = _claim(rows, now=10)
     assert state_rows[KEY]['first_summary_policy_source'] == 'fallback'
     assert claim.payload['first_summary_policy'] == state_rows[KEY]['first_summary_policy']
+
+
+def test_enqueue_without_tx_moves_wake_on_max_coalesce_and_tolerates_failed_wake(rows, sweep_query):  # noqa: F811
+    from database.outbox_firestore import FirestoreOutbox
+
+    wakes, fail = [], [False]
+
+    def create_wake(row_id, token, at):
+        if fail[0]:
+            raise RuntimeError('task create failed')
+        wakes.append((row_id, token, at))
+
+    injected = FirestoreOutbox(OutboxKind.ENRICHMENT, create_wake=create_wake)
+    first = injected.enqueue(KEY, 'u', PAYLOAD, 10.0, now=0.0)
+    assert wakes == [(KEY, first.wake_token, 10.0)]
+    moved = injected.enqueue(KEY, 'u', PAYLOAD, 20.0, coalesce='max', now=1.0)
+    assert moved.coalesced and moved.wake_token and moved.wake_token != first.wake_token
+    assert wakes[-1] == (KEY, moved.wake_token, 20.0)
+    still = injected.enqueue(KEY, 'u', PAYLOAD, 15.0, coalesce='max', now=2.0)
+    assert still.coalesced and still.wake_token is None and len(wakes) == 2
+
+    other_key = reprocess.key('u', 'c2')
+    fail[0] = True
+    pending = injected.enqueue(other_key, 'u', {'conversation_id': 'c2', 'language': 'en'}, 5.0, now=0.0)
+    assert pending.wake_token and len(wakes) == 2
+    with pytest.raises(RuntimeError):
+        injected.wake(other_key, pending.wake_token)
+    assert injected.sweep(now=6.0).errors == 1
+    fail[0] = False
+    assert injected.sweep(now=7.0).rewoken == 1
+    assert wakes[-1] == (other_key, pending.wake_token, 5.0)
+
