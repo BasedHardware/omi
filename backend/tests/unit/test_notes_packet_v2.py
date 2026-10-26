@@ -182,6 +182,23 @@ def test_two_speakers_with_unknown_owner_never_get_named_attribution(evidence):
     assert fixture['segments'][0]['is_user'] is True  # Source labels are never rewritten.
 
 
+@pytest.mark.parametrize('status,expected', [('unknown', None), ('ambiguous', None), ('user', 'Morgan')])
+def test_owner_boolean_without_positive_identity_stays_anonymous(status, expected):
+    rows = [
+        {
+            'id': 'synthetic-owner',
+            'text': 'A personal story.',
+            'speaker_id': 0,
+            'is_user': True,
+            'speaker_identity_status': status,
+        }
+    ]
+    text, mapping = render_cluster_transcript(rows, names={}, owner_name='Morgan')
+    assert mapping['c0'] == expected
+    assert ('Morgan' in text) == (expected == 'Morgan')
+    assert rows[0]['is_user'] is True
+
+
 @pytest.mark.parametrize('band,expected', [('confident', 'Nik'), ('likely', None), ('unknown', None)])
 def test_renderer_uses_the_policy_band_and_higher_probability(band, expected):
     evidence = SpeakerEvidence(

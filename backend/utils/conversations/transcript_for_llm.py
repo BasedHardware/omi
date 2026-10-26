@@ -24,7 +24,11 @@ from config.refactor_modes import serving_for
 from database.auth import get_user_name
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
-from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
+from utils.conversations.owner_attribution import (
+    OwnerAttributionEvidence,
+    may_attribute_to_owner,
+    confident_owner_segments,
+)
 from utils.conversations.wake_word import WAKE_WORD_MARKER, escape_spoken_wake_word_marker, find_wake_word_segment_ids
 from utils.speakers.display import DisplayParticipants, display_participants
 
@@ -376,6 +380,11 @@ def render_cluster_transcript(
     """
     safe, owner_note = owner_safe_transcript_segments(segments)
     rows = [SimpleNamespace(**dict(row)) if isinstance(row, Mapping) else row for row in safe]
+    trusted_owner_rows = {id(row) for row in confident_owner_segments(rows)}
+    rows = [
+        _clear_owner_claim(row) if getattr(row, 'is_user', False) and id(row) not in trusted_owner_rows else row
+        for row in rows
+    ]
     display = display_participants(
         rows,
         names=names,
