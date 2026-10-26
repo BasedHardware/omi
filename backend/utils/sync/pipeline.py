@@ -2211,13 +2211,18 @@ def _record_capture_time_admission(outcome: SyncCaptureTimeReason, ahead_seconds
     Plain acceptances are counter-only (per-file volume); skew and rejections
     get a log line so the readback can count and sample both sides.
     """
-    label = reason_label(ReasonFamily.SYNC_CAPTURE_TIME, outcome, SyncCaptureTimeReason)
     try:
-        OMI_SYNC_CAPTURE_TIME_TOTAL.labels(outcome=label).inc()
+        OMI_SYNC_CAPTURE_TIME_TOTAL.labels(
+            outcome=reason_label(ReasonFamily.SYNC_CAPTURE_TIME, outcome, SyncCaptureTimeReason)
+        ).inc()
     except Exception:
         pass
-    if label != SyncCaptureTimeReason.ACCEPTED.value:
-        logger.info('event=sync_capture_time outcome=%s ahead_seconds=%.1f', label, ahead_seconds)
+    if outcome != SyncCaptureTimeReason.ACCEPTED:
+        logger.info(
+            'event=sync_capture_time outcome=%s ahead_seconds=%.1f',
+            reason_label(ReasonFamily.SYNC_CAPTURE_TIME, outcome, SyncCaptureTimeReason),
+            ahead_seconds,
+        )
 
 
 def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
