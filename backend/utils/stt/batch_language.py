@@ -208,6 +208,28 @@ def _self_decision(verdict: language_gate.SelfVerdict) -> LanguageDecision:
     return LanguageDecision(verdict.language, verdict.p_supported, 'self_lid', verdict.audio_seconds)
 
 
+def compare_shadow_pair(audio: bytes, *, before_call, surface='batch_shadow') -> bool:
+    """Compare identical bounded audio without consulting enforcement or selecting a route.
+
+    Each call needs a fresh privacy/funding check. A caller must already hold a
+    durable, at-most-once fleet probe reservation. No recognizer is invoked.
+    """
+    if not language_gate_shadow_enabled():
+        return False
+    probe, seconds = probe_wav(audio)
+    if not before_call():
+        return False
+    verdict = language_gate.self_detect(probe, surface=surface)
+    if verdict is not None:
+        if not _finite_number(verdict.audio_seconds) or abs(verdict.audio_seconds - seconds) > 0.1:
+            verdict = None
+        else:
+            verdict = replace(verdict, audio_seconds=seconds)
+    vendor = detect(probe, before_probe=before_call)
+    language_gate.record_shadow(surface, verdict, vendor)
+    return verdict is not None and vendor.evidence == 'audio_lid' and vendor.confidence >= 0.9
+
+
 def resolve_language(
     language, audio: bytes, *, before_probe=None, surface='prerecorded', cohort_key=None, **audio_options
 ) -> LanguageDecision:

@@ -196,7 +196,10 @@ def test_service_route_is_not_trusted_over_the_backend_threshold(monkeypatch):
         (3.0, 0.985, True),
         (5.99, 0.98, False),
         (6.0, 0.9218, False),  # highest offline P(supported) on >=6 s unsupported speech
-        (6.0, 0.95, True),
+        (6.0, 0.95, False),
+        (16.7, 0.9700, False),
+        (30.0, 0.9757, False),
+        (6.0, 0.985, True),
         (30, 0.949, False),
     ],
 )
@@ -208,7 +211,7 @@ def test_self_gate_threshold_by_measured_seconds(monkeypatch, seconds, p_support
 
 def test_unsupported_top_language_is_never_parakeet_even_with_high_p_supported():
     assert not lid.LanguageDecision('sqi', 0.97, 'self_lid', 10).parakeet_safe
-    assert lid.LanguageDecision('pt', 0.97, 'self_lid', 10).parakeet_safe
+    assert lid.LanguageDecision('pt', 0.99, 'self_lid', 10).parakeet_safe
     assert not lid.LanguageDecision('pt', 0.97, 'self_lid', None).parakeet_safe
 
 
@@ -226,6 +229,32 @@ def test_batch_intake_keeps_zero_percent_as_shadow_only(monkeypatch):
     decision = lid.resolve_language('multi', wav(), surface='batch')
     assert decision.evidence == 'audio_lid'
     assert len(wire.vendor_calls) == 1 and len(wire.gate_calls) == 1
+
+
+def test_pair_only_qualifier_ignores_enforcement_and_compares_identical_bounded_audio(monkeypatch):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    wire = Wire(monkeypatch, self_gate=gate_body('en', 0.99, 30))
+    requests = []
+    post = wire.post
+
+    def capture(url, **kwargs):
+        requests.append(next(iter(kwargs['files'].values()))[1])
+        return post(url, **kwargs)
+
+    wire.post = capture
+    before = Mock(return_value=True)
+    assert lid.compare_shadow_pair(wav(40), before_call=before)
+    assert before.call_count == 2
+    assert len(wire.vendor_calls) == len(wire.gate_calls) == 1
+    assert requests[0] == requests[1]
+    assert lid.probe_wav(requests[0])[1] == 30
+
+
+def test_pair_only_qualifier_rechecks_permission_before_vendor(monkeypatch):
+    wire = Wire(monkeypatch)
+    before = Mock(side_effect=[True, False])
+    assert not lid.compare_shadow_pair(wav(), before_call=before)
+    assert len(wire.gate_calls) == 1 and wire.vendor_calls == []
 
 
 @pytest.mark.parametrize('enrolled', [True, False])
