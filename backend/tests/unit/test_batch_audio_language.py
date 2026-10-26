@@ -149,7 +149,7 @@ def test_worker_long_lid_and_declared_supported_permission_remain_available():
 
 @pytest.mark.parametrize(
     'seconds,confidence,safe',
-    [(5.99, 0.984, False), (5.99, 0.985, True), (6.0, 0.949, False), (6.0, 0.95, True), (65.0, 0.95, True)],
+    [(5.99, 0.984, False), (5.99, 0.985, True), (6.0, 0.949, False), (6.0, 0.985, True), (65.0, 0.985, True)],
 )
 def test_worker_self_lid_reapplies_shared_floor_and_probe_bound(seconds, confidence, safe):
     from diarizer.batch_pipeline_models import stt_language
@@ -626,7 +626,7 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
 def test_worker_accepts_self_lid_evidence_with_its_own_floors():
     from diarizer.batch_pipeline_models import stt_language
 
-    context = self_lid_context(confidence=0.95, probe_seconds=8.0)
+    context = self_lid_context(confidence=0.99, probe_seconds=8.0)
     identity = dict(expected_owner_id='synthetic-owner', expected_segment_id='synthetic-segment')
     assert stt_language(context, duration_seconds=8, **identity) == 'en'
     # Below one second the self gate never proves support on its own.
@@ -638,8 +638,15 @@ def test_worker_accepts_self_lid_evidence_with_its_own_floors():
         )
         is None
     )
-    # A short probe needs the higher floor, not the >=6 s one.
-    assert stt_language({**context, 'stt_language_probe_seconds': 3.0}, duration_seconds=3, **identity) is None
+    # Short and long probes both reject the former permissive long-clip range.
+    assert (
+        stt_language(
+            {**context, 'stt_language_probe_seconds': 3.0, 'stt_language_confidence': 0.98},
+            duration_seconds=3,
+            **identity
+        )
+        is None
+    )
     assert (
         stt_language(
             {**context, 'stt_language_probe_seconds': 3.0, 'stt_language_confidence': 0.985},
@@ -652,7 +659,7 @@ def test_worker_accepts_self_lid_evidence_with_its_own_floors():
 
 @pytest.mark.parametrize(
     'seconds,confidence,expected',
-    [(6.000375, 0.95, 'en'), (5.999625, 0.95, None), (0.999625, 0.999, None), (1.000375, 0.999, 'en')],
+    [(6.000375, 0.985, 'en'), (5.999625, 0.984, None), (0.999625, 0.999, None), (1.000375, 0.999, 'en')],
 )
 def test_worker_accepts_legacy_rounded_probe_but_uses_measured_floor(seconds, confidence, expected):
     from diarizer.batch_pipeline_models import stt_language
