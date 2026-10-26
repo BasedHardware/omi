@@ -296,7 +296,7 @@ def main():
         'checked_at': datetime.now(timezone.utc).isoformat(),
         'owner_count': 1,
         'units': len(units),
-        'strict_vad': dict(counts),
+        'strict_vad': {'unmeasured': counts['speech']} if args.independent_language else dict(counts),
         # Not in the digest: the approved census is unchanged by this report.
         'speech_epoch1_failures': dict(Counter(failures[sid] for sid, _, decision in units if decision == 'speech')),
         'paid_epoch': args.paid_epoch,
