@@ -18,7 +18,7 @@ from utils.agent_capabilities.text_edits import replace_term
 from models.agent_refs import base_ref, has_ref, cited_value
 from models.dream_edit import MemoryHygieneEdit
 from models.agent_edit import HarnessEdit
-from models.agent_tools import ProposeEdit
+from models.agent_tools import tool_model
 from database import review_memory_hygiene
 from utils.entity_pages import resolve_entity
 from utils.agent_capabilities.guards import (
@@ -606,7 +606,7 @@ def validate_cleanup(edit, records, *, authority='dream'):
 
 def validate_edit(edit, records, *, authority='dream'):
     if isinstance(edit, HarnessEdit):
-        ProposeEdit.model_validate({'edit': edit.model_dump()})
+        tool_model('propose_edit', authority).model_validate({'edit': edit.model_dump()})
     if not has_ref(edit.target, records) or any((not has_ref(ref, records) for ref in edit.evidence)):
         raise ValueError('agent_unknown_evidence')
     row = records[base_ref(edit.target)]

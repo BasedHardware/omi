@@ -3067,7 +3067,7 @@ export interface HarnessEdit {
   before?: string;
   effective_from?: string;
   evidence: Array<string>;
-  kind: "spelling" | "title" | "overview" | "memory" | "resolve_required_memory" | "merge_memories" | "retire_memory" | "supersede_memory" | "merge_people" | "entity_summary" | "close_task" | "dismiss_person" | "merge_tasks" | "retire_task" | "merge_conversations" | "set_language";
+  kind: "spelling" | "title" | "overview" | "memory" | "merge_memories" | "retire_memory" | "supersede_memory" | "merge_people" | "entity_summary" | "close_task" | "dismiss_person" | "merge_tasks" | "retire_task" | "merge_conversations" | "set_language";
   other?: string;
   reason: string;
   target: string;

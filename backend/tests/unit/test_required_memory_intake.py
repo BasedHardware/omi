@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 import asyncio
+import json
 from threading import Event
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -10,12 +11,16 @@ import pytest
 
 from config import required_memory_intake as policy
 from database import memory_apply_store, review_store, dream_scheduler
-from models.agent_edit import HarnessEdit
+from models.agent_edit import DreamHarnessEdit as HarnessEdit
+from models.agent_edit import HarnessEdit as ReleasedHarnessEdit
+from models.agent_tools import tool_model, tool_schemas
+from utils.agent_capabilities.session import Session
+from database import review_changes
 from models.memory_apply import ApplyStatus, MemoryControlState, memory_content_hash
 from models.memory_evidence import MemoryEvidence
 from models.product_memory import MemoryItem
 from tests.support.dream_firestore import DreamFirestore
-from utils import dream_agent, dream_required_intake as backlog
+from utils import dream_agent, dream_required_intake as backlog, dream_review_policy
 from utils.agent_capabilities.evidence import EvidenceRecords
 from utils.agent_capabilities.limits import SessionLimits
 from utils.memory import canonical_required_processing as processing, required_intake as intake
@@ -353,6 +358,55 @@ def test_only_backlog_kind_may_cite_a_bounded_full_inventory(db):
         HarnessEdit.model_validate(raw)
     with pytest.raises(ValueError, match='candidate_required'):
         backlog.validate(resolution(row), {'memory_items/new': row}, authority='user')
+
+
+def test_private_dream_contract_does_not_widen_released_review(db):
+    public = ReleasedHarnessEdit.model_json_schema()['properties']
+    private = HarnessEdit.model_json_schema()['properties']
+    assert 'resolve_required_memory' not in public['kind']['enum']
+    assert public['evidence']['maxItems'] == 10
+    assert 'resolve_required_memory' in private['kind']['enum']
+    assert private['evidence']['maxItems'] == 101
+    raw = resolution(historical_candidate(db)).model_dump()
+    with pytest.raises(ValueError, match='Dream-private'):
+        tool_model('propose_edit', 'user').model_validate({'edit': raw})
+    parsed = tool_model('propose_edit', 'dream').model_validate({'edit': raw})
+    assert parsed.edit.kind == 'resolve_required_memory'
+    assert 'resolve_required_memory' not in str(tool_schemas(authority='user'))
+    assert 'resolve_required_memory' in str(tool_schemas(authority='dream'))
+
+
+def test_private_intake_cannot_be_serialized_into_review_offer(db):
+    with pytest.raises(ValueError, match='cannot be offered in Review'):
+        dream_review_policy.suggest_edit(UID, resolution(historical_candidate(db)), {})
+
+
+@pytest.mark.asyncio
+async def test_private_dream_tool_call_stages_through_the_real_session(db, monkeypatch):
+    row = historical_candidate(db)
+    row[backlog.MARKER]['dedupe_refs'] = []
+    edit = resolution(row, other='').model_copy(update={'evidence': ['memory_items/new']})
+    monkeypatch.setattr(review_changes, 'agent_change_allowed', lambda *a: True)
+    monkeypatch.setattr(review_store, 'safe_id', lambda *a: 'synthetic-intake-proposal')
+    session = Session(
+        UID,
+        SimpleNamespace(),
+        SessionLimits(),
+        {'targets': ['memory_items/new']},
+        authority='dream',
+        records=EvidenceRecords({'memory_items/new': row}),
+    )
+    result = await session.execute(
+        [
+            {
+                'id': 'private-tool',
+                'function': {'name': 'propose_edit', 'arguments': json.dumps({'edit': edit.model_dump(mode='json')})},
+            }
+        ]
+    )
+    response = json.loads(result[0]['content'].split('\n', 1)[1])
+    assert response['status'] == 'staged', response
+    assert isinstance(next(iter(session.staged.values())).operation, HarnessEdit)
 
 
 def item(key='new', *, captured_at=NOW, processed=False):
