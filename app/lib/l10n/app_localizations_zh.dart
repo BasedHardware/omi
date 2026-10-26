@@ -13659,6 +13659,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get askConnectChatGptFirst => '只需连接一次 ChatGPT，即可询问你的对话。';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '您的 Omi 已经 $days 天没有连接了',
+      many: '您的 Omi 已经 $days 天没有连接了',
+      few: '您的 Omi 已经 $days 天没有连接了',
+      two: '您的 Omi 已经 $days 天没有连接了',
+      one: '您的 Omi 已经 $days 天没有连接了',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => '重新连接';
 
   @override

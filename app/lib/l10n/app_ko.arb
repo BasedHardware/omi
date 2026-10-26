@@ -4241,6 +4241,7 @@
     "askInChatGpt": "ChatGPT에 묻기",
     "copyForAnyApp": "다른 앱용으로 복사",
     "askConnectChatGptFirst": "ChatGPT를 한 번 연결하면 대화에 대해 물어볼 수 있습니다.",
+    "reconnectNudgeTitle": "{days, plural, one{Omi가 {days}일째 연결되지 않았습니다} two{Omi가 {days}일째 연결되지 않았습니다} few{Omi가 {days}일째 연결되지 않았습니다} many{Omi가 {days}일째 연결되지 않았습니다} other{Omi가 {days}일째 연결되지 않았습니다}}",
     "reconnect": "다시 연결",
     "chatGptNeedsReconnect": "더 많은 액세스 권한이 필요합니다. 다시 연결하여 해결하세요.",
     "connectAgentWaiting": "에이전트가 키를 사용하기를 기다리는 중",

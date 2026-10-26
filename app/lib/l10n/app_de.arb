@@ -4241,6 +4241,7 @@
     "askInChatGpt": "ChatGPT fragen",
     "copyForAnyApp": "Für jede App kopieren",
     "askConnectChatGptFirst": "Verbinde ChatGPT einmal, um es nach deinen Gesprächen zu fragen.",
+    "reconnectNudgeTitle": "{days, plural, one{Ihr Omi war seit {days} Tag nicht verbunden} two{Ihr Omi war seit {days} Tagen nicht verbunden} few{Ihr Omi war seit {days} Tagen nicht verbunden} many{Ihr Omi war seit {days} Tagen nicht verbunden} other{Ihr Omi war seit {days} Tagen nicht verbunden}}",
     "reconnect": "Erneut verbinden",
     "chatGptNeedsReconnect": "Benötigt mehr Zugriff. Zum Beheben erneut verbinden.",
     "connectAgentWaiting": "Warten, bis der Agent seinen Schlüssel verwendet",

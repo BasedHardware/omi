@@ -11664,6 +11664,7 @@
     "askInChatGpt": "Прашај го ChatGPT",
     "copyForAnyApp": "Копирај за која било апликација",
     "askConnectChatGptFirst": "Поврзете го ChatGPT еднаш за да го прашувате за вашите разговори.",
+    "reconnectNudgeTitle": "{days, plural, one{Вашиот Omi не се поврзал {days} ден} two{Вашиот Omi не се поврзал {days} дена} few{Вашиот Omi не се поврзал {days} дена} many{Вашиот Omi не се поврзал {days} дена} other{Вашиот Omi не се поврзал {days} дена}}",
     "reconnect": "Поврзи повторно",
     "chatGptNeedsReconnect": "Потребен е повеќе пристап. Поврзи повторно за да поправиш.",
     "connectAgentWaiting": "Се чека агентот да го употреби својот клуч",

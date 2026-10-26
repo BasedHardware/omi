@@ -4241,6 +4241,7 @@
     "askInChatGpt": "Fråga ChatGPT",
     "copyForAnyApp": "Kopiera för valfri app",
     "askConnectChatGptFirst": "Anslut ChatGPT en gång för att fråga den om dina konversationer.",
+    "reconnectNudgeTitle": "{days, plural, one{Din Omi har inte anslutit på {days} dag} two{Din Omi har inte anslutit på {days} dagar} few{Din Omi har inte anslutit på {days} dagar} many{Din Omi har inte anslutit på {days} dagar} other{Din Omi har inte anslutit på {days} dagar}}",
     "reconnect": "Anslut igen",
     "chatGptNeedsReconnect": "Behöver mer åtkomst. Anslut igen för att åtgärda.",
     "connectAgentWaiting": "Väntar på att agenten ska använda sin nyckel",

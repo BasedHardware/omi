@@ -13804,6 +13804,20 @@ class AppLocalizationsTh extends AppLocalizations {
   String get askConnectChatGptFirst => 'เชื่อมต่อ ChatGPT ครั้งเดียวเพื่อถามเกี่ยวกับการสนทนาของคุณ';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Omi ของคุณไม่ได้เชื่อมต่อมา $days วันแล้ว',
+      many: 'Omi ของคุณไม่ได้เชื่อมต่อมา $days วันแล้ว',
+      few: 'Omi ของคุณไม่ได้เชื่อมต่อมา $days วันแล้ว',
+      two: 'Omi ของคุณไม่ได้เชื่อมต่อมา $days วันแล้ว',
+      one: 'Omi ของคุณไม่ได้เชื่อมต่อมา $days วันแล้ว',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'เชื่อมต่อใหม่';
 
   @override

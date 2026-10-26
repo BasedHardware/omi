@@ -13684,6 +13684,20 @@ class AppLocalizationsKo extends AppLocalizations {
   String get askConnectChatGptFirst => 'ChatGPT를 한 번 연결하면 대화에 대해 물어볼 수 있습니다.';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Omi가 $days일째 연결되지 않았습니다',
+      many: 'Omi가 $days일째 연결되지 않았습니다',
+      few: 'Omi가 $days일째 연결되지 않았습니다',
+      two: 'Omi가 $days일째 연결되지 않았습니다',
+      one: 'Omi가 $days일째 연결되지 않았습니다',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => '다시 연결';
 
   @override

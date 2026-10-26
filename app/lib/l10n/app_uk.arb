@@ -4241,6 +4241,7 @@
     "askInChatGpt": "Запитати ChatGPT",
     "copyForAnyApp": "Скопіювати для будь-якого застосунку",
     "askConnectChatGptFirst": "Підключіть ChatGPT один раз, щоб питати його про свої бесіди.",
+    "reconnectNudgeTitle": "{days, plural, one{Ваш Omi не підключався вже {days} день} two{Ваш Omi не підключався вже {days} дня} few{Ваш Omi не підключався вже {days} дні} many{Ваш Omi не підключався вже {days} днів} other{Ваш Omi не підключався вже {days} дня}}",
     "reconnect": "Підключити знову",
     "chatGptNeedsReconnect": "Потрібен додатковий доступ. Підключіть знову, щоб виправити.",
     "connectAgentWaiting": "Очікуємо, поки агент використає свій ключ",

@@ -136,6 +136,9 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | connectDevicePageOpened | Connect Device Page Opened | none | active | mobile-instrumentation-presence |
 | getOmiDeviceClicked | Get Omi Device Clicked | none | active | mobile-instrumentation-presence |
 | connectionGuideOpened | Connection Guide Opened | none | active | mobile-instrumentation-presence |
+| reconnectNudgeShown | Reconnect Nudge Shown | days_since_connected | active | reconnect-nudge |
+| reconnectNudgeTapped | Reconnect Nudge Tapped | days_since_connected | active | reconnect-nudge |
+| reconnectNudgeDismissed | Reconnect Nudge Dismissed | days_since_connected | active | reconnect-nudge |
 | dataPrivacyPageOpened | Data Privacy Page Opened | none | active | mobile-instrumentation-presence |
 | aiAppGeneratorPageOpened | AI App Generator Page Opened | none | active | mobile-instrumentation-presence |
 | importHistoryPageOpened | Import History Page Opened | none | active | mobile-instrumentation-presence |

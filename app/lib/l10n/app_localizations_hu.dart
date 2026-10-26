@@ -13927,6 +13927,20 @@ class AppLocalizationsHu extends AppLocalizations {
   String get askConnectChatGptFirst => 'Csatlakoztasd egyszer a ChatGPT-t, hogy a beszélgetéseidről kérdezhesd.';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Az Omid $days napja nem csatlakozott',
+      many: 'Az Omid $days napja nem csatlakozott',
+      few: 'Az Omid $days napja nem csatlakozott',
+      two: 'Az Omid $days napja nem csatlakozott',
+      one: 'Az Omid $days napja nem csatlakozott',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'Újracsatlakozás';
 
   @override

@@ -13898,6 +13898,20 @@ class AppLocalizationsLt extends AppLocalizations {
   String get askConnectChatGptFirst => 'Vieną kartą prijunkite ChatGPT, kad galėtumėte jo klausti apie savo pokalbius.';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Jūsų Omi neprisijungė jau $days dienų',
+      many: 'Jūsų Omi neprisijungė jau $days dienos',
+      few: 'Jūsų Omi neprisijungė jau $days dienas',
+      two: 'Jūsų Omi neprisijungė jau $days dienų',
+      one: 'Jūsų Omi neprisijungė jau $days dieną',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'Prisijungti iš naujo';
 
   @override

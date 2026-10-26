@@ -4283,6 +4283,7 @@
     "askInChatGpt": "Spørg ChatGPT",
     "copyForAnyApp": "Kopiér til enhver app",
     "askConnectChatGptFirst": "Forbind ChatGPT én gang for at spørge den om dine samtaler.",
+    "reconnectNudgeTitle": "{days, plural, one{Din Omi har ikke været forbundet i {days} dag} two{Din Omi har ikke været forbundet i {days} dage} few{Din Omi har ikke været forbundet i {days} dage} many{Din Omi har ikke været forbundet i {days} dage} other{Din Omi har ikke været forbundet i {days} dage}}",
     "reconnect": "Forbind igen",
     "chatGptNeedsReconnect": "Kræver mere adgang. Forbind igen for at rette det.",
     "connectAgentWaiting": "Venter på at agenten bruger sin nøgle",

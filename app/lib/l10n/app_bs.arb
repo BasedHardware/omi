@@ -11664,6 +11664,7 @@
     "askInChatGpt": "Pitaj ChatGPT",
     "copyForAnyApp": "Kopiraj za bilo koju aplikaciju",
     "askConnectChatGptFirst": "Povežite ChatGPT jednom da biste ga pitali o svojim razgovorima.",
+    "reconnectNudgeTitle": "{days, plural, one{Vaš Omi se nije povezao {days} dan} two{Vaš Omi se nije povezao {days} dana} few{Vaš Omi se nije povezao {days} dana} many{Vaš Omi se nije povezao {days} dana} other{Vaš Omi se nije povezao {days} dana}}",
     "reconnect": "Ponovo poveži",
     "chatGptNeedsReconnect": "Potreban je dodatni pristup. Ponovo poveži da popraviš.",
     "connectAgentWaiting": "Čeka se da agent upotrijebi svoj ključ",

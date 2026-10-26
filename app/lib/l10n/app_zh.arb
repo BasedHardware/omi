@@ -4241,6 +4241,7 @@
     "askInChatGpt": "问 ChatGPT",
     "copyForAnyApp": "复制到任意应用",
     "askConnectChatGptFirst": "只需连接一次 ChatGPT，即可询问你的对话。",
+    "reconnectNudgeTitle": "{days, plural, one{您的 Omi 已经 {days} 天没有连接了} two{您的 Omi 已经 {days} 天没有连接了} few{您的 Omi 已经 {days} 天没有连接了} many{您的 Omi 已经 {days} 天没有连接了} other{您的 Omi 已经 {days} 天没有连接了}}",
     "reconnect": "重新连接",
     "chatGptNeedsReconnect": "需要更多权限。重新连接以修复。",
     "connectAgentWaiting": "正在等待 Agent 使用其密钥",

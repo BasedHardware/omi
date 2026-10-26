@@ -1311,6 +1311,33 @@ final class ConnectionGuideOpened extends RegisteredEvent {
   Map<String, Object> get properties => {};
 }
 
+final class ReconnectNudgeShown extends RegisteredEvent {
+  const ReconnectNudgeShown({required this.daysSinceConnected});
+  final int daysSinceConnected;
+  @override
+  String get wireName => "Reconnect Nudge Shown";
+  @override
+  Map<String, Object> get properties => {"days_since_connected": daysSinceConnected};
+}
+
+final class ReconnectNudgeTapped extends RegisteredEvent {
+  const ReconnectNudgeTapped({required this.daysSinceConnected});
+  final int daysSinceConnected;
+  @override
+  String get wireName => "Reconnect Nudge Tapped";
+  @override
+  Map<String, Object> get properties => {"days_since_connected": daysSinceConnected};
+}
+
+final class ReconnectNudgeDismissed extends RegisteredEvent {
+  const ReconnectNudgeDismissed({required this.daysSinceConnected});
+  final int daysSinceConnected;
+  @override
+  String get wireName => "Reconnect Nudge Dismissed";
+  @override
+  Map<String, Object> get properties => {"days_since_connected": daysSinceConnected};
+}
+
 final class DataPrivacyPageOpened extends RegisteredEvent {
   const DataPrivacyPageOpened();
   @override

@@ -13872,6 +13872,20 @@ class AppLocalizationsCs extends AppLocalizations {
   String get askConnectChatGptFirst => 'Jednou připojte ChatGPT a ptejte se ho na své konverzace.';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Vaše Omi se nepřipojilo $days dní',
+      many: 'Vaše Omi se nepřipojilo $days dne',
+      few: 'Vaše Omi se nepřipojilo $days dny',
+      two: 'Vaše Omi se nepřipojilo $days dní',
+      one: 'Vaše Omi se nepřipojilo $days den',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'Znovu připojit';
 
   @override

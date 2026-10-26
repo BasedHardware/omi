@@ -13859,6 +13859,20 @@ class AppLocalizationsDa extends AppLocalizations {
   String get askConnectChatGptFirst => 'Forbind ChatGPT én gang for at spørge den om dine samtaler.';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Din Omi har ikke været forbundet i $days dage',
+      many: 'Din Omi har ikke været forbundet i $days dage',
+      few: 'Din Omi har ikke været forbundet i $days dage',
+      two: 'Din Omi har ikke været forbundet i $days dage',
+      one: 'Din Omi har ikke været forbundet i $days dag',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'Forbind igen';
 
   @override

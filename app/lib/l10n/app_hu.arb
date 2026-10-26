@@ -4337,6 +4337,7 @@
     "askInChatGpt": "Kérdezd a ChatGPT-t",
     "copyForAnyApp": "Másolás bármely alkalmazáshoz",
     "askConnectChatGptFirst": "Csatlakoztasd egyszer a ChatGPT-t, hogy a beszélgetéseidről kérdezhesd.",
+    "reconnectNudgeTitle": "{days, plural, one{Az Omid {days} napja nem csatlakozott} two{Az Omid {days} napja nem csatlakozott} few{Az Omid {days} napja nem csatlakozott} many{Az Omid {days} napja nem csatlakozott} other{Az Omid {days} napja nem csatlakozott}}",
     "reconnect": "Újracsatlakozás",
     "chatGptNeedsReconnect": "Több hozzáférésre van szükség. Csatlakoztasd újra a javításhoz.",
     "connectAgentWaiting": "Várakozás, hogy az ügynök használja a kulcsát",

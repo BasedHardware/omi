@@ -13868,6 +13868,20 @@ class AppLocalizationsFa extends AppLocalizations {
   String get askConnectChatGptFirst => 'یک بار ChatGPT را وصل کنید تا دربارهٔ گفتگوهایتان از آن بپرسید.';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Omi شما $days روز است که وصل نشده',
+      many: 'Omi شما $days روز است که وصل نشده',
+      few: 'Omi شما $days روز است که وصل نشده',
+      two: 'Omi شما $days روز است که وصل نشده',
+      one: 'Omi شما $days روز است که وصل نشده',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'اتصال دوباره';
 
   @override

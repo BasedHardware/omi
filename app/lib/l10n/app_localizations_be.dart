@@ -13906,6 +13906,20 @@ class AppLocalizationsBe extends AppLocalizations {
   String get askConnectChatGptFirst => 'Падключыце ChatGPT адзін раз, каб пытацца ў яго пра свае размовы.';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Ваш Omi не падключаўся ўжо $days дня',
+      many: 'Ваш Omi не падключаўся ўжо $days дзён',
+      few: 'Ваш Omi не падключаўся ўжо $days дні',
+      two: 'Ваш Omi не падключаўся ўжо $days дня',
+      one: 'Ваш Omi не падключаўся ўжо $days дзень',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'Падключыць зноў';
 
   @override

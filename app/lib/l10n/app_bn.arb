@@ -11664,6 +11664,7 @@
     "askInChatGpt": "ChatGPT-কে জিজ্ঞাসা করুন",
     "copyForAnyApp": "যেকোনো অ্যাপের জন্য কপি করুন",
     "askConnectChatGptFirst": "আপনার কথোপকথন সম্পর্কে জিজ্ঞাসা করতে একবার ChatGPT সংযুক্ত করুন।",
+    "reconnectNudgeTitle": "{days, plural, one{আপনার Omi {days} দিন ধরে সংযুক্ত হয়নি} two{আপনার Omi {days} দিন ধরে সংযুক্ত হয়নি} few{আপনার Omi {days} দিন ধরে সংযুক্ত হয়নি} many{আপনার Omi {days} দিন ধরে সংযুক্ত হয়নি} other{আপনার Omi {days} দিন ধরে সংযুক্ত হয়নি}}",
     "reconnect": "আবার সংযুক্ত করুন",
     "chatGptNeedsReconnect": "আরও অ্যাক্সেস প্রয়োজন। ঠিক করতে আবার সংযুক্ত করুন।",
     "connectAgentWaiting": "এজেন্ট তার কী ব্যবহার করার অপেক্ষায়",

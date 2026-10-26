@@ -4241,6 +4241,7 @@
     "askInChatGpt": "Întreabă ChatGPT",
     "copyForAnyApp": "Copiază pentru orice aplicație",
     "askConnectChatGptFirst": "Conectează ChatGPT o singură dată ca să-l întrebi despre conversațiile tale.",
+    "reconnectNudgeTitle": "{days, plural, one{Omi-ul tău nu s-a conectat de {days} zi} two{Omi-ul tău nu s-a conectat de {days} de zile} few{Omi-ul tău nu s-a conectat de {days} zile} many{Omi-ul tău nu s-a conectat de {days} de zile} other{Omi-ul tău nu s-a conectat de {days} de zile}}",
     "reconnect": "Reconectează",
     "chatGptNeedsReconnect": "Are nevoie de mai mult acces. Reconectează pentru a remedia.",
     "connectAgentWaiting": "Se așteaptă ca agentul să-și folosească cheia",

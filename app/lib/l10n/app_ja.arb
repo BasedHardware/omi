@@ -4241,6 +4241,7 @@
     "askInChatGpt": "ChatGPTに質問",
     "copyForAnyApp": "どのアプリでも使えるようにコピー",
     "askConnectChatGptFirst": "ChatGPTを一度接続すると、会話について質問できます。",
+    "reconnectNudgeTitle": "{days, plural, one{Omiが{days}日間接続されていません} two{Omiが{days}日間接続されていません} few{Omiが{days}日間接続されていません} many{Omiが{days}日間接続されていません} other{Omiが{days}日間接続されていません}}",
     "reconnect": "再接続",
     "chatGptNeedsReconnect": "追加のアクセス権が必要です。再接続して修正してください。",
     "connectAgentWaiting": "エージェントがキーを使うのを待っています",

@@ -4241,6 +4241,7 @@
     "askInChatGpt": "Spør ChatGPT",
     "copyForAnyApp": "Kopier for hvilken som helst app",
     "askConnectChatGptFirst": "Koble til ChatGPT én gang for å spørre den om samtalene dine.",
+    "reconnectNudgeTitle": "{days, plural, one{Omi-en din har ikke koblet til på {days} dag} two{Omi-en din har ikke koblet til på {days} dager} few{Omi-en din har ikke koblet til på {days} dager} many{Omi-en din har ikke koblet til på {days} dager} other{Omi-en din har ikke koblet til på {days} dager}}",
     "reconnect": "Koble til på nytt",
     "chatGptNeedsReconnect": "Trenger mer tilgang. Koble til på nytt for å fikse det.",
     "connectAgentWaiting": "Venter på at agenten bruker nøkkelen sin",

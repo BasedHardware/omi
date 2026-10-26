@@ -4241,6 +4241,7 @@
     "askInChatGpt": "Jautāt ChatGPT",
     "copyForAnyApp": "Kopēt jebkurai lietotnei",
     "askConnectChatGptFirst": "Vienreiz savienojiet ChatGPT, lai varētu jautāt par savām sarunām.",
+    "reconnectNudgeTitle": "{days, plural, one{Jūsu Omi nav savienojies jau {days} dienu} two{Jūsu Omi nav savienojies jau {days} dienas} few{Jūsu Omi nav savienojies jau {days} dienas} many{Jūsu Omi nav savienojies jau {days} dienas} other{Jūsu Omi nav savienojies jau {days} dienas}}",
     "reconnect": "Savienot vēlreiz",
     "chatGptNeedsReconnect": "Nepieciešama plašāka piekļuve. Savienojiet vēlreiz, lai labotu.",
     "connectAgentWaiting": "Gaida, kamēr aģents izmantos savu atslēgu",

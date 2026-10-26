@@ -4241,6 +4241,7 @@
     "askInChatGpt": "Klausti ChatGPT",
     "copyForAnyApp": "Kopijuoti bet kuriai programai",
     "askConnectChatGptFirst": "Vieną kartą prijunkite ChatGPT, kad galėtumėte jo klausti apie savo pokalbius.",
+    "reconnectNudgeTitle": "{days, plural, one{Jūsų Omi neprisijungė jau {days} dieną} two{Jūsų Omi neprisijungė jau {days} dienų} few{Jūsų Omi neprisijungė jau {days} dienas} many{Jūsų Omi neprisijungė jau {days} dienos} other{Jūsų Omi neprisijungė jau {days} dienų}}",
     "reconnect": "Prisijungti iš naujo",
     "chatGptNeedsReconnect": "Reikia daugiau prieigos. Prisijunkite iš naujo, kad ištaisytumėte.",
     "connectAgentWaiting": "Laukiama, kol agentas panaudos savo raktą",

@@ -13870,6 +13870,20 @@ class AppLocalizationsBn extends AppLocalizations {
   String get askConnectChatGptFirst => 'আপনার কথোপকথন সম্পর্কে জিজ্ঞাসা করতে একবার ChatGPT সংযুক্ত করুন।';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'আপনার Omi $days দিন ধরে সংযুক্ত হয়নি',
+      many: 'আপনার Omi $days দিন ধরে সংযুক্ত হয়নি',
+      few: 'আপনার Omi $days দিন ধরে সংযুক্ত হয়নি',
+      two: 'আপনার Omi $days দিন ধরে সংযুক্ত হয়নি',
+      one: 'আপনার Omi $days দিন ধরে সংযুক্ত হয়নি',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'আবার সংযুক্ত করুন';
 
   @override

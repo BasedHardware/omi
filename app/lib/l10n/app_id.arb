@@ -4276,6 +4276,7 @@
     "askInChatGpt": "Tanya ChatGPT",
     "copyForAnyApp": "Salin untuk Aplikasi Apa Pun",
     "askConnectChatGptFirst": "Hubungkan ChatGPT sekali untuk bertanya tentang percakapan Anda.",
+    "reconnectNudgeTitle": "{days, plural, one{Omi Anda belum terhubung selama {days} hari} two{Omi Anda belum terhubung selama {days} hari} few{Omi Anda belum terhubung selama {days} hari} many{Omi Anda belum terhubung selama {days} hari} other{Omi Anda belum terhubung selama {days} hari}}",
     "reconnect": "Hubungkan ulang",
     "chatGptNeedsReconnect": "Perlu akses tambahan. Hubungkan ulang untuk memperbaiki.",
     "connectAgentWaiting": "Menunggu agen menggunakan kuncinya",

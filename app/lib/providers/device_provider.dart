@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:omi/services/devices/charge_start_tracker.dart';
+import 'package:omi/services/devices/device_last_connected.dart';
 import 'package:omi/services/devices/fully_charged_alert_gate.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'dart:io';
@@ -324,6 +325,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         !SharedPreferencesUtil().batchModeEnabled;
     final endedSessionWasIntentional = endedDevice != null && _intentionalDisconnectDevices.remove(endedDevice.id);
     final isNewConnection = device != null && connectedDevice?.id != device.id;
+    // A link starting or ending is the last moment one was up.
+    if (device != null || connectedDevice != null) DeviceLastConnected.mark(now);
     connectedDevice = device;
     pairedDevice = device;
     if (isNewConnection) {
@@ -1117,6 +1120,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final healthDevice = pairedDevice;
     _deviceHealthTimer ??= Timer.periodic(const Duration(hours: 1), (_) {
       if (!_isCurrent(generation)) return;
+      // A long session can end without a disconnect callback (app killed); keep the stamp fresh.
+      if (connectedDevice != null) DeviceLastConnected.mark();
       final current = pairedDevice ?? healthDevice;
       if (current != null) unawaited(DeviceHealthTelemetry.maybeEmit(current));
     });

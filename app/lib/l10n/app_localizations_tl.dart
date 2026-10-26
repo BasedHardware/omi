@@ -13980,6 +13980,20 @@ class AppLocalizationsTl extends AppLocalizations {
       'Ikonekta ang ChatGPT nang isang beses para matanong ito tungkol sa iyong mga usapan.';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Hindi pa nakakonekta ang iyong Omi sa loob ng $days araw',
+      many: 'Hindi pa nakakonekta ang iyong Omi sa loob ng $days araw',
+      few: 'Hindi pa nakakonekta ang iyong Omi sa loob ng $days araw',
+      two: 'Hindi pa nakakonekta ang iyong Omi sa loob ng $days araw',
+      one: 'Hindi pa nakakonekta ang iyong Omi sa loob ng $days araw',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'Muling ikonekta';
 
   @override

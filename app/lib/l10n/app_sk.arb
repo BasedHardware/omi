@@ -4241,6 +4241,7 @@
     "askInChatGpt": "Opýtať sa ChatGPT",
     "copyForAnyApp": "Kopírovať pre ľubovoľnú aplikáciu",
     "askConnectChatGptFirst": "Raz pripojte ChatGPT a pýtajte sa ho na svoje konverzácie.",
+    "reconnectNudgeTitle": "{days, plural, one{Vaše Omi sa nepripojilo už {days} deň} two{Vaše Omi sa nepripojilo už {days} dní} few{Vaše Omi sa nepripojilo už {days} dni} many{Vaše Omi sa nepripojilo už {days} dňa} other{Vaše Omi sa nepripojilo už {days} dní}}",
     "reconnect": "Znova pripojiť",
     "chatGptNeedsReconnect": "Potrebuje viac prístupu. Pripojte znova a opravte.",
     "connectAgentWaiting": "Čaká sa, kým agent použije svoj kľúč",

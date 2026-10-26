@@ -4276,6 +4276,7 @@
     "askInChatGpt": "ChatGPT'ye Sor",
     "copyForAnyApp": "Herhangi Bir Uygulama İçin Kopyala",
     "askConnectChatGptFirst": "Konuşmaların hakkında sormak için ChatGPT'yi bir kez bağla.",
+    "reconnectNudgeTitle": "{days, plural, one{Omi'niz {days} gündür bağlanmadı} two{Omi'niz {days} gündür bağlanmadı} few{Omi'niz {days} gündür bağlanmadı} many{Omi'niz {days} gündür bağlanmadı} other{Omi'niz {days} gündür bağlanmadı}}",
     "reconnect": "Yeniden bağlan",
     "chatGptNeedsReconnect": "Daha fazla erişim gerekiyor. Düzeltmek için yeniden bağlan.",
     "connectAgentWaiting": "Ajanın anahtarını kullanması bekleniyor",

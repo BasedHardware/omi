@@ -4241,6 +4241,7 @@
     "askInChatGpt": "Kysy ChatGPT:ltä",
     "copyForAnyApp": "Kopioi mihin tahansa sovellukseen",
     "askConnectChatGptFirst": "Yhdistä ChatGPT kerran, niin voit kysyä siltä keskusteluistasi.",
+    "reconnectNudgeTitle": "{days, plural, one{Omisi ei ole yhdistänyt {days} päivään} two{Omisi ei ole yhdistänyt {days} päivään} few{Omisi ei ole yhdistänyt {days} päivään} many{Omisi ei ole yhdistänyt {days} päivään} other{Omisi ei ole yhdistänyt {days} päivään}}",
     "reconnect": "Yhdistä uudelleen",
     "chatGptNeedsReconnect": "Tarvitsee lisäoikeuksia. Korjaa yhdistämällä uudelleen.",
     "connectAgentWaiting": "Odotetaan, että agentti käyttää avaintaan",

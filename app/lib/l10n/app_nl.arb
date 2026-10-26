@@ -4241,6 +4241,7 @@
     "askInChatGpt": "Vraag het ChatGPT",
     "copyForAnyApp": "Kopiëren voor elke app",
     "askConnectChatGptFirst": "Verbind ChatGPT één keer om het vragen te stellen over je gesprekken.",
+    "reconnectNudgeTitle": "{days, plural, one{Je Omi heeft al {days} dag geen verbinding gemaakt} two{Je Omi heeft al {days} dagen geen verbinding gemaakt} few{Je Omi heeft al {days} dagen geen verbinding gemaakt} many{Je Omi heeft al {days} dagen geen verbinding gemaakt} other{Je Omi heeft al {days} dagen geen verbinding gemaakt}}",
     "reconnect": "Opnieuw verbinden",
     "chatGptNeedsReconnect": "Meer toegang nodig. Opnieuw verbinden om dit op te lossen.",
     "connectAgentWaiting": "Wachten tot de agent zijn sleutel gebruikt",

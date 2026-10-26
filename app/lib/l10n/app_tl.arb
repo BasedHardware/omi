@@ -11664,6 +11664,7 @@
     "askInChatGpt": "Tanungin ang ChatGPT",
     "copyForAnyApp": "Kopyahin para sa Kahit Anong App",
     "askConnectChatGptFirst": "Ikonekta ang ChatGPT nang isang beses para matanong ito tungkol sa iyong mga usapan.",
+    "reconnectNudgeTitle": "{days, plural, one{Hindi pa nakakonekta ang iyong Omi sa loob ng {days} araw} two{Hindi pa nakakonekta ang iyong Omi sa loob ng {days} araw} few{Hindi pa nakakonekta ang iyong Omi sa loob ng {days} araw} many{Hindi pa nakakonekta ang iyong Omi sa loob ng {days} araw} other{Hindi pa nakakonekta ang iyong Omi sa loob ng {days} araw}}",
     "reconnect": "Muling ikonekta",
     "chatGptNeedsReconnect": "Kailangan ng mas maraming access. Muling ikonekta para ayusin.",
     "connectAgentWaiting": "Hinihintay na gamitin ng agent ang key nito",

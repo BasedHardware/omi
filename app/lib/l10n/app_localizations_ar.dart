@@ -13796,6 +13796,20 @@ class AppLocalizationsAr extends AppLocalizations {
   String get askConnectChatGptFirst => 'اربط ChatGPT مرة واحدة لتسأله عن محادثاتك.';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'لم يتصل جهاز Omi منذ $days يوم',
+      many: 'لم يتصل جهاز Omi منذ $days يومًا',
+      few: 'لم يتصل جهاز Omi منذ $days أيام',
+      two: 'لم يتصل جهاز Omi منذ $days يوم',
+      one: 'لم يتصل جهاز Omi منذ $days يوم',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'إعادة الاتصال';
 
   @override

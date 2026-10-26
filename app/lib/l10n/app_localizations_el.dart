@@ -13960,6 +13960,20 @@ class AppLocalizationsEl extends AppLocalizations {
   String get askConnectChatGptFirst => 'Συνδέστε το ChatGPT μία φορά για να το ρωτάτε για τις συνομιλίες σας.';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Το Omi σας δεν έχει συνδεθεί εδώ και $days ημέρες',
+      many: 'Το Omi σας δεν έχει συνδεθεί εδώ και $days ημέρες',
+      few: 'Το Omi σας δεν έχει συνδεθεί εδώ και $days ημέρες',
+      two: 'Το Omi σας δεν έχει συνδεθεί εδώ και $days ημέρες',
+      one: 'Το Omi σας δεν έχει συνδεθεί εδώ και $days ημέρα',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'Επανασύνδεση';
 
   @override

@@ -11664,6 +11664,7 @@
     "askInChatGpt": "שאלו את ChatGPT",
     "copyForAnyApp": "העתקה לכל אפליקציה",
     "askConnectChatGptFirst": "חברו את ChatGPT פעם אחת כדי לשאול אותו על השיחות שלכם.",
+    "reconnectNudgeTitle": "{days, plural, one{ה-Omi שלך לא התחבר כבר {days} יום} two{ה-Omi שלך לא התחבר כבר {days} ימים} few{ה-Omi שלך לא התחבר כבר {days} ימים} many{ה-Omi שלך לא התחבר כבר {days} ימים} other{ה-Omi שלך לא התחבר כבר {days} ימים}}",
     "reconnect": "התחבר מחדש",
     "chatGptNeedsReconnect": "נדרשת גישה נוספת. התחבר מחדש כדי לתקן.",
     "connectAgentWaiting": "ממתין לכך שהסוכן ישתמש במפתח שלו",

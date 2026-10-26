@@ -4241,6 +4241,7 @@
     "askInChatGpt": "ถาม ChatGPT",
     "copyForAnyApp": "คัดลอกไปใช้กับแอปใดก็ได้",
     "askConnectChatGptFirst": "เชื่อมต่อ ChatGPT ครั้งเดียวเพื่อถามเกี่ยวกับการสนทนาของคุณ",
+    "reconnectNudgeTitle": "{days, plural, one{Omi ของคุณไม่ได้เชื่อมต่อมา {days} วันแล้ว} two{Omi ของคุณไม่ได้เชื่อมต่อมา {days} วันแล้ว} few{Omi ของคุณไม่ได้เชื่อมต่อมา {days} วันแล้ว} many{Omi ของคุณไม่ได้เชื่อมต่อมา {days} วันแล้ว} other{Omi ของคุณไม่ได้เชื่อมต่อมา {days} วันแล้ว}}",
     "reconnect": "เชื่อมต่อใหม่",
     "chatGptNeedsReconnect": "ต้องการสิทธิ์เข้าถึงเพิ่มเติม เชื่อมต่อใหม่เพื่อแก้ไข",
     "connectAgentWaiting": "กำลังรอให้เอเจนต์ใช้คีย์ของตน",

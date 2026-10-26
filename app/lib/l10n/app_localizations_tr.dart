@@ -13885,6 +13885,20 @@ class AppLocalizationsTr extends AppLocalizations {
   String get askConnectChatGptFirst => 'Konuşmaların hakkında sormak için ChatGPT\'yi bir kez bağla.';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Omi\'niz $days gündür bağlanmadı',
+      many: 'Omi\'niz $days gündür bağlanmadı',
+      few: 'Omi\'niz $days gündür bağlanmadı',
+      two: 'Omi\'niz $days gündür bağlanmadı',
+      one: 'Omi\'niz $days gündür bağlanmadı',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'Yeniden bağlan';
 
   @override

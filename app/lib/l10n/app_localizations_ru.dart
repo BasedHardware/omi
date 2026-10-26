@@ -13920,6 +13920,20 @@ class AppLocalizationsRu extends AppLocalizations {
   String get askConnectChatGptFirst => 'Подключите ChatGPT один раз, чтобы спрашивать его о своих беседах.';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Ваш Omi не подключался уже $days дня',
+      many: 'Ваш Omi не подключался уже $days дней',
+      few: 'Ваш Omi не подключался уже $days дня',
+      two: 'Ваш Omi не подключался уже $days дня',
+      one: 'Ваш Omi не подключался уже $days день',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'Подключить снова';
 
   @override

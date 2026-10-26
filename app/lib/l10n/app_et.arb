@@ -4241,6 +4241,7 @@
     "askInChatGpt": "Küsi ChatGPT-lt",
     "copyForAnyApp": "Kopeeri mis tahes rakenduse jaoks",
     "askConnectChatGptFirst": "Ühenda ChatGPT üks kord, et küsida temalt oma vestluste kohta.",
+    "reconnectNudgeTitle": "{days, plural, one{Sinu Omi pole {days} päev ühendust loonud} two{Sinu Omi pole {days} päeva ühendust loonud} few{Sinu Omi pole {days} päeva ühendust loonud} many{Sinu Omi pole {days} päeva ühendust loonud} other{Sinu Omi pole {days} päeva ühendust loonud}}",
     "reconnect": "Ühenda uuesti",
     "chatGptNeedsReconnect": "Vajab rohkem juurdepääsu. Paranda uuesti ühendamisega.",
     "connectAgentWaiting": "Ootame, kuni agent kasutab oma võtit",

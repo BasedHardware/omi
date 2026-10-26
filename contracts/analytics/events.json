@@ -2110,6 +2110,60 @@
       "correlation": null
     },
     {
+      "id": "reconnectNudgeShown",
+      "wire_name": "Reconnect Nudge Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "daysSinceConnected": {
+          "type": "int",
+          "wire_name": "days_since_connected"
+        }
+      },
+      "consumers": [
+        "reconnect-nudge"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "reconnectNudgeTapped",
+      "wire_name": "Reconnect Nudge Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "daysSinceConnected": {
+          "type": "int",
+          "wire_name": "days_since_connected"
+        }
+      },
+      "consumers": [
+        "reconnect-nudge"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "reconnectNudgeDismissed",
+      "wire_name": "Reconnect Nudge Dismissed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "daysSinceConnected": {
+          "type": "int",
+          "wire_name": "days_since_connected"
+        }
+      },
+      "consumers": [
+        "reconnect-nudge"
+      ],
+      "correlation": null
+    },
+    {
       "id": "dataPrivacyPageOpened",
       "wire_name": "Data Privacy Page Opened",
       "status": "active",

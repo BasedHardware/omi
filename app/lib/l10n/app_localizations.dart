@@ -24633,6 +24633,12 @@ abstract class AppLocalizations {
   /// **'Connect ChatGPT once to ask it about your conversations.'**
   String get askConnectChatGptFirst;
 
+  /// Home row shown when the paired Omi has had no connection for days. days is the whole number of days since it last connected (always 3 or more). Every plural branch is present so each locale can use its own forms.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, one{Your Omi hasn\'t connected in {days} day} two{Your Omi hasn\'t connected in {days} days} few{Your Omi hasn\'t connected in {days} days} many{Your Omi hasn\'t connected in {days} days} other{Your Omi hasn\'t connected in {days} days}}'**
+  String reconnectNudgeTitle(int days);
+
   /// Button that connects an app (ChatGPT) again so it gets the access it is missing
   ///
   /// In en, this message translates to:

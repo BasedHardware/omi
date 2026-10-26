@@ -13930,6 +13930,20 @@ class AppLocalizationsRo extends AppLocalizations {
   String get askConnectChatGptFirst => 'Conectează ChatGPT o singură dată ca să-l întrebi despre conversațiile tale.';
 
   @override
+  String reconnectNudgeTitle(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Omi-ul tău nu s-a conectat de $days de zile',
+      many: 'Omi-ul tău nu s-a conectat de $days de zile',
+      few: 'Omi-ul tău nu s-a conectat de $days zile',
+      two: 'Omi-ul tău nu s-a conectat de $days de zile',
+      one: 'Omi-ul tău nu s-a conectat de $days zi',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get reconnect => 'Reconectează';
 
   @override

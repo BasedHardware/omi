@@ -10,6 +10,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/devices/device_last_connected.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
@@ -167,6 +168,32 @@ void main() {
       expect(analytics.personPropertiesByUser[uid]?['has_paired_device'], isTrue);
       expect(DateTime.tryParse(analytics.personPropertiesByUser[uid]?['first_paired_at'] as String), isNotNull);
     }
+  });
+
+  test('stamps the last connection when a link starts and ends, never without one', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'stamp-user'});
+    await SharedPreferencesUtil.init();
+    final provider = DeviceProvider(bleDiagnosticsLoader: (_) async => throw StateError('no diagnostics'));
+    addTearDown(provider.dispose);
+    final device =
+        BtDevice(id: 'AA:AA:AA:AA:AA:04', name: 'Omi', type: DeviceType.omi, rssi: -50, firmwareRevision: '3.0.21');
+
+    await provider.setConnectedDevice(null);
+    expect(DeviceLastConnected.read(), isNull, reason: 'no link was up');
+
+    final beforeConnect = DateTime.now().subtract(const Duration(seconds: 1));
+    await provider.setConnectedDevice(device);
+    expect(DeviceLastConnected.read()!.isAfter(beforeConnect), isTrue);
+
+    final old = DateTime.utc(2026, 1, 1);
+    DeviceLastConnected.mark(old);
+    await provider.setConnectedDevice(null);
+    expect(DeviceLastConnected.read()!.isAfter(old.add(const Duration(days: 1))), isTrue,
+        reason: 'the link just ended');
+
+    DeviceLastConnected.mark(old);
+    await provider.setConnectedDevice(null);
+    expect(DeviceLastConnected.read(), old, reason: 'a second reset has no link to end');
   });
 
   test('non-null to null transition emits one truthful Device Session Ended', () async {

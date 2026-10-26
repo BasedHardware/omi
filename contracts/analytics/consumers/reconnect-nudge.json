@@ -1,0 +1,18 @@
+{
+  "id": "reconnect-nudge",
+  "kind": "question",
+  "owner": "Mobile growth",
+  "question": "Does Home's reconnect row bring idle Omis back? Per build: people shown the row, people who tapped Reconnect or closed it, and how many days their Omi had been away. Recovery is a keep-listed Device Session Ended for the same person after a tap.",
+  "query": "contracts/analytics/consumers/reconnect-nudge.sql",
+  "events": [
+    "reconnectNudgeShown",
+    "reconnectNudgeTapped",
+    "reconnectNudgeDismissed"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "build_number",
+    "days_since_connected"
+  ],
+  "zero_policy": "Presence is not recovery. Report shown, tapped and closed people separately, with a NULL tap rate when nobody was shown the row; a tap only counts as a reconnect when a later device session ends for that person."
+}
