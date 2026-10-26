@@ -498,7 +498,9 @@ def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
         started_at=START,
         timezone_name='UTC',
         language_code='en',
-        speaker_map={0: fixture['owner_name'], 1: None},
+        # This happy-path writer replay has a resolved voice binding. Calendar
+        # and screen attendance alone no longer authorize the participant.
+        speaker_map={0: fixture['owner_name'], 1: 'Maya Okafor'},
         transcript_segment_ids=[sid for sid, _spk, _text in fixture['segments']],
         known_spellings='Known spellings\n{"spelling": "Quorbi"}',
     )
@@ -810,7 +812,7 @@ def test_people_only_binding_cannot_escape_through_salvaged_submission():
     assert 'Michael' not in str(result.submission)
 
 
-def test_people_lookup_never_authorizes_identity_but_overlapping_calendar_does(toolbox, monkeypatch):
+def test_people_lookup_and_overlapping_calendar_never_authorize_a_voice(toolbox, monkeypatch):
     box, _ = toolbox
     box.identity = NotesIdentity()
     found = run(box.call('search_people', {'query': 'Maya'}))
@@ -827,7 +829,9 @@ def test_people_lookup_never_authorizes_identity_but_overlapping_calendar_does(t
     ]
     monkeypatch.setattr(tools.calendar_db, 'get_meetings_in_time_range', lambda *a, **kw: meetings)
     run(box.call('get_calendar', {}))
-    assert box.identity.supported('Maya Okafor')
+    assert box.identity.meeting_names == ('Maya Okafor',)
+    assert not box.identity.supported('Maya Okafor')
+    assert not box.identity.supported('Maya Okafor', 'c1')
     assert not box.identity.supported('Historical Person')
 
 

@@ -80,9 +80,9 @@ def test_model_evidence_kind_and_fabricated_evidence_cannot_authorize_identity(k
         {'people_on_screen': [{'name': NAME, 'evidence': ['call_window'], 'call_seen_during_conversation': True}]},
     ],
 )
-def test_conversation_calendar_or_tile_roster_can_corroborate_a_name(packet):
+def test_conversation_calendar_or_tile_roster_cannot_bind_an_unresolved_voice(packet):
     identity = notes_identity(SimpleNamespace(), {}, packet)
-    assert repair_identity(submission(), identity) == (submission(), [])
+    assert repair_identity(submission(), identity)[0]['participants'] == []
 
 
 def test_profile_page_and_historical_meeting_are_not_meeting_identity():
@@ -139,7 +139,7 @@ def test_prefix_keeps_original_voice_authority_separate_from_roster_inference():
         roster=roster,
     )
     assert prefix.speaker_names == (('c0', None),)
-    assert notes_identity(prefix, {'roster': roster}).supported(NAME)
+    assert not notes_identity(prefix, {'roster': roster}).supported(NAME)
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
@@ -270,11 +270,14 @@ def test_sarah_chen_contact_mentions_keep_people_spelling_on_every_notes_path(mo
 
 @pytest.mark.parametrize('name', ['David Zhang', 'David'])
 @pytest.mark.parametrize('speaker', [None, 'c1'])
-def test_owner_is_allowed_even_without_owner_speaker_evidence(name, speaker):
+def test_owner_profile_does_not_authorize_an_unresolved_speaker(name, speaker):
     prefix = SimpleNamespace(account_owner_name='David Zhang', owner_names=(), speaker_names=(('c1', None),))
     identity = notes_identity(prefix, {'people': [{'name': 'David Miller'}]})
     payload = {'overview': f'{name} reviewed the plan.', 'participants': [{'name': name, 'speaker': speaker}]}
-    assert repair_identity(payload, identity) == (payload, [])
+    fixed, repairs = repair_identity(payload, identity)
+    assert repairs == ['unsupported_speaker_identity']
+    assert fixed['participants'] == []
+    assert fixed['overview'] == 'a speaker reviewed the plan.'
 
 
 def test_blocked_david_contact_does_not_scrub_owner_first_name_or_full_name():

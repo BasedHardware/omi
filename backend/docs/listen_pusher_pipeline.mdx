@@ -6880,8 +6880,9 @@ by clients until their opt-in paths serve.
 Notes enforce speaker identity independently of the packet rollout. The output
 contract carries the original speaker-authority map separately from prompt
 roster inference. A People spelling or `search_people` hit cannot identify an
-unresolved speaker: a resolved binding, this conversation's calendar/tile roster,
-or an affirmative owner correction must corroborate it. Model-authored evidence
+unresolved speaker: a resolved binding or an affirmative owner correction must
+corroborate it. Calendar/tile attendance and the account profile do not bind a
+voice. Model-authored evidence
 lines do not authorize identities. Unsupported participants are removed and their
 names become “a speaker” across visible notes, tasks and events; names actually
 heard in speech remain hedged, without expanding them from the People catalog.
@@ -6925,6 +6926,44 @@ the refactor families while retaining the prerecorded-language gate allowlist.
 
 ### Wave 2 evidence and consumers
 
+The nine wave-2 percentage controls share the `capture-speaker-notes:wave2`
+account bucket in `config.refactor_modes`. Equal percentages select the same
+accounts across producers and consumers, and larger steps contain smaller
+ones. Digest admission remains additive; `off` overrides both. Other mode
+families and sampled shadow writers retain their existing salts. Deploy this
+parser consistently before a percentage ramp.
+
+For accounts serving `SPEAKER_EVIDENCE_MODE`, conversation memory formation
+accepts only a prompt-local copy of segments with a unique trusted owner cluster
+and a positive producer match (`conversation_voice` or
+`speaker_evidence_v2`) plus `speaker_identity_status=user`, or an explicit manual
+owner label. A legacy `is_user` boolean, carried label, unavailable/ambiguous
+identity or contradictory owner clusters cannot authorize memory formation.
+No eligible speech means no paid eager extraction and no empty replacement of
+earlier memories. Quote grounding and the extraction fingerprint see the same
+filtered input; notes, tasks, retained transcripts/audio and explicit external
+text intake keep their own inputs and authorities. Shadow/off and accounts
+outside the aligned serve cohort retain their existing memory input. Measure
+admitted and withheld memory sources per day before expanding the cohort.
+The deployment-wide canonical mutation readiness fence remains unconditional.
+The looser live-embedding operating point alone is insufficient; V2 provenance
+requires its actual owner candidate to be label-eligible and confident.
+In `omi_media_noise_shadow_total`, `check=owner_memory_source` counts admitted
+(`agree`) versus fully withheld (`disagree`) serving-cohort source attempts.
+`check=owner_memory_segments` counts included/excluded segments with the same
+outcomes. These are aggregate attempt volumes, including retries, not unique
+created memories or labeled speaker correctness. Compare daily windows and
+existing memory creation telemetry before expanding; an absent series is unknown.
+
+V2 manual evidence records the segment IDs its receipt binds. A short excerpt
+contributes only its own speech duration to media admission, never its whole
+voice's duration. Old evidence without that scope abstains from exclusion.
+Explicit restore and its persisted user-kept marker reach classification before
+the media minimum, so later reprocessing cannot hide a restored card again.
+
+Notes do not bind a likely speaker suggestion to a name: likely and unknown
+voices remain anonymous, with statements attributed as "someone said".
+
 Speaker refinement uses the same evidence record: count hints cannot merge
 confident distinct identities, and desktop-channel/near-field anchors remain
 explicit candidates. Live text-only introductions cannot create or link people
@@ -6938,6 +6977,12 @@ Memory/task entrypoints and daily/simple/comprehensive recaps use the same
 eligibility helper. Restoring a recording protects it, reclassification clears
 its exclusion, and successful reprocessing clears the terminal marker. Shadow
 preserves transcripts, labels and derived output; it never writes media edges.
+On clients with the existing Show discarded/restore capability (currently
+iOS/Android), both media and noise minima are hidden from the default feed.
+Bystander classification uses noise. Explicit keep/restore overrides automatic
+hiding and reprocessing clears the derived-effect suppression marker. Other
+clients need a visible restore surface before enabling equivalent hiding; a
+wire decoder accepting `discarded` alone is not that product capability.
 
 Cross-device reconciliation runs at completed-conversation finalization. Wall
 time proposes candidates; ordered shared speech must confirm every group pair.
@@ -6954,6 +6999,8 @@ unwired. Closed clients query coverage. Server SNR/confidence is optional and
 not consistently persisted; absent measurements retain source/duration ranking.
 This branch does not repair historical derived effects or release audio based
 on inferred alignment.
+The remaining generalized streaming/quality-assembly work is scoped in
+[streaming cross-device design](cross_device_streaming_design.md).
 
 Database-writing shadow paths use `refactor_modes.shadow_sampled`: capture
 coverage, speaker evidence and boundary evidence each declare
