@@ -337,7 +337,7 @@ def test_payload_validation_has_closed_failure_stage(setup, monkeypatch, legacy_
     artifacts.fetch_audio.return_value = wav()
     recovery.stt = transcribe
     monkeypatch.setattr(
-        'utils.batch_pipeline.quarantine_recovery.projection_speech_spans',
+        'utils.batch_pipeline.recovery_recognizers.projection_speech_spans',
         Mock(side_effect=ValueError('PRIVATE_SENTINEL')),
     )
     assert recovery.recover('bad', binding.owner_id) == 'failed_held'
