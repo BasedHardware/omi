@@ -310,7 +310,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         # Pin intent-to-treat identity before any POST/background callback. A
         # fallback leg keeps the session arm even if task context later changes.
         self._routing_cohort = current_routing_cohort.get()
-        self._shape_route = self._routing_cohort.parakeet_shape_route if self._routing_cohort else ShapeRoute()
+        self._shape_route = (
+            self._routing_cohort.parakeet_shape_route if self._routing_cohort else ShapeRoute(initialized=True)
+        )
         self._shape_url: str | None = None
         self.progress_deadline_enabled = False
         self.allow_no_text_rescue: Callable[[], bool] = lambda: True

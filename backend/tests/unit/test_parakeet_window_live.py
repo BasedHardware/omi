@@ -75,7 +75,11 @@ async def test_shape_canary_post_isolated_and_zero_drains_without_cancelling(mon
 
     client = HeldClient()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
-    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    token = current_routing_cohort.set(RoutingCohort('on'))
+    try:
+        sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    finally:
+        current_routing_cohort.reset(token)
     pending = asyncio.create_task(sock._post_and_parse(b'\x01\x00' * 32000, 2))
     await entered.wait()
     route_file.write_text(json.dumps({**route, 'percent': 0}))
