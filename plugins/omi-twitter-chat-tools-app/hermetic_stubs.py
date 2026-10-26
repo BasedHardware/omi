@@ -21,12 +21,13 @@ class StubResponse:
 
 
 class StubHTTPException(Exception):
-    """Mirrors the two attributes the disconnect guard's callers read."""
+    """Mirrors the attributes the disconnect and tools guards' callers read."""
 
-    def __init__(self, status_code: int, detail: object = None) -> None:
+    def __init__(self, status_code: int = 500, detail: object = None, headers: dict = None, **kwargs) -> None:
         super().__init__(detail)
         self.status_code = status_code
         self.detail = detail
+        self.headers = headers or {}
 
 
 def http_exception() -> type:
