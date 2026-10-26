@@ -5,12 +5,12 @@ from dataclasses import asdict
 from uuid import uuid4
 
 from config.policy import RecoveryPolicy
-from config.batch_language_recovery import language_guarded, independent_attempted, below_silence_threshold
+from config.batch_language_recovery import language_guarded, independent_attempted
 from database.batch_pipeline_policy import load_stage_policy, stage_in_transaction, record_policy_observations
 from database.batch_pipeline_terminal_empty import spent_canary
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
-from utils.batch_pipeline.contracts import WorkResult, held_vad_census
+from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_result_allowed
 from utils.batch_pipeline.recovery_disposition import STAGES, REASONS, padded_skipped
 from utils.batch_pipeline.scheduler import owner_key
 
@@ -193,7 +193,8 @@ class SpeechRedriveStore:
         *,
         failure=None,
         outcome="success",
-        measured_held_vad_speech_seconds=None
+        measured_held_vad_speech_seconds=None,
+        independent_silence=False,
     ):
         def commit(tx):
             job, binding = self.checked(tx, segment_id)
@@ -216,10 +217,15 @@ class SpeechRedriveStore:
                 return False
             if outcome not in {'success', 'no_recoverable_speech', 'silence'}:
                 raise ValueError('closed speech outcome required')
-            if result_uri and outcome == 'silence' and independent_redrive(job):
-                census = held_vad_census(job)
-                if census is None or not below_silence_threshold(census):
-                    return False
+            census = held_vad_census(job, measured_held_vad_speech_seconds)
+            if result_uri and not held_result_allowed(
+                job, outcome, measured_held_vad_speech_seconds, independent=independent_silence
+            ):
+                if job.get('measured_held_vad_speech_seconds') != census:
+                    job['measured_held_vad_speech_seconds'] = census
+                    tx.put('jobs', segment_id, job)
+                return False
+            job['measured_held_vad_speech_seconds'] = census
             if result_uri:
                 owner = tx.get('owners', owner_key(job['owner_id']))
                 owner['revision'] = owner.get('revision', 0) + 1
@@ -236,7 +242,6 @@ class SpeechRedriveStore:
                 if not failure or failure.get('stage') not in STAGES or failure.get('reason') not in REASONS:
                     raise ValueError('closed redrive failure required')
                 marker.update(state='failed_held', settled_at=now, failure=dict(failure))
-                job['measured_held_vad_speech_seconds'] = held_vad_census(job, measured_held_vad_speech_seconds)
             tx.put('jobs', segment_id, job)
             return True
 

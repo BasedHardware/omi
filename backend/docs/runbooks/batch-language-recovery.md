@@ -39,6 +39,16 @@ attempt also prevents an operator from buying Soniox again for the same unit.
   VAD later reports zero; settlement also fences saved-silence replay against
   unknown or positive census evidence.
 
+The same census rule also covers ordinary recovery, paid redrive, silent-only
+operator disposition, terminal disposition and shadow settlement/reaping.
+Ordinary VAD-only silence requires an explicitly validated zero and no prior
+positive speech; guarded subframe silence additionally requires both independent
+empty recognizers. Saved results supply their validated VAD measurement to the
+atomic settlement fence, so a real zero can reconcile without converting an
+unknown or larger prior value into zero. Contradictory saved results stay held.
+Legacy no-provider/terminal tools refuse language-guarded units; use the explicit
+independent epoch-3 plan. Completed historical receipts remain unchanged.
+
 Threshold evidence: local Silero evaluates 512 samples at 16 kHz, one 32 ms frame
 (`utils/stt/local_vad.py`). Only the clipped final frame can be shorter. Synthetic
 tests cover 0/16/32/64/320/4384 ms, the 511/512-sample boundary, and floating-point

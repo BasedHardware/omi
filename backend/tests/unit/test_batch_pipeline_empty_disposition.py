@@ -176,7 +176,9 @@ def test_operator_silence_preserves_paid_intent_and_replay_is_once(setup, monkey
     token = job['silence_disposition']['token']
     assert token != old['token'] and row(client)['recovery'] == old
     assert protocol.prepare_silence('bad', binding.owner_id, 'plan', 101)['silence_disposition']['token'] == token
-    assert protocol.complete_silence('bad', token, 'plan', 'gs://synthetic/silence', 102)
+    assert protocol.complete_silence(
+        'bad', token, 'plan', 'gs://synthetic/silence', 102, measured_held_vad_speech_seconds=0
+    )
     assert row(client)['recovery'] == old and row(client)['result']['outcome'] == 'silence'
     revision = client.rows[
         (
@@ -184,7 +186,9 @@ def test_operator_silence_preserves_paid_intent_and_replay_is_once(setup, monkey
             owner_key(binding.owner_id),
         )
     ]['revision']
-    assert protocol.complete_silence('bad', token, 'plan', 'gs://synthetic/silence', 103)
+    assert protocol.complete_silence(
+        'bad', token, 'plan', 'gs://synthetic/silence', 103, measured_held_vad_speech_seconds=0
+    )
     assert (
         client.rows[
             (
@@ -255,11 +259,15 @@ def test_operator_replay_after_durable_upload_completion_does_not_need_live_run(
     protocol = SilenceDispositionStore(store, server_flags=SERVING_ENV)
     job = protocol.prepare_silence('bad', binding.owner_id, 'plan', 100)
     token = job['silence_disposition']['token']
-    assert protocol.complete_silence('bad', token, 'plan', 'gs://synthetic/silence', 102)
+    assert protocol.complete_silence(
+        'bad', token, 'plan', 'gs://synthetic/silence', 102, measured_held_vad_speech_seconds=0
+    )
     ledger = client.rows[('users', binding.owner_id, 'sync_content_ledger', binding.content_id)]
     ledger['status'] = 'completed'
     snapshot = deepcopy(client.rows)
-    assert protocol.complete_silence('bad', token, 'plan', 'gs://synthetic/silence', 103)
+    assert protocol.complete_silence(
+        'bad', token, 'plan', 'gs://synthetic/silence', 103, measured_held_vad_speech_seconds=0
+    )
     assert protocol.prepare_silence('bad', binding.owner_id, 'plan', 104)['silence_disposition']['token'] == token
     assert client.rows == snapshot
 

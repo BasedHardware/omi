@@ -12,9 +12,8 @@ from database.batch_pipeline_policy import (
 )
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, normalized_binding
 from database.sync_ledger import batch_projection_ledger_owner_matches
-from config.batch_language_recovery import language_guarded, below_silence_threshold
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
-from utils.batch_pipeline.contracts import WorkResult, held_vad_census
+from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
 from utils.batch_pipeline.scheduler import owner_key
 
 
@@ -254,6 +253,7 @@ class RecoveryStore:
         outcome="success",
         failure=None,
         measured_held_vad_speech_seconds=None,
+        independent_silence=False,
     ):
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
@@ -266,13 +266,17 @@ class RecoveryStore:
                 or existing
             ):
                 return False, 0
-            if result_uri and outcome == 'silence' and language_guarded(job):
-                census = held_vad_census(job)
-                if census is None or not below_silence_threshold(census):
-                    return False, 0
+            census = held_vad_census(job, measured_held_vad_speech_seconds)
+            if result_uri and not held_result_allowed(
+                job, outcome, measured_held_vad_speech_seconds, independent=independent_silence
+            ):
+                if job.get('measured_held_vad_speech_seconds') != census:
+                    job['measured_held_vad_speech_seconds'] = census
+                    tx.put('jobs', segment_id, job)
+                return False, 0
+            job['measured_held_vad_speech_seconds'] = census
             if result_uri is None:
                 job.update(recovery_state='failed_held')
-                job['measured_held_vad_speech_seconds'] = held_vad_census(job, measured_held_vad_speech_seconds)
                 if failure:
                     from utils.batch_pipeline.recovery_disposition import STAGES, REASONS
 
@@ -394,6 +398,8 @@ class SilenceDispositionStore(RecoveryStore):
                 raise ProjectionBlocked('disposition owner mismatch')
             if marker.get('plan_digest') == plan_digest and marker.get('state') == 'completed':
                 return job
+            if not held_silence_allowed(job, 0):
+                raise ProjectionBlocked('held speech blocks no-provider silence')
             if (
                 binding.owner_id != owner_id
                 or job.get('state') != 'quarantined'
@@ -428,7 +434,9 @@ class SilenceDispositionStore(RecoveryStore):
         record_policy_observations(observations)
         return result
 
-    def complete_silence(self, segment_id, token, plan_digest, result_uri, now):
+    def complete_silence(
+        self, segment_id, token, plan_digest, result_uri, now, *, measured_held_vad_speech_seconds=None
+    ):
         from config.batch_pipeline import empty_asr_disposition_enabled
 
         if not empty_asr_disposition_enabled():
@@ -457,7 +465,14 @@ class SilenceDispositionStore(RecoveryStore):
                 or job.get('merge_pending') is not False
             ):
                 return False
+            census = held_vad_census(job, measured_held_vad_speech_seconds)
+            if not held_silence_allowed(job, measured_held_vad_speech_seconds):
+                if job.get('measured_held_vad_speech_seconds') != census:
+                    job['measured_held_vad_speech_seconds'] = census
+                    tx.put('jobs', segment_id, job)
+                return False
             owner = tx.get('owners', owner_key(job['owner_id']))
+            job['measured_held_vad_speech_seconds'] = held_vad_census(job, measured_held_vad_speech_seconds)
             owner['revision'] = owner.get('revision', 0) + 1
             marker.update(state='completed', completed_at=now)
             job.update(

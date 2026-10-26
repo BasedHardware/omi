@@ -6174,6 +6174,11 @@ count (null for unobserved) and original measured VAD seconds; T2 retains the
 maximum prior/new measured held value. A later CPU zero cannot erase positive
 worker evidence; per-provider receipts still retain their own local measurements.
 The retained census also gates silence and saved-silence settlement/replay.
+This applies to ordinary recovery, paid redrive, silent-only/terminal operator
+disposition and shadow settlement/reaping. A validated saved result supplies its
+measurement to the atomic fence; prior positive speech is never cleared by a
+later zero. Ordinary VAD-only silence needs a measured zero, and guarded units
+cannot bypass independent recovery through the legacy no-provider tools.
 The 32 ms boundary is a conservative Silero frame-resolution
 proposal supported by synthetic tests, not labeled evidence about held audio.
 

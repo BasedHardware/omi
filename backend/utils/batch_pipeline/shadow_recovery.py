@@ -7,7 +7,7 @@ from config.policy import RecoveryPolicy
 from config.batch_pipeline_empty_asr import terminal_empty_allowed
 from config.batch_language_recovery import language_guarded, below_silence_threshold, allowed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from utils.batch_pipeline.contracts import WorkItem, held_vad_census
+from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_silence_allowed
 from utils.batch_pipeline.recovery_disposition import inspect_audio, MultilingualEmpty, padded_empty
 from utils.batch_pipeline.recovery_recognizers import recognizer_attempt, independent_ready
 
@@ -85,7 +85,7 @@ def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspec
                 independent_ready if second_stt is second_transcribe else lambda: True,
             )
         elif not spans:
-            outcome = 'empty'
+            outcome = 'empty' if held_silence_allowed({**job['item'], **job}, 0) else 'failed_held'
         elif not shadow_percent() or not repository.paid(segment, 'modulate'):
             outcome = 'paid_skipped'
         else:

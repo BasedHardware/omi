@@ -35,7 +35,7 @@ from config.batch_language_recovery import allowed as independent_allowed, langu
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
-from utils.batch_pipeline.contracts import WorkItem, held_vad_census
+from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_silence_allowed, held_result_allowed
 from utils.batch_pipeline.recovery_recognizers import (
     transcribe,
     second_transcribe,
@@ -47,6 +47,7 @@ from utils.batch_pipeline.recovery_disposition import (
     silence_payload,
     RecoveryFailure,
     result_outcome,
+    result_vad_evidence,
     MultilingualEmpty,
     WordsWithoutVad,
     padded_empty,
@@ -222,10 +223,34 @@ class QuarantineRecovery:
             if job['recovery_state'] == 'running':
                 uri = self.artifacts.find_recovery_result(item, token)
                 if uri:
-                    outcome = result_outcome(self.artifacts.load_result(item, uri))
+                    payload = self.artifacts.load_result(item, uri)
+                    outcome = result_outcome(payload)
+                    measured = result_vad_evidence(payload)
+                    independent = payload.get('words_provider') == 'independent_empty_strict_vad'
+                    if not held_result_allowed(job, outcome, measured, independent=independent):
+                        failure = {'stage': 'payload_validation', 'reason': 'invalid_payload'}
+                        return (
+                            'failed_held'
+                            if self.protocol.settle(
+                                segment_id,
+                                token,
+                                self.clock(),
+                                failure=failure,
+                                measured_held_vad_speech_seconds=measured,
+                            )
+                            else 'held'
+                        )
                     return (
                         'reconciled'
-                        if self.protocol.settle(segment_id, token, self.clock(), uri, outcome=outcome)
+                        if self.protocol.settle(
+                            segment_id,
+                            token,
+                            self.clock(),
+                            uri,
+                            outcome=outcome,
+                            measured_held_vad_speech_seconds=measured,
+                            independent_silence=independent,
+                        )
                         else 'held'
                     )
                 # Bound the scan dwell without allowing takeover. A very late
@@ -258,6 +283,8 @@ class QuarantineRecovery:
                     inspected_spans = spans
                     measured_vad = sum(span['end'] - span['start'] for span in spans)
                     if not spans and not language_guarded(job):
+                        if not held_silence_allowed(job, measured_vad):
+                            raise RecoveryFailure('payload_validation', 'invalid_payload')
                         local_payload = silence_payload(duration)
                 except RecoveryFailure as error:
                     inspection_failure = error
@@ -415,7 +442,15 @@ class QuarantineRecovery:
             try:
                 outcome = result_outcome(payload)
                 uri = self.artifacts.persist_recovery_result(item, payload, token)
-                changed = self.protocol.settle(segment_id, token, self.clock(), uri, outcome=outcome)
+                changed = self.protocol.settle(
+                    segment_id,
+                    token,
+                    self.clock(),
+                    uri,
+                    outcome=outcome,
+                    measured_held_vad_speech_seconds=result_vad_evidence(payload),
+                    independent_silence=payload.get('words_provider') == 'independent_empty_strict_vad',
+                )
                 if changed and outcome == 'no_recoverable_speech':
                     log_terminal_empty()
                 if changed and outcome == 'silence':

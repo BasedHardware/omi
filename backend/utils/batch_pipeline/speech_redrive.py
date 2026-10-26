@@ -14,13 +14,14 @@ from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from config.batch_language_recovery import allowed as independent_allowed, below_silence_threshold, prior_modulate_empty
-from utils.batch_pipeline.contracts import WorkItem, held_vad_census
+from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_result_allowed
 from utils.batch_pipeline.quarantine_recovery import log_failure, log_terminal_empty
 from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     result_outcome,
+    result_vad_evidence,
     RecoveryFailure,
     MultilingualEmpty,
     terminal_empty_payload,
@@ -89,9 +90,29 @@ def redrive_one(
                 outcome == 'success' and not payload.get('words')
             ):
                 raise RecoveryFailure('payload_validation', 'invalid_payload')
+            measured = result_vad_evidence(payload)
+            independent_silence = payload.get('words_provider') == 'independent_empty_strict_vad'
+            if not held_result_allowed(job, outcome, measured, independent=independent_silence):
+                failure = {'stage': 'payload_validation', 'reason': 'invalid_payload'}
+                return (
+                    'failed_held'
+                    if protocol.settle(
+                        sid, token, plan_digest, clock(), failure=failure, measured_held_vad_speech_seconds=measured
+                    )
+                    else 'fenced'
+                )
             return (
                 'reconciled'
-                if protocol.settle(sid, token, plan_digest, clock(), uri, outcome=result_outcome(payload))
+                if protocol.settle(
+                    sid,
+                    token,
+                    plan_digest,
+                    clock(),
+                    uri,
+                    outcome=outcome,
+                    measured_held_vad_speech_seconds=measured,
+                    independent_silence=independent_silence,
+                )
                 else 'fenced'
             )
         if clock() - marker['started_at'] > 900:
@@ -221,7 +242,16 @@ def redrive_one(
     # invocation may reconcile the object, but can never call the provider again.
     uri = artifacts.persist_recovery_result(item, payload, token)
     outcome = result_outcome(payload)
-    changed = protocol.settle(sid, token, plan_digest, clock(), uri, outcome=outcome)
+    changed = protocol.settle(
+        sid,
+        token,
+        plan_digest,
+        clock(),
+        uri,
+        outcome=outcome,
+        measured_held_vad_speech_seconds=result_vad_evidence(payload),
+        independent_silence=payload.get('words_provider') == 'independent_empty_strict_vad',
+    )
     if changed and outcome == 'no_recoverable_speech':
         record_correctness('no_recoverable_speech', seconds=item.duration_seconds)
         log_terminal_empty()

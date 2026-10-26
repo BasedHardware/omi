@@ -13,7 +13,14 @@ import time
 from config.batch_pipeline_shadow import paid_recovery_limit, shadow_percent
 from config.policy import resolve_stage_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from utils.batch_pipeline.contracts import WorkItem, RecoveryWork, ValidationFailureWork, attach_held_vad
+from utils.batch_pipeline.contracts import (
+    WorkItem,
+    RecoveryWork,
+    ValidationFailureWork,
+    attach_held_vad,
+    held_vad_census,
+    held_silence_allowed,
+)
 from utils.batch_pipeline.shadow_metrics import OUTCOMES, PAID, PAID_AUDIO, record
 
 MAX_OFFERS = 4
@@ -55,6 +62,29 @@ class ShadowStore:
         job = tx.get('shadow_jobs', segment)
         if job.get('shadow') is not True or job.get('state') == 'settled':
             return None
+        context = {'duration_seconds': (job.get('item') or {}).get('duration_seconds'), **job}
+        measured = speech if vad == 'strict' else None
+        census = held_vad_census(context, measured)
+        independent = (
+            isinstance(recognizers, dict)
+            and set(recognizers) == {'modulate', 'soniox'}
+            and all(
+                isinstance(r, dict)
+                and r.get('provider') == p
+                and r.get('outcome') == 'empty'
+                and r.get('word_count') == 0
+                for p, r in recognizers.items()
+            )
+        )
+        # Positive-VAD historical exhaustion also uses "empty" and retains loss
+        # accounting. A zero/unknown silence claim must respect earlier speech.
+        if (
+            outcome == 'empty'
+            and measured in (None, 0)
+            and not held_silence_allowed(context, measured, independent=independent)
+        ):
+            outcome = 'failed_held'
+        speech, vad = census or 0.0, 'strict' if census is not None else 'unknown'
         row = {
             'shadow': True,
             'state': 'settled',
@@ -281,6 +311,7 @@ class ShadowStore:
             if job.get('shadow') is not True or job.get('state') != 'running':
                 return False
             bound = dict(job['item'])
+            bound['measured_held_vad_speech_seconds'] = held_vad_census({**bound, **job})
             attach_held_vad(bound, evidence.measured_held_vad_speech_seconds, evidence.worker_vad_receipt)
             evidence_fields = {
                 key: bound[key] for key in ('measured_held_vad_speech_seconds', 'worker_vad_receipt') if key in bound

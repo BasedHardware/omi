@@ -141,6 +141,14 @@ def validate_independent_silence(payload):
         raise ValueError('two independent empty receipts required')
 
 
+def result_vad_evidence(payload):
+    """Measurement from a validated result, including deterministic saved-result replay."""
+    outcome = result_outcome(payload)
+    if outcome == 'silence':
+        return payload.get('measured_vad_speech_seconds', 0.0)
+    return payload.get('speech_seconds')
+
+
 def independent_silence_payload(duration, spans):
     seconds = sum(s['end'] - s['start'] for s in spans)
     payload = {

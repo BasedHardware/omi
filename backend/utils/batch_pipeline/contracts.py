@@ -7,6 +7,7 @@ from typing import Protocol, Sequence
 
 
 from config.batch_pipeline import Priority
+from config.batch_language_recovery import language_guarded, below_silence_threshold
 from utils.batch_pipeline.capacity import PoolCapacity as PoolCapacity
 from utils.batch_pipeline.errors import validate_worker_failure
 from utils.observability.reasons import WorkerValidationReason, WorkOutcome, reason_values
@@ -125,6 +126,22 @@ def held_vad_census(job, seconds=None):
     measured = validate_measured_vad(seconds, duration)
     known = [value for value in (prior, measured) if value is not None]
     return max(known) if known else None
+
+
+def held_silence_allowed(job, seconds=None, *, independent=False):
+    """Every route respects prior speech; guarded subframes need independent proof."""
+    census = held_vad_census(job, seconds)
+    if census is None:
+        return False
+    if independent:
+        return below_silence_threshold(census)
+    return not language_guarded(job) and census == 0
+
+
+def held_result_allowed(job, outcome, seconds=None, *, independent=False):
+    if outcome == 'silence':
+        return held_silence_allowed(job, seconds, independent=independent)
+    return outcome != 'no_recoverable_speech' or not language_guarded(job)
 
 
 def vad_receipt(audio_uri, captured_samples, speech_seconds):
