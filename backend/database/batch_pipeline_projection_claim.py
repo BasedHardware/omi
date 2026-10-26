@@ -3,12 +3,18 @@
 from contextlib import contextmanager
 from functools import lru_cache
 import logging
+import time
 from uuid import uuid4
 
 from database import redis_db
+from database.firestore_transaction_retry import transaction_retry_deadline_scope
 
 logger = logging.getLogger(__name__)
 LEASE_SECONDS = 300
+# Transaction retries under the claim stop while the lease still covers a
+# whole worst-case Firestore chain, so a slow retry tail cannot outlive the
+# claim another walker would then coalesce onto.
+CLAIM_RETRY_MARGIN_SECONDS = 30
 REDIS_TIMEOUT_SECONDS = 1.0
 _RELEASE_LUA = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
@@ -44,7 +50,11 @@ def projection_claim(namespace: str, hashed_owner: str):
         yield True
         return
     try:
-        yield acquired
+        # The claim's lease bounds every Firestore transaction retry inside it
+        # (minus the margin above): run_blocking and plain nested calls both
+        # carry the scoped deadline down to the transaction boundary.
+        with transaction_retry_deadline_scope(time.monotonic() + LEASE_SECONDS - CLAIM_RETRY_MARGIN_SECONDS):
+            yield acquired
     finally:
         if acquired:
             try:

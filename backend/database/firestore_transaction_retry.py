@@ -5,19 +5,34 @@ raised while the decorated transaction body performs reads.  A fresh outer
 transaction is therefore required for read-time contention.  Keep this helper
 narrow: ambiguous commit outcomes and unrelated provider failures must not be
 replayed.
+
+Attempts are bounded twice.  ``max_attempts`` bounds the chain count for every
+caller.  A caller that owns a wall-clock budget — the sync handler's request
+budget, a batch projection claim's lease — additionally scopes a deadline, and
+a new attempt starts only while the remaining budget covers a whole
+conservative attempt estimate, so total retry wall time stays below that
+deadline.  Expired-transaction retirements count as contention here (an
+expired chain is atomic and wrote nothing, exactly like an aborted one), but
+only under those bounds.
 """
 
 import logging
 import random
 import time
-from typing import Any, Callable, TypeVar
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Callable, Iterator, TypeVar
 
 try:
-    # The fallback class below rebinds this name in lightweight stub environments.
+    # The fallback classes below rebind these names in lightweight stub environments.
     from google.api_core.exceptions import Aborted as FirestoreAborted  # type: ignore[reportAssignmentType]
+    from google.api_core.exceptions import InvalidArgument as FirestoreInvalidArgument  # type: ignore[reportAssignmentType]
 except Exception:  # pragma: no cover - lightweight tests may stub only google.cloud
 
     class FirestoreAborted(Exception):
+        """Stub-safe fallback for test environments without google-api-core."""
+
+    class FirestoreInvalidArgument(Exception):
         """Stub-safe fallback for test environments without google-api-core."""
 
 
@@ -28,21 +43,66 @@ T = TypeVar("T")
 DEFAULT_MAX_ATTEMPTS = 5
 _INITIAL_MAX_DELAY_SECONDS = 0.2
 _MAX_DELAY_SECONDS = 1.0
+# Firestore retires any transaction chain after 270 seconds (the documented
+# transaction lifetime quota — the same retirement that surfaces as
+# "transaction has expired"), so no single attempt can outlive this.  Starting
+# an attempt only while that whole worst case fits the remaining budget keeps
+# total retry wall time below the deadline without ever timing the body itself.
+FIRESTORE_TRANSACTION_CHAIN_SECONDS = 270.0
+
+_EXPIRED_TRANSACTION_MARKER = "transaction has expired"
 
 
 class FirestoreContentionExhausted(RuntimeError):
-    """Raised after every bounded transaction-contention attempt is used."""
+    """Raised after every bounded transaction-contention attempt is used.
+
+    ``reason`` is the closed outcome token ``attempts_exhausted`` or
+    ``deadline_exhausted``; callers log it, never the message.
+    """
+
+    def __init__(self, message: str, *, reason: str = "attempts_exhausted") -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+def _is_expired_transaction(error: BaseException) -> bool:
+    # A retired chain reports itself as ``InvalidArgument`` at commit or as
+    # ``Aborted`` on a streaming read; either way nothing was written.
+    return (
+        isinstance(error, (FirestoreInvalidArgument, FirestoreAborted))
+        and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
+    )
 
 
 def _is_transaction_contention(error: BaseException) -> bool:
     current: BaseException | None = error
     seen: set[int] = set()
     while current is not None and id(current) not in seen:
-        if isinstance(current, FirestoreAborted):
+        if isinstance(current, FirestoreAborted) or _is_expired_transaction(current):
             return True
         seen.add(id(current))
         current = current.__cause__
     return False
+
+
+_retry_deadline: ContextVar[float | None] = ContextVar("firestore_transaction_retry_deadline", default=None)
+
+
+@contextmanager
+def transaction_retry_deadline_scope(deadline: float | None) -> Iterator[None]:
+    """Bound nested Firestore transaction retries to ``deadline`` (monotonic seconds).
+
+    ``run_blocking`` copies ContextVars into executor leaves, so a caller that
+    owns a wall-clock budget scopes it once here and every nested
+    ``run_with_transaction_contention_retry`` inherits it; ``None`` restores
+    the default attempt-only bound.  Scopes nest by token, and a ``None``
+    scope inside a bounded one opts a subregion back out.
+    """
+    token = _retry_deadline.set(deadline)
+    try:
+        yield
+    finally:
+        _retry_deadline.reset(token)
 
 
 def equal_jitter_delay(attempt: int, random_value: Callable[[], float] = random.random) -> float:
@@ -65,21 +125,62 @@ def run_with_transaction_contention_retry(
     *,
     operation_name: str,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+    deadline: float | None = None,
+    per_attempt_estimate_seconds: float = FIRESTORE_TRANSACTION_CHAIN_SECONDS,
     sleep: Callable[[float], None] = time.sleep,
     random_value: Callable[[], float] = random.random,
+    monotonic: Callable[[], float] = time.monotonic,
 ) -> T:
     """Run a decorated Firestore transaction with bounded equal-jitter retry.
 
     A new transaction is created for every outer attempt.  Only explicit
-    ``Aborted`` contention, including the SDK's exhausted-attempt wrapper, is
-    replayed.  Firestore aborts are atomic, so callers must keep all writes and
-    idempotency checks inside ``operation``.
+    ``Aborted`` contention — including the SDK's exhausted-attempt wrapper —
+    and expired-transaction retirements are replayed.  Firestore aborts and
+    expiries are atomic, so callers must keep all writes and idempotency
+    checks inside ``operation``.  When this helper nests ``run_transactional``,
+    the outer layer owns every attempt: the inner call runs with
+    ``attempts=1`` so a single budget bounds the whole chain count.
+
+    ``deadline`` (monotonic seconds; the ambient ``transaction_retry_deadline_scope``
+    applies when the parameter is ``None``) adds a wall-clock bound: a new
+    attempt starts only while the remaining budget covers a whole conservative
+    attempt estimate — Firestore's documented 270 s chain lifetime, or the last
+    attempt's observed duration when that was longer.  When it does not, the
+    loop stops with ``FirestoreContentionExhausted(reason='deadline_exhausted')``.
+    Callers without a deadline keep the attempt-only bound.
     """
 
     if max_attempts < 1:
         raise ValueError("max_attempts must be positive")
+    if per_attempt_estimate_seconds <= 0:
+        raise ValueError("per_attempt_estimate_seconds must be positive")
 
+    if deadline is None:
+        deadline = _retry_deadline.get()
+    last_error: Exception | None = None
+    last_attempt_seconds = 0.0
     for attempt in range(1, max_attempts + 1):
+        if deadline is not None:
+            remaining = deadline - monotonic()
+            estimate = max(per_attempt_estimate_seconds, last_attempt_seconds)
+            if remaining < estimate:
+                logger.error(
+                    "firestore_transaction_contention operation=%s attempt=%d/%d outcome=deadline_exhausted "
+                    "remaining_ms=%d estimate_ms=%d",
+                    operation_name,
+                    attempt,
+                    max_attempts,
+                    round(remaining * 1000),
+                    round(estimate * 1000),
+                )
+                error = FirestoreContentionExhausted(
+                    f"Firestore transaction retry deadline exhausted for {operation_name}",
+                    reason="deadline_exhausted",
+                )
+                if last_error is not None:
+                    raise error from last_error
+                raise error
+        attempt_started = monotonic()
         try:
             result = operation(transaction_factory())
             if attempt > 1:
@@ -91,6 +192,8 @@ def run_with_transaction_contention_retry(
                 )
             return result
         except Exception as error:
+            last_error = error
+            last_attempt_seconds = monotonic() - attempt_started
             if not _is_transaction_contention(error):
                 raise
             if attempt >= max_attempts:

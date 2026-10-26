@@ -279,6 +279,84 @@ def test_claim_redis_unavailable_keeps_firestore_as_authority(monkeypatch):
         assert acquired
 
 
+def test_claim_scopes_the_transaction_retry_deadline_to_its_lease(claim_redis):
+    import time as real_time
+
+    from database import batch_pipeline_projection_claim as claims
+    from database import firestore_transaction_retry
+
+    with claims.projection_claim('synthetic', 'owner'):
+        deadline = firestore_transaction_retry._retry_deadline.get()
+        assert (
+            real_time.monotonic()
+            < deadline
+            <= real_time.monotonic() + (claims.LEASE_SECONDS - claims.CLAIM_RETRY_MARGIN_SECONDS)
+        )
+    assert firestore_transaction_retry._retry_deadline.get() is None
+
+
+def test_claim_lease_bounds_projection_retries_within_the_claim(monkeypatch, claim_redis):
+    import time as real_time
+    from functools import partial
+
+    from database import batch_pipeline_projection_claim as claims
+    from database import firestore_transaction_retry
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+
+    EXPIRED = 'The referenced transaction has expired or is no longer valid.'
+
+    class Clock:
+        def __init__(self):
+            # Anchored to the real clock so the claim's lease deadline and the
+            # retry gates share one time base.
+            self.now = real_time.monotonic()
+
+        def monotonic(self):
+            return self.now
+
+        def sleep(self, seconds):
+            self.now += seconds
+
+    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
+    clock = Clock()
+    actual = firestore_transaction_retry.run_with_transaction_contention_retry
+    monkeypatch.setattr(
+        firestore_transaction_retry,
+        'run_with_transaction_contention_retry',
+        partial(
+            actual,
+            sleep=clock.sleep,
+            random_value=lambda: 0,
+            monotonic=clock.monotonic,
+            per_attempt_estimate_seconds=250.0,
+        ),
+    )
+    client = Mock()
+    calls = []
+
+    def operation(transaction):
+        calls.append(transaction)
+        clock.now += 100.0
+        raise InvalidArgument(EXPIRED)
+
+    store = ProjectionStore(Mock(client=client))
+    policy = resolve_stage_policy('synthetic-owner', 'projection')
+    with claims.projection_claim('synthetic', 'owner') as acquired:
+        assert acquired
+        # One 100 s attempt fits the 270 s lease budget; the next chain's
+        # worst case does not, so the storm stops inside the claim.
+        with pytest.raises(FirestoreContentionExhausted) as raised:
+            store.run(operation, policy=policy)
+        assert raised.value.reason == 'deadline_exhausted'
+        assert len(calls) == 1
+    # Without the claim's lease the same storm spends the full attempt budget.
+    with pytest.raises(FirestoreContentionExhausted) as raised:
+        store.run(operation, policy=policy)
+    assert raised.value.reason == 'attempts_exhausted'
+    assert len(calls) == 6
+
+
 def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch):
     from types import SimpleNamespace
     from utils.batch_pipeline import projection
