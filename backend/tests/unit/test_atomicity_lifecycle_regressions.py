@@ -91,6 +91,98 @@ def test_preference_tool_honors_real_relevance_score(preference_tools_module):
     assert "Uses Google Calendar" in message
 
 
+def test_preference_duplicate_message_skips_non_dict_hits(preference_tools_module):
+    """Non-dict entries in search hits (e.g. None, str, int, list) must not raise AttributeError."""
+    assert preference_tools_module.preference_duplicate_message("Prefers dark mode", [None, "corrupt", 123, ["x"]]) is None
+    message = preference_tools_module.preference_duplicate_message(
+        "Prefers dark mode",
+        [None, "bad-hit", {"memory_id": "m1", "content": "Prefers dark mode"}],
+    )
+    assert message == "Similar preference already exists (memory_id=m1): Prefers dark mode"
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [
+        (False, False),
+        (True, True),
+        (0, False),
+        (1, True),
+        (0.0, False),
+        (1.0, True),
+        ("false", False),
+        ("FALSE", False),
+        (" 0 ", False),
+        ("no", False),
+        ("off", False),
+        ("n", False),
+        ("", False),
+        ("   ", False),
+        ("true", True),
+        ("TRUE", True),
+        (" 1 ", True),
+        ("yes", True),
+        ("on", True),
+        ("y", True),
+        (None, False),
+        ("maybe", False),
+        ("unrecognized", False),
+        (["true"], False),
+        ({"user_stated": True}, False),
+    ],
+)
+def test_coerce_user_stated_truth_table(preference_tools_module, raw_value, expected):
+    assert preference_tools_module._coerce_user_stated(raw_value) is expected
+
+
+@pytest.mark.parametrize(
+    ("raw_id", "expected"),
+    [
+        ("  mem-123  ", "mem-123"),
+        ("mem-abc", "mem-abc"),
+        ("", ""),
+        ("   ", ""),
+        (42, "42"),
+        (0, "0"),
+        (True, ""),
+        (False, ""),
+        (None, ""),
+        (["mem-1"], ""),
+    ],
+)
+def test_normalize_replace_memory_id_helper(preference_tools_module, raw_id, expected):
+    assert preference_tools_module._normalize_replace_memory_id(raw_id) == expected
+
+
+@pytest.mark.parametrize("bad_preference", ["", "   ", "\n\t ", None, 123, ["Prefers tea"]])
+def test_preference_tool_rejects_empty_or_non_string_preference(preference_tools_module, monkeypatch, bad_preference):
+    module = preference_tools_module
+    firestore_mock = MagicMock(side_effect=AssertionError("Firestore must not be touched on invalid preference"))
+    monkeypatch.setattr(module, "get_data_plane_firestore_client", firestore_mock)
+
+    result = module.save_user_preference_tool(
+        bad_preference,
+        config={"configurable": {"user_id": "user-1"}},
+    )
+    assert result == "Error: Preference must be a non-empty string"
+    firestore_mock.assert_not_called()
+
+
+def test_get_uid_tolerates_non_dict_or_none_config_and_falls_back(preference_tools_module, monkeypatch):
+    module = preference_tools_module
+    monkeypatch.setattr(module, "_agent_config", lambda: None)
+
+    assert module._get_uid(None) == ""
+    assert module._get_uid("not-a-dict") == ""  # type: ignore[arg-type]
+    assert module._get_uid({"configurable": None}) == ""
+    assert module._get_uid({"configurable": "invalid", "user_id": "  top-level-user  "}) == "top-level-user"
+    assert module._get_uid({"configurable": {"user_id": "  cfg-user  "}, "user_id": "top-level-user"}) == "cfg-user"
+
+    monkeypatch.setattr(module, "_agent_config", lambda: {"configurable": {"user_id": " ctx-user "}})
+    assert module._get_uid(None) == "ctx-user"
+    assert module._get_uid({"configurable": None}) == "ctx-user"
+
+
 def test_preference_tool_writes_retry_stable_agent_conclusion_to_ledger(preference_tools_module, monkeypatch):
     module = preference_tools_module
 

@@ -49,7 +49,11 @@ def preference_duplicate_message(preference: str, hits: Optional[list]) -> Optio
     the search result actually carries a relevance field.
     """
     preferred = " ".join((preference or "").split()).casefold()
-    for hit in hits or []:
+    if not isinstance(hits, (list, tuple, set)):
+        return None
+    for hit in hits:
+        if not isinstance(hit, dict):
+            continue
         memory_id = str(hit.get('memory_id') or hit.get('id') or '').strip()
         existing = f" (memory_id={memory_id})" if memory_id else ""
         raw_score = hit.get("score", hit.get("relevance_score", hit.get("vector_score")))
@@ -100,6 +104,15 @@ def _coerce_user_stated(value: Any) -> bool:
         if norm in _TRUE_USER_STATED:
             return True
     return False
+
+
+def _normalize_replace_memory_id(value: Any) -> str:
+    """Normalize replace_memory_id from string or integer input; reject booleans and other types."""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value).strip()
+    return ""
 
 
 def _get_uid(config: RunnableConfig) -> str:
@@ -235,7 +248,7 @@ def save_user_preference_tool(
         logger.error("Failed to resolve preference storage error_type=%s", type(e).__name__)
         return "Error saving preference"
 
-    replacement = replace_memory_id.strip() if isinstance(replace_memory_id, str) else (str(replace_memory_id).strip() if isinstance(replace_memory_id, int) and not isinstance(replace_memory_id, bool) else "")
+    replacement = _normalize_replace_memory_id(replace_memory_id)
     if replacement:
         try:
             prior = read_canonical_memory_item(uid, replacement, db_client=firestore_client)
