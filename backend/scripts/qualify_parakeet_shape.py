@@ -280,6 +280,7 @@ async def run(args):
                                 task.cancel()
                         await asyncio.gather(*tasks, return_exceptions=True)
                     active_seconds[arm] += time.monotonic() - arm_started
+                    require_watcher(args.watcher_status, receipt['identities']['watcher_identity'])
                 for index, fixture in enumerate(wave_fixtures):
                     pair = {arm: results[arm][index] for arm in ('control', 'candidate')}
                     parity = quality(fixture, pair['control']['segments'], pair['candidate']['segments'])
@@ -291,6 +292,7 @@ async def run(args):
                             for metric in samples[cohort][arm]:
                                 samples[cohort][arm][metric].append(pair[arm][metric])
                 wave_index += concurrency
+            require_watcher(args.watcher_status, receipt['identities']['watcher_identity'])
             phase = {
                 'concurrency': concurrency,
                 'elapsed_seconds': time.monotonic() - started,
