@@ -114,15 +114,20 @@ def list_owner_pending_cards(
     """``(day, pending cards)`` for the owner's Review listing.
 
     The day is resolved exactly as the pass dated it (``cards_display_day``);
-    when that day's document has no pending cards — the pass did not run, or
-    everything is answered — the most recent of the previous
+    when that day has no cards document yet (the pass has not run), the most
+    recent of the previous
     ``OWNER_FALLBACK_DAYS`` days that still has pending cards is listed
     instead, so the answer endpoint's date path stays the day the cards
     actually live in.
     """
     day = cards_display_day(uid, tz, now)
+    cards = open_loops_db.get_cards(uid, day, firestore_client=firestore_client)
+    if cards is not None:
+        # The pass ran for this day: an empty or fully answered day stays empty.
+        # Falling back here would resurface yesterday's unanswered cards.
+        return day, [card for card in cards if card.get('state') == PENDING_STATE][: max(0, limit)]
     base = date.fromisoformat(day)
-    for offset in range(OWNER_FALLBACK_DAYS + 1):
+    for offset in range(1, OWNER_FALLBACK_DAYS + 1):
         candidate = (base - timedelta(days=offset)).isoformat()
         pending = list_pending_cards(uid, limit=limit, date_str=candidate, firestore_client=firestore_client)
         if pending:
@@ -163,13 +168,41 @@ def answer_card(
     if card is None:
         return None
 
+    try:
+        _record_answer_on_loop(uid, card, action, moment, tz, firestore_client)
+    except Exception:
+        # The card committed as answered but its loop did not record it. Put the
+        # card back to pending so the owner's retry applies the answer instead of
+        # hitting a 409 that silently loses it; the route returns a 500.
+        try:
+            open_loops_db.transition_card_state(
+                uid,
+                day,
+                str(card_id),
+                PENDING_STATE,
+                None,
+                from_state=CARD_STATE_BY_ACTION[action],
+                firestore_client=firestore_client,
+            )
+        except Exception:
+            logger.exception('open_loop_card_revert_failed card_id=%s date=%s', card_id, day)
+        raise
+    return card
+
+
+def _record_answer_on_loop(
+    uid: str, card: Dict[str, Any], action: str, moment: datetime, tz: Optional[str], firestore_client: Any
+) -> None:
     loops = open_loops_db.get_loops(uid, firestore_client=firestore_client)
     loop = next((l for l in loops if str(l.get('id')) == str(card.get('loop_id'))), None)
-    if loop is not None:
-        open_loops_db.upsert_loop(
-            uid, _apply_answer_to_loop(uid, loop, card, action, moment, tz), firestore_client=firestore_client
-        )
-    return card
+    if loop is None or loop.get('status') in store.TERMINAL_STATUSES:
+        # Already resolved, dropped or expired since the card was written: the
+        # card answer stands, but it must not re-resolve the loop or complete
+        # its task a second time.
+        return
+    open_loops_db.upsert_loop(
+        uid, _apply_answer_to_loop(uid, loop, card, action, moment, tz), firestore_client=firestore_client
+    )
 
 
 def _complete_linked_task(uid: str, task_id: str, loop_id: Any) -> None:

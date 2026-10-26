@@ -423,3 +423,61 @@ def test_task_completion_failure_never_rolls_back_the_loop_transition(cards_env,
     assert answered['state'] == 'done'
     loop = get_loops(UID, firestore_client=cards_env.fake)[0]
     assert loop['status'] == 'resolved'
+
+
+def test_owner_listing_never_falls_back_over_a_day_the_pass_ran(cards_env, monkeypatch):
+    """Today's document exists but is fully answered (or the pass wrote zero
+    cards): the listing stays empty instead of resurfacing yesterday's
+    unanswered cards, whose loops may have expired or resolved since."""
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
+    tz = 'Africa/Lagos'
+    set_cards(UID, '2026-10-25', [_card(state='done')], firestore_client=cards_env.fake)
+    set_cards(UID, '2026-10-24', [_card(card_id='ol-24', question='older card')], firestore_client=cards_env.fake)
+    afternoon = datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc)
+    assert service.list_owner_pending_cards(UID, tz=tz, now=afternoon, firestore_client=cards_env.fake) == (
+        '2026-10-25',
+        [],
+    )
+    set_cards(UID, '2026-10-25', [], firestore_client=cards_env.fake)
+    assert service.list_owner_pending_cards(UID, tz=tz, now=afternoon, firestore_client=cards_env.fake) == (
+        '2026-10-25',
+        [],
+    )
+
+
+def test_answer_on_a_terminal_loop_never_re_resolves_or_completes_its_task(cards_env):
+    loop = _loop(
+        status='expired',
+        linked_task_id='task-9',
+        task_link='model',
+        linked_task_title=TASK_TITLE,
+    )
+    _seed(cards_env, [_card(question=STRONG_QUESTION)], loops=[loop])
+    answered = service.answer_card(UID, LOOP_ID, 'done', date_str=DATE_STR, now=NOW, firestore_client=cards_env.fake)
+    assert answered['state'] == 'done'
+    stored = get_loops(UID, firestore_client=cards_env.fake)[0]
+    assert stored['status'] == 'expired' and stored['history'] == loop['history']
+    assert cards_env.task_completions == []
+
+
+def test_a_failed_loop_write_puts_the_card_back_so_a_retry_applies(cards_env, monkeypatch):
+    _seed(cards_env, [_card()])
+    real_upsert = service.open_loops_db.upsert_loop
+    calls = {'n': 0}
+
+    def flaky_upsert(*args, **kwargs):
+        calls['n'] += 1
+        if calls['n'] == 1:
+            raise RuntimeError('firestore unavailable')
+        return real_upsert(*args, **kwargs)
+
+    monkeypatch.setattr(service.open_loops_db, 'upsert_loop', flaky_upsert)
+    with pytest.raises(RuntimeError):
+        service.answer_card(UID, LOOP_ID, 'drop', date_str=DATE_STR, now=NOW, firestore_client=cards_env.fake)
+    # the card is pending again, not a silent 409 on retry
+    assert [c['id'] for c in service.list_pending_cards(UID, date_str=DATE_STR, firestore_client=cards_env.fake)] == [
+        LOOP_ID
+    ]
+    answered = service.answer_card(UID, LOOP_ID, 'drop', date_str=DATE_STR, now=NOW, firestore_client=cards_env.fake)
+    assert answered['state'] == 'dropped'
+    assert get_loops(UID, firestore_client=cards_env.fake)[0]['status'] == 'dropped'

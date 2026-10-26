@@ -168,7 +168,8 @@ def _transition_card(
     date_str: str,
     card_id: str,
     state: str,
-    answered_at: str,
+    answered_at: Optional[str],
+    from_state: str = CARD_STATE_PENDING,
 ) -> Optional[Dict[str, Any]]:
     """Read-check-update of one card's state, serialized against every other answer.
 
@@ -189,7 +190,7 @@ def _transition_card(
     if not isinstance(cards, list):
         return None
     position = next((i for i, c in enumerate(cards) if isinstance(c, dict) and str(c.get('id')) == str(card_id)), None)
-    if position is None or cards[position].get('state') != CARD_STATE_PENDING:
+    if position is None or cards[position].get('state') != from_state:
         return None
     card = {**cards[position], 'state': state, 'answered_at': answered_at}
     cards[position] = card
@@ -210,11 +211,12 @@ def transition_card_state(
     date_str: str,
     card_id: str,
     state: str,
-    answered_at: str,
+    answered_at: Optional[str],
     *,
+    from_state: str = CARD_STATE_PENDING,
     firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
-    """Move one pending card of the day's document to ``state`` atomically.
+    """Move one card of the day's document from ``from_state`` (pending) to ``state`` atomically.
 
     On contention (another answer committed since this transaction's read) the
     Firestore wrapper re-runs the body against the committed state, so the
@@ -231,6 +233,7 @@ def transition_card_state(
         card_id,
         state,
         answered_at,
+        from_state,
     )
 
 
