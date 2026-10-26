@@ -520,7 +520,9 @@ final class ConversationRepository {
     let session = cacheWriteScope.capture()
     if let cached = try? await local.detail(id: id) {
       try ensureCurrentSession(session)
-      onCached?(confirmedRestores[id] ?? cached)
+      onCached?(
+        ConversationReconciliationPolicy.retainingLoadedTranscript(
+          server: confirmedRestores[id] ?? cached, current: cached))
     }
 
     do {
@@ -542,7 +544,8 @@ final class ConversationRepository {
       try ensureCurrentSession(session)
       if let cached = try? await local.detail(id: id) {
         try ensureCurrentSession(session)
-        return confirmedRestores[id] ?? cached
+        return ConversationReconciliationPolicy.retainingLoadedTranscript(
+          server: confirmedRestores[id] ?? cached, current: cached)
       }
       try ensureCurrentSession(session)
       guard let seed else { throw error }
@@ -871,9 +874,10 @@ final class ConversationRepository {
       return row
     }
     if !row.discarded && current {
-      confirmedRestores[row.id] = row
+      let retained = ConversationReconciliationPolicy.retainingLoadedTranscript(server: row, current: restored)
+      confirmedRestores[row.id] = retained
       confirmedRestoreRevisions[row.id] = row.updatedAt
-      return row
+      return retained
     }
     return restored
   }

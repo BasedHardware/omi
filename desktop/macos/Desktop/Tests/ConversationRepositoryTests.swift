@@ -92,6 +92,60 @@ final class ConversationRepositoryTests: XCTestCase {
       ).isEmpty)
   }
 
+  func testSparseListAfterRestoreRetainsTranscriptForOfflineDetail() async throws {
+    let restored = makeConversation(revision: 2, transcript: "Retained transcript")
+    let sparse = makeConversation(title: "Fresh list title", revision: 3)
+    let remote = FakeConversationRemote(listResult: .success([sparse]))
+    remote.restoreResult = .success(restored)
+    let local = FakeConversationLocal(detailResult: restored)
+    let repository = ConversationRepository(remote: remote, local: local)
+    _ = try await repository.restore(id: restored.id)
+    await repository.load(query: .all)
+    var cachedPaint: ServerConversation?
+    let offline = try await repository.detail(id: restored.id) { cachedPaint = $0 }
+    XCTAssertEqual(cachedPaint?.transcriptSegments.first?.text, "Retained transcript")
+    XCTAssertEqual(offline.transcriptSegments.first?.text, "Retained transcript")
+    XCTAssertTrue(offline.transcriptSegmentsIncluded)
+    XCTAssertEqual(offline.title, "Fresh list title")
+    XCTAssertEqual(offline.updatedAt, sparse.updatedAt)
+  }
+
+  func testSparseSearchAfterRestoreRetainsTranscriptButExplicitEmptyDetailWins() async throws {
+    let restored = makeConversation(revision: 2, transcript: "Retained transcript")
+    let sparse = makeConversation(revision: 3)
+    var empty = makeConversation(revision: 4)
+    empty.transcriptSegmentsIncluded = true
+    let remote = FakeConversationRemote(searchResult: .success([sparse]))
+    remote.restoreResult = .success(restored)
+    let local = FakeConversationLocal(detailResult: restored)
+    let repository = ConversationRepository(remote: remote, local: local)
+    _ = try await repository.restore(id: restored.id)
+    let hits = try await repository.search(text: "synthetic", includeDiscarded: true)
+    XCTAssertEqual(hits.first?.transcriptSegments.first?.text, "Retained transcript")
+    let offline = try await repository.detail(id: restored.id)
+    XCTAssertEqual(offline.transcriptSegments.first?.text, "Retained transcript")
+    remote.detailResult = .success(empty)
+    let canonical = try await repository.detail(id: restored.id)
+    XCTAssertTrue(canonical.transcriptSegments.isEmpty)
+    XCTAssertTrue(canonical.transcriptSegmentsIncluded)
+    XCTAssertEqual(canonical.updatedAt, empty.updatedAt)
+  }
+
+  func testSparseRestoreResponseDoesNotMaskCachedTranscriptOffline() async throws {
+    let cached = makeConversation(revision: 1, transcript: "Cached retained transcript", discarded: true)
+    let restored = makeConversation(title: "Restored", revision: 2)
+    let remote = FakeConversationRemote()
+    remote.restoreResult = .success(restored)
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal(detailResult: cached))
+    _ = try await repository.restore(id: restored.id)
+    var cachedPaint: ServerConversation?
+    let offline = try await repository.detail(id: restored.id) { cachedPaint = $0 }
+    XCTAssertEqual(cachedPaint?.transcriptSegments.first?.text, "Cached retained transcript")
+    XCTAssertEqual(offline.transcriptSegments.first?.text, "Cached retained transcript")
+    XCTAssertFalse(offline.discarded)
+    XCTAssertEqual(offline.title, "Restored")
+  }
+
   func testRestoreWithoutResponseRevisionAdoptsFreshServerChanges() async throws {
     let restored = makeConversation(title: "Restored", revision: nil)
     let fresh = makeConversation(title: "Later title", revision: 3)
