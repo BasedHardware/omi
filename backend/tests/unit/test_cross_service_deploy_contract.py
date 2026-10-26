@@ -222,7 +222,10 @@ def results(tmp_path_factory: pytest.TempPathFactory) -> Results:
         if name in HELM_MUTATIONS and not HAS_HELM:
             continue
         source = OverlaySource(tmp_path_factory.mktemp(name), overrides())
-        context = contract.build_context(source, readers=baseline.readers)
+        # Source-default mutations need a fresh reader inventory; manifest/chart
+        # mutations can reuse the baseline AST scan.
+        readers = None if name == 'worker_without_independent_recovery' else baseline.readers
+        context = contract.build_context(source, readers=readers)
         mutations[name], _, _ = contract.partition(contract.evaluate(context), gaps)
     return Results(baseline=baseline, baseline_new=baseline_new, mutations=mutations)
 
