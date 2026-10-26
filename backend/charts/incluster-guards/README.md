@@ -160,8 +160,13 @@ age and scrape age must be <=120s. Missing/stale/nonfinite samples are BLIND.
 A fresh `omi_batch_pipeline_oldest_age_seconds > 1800` emits **TRIP**,
 `uncommitted_job_age_over_30m`. This is a conservative stuck-job **proxy**:
 `database/batch_pipeline_store.py:oldest()` queries `merge_pending=true` and
-measures from enqueue. It includes historical obligations and legitimate deep
-queues; it cannot identify new jobs or prove a projection wedge. Retry age is
+measures from enqueue, skipping durable allowance policy holds
+(`compute_decision` outcome=held reason=allowance_exhausted; 131 such holds
+kept this proxy tripped permanently on 2026-10-25) within a bounded 500-row
+FIFO prefix; a prefix filled entirely by holds fails toward tripping on the
+oldest hold's age rather than a fresh zero. It still includes legitimate deep
+queues; it cannot identify new
+jobs or prove a projection wedge. Retry age is
 logged, not another rollback condition. Usable readings without that trip are
 **PARTIAL**, never a claim of complete batch safety.
 
@@ -174,11 +179,28 @@ running** until those gaps have a verified aggregate producer. The separate
 trusted P90 aggregates without customer metadata access.
 
 Every reading emits JSON `batch_safety` / `parakeet_guard` records without IDs,
-workload env, event messages, or HTTP bodies. A batch TRIP/BLIND or Parakeet
-TRIP/BLIND exits nonzero; backoffLimit=0 prevents retries from accelerating the
+workload env, event messages, or HTTP bodies. The batch section is **isolated
+evidence** (2026-10-25 21:06Z ruling): its trips and unknowns are logged and
+recorded in the state ConfigMap but never fail the Job or block the Parakeet
+schedule - only a Parakeet TRIP/BLIND exits nonzero.
+backoffLimit=0 prevents retries from accelerating the
 blind counter. The state ConfigMap records `omi.me/batch-safety-verdict` and
 `omi.me/parakeet-guard-verdict`. Kube-state-metrics exposes failed Jobs without
 an exporter or new Job network listener.
+
+## Rollback expiry and the explicit clear
+
+An applied rollback does not wait for a human forever: while rolled back, the
+Job keeps evaluating readings, and after **one full 15-minute lookback window
+of consecutive clean readings** (no trips, no blind, no unmeasured, not
+low-sample) it clears itself - restoring workload-only metrics with the floor
+still at 12, after which the arming/usable gates own any scheduled reduction.
+Any unusable reading restarts the clean streak; a real regression keeps
+re-tripping readings, so its rollback never expires. A rollback/expiry loop is
+bounded and visible: each cycle holds the cap for at least the clean window
+plus a fresh arming window before any lower applies. The explicit operator
+clear remains: patch the HPA to remove the `parakeet_request_latency_p99`
+metric (an approved HPA change); the guard reconciles on the next reading.
 
 **Alert routing needs lead verification:** the checked-in monitoring values say
 Grafana owns notification routing and disable Alertmanager. This chart does not
