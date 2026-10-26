@@ -225,6 +225,22 @@ async def probe_arm(base, fixture, client):
     return {'first': first, 'post': live_post, 'v2_post': post, 'segments': segments, 'v2': payload}
 
 
+def sample_wave(samples, fixtures, results):
+    """Concurrent requests share a queue; never count them as independent trials.
+
+    Retain one randomly chosen matched producer pair per cohort per wave.
+    Every producer still participates in the separate hard quality/error gate.
+    """
+    indices = {'pooled': list(range(len(fixtures)))}
+    for index, fixture in enumerate(fixtures):
+        indices.setdefault(fixture['sha256'], []).append(index)
+    for cohort, choices in indices.items():
+        index = random.choice(choices)
+        for arm, metrics in samples[cohort].items():
+            for metric, values in metrics.items():
+                values.append(results[arm][index][metric])
+
+
 async def run(args):
     fixtures = load_manifest(args.manifest)
     cohorts = ['pooled', *sorted({f['sha256'] for f in fixtures})]
@@ -235,6 +251,7 @@ async def run(args):
         'state': 'HOLD',
         'fixture_hashes': [f['sha256'] for f in fixtures],
         'test': 'exact-binomial-p95-zero-margin-pooled-and-every-fixture',
+        'statistical_unit': 'one-random-matched-producer-pair-per-wave-per-cohort',
         'alpha_per_tail': alpha,
         'phases': phases,
         'identities': json.loads(Path(args.identities).read_text()),
@@ -288,10 +305,7 @@ async def run(args):
                     if not parity['pass'] or pair['control']['v2'] != pair['candidate']['v2']:
                         raise ValueError('accuracy_speaker_language_or_timestamp_parity_failed')
                     qualities.append(parity)
-                    for cohort in ('pooled', fixture['sha256']):
-                        for arm in samples[cohort]:
-                            for metric in samples[cohort][arm]:
-                                samples[cohort][arm][metric].append(pair[arm][metric])
+                sample_wave(samples, wave_fixtures, results)
                 wave_index += concurrency
             require_watcher(args.watcher_status, receipt['identities']['watcher_identity'])
             phase = {
@@ -299,6 +313,7 @@ async def run(args):
                 'elapsed_seconds': time.monotonic() - started,
                 'active_seconds_by_arm': active_seconds,
                 'quality_pairs': len(qualities),
+                'waves': wave_index // concurrency,
                 'quality_pass': all(q['pass'] for q in qualities),
                 'quality_totals': {
                     key: sum(q[key] for q in qualities)

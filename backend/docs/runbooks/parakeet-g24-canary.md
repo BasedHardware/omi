@@ -210,6 +210,15 @@ arms, three metrics, five phases, two tails and all cohorts. Accept only if the 
 bound <= control lower bound: zero worsening margin. Infinite/overlapping
 intervals are HOLD, a separated regression ABORT. No post hoc margin or sample
 floor reduction. A short or sparse run cannot pass by lasting an hour.
+Concurrent producers share a GPU queue, so they are not independent trials.
+The p95 test retains one randomly selected matched producer pair per wave
+for each cohort; all producers still face every hard quality/error check.
+Record the wave count, retain stable reset/warmup conditions between waves,
+and HOLD if temporal dependence invalidates the binomial sampling assumption.
+In particular, long clips can leave the first stage inconclusive well beyond
+15 minutes; size the approved window for the required sample count and keep
+0% if it cannot fit off-peak. Four hours is a duration minimum, not a promise
+of enough statistical power or of a PASS.
 
 ## Lead-only live ramp and rollback
 

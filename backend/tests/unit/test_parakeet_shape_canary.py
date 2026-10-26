@@ -262,6 +262,15 @@ def test_uncertainty_is_hold_not_parity():
     assert qualify.compare(list(range(500)), list(range(500)))['state'] == 'HOLD'
 
 
+def test_concurrent_producers_are_one_trial_per_wave_not_independent_samples():
+    samples = {cohort: {arm: {'first': []} for arm in ('control', 'candidate')} for cohort in ('pooled', 'clip')}
+    results = {arm: [{'first': n} for n in range(8)] for arm in ('control', 'candidate')}
+    qualify.sample_wave(samples, [{'sha256': 'clip'}] * 8, results)
+    for cohort in samples.values():
+        assert len(cohort['control']['first']) == 1
+        assert cohort['control']['first'] == cohort['candidate']['first']
+
+
 def test_quality_catches_tail_and_speaker_loss():
     fixture = {'reference': 'blue bird sings'}
     control = [{'text': 'blue bird sings', 'start': 1, 'end': 3, 'speaker': 'SPEAKER_0'}]
