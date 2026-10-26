@@ -36,18 +36,18 @@ from database.batch_pipeline_recognizer_receipts import record_recognizer
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe
+from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe, recognizer_attempt
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     silence_payload,
     RecoveryFailure,
     result_outcome,
     MultilingualEmpty,
+    WordsWithoutVad,
     padded_empty,
     padded_long_speech,
     terminal_empty_payload,
     TWO_PROVIDER_EMPTY_EVIDENCE,
-    LANGUAGE_GUARD_EMPTY_EVIDENCE,
     independent_silence_payload,
 )
 
@@ -111,10 +111,7 @@ def second_provider_eligible(job, empty):
     if SECOND_PROVIDER is None:
         return False
     speech = sum(span['end'] - span['start'] for span in empty.spans)
-    guarded = (job.get('worker_failure') or {}).get('reason') == 'unsupported_language'
-    return second_multilingual_enabled() and (
-        guarded and speech > 0 or padded_long_speech(job) and speech >= LONG_SPEECH_HANDOFF_SECONDS
-    )
+    return second_multilingual_enabled() and padded_long_speech(job) and speech >= LONG_SPEECH_HANDOFF_SECONDS
 
 
 class QuarantineRecovery:
@@ -140,7 +137,7 @@ class QuarantineRecovery:
         self, item, owner_id, audio, empty, policy, *, guarded=False, byok=False, token=None, first_empty=True
     ):
         """At most one independent call inside the running intent; None leaves custody held."""
-        payload, outcome = None, 'refused'
+        payload, outcome, word_count = None, 'refused', None
         provider = 'soniox' if guarded else SECOND_PROVIDER
         if provider is None:
             return None
@@ -162,21 +159,12 @@ class QuarantineRecovery:
                     reason='other',
                     outcome='degraded',
                 )
-                payload = self.second_stt(item, audio, empty)
-                result_outcome(payload)
-                outcome = 'words'
+                payload, outcome, word_count = recognizer_attempt(lambda: self.second_stt(item, audio, empty))
         except (BatchPrivacyBlocked, ProjectionBlocked):
             raise
-        except MultilingualEmpty:
-            outcome = 'empty'
         except Exception:
             payload, outcome = None, 'error'
         if guarded and outcome in {'words', 'empty', 'error'}:
-            word_count = 0 if outcome == 'empty' else None
-            if outcome == 'words':
-                if payload is None:
-                    raise RecoveryFailure('payload_validation', 'invalid_payload')
-                word_count = len(payload['words'])
             record_recognizer(
                 self.store,
                 item.segment_id,
@@ -201,9 +189,7 @@ class QuarantineRecovery:
                 return independent_silence_payload(empty.duration, empty.spans)
             return payload
         if outcome == 'empty' and policy.terminal_empty_disposition and terminal_empty_allowed(empty.spans):
-            # Two independent multilingual recognizers found no words.
-            evidence = LANGUAGE_GUARD_EMPTY_EVIDENCE if guarded else TWO_PROVIDER_EMPTY_EVIDENCE
-            return terminal_empty_payload(empty.duration, empty.spans, evidence)
+            return terminal_empty_payload(empty.duration, empty.spans, TWO_PROVIDER_EMPTY_EVIDENCE)
         return payload
 
     def recover(self, segment_id, owner_id):
@@ -237,7 +223,7 @@ class QuarantineRecovery:
                         log_failure(failure)
                 return 'held'
             byok = admitted_as_byok(job)
-            if byok:
+            if byok and not language_guarded(job):
                 record_decision(DispatchPath.QUARANTINE, True, DispatchReason.BYOK)
             disposition = (
                 language_guarded(job)
@@ -246,7 +232,7 @@ class QuarantineRecovery:
             )
             if (
                 not disposition
-                and not byok
+                and (not byok or language_guarded(job))
                 and not sync_allowed(owner_id, item.duration_seconds, lane='batch', path=DispatchPath.QUARANTINE)
             ):
                 return 'held'
@@ -258,17 +244,20 @@ class QuarantineRecovery:
                     _, duration, spans = inspect_audio(item, audio)
                     inspected_spans = spans
                     measured_vad = sum(span['end'] - span['start'] for span in spans)
-                    if not spans:
+                    if not spans and not language_guarded(job):
                         local_payload = silence_payload(duration)
                 except RecoveryFailure as error:
                     inspection_failure = error
+            if language_guarded(job) and inspected_spans == [] and not independent_allowed(duration):
+                self.protocol.observe_vad(segment_id, token, 0)
+                return 'held'
 
             # Privacy and the intent token are rechecked after download and
             # immediately before issuing the sole application-level STT call.
             if (
                 local_payload is None
                 and inspection_failure is None
-                and not byok
+                and (not byok or language_guarded(job))
                 and not sync_allowed(owner_id, item.duration_seconds, lane='batch', path=DispatchPath.QUARANTINE)
             ):
                 if measured_vad is not None:
@@ -295,7 +284,7 @@ class QuarantineRecovery:
                     reason='other',
                     outcome='degraded',
                 )
-            payload, empty = None, None
+            payload, empty, recognized_count = None, None, None
             try:
                 if inspection_failure is not None:
                     raise inspection_failure
@@ -303,7 +292,13 @@ class QuarantineRecovery:
                     local_payload
                     if local_payload is not None
                     else (
-                        self.stt(item, normalized_binding(job['projection_binding']), audio, multilingual=multilingual)
+                        self.stt(
+                            item,
+                            normalized_binding(job['projection_binding']),
+                            audio,
+                            multilingual=multilingual,
+                            force_recognition=language_guarded(job),
+                        )
                         if self.stt is transcribe
                         else self.stt(item, normalized_binding(job['projection_binding']), audio)
                     )
@@ -328,6 +323,7 @@ class QuarantineRecovery:
             except BatchPrivacyBlocked:
                 raise
             except Exception as error:
+                recognized_count = error.word_count if isinstance(error, WordsWithoutVad) else None
                 failure = (
                     {'stage': error.stage, 'reason': error.reason}
                     if isinstance(error, RecoveryFailure)
@@ -354,12 +350,21 @@ class QuarantineRecovery:
                 and inspected_spans is not None
                 and inspection_failure is None
             ):
-                record_recognizer(self.store, segment_id, token, 'recovery', 'modulate', 'error', None, measured_vad)
+                record_recognizer(
+                    self.store,
+                    segment_id,
+                    token,
+                    'recovery',
+                    'modulate',
+                    'words' if recognized_count else 'error',
+                    recognized_count,
+                    measured_vad,
+                )
                 empty = MultilingualEmpty(duration, inspected_spans)
             # Outside the handler: neither metering nor a second provider may chain the first.
             if empty is not None:
                 # A valid empty answer is still accepted, billed audio.
-                if first_empty:
+                if first_empty or recognized_count:
                     metered(record_accepted, owner_id, 'modulate', item.duration_seconds)
                 if first_empty and language_guarded(job):
                     record_recognizer(self.store, segment_id, token, 'recovery', 'modulate', 'empty', 0, measured_vad)

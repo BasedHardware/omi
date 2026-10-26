@@ -180,6 +180,14 @@ class MultilingualEmpty(RecoveryFailure):
         self.duration, self.spans = duration, spans
 
 
+class WordsWithoutVad(RecoveryFailure):
+    """Recognized words contradict zero VAD; retain both facts instead of silence."""
+
+    def __init__(self, word_count):
+        super().__init__('payload_validation', 'invalid_payload')
+        self.word_count = word_count
+
+
 def padded_empty(job):
     return job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1}
 

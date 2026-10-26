@@ -12,10 +12,31 @@ from utils.batch_pipeline.recovery_disposition import (
     at_stage,
     RecoveryFailure,
     MultilingualEmpty,
+    WordsWithoutVad,
+    result_outcome,
 )
 
 
-def transcribe(item, binding, audio, *, multilingual=None):
+def recognizer_attempt(operation):
+    """A validated word response with no VAD remains billable, never silence."""
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from database.batch_pipeline_projection_protocol import ProjectionBlocked
+
+    try:
+        payload = operation()
+        result_outcome(payload)
+        return payload, 'words', len(payload['words'])
+    except (BatchPrivacyBlocked, ProjectionBlocked):
+        raise
+    except MultilingualEmpty:
+        return None, 'empty', 0
+    except WordsWithoutVad as error:
+        return None, 'words', error.word_count
+    except Exception:
+        return None, 'error', None
+
+
+def transcribe(item, binding, audio, *, multilingual=None, force_recognition=False):
     """Use the sync client directly, with no whole-upload coordinator or retries."""
     # Preserve the existing deferred STT boundary: its transitive encryption
     # module requires runtime secrets and cannot join credential-free imports.
@@ -23,7 +44,7 @@ def transcribe(item, binding, audio, *, multilingual=None):
     from utils.stt.parakeet_request_metrics import parakeet_caller
 
     pcm, duration, spans = inspect_audio(item, audio)
-    if not spans:
+    if not spans and not force_recognition:
         if empty_asr_disposition_enabled():
             return silence_payload(duration)
         raise RecoveryFailure('strict_vad', 'no_speech')
@@ -98,6 +119,8 @@ def validate_response(response, duration, spans, *, multilingual):
 
 
 def words_payload(duration, spans, words, language):
+    if not spans:
+        raise WordsWithoutVad(len(words))
     # Preserve legacy speaker labels directly in build_incoming. Exclusive batch
     # diarization turns cannot represent overlapping legacy utterances.
     payload = {

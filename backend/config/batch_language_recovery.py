@@ -39,8 +39,18 @@ def independent_attempted(job):
 
 
 def prior_modulate_empty(job):
-    recovery = job.get('recovery') or {}
-    return recovery.get('provider') == 'modulate' and recovery.get('failure') == {
-        'stage': 'response_validation',
-        'reason': 'empty_asr',
-    }
+    paid = job.get('speech_redrive') or {}
+    if paid.get('provider') == PROVIDER:
+        paid = paid.get('prior_speech_redrive') or {}
+    for attempt in (job.get('recovery') or {}, paid):
+        if attempt.get('provider') != 'modulate':
+            continue
+        receipt = (attempt.get('recognizers') or {}).get('modulate')
+        if receipt is not None:
+            if receipt.get('outcome') == 'empty' and receipt.get('word_count') == 0:
+                return True
+        elif attempt.get('failure') == {'stage': 'response_validation', 'reason': 'empty_asr'}:
+            # Historical spent intents predate per-recognizer receipts. Their
+            # closed validated-empty failure is bound to this same audio window.
+            return True
+    return False

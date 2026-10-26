@@ -21,6 +21,11 @@ attempt also prevents an operator from buying Soniox again for the same unit.
   (32 ms)** of strict VAD classify as silence. The result retains original VAD
   spans/seconds and both provider/zero-word receipts in separate measured fields.
   Compare sample counts, so floating-point subtraction cannot clear a full frame.
+- Guarded zero-VAD units also run both recognizers before silence. Recognized
+  words with zero strict VAD remain held with positive word-count receipts;
+  transcript timestamps never fabricate the missing VAD accounting evidence.
+  A disabled/capped independent path keeps a zero-VAD obligation prepared and
+  buys neither call.
 - A full positive VAD frame, unknown/invalid VAD, provider failure or malformed
   response cannot authorize this silence disposition. Keep custody held.
 - The job's `recovery.recognizers` / `speech_redrive.recognizers` stores provider,
@@ -47,7 +52,8 @@ set it false on the recovery role/operator, retaining all held obligations.
 lower the hard 60-second per-unit ceiling. Invalid/nonfinite values refuse spend.
 Each unit gets at most one independent submission across automatic and explicit
 recovery. Company-funded Soniox rechecks the batch allowance even for units
-originally admitted with customer-funded credentials. Larger units stay held
+originally admitted with customer-funded credentials. Guarded Modulate dispatch
+also rechecks company funding. Larger units stay held
 for a separately reviewed recovery plan. Polling has a 120 s budget and 60-GET
 ceiling; individual requests have at most a 20 s I/O timeout. Cleanup uses two
 bounded requests. Recovery never automatically resubmits a timed-out job.
@@ -58,12 +64,18 @@ Soniox's published async estimate is **$0.10/audio hour**: approximately
 ten-unit duration ceiling is about **$0.016667**. These are estimates, not vendor
 usage measurements or a guaranteed token bill; actual billing is token-based.
 Prior Modulate spend is already incurred and is not included. Valid empty Soniox
-responses are metered as accepted provider audio too.
+responses are metered as accepted provider audio too. Fresh guarded zero-VAD
+units now pay for Modulate as well, rather than taking the old VAD-only shortcut.
+At Modulate's published **$0.03/audio hour** and Soniox's approximate $0.10/hour,
+the two-call estimate is **$0.000722/20 s** or **$0.002167/60 s**. Account-specific
+settled usage remains the billing authority; these figures are public-rate
+estimates and do not change the existing internal rate card.
 
 Sources checked 2026-10-26: [Soniox pricing](https://soniox.com/pricing),
 [model](https://soniox.com/docs/stt/models),
 [async request](https://soniox.com/docs/api-reference/stt/transcriptions/create_transcription),
 [token response](https://soniox.com/docs/api-reference/stt/transcriptions/get_transcription_transcript).
+Modulate: [multilingual batch pricing](https://www.modulate.ai/api-pricing).
 
 The adapter uploads only canonical WAV bytes in memory, with no account IDs,
 provenance, public URLs or transcript logging. It deletes only its own temporary
@@ -98,6 +110,9 @@ verbatim as `speech_redrive.prior_speech_redrive`; the new Soniox token is epoch
 The approval digest binds that prior token. A running or unsettled epoch 2 cannot
 be replaced. Preserve the previous `--silent` setting; replacement refuses a
 suppression change. Existing Modulate plans cannot silently switch to Soniox.
+Either preserved epoch may supply the valid-empty Modulate evidence; a recorded
+error is never converted into an empty result merely because another stage's
+failure code says `empty_asr`.
 
 No production audio, transcripts, account data or vendor calls are needed to
 develop or locally verify this path. Use only synthetic fixtures.

@@ -365,3 +365,115 @@ def test_guarded_obligation_drains_with_older_multilingual_snapshot_off(setup, m
     )
     soniox.assert_called_once()
     modulate.assert_not_called()
+
+
+def test_guarded_zero_vad_requires_both_empty_recognizers_before_silence(setup, monkeypatch, legacy_dependencies):
+    client, _, binding, artifacts, modulate, soniox, recovery, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0
+    )
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    payload = artifacts.persist_recovery_result.call_args.args[1]
+    assert result_outcome(payload) == 'silence'
+    assert payload['words_provider'] == 'independent_empty_strict_vad'
+    assert payload['measured_vad_speech_seconds'] == 0
+    modulate.assert_called_once()
+    soniox.assert_called_once()
+    assert row(client)['recovery']['recognizers']['soniox']['outcome'] == 'empty'
+
+
+@pytest.mark.parametrize(
+    'first,second', [('words', 'empty'), ('empty', 'words'), ('words', 'words'), ('error', 'empty')]
+)
+def test_zero_vad_words_or_provider_error_cannot_become_silence(setup, monkeypatch, legacy_dependencies, first, second):
+    client, _, binding, artifacts, modulate, soniox, recovery, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0
+    )
+    if first == 'error':
+        modulate.side_effect = TimeoutError('synthetic')
+    else:
+        modulate.return_value = (WORDS if first == 'words' else [], 'vi')
+    soniox.return_value = (WORDS if second == 'words' else [], 'vi')
+    meter = Mock()
+    monkeypatch.setattr('utils.batch_pipeline.quarantine_recovery.record_accepted', meter)
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    receipts = row(client)['recovery']['recognizers']
+    assert receipts['modulate']['outcome'] == first
+    assert receipts['soniox']['outcome'] == second
+    assert receipts['modulate']['word_count'] == (1 if first == 'words' else 0 if first == 'empty' else None)
+    assert receipts['soniox']['word_count'] == (1 if second == 'words' else 0)
+    assert row(client)['measured_held_vad_speech_seconds'] == 0
+    assert [call.args[1] for call in meter.call_args_list] == (
+        ['soniox'] if first == 'error' else ['modulate', 'soniox']
+    )
+    artifacts.persist_recovery_result.assert_not_called()
+    modulate.assert_called_once()
+    soniox.assert_called_once()
+
+
+@pytest.mark.parametrize('guard', ['kill', 'cap', 'allowance'])
+def test_zero_vad_spend_refusal_keeps_prepared_obligation(setup, monkeypatch, legacy_dependencies, guard):
+    client, _, binding, _, modulate, soniox, recovery, _ = guarded(setup, monkeypatch, legacy_dependencies, speech=0)
+    if guard == 'kill':
+        monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
+    elif guard == 'cap':
+        monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS', '1')
+    else:
+        row(client)['policy'] = {'provider_reason': 'byok'}
+        monkeypatch.setattr('utils.batch_pipeline.quarantine_recovery.sync_allowed', lambda *a, **kw: False)
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'prepared'
+    assert row(client)['measured_held_vad_speech_seconds'] == 0
+    modulate.assert_not_called()
+    soniox.assert_not_called()
+
+
+def test_spent_epoch2_empty_is_independent_evidence_when_epoch1_failed(setup, monkeypatch, legacy_dependencies):
+    client, store, binding, artifacts, modulate, soniox, _, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0.016, automatic=False
+    )
+    row(client)['recovery']['failure'] = {'stage': 'provider', 'reason': 'provider_failed'}
+    old = deepcopy(row(client)['recovery'])
+    previous = {
+        'provider': 'modulate',
+        'paid_epoch': 2,
+        'state': 'failed_held',
+        'token': 'old-paid-token',
+        'plan_digest': 'old-paid-plan',
+        'started_at': 3,
+        'settled_at': 4,
+        'privacy_generation': 0,
+        'prior_recovery': deepcopy(old),
+        'failure': {'stage': 'response_validation', 'reason': 'empty_asr'},
+    }
+    row(client)['speech_redrive'] = deepcopy(previous)
+    assert (
+        redrive_one(
+            store,
+            artifacts,
+            'bad',
+            binding.owner_id,
+            'independent-plan',
+            old,
+            server_flags=SERVING_ENV,
+            independent_language=True,
+            clock=lambda: 100,
+        )
+        == 'recovered'
+    )
+    assert row(client)['speech_redrive']['prior_speech_redrive'] == previous
+    assert result_outcome(artifacts.persist_recovery_result.call_args.args[1]) == 'silence'
+    modulate.assert_not_called()
+    soniox.assert_called_once()
+
+
+def test_recorded_provider_error_cannot_be_promoted_to_valid_empty():
+    from config.batch_language_recovery import prior_modulate_empty
+
+    job = {
+        'recovery': {
+            'provider': 'modulate',
+            'failure': {'stage': 'response_validation', 'reason': 'empty_asr'},
+            'recognizers': {'modulate': {'outcome': 'error', 'word_count': None}},
+        }
+    }
+    assert not prior_modulate_empty(job)

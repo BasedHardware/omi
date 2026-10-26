@@ -27,6 +27,7 @@ from utils.batch_pipeline.recovery_disposition import (
     padded_empty,
     padded_skipped,
     independent_silence_payload,
+    WordsWithoutVad,
 )
 from utils.batch_pipeline.admission import admitted_as_byok
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
@@ -123,7 +124,7 @@ def redrive_one(
     if not protocol.start(sid, token, plan_digest, clock()):
         return 'fenced'
     record_fallback(component='stt_selection', from_mode='batch', to_mode=provider, reason='other', outcome='degraded')
-    payload = None
+    payload, billable_independent = None, False
     first_empty = prior_modulate_empty(job)
     if independent:
         record_recognizer(
@@ -156,14 +157,16 @@ def redrive_one(
         )
         if independent:
             empty = isinstance(error, MultilingualEmpty)
+            billable_independent = isinstance(error, (MultilingualEmpty, WordsWithoutVad))
+            count = error.word_count if isinstance(error, WordsWithoutVad) else 0 if empty else None
             record_recognizer(
                 store,
                 sid,
                 token,
                 'speech_redrive',
                 provider,
-                'empty' if empty else 'error',
-                0 if empty else None,
+                'words' if count else 'empty' if empty else 'error',
+                count,
                 measured,
             )
             if empty and first_empty and below_silence_threshold(measured):
@@ -182,8 +185,9 @@ def redrive_one(
     else:
         failure = None
         if independent:
+            billable_independent = True
             record_recognizer(store, sid, token, 'speech_redrive', provider, 'words', len(payload['words']), measured)
-    if independent and (failure is None or failure['reason'] == 'empty_asr') and cap_enabled(uid, 'batch'):
+    if independent and billable_independent and cap_enabled(uid, 'batch'):
         # Valid empty responses also consume vendor spend.
         record_audio(
             'sync',
