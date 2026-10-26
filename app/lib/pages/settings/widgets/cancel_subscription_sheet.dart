@@ -34,9 +34,21 @@ class CancelSubscriptionFlow extends StatefulWidget {
 
 /// What the reader has entered so far, shared by the three steps.
 class _CancelFlow {
+  _CancelFlow() {
+    // Fetched when the flow opens, so the last step has the offer on arrival instead of swapping
+    // it in under the reader's thumb.
+    offerLoaded = payment_api.getRetentionOffer().then((offer) {
+      if (offer != null && offer.eligible && offer.discountedAmount != null) this.offer = offer;
+    });
+  }
+
   final exit = LeaveFlowExit();
   final details = TextEditingController();
   String? reason;
+
+  /// The stay offer, once loaded; null while loading or when the reader has none.
+  wire.GeneratedRetentionOfferResponse? offer;
+  late final Future<void> offerLoaded;
 
   void dispose() => details.dispose();
 }
@@ -191,15 +203,21 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
   @override
   void initState() {
     super.initState();
-    _loadOffer();
+    final offer = _flow.offer;
+    if (offer != null) {
+      _showOffer(offer);
+    } else {
+      _flow.offerLoaded.then((_) {
+        final offer = _flow.offer;
+        if (mounted && offer != null) setState(() => _showOffer(offer));
+      });
+    }
   }
 
-  Future<void> _loadOffer() async {
-    final offer = await payment_api.getRetentionOffer();
-    if (!mounted || offer == null || !offer.eligible || offer.discountedAmount == null) return;
-    setState(() => _offer = offer);
+  void _showOffer(wire.GeneratedRetentionOfferResponse offer) {
+    _offer = offer;
     PlatformManager.instance.analytics
-        .track('Retention Offer Shown', properties: {'reason': _flow.reason, 'percent_off': offer.percentOff});
+        .subscriptionRetentionOfferShown(reason: _flow.reason, percentOff: offer.percentOff);
   }
 
   String _monthlyPrice(wire.GeneratedRetentionOfferResponse offer) {
@@ -214,7 +232,7 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
     if (offer == null || _busy) return;
     setState(() => _isAcceptingOffer = true);
     PlatformManager.instance.analytics
-        .track('Retention Offer Accepted', properties: {'reason': _flow.reason, 'percent_off': offer.percentOff});
+        .subscriptionRetentionOfferAccepted(reason: _flow.reason, percentOff: offer.percentOff);
     final ok = await payment_api.acceptRetentionOffer();
     if (!mounted) return;
     if (ok) {
@@ -234,6 +252,11 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
     final details = _flow.details.text.trim().isNotEmpty ? _flow.details.text.trim() : null;
     final attempt =
         ProductTelemetry.instance.start(ProductJourney.subscriptionCancel, surface: ProductSurface.settings);
+    final offer = _offer;
+    if (offer != null) {
+      PlatformManager.instance.analytics
+          .subscriptionRetentionOfferDeclined(reason: _flow.reason, percentOff: offer.percentOff);
+    }
     PlatformManager.instance.analytics.subscriptionCancelConfirmed(reason: _flow.reason!, details: details);
 
     try {
