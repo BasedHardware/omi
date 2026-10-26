@@ -5501,14 +5501,49 @@ changes cannot reset the account budget. The budget bounds work admission,
 not billed speech. A fresh-only hard restriction or daily ceiling demotes a
 promoted LEGACY batch to backfill before persistence and final admission metrics,
 so optional promotion never introduces a fair-use 429. DEVICE_BOUND fresh keeps
-its existing 429 response. Trusted manifests retain their existing route. Future,
-invalid/missing timestamps, mixed historical batches and lookback rejection
-keep their existing semantics. Deprecated V1 stays unchanged.
+its existing 429 response. Trusted manifests retain their existing route.
+Capture times ahead of the server clock within the shared
+`SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS` window (default 600s; phone clocks drift
+minutes and app files are named after the audio START, so ahead-of-server stamps
+are clock skew, not future audio) stay admissible without untrusted-backfill
+demotion. The capture-time window is an admission check only: staging boundaries
+enforce it once per upload, while internal WAL/VAD clock reads accept derived
+segment names (source capture time plus speech offset) that may sit past the
+window. Every accepted request computes one server-clock offset from admitted
+data only — `max(0, admitted audio end − server now)`: the router's staging
+seam uses the staged filename starts alone (decode has not run, so durations
+are not yet known) and the pipeline recomputes from the furthest segment end
+(start plus decoded duration) after VAD. A claimed `audio_end_seconds` past the
+admitted span plus one live-capture chunk of trailing slack is clipped to it,
+so an inflated client claim can neither grow the claimed span nor move the
+session matching interval. The offset is used everywhere a capture time meets
+server-clock rows: the recording-session audio bounds the router passes into
+intake, the minimal-redrive attach lookup, the recording-lineage planner's
+comparison spans and `started_before`/`finished_after` query bounds, and the
+±120s closest-conversation lookup. Stored conversation
+`started_at`/`finished_at` shift by that same offset as a pair (duration
+preserved, finish ≤ server now, one captured `now` for both ends), while
+identity, chunk and lineage keys keep raw filename times so retry anchors stay
+stable. Retained private-cloud chunks persist their skew-normalized playback
+start beside the raw capture-clock chunk key (`v2_playback_start` blob metadata
+→ `audio_files[].playback_start`, present only when every chunk in the part
+carries one), and conversation playback `wall_offset` values are computed from
+that normalized basis. Beyond the window, before 2024-01-01, or malformed
+timestamps are refused with 400 plus a typed `code: 'invalid_capture_time'`
+body on V2 (released clients see the same status and `detail` text and ignore
+the body). Mixed historical batches and lookback rejection keep their existing
+semantics. Deprecated V1 keeps the pre-existing zero future tolerance — any
+future stamp stays the legacy 400 — because its inline pipeline runs at
+capture-time offset 0; V2 owns skew admission.
 
 `omi_sync_lane_admissions_total{lane,trust,reason}` and `sync_lane_admission`
 record the final budget and fresh-gate decision. New reasons: `recent_legacy_capture`,
 `legacy_fresh_budget_exceeded`, `legacy_fresh_budget_unavailable`,
-`legacy_fresh_hard_restricted`, `legacy_fresh_daily_ceiling`. No account
+`legacy_fresh_hard_restricted`, `legacy_fresh_daily_ceiling`. Per-file
+capture-time admission dispositions (accepted, `accepted_future_skew`,
+`rejected_future`, `rejected_early`, `rejected_malformed`) are counted in
+`omi_sync_capture_time_total{outcome}` with an `event=sync_capture_time` log for
+every non-plain-accepted outcome. No account
 labels are added. Optional final-pass logs now include `lane` and
 `duration_seconds`, covering decoding, embedding triage, diarization and naming
 inside the adapter. These times exclude the preceding WAV download and are

@@ -4552,6 +4552,18 @@
             "title": "Id",
             "type": "string"
           },
+          "playback_start": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Normalized server-clock start for playback wall math (v2 only)",
+            "title": "Playback Start"
+          },
           "provider": {
             "default": "gcp",
             "description": "Storage provider (e.g., 'gcp')",

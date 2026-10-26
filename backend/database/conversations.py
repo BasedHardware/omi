@@ -2227,6 +2227,7 @@ def _finalize_audio_file_group(
     # v2 groups carry validated contiguous coverage spans from blob metadata;
     # duration is the authoritative span extent, never an encoded-size guess.
     spans: List[Tuple[float, float]] = []
+    playback_starts: List[float] = []
     for chunk in chunk_group:
         span = chunk.get('span')
         if not isinstance(span, dict):
@@ -2243,6 +2244,9 @@ def _finalize_audio_file_group(
             spans = []
             break
         spans.append((start, start + samples / rate))
+        playback_start = span.get('playback_start')
+        if isinstance(playback_start, (int, float)):
+            playback_starts.append(float(playback_start))
 
     if spans:
         started_at = datetime.fromtimestamp(spans[0][0], tz=timezone.utc)
@@ -2257,6 +2261,10 @@ def _finalize_audio_file_group(
             started_at=started_at,
             duration=duration,
             chunk_spans=[ChunkSpan(start=round(start, 3), end=round(end, 3)) for start, end in spans],
+            # The normalized wall basis holds only when every chunk in the
+            # group carries its persisted playback start; one legacy chunk
+            # leaves the part on the raw capture clock.
+            playback_start=(min(playback_starts) if len(playback_starts) == len(spans) else None),
         )
 
     # Calculate started_at and duration from timestamps and blob sizes

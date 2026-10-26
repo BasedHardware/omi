@@ -31,7 +31,10 @@ from utils.sync import assignment
 from utils.sync.capture_repeat_evidence import capture_covered_indices
 from utils.sync.recording_lineage import select_segment_targets
 
-T0 = 1_800_000_000.0
+# 2025-10-09, deliberately in the past: these fixtures verify timeless
+# dedupe/lineage/parity behavior, and a future T0 would collide with the
+# capture-time skew policy that clamps stored conversation times to now.
+T0 = 1_760_000_000.0
 LIVE_ID = 'LIVE-ROW'
 ORIGIN = 'REC-1'
 
