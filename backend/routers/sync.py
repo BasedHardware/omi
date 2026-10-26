@@ -257,6 +257,13 @@ AUDIO_SAMPLE_RATE = 16000
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
+# How far past the newest admitted filename start a claimed session end may
+# run: one live-capture chunk of trailing audio, mirroring the trailing
+# allowance recording-session binding itself grants (recording_session_target).
+# Decode has not run at the staging seam, so the last file's duration is the
+# one admitted-audio fact this slack stands in for.
+SESSION_CLAIM_TRAILING_SLACK_SECONDS = 60.0
+
 
 async def _offer_shadow_upload(**kwargs) -> None:
     # The shadow is best effort: its import or handoff must never fail a legacy upload.
@@ -1236,19 +1243,29 @@ async def sync_local_files_v2(
         # One server-clock offset per request shifts the client's
         # recording-session audio bounds onto the server clock before any
         # temporal comparison (recording-session binding compares them against
-        # server-clock conversation rows). Files keep their raw capture-clock
-        # names and keys; only these two comparison inputs move.
+        # server-clock conversation rows). Admitted data only: at this staging
+        # seam decode has not run, so the basis is the staged filename starts
+        # alone — the pipeline recomputes the offset from decoded durations
+        # after VAD — and a claimed end past the admitted span plus one
+        # live-capture chunk of slack (the same trailing allowance session
+        # binding grants) is clipped to it, so an inflated client claim can
+        # neither widen the claimed span nor move the session matching
+        # interval. Files keep their raw capture-clock names and keys.
         if isinstance(audio_start_seconds, (int, float)) and isinstance(audio_end_seconds, (int, float)):
-            max_file_end = float(audio_end_seconds)
+            admitted_file_starts = []
             for filename in filenames:
                 try:
-                    max_file_end = max(max_file_end, float(get_timestamp_from_path(filename)))
+                    admitted_file_starts.append(float(get_timestamp_from_path(filename)))
                 except (IndexError, ValueError):
                     continue  # Admission above rejects unparseable names with the typed 400.
-            session_clock_offset = capture_clock_offset(max_file_end)
-            if session_clock_offset > 0:
-                audio_start_seconds -= session_clock_offset
-                audio_end_seconds -= session_clock_offset
+            if admitted_file_starts:
+                admitted_end = max(admitted_file_starts) + SESSION_CLAIM_TRAILING_SLACK_SECONDS
+                audio_start_seconds = float(audio_start_seconds)
+                audio_end_seconds = min(float(audio_end_seconds), admitted_end)
+                session_clock_offset = capture_clock_offset(max(admitted_file_starts))
+                if session_clock_offset > 0:
+                    audio_start_seconds -= session_clock_offset
+                    audio_end_seconds -= session_clock_offset
 
         if manifest_claims is not None and not await run_blocking(
             sync_executor, manifest_claims_match_paths, manifest_claims, paths
@@ -3944,10 +3961,19 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
 
         started_at_ts = persisted_started_seconds(conversation.get('started_at') or conversation.get('created_at'))
         if started_at_ts is None:
-            chunk_starts = [
-                min(af['chunk_timestamps']) for af in audio_files if isinstance(af, dict) and af.get('chunk_timestamps')
+            # No stored origin: anchor the wall clock on each part's own basis
+            # (normalized playback start when persisted, else raw chunk keys)
+            # so skewed parts keep non-negative, truthful offsets.
+            part_bases = [
+                (
+                    af['playback_start']
+                    if isinstance(af.get('playback_start'), (int, float))
+                    else (min(af['chunk_timestamps']) if af.get('chunk_timestamps') else None)
+                )
+                for af in audio_files
+                if isinstance(af, dict)
             ]
-            started_at_ts = min(chunk_starts) if chunk_starts else 0.0
+            started_at_ts = min((base for base in part_bases if base is not None), default=0.0)
 
         try:
             with PLAYBACK_BUILD_SECONDS.labels('conversation').time() if demand else nullcontext():

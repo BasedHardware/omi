@@ -40,18 +40,22 @@ def maximum_future_skew_seconds() -> int:
 
 
 def capture_time_rejection(
-    capture_time: datetime, *, now: Optional[datetime] = None
+    capture_time: datetime, *, now: Optional[datetime] = None, future_skew_seconds: Optional[int] = None
 ) -> Optional[SyncCaptureTimeReason]:
     """The closed rejection reason for an implausible capture time, else ``None``.
 
     ``rejected_early`` covers pre-2024 stamps (bogus SD-card markers); times
     further ahead of server now than the shared skew tolerance are
     ``rejected_future``. Within-tolerance future times are admissible skew.
+    ``future_skew_seconds`` overrides the shared tolerance for callers that
+    keep a stricter pre-skew-admission contract (v1 staging rejects any
+    future time because nothing downstream of it normalizes skew).
     """
     effective_now = datetime.now(timezone.utc) if now is None else now
+    tolerance = maximum_future_skew_seconds() if future_skew_seconds is None else max(0, int(future_skew_seconds))
     if capture_time < EARLIEST_CAPTURE_TIME:
         return SyncCaptureTimeReason.REJECTED_EARLY
-    if capture_time > effective_now + timedelta(seconds=maximum_future_skew_seconds()):
+    if capture_time > effective_now + timedelta(seconds=tolerance):
         return SyncCaptureTimeReason.REJECTED_FUTURE
     return None
 

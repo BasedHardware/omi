@@ -1884,6 +1884,12 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 survivors,
                 len(transcript_segments),
                 private_cloud_sync_enabled,
+                # Retained audio persists its server-clock playback start (the
+                # stored pair's basis, including its clamp to now) beside the
+                # raw capture-clock chunk key, so conversation playback wall
+                # offsets stay truthful for skewed captures.
+                playback_start=clamp_capture_time(timestamp - capture_time_offset),
+                playback_clock_offset=capture_time_offset,
             ),
             finish=finish_sync_segment,
             mark_finalize=mark_finalize,
@@ -2122,6 +2128,9 @@ def _store_intake_audio(
     transcript_segment_count: int,
     private_cloud_sync_enabled: bool,
     conversation_id: str,
+    *,
+    playback_start: Optional[float] = None,
+    playback_clock_offset: float = 0.0,
 ) -> None:
     store_intake_audio(
         uid,
@@ -2132,6 +2141,8 @@ def _store_intake_audio(
         transcript_segment_count,
         private_cloud_sync_enabled,
         conversation_id,
+        playback_start=playback_start,
+        playback_clock_offset=playback_clock_offset,
         store_full=_store_sync_audio_chunk,
         store_partial=store_partial_merge_survivor_audio,
     )
@@ -2143,6 +2154,7 @@ def _store_sync_audio_chunk(
     timestamp: float,
     audio_bytes: Optional[bytes],
     data_protection_level: Optional[str],
+    playback_start: Optional[float] = None,
 ):
     """Reuse stable private-cloud chunk naming; audio storage remains best-effort."""
     store_sync_audio_chunk(
@@ -2151,6 +2163,7 @@ def _store_sync_audio_chunk(
         timestamp,
         audio_bytes,
         data_protection_level,
+        playback_start=playback_start,
         decode_audio=_wav_bytes_to_pcm16_16k,
         upload_audio=upload_audio_chunk,
     )
@@ -3151,8 +3164,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             # One server-clock offset per request, computed once after
             # segmentation: the furthest segment end (VAD names carry the
             # source capture clock) minus server now. Every temporal
-            # comparison and stored pair in process_segment shifts by it;
-            # chunk identity and lineage keys keep raw capture-clock times.
+            # comparison and stored pair in process_segment shifts by it, and
+            # the lineage planner below receives it for its comparison spans
+            # and query bounds; chunk identity and lineage keys keep raw
+            # capture-clock times.
             request_capture_offset = await run_blocking(
                 sync_executor,
                 lambda: capture_clock_offset(
@@ -3183,6 +3198,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         is_locked,
                         job_id,
                         segment_binding_reasons,
+                        capture_time_offset=request_capture_offset,
                         **({'segment_source_maps': segment_source_maps} if segment_source_maps else {}),
                     )
                 except Exception:

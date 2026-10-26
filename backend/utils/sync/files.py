@@ -155,8 +155,15 @@ def retrieve_file_paths(files: List[UploadFile], uid: str) -> List[str]:
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
         # The internal clock read above is window-free (derived names); this
-        # staging boundary owns the capture-time admission window.
-        if capture_time_rejection(datetime.fromtimestamp(timestamp, tz=timezone.utc)) is not None:
+        # staging boundary owns the capture-time admission window. V1 (and the
+        # chat/desktop transcribe seams sharing it) keep the pre-skew-admission
+        # contract — any future time is rejected — because their pipelines run
+        # at capture-time offset 0, so an admitted future stamp would store and
+        # compare ahead of the server clock. V2 staging owns skew admission.
+        if (
+            capture_time_rejection(datetime.fromtimestamp(timestamp, tz=timezone.utc), future_skew_seconds=0)
+            is not None
+        ):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
 
         path = os.path.join(directory, filename)

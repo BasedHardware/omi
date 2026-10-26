@@ -319,10 +319,15 @@ def test_v2_route_shifts_recording_session_bounds_to_server_clock(client, monkey
 
     assert response.status_code == 202, response.text
     intake = captured['intake_context']
-    offset = capture_clock.capture_clock_offset(raw_end)
-    assert intake['audio_start_seconds'] == pytest.approx(raw_start - offset, abs=1.0)
-    assert intake['audio_end_seconds'] == pytest.approx(raw_end - offset, abs=1.0)
-    assert intake['audio_end_seconds'] <= server_now + 1.0
+    # Admitted data only: the offset comes from the staged filename starts,
+    # not the claimed end (round-2 fix), so the whole claimed interval moves
+    # by the filename-starts offset.
+    from utils.sync.files import get_timestamp_from_path
+
+    offset = capture_clock.capture_clock_offset(get_timestamp_from_path(filename))
+    assert intake['audio_start_seconds'] == pytest.approx(raw_start - offset, abs=2.0)
+    assert intake['audio_end_seconds'] == pytest.approx(raw_end - offset, abs=2.0)
+    assert intake['audio_end_seconds'] <= server_now + 2.0
 
 
 @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='url')
@@ -472,3 +477,342 @@ def test_minimal_redrive_attach_lookup_compares_on_server_clock(
     assert attached['start'] == pytest.approx(now_test - 10, abs=1.0)
     assert attached['end'] == pytest.approx(now_test, abs=1.0)
     assert len(conversations(store)) == 1
+
+
+# --- fix round 2: v1 staging keeps the pre-PR zero future tolerance ---
+
+
+def test_capture_time_rejection_supports_a_stricter_caller_tolerance():
+    """``future_skew_seconds`` lets v1 staging keep its pre-PR zero tolerance."""
+    ahead = datetime.now(timezone.utc) + timedelta(seconds=170)
+    assert capture_time_rejection(ahead) is None  # shared window admits skew
+    assert capture_time_rejection(ahead, future_skew_seconds=0) is SyncCaptureTimeReason.REJECTED_FUTURE
+    assert capture_time_rejection(datetime.now(timezone.utc) - timedelta(seconds=10), future_skew_seconds=0) is None
+
+
+def test_v1_staging_rejects_any_future_capture_time(tmp_path, monkeypatch):
+    """V1 (and the chat seams sharing ``retrieve_file_paths``) reject future stamps.
+
+    The v1 inline pipeline runs ``process_segment`` at capture-time offset 0
+    and is deprecated, so it keeps the simpler pre-PR contract — any future
+    time is the legacy 400 — instead of propagating the request offset. V2
+    owns skew admission and normalization.
+    """
+    from fastapi import HTTPException
+
+    from utils.sync.files import retrieve_file_paths
+
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(HTTPException) as exc_info:
+        retrieve_file_paths([_Upload(_filename(171))], 'u1')
+
+    assert exc_info.value.status_code == 400
+    assert 'invalid timestamp' in exc_info.value.detail
+
+    past = _filename(-3600)
+    assert retrieve_file_paths([_Upload(past)], 'u1') == [f'syncing/u1/{past}']
+
+
+# --- fix round 2: the lineage planner compares on the server clock ---
+
+
+def test_lineage_planner_binds_skewed_segment_on_server_clock(monkeypatch):
+    """A +171 s raw span must bind its server-clock generation, not miss it.
+
+    The planner's comparison spans and the ``started_before``/``finished_after``
+    query bounds shift by the request offset; span keys keep the raw
+    capture-clock segment identity. Without the shift the same span misses the
+    server-clock row and falls through unbound.
+    """
+    from utils.sync import recording_lineage
+
+    server_now = datetime.now(timezone.utc).timestamp()
+    row = {
+        'id': 'gen-live',
+        'started_at': datetime.fromtimestamp(server_now - 70, tz=timezone.utc),
+        'finished_at': datetime.fromtimestamp(server_now - 10, tz=timezone.utc),
+        'source': 'omi',
+        'client_device_id': 'pendant',
+        'external_data': {'recording_session_id': 'rec-live'},
+    }
+    captured: dict = {}
+
+    def fake_load_lineage(_uid, _origin, started_before, _client, finished_after, **_kwargs):
+        captured['started_before'] = started_before.timestamp()
+        captured['finished_after'] = finished_after.timestamp()
+        return [dict(row)], None, False
+
+    monkeypatch.setattr(recording_lineage, '_load_lineage', fake_load_lineage)
+
+    raw_start = server_now + 101  # phone clock +171 s over the row's start
+    duration = 30.0
+
+    reasons: dict = {}
+    targets = recording_lineage.plan_segment_targets(
+        ['segment.wav'],
+        lambda _p: raw_start,
+        lambda _p: duration,
+        'u',
+        'rec-live',
+        None,
+        'omi',
+        'pendant',
+        False,
+        'job-1',
+        reasons,
+        capture_time_offset=171.0,
+    )
+
+    assert targets['segment.wav'] == 'gen-live'
+    assert reasons['segment.wav'] == 'bound'
+    assert captured['finished_after'] == pytest.approx(server_now - 70, abs=1.0)
+    assert captured['started_before'] == pytest.approx(server_now - 40 + recording_lineage.START_SKEW_SECONDS, abs=1.0)
+
+    unshifted_reasons: dict = {}
+    unshifted_targets = recording_lineage.plan_segment_targets(
+        ['segment.wav'],
+        lambda _p: raw_start,
+        lambda _p: duration,
+        'u',
+        'rec-live',
+        None,
+        'omi',
+        'pendant',
+        False,
+        'job-1',
+        unshifted_reasons,
+    )
+
+    assert unshifted_targets['segment.wav'] is None
+    assert unshifted_reasons['segment.wav'] == 'unbound'
+
+
+@patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='url')
+@patch('utils.sync.pipeline.prerecorded', return_value=(['word'], 'en'))
+@patch('utils.sync.pipeline.postprocess_words')
+@patch('utils.sync.pipeline.get_timestamp_from_path')
+def test_lineage_bound_skewed_segment_never_consults_the_closest_lookup(
+    mock_timestamp, mock_postprocess, _mock_prerecorded, _mock_signed_url
+):
+    """A lineage-bound target is explicit: the unqualified closest lookup stays out."""
+    from models.transcript_segment import TranscriptSegment
+
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from tests.unit.test_sync_cross_job_assignment import chunk, conversations, intake
+    from utils.sync import pipeline
+
+    now_test = datetime.now(timezone.utc).timestamp()
+    mock_timestamp.return_value = now_test + 171
+    mock_postprocess.return_value = [
+        TranscriptSegment(text='Skewed capture speech', start=0.0, end=10.0, is_user=False)
+    ]
+    live = chunk('live', now_test - 60)
+    live['sync_content_revision'] = 1
+    store = StrictFirestore()
+    store.rows[('users', 'u', 'conversations', 'live')] = dict(live)
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors: list = []
+    with patch('utils.sync.pipeline.get_closest_conversation_to_timestamps') as mock_closest, patch(
+        'utils.conversations.lifecycle.ingest_sync_conversation',
+        side_effect=lambda uid, incoming, **kw: intake(store, incoming, **kw),
+    ), patch('utils.sync.pipeline.identify_speakers_for_segments'), patch(
+        'utils.sync.pipeline.conversations_db.get_manual_speaker_receipt', return_value={}
+    ), patch(
+        'utils.sync.pipeline.get_wav_duration', return_value=10
+    ):
+        result = pipeline.process_segment(
+            'seg_123.wav',
+            'u',
+            response,
+            MagicMock(),
+            errors,
+            # What the offset-shifted lineage planner produced for this span.
+            target_conversation_id='live',
+            client_device_id='pendant',
+            capture_time_offset=181.0,
+        )
+
+    assert result and errors == []
+    mock_closest.assert_not_called()
+    assert len(conversations(store)) == 1
+    assert conversations(store)[0]['id'] == 'live'
+
+
+# --- fix round 2: the request offset derives from admitted data only ---
+
+
+def test_v2_route_offset_ignores_inflated_claimed_end(client, monkeypatch):
+    """An inflated ``audio_end_seconds`` can neither grow the offset nor the span.
+
+    The offset comes from the staged filename starts alone (decode has not run
+    at the seam), and the claimed end is clamped to the admitted span plus one
+    chunk of trailing slack — so wildly different inflated claims leave the
+    session matching interval in the same place.
+    """
+    from fastapi.responses import JSONResponse
+
+    captured = {}
+
+    async def fake_record_response(**_kwargs):
+        return router.RecordUploadRoute.BATCH
+
+    async def fake_accept_batch_upload(**kwargs):
+        captured.update(kwargs)
+        return JSONResponse(status_code=202, content={'job_id': 'j', 'status': 'queued'})
+
+    monkeypatch.setattr(router, 'registered_record_response', fake_record_response)
+    monkeypatch.setattr(router, 'accept_batch_upload', fake_accept_batch_upload)
+
+    server_now = datetime.now(timezone.utc).timestamp()
+    filename = _filename(111)  # newest admitted file starts +111 s (phone clock)
+    raw_start = server_now + 111
+
+    intervals = []
+    for inflated_end in (server_now + 900, server_now + 1800):
+        captured.clear()
+        response = client.post(
+            '/v2/sync-local-files',
+            params={
+                'recording_session_id': 'rec-live',
+                'audio_start_seconds': raw_start,
+                'audio_end_seconds': inflated_end,
+            },
+            files=[('files', (filename, b'\x00' * 32, 'application/octet-stream'))],
+        )
+        assert response.status_code == 202, response.text
+        intake = captured['intake_context']
+        intervals.append((intake['audio_start_seconds'], intake['audio_end_seconds']))
+
+    # The interval is identical for both inflated claims: bounded by the
+    # admitted span (max filename start + trailing slack), shifted by the
+    # filename-starts offset alone.
+    assert intervals[0] == pytest.approx(intervals[1], abs=1.0)
+    start_seconds, end_seconds = intervals[0]
+    assert start_seconds == pytest.approx(server_now, abs=3.0)  # +111 shifted by the +111 offset
+    assert end_seconds == pytest.approx(server_now + router.SESSION_CLAIM_TRAILING_SLACK_SECONDS, abs=3.0)
+
+
+# --- fix round 2: retained chunks persist their playback timing ---
+
+
+def test_skewed_chunk_metadata_round_trips_playback_start():
+    """The write seam stamps the normalized start; the parser rehydrates it.
+
+    ``v2_playback_start`` only moves a start back onto the server clock, so a
+    value ahead of the raw span start (or non-finite) is ignored and the span
+    stays on the capture clock.
+    """
+    from database.audio_timeline import parse_span_blob_metadata
+
+    raw_start = datetime.now(timezone.utc).timestamp() + 171
+    normalized = raw_start - 171
+
+    written = {
+        'v2_start': repr(raw_start),
+        'v2_samples': '160000',
+        'v2_sample_rate': '16000',
+        'v2_playback_start': repr(normalized),
+    }
+    assert parse_span_blob_metadata(written) == {
+        'start': raw_start,
+        'samples': 160000,
+        'sample_rate': 16000,
+        'playback_start': normalized,
+    }
+
+    ignored = dict(written, v2_playback_start=repr(raw_start + 1))
+    assert 'playback_start' not in parse_span_blob_metadata(ignored)
+    malformed = dict(written, v2_playback_start='not-a-number')
+    assert 'playback_start' not in parse_span_blob_metadata(malformed)
+    legacy = {'v2_start': repr(raw_start), 'v2_samples': '160000', 'v2_sample_rate': '16000'}
+    assert 'playback_start' not in parse_span_blob_metadata(legacy)
+
+
+def test_store_sync_audio_chunk_passes_playback_start_to_the_upload():
+    """The store chain forwards the normalized start beside the raw chunk key."""
+    from utils.sync.merge_audio import store_sync_audio_chunk
+
+    uploaded: list[dict] = []
+
+    def fake_upload(pcm, uid, conversation_id, timestamp, data_protection_level, playback_start=None):
+        uploaded.append({'timestamp': timestamp, 'playback_start': playback_start, 'bytes': pcm})
+        return 'chunks/u/c/1.0.opus'
+
+    raw_start = datetime.now(timezone.utc).timestamp() + 171
+
+    store_sync_audio_chunk(
+        'u',
+        'c',
+        raw_start,
+        b'wav-bytes',
+        None,
+        playback_start=raw_start - 171,
+        decode_audio=lambda _b: b'\x00' * 3200,
+        upload_audio=fake_upload,
+    )
+
+    assert uploaded == [{'timestamp': raw_start, 'playback_start': raw_start - 171, 'bytes': b'\x00' * 3200}]
+
+
+@patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='url')
+@patch('utils.sync.pipeline.prerecorded', return_value=(['word'], 'en'))
+@patch('utils.sync.pipeline.postprocess_words')
+@patch('utils.sync.pipeline.get_timestamp_from_path')
+def test_skewed_private_cloud_chunk_persist_normalized_playback_start(
+    mock_timestamp, mock_postprocess, _mock_prerecorded, _mock_signed_url
+):
+    """process_segment hands retained audio its server-clock playback basis."""
+    from models.transcript_segment import TranscriptSegment
+
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from tests.unit.test_sync_cross_job_assignment import intake
+    from utils.sync import pipeline
+
+    now_test = datetime.now(timezone.utc).timestamp()
+    mock_timestamp.return_value = now_test + 171
+    mock_postprocess.return_value = [
+        TranscriptSegment(text='Skewed capture speech', start=0.0, end=10.0, is_user=False)
+    ]
+    stored: list[dict] = []
+
+    def fake_store_intake_audio(*_args, **kwargs):
+        stored.append(kwargs)
+
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors: list = []
+    store = StrictFirestore()
+    with patch('utils.sync.pipeline._store_intake_audio', side_effect=fake_store_intake_audio), patch(
+        # The bridge finalize follows a real private-cloud conversation; the
+        # store-chain kwargs under test are already captured by then.
+        'utils.sync.pipeline.finish_sync_segment'
+    ), patch(
+        'utils.conversations.lifecycle.ingest_sync_conversation',
+        side_effect=lambda uid, incoming, **kw: intake(store, incoming, **kw),
+    ), patch(
+        'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None
+    ), patch(
+        'utils.sync.pipeline.identify_speakers_for_segments'
+    ), patch(
+        'utils.sync.pipeline.conversations_db.get_manual_speaker_receipt', return_value={}
+    ), patch(
+        'utils.sync.pipeline.get_wav_duration', return_value=10
+    ), patch(
+        'utils.sync.pipeline._download_audio_bytes', return_value=b'wav'
+    ):
+        result = pipeline.process_segment(
+            'seg_123.wav',
+            'u',
+            response,
+            MagicMock(),
+            errors,
+            private_cloud_sync_enabled=True,
+            capture_time_offset=181.0,
+        )
+
+    assert result and errors == []
+    assert stored, 'retained audio must reach the store chain'
+    assert stored[0]['playback_clock_offset'] == pytest.approx(181.0)
+    # The raw +171 s stamp shifted by the request offset lands at the stored
+    # pair's server-clock start (clamped to now at latest).
+    assert stored[0]['playback_start'] == pytest.approx(now_test - 10, abs=1.0)
+    assert stored[0]['playback_start'] <= datetime.now(timezone.utc).timestamp()
