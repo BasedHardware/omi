@@ -120,10 +120,12 @@ Its former pass, preserved here as the historical contract:
 6. commits each route through canonical apply and drains new outbox work.
 
 Current ownership after the retirement: required submissions normalize inline at
-write time, and Dream's scheduled sweep retries pending items and folds in the
-backlog. Steps 1, 2, 4 and 6 (deterministic TTL settling and committed outbox
-drains) currently have no scheduled owner in any environment; that gap is
-tracked as follow-up work and this section documents the contract they held.
+write time and Dream's scheduled sweep retries pending items and folds in the
+backlog (lane memreq; wiring lands with its PR — merge it with or before this
+retirement, and until then pending items wait as production always has). Steps 1,
+2, 4 and 6 (deterministic TTL settling and committed outbox drains) currently
+have no scheduled owner in any environment; that gap is tracked as follow-up work
+and this section documents the contract they held.
 
 Only consolidation can issue the promotion receipt required for a new
 Short-term to Long-term transition. Invalid/partial model output mutates

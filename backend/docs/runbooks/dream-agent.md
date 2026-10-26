@@ -265,10 +265,14 @@ The maintenance-host Dream drain is removed. Consolidation tuning reads,
 
 The mixed maintenance host (`memory-maintenance-job`), its dev hourly schedule and
 its deploy workflows are retired (2026-10-26); the job never served production.
-Required intake now runs inline when a memory is extracted, and Dream's scheduled
-sweep is the retry/backlog owner. The retired host's residual duties — deterministic
+Required intake moves inline when a memory is extracted, with Dream's scheduled
+sweep as the retry/backlog owner (lane memreq; that wiring lands with memreq's PR —
+merge it with or before this retirement). Until it lands, pending required items
+have no scheduled retry in any environment, which is exactly the state production
+has always had; the gap and the host's other orphaned duties are tracked in anx
+(memretire-orphaned-duties). The retired host's residual duties — deterministic
 TTL transitions, committed canonical outbox drains and already-enqueued recurrence
-delivery — have no live owner in dev or prod and are tracked as follow-up work; the
+delivery — have no live owner in dev or prod; the
 dev `daily-memory-sweep` and `knowledge-ledger-drain` schedulers/jobs that kept
 running old code are paused pending cloud retirement. Stranded finalization,
 ingest-time prevention, speaker teaching, task refresh, frame retention, X ingestion
@@ -324,11 +328,13 @@ Do not change `allowlist` to `all` as an outage workaround.
 
 Ordinary compatibility-mode observations receive a bounded canonical intake
 route after extraction commits, for free and paid owners alike. With the
-maintenance host retired, Dream's scheduled sweep retries pending observations,
-including rows past their former TTL. Explicit submissions run the
-required-processing path inline at write time, with the same receipts, and Dream
-retries their stragglers. Intake uses the existing memory L2 gateway lane
-(background Flex), not the Dream reasoning/capacity/paid-cohort budget.
+maintenance host retired, Dream's scheduled sweep becomes the retry owner for
+pending observations (wiring lands with lane memreq's PR), including rows past
+their former TTL. Explicit submissions run the required-processing path inline
+at write time once memreq lands, with the same receipts; until then pending
+submissions wait exactly as production always has. Intake uses the existing
+memory L2 gateway lane (background Flex), not the Dream
+reasoning/capacity/paid-cohort budget.
 `MEMORY_OBSERVATION_INTAKE_ENABLED` defaults on; false stops both observation
 entrypoints before DB/model work, leaving capture and required intake intact. Dream still owns verified
 retrospective cleanup. A promotion admission receipt binds the canonical
