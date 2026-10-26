@@ -16,7 +16,10 @@ bin/omi-heavy run -- nice -n 19 bash app/tool/perf_sim_profile.sh \
 
 Resolve `bin/omi-heavy` from the workspace when outside it. Admission verifies
 the explicit emulator serial, native emulator property, runtime fingerprint,
-display size/density and model before compilation and every launch. For iOS,
+display size/density and model before compilation and every launch. Virtual
+identity also binds the host-name hash, host OS/architecture and logical CPU
+count; reusing the same emulator serial/image on another host cannot qualify a
+comparison. Host names themselves are not exported. For iOS,
 use `--simulator-qualification --device <booted-simulator-UDID>` and pin the
 runtime's `buildversion` with `--runtime-build`; it remains debug-only.
 

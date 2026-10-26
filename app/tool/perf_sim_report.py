@@ -9,6 +9,7 @@ import argparse
 from collections import Counter
 import json
 import math
+import re
 from pathlib import Path
 
 SCENARIOS = (
@@ -157,6 +158,11 @@ def summarize(directory, expected_runs):
         expected_platform, expected_mode = ('android', 'profile') if kind == 'android-emulator' else ('ios', 'debug')
         if identities[0]['platform'] != expected_platform or first['build_mode'] != expected_mode:
             raise ValueError('virtual runtime kind does not match platform/build mode')
+        host = runtime.get('host', {})
+        if (not isinstance(host, dict) or not re.fullmatch(r'[a-f0-9]{64}', str(host.get('node_sha256', '')))
+                or not host.get('platform') or not host.get('architecture')
+                or type(host.get('logical_cpus')) is not int or host['logical_cpus'] <= 0):
+            raise ValueError('virtual qualification requires host identity')
         if protocol.get('host_load_policy') != 'load1-per-logical-cpu<=1/v1':
             raise ValueError('virtual qualification requires fixed host load admission')
         for prefix, count in (('warmup', warmups), ('receipt', expected_runs)):

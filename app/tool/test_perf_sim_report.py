@@ -130,7 +130,9 @@ class ReportTests(unittest.TestCase):
             value['heavy_profile'].update(virtual_qualification=True, acceptance_eligible=False)
             value['heavy_run'].update(platform='android',
                                      native_harness={'package': 'com.friend.ios.dev', 'firebase_auto_initializer_absent': True},
-                                     virtual_runtime={'kind': 'android-emulator', 'runtime_build': 'pinned'},
+                                     virtual_runtime={'kind': 'android-emulator', 'runtime_build': 'pinned',
+                                                      'host': {'node_sha256': 'a' * 64, 'platform': 'fixture-os',
+                                                               'architecture': 'arm64', 'logical_cpus': 10}},
                                      launch_protocol={'warmup_runs': 1, 'measured_runs': 3, 'outlier_policy': 'retain-all',
                                                       'host_load_policy': 'load1-per-logical-cpu<=1/v1'})
             for prefix, count in (('warmup', 1), ('receipt', 3)):
@@ -158,6 +160,11 @@ class ReportTests(unittest.TestCase):
             value['heavy_run']['binary_sha256'] = 'different'
             (root / 'warmup-1.json').write_text(json.dumps(value))
             with self.assertRaisesRegex(ValueError, 'warmup differs'):
+                reporter.summarize(root, 3)
+            del value['heavy_run']['virtual_runtime']['host']
+            for path in [root / f'receipt-{i}.json' for i in range(1, 4)] + [root / 'warmup-1.json']:
+                path.write_text(json.dumps(value))
+            with self.assertRaisesRegex(ValueError, 'requires host identity'):
                 reporter.summarize(root, 3)
 
     def test_ios_profile_cannot_masquerade_as_virtual_profile_baseline(self):

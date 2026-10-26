@@ -22,6 +22,8 @@ def compare(before, after):
     if virtual:
         if after.get('virtual_qualification') is not True:
             raise ValueError('virtual and physical evidence cannot be compared')
+        if any(not value['identity'].get('virtual_runtime', {}).get('host') for value in (before, after)):
+            raise ValueError('virtual comparison requires host identity; qualify a new baseline')
         for key in ('virtual_runtime', 'launch_protocol'):
             if not before['identity'].get(key) or before['identity'][key] != after['identity'].get(key):
                 raise ValueError(f'incomparable virtual {key}')

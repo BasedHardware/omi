@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Attest an explicit virtual target and pinned runtime before any installation."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,15 @@ import subprocess
 
 def read(command):
     return subprocess.run(command, check=True, capture_output=True, text=True, timeout=20).stdout.strip()
+
+
+def host_identity():
+    node = platform.node()
+    cpus = os.cpu_count()
+    if not node or cpus is None or cpus <= 0:
+        raise ValueError('virtual host identity is unavailable')
+    return {'node_sha256': hashlib.sha256(node.encode()).hexdigest(),
+            'platform': platform.platform(), 'architecture': platform.machine(), 'logical_cpus': cpus}
 
 
 def attest(platform, device, runtime_build):
@@ -39,6 +49,7 @@ def attest(platform, device, runtime_build):
                    'model': entry['deviceTypeIdentifier']}
     if actual != runtime_build:
         raise ValueError(f'runtime build differs from pin: expected {runtime_build}, got {actual}')
+    details['host'] = host_identity()
     return details
 
 

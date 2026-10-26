@@ -28,7 +28,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ "$RUNS" =~ ^[1-9][0-9]*$ ]] || { echo 'runs must be positive' >&2; exit 64; }
-[[ "$WARMUP_RUNS" =~ ^[0-9]+$ && "$WARMUP_RUNS" -le 3 ]] || { echo 'warmup-runs must be 0..3' >&2; exit 64; }
+[[ "$WARMUP_RUNS" =~ ^[0-3]$ ]] || { echo 'warmup-runs must be a single digit 0..3' >&2; exit 64; }
 if [[ "$VIRTUAL" == 1 && "$WARMUP_RUNS" -lt 1 ]]; then
   echo 'virtual qualification requires at least one retained warmup launch' >&2; exit 64
 fi
@@ -37,6 +37,9 @@ if [[ "$VIRTUAL" == 0 && ( "$WARMUP_RUNS" != 0 || -n "$RUNTIME_BUILD" ) ]]; then
 fi
 [[ -n "$DEVICE" ]] || { echo 'pass --device UDID (use a dedicated development device)' >&2; exit 64; }
 [[ "$PLATFORM" == ios || "$PLATFORM" == android ]] || { echo 'platform must be ios or android' >&2; exit 64; }
+if [[ "$VIRTUAL" == 1 && "$PLATFORM" == android && ! "$DEVICE" =~ ^emulator-[0-9]+$ ]]; then
+  echo 'virtual Android target must be an explicit emulator serial' >&2; exit 65
+fi
 [[ -n "$OUT_DIR" ]] || OUT_DIR="${TMPDIR:-/tmp}/omi-heavy-$(date -u +%Y%m%dT%H%M%SZ)"
 if [[ "$VIRTUAL" == 1 && -d "$OUT_DIR" && -n "$(find "$OUT_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
   echo 'virtual output directory must be new or empty; retain failed batches separately' >&2; exit 64

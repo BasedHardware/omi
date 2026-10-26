@@ -95,11 +95,19 @@ class DeviceToolsTests(unittest.TestCase):
         before, after = summary(), summary()
         for value in (before, after):
             value.update(accepted_baseline=False, qualified_virtual_baseline=True, virtual_qualification=True)
-            value['identity'].update(virtual_runtime={'kind': 'android-emulator', 'runtime_build': 'pin'},
+            value['identity'].update(virtual_runtime={'kind': 'android-emulator', 'runtime_build': 'pin',
+                                                     'host': {'node_sha256': 'a' * 64}},
                                      launch_protocol={'warmup_runs': 1, 'measured_runs': 3, 'outlier_policy': 'retain-all'})
         self.assertTrue(comparison.compare(before, after)['current_variance_pass'])
         after['identity']['virtual_runtime']['runtime_build'] = 'new'
         with self.assertRaisesRegex(ValueError, 'virtual_runtime'):
+            comparison.compare(before, after)
+        after['identity']['virtual_runtime']['runtime_build'] = 'pin'
+        after['identity']['virtual_runtime']['host']['node_sha256'] = 'b' * 64
+        with self.assertRaisesRegex(ValueError, 'virtual_runtime'):
+            comparison.compare(before, after)
+        del after['identity']['virtual_runtime']['host']
+        with self.assertRaisesRegex(ValueError, 'requires host identity'):
             comparison.compare(before, after)
         after = summary()
         with self.assertRaisesRegex(ValueError, 'virtual and physical'):
