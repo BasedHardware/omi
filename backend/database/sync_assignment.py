@@ -6,7 +6,6 @@ import os
 import time
 from google.cloud import firestore
 import config.speaker_match_scores as match_scores
-from utils.sync.assignment import SyncAssignmentDiscoveryRequired, run_with_size_limit_backstop
 
 
 class SyncAssignmentDiscovery:
@@ -36,6 +35,8 @@ class SyncAssignmentDiscovery:
         )
 
     def run(self, assign, attempted_canonical, discover):
+        from utils.sync.assignment import SyncAssignmentDiscoveryRequired, run_with_size_limit_backstop
+
         try:
             return run_with_size_limit_backstop(assign, attempted_canonical)
         except SyncAssignmentDiscoveryRequired:

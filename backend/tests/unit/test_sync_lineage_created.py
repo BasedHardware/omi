@@ -155,35 +155,48 @@ def test_stamp_gap_reroute_discovers_and_rechecks_live_candidates(monkeypatch, c
     assert all('_sync_lineage_created' not in value for value in client.rows.values())
 
 
-@pytest.mark.parametrize('provenance_matches', [False, True])
-def test_stamp_gap_reroute_can_adopt_discovered_live_content(monkeypatch, caplog, provenance_matches):
-    from utils.sync import assignment
+@pytest.mark.parametrize('overlap', [False, True])
+@pytest.mark.parametrize('duration', [9.5, 330])
+@pytest.mark.parametrize('dedupe_enabled', [False, True])
+def test_stamp_gap_reroute_never_adopts_live_content(monkeypatch, caplog, overlap, duration, dedupe_enabled):
+    from datetime import timedelta
 
-    capture_mismatch = assignment.capture_mismatch
+    from utils.sync.live_overlap import choose_live_overlap
 
-    def mismatch(row, incoming, uid=None):
-        if row['id'] == 'live' and not provenance_matches:
-            return 'capture_key'
-        return capture_mismatch(row, incoming, uid)
-
-    monkeypatch.setattr(assignment, 'capture_mismatch', mismatch)
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', str(dedupe_enabled).lower())
     client = StrictFirestore()
     stamp = dict(chunk('stamp', 0), data_protection_level='standard')
     client.rows[('users', 'u', 'conversations', 'stamp')] = deepcopy(stamp)
-    live = dict(chunk('live', 1002), has_content=True, capture_evidence={'origin': 'live'})
+    live = dict(chunk('live', 1002 if overlap else 2000), has_content=True, capture_evidence={'origin': 'live'})
+    incoming = dict(chunk('wal', 1000), _sync_lineage_binding='stamp_fallback')
+    incoming['finished_at'] = incoming['started_at'] + timedelta(seconds=duration)
+    incoming['transcript_segments'][0]['end'] = duration
+    # This is adoptable content on ordinary untargeted intake. The long case
+    # would stretch it by more than 300 s if reroute selection regressed.
+    assert choose_live_overlap([live], incoming) == ('live' if overlap else None)
+    if overlap and duration > 300:
+        assert (incoming['finished_at'] - live['finished_at']).total_seconds() > 300
+    calls = []
     with caplog.at_level(logging.INFO):
         _, (row, created, _) = persist(
             monkeypatch,
             client=client,
             live=live,
             target_id='stamp',
-            incoming=dict(chunk('wal', 1000), _sync_lineage_binding='stamp_fallback'),
+            incoming=incoming,
+            discovery_calls=calls,
         )
-    assert created is not provenance_matches
-    assert row['id'] == ('live' if provenance_matches else 'wal')
+    assert created and row['id'] == 'wal'
     assert row['_sync_lineage_stamp_gap_refused'] is True
     assert client.rows[('users', 'u', 'conversations', 'stamp')] == stamp
-    assert len(observations(caplog)) == (0 if provenance_matches else 1)
+    assert client.rows[('users', 'u', 'conversations', 'live')] == live
+    assert ('users', 'u', 'conversations', 'wal') in client.rows
+    assert calls == [True]
+    outcome = 'created_overlap' if overlap else 'created_clear'
+    assert observations(caplog) == [
+        f'event=sync_lineage_resolve outcome={outcome} stage=assignment '
+        'checked_live_candidates_bucket=2_5 lookup_complete=true'
+    ]
 
 
 @pytest.mark.parametrize('reason', ['lookup_failed', 'page_cap'])

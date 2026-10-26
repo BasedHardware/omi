@@ -308,16 +308,10 @@ def assign_in_transaction(
 
     # Discovery is a hint only. Re-read every candidate under the same
     # transaction as the append, so deletion, lifecycle and provenance win.
-    def temporal_live_target(excluded: frozenset[str] = frozenset()) -> str | None:
-        if not live_candidate_ids or not live_overlap_enabled():
-            return None
-        live_rows = [row for cid in live_candidate_ids if (row := load(cid)) and cid not in full_ids | excluded]
-        live_id = choose_live_overlap(live_rows, incoming, uid=user_ref.id)
-        return live_id
-
     temporal_live = False
-    if not target_id:
-        live_id = temporal_live_target()
+    if not target_id and live_candidate_ids and live_overlap_enabled():
+        live_rows = [row for cid in live_candidate_ids if (row := load(cid)) and cid not in full_ids]
+        live_id = choose_live_overlap(live_rows, incoming, uid=user_ref.id)
         if live_id:
             target_id, target = live_id, load(live_id)
             temporal_live = True
@@ -729,13 +723,10 @@ def assign_in_transaction(
         live_stats = None
         stamp_fallback_live = False
         excluded = frozenset({refused_id})
-        live_id = temporal_live_target(excluded)
-        live_target = load(live_id) if live_id else None
-        # The initial temporal path checks capture provenance after selection;
-        # this late selection must cross the same fence before becoming a target.
-        if live_target is not None and capture_mismatch(live_target, incoming, user_ref.id) == 'none':
-            target_id, target, target_hint = live_id, live_target, live_id
-            temporal_live = True
+        # Reroute discovery is observation-only. Read every hint before writes
+        # for contention and gate-3 classification, without adopting a live row.
+        for cid in live_candidate_ids:
+            load(cid)
         chosen = plan(excluded, chosen.kept)
         stamp_gap_refused = True
     if (
