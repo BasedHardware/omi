@@ -4457,6 +4457,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get continueText => 'Συνέχεια';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Έχετε ήδη συνδρομή. Διαχειριστείτε την τρέχουσα συνδρομή σας αντί να ξεκινήσετε μια νέα.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Επανεγγραφείτε πρώτα για να αλλάξετε πρόγραμμα.';
 
   @override
@@ -4938,6 +4942,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Το πρόσθετο δείγμα ομιλίας αφαιρέθηκε';
+
+  @override
+  String get consentDataMessage =>
+      'Συνεχίζοντας, οι συνομιλίες, οι εγγραφές και τα προσωπικά σας στοιχεία θα αποθηκευτούν με ασφάλεια στους διακομιστές μας. Οι ηχογραφήσεις και τα μεταγραφές σας επεξεργάζονται από υπηρεσίες τεχνητής νοημοσύνης τρίτων (συμπεριλαμβανομένων των Deepgram για μεταγραφή και OpenAI για ανάλυση) για να σας παρέχουν γνώσεις βασισμένες σε AI και να ενεργοποιήσουν όλες τις λειτουργίες της εφαρμογής.';
 
   @override
   String get tasksEmptyStateMessage => 'Ξεκινήστε μια συνομιλία για να δημιουργήσετε μια εργασία.';
@@ -8651,6 +8659,9 @@ class AppLocalizationsEl extends AppLocalizations {
       'Η απομαγνητοφώνηση δεν είναι διαθέσιμη — η εγγραφή συνεχίζεται και ο ήχος σας αποθηκεύεται.';
 
   @override
+  String get captureNoAudioFromPendant => 'Δεν υπάρχει ήχος από το μενταγιόν';
+
+  @override
   String get capturing => 'Καταγραφή';
 
   @override
@@ -11155,6 +11166,12 @@ class AppLocalizationsEl extends AppLocalizations {
       'Η σύνδεση Bluetooth με το Omi σου διακόπηκε, οπότε ο ήχος δεν φτάνει στην εφαρμογή. Το Omi συνεχίζει να καταγράφει στη συσκευή και θα συγχρονιστεί μόλις επανέλθει η σύνδεση. Η επανάληψη επανασυνδέει τη σύνδεση· αν εξακολουθεί να αποτυγχάνει, έλεγξε τη συσκευή σου στις Ρυθμίσεις > Συσκευή.';
 
   @override
+  String get captureConnecting => 'Σύνδεση…';
+
+  @override
+  String get captureNoAudioDetail => 'Το μενταγιόν είναι συνδεδεμένο, αλλά κανένας ήχος δεν φτάνει στο τηλέφωνό σας';
+
+  @override
   String get captureIngressNeedsReconnect => 'Ο ήχος δεν φτάνει στην εφαρμογή — συνδέστε ξανά το Omi';
 
   @override
@@ -11183,13 +11200,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Ο χώρος σχεδόν γέμισε';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Το Omi θα επανασυνδεθεί μόνο του';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12324,12 +12334,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Ελέγξτε τη σύνδεση';
-
-  @override
-  String get forYou => 'Για εσάς';
-
-  @override
-  String get stopThese => 'Διακοπή αυτών';
 
   @override
   String get dismiss => 'Απόρριψη';
@@ -14506,6 +14510,26 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable =>
+      'Οι τρέχουσες σημειώσεις δεν ενημερώνονται. Δείτε προς το παρόν την απομαγνητοφώνηση.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Εγγραφή · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Προηγούμενο επεισόδιο';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Τμήματα σε εκκρεμότητα: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Άνοιγμα προηγούμενου επεισοδίου';
+
+  @override
   String get episodeNotesSoon => 'Οι σημειώσεις εμφανίζονται μετά τα πρώτα λεπτά συζήτησης.';
 
   @override
@@ -14643,6 +14667,36 @@ class AppLocalizationsEl extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Έγινε. $percent% έκπτωση για τους επόμενους $months μήνες.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Άλλοι';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Ολοκληρώθηκε';
+
+  @override
+  String get openLoopAnswerRemind => 'Υπενθύμιση αργότερα';
+
+  @override
+  String get openLoopAnswerDrop => 'Απόρριψη';
 
   @override
   String get consentShortMessage =>

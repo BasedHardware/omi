@@ -8,6 +8,7 @@ import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/preferences_quarantine.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -19,7 +20,7 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/capture/capture_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
-import 'package:omi/startup/boot_journal.dart';
+import 'package:omi/utils/conversation_cache_decode.dart';
 import 'package:omi/env/physical_qualification.dart';
 
 typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
@@ -88,7 +89,10 @@ class SharedPreferencesUtil {
   }
 
   static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
+    _conversationCacheReadSession++;
+    _cachedConversationsGeneration++;
     _preferences = await SharedPreferences.getInstance();
+    if (!PhysicalQualification.enabled) await PreferenceQuarantine.restoreThenPrune(_preferences!);
     if (!PhysicalQualification.enabled) await _quarantineBootSettings();
     await _migrateAppearanceDefault();
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
@@ -155,6 +159,11 @@ class SharedPreferencesUtil {
     }
   }
 
+  /// Whether a raw stored value is a string list. Not `value is List<String>`: on iOS/macOS (and for
+  /// Android lists in the legacy encoding) a list loaded from disk is `List<Object?>`, which
+  /// `SharedPreferences.get` does not convert, so that test rejects every valid saved list.
+  static bool _isStoredStringList(Object value) => value is List && value.every((item) => item is String);
+
   static Future<void> _quarantineBootSettings() async {
     final prefs = _preferences!;
     final expected = <String, bool Function(Object)>{
@@ -166,7 +175,7 @@ class SharedPreferencesUtil {
       'uid': (value) => value is String,
       'fullName': (value) => value is String,
       'batchModeEnabled': (value) => value is bool,
-      'flash_page_pending_uploads': (value) => value is List<String>,
+      'flash_page_pending_uploads': _isStoredStringList,
       'limitless_wal_migration_v1': (value) => value is bool,
     };
     for (final entry in expected.entries) {
@@ -181,18 +190,7 @@ class SharedPreferencesUtil {
     final prefs = _preferences;
     if (prefs == null || !_quarantinePending.add(key)) return;
     try {
-      final archive = '$key.corrupt-${DateTime.now().microsecondsSinceEpoch}';
-      bool saved = false;
-      if (value is String) saved = await prefs.setString(archive, value);
-      if (value is bool) saved = await prefs.setBool(archive, value);
-      if (value is int) saved = await prefs.setInt(archive, value);
-      if (value is double) saved = await prefs.setDouble(archive, value);
-      if (value is List<String>) saved = await prefs.setStringList(archive, value);
-      if (value is List && value is! List<String>) saved = await prefs.setString(archive, jsonEncode(value));
-      if (saved) await prefs.remove(key);
-      await BootJournal.instance.record('quarantine:$key', saved ? reason : 'copy_failed');
-    } catch (_) {
-      await BootJournal.instance.record('quarantine:$key', 'copy_failed');
+      await PreferenceQuarantine.archive(prefs, key, value, reason: reason);
     } finally {
       _quarantinePending.remove(key);
     }
@@ -1153,6 +1151,63 @@ class SharedPreferencesUtil {
   /// Bumped by every cache write and by [clear]; an older background write
   /// never lands over a newer write or a sign-out clear.
   static int _cachedConversationsGeneration = 0;
+  // Clear/init invalidate reads even while their asynchronous cleanup is still
+  // running. Ordinary cache refreshes may instead retry the latest snapshot.
+  static int _conversationCacheReadSession = 0;
+
+  @visibleForTesting
+  // Raw JSON character budget, so one long transcript also uses the worker.
+  static int cachedConversationsBackgroundDecodeThreshold = 64 * 1024;
+
+  /// Restore full history off the UI isolate. A cleared/replaced account never
+  /// receives an old completion; a racing cache write gets one fresh attempt.
+  /// The synchronous getter remains available to compatibility-only callers.
+  Future<List<ServerConversation>> loadCachedConversations() async {
+    final session = _conversationCacheReadSession;
+    final ownerUid = uid;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final generation = _cachedConversationsGeneration;
+      final legacy = getBool('migratedMemories') && getStringList('cachedMemories').isNotEmpty;
+      final key = legacy ? 'cachedMemories' : 'cachedConversations';
+      final encoded = List<String>.of(getStringList(key));
+      var decoded = await offUiIsolate(() => decodeConversationCacheSnapshot(encoded),
+          size: encoded.fold<int>(0, (size, value) => size + value.length),
+          threshold: cachedConversationsBackgroundDecodeThreshold,
+          debugName: 'conversation_cache_decode');
+      if (session != _conversationCacheReadSession || uid != ownerUid) return [];
+      if (generation != _cachedConversationsGeneration) {
+        if (legacy) return []; // Never retry an old migration over a newer cache writer.
+        continue;
+      }
+      for (final type in decoded.unreadableTypes) {
+        Logger.debug('Skipping unreadable $key entry: $type');
+      }
+      if (legacy) {
+        // Use the existing guarded migration writer, and refuse a newer
+        // write/clear after its await too.
+        final migrationGeneration = generation + 1;
+        await cacheConversations(decoded.conversations);
+        if (session != _conversationCacheReadSession || uid != ownerUid) return [];
+        if (_cachedConversationsGeneration != migrationGeneration) return [];
+        // The old getter reads the just-written modern wire form. Preserve
+        // that normalization instead of returning pre-round-trip legacy rows.
+        final normalized = List<String>.of(getStringList('cachedConversations'));
+        decoded = await offUiIsolate(() => decodeConversationCacheSnapshot(normalized),
+            size: normalized.fold<int>(0, (size, value) => size + value.length),
+            threshold: cachedConversationsBackgroundDecodeThreshold,
+            debugName: 'conversation_cache_decode');
+        if (session != _conversationCacheReadSession || uid != ownerUid) return [];
+        if (_cachedConversationsGeneration != migrationGeneration) return [];
+        await saveBool('migratedMemories', true);
+        if (session != _conversationCacheReadSession || uid != ownerUid) return [];
+        if (_cachedConversationsGeneration != migrationGeneration) return [];
+      }
+      return decoded.conversations;
+    }
+    // Concurrent live rows are reconciled by the provider. Never publish a
+    // superseded cache snapshot merely to complete a best-effort fallback.
+    return [];
+  }
 
   @visibleForTesting
   static int cachedConversationsBackgroundEncodeThreshold = 20;
@@ -1161,12 +1216,16 @@ class SharedPreferencesUtil {
   /// UI isolate. The cache holds full transcripts and is refreshed on resume.
   Future<void> cacheConversations(List<ServerConversation> value) async {
     final generation = ++_cachedConversationsGeneration;
+    final session = _conversationCacheReadSession;
+    final ownerUid = uid;
     final snapshot = List<ServerConversation>.of(value);
     final encoded = await offUiIsolate(() => [for (final c in snapshot) jsonEncode(c.toJson())],
         size: snapshot.length,
         threshold: cachedConversationsBackgroundEncodeThreshold,
         debugName: 'conversation_cache_encode');
-    if (generation != _cachedConversationsGeneration) return;
+    if (generation != _cachedConversationsGeneration || session != _conversationCacheReadSession || uid != ownerUid) {
+      return;
+    }
     await saveStringList('cachedConversations', encoded);
   }
 
@@ -1376,6 +1435,7 @@ class SharedPreferencesUtil {
   /// Clears persisted user identity and server-backed display caches while
   /// preserving device, onboarding, permissions, and offline recording state.
   void clearUserDisplayCache() {
+    _conversationCacheReadSession++;
     final ownerUid = uid;
     if (ownerUid.isNotEmpty) _scopeLegacyUserData(ownerUid);
     authToken = '';
@@ -1515,9 +1575,13 @@ class SharedPreferencesUtil {
   double getDouble(String key, {double defaultValue = 0.0}) =>
       PhysicalQualification.enabled ? _preferences?.getDouble(key) ?? defaultValue : _readOrDefault(key, defaultValue);
 
-  List<String> getStringList(String key, {List<String> defaultValue = const []}) => PhysicalQualification.enabled
-      ? _preferences?.getStringList(key) ?? defaultValue
-      : _readOrDefault(key, defaultValue);
+  List<String> getStringList(String key, {List<String> defaultValue = const []}) {
+    if (PhysicalQualification.enabled) return _preferences?.getStringList(key) ?? defaultValue;
+    final value = _preferences?.get(key);
+    // A list loaded from disk is List<Object?>, not List<String>; see _isStoredStringList.
+    if (value is List && value is! List<String> && _isStoredStringList(value)) return List<String>.from(value);
+    return _readOrDefault(key, defaultValue);
+  }
 
   Future<bool> saveString(String key, String value) async {
     final changed = key == 'btDevice' && _preferences?.getString(key) != value;
@@ -1538,6 +1602,7 @@ class SharedPreferencesUtil {
   Future<bool> remove(String key) async => await _preferences?.remove(key) ?? false;
 
   Future<bool> clear() async {
+    _conversationCacheReadSession++;
     // Drop any in-flight background conversation cache write (sign-out, account deletion).
     _cachedConversationsGeneration++;
     _authTokenCache = '';

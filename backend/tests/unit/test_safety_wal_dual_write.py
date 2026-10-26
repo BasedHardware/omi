@@ -172,7 +172,6 @@ def test_batch_provider_stamp(independent_job_pipeline, monkeypatch, flag, expec
     pipeline, transcript_segment, lifecycle = independent_job_pipeline
     store = StrictFirestore()
     pipeline.get_syncing_file_temporal_signed_url = lambda path: path
-    pipeline.schedule_syncing_temporal_file_deletion = lambda path: None
     pipeline.get_prerecorded_service = lambda language: ('test', None, 'parakeet')
     pipeline.prerecorded = lambda *a, **kw: ([{}], 'en')
     pipeline.postprocess_words = lambda *a: [

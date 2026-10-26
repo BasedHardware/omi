@@ -55,7 +55,18 @@ CLOSE_REASON_LABELS = frozenset(
 )
 PROVISIONAL_OUTCOMES = frozenset({'kept', 'dropped', 'dismissed'})
 BOUNDARY_OUTCOMES = frozenset(
-    {'new', 'continue', 'parallel', 'pending', 'close', 'jev_continue', 'jev_close', 'jev_no_answer'}
+    {
+        'new',
+        'continue',
+        'parallel',
+        'pending',
+        'close',
+        'jev_continue',
+        'jev_close',
+        'jev_no_answer',
+        'sync_rejoin',
+        'sync_rejoin_member',
+    }
 )
 
 EPISODE_MOMENT_UPDATES_TOTAL = _reuse_or_create(

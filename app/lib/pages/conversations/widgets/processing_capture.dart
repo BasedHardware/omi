@@ -16,7 +16,6 @@ import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -33,7 +32,7 @@ class ConversationCaptureWidget extends StatefulWidget {
   final bool showsCall;
 
   /// Episodes on: a streaming capture is the live episode row in Today, so this card stays for the
-  /// states that are not an episode (a call, Transcribe Later, a dropped pendant).
+  /// states that are not an episode (a call or Transcribe Later).
   final bool deferStreamingToEpisode;
 
   @override
@@ -43,13 +42,6 @@ class ConversationCaptureWidget extends StatefulWidget {
 class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   Timer? _offlineTicker;
   int _offlineTick = 0;
-
-  /// The pendant capture this card last showed, kept so a pendant that drops mid-capture shows as
-  /// Disconnected instead of the card vanishing. The controller forgets the device on disconnect
-  /// (`liveCaptureSource` goes null, just as when nothing ever recorded), so "was capturing" is
-  /// remembered here: set while a realtime pendant capture is live, cleared when the pendant
-  /// reconnects, is unpaired, or another source (the phone) takes over.
-  String? _droppedSource;
 
   @override
   void initState() {
@@ -62,11 +54,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       final callActive = widget.showsCall && context.read<PhoneCallProvider>().callState == PhoneCallState.active;
       // With the live episode row drawing the streaming capture, this card has no elapsed time.
       final deferred = widget.deferStreamingToEpisode && EpisodePresentation.streamingSource(provider) != null;
-      if (callActive ||
-          (!deferred &&
-              (provider.offlineRecordingStartedAt != null ||
-                  provider.customSttBufferingDuration != null ||
-                  provider.liveCaptureSource != null))) {
+      // The compact streaming pill has no elapsed clock. Rebuilding it each
+      // second changes nothing, and Timer callbacks keep running even when
+      // Home's TickerMode is disabled behind Tasks.
+      if (TickerMode.valuesOf(context).enabled &&
+          (callActive ||
+              (!deferred &&
+                  (provider.offlineRecordingStartedAt != null || provider.customSttBufferingDuration != null)))) {
         setState(() {}); // the elapsed time on the card
       }
       _offlineTick++;
@@ -76,7 +70,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           SharedPreferencesUtil().batchModeEnabled &&
           provider.recordingDevice?.type == DeviceType.limitless) {
         await SharedPreferencesUtil.reload();
-        if (mounted) setState(() {});
+        if (mounted && TickerMode.valuesOf(context).enabled) setState(() {});
       }
     });
   }
@@ -123,17 +117,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     return Consumer<CaptureProvider>(
       builder: (context, provider, child) {
-        // The card means "what's recording now": hidden when nothing is (a connected pendant
-        // that is not capturing, or a stopped phone). Transcribe Later keeps its own card.
+        // The card means "what's recording now": hidden when nothing is (a connected pendant that
+        // is not capturing, a stopped phone, or a pendant that dropped mid-capture — the header
+        // chip already says Disconnected / Connecting… for that, and the drop needs no action, so
+        // a row here would only repeat the chip). Transcribe Later keeps its own card.
         final batch = provider.isPhoneMicBatchRecording ||
             (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice);
-        final (pendantConnected, pendantPaired, pendantConnecting) = context.select<DeviceProvider, (bool, bool, bool)>(
-          (d) => (d.connectedDevice != null, d.pairedDevice?.id.isNotEmpty ?? false, d.isConnecting),
-        );
-        final pendantDropped = _trackPendantDrop(provider, connected: pendantConnected, paired: pendantPaired);
-        if (pendantDropped) {
-          return _cardShell(_buildPendantDroppedUI(provider, reconnecting: pendantConnecting), decorated: false);
-        }
         final phoneLive = provider.recordingState == RecordingState.record ||
             provider.recordingState == RecordingState.initialising ||
             provider.recordingState == RecordingState.interrupted ||
@@ -209,36 +198,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         child: child,
       );
 
-  /// Updates the remembered pendant capture and says whether it dropped: no source is live, the
-  /// pendant it came from is still paired but not connected. See [_droppedSource].
-  bool _trackPendantDrop(CaptureProvider provider, {required bool connected, required bool paired}) {
-    final source = provider.liveCaptureSource;
-    if (source != null && source != 'phone' && !SharedPreferencesUtil().batchModeEnabled) {
-      _droppedSource = source;
-      return false;
-    }
-    if (source != null || connected || !paired) {
-      _droppedSource = null;
-      return false;
-    }
-    if (_droppedSource == null) return false;
-    return true;
-  }
-
-  Widget _buildPendantDroppedUI(CaptureProvider provider, {required bool reconnecting}) {
-    final l10n = context.l10n;
-    return LiveCaptureCard(
-      source: _droppedSource!,
-      status: l10n.disconnected,
-      // Reconnecting is its own state; a drop that is not reconnecting yet still says what
-      // happens next inline, instead of a bare "Disconnected" with the why only in the sheet.
-      detail: reconnecting ? l10n.reconnecting : l10n.capturePendantDisconnectedShort,
-      explanation: l10n.capturePendantDisconnectedDetail,
-      compact: true,
-      lastLine: provider.segments.lastOrNull?.text,
-    );
-  }
-
   Future<void> _togglePause(CaptureProvider provider) async {
     final phone = provider.liveCaptureSource == 'phone';
     try {
@@ -268,7 +227,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool isDeviceRecording = liveSource != null && liveSource != 'phone';
     // Keep automatic repair and legitimate pendant sleep quiet. In particular,
     // never animate a Listening timer solely because a restored link is ready.
-    final unverified = isDeviceRecording && !provider.isPaused && !provider.pendantCaptureVerified;
+    // An exhausted recovery is not a wait: it reads as the failure it is.
+    final noAudio = isDeviceRecording && !provider.isPaused && provider.pendantCaptureActionRequired;
+    final unverified = isDeviceRecording && !provider.isPaused && !provider.pendantCaptureVerified && !noAudio;
 
     // Offline/batch mode: device or phone-mic audio is saved locally with no live
     // transcription, so show a dedicated, self-explanatory card instead of the
@@ -313,6 +274,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     final displayState = liveCaptureDisplayState(
       audioInterrupted: micTaken,
       paused: isPaused,
+      pendantNoAudio: noAudio,
+      pendantUnverified: unverified,
       transcriptionUnavailable: hasTerminalTranscriptionFailure,
       bufferingFor: bufferingFor,
       reconnecting: interruption == CaptureInterruption.recovering,
@@ -334,24 +297,31 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     // When recording is active: the one capture status and control surface.
     if (isDeviceRecording || isPhoneRecording) {
-      final card = LiveCaptureCard(
-        source: isDeviceRecording ? liveSource : 'phone',
-        status: copy.status,
-        detail: copy.detail,
-        explanation: copy.explanation,
-        // Resume only when the status says Paused and the reader paused it; a degraded transcription
-        // is still live, so its control is Pause.
-        paused: isPaused,
-        // The session clock (how long the pendant has been connected) is not the conversation.
-        compact: true,
-        lastLine: provider.segments.lastOrNull?.text,
-        note:
-            isPhoneRecording && provider.pendantPausedForPhone ? context.l10n.pendantPausedResumesWhenYouFinish : null,
-        // Photo-capture devices (OmiGlass) keep capturing photos; there is nothing to pause.
-        onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || micTaken
-            ? null
-            : () => _togglePause(provider),
-      );
+      // A local-preview session has no cloud lines yet: the card's existing
+      // last-line slot shows the newest on-device preview line instead.
+      final preview = provider.livePreview;
+      Widget buildCard(String? lastLine) => LiveCaptureCard(
+            source: isDeviceRecording ? liveSource : 'phone',
+            status: copy.status,
+            detail: copy.detail,
+            explanation: copy.explanation,
+            // Resume only when the status says Paused and the reader paused it; a degraded transcription
+            // is still live, so its control is Pause.
+            paused: isPaused,
+            // The session clock (how long the pendant has been connected) is not the conversation.
+            compact: true,
+            lastLine: lastLine,
+            note: isPhoneRecording && provider.pendantPausedForPhone
+                ? context.l10n.pendantPausedResumesWhenYouFinish
+                : null,
+            // Photo-capture devices (OmiGlass) keep capturing photos; there is nothing to pause.
+            onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || micTaken
+                ? null
+                : () => _togglePause(provider),
+          );
+      final card = preview != null && provider.localPreviewAdmitted && provider.segments.isEmpty
+          ? ListenableBuilder(listenable: preview, builder: (context, _) => buildCard(preview.latestLine))
+          : buildCard(provider.segments.lastOrNull?.text);
       return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -153,6 +153,8 @@ dependency_overrides:
       path: opus_flutter_android
 
 dev_dependencies:
+  flutter_driver:
+    sdk: flutter
   flutter_launcher_icons: 0.13.1
   google_sign_in_ios: 5.7.5
   flutter_lints: ^4.0.0

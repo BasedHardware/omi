@@ -46,6 +46,7 @@ _BUCKETS = ((1, '<1s'), (5, '<5s'), (30, '<30s'), (60, '<1m'), (300, '<5m'), (90
 _DROP_FIELDS = frozenset(
     (
         'audio_uri',
+        'input_uri_sha256',  # derivative of the dropped immutable input URI
         'result_uri',
         'owner_key',
         'next',
@@ -433,14 +434,15 @@ GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
         summary_sigma=0.0,
     ),
     # Near-silence with empty first ASR: padded retry recovers some; the rest quarantine as empty_asr,
-    # spend one paid call and either recover or settle as terminal empty (no_recoverable_speech).
+    # spend one paid call and either recover or retain measured positive-VAD held custody.
     'empty_asr_padded_retry': lambda: _config(
         'empty_asr_padded_retry',
         workload={'near_silence_fraction': 0.7},
         stt=STTProfile(min_replicas=2, max_replicas=2, near_silence_empty_rate=0.6),
         modulate=ModulateProfile(near_silence_recover_rate=0.5),
     ),
-    # Every first and padded ASR attempt is empty and the paid provider finds no speech: terminal empty.
+    # Historical terminal-empty case: every recognizer is empty on positive VAD.
+    # Ship-on safety retains these units; its explicit rollback is mutation-tested.
     'empty_asr_terminal': lambda: _config(
         'empty_asr_terminal',
         workload={'near_silence_fraction': 1.0, 'owners': 2},

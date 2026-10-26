@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "Веќе имате претплата. Управувајте со тековната претплата наместо да започнете нова.",
     "resubscribeFirstToChangePlans": "Прво претплатете се повторно за да го смените планот.",
     "resubscribe": "Претплати се повторно",
     "@resubscribe": {
@@ -5781,6 +5782,10 @@
     "additionalSpeechSampleRemoved": "Дополнителен примерок на говор отстранет",
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
+    },
+    "consentDataMessage": "Со продолжување, вашите разговори, снимки и лични информации ќе бидат безбедно зачувани на нашите сервери. Вашите аудио снимки и транскрипти се обработуваат од AI услуги на трети страни (вклучувајќи Deepgram за транскрипција и OpenAI за анализа) за да ви обезбедат увиди базирани на AI и да ги овозможат сите функции на апликацијата.",
+    "@consentDataMessage": {
+        "description": "Consent message explaining how user data will be stored and used"
     },
     "tasksEmptyStateMessage": "Започнете разговор за да создадете задача.",
     "@tasksEmptyStateMessage": {
@@ -10610,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "Прикачувањето не успеа — аудио со времетраење {duration} е зачувано на вашиот телефон.",
     "audioUploadFailedTapRetry": "Прикачувањето не успеа — аудио со времетраење {duration} е зачувано на вашиот телефон. Допрете за да се обидете повторно.",
     "audioUploadRetrying": "Повторен обид за прикачување… аудио со времетраење {duration} е зачувано на вашиот телефон",
+    "captureNoAudioFromPendant": "Нема звук од приврзокот",
     "capturing": "Снимање",
     "capturingPhotos": "Снимање фотографии",
     "listeningTranscriptWillAppear": "Слушам… овде ќе се појави транскрипт.",
@@ -10912,6 +10918,8 @@
     "captureBannerTryReconnect": "Обиди се да поврзеш повторно",
     "captureBannerRetrySync": "Повтори ја синхронизацијата",
     "captureWedgeBleExplanation": "Bluetooth-врската со вашиот Omi застана, така што звукот не стига до апликацијата. Omi продолжува да снима на уредот и ќе се синхронизира кога ќе се врати врската. Обидот повторно ја воспоставува врската; ако продолжува да не успева, проверете го уредот во Поставки > Уред.",
+    "captureConnecting": "Се поврзува…",
+    "captureNoAudioDetail": "Привесоката е поврзана, но никој звук не стигнува до вашиот телефон",
     "captureIngressNeedsReconnect": "Аудиото не стига до апликацијата — повторно поврзете го Omi",
     "captureIngressNeedsReconnectExplanation": "Апликацијата повеќе не може да прима аудио од уредот Omi и не успеа автоматски да ја обнови врската. Исклучете и повторно поврзете го уредот — од поставките за уред или со гаснење и палење. Аудиото зачувано на уредот ќе се синхронизира подоцна.",
     "captureStillRecording": "Снимањето продолжува",
@@ -10921,7 +10929,6 @@
     "captureStarting": "Се стартува…",
     "capturePhoneStorageFull": "Меморијата на телефонот е полна",
     "captureStorageAlmostFull": "Меморијата е речиси полна",
-    "capturePendantDisconnectedDetail": "Приврзокот ја изгуби врската со овој телефон. Omi ќе се поврзе повторно сам кога приврзокот е вклучен и во близина. Сè што е снимено досега е безбедно.",
     "participantsSummaryUncounted": "{name} и други",
     "deviceOnboardingVoiceReplyTitle": "Слушнете ги одговорите на Omi",
     "deviceOnboardingVoiceReplySample": "Разбрано. Вашиот следен состанок започнува за дваесет минути.",
@@ -11199,9 +11206,6 @@
     "playbackAudioUnavailable": "Аудиото не е достапно",
     "playbackAudioLoadFailed": "Аудиото не можеше да се вчита",
     "playbackAudioNetworkFailed": "Проверете ја врската",
-    "capturePendantDisconnectedShort": "Omi ќе се поврзе повторно сам",
-    "forYou": "За вас",
-    "stopThese": "Запри ги овие",
     "dismiss": "Сокриј",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
@@ -11811,6 +11815,11 @@
     "episodeSoFar": "Досега",
     "episodeUpdatedJustNow": "Ажурирано сега · целосни белешки на крајот",
     "episodeUpdatedMinutesAgo": "Ажурирано пред {minutes} мин · целосни белешки на крајот",
+    "episodeNotesUnavailable": "Тековните белешки не се ажурираат. Засега погледнете го транскриптот.",
+    "episodeCaptureFor": "Снимање · {duration}",
+    "episodePrevious": "Претходна епизода",
+    "captureChunksPending": "Делови на чекање: {pending}",
+    "episodeOpenPrevious": "Отвори ја претходната епизода",
     "episodeNotesSoon": "Белешките се појавуваат по првите минути разговор.",
     "episodeOpenAll": "Отвори сè",
     "episodeWrapUpNow": "Заврши сега",
@@ -11847,6 +11856,16 @@
     "retentionOfferAccept": "Остани со {percent}% попуст",
     "retentionOfferBody": "Остани и плаќај {price} месечно во следните {months} месеци.",
     "retentionOfferApplied": "Готово. {percent}% попуст за следните {months} месеци.",
+    "othersSpeakerLabel": "Други",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Завршено",
+    "openLoopAnswerRemind": "Потсети ме подоцна",
+    "openLoopAnswerDrop": "Отфрли",
     "consentShortMessage": "Omi користи вештачка интелигенција за да ги претвори вашите разговори во белешки. Можете да ги избришете во секое време.",
     "consentAiProviders": "Се обработува со {providers}."
 }

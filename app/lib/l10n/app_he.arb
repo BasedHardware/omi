@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "כבר יש לך מנוי. אפשר לנהל את המנוי הקיים במקום להתחיל מנוי חדש.",
     "resubscribeFirstToChangePlans": "הירשמו מחדש קודם כדי לשנות תוכנית.",
     "resubscribe": "הירשם מחדש",
     "@resubscribe": {
@@ -5781,6 +5782,10 @@
     "additionalSpeechSampleRemoved": "דוגמה דיבור נוספת הוסרה",
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
+    },
+    "consentDataMessage": "בהמשך, השיחות, ההקלטות והמידע האישי שלך יאוחסנו בצורה מאובטחת בשרתים שלנו. הקלטות האודיו והתמלולים שלך מעובדים על ידי שירותי AI של צד שלישי (כולל Deepgram לתמלול ו-OpenAI לניתוח) כדי לספק לך תובנות מבוססות AI ולאפשר את כל תכונות האפליקציה.",
+    "@consentDataMessage": {
+        "description": "Consent message explaining how user data will be stored and used"
     },
     "tasksEmptyStateMessage": "התחילו שיחה כדי ליצור משימה.",
     "@tasksEmptyStateMessage": {
@@ -10610,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "ההעלאה נכשלה — {duration} של אודיו נשמרו בטלפון שלך.",
     "audioUploadFailedTapRetry": "ההעלאה נכשלה — {duration} של אודיו נשמרו בטלפון שלך. יש להקיש כדי לנסות שוב.",
     "audioUploadRetrying": "מנסה להעלות שוב… {duration} של אודיו נשמרו בטלפון שלך",
+    "captureNoAudioFromPendant": "אין שמע מהתליון",
     "capturing": "מתבצעת הקלטה",
     "capturingPhotos": "מצלם תמונות",
     "listeningTranscriptWillAppear": "מאזין… התמלול יופיע כאן.",
@@ -10912,6 +10918,8 @@
     "captureBannerTryReconnect": "נסה להתחבר מחדש",
     "captureBannerRetrySync": "נסה שוב לסנכרן",
     "captureWedgeBleExplanation": "חיבור ה-Bluetooth ל-Omi שלך נקטע, לכן השמע לא מגיע לאפליקציה. Omi ממשיך להקליט במכשיר ויסתנכרן ברגע שהחיבור יחזור. ניסיון חוזר מחבר מחדש את הקישור; אם זה ממשיך להיכשל, בדוק את המכשיר בהגדרות > מכשיר.",
+    "captureConnecting": "מתחבר…",
+    "captureNoAudioDetail": "התליון מחובר, אבל שמע לא מגיע לטלפון שלך",
     "captureIngressNeedsReconnect": "האודיו לא מגיע לאפליקציה — חבר מחדש את ה-Omi",
     "captureIngressNeedsReconnectExplanation": "האפליקציה כבר לא מצליחה לקבל אודיו ממכשיר ה-Omi ולא הצליחה לשחזר את החיבור אוטומטית. נתק וחבר מחדש את המכשיר — מהגדרות המכשיר או על ידי כיבוי והדלקה. אודיו שנשמר במכשיר יסונכרן מאוחר יותר.",
     "captureStillRecording": "עדיין מקליט",
@@ -10921,7 +10929,6 @@
     "captureStarting": "מתחיל…",
     "capturePhoneStorageFull": "אחסון הטלפון מלא",
     "captureStorageAlmostFull": "האחסון כמעט מלא",
-    "capturePendantDisconnectedDetail": "התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.",
     "participantsSummaryUncounted": "{name} ואחרים",
     "deviceOnboardingVoiceReplyTitle": "האזינו לתשובות של Omi",
     "deviceOnboardingVoiceReplySample": "הבנתי. הפגישה הבאה שלך מתחילה בעוד עשרים דקות.",
@@ -11199,9 +11206,6 @@
     "playbackAudioUnavailable": "האודיו לא זמין",
     "playbackAudioLoadFailed": "לא ניתן לטעון את האודיו",
     "playbackAudioNetworkFailed": "בדקו את החיבור",
-    "capturePendantDisconnectedShort": "Omi יתחבר מחדש מעצמו",
-    "forYou": "בשבילך",
-    "stopThese": "הפסקת אלה",
     "dismiss": "סגירה",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
@@ -11811,6 +11815,11 @@
     "episodeSoFar": "עד כה",
     "episodeUpdatedJustNow": "עודכן עכשיו · הערות מלאות בסיום",
     "episodeUpdatedMinutesAgo": "עודכן לפני {minutes} דק׳ · הערות מלאות בסיום",
+    "episodeNotesUnavailable": "ההערות בזמן אמת אינן מתעדכנות. בינתיים אפשר לצפות בתמלול.",
+    "episodeCaptureFor": "הקלטה · {duration}",
+    "episodePrevious": "הפרק הקודם",
+    "captureChunksPending": "מקטעים ממתינים: {pending}",
+    "episodeOpenPrevious": "פתח את הפרק הקודם",
     "episodeNotesSoon": "ההערות יופיעו אחרי הדקות הראשונות של השיחה.",
     "episodeOpenAll": "פתח הכול",
     "episodeWrapUpNow": "סכם עכשיו",
@@ -11847,6 +11856,16 @@
     "retentionOfferAccept": "הישארו עם {percent}% הנחה",
     "retentionOfferBody": "הישארו ושלמו {price} לחודש ב-{months} החודשים הבאים.",
     "retentionOfferApplied": "בוצע. {percent}% הנחה ב-{months} החודשים הבאים.",
+    "othersSpeakerLabel": "אחרים",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "בוצע",
+    "openLoopAnswerRemind": "הזכר לי מאוחר יותר",
+    "openLoopAnswerDrop": "ותר על זה",
     "consentShortMessage": "Omi משתמש בבינה מלאכותית כדי להפוך את השיחות שלך להערות. אפשר למחוק אותן בכל עת.",
     "consentAiProviders": "מעובד באמצעות {providers}."
 }

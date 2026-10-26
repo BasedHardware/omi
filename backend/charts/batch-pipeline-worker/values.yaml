@@ -48,7 +48,11 @@ worker:
   flightBatchingEnabled: false
   flightBatchSeconds: 1800
   emptyAsrRecoveryEnabled: false
+  # Activation follows the CPU role's separately approved secret-access change.
+  independentLanguageRecoveryEnabled: false
   emptyAsrDispositionEnabled: false
+  # Kill switch for context retry and positive-VAD custody; ship on.
+  emptyAsrSafetyNetEnabled: true
   headPriorityEnabled: false
   workerSilenceDispositionEnabled: false
   workerValidationDispositionEnabled: true

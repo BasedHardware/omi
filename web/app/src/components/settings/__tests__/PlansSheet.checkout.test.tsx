@@ -64,4 +64,50 @@ describe('PlansSheet checkout', () => {
       '_blank',
     );
   });
+
+  it('renders a single-plan Omi Pro catalog as two intervals and checks out the selected one', async () => {
+    // 2026-10-24 ruling: a new buyer's web catalog is unlimited_v2 only.
+    // The sheet renders both billing intervals of the single tier, preselects
+    // the first, checks out the selected price, and shows no other tier.
+    render(
+      <PlansSheet
+        open
+        onOpenChange={vi.fn()}
+        onSubscriptionUpdate={vi.fn()}
+        subscription={{ plan: 'basic', status: 'active', is_unlimited: false }}
+        cachedPlans={[
+          {
+            id: 'price_omi_pro_month',
+            plan_id: 'unlimited_v2',
+            title: 'Unlimited Monthly',
+            price_string: '$29.99/mo',
+            interval: 'month',
+          },
+          {
+            id: 'price_omi_pro_year',
+            plan_id: 'unlimited_v2',
+            title: 'Unlimited Annual',
+            price_string: '$22.49/mo',
+            interval: 'year',
+          },
+        ]}
+      />,
+    );
+
+    expect(await screen.findByText('Unlimited Monthly')).toBeTruthy();
+    expect(screen.getByText('Unlimited Annual')).toBeTruthy();
+    expect(screen.queryByText('Plus Monthly')).toBeNull();
+
+    // Annual is selectable and becomes the checkout target.
+    fireEvent.click(screen.getByRole('button', { name: /Unlimited Annual/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to Payment' }));
+
+    await waitFor(() => {
+      expect(createCheckoutSession).toHaveBeenCalledWith('price_omi_pro_year');
+    });
+    expect(window.open).toHaveBeenCalledWith(
+      'https://checkout.stripe.test/pay',
+      '_blank',
+    );
+  });
 });

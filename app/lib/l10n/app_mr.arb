@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "तुमच्याकडे आधीपासून सदस्यता आहे. नवीन सदस्यता सुरू करण्याऐवजी सध्याची सदस्यता व्यवस्थापित करा.",
     "resubscribeFirstToChangePlans": "योजना बदलण्यासाठी आधी पुन्हा सदस्यता घ्या.",
     "resubscribe": "पुन्हा सदस्यता घ्या",
     "@resubscribe": {
@@ -5781,6 +5782,10 @@
     "additionalSpeechSampleRemoved": "अतिरिक्त भाषण नमुना काढून टाकला",
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
+    },
+    "consentDataMessage": "पुढे चालू ठेवल्यास, तुमच्या संभाषणा, रेकॉर्डिंग आणि वैयक्तिक माहिती आमच्या सर्व्हरवर सुरक्षितपणे साठवली जाईल. तुमच्या ऑडिओ रेकॉर्डिंग आणि ट्रान्सक्रिप्ट तृतीय-पक्ष AI सेवांद्वारे प्रक्रिया केली जातात (ट्रान्सक्रिप्शनसाठी Deepgram आणि विश्लेषणासाठी OpenAI सह) तुम्हाला AI-चालित अंतर्दृष्टी प्रदान करण्यासाठी आणि सर्व अॅप वैशिष्ट्ये सक्षम करण्यासाठी.",
+    "@consentDataMessage": {
+        "description": "Consent message explaining how user data will be stored and used"
     },
     "tasksEmptyStateMessage": "कार्य तयार करण्यासाठी संभाषण सुरू करा.",
     "@tasksEmptyStateMessage": {
@@ -10610,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "अपलोड अयशस्वी — {duration} ऑडिओ तुमच्या फोनवर जतन केला आहे.",
     "audioUploadFailedTapRetry": "अपलोड अयशस्वी — {duration} ऑडिओ तुमच्या फोनवर जतन केला आहे. पुन्हा प्रयत्न करण्यासाठी टॅप करा.",
     "audioUploadRetrying": "अपलोड पुन्हा करत आहे… {duration} ऑडिओ तुमच्या फोनवर जतन केला आहे",
+    "captureNoAudioFromPendant": "पेंडंटमधून ऑडिओ नाही",
     "capturing": "कॅप्चर होत आहे",
     "capturingPhotos": "फोटो कॅप्चर होत आहेत",
     "listeningTranscriptWillAppear": "ऐकत आहे… येथे ट्रान्सक्रिप्ट दिसेल.",
@@ -10912,6 +10918,8 @@
     "captureBannerTryReconnect": "पुन्हा कनेक्ट करण्याचा प्रयत्न करा",
     "captureBannerRetrySync": "सिंक पुन्हा प्रयत्न करा",
     "captureWedgeBleExplanation": "तुमच्या Omi शी असलेला ब्लूटूथ दुवा तुटला आहे, म्हणून ऑडिओ अ‍ॅपपर्यंत पोहोचत नाही. Omi डिव्हाइसवर रेकॉर्डिंग सुरू ठेवते आणि दुवा पुन्हा स्थापित झाल्यावर सिंक होईल. पुन्हा प्रयत्न केल्याने दुवा पुन्हा जोडला जातो; तो सतत अयशस्वी होत असल्यास, सेटिंग्ज > डिव्हाइसमध्ये तुमचे डिव्हाइस तपासा.",
+    "captureConnecting": "जोडत आहे…",
+    "captureNoAudioDetail": "पेंडंट कनेक्टेड आहे, पण तुमच्या फोनपर्यंत कोणताही ऑडियो पोहोचत नाही",
     "captureIngressNeedsReconnect": "ऑडिओ अॅपपर्यंत पोहोचत नाही — तुमचे Omi पुन्हा कनेक्ट करा",
     "captureIngressNeedsReconnectExplanation": "अॅप आता Omi डिव्हाइसमधून ऑडिओ घेऊ शकत नाही आणि कनेक्शन आपोआप पुनर्स्थापित होऊ शकले नाही. डिव्हाइस डिस्कनेक्ट करा आणि पुन्हा कनेक्ट करा — डिव्हाइस सेटिंग्जमधून, किंवा बंद करून चालू करून. डिव्हाइसवर जतन केलेले ऑडियो नंतर सिंक होईल.",
     "captureStillRecording": "अजूनही रेकॉर्डिंग सुरू आहे",
@@ -10921,7 +10929,6 @@
     "captureStarting": "सुरू होत आहे…",
     "capturePhoneStorageFull": "फोन स्टोरेज भरले",
     "captureStorageAlmostFull": "स्टोरेज जवळजवळ भरले",
-    "capturePendantDisconnectedDetail": "तुमच्या पेंडंटचा या फोनशी संपर्क तुटला. पेंडंट चालू आणि जवळ असल्यावर Omi आपोआप पुन्हा कनेक्ट होईल. याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे.",
     "participantsSummaryUncounted": "{name} आणि इतर",
     "deviceOnboardingVoiceReplyTitle": "Omi ची उत्तरे ऐका",
     "deviceOnboardingVoiceReplySample": "समजले. तुमची पुढील मीटिंग वीस मिनिटांत सुरू होईल.",
@@ -11199,9 +11206,6 @@
     "playbackAudioUnavailable": "ऑडिओ उपलब्ध नाही",
     "playbackAudioLoadFailed": "ऑडिओ लोड होऊ शकला नाही",
     "playbackAudioNetworkFailed": "कनेक्शन तपासा",
-    "capturePendantDisconnectedShort": "Omi आपोआप पुन्हा कनेक्ट होईल",
-    "forYou": "तुमच्यासाठी",
-    "stopThese": "हे थांबवा",
     "dismiss": "लपवा",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
@@ -11811,6 +11815,11 @@
     "episodeSoFar": "आतापर्यंत",
     "episodeUpdatedJustNow": "आत्ताच अपडेट केले · शेवटी पूर्ण नोट्स",
     "episodeUpdatedMinutesAgo": "{minutes} मिनिटांपूर्वी अपडेट · शेवटी पूर्ण नोट्स",
+    "episodeNotesUnavailable": "चालू टिपा अपडेट होत नाहीत. सध्या प्रतिलेख पहा.",
+    "episodeCaptureFor": "रेकॉर्डिंग · {duration}",
+    "episodePrevious": "मागील भाग",
+    "captureChunksPending": "प्रलंबित भाग: {pending}",
+    "episodeOpenPrevious": "मागील भाग उघडा",
     "episodeNotesSoon": "बोलण्याच्या पहिल्या काही मिनिटांनंतर नोट्स दिसतील.",
     "episodeOpenAll": "सर्व उघडा",
     "episodeWrapUpNow": "आता पूर्ण करा",
@@ -11847,6 +11856,16 @@
     "retentionOfferAccept": "{percent}% सवलतीसह सुरू ठेवा",
     "retentionOfferBody": "सुरू ठेवा आणि दरमहा {price} भरा, पुढील {months} महिने.",
     "retentionOfferApplied": "झाले. {percent}% सवलत, पुढील {months} महिने.",
+    "othersSpeakerLabel": "इतर",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "पूर्ण",
+    "openLoopAnswerRemind": "नंतर लक्षात आणून द्या",
+    "openLoopAnswerDrop": "टाकून द्या",
     "consentShortMessage": "Omi AI वापरून तुमच्या संभाषणांच्या नोट्स बनवते. तुम्ही त्या कधीही हटवू शकता.",
     "consentAiProviders": "{providers} द्वारे प्रक्रिया केली जाते."
 }

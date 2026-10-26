@@ -117,6 +117,14 @@ class WrappedErrorSanitizationTests(unittest.TestCase):
                 cls._stubbed_modules[k] = v
                 sys.modules[k] = v
 
+        # Import router dependencies as fixture setup; the fast-unit call budget
+        # measures the status sanitization behavior, not a cold dependency import.
+        from routers import wrapped as wrapped_router
+        from database.wrapped import WrappedStatus
+
+        cls.wrapped_router = wrapped_router
+        cls.WrappedStatus = WrappedStatus
+
     @classmethod
     def tearDownClass(cls):
         for k in cls._stubbed_modules:
@@ -130,8 +138,8 @@ class WrappedErrorSanitizationTests(unittest.TestCase):
         self.assertIn('error="Failed to generate Wrapped. Please try again later."', source)
 
     def test_get_wrapped_status_allowlist_behavior(self):
-        from routers import wrapped as wrapped_router
-        from database.wrapped import WrappedStatus
+        wrapped_router = self.wrapped_router
+        WrappedStatus = self.WrappedStatus
 
         # 1. Raw traceback in DB -> masked to generic
         with patch.object(

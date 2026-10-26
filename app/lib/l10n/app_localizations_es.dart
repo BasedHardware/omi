@@ -4422,6 +4422,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get continueText => 'Continuar';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Ya tienes una suscripción. Gestiona tu suscripción actual en lugar de iniciar una nueva.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Vuelve a suscribirte primero para cambiar de plan.';
 
   @override
@@ -4903,6 +4907,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Muestra de voz adicional eliminada';
+
+  @override
+  String get consentDataMessage =>
+      'Al continuar, tus conversaciones, grabaciones e información personal se almacenarán de forma segura en nuestros servidores. Tus grabaciones de audio y transcripciones son procesadas por servicios de IA de terceros (incluyendo Deepgram para transcripción y OpenAI para análisis) para proporcionarte información impulsada por IA y habilitar todas las funciones de la aplicación.';
 
   @override
   String get tasksEmptyStateMessage => 'Inicia una conversación para crear una tarea.';
@@ -8614,6 +8622,9 @@ class AppLocalizationsEs extends AppLocalizations {
       'La transcripción no está disponible — la grabación continúa y tu audio se guarda.';
 
   @override
+  String get captureNoAudioFromPendant => 'Sin audio del colgante';
+
+  @override
   String get capturing => 'Capturando';
 
   @override
@@ -11114,6 +11125,12 @@ class AppLocalizationsEs extends AppLocalizations {
       'El enlace Bluetooth con tu Omi se ha detenido, por lo que el audio no llega a la aplicación. Omi sigue grabando en el dispositivo y se sincronizará cuando el enlace se recupere. Reintentar vuelve a conectar el enlace; si sigue fallando, revisa tu dispositivo en Ajustes > Dispositivo.';
 
   @override
+  String get captureConnecting => 'Conectando…';
+
+  @override
+  String get captureNoAudioDetail => 'El colgante está conectado, pero ningún audio llega a tu teléfono';
+
+  @override
   String get captureIngressNeedsReconnect => 'El audio no llega a la aplicación — vuelve a conectar tu Omi';
 
   @override
@@ -11142,13 +11159,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Almacenamiento casi lleno';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Tu colgante perdió la conexión con este teléfono. Omi se volverá a conectar solo cuando el colgante esté encendido y cerca. Todo lo grabado antes está a salvo.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi se volverá a conectar solo';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12282,12 +12292,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Comprueba la conexión';
-
-  @override
-  String get forYou => 'Para ti';
-
-  @override
-  String get stopThese => 'Dejar de recibir esto';
 
   @override
   String get dismiss => 'Descartar';
@@ -14456,6 +14460,26 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable =>
+      'Las notas en directo no se están actualizando. Consulta la transcripción por ahora.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Grabando · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episodio anterior';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Fragmentos pendientes: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Abrir episodio anterior';
+
+  @override
   String get episodeNotesSoon => 'Las notas aparecen tras los primeros minutos de conversación.';
 
   @override
@@ -14592,6 +14616,36 @@ class AppLocalizationsEs extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Listo. $percent% de descuento los próximos $months meses.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Otros';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Hecho';
+
+  @override
+  String get openLoopAnswerRemind => 'Recuérdamelo más tarde';
+
+  @override
+  String get openLoopAnswerDrop => 'Descartar';
 
   @override
   String get consentShortMessage =>

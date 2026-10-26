@@ -275,6 +275,14 @@ export interface UpgradeSubscriptionResponse {
   scheduled_start?: number;
 }
 
+export interface RedeemCodeResponse {
+  status: string;
+  percent_off?: number | null;
+  amount_off?: number | null;
+  currency?: string | null;
+  applies_at?: number | null;
+}
+
 export interface Person {
   id: string;
   name: string;

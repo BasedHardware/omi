@@ -22,7 +22,6 @@ def test_real_segment_reports_provider_boundary_without_changing_flag_off_calls(
         'get_syncing_file_temporal_signed_url',
         Mock(side_effect=RuntimeError('synthetic URL failure') if exit_at == 'url' else None, return_value='url'),
     )
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
     monkeypatch.setattr(
         pipeline,
         'keyterms',

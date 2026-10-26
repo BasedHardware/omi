@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-discarded-conversations.png",
+      "platform": "desktop-macos",
+      "description": "Synthetic named bundle: Include discarded filter and retained media/noise rows",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-desktop-macos-restore-conversation.png",
+      "platform": "desktop-macos",
+      "description": "Synthetic discarded conversation detail with Restore Conversation and retained-source guidance",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-desktop-macos-retained-transcript.png",
+      "platform": "desktop-macos",
+      "description": "Retained transcript remains readable while the conversation is discarded",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ],
+  "source_revision": "ef818b57d600735de96635e5d444da51590a7a5c",
+  "bundle_id": "com.omi.omi-solrestore",
+  "data": "Synthetic local emulator fixtures only",
+  "render_method": "AppKit in-process visual export"
+}

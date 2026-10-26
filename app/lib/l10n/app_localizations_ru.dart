@@ -4433,6 +4433,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get continueText => 'Продолжить';
 
   @override
+  String get checkoutExistingSubscription =>
+      'У вас уже есть подписка. Управляйте текущей подпиской вместо оформления новой.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Сначала оформите подписку снова, чтобы сменить план.';
 
   @override
@@ -4911,6 +4915,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Дополнительный образец голоса удален';
+
+  @override
+  String get consentDataMessage =>
+      'Продолжая, ваши разговоры, записи и личная информация будут надежно храниться на наших серверах. Ваши аудиозаписи и транскрипции обрабатываются сторонними AI-сервисами (включая Deepgram для транскрипции и OpenAI для анализа), чтобы предоставить вам аналитику на основе ИИ и обеспечить работу всех функций приложения.';
 
   @override
   String get tasksEmptyStateMessage => 'Начните разговор, чтобы создать задачу.';
@@ -8620,6 +8628,9 @@ class AppLocalizationsRu extends AppLocalizations {
       'Расшифровка недоступна — запись продолжается, аудио сохраняется.';
 
   @override
+  String get captureNoAudioFromPendant => 'Нет звука с кулона';
+
+  @override
   String get capturing => 'Запись';
 
   @override
@@ -11122,6 +11133,12 @@ class AppLocalizationsRu extends AppLocalizations {
       'Связь Bluetooth с вашим Omi прервалась, поэтому звук не попадает в приложение. Omi продолжает записывать на устройстве и синхронизируется, когда связь восстановится. Повторная попытка переподключает связь; если она продолжает сбиваться, проверьте устройство в разделе Настройки > Устройство.';
 
   @override
+  String get captureConnecting => 'Подключение…';
+
+  @override
+  String get captureNoAudioDetail => 'Кулон подключён, но звук не поступает на ваш телефон';
+
+  @override
   String get captureIngressNeedsReconnect => 'Звук не доходит до приложения — переподключите Omi';
 
   @override
@@ -11150,13 +11167,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Память почти заполнена';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Кулон потерял связь с этим телефоном. Omi переподключится сам, когда кулон будет включён и рядом. Всё, что записано до этого, сохранено.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi переподключится сам';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12288,12 +12298,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Проверьте соединение';
-
-  @override
-  String get forYou => 'Для вас';
-
-  @override
-  String get stopThese => 'Отключить такие';
 
   @override
   String get dismiss => 'Скрыть';
@@ -14461,6 +14465,25 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Текущие заметки не обновляются. Пока просмотрите расшифровку.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Запись · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Предыдущий эпизод';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Ожидающие фрагменты: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Открыть предыдущий эпизод';
+
+  @override
   String get episodeNotesSoon => 'Заметки появятся после первых минут разговора.';
 
   @override
@@ -14597,6 +14620,36 @@ class AppLocalizationsRu extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Готово. Скидка $percent% на следующие $months месяца.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Другие';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Готово';
+
+  @override
+  String get openLoopAnswerRemind => 'Напомнить позже';
+
+  @override
+  String get openLoopAnswerDrop => 'Отклонить';
 
   @override
   String get consentShortMessage =>

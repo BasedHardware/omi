@@ -42,6 +42,10 @@ def test_oidc_client_sends_only_fenced_ids_and_reuses_short_lived_cached_token()
         {'allowed': [], 'retry_after': {'segment': float('nan')}},
         {'allowed': [], 'retry_after': {'segment': -1}},
         {'allowed': [], 'retry_after': {'foreign': 30}},
+        {'allowed': [], 'held_reason': {'foreign': 'allowance_exhausted'}},
+        {'allowed': [], 'held_reason': {'segment': ''}},
+        {'allowed': [], 'held_reason': {'segment': 'unbounded ' * 13}},
+        {'allowed': [], 'held_reason': {'segment': 60}},
     ],
 )
 def test_invalid_authorization_receipt_never_permits_compute(body):
@@ -54,6 +58,18 @@ def test_invalid_authorization_receipt_never_permits_compute(body):
     )
     with pytest.raises(ValueError):
         client([lease()])
+
+
+def test_hold_reason_receipt_round_trips_for_the_durable_decision():
+    body = {'allowed': [], 'retry_after': {'segment': 60}, 'held_reason': {'segment': 'allowance_exhausted'}}
+    client = ComputeClient(
+        'https://synthetic.invalid',
+        'audience',
+        'dev',
+        token=lambda: 'synthetic',
+        send=lambda *args, **kwargs: io.BytesIO(json.dumps(body).encode()),
+    )
+    assert client([lease()])['held_reason'] == {'segment': 'allowance_exhausted'}
 
 
 @pytest.mark.parametrize(

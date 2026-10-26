@@ -96,7 +96,7 @@ def test_disabled_dedupe_preserves_calls_and_invalidates_only_metadata(monkeypat
     generate = Mock(return_value='same')
     conversation = SimpleNamespace(id='c')
     assert dedupe.notes('u', conversation, 'prefix', generate, {}) == 'same'
-    generate.assert_called_once_with('prefix', uid='u')
+    generate.assert_called_once_with('prefix', uid='u', open_loop_out=None)
     assert dedupe.l1_input('u', conversation, object()) == (None, False)
     invalidation = Mock(return_value=False)
     monkeypatch.setattr(dedupe, 'invalidate_l1', invalidation)
@@ -224,6 +224,40 @@ def test_invalid_checkpoint_output_is_a_cache_miss(enabled, monkeypatch):
     monkeypatch.setattr(dedupe, '_stored', lambda *_: {**hashes, 'structured': 'invalid stored shape'})
     assert dedupe.notes('u', enabled, 'input', generate, {}) == 'valid generated output'
     assert generate.call_count == 2
+
+
+def _counter_value(name, feature):
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value(name, {'feature': feature}) or 0
+
+
+def test_evaluation_counters_report_hit_miss_and_checkpoint_error(enabled, monkeypatch):
+    from models.conversation import Structured
+
+    skipped = _counter_value('conversation_llm_input_dedupe_skipped_total', 'notes')
+    misses = _counter_value('conversation_llm_input_dedupe_misses_total', 'notes')
+    errors = _counter_value('conversation_llm_input_dedupe_checkpoint_errors_total', 'notes')
+    l1_misses = _counter_value('conversation_llm_input_dedupe_misses_total', 'l1')
+
+    generate = Mock(return_value=Structured(title='Fresh'))
+    hashes = {}
+    dedupe.notes('u', enabled, 'input', generate, hashes)
+    assert _counter_value('conversation_llm_input_dedupe_misses_total', 'notes') == misses + 1
+    assert _counter_value('conversation_llm_input_dedupe_checkpoint_errors_total', 'notes') == errors
+
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **k: {**hashes, 'structured': generate.return_value.model_dump()})
+    dedupe.notes('u', enabled, 'input', generate, {})
+    assert _counter_value('conversation_llm_input_dedupe_skipped_total', 'notes') == skipped + 1
+    assert _counter_value('conversation_llm_input_dedupe_misses_total', 'notes') == misses + 1
+
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **k: {**hashes, 'structured': 'invalid stored shape'})
+    dedupe.notes('u', enabled, 'input', generate, {})
+    assert _counter_value('conversation_llm_input_dedupe_misses_total', 'notes') == misses + 2
+    assert _counter_value('conversation_llm_input_dedupe_checkpoint_errors_total', 'notes') == errors + 1
+
+    dedupe.l1_input('u', enabled, {'text': 'same'})
+    assert _counter_value('conversation_llm_input_dedupe_misses_total', 'l1') == l1_misses + 1
 
 
 @pytest.mark.parametrize('enabled_flag', [False, True])

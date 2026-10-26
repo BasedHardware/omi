@@ -60,6 +60,7 @@ AUTH_MECHANISMS = {
     'service_oidc',
     'google_compute_identity_token',
     'webhook_signature',
+    'plugin_capability',
     'websocket_first_message',
     'unknown',
 }

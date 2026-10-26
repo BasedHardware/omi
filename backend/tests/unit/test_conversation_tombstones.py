@@ -185,6 +185,9 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
     data_plane = Store()
     data_plane.rows['rollout_cohorts/u'] = {'cohorts': {'dev': {'batch-pipeline': True}}}
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: data_plane)
+    # Global quiet-job pagination is covered by the real Firestore emulator.
+    quiet_cleanup = MagicMock()
+    monkeypatch.setattr(user_data_deletion, 'stop_quiet_checks_for_account', quiet_cleanup)
 
     def purge(ref, **kwargs):
         for path in list(store.rows):
@@ -201,6 +204,7 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
         },
     )
     wipe('u')
+    quiet_cleanup.assert_called_once_with('u', firestore_client=store)
     assert data_plane.rows == {}
     assert store.rows == {}
     assert not tombstones.is_deleted('u', 'c')

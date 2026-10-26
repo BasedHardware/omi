@@ -4446,6 +4446,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get continueText => 'Folytatás';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Már van előfizetésed. Új indítása helyett kezeld a meglévő előfizetésedet.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Csomagváltáshoz először fizess elő újra.';
 
   @override
@@ -4925,6 +4929,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'További hangminta eltávolítva';
+
+  @override
+  String get consentDataMessage =>
+      'A folytatással beszélgetéseit, felvételeit és személyes adatait biztonságosan tároljuk szervereinken. Hangfelvételeit és átiratait harmadik féltől származó AI szolgáltatások dolgozzák fel (beleértve a Deepgramot az átíráshoz és az OpenAI-t az elemzéshez), hogy AI-alapú betekintéseket nyújtsunk Önnek és az alkalmazás összes funkcióját biztosítsuk.';
 
   @override
   String get tasksEmptyStateMessage => 'Feladat létrehozásához kezdj beszélgetést.';
@@ -8628,6 +8636,9 @@ class AppLocalizationsHu extends AppLocalizations {
       'Az átírás nem érhető el — a felvétel folytatódik, és a hanganyag mentésre kerül.';
 
   @override
+  String get captureNoAudioFromPendant => 'Nincs hang a medálból';
+
+  @override
   String get capturing => 'Rögzítés';
 
   @override
@@ -11127,6 +11138,12 @@ class AppLocalizationsHu extends AppLocalizations {
       'Az Omi eszközzel létesített Bluetooth-kapcsolat megakadt, így a hang nem jut el az alkalmazásba. Az Omi tovább rögzít az eszközön, és a kapcsolat helyreállása után szinkronizál. Az újrapróbálás újra létrehozza a kapcsolatot; ha továbbra is sikertelen, ellenőrizze az eszközt a Beállítások > Eszköz alatt.';
 
   @override
+  String get captureConnecting => 'Csatlakozás…';
+
+  @override
+  String get captureNoAudioDetail => 'A medál csatlakoztatva, de egyetlen hang sem ér el a telefonjára';
+
+  @override
   String get captureIngressNeedsReconnect => 'A hang nem ér el az appba — csatlakoztasd újra az Omit';
 
   @override
@@ -11155,13 +11172,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'A tárhely majdnem megtelt';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Az Omi magától újracsatlakozik';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12292,12 +12302,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Ellenőrizze a kapcsolatot';
-
-  @override
-  String get forYou => 'Önnek';
-
-  @override
-  String get stopThese => 'Ezek leállítása';
 
   @override
   String get dismiss => 'Elrejtés';
@@ -14470,6 +14474,25 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'A folyamatos jegyzetek nem frissülnek. Egyelőre tekintsd meg az átiratot.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Rögzítés · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Előző epizód';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Várakozó részek: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Előző epizód megnyitása';
+
+  @override
   String get episodeNotesSoon => 'A jegyzetek a beszélgetés első perceit követően jelennek meg.';
 
   @override
@@ -14606,6 +14629,36 @@ class AppLocalizationsHu extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Kész. $percent% kedvezmény a következő $months hónapban.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Mások';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Kész';
+
+  @override
+  String get openLoopAnswerRemind => 'Emlékeztessen később';
+
+  @override
+  String get openLoopAnswerDrop => 'Eldobás';
 
   @override
   String get consentShortMessage =>

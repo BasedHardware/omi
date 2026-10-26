@@ -11,7 +11,9 @@ from uuid import uuid4
 
 from google.cloud import firestore
 
+from database.quiet_check_retirement import stop_quiet_checks_for_job
 from database._client import get_firestore_client
+from database.conversation_merge_policy import source_has_merge_receipt
 
 COLLECTION = 'conversation_finalization_jobs'
 KIND = 'conversation_merge'
@@ -43,7 +45,11 @@ def admit(uid: str, conversation_ids: list[str], reprocess: bool, *, firestore_c
         deleting = client.collection('account_deletions').document(uid).get(transaction=transaction)
         rows = [ref.get(transaction=transaction).to_dict() or {} for ref in refs]
         if deleting.exists or any(
-            row.get('status') != 'completed' or row.get('deleted') or row.get('is_locked') or row.get('merge_job_id')
+            row.get('status') != 'completed'
+            or row.get('deleted')
+            or row.get('is_locked')
+            or row.get('merge_job_id')
+            or source_has_merge_receipt(row)
             for row in rows
         ):
             return None
@@ -74,7 +80,10 @@ def admit(uid: str, conversation_ids: list[str], reprocess: bool, *, firestore_c
             transaction.update(ref, {'status': 'merging', 'merge_job_id': job_id})
         return job | {'job_id': job_id}
 
-    return commit(client.transaction())
+    job = commit(client.transaction())
+    if job is not None:
+        stop_quiet_checks_for_job(job['job_id'], firestore_client=client)
+    return job
 
 
 def claim(job_id: str, *, generation: int | None = None, firestore_client: Any = None) -> dict | None:
@@ -249,4 +258,7 @@ def finish_recovery(job_id: str, epoch: int, *, firestore_client: Any = None) ->
         )
         return True
 
-    return commit(client.transaction())
+    finished = commit(client.transaction())
+    if finished:
+        stop_quiet_checks_for_job(job_id, firestore_client=client)
+    return finished

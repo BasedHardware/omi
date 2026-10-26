@@ -13,9 +13,11 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
-from utils.retrieval.turn_refs import register_record_ref  # noqa: F401 - real pure module before package stubs
-
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from utils.retrieval.turn_refs import register_record_ref  # noqa: E402, F401 - real pure module before package stubs
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -72,6 +74,7 @@ for _p in [
     "models",
     "utils",
     "utils.conversations",
+    "utils.observability",
     "utils.retrieval",
     "utils.retrieval.tools",
 ]:
@@ -131,6 +134,34 @@ _transcript_search_mod.chat_transcript_coverage_note = MagicMock(return_value="T
 _transcript_search_mod.chat_transcript_excerpts = MagicMock(return_value={})
 _transcript_search_mod.merge_chat_conversation_ids = MagicMock(return_value=[])
 _transcript_search_mod.search_chat_transcript_chunks = MagicMock(return_value=_ChatTranscriptSearch([], False))
+
+# Stub utils.observability.fallback
+_fallback_mod = _mod("utils.observability.fallback")
+_fallback_mod.record_fallback = MagicMock()
+
+
+def _ensure_optional_deps():
+    try:
+        import prometheus_client  # noqa: F401
+    except ImportError:
+        _prom = _mod("prometheus_client")
+        _prom.Counter = lambda *a, **kw: MagicMock()
+        _prom.Gauge = lambda *a, **kw: MagicMock()
+        _prom.Histogram = lambda *a, **kw: MagicMock()
+        _prom.Summary = lambda *a, **kw: MagicMock()
+        _prom.REGISTRY = MagicMock()
+        _prom.CONTENT_TYPE_LATEST = "text/plain"
+        _prom.disable_created_metrics = MagicMock()
+        _prom.generate_latest = MagicMock()
+        _prom.start_http_server = MagicMock()
+    try:
+        import fastapi  # noqa: F401
+    except ImportError:
+        _fa = _mod("fastapi")
+        _fa.Response = MagicMock
+
+
+_ensure_optional_deps()
 
 # Stub utils.retrieval.chat_scope
 _chat_scope_mod = _mod("utils.retrieval.chat_scope")
@@ -217,6 +248,33 @@ class TestConversationToolsSanitization(unittest.TestCase):
         config = {"configurable": {"user_id": "test_user"}}
         result = conv_tools.get_conversations_tool.func(start_date="not-a-date", config=config)
         self.assertIn("Error: Invalid start_date format", result)
+        self.assertIn("not-a-date", result)
+        self.assertNotIn("ValueError", result)
+        self.assertNotIn("isoformat", result.lower())
+
+    def test_invalid_end_date_returns_validation_error(self):
+        config = {"configurable": {"user_id": "test_user"}}
+        result = conv_tools.get_conversations_tool.func(end_date="not-a-date", config=config)
+        self.assertIn("Error: Invalid end_date format", result)
+        self.assertIn("not-a-date", result)
+        self.assertNotIn("ValueError", result)
+        self.assertNotIn("isoformat", result.lower())
+
+    def test_search_conversations_invalid_start_date_sanitized(self):
+        config = {"configurable": {"user_id": "test_user"}}
+        result = conv_tools.search_conversations_tool.func(query="test", start_date="bad-date", config=config)
+        self.assertIn("Error: Invalid start_date format", result)
+        self.assertIn("bad-date", result)
+        self.assertNotIn("ValueError", result)
+        self.assertNotIn("isoformat", result.lower())
+
+    def test_search_conversations_invalid_end_date_sanitized(self):
+        config = {"configurable": {"user_id": "test_user"}}
+        result = conv_tools.search_conversations_tool.func(query="test", end_date="bad-date", config=config)
+        self.assertIn("Error: Invalid end_date format", result)
+        self.assertIn("bad-date", result)
+        self.assertNotIn("ValueError", result)
+        self.assertNotIn("isoformat", result.lower())
 
     def test_successful_fetch_returns_formatted_string(self):
         fake_convs = [{"id": "conv-1", "transcript_segments": []}]

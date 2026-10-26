@@ -126,14 +126,18 @@ def test_operator_is_paid(load_subscription):
 
 
 def test_filter_plans_for_basic_user(load_subscription):
-    """Basic users see Neo, Operator, and Architect in purchase catalog."""
+    """A basic buyer with no platform header keeps the pre-ruling catalog.
+
+    Desktop compatibility outranks closing the header-less direct-API gap: a
+    missing or unknown platform is not restricted (the restriction follows the
+    explicit first-party values — see the mobile/web tests below).
+    """
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
         filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic)
-
-    plan_ids = [d['plan_id'] for d in filtered]
-    assert 'operator' in plan_ids
-    assert 'architect' in plan_ids
+        plan_ids = [d['plan_id'] for d in filtered]
+        assert 'operator' in plan_ids
+        assert 'architect' in plan_ids
 
 
 def test_filter_plans_keeps_legacy_for_current_subscriber(load_subscription):
@@ -148,12 +152,21 @@ def test_filter_plans_keeps_legacy_for_current_subscriber(load_subscription):
     assert 'architect' in plan_ids
 
 
-def test_filter_plans_mobile_new_user_sees_only_plus_and_unlimited_v2(load_subscription):
-    """New / never-paid mobile users see only the consumer tiers Plus + Unlimited.
+def test_filter_plans_mobile_new_user_sees_only_unlimited_v2(load_subscription, monkeypatch):
+    """New / never-paid mobile users see only Omi Pro (unlimited_v2).
 
-    Neo (unlimited) is deprecated, and Operator + Architect are desktop-only, so
-    all three are hidden from the mobile purchase catalog.
+    2026-10-24 ruling. Neo (unlimited) is deprecated, Operator + Architect are
+    desktop-only, and Plus is no longer sold to new buyers on mobile. The kill
+    switch restores the two-tier mobile catalog.
     """
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        for platform in ('ios', 'android'):
+            filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform=platform)
+            plan_ids = [d['plan_id'] for d in filtered]
+            assert plan_ids == ['unlimited_v2'], (platform, plan_ids)
+
+    monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
         for platform in ('ios', 'android'):
@@ -176,10 +189,14 @@ def test_filter_plans_hides_neo_on_mobile_for_non_neo_subscribers(load_subscript
 
     Regression: `ever_purchased` was any paid plan, so Architect subscribers
     saw Neo on the phone sheet next to cheaper Plus. Do not restore that leak.
+    A basic caller gets the single-plan catalog; paid callers keep the
+    two-tier mobile catalog (2026-10-24 ruling).
     """
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
-        for plan in (PlanType.basic, PlanType.plus, PlanType.unlimited_v2):
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='ios')
+        assert [d['plan_id'] for d in filtered] == ['unlimited_v2']
+        for plan in (PlanType.plus, PlanType.unlimited_v2):
             filtered = sub_mod.filter_plans_for_user(definitions, plan, platform='ios')
             plan_ids = [d['plan_id'] for d in filtered]
             assert 'unlimited' not in plan_ids, (plan, plan_ids)
@@ -227,14 +244,21 @@ def test_filter_plans_shows_neo_on_mobile_for_current_neo_subscriber(load_subscr
     assert 'operator' not in plan_ids
 
 
-def test_filter_plans_hides_neo_on_web_for_new_user(load_subscription):
-    """Web sells the full new catalog (Plus + Unlimited + Operator + Architect);
-    deprecated Neo is hidden from the web purchase catalog.
+def test_filter_plans_hides_neo_on_web_for_new_user(load_subscription, monkeypatch):
+    """Web new buyers get the single-plan catalog; Neo stays hidden either way.
 
-    Regression: web (X-App-Platform: web) previously hid nothing, so Neo was
-    offered for purchase alongside the new tiers. Neo purchase is restricted to
-    existing subscribers only.
+    2026-10-24 ruling: a basic web caller is offered only Omi Pro. With the
+    kill switch off, web again sells the full new catalog (Plus + Unlimited +
+    Operator + Architect) — deprecated Neo stays hidden for new users in both
+    shapes (regression: web previously hid nothing, offering Neo for purchase).
     """
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='web')
+    plan_ids = [d['plan_id'] for d in filtered]
+    assert plan_ids == ['unlimited_v2'], plan_ids
+
+    monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
         filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='web')
@@ -255,12 +279,19 @@ def test_filter_plans_shows_neo_on_web_for_current_neo_subscriber(load_subscript
 
 
 def test_filter_plans_keeps_neo_for_unknown_platform(load_subscription):
-    """A header-less / unknown platform is still unfiltered — Neo stays visible."""
+    """Unknown/missing platform keeps the pre-ruling catalog entirely.
+
+    The single-plan restriction follows the explicit first-party platform
+    values (ios/android/web); a header-less or unrecognized caller is not
+    restricted, so the current-Neo escape and the unfiltered new-buyer catalog
+    both keep working for desktop compatibility.
+    """
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
         filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform=None)
-
-    assert 'unlimited' in [d['plan_id'] for d in filtered]
+        assert 'unlimited' in [d['plan_id'] for d in filtered]
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.unlimited, platform=None)
+        assert 'unlimited' in [d['plan_id'] for d in filtered]
 
 
 def test_filter_plans_hides_neo_on_windows_for_new_user(load_subscription):
@@ -400,12 +431,14 @@ def test_version_gating_web_always_new(load_subscription):
         assert sub_mod.should_show_new_plans('Web', '1.0.0') is True  # case-insensitive
 
 
-def test_web_full_catalog_shows_new_plans_and_hides_neo(load_subscription):
+def test_web_full_catalog_shows_new_plans_and_hides_neo(load_subscription, monkeypatch):
     """End-to-end catalog resolution for a web client (X-App-Platform: web).
 
-    Web renders the full new catalog under canonical titles — Plus + Unlimited
-    (mobile tiers) AND Operator + Architect (desktop tiers) — never the legacy
-    'Omi Pro' / 'Unlimited Plan' rename, and never deprecated Neo for a new user.
+    2026-10-24 ruling: a new web buyer gets the single-plan catalog (Omi Pro
+    only) under canonical titles — never the legacy 'Omi Pro' / 'Unlimited
+    Plan' rename, and never deprecated Neo. With the kill switch off, web again
+    renders the full new catalog: Plus + Unlimited (mobile tiers) AND Operator
+    + Architect (desktop tiers), still Neo-free.
     """
     with load_subscription() as sub_mod:
         new_plans_enabled = sub_mod.should_show_new_plans('web', None)
@@ -414,14 +447,22 @@ def test_web_full_catalog_shows_new_plans_and_hides_neo(load_subscription):
         # No legacy adaptation for web (new_plans_enabled) → raw canonical catalog.
         filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='web')
     by_id = {d['plan_id']: d for d in filtered}
-    assert set(by_id) == {'plus', 'unlimited_v2', 'operator', 'architect'}, by_id
+    assert set(by_id) == {'unlimited_v2'}, by_id
     assert 'unlimited' not in by_id  # Neo hidden
-    assert by_id['operator']['title'] == 'Operator'
-    assert by_id['architect']['title'] == 'Architect'
     assert by_id['unlimited_v2']['title'] == 'Unlimited'
     titles = [d['title'] for d in filtered]
     assert 'Omi Pro' not in titles
     assert 'Unlimited Plan' not in titles
+
+    monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='web')
+    by_id = {d['plan_id']: d for d in filtered}
+    assert set(by_id) == {'plus', 'unlimited_v2', 'operator', 'architect'}, by_id
+    assert 'unlimited' not in by_id  # Neo hidden
+    assert by_id['operator']['title'] == 'Operator'
+    assert by_id['architect']['title'] == 'Architect'
 
 
 def test_version_gating_mobile_requires_version(load_subscription):

@@ -4425,6 +4425,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get continueText => 'Fortsätt';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Du har redan en prenumeration. Hantera din nuvarande prenumeration i stället för att starta en ny.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Prenumerera igen först för att byta plan.';
 
   @override
@@ -4901,6 +4905,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Ytterligare röstprov borttaget';
+
+  @override
+  String get consentDataMessage =>
+      'Genom att fortsätta kommer dina konversationer, inspelningar och personlig information att lagras säkert på våra servrar. Dina ljudinspelningar och transkriptioner behandlas av AI-tjänster från tredje part (inklusive Deepgram för transkription och OpenAI för analys) för att ge dig AI-drivna insikter och aktivera alla appfunktioner.';
 
   @override
   String get tasksEmptyStateMessage => 'Starta ett samtal för att skapa en uppgift.';
@@ -8594,6 +8602,9 @@ class AppLocalizationsSv extends AppLocalizations {
       'Transkribering är inte tillgänglig — inspelningen fortsätter och ditt ljud sparas.';
 
   @override
+  String get captureNoAudioFromPendant => 'Inget ljud från hänget';
+
+  @override
   String get capturing => 'Spelar in';
 
   @override
@@ -11087,6 +11098,12 @@ class AppLocalizationsSv extends AppLocalizations {
       'Bluetooth-länken till din Omi har stannat, så ljudet når inte appen. Omi fortsätter spela in på enheten och synkar när länken återkommer. Försök igen återupprättar länken; om det fortsätter att misslyckas, kontrollera din enhet i Inställningar > Enhet.';
 
   @override
+  String get captureConnecting => 'Ansluter…';
+
+  @override
+  String get captureNoAudioDetail => 'Pendanten är ansluten, men ingen ljud når din telefon';
+
+  @override
   String get captureIngressNeedsReconnect => 'Ljudet når inte appen — anslut din Omi igen';
 
   @override
@@ -11115,13 +11132,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Lagringen är nästan full';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi ansluter igen av sig själv';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12250,12 +12260,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Kontrollera anslutningen';
-
-  @override
-  String get forYou => 'För dig';
-
-  @override
-  String get stopThese => 'Stoppa dessa';
 
   @override
   String get dismiss => 'Avvisa';
@@ -14420,6 +14424,25 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Löpande anteckningar uppdateras inte. Visa transkriptionen tills vidare.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Spelar in · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Föregående avsnitt';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Väntande delar: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Öppna föregående avsnitt';
+
+  @override
   String get episodeNotesSoon => 'Anteckningarna visas efter de första minuterna av samtalet.';
 
   @override
@@ -14556,6 +14579,36 @@ class AppLocalizationsSv extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Klart. $percent % rabatt de kommande $months månaderna.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Andra';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Klar';
+
+  @override
+  String get openLoopAnswerRemind => 'Påminn mig senare';
+
+  @override
+  String get openLoopAnswerDrop => 'Släpp det';
 
   @override
   String get consentShortMessage =>

@@ -4425,6 +4425,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get continueText => 'Jatka';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Sinulla on jo tilaus. Hallitse nykyistä tilaustasi uuden aloittamisen sijaan.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Tilaa ensin uudelleen, jotta voit vaihtaa pakettia.';
 
   @override
@@ -4900,6 +4904,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Lisäpuhenäyte poistettu';
+
+  @override
+  String get consentDataMessage =>
+      'Jatkamalla keskustelusi, tallenteet ja henkilötietosi tallennetaan turvallisesti palvelimillemme. Äänitallenteitasi ja transkriptioitasi käsittelevät kolmannen osapuolen tekoälypalvelut (mukaan lukien Deepgram transkriptiota ja OpenAI analyysiä varten) tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.';
 
   @override
   String get tasksEmptyStateMessage => 'Aloita keskustelu luodaksesi tehtävän.';
@@ -8592,6 +8600,9 @@ class AppLocalizationsFi extends AppLocalizations {
       'Litterointi ei ole käytettävissä — tallennus jatkuu ja äänesi tallennetaan.';
 
   @override
+  String get captureNoAudioFromPendant => 'Riipuksesta ei kuulu ääntä';
+
+  @override
   String get capturing => 'Tallennetaan';
 
   @override
@@ -11084,6 +11095,12 @@ class AppLocalizationsFi extends AppLocalizations {
       'Omi-laitteeseen muodostettu Bluetooth-yhteys on pysähtynyt, joten ääni ei päädy sovellukseen. Omi jatkaa tallentamista laitteella ja synkronoi, kun yhteys palaa. Uudelleenyrittäminen yhdistää linkin uudelleen; jos se epäonnistuu jatkuvasti, tarkista laittesi kohdasta Asetukset > Laite.';
 
   @override
+  String get captureConnecting => 'Yhdistetään…';
+
+  @override
+  String get captureNoAudioDetail => 'Riipus on yhdistetty, mutta mikään ääni ei ala puhelimeesi';
+
+  @override
   String get captureIngressNeedsReconnect => 'Ääni ei tavoita sovellusta — yhdistä Omi uudelleen';
 
   @override
@@ -11112,13 +11129,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Tallennustila melkein täynnä';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi yhdistää itsestään uudelleen';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12248,12 +12258,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Tarkista yhteys';
-
-  @override
-  String get forYou => 'Sinulle';
-
-  @override
-  String get stopThese => 'Lopeta nämä';
 
   @override
   String get dismiss => 'Hylkää';
@@ -14417,6 +14421,25 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Jatkuvat muistiinpanot eivät päivity. Katso toistaiseksi litterointi.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Tallennetaan · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Edellinen jakso';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Odottavat osat: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Avaa edellinen jakso';
+
+  @override
   String get episodeNotesSoon => 'Muistiinpanot näkyvät ensimmäisten puheminuuttien jälkeen.';
 
   @override
@@ -14553,6 +14576,36 @@ class AppLocalizationsFi extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Valmis. $percent % alennus seuraavat $months kuukautta.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Muut';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Valmis';
+
+  @override
+  String get openLoopAnswerRemind => 'Muistuta myöhemmin';
+
+  @override
+  String get openLoopAnswerDrop => 'Ohita';
 
   @override
   String get consentShortMessage =>

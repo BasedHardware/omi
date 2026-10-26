@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from config.sync_safety_wal import sync_safety_wal_enabled
+from config.sync_lineage import sync_lineage_resolve_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.observability.fallback import record_fallback
@@ -37,6 +38,7 @@ from utils.sync.live_speech_dedupe import (
 )
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.assignment_telemetry import lineage_span_delta_bucket as _lineage_span_delta_bucket
+from utils.sync.assignment_telemetry import created_sync_row_observation
 from utils.capture.dedupe import choose_segments
 from utils.capture.identity import assignment_keys_compatible, persist_identity
 from utils.sync.assignment_index import AssignmentIndex
@@ -52,6 +54,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 _T = TypeVar('_T')
+
+
+class SyncAssignmentDiscoveryRequired(Exception):
+    """Restart read-only stamp-gap planning with bounded live metadata hints."""
+
 
 # Firestore rejects any write that leaves a document above 1 MiB
 # (FIRESTORE_MAX_DOCUMENT_BYTES), and a temporal merge only ever grows the
@@ -176,6 +183,9 @@ def assign_in_transaction(
     full_ids: frozenset[str] = frozenset(),
     live_candidate_ids: tuple[str, ...] = (),
     absorbed: list[str] | None = None,
+    live_lookup_complete: bool = False,
+    live_lookup_incomplete_reason: str | None = None,
+    discover_on_stamp_gap: bool = False,
 ) -> tuple[dict, bool, list[dict]]:
     """Production transaction body; injected codecs preserve encryption in adapters.
 
@@ -195,6 +205,7 @@ def assign_in_transaction(
     if absorbed is not None:
         absorbed.clear()
     incoming = deepcopy(incoming)
+    lineage_eligible = incoming.pop('_sync_lineage_eligible', False) is True
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
     require_live_target = incoming.pop('_batch_require_live_target', False)
     record_span = incoming.pop('_batch_replace_live', None)
@@ -294,6 +305,7 @@ def assign_in_transaction(
         # redirects its late repair audio to the survivor; temporal fallback would
         # recreate the donor as a duplicate row. A deleted survivor supersedes it.
         target_id, target = resolve(target_id)
+
     # Discovery is a hint only. Re-read every candidate under the same
     # transaction as the append, so deletion, lifecycle and provenance win.
     temporal_live = False
@@ -701,11 +713,20 @@ def assign_in_transaction(
             if no_op['id'] == target_id and live_stats is not None and live_stats['sync_retry']:
                 no_op['_sync_lineage_completion_pending'] = True
             return no_op, False, []
+        if discover_on_stamp_gap:
+            # No writes have happened. The adapter discovers outside this
+            # transaction, then retries the target, deletion and lease fences
+            # along with every candidate read before committing the reroute.
+            raise SyncAssignmentDiscoveryRequired()
         refused_id = target_id
         target_id, target, target_hint = None, None, None
         live_stats = None
         stamp_fallback_live = False
         excluded = frozenset({refused_id})
+        # Reroute discovery is observation-only. Read every hint before writes
+        # for contention and gate-3 classification, without adopting a live row.
+        for cid in live_candidate_ids:
+            load(cid)
         chosen = plan(excluded, chosen.kept)
         stamp_gap_refused = True
     if (
@@ -816,6 +837,18 @@ def assign_in_transaction(
     index.write(result, set(matched) | {canonical})
     if absorbed is not None:
         absorbed[:] = sorted(cid for cid in matched if cid != canonical)
+    if created and lineage_eligible and sync_lineage_resolve_enabled():
+        # The adapter emits only the final successful transaction's observation,
+        # after commit. Neither this marker nor eligibility enters the write codec.
+        candidates_read = all(cid in read for cid in live_candidate_ids)
+        result['_sync_lineage_created'] = created_sync_row_observation(
+            [row for row in read.values() if row is not None],
+            result,
+            incoming,
+            lookup_complete=live_lookup_complete and candidates_read,
+            lookup_incomplete_reason=live_lookup_incomplete_reason,
+            candidates_read=candidates_read,
+        )
     if live_stats is not None:
         # Transient telemetry only: the encoded plan already committed above.
         appended = bounded_span_seconds(survivors)

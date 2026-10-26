@@ -750,4 +750,81 @@ void main() {
       expect(wal.status, WalStatus.synced);
     });
   });
+
+  group('syncAll: server-unavailable pacing', () {
+    Future<LocalWalSyncImpl> buildDrain({
+      required Object Function() failure,
+      required List<Duration> pauses,
+      required List<List<String>> attempts,
+    }) async {
+      final sync = LocalWalSyncImpl(
+        listener,
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            attempts.add(files.map((file) => file.uri.pathSegments.last).toList());
+            throw failure();
+          },
+          fairUseStatusLoader: () async => null,
+        ),
+        sleep: (duration) async => pauses.add(duration),
+      );
+      // Distinct conversations/sessions so each WAL forms its own batch.
+      const base = 2000000000 - 7 * 24 * 60 * 60;
+      sync.testWals = [
+        for (var i = 0; i < 4; i++)
+          () {
+            final name = 'paced_$i.bin';
+            File('${tempDir.path}/$name').writeAsBytesSync([1]);
+            return _makeWal(timerStart: base - i * 60, filePath: name)
+              ..conversationId = 'paced-conversation-$i'
+              ..recordingSessionId = 'paced-session-$i';
+          }(),
+      ];
+      return sync;
+    }
+
+    test('a 503 with Retry-After stops the drain instead of failing every batch', () async {
+      final pauses = <Duration>[];
+      final attempts = <List<String>>[];
+      final sync = await buildDrain(
+        failure: () => const SyncUploadHttpException(503, 'Server is temporarily unavailable', retryAfterSeconds: 30),
+        pauses: pauses,
+        attempts: attempts,
+      );
+
+      await sync.syncAll();
+
+      expect(attempts.length, 1, reason: 'the gate cooldown must stop the drain after the first refused batch');
+      expect(SyncRateLimiter.instance.isLimited, isTrue);
+      expect(SyncRateLimiter.instance.reason, RateLimitReason.backendBusy);
+      expect(pauses, isEmpty, reason: 'the server already scoped the pause; no local backoff on top');
+      expect(sync.testWals.every((wal) => wal.status == WalStatus.miss), isTrue,
+          reason: 'a 503 consumes no retry budget');
+    });
+
+    test('a 503 without Retry-After pauses between batches with a growing backoff', () async {
+      final pauses = <Duration>[];
+      final attempts = <List<String>>[];
+      final sync = await buildDrain(
+        failure: () => const SyncUploadHttpException(503, 'Server is temporarily unavailable'),
+        pauses: pauses,
+        attempts: attempts,
+      );
+
+      await sync.syncAll();
+
+      expect(attempts.length, 4, reason: 'without server pacing the drain keeps trying every batch');
+      expect(pauses.map((duration) => duration.inSeconds), [2, 4, 8, 16]);
+      expect(SyncRateLimiter.instance.isLimited, isFalse);
+    });
+  });
 }

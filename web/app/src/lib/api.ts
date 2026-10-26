@@ -2005,6 +2005,14 @@ export async function createCheckoutSession(
   }
 }
 
+/** Apply a promotion code to the current subscription, including during a free trial. */
+export async function redeemCode(code: string): Promise<RedeemCodeResponse> {
+  return fetchWithAuth<RedeemCodeResponse>('/v1/payments/redeem-code', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+}
+
 /**
  * Upgrade subscription to a different plan
  */
@@ -2218,6 +2226,7 @@ import type {
   UpgradeSubscriptionResponse,
   CancelSubscriptionResponse,
   CustomerPortalResponse,
+  RedeemCodeResponse,
 } from '@/types/user';
 
 /** Get user's developer API keys; opt into errors for settings. */

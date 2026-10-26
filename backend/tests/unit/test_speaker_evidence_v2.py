@@ -260,6 +260,11 @@ def test_channel_snapshot_survives_acoustic_resolution(monkeypatch):
     processing.finish(token, uuid.uuid4().hex, conversation, {})
     assert item.is_user
     assert item.speaker_identity_status == 'user'
+    assert item.speaker_match_source == 'speaker_evidence_v2'
+    assert item.speaker_label_source == 'auto'
+    from utils.conversations.owner_attribution import confident_owner_segments
+
+    assert confident_owner_segments([item]) == [item]
     assert stored[-1].owner_anchor == 'channel'
 
 

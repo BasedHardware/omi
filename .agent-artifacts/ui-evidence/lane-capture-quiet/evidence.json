@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-row-quiet-dark.png",
+      "platform": "mobile-ios",
+      "description": "Home live episode row, confirmed-subscription quiet: Listening with a running clock (dark)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-row-no-audio-dark.png",
+      "platform": "mobile-ios",
+      "description": "Home live episode row, exhausted recovery: no-audio warning with a Reconnect action instead of Listening (dark)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-home-row-quiet-light.png",
+      "platform": "mobile-ios",
+      "description": "Home live episode row, confirmed-subscription quiet (light)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-home-row-no-audio-light.png",
+      "platform": "mobile-ios",
+      "description": "Home live episode row, exhausted recovery (light)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-device-badge-quiet-dark.png",
+      "platform": "mobile-ios",
+      "description": "Device Settings Right-now badge, confirmed-subscription quiet: Listening now with its live length (dark)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-device-badge-no-audio-dark.png",
+      "platform": "mobile-ios",
+      "description": "Device Settings Right-now badge, exhausted recovery: warning row whose tap reconnects (dark)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-device-badge-quiet-light.png",
+      "platform": "mobile-ios",
+      "description": "Device Settings Right-now badge, confirmed-subscription quiet (light)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-device-badge-no-audio-light.png",
+      "platform": "mobile-ios",
+      "description": "Device Settings Right-now badge, exhausted recovery (light)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

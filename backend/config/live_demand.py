@@ -11,6 +11,7 @@ from config.rollout_cohorts import in_rollout_cohort
 from dataclasses import dataclass
 from typing import TypedDict
 
+from config.cloud_live_stt import WHEN_WATCHED, resolve_cloud_live_stt_mode
 from config.stt_provider_policy import normalized_stt_language
 
 
@@ -52,6 +53,13 @@ def resolve_live_demand(*, flags=None) -> LiveDemandConfig:
             policy.demand_admitted,
         )
     env = os.environ if flags is None else flags
+    # CLOUD_LIVE_STT_MODE=when_watched reuses this machinery (#21481) rather
+    # than adding a parallel switch: every session becomes demand-admitted, so
+    # a vendor stream runs only while the transcript is visible or a
+    # server-side real-time consumer is active. An explicit runtime policy
+    # above still wins.
+    if resolve_cloud_live_stt_mode(env=env) == WHEN_WATCHED:
+        return LiveDemandConfig(enabled=True, percent=100)
     try:
         percent = float(env.get('STT_LIVE_DEMAND_PERCENT', '0'))
         dwell = float(env.get('STT_LIVE_DEMAND_MIN_DWELL_SECONDS', '15'))

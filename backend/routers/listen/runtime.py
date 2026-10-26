@@ -36,6 +36,7 @@ from utils.analytics import billable_transcription_seconds, record_usage
 from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
+from routers.listen.local_preview import renew_local_preview
 from utils.observability.fallback import record_fallback
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 from utils.byok import get_byok_keys
@@ -64,6 +65,7 @@ from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.observability.listen_close import CLOSE_FRAME_DRAIN_SECONDS, note_ws_close, record_listen_ws_close
 from utils.observability.listen_loop import ensure_loop_lag_probe
+from utils.observability.live_speaker_ordinals import LiveSpeakerOrdinalTracker, record_live_speaker_ordinals
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
     LiveSTTAttempt,
@@ -200,6 +202,8 @@ class ListenSessionRuntime:
         self.translation_language: Optional[str] = None
         self.user_has_credits = True
         self.private_cloud_sync_enabled = False
+        # Mobile local-preview lane, pinned once before STT starts (routers/listen/local_preview.py).
+        self.local_preview_batch = False
         self.has_speech_profile = False
         self.conversation_creation_timeout = request.conversation_timeout
         self.occasion_mode = False
@@ -223,6 +227,7 @@ class ListenSessionRuntime:
         self.transcripts: Any = None
         self.conversations: Any = None
         self.parity_capture = ListenParityCapture(None)
+        self.speaker_ordinal_tracker = LiveSpeakerOrdinalTracker()
 
     def _build_components(self) -> None:
         channels = build_channel_config(self.request.source or 'phone_call') if self.is_multi_channel else []
@@ -849,7 +854,9 @@ class ListenSessionRuntime:
         if admission is not None:
             await admission.refresh(force=bool(invalidated), subscription=subscription)
             if getattr(self.receiver, 'cap_paused', False) and admission.managed:
-                await self.receiver.initialize_stt()
+                if await self.receiver.initialize_stt() and not getattr(self.receiver, 'cap_paused', False):
+                    self.receiver.note_deferred_stream_opened()
+                    self.receiver.ensure_live_demand_routing()
         credit_admission = (
             admission
             if admission is not None
@@ -992,6 +999,11 @@ class ListenSessionRuntime:
         return seconds
 
     async def refresh_mobile_batch_admission(self) -> None:
+        if renew_local_preview(self):
+            # The local-preview lane owns its own admission (batch lane + private
+            # sync, pinned at session start). Integrations degrade by ruling.
+            self.mobile_standard_batch = True
+            return
         if mobile_standard_batch_rollout_enabled():
             await warm_rollout_cohorts(self.request.uid)
         # Conservatively retain live delivery for ANY enabled integration. This
@@ -1111,6 +1123,13 @@ class ListenSessionRuntime:
         if self.use_custom_stt:
             # Custom-STT clients produce their own transcripts; no backend provider serves.
             return MessageServiceStatusEvent(status='ready')
+        if getattr(self.receiver, 'cloud_live_suppressed', False):
+            # Deferred stream: nothing serves yet, so name no provider.
+            return MessageServiceStatusEvent(
+                status='ready',
+                mobile_standard_batch=getattr(self, 'mobile_standard_batch', False),
+                local_preview=True if getattr(self, 'local_preview_batch', False) else None,
+            )
         serving = self.receiver._serving_provider()
         selected = getattr(self.stt_service_selected, 'value', self.stt_service_selected)
         fell_back = bool(serving) and bool(selected) and serving != selected
@@ -1169,9 +1188,9 @@ class ListenSessionRuntime:
             current_routing_cohort.set(self._routing_cohort)
             if not await self.receiver.initialize_stt():
                 return
-            demand = getattr(self.receiver, 'live_demand', None)
-            if demand is not None:
-                background.append(self.task_supervisor.create_lifetime_task(demand.run(), name='live_demand_routing'))
+            demand_task = self.receiver.ensure_live_demand_routing()
+            if demand_task is not None:
+                background.append(demand_task)
             record_listen_session_accepted(
                 source=self.request.source,
                 platform=self.client_device_context.platform,
@@ -1446,6 +1465,9 @@ class ListenSessionRuntime:
             await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
         if not owner_persistence_blocked:
             await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
+        # After the transcript loop drained and before the matcher's maps clear:
+        # the ordinal ledger needs both the final segments and final naming.
+        record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()
