@@ -4,12 +4,14 @@ This file is a projected ConfigMap, never a subPath mount. The watcher renews
 the lease; kubelet propagation delays can reduce admission but cannot extend it.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from _thread import LockType
 import json
 import math
 import os
 from pathlib import Path
 import secrets
+import threading
 import time
 
 CANDIDATE = 'http://prod-omi-parakeet-g24.prod-omi-backend.svc.cluster.local:8080'
@@ -58,12 +60,17 @@ class ShapeRoute:
     drained: bool = False
     identity: str = ''
     counted: bool = False
+    _lock: LockType = field(default_factory=threading.Lock, init=False, repr=False)
 
     @property
     def arm(self) -> str:
         return 'canary' if self.selected else 'control'
 
     def resolve(self) -> str | None:
+        with self._lock:
+            return self._resolve()
+
+    def _resolve(self) -> str | None:
         lease = read_lease()
         if not self.initialized:
             self.initialized = True
