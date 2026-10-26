@@ -179,9 +179,15 @@ def test_merge_rollback_retires_old_debt_and_preserves_reopened_owner(store, mon
     assert client.rows[paths[1]]['status'] == 'waiting_quiet'
 
 
-@pytest.mark.parametrize('receipt', ['transcript_corrections_moved_to', 'dream_duplicate_of'])
-def test_old_partial_merge_source_cannot_be_admitted_as_fresh_input(store, receipt):
-    row(store, 'a')[receipt] = 'retained-previous-target'
+def test_old_partial_merge_source_cannot_be_admitted_as_fresh_input(store):
+    row(store, 'a')['transcript_corrections_moved_to'] = 'retained-previous-target'
     assert admit(store) is None
     assert all(row(store, cid)['status'] == 'completed' for cid in ('a', 'b'))
     assert not any(tx.creates or tx.updates for tx in store[0].transactions)
+
+
+def test_semantic_duplicate_hint_without_transfer_receipt_remains_mergeable(store):
+    row(store, 'a').update(dream_duplicate=True, dream_duplicate_of='similar-conversation')
+    job = admit(store)
+    assert job is not None
+    assert all(row(store, cid)['merge_job_id'] == job['job_id'] for cid in ('a', 'b'))

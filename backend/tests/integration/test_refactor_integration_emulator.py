@@ -171,10 +171,11 @@ def test_stale_worker_cannot_move_corrections_after_lease_recovery(world, monkey
     )
 
 
-@pytest.mark.parametrize('receipt', ['transcript_corrections_moved_to', 'dream_duplicate_of'])
-def test_preexisting_partial_merge_receipt_fences_new_admission(world, receipt):
+def test_preexisting_partial_merge_receipt_fences_new_admission(world):
     client, owner, user = world
-    user.collection('conversations').document('a').set({'status': 'completed', receipt: 'retained-target'})
+    user.collection('conversations').document('a').set(
+        {'status': 'completed', 'transcript_corrections_moved_to': 'retained-target'}
+    )
     user.collection('conversations').document('b').set({'status': 'completed'})
     assert merges.admit(owner, ['a', 'b'], False, firestore_client=client) is None
     assert all(
@@ -236,3 +237,12 @@ def test_sealed_cleanup_failure_recovers_same_target_through_real_coordinator(wo
     reprocess.assert_not_called()
     notify.assert_called_once_with(owner, target.id, ['a', 'b'])
     assert client.collection(merges.COLLECTION).document(job['job_id']).get().to_dict()['status'] == 'completed'
+
+
+def test_semantic_duplicate_remains_admissible_without_a_transfer_receipt(world):
+    client, owner, user = world
+    user.collection('conversations').document('a').set(
+        {'status': 'completed', 'dream_duplicate': True, 'dream_duplicate_of': 'similar-conversation'}
+    )
+    user.collection('conversations').document('b').set({'status': 'completed'})
+    assert merges.admit(owner, ['a', 'b'], False, firestore_client=client) is not None
