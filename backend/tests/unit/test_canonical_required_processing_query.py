@@ -9,6 +9,7 @@ from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, Pro
 from utils.memory.canonical_required_processing import (
     MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV,
     list_pending_required_processing_items,
+    list_receipted_required_processing_items,
     maintenance_captured_after,
     run_required_memory_processing,
 )
@@ -267,3 +268,25 @@ def test_maintenance_captured_after_env_contract(monkeypatch) -> None:
     monkeypatch.setenv(MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV, "not-a-timestamp")
     with pytest.raises(ValueError, match="RFC3339"):
         maintenance_captured_after()
+
+
+def test_completion_query_excludes_observations_and_unprocessed_rows_before_stream():
+    ordinary = [
+        _item(f'ordinary-{index}', captured_at=NOW, required=False, processing_status='processed').model_copy(
+            update={'processing_state': ProcessingState.processed}
+        )
+        for index in range(250)
+    ]
+    ready = _item('ready', captured_at=NOW, processing_status='processed').model_copy(
+        update={'processing_state': ProcessingState.processed}
+    )
+    pending = _item('pending', captured_at=NOW)
+    db = _Db(
+        [
+            (f'users/{UID}/memory_items/{row.memory_id}', row.model_dump(mode='python'))
+            for row in [*ordinary, ready, pending]
+        ]
+    )
+    result = list_receipted_required_processing_items(UID, db_client=db)
+    assert [row.memory_id for row in result] == ['ready']
+    assert db.streamed_count == 1 and db.stream_limit == 100

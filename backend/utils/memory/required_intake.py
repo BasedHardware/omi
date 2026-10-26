@@ -17,8 +17,9 @@ from database._client import get_firestore_client
 from database import dream_scheduler
 from database.required_intake_fence import source_scope
 from models.product_memory import MemoryItem
-from utils.executors import db_executor, llm_executor, run_blocking
+from utils.executors import db_executor, llm_executor, run_blocking, ExecutorSaturatedError
 from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_llm
+from utils.llm.usage_tracker import track_usage
 from utils.memory import canonical_required_processing as required
 from utils.memory.promotion_flex import PromotionFlexDeferred
 from utils.memory.required_source_admission import source_revisions
@@ -50,7 +51,8 @@ def normalize(item, *, request_timeout=policy.INLINE_TIMEOUT_SECONDS):
     except Exception as error:
         raise PromotionFlexDeferred('required_intake_model_unavailable') from error
     try:
-        return required.invoke_required_memory_processor(item, llm)
+        with track_usage(item.uid, 'memory_l2_flex'):
+            return required.invoke_required_memory_processor(item, llm)
     except Exception as error:
         # Availability never spends the processor's quality retry budget.
         if (
@@ -73,7 +75,10 @@ def bounded_normalize(item, *, deadline):
     if remaining < 1:
         raise PromotionFlexDeferred('required_intake_deadline')
     # Quantized timeouts keep the shared model cache bounded to twelve clients.
-    future = llm_executor.submit(normalize, item, request_timeout=int(remaining))
+    try:
+        future = llm_executor.submit(normalize, item, request_timeout=int(remaining))
+    except ExecutorSaturatedError as error:
+        raise PromotionFlexDeferred('required_intake_executor_busy') from error
     try:
         return future.result(timeout=remaining)
     except TimeoutError as error:
@@ -165,7 +170,7 @@ async def retry_owner(uid, *, db_client=None, now=None):
     return processed
 
 
-async def retry_due_owners(owners):
+async def retry_due_owners(owners, *, complete_owner=None):
     """Bound the sweep, keep DB threads free during model waits, retain due rows."""
     if not policy.enabled():
         return 0
@@ -178,6 +183,21 @@ async def retry_due_owners(owners):
                 return
             try:
                 await retry_owner(uid)
+                if complete_owner is not None and policy.enabled():
+                    completion = await run_blocking(
+                        db_executor,
+                        complete_owner,
+                        uid,
+                        db_client=get_firestore_client(),
+                        now=datetime.now(timezone.utc),
+                        run_id='dream-required-intake',
+                        limit=5,
+                    )
+                    logger.info(
+                        'required_intake_completion promoted=%d failed=%d',
+                        len(completion.promoted_memory_ids),
+                        len(completion.failed_memory_ids),
+                    )
             except Exception as error:
                 record_deferred(error)
             completed.add(index)
@@ -195,12 +215,12 @@ async def retry_due_owners(owners):
     return prefix
 
 
-async def retry_sweep(*, limit=4990):
+async def retry_sweep(*, limit=4990, complete_owner=None):
     if not policy.enabled() or limit <= 0:
         return
     try:
         owners, before = await run_blocking(db_executor, dream_scheduler.required_retry_page, limit=limit)
-        completed = await retry_due_owners(owners)
+        completed = await retry_due_owners(owners, complete_owner=complete_owner)
         if not owners or completed:
             await run_blocking(
                 db_executor,

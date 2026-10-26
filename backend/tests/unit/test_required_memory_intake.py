@@ -1,6 +1,8 @@
 """Write-time admission, leased retries and hidden historical dedupe, offline."""
 
 from datetime import datetime, timedelta, timezone
+import asyncio
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -20,6 +22,7 @@ from utils.memory import canonical_required_processing as processing, required_i
 from utils.memory.promotion_flex import PromotionFlexDeferred
 from utils.memory import required_source_admission as admission
 from utils.memory import canonical_memory_adapter as adapter
+from utils.memory import canonical_consolidation as consolidation
 from utils.memory.required_promotion import required_processing_payload
 from database.document_ids import document_id_from_seed
 
@@ -36,6 +39,11 @@ def item(key='new', *, captured_at=NOW, processed=False):
         source_version='1',
         artifact_preservation='not_applicable',
     )
+    promotion = required_processing_payload(
+        {'id': key, 'content': content, 'manually_added': True}, source_surface='mcp'
+    )['promotion']
+    if processed:
+        promotion['processing_status'] = 'processed'
     return MemoryItem(
         uid=UID,
         memory_id=key,
@@ -57,7 +65,7 @@ def item(key='new', *, captured_at=NOW, processed=False):
         updated_at=NOW,
         account_generation=1,
         expires_at=captured_at + timedelta(days=7),
-        promotion={'required': True, 'processing_status': 'processed' if processed else 'pending_processing'},
+        promotion=promotion,
     )
 
 
@@ -237,6 +245,14 @@ def test_backlog_dedupe_retains_source_and_does_not_normalize_or_change_survivor
         'visibility': 'private',
         'subject_scope': row['subject_scope'],
         'subject_entity_id': row['subject_entity_id'],
+        'memory_tier': 'long_term',
+    }
+    db.rows[('users', UID, 'memory_items', 'survivor')] = {
+        **item('survivor', processed=True).model_dump(mode='python'),
+        'tier': 'long_term',
+        'expires_at': None,
+        'ledger_commit_id': 'synthetic-survivor-commit',
+        'ledger_sequence': 1,
     }
     monkeypatch.setattr(backlog, 'bounded_normalize', lambda *a, **k: pytest.fail('duplicate must not become visible'))
     outcome = backlog.apply(
@@ -249,7 +265,7 @@ def test_backlog_dedupe_retains_source_and_does_not_normalize_or_change_survivor
     )
     assert outcome == 'applied'
     result = stored(db)
-    assert result.status.value == 'superseded' and result.processing_state.value == 'pending'
+    assert result.status.value == 'superseded' and result.processing_state.value == 'blocked'
     assert result.content == row['content']
     assert result.promotion['required_intake_resolution']['survivor_id'] == 'survivor'
 
@@ -302,7 +318,7 @@ async def test_cleanup_off_still_runs_required_retry_phase(monkeypatch):
     monkeypatch.setattr(dream_agent, 'enabled', lambda: False)
     monkeypatch.setattr(dream_agent, 'retry_sweep', retry)
     assert await dream_agent.drain(limit=7) == []
-    retry.assert_awaited_once_with(limit=7)
+    retry.assert_awaited_once_with(limit=7, complete_owner=consolidation.complete_receipted_required_intake)
 
 
 @pytest.mark.asyncio
@@ -331,7 +347,6 @@ def test_source_quote_admission_requires_owner_anchor_and_revision(monkeypatch):
     monkeypatch.setattr(admission, 'serving_for', lambda *a: True)
     monkeypatch.setattr(admission.conversations, 'prepare_conversation_for_read', lambda *a, **k: source)
     monkeypatch.setattr(admission, 'exclude_from_derived', lambda *a, **k: False)
-    monkeypatch.setattr(admission.owner_attribution, 'confident_owner_segments', lambda rows: [rows[0]], raising=False)
     counts = []
     monkeypatch.setattr(
         admission.relevance_media_metrics, 'observe_owner_memory_admission', lambda *a: counts.append(a), raising=False
@@ -357,6 +372,9 @@ def test_source_quote_admission_requires_owner_anchor_and_revision(monkeypatch):
     assert counts == [(2, 1), (2, 0)]
     evidence.quote_refs = [{'text': 'I prefer tea', 'segment_id': 'owner'}]
     snapshot.update_time = None
+    assert admission.source_revisions(UID, row, db_client=client) is None
+    snapshot.update_time = NOW
+    owner['speaker_label_source'] = None
     assert admission.source_revisions(UID, row, db_client=client) is None
 
 
@@ -417,3 +435,84 @@ def test_create_retry_after_inline_rewrite_reuses_the_receipted_submission(db, m
     second = adapter.write_canonical_external_memory(UID, payload, db_client=db)
     assert first == second and calls == [first]
     assert stored(db, first).content == 'The owner prefers tea.'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['restricted', 'locked', 'old_generation'])
+async def test_backlog_ineligible_rows_never_reach_embedding_search(db, monkeypatch, kind):
+    historical_candidate(db)
+    row = stored(db)
+    updates = (
+        {'sensitivity_labels': ['credential']}
+        if kind == 'restricted'
+        else ({'promotion': {**row.promotion, 'is_locked': True}} if kind == 'locked' else {'account_generation': 0})
+    )
+    row = row.model_copy(update=updates)
+    monkeypatch.setattr(processing, 'list_pending_required_processing_items', lambda *a, **k: [row])
+    source = SimpleNamespace(search=AsyncMock(side_effect=AssertionError('must not embed withheld content')))
+    seed, rows = await backlog.prepare(UID, {'targets': []}, EvidenceRecords(), SessionLimits(), source)
+    assert not seed['targets'] and not rows
+    source.search.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_timed_out_model_completion_has_no_late_write_authority(db):
+    started, release, finished = Event(), Event(), Event()
+
+    def slow(row):
+        started.set()
+        try:
+            release.wait(timeout=2)
+            return normalized(row)
+        finally:
+            finished.set()
+
+    task = asyncio.create_task(
+        processing.process_required_memory_item_async(UID, 'new', db_client=db, processor=slow, timeout_seconds=0.1)
+    )
+    try:
+        assert await asyncio.to_thread(started.wait, 1)
+        outcome = await task
+        assert outcome.retryable and not outcome.processed
+        assert stored(db).processing_state.value == 'pending'
+    finally:
+        release.set()
+        await asyncio.to_thread(finished.wait, 2)
+        await task
+    assert stored(db).processing_state.value == 'pending'
+
+
+def test_changed_account_generation_never_calls_normalizer(db, monkeypatch):
+    row = item().model_copy(update={'account_generation': 0})
+    db.rows[('users', UID, 'memory_items', 'new')] = row.model_dump(mode='python')
+    monkeypatch.setattr(intake, 'normalize', lambda *a, **k: pytest.fail('stale account generation'))
+    outcome = intake.after_capture(UID, row, db_client=db)
+    assert outcome.skipped_reason == 'account_generation_changed' and not outcome.attempted
+
+
+def test_receipted_required_completion_uses_the_existing_atomic_l2_route(db, monkeypatch):
+    monkeypatch.setattr(intake, 'normalize', normalized)
+    assert intake.after_capture(UID, item(), db_client=db).processed
+    monkeypatch.setattr(consolidation, 'list_receipted_required_processing_items', lambda *a, **k: [stored(db)])
+    result = consolidation.complete_receipted_required_intake(
+        UID, db_client=db, now=NOW, run_id='synthetic-dream-completion', limit=5
+    )
+    assert result.promoted_memory_ids == ['new']
+    assert stored(db).tier.value == 'long_term'
+    assert stored(db).promotion['admission_receipt'] and stored(db).graph_ready
+
+
+def test_short_term_neighbor_cannot_retire_authoritative_backlog(db):
+    row = historical_candidate(db)
+    survivor = {**row, 'id': 'survivor', 'memory_tier': 'short_term'}
+    survivor.pop(backlog.MARKER)
+    with pytest.raises(ValueError, match='not_durable'):
+        backlog.validate(resolution(row), {'memory_items/new': row, 'memory_items/survivor': survivor})
+    assert stored(db).status.value == 'active'
+
+
+def test_noncompatibility_writer_withholds_unowned_required_work_before_paid_call(db, monkeypatch):
+    db.rows[('users', UID, 'memory_state', 'apply_control')]['writer_mode'] = 'ledger'
+    monkeypatch.setattr(intake, 'normalize', lambda *a, **k: pytest.fail('wrong writer must not spend'))
+    outcome = intake.after_capture(UID, item(), db_client=db)
+    assert outcome.skipped_reason == 'writer_mode_owned' and not outcome.attempted

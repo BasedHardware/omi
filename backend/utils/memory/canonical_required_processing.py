@@ -34,6 +34,9 @@ from models.memory_admission import (
 from models.memory_apply import (
     ApplyStatus,
     MemoryControlState,
+    MemoryWriterClass,
+    WriterAdmissionError,
+    require_writer_admitted,
     build_patch_mutation_identity,
 )
 from models.memory_contracts import (
@@ -558,6 +561,23 @@ def _response_content(response: Any) -> str:
     return str(content or "")
 
 
+def list_receipted_required_processing_items(uid, *, db_client, limit=100):
+    """Use the same required-intake index; ordinary observations never fill this page."""
+    query = REQUIRED_MEMORY_PROCESSING_QUERY.build(
+        db_client.collection(MemoryCollections(uid=uid).memory_items),
+        {
+            'tier': 'short_term',
+            'status': 'active',
+            'processing_state': 'processed',
+            'required': True,
+            'processing_statuses': [REQUIRED_PROCESSING_STATUS_PROCESSED],
+        },
+        field_filter_factory=FieldFilter,
+    )
+    snapshots = query.order_by('captured_at').order_by('memory_id').limit(max(1, min(limit, 100))).stream()
+    return [MemoryItem(**_snapshot_payload(snapshot)) for snapshot in snapshots]
+
+
 def invoke_required_memory_processor(item: MemoryItem, llm: Any) -> ProcessedRequiredMemory:
     parser = PydanticOutputParser(pydantic_object=ProcessedRequiredMemory)
     provenance = dict((item.promotion or {}).get("submission") or {})
@@ -692,6 +712,9 @@ def _apply_processed_result(
     expected_head_commit_id: Optional[str] = None,
 ) -> ApplyStatus:
     control = _read_control_state(item.uid, db_client=db_client)
+    _require_processing_writer(control, item)
+    if item.account_generation != control.account_generation:
+        raise RequiredIntakeSourceChanged('required_intake_account_generation_changed')
     if expected_head_commit_id is not None and control.head_commit_id != expected_head_commit_id:
         raise PromotionFlexDeferred('required_intake_dedupe_snapshot_changed')
     evidence_ids = [evidence.evidence_id for evidence in item.evidence]
@@ -966,6 +989,18 @@ class RequiredProcessingAttempt:
     context: tuple[MemoryItem, RequiredProcessingRetryState, str, datetime] | None = None
 
 
+def _require_processing_writer(control, item):
+    writer = (
+        MemoryWriterClass.ledger
+        if item.ledger_schema_version == 'knowledge_ledger.v1'
+        else MemoryWriterClass.compatibility
+    )
+    try:
+        require_writer_admitted(control, writer)
+    except WriterAdmissionError as error:
+        raise RequiredIntakeSourceChanged('required_intake_writer_mode_owned') from error
+
+
 def _begin_required_processing(
     uid: str,
     memory_id: str,
@@ -987,6 +1022,18 @@ def _begin_required_processing(
             result=(
                 RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="not_pending_required_processing")
             )
+        )
+
+    control = _read_control_state(uid, db_client=client)
+    if item.account_generation != control.account_generation:
+        return RequiredProcessingAttempt(
+            result=RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason='account_generation_changed')
+        )
+    try:
+        _require_processing_writer(control, item)
+    except RequiredIntakeSourceChanged:
+        return RequiredProcessingAttempt(
+            result=RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason='writer_mode_owned')
         )
 
     current_time = _coerce_utc(now or datetime.now(timezone.utc))

@@ -25,6 +25,7 @@ from models.agent_tools import Search
 from models.memory_apply import ApplyStatus, MemoryControlState, build_patch_mutation_identity
 from models.memory_contracts import deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
+from models.product_memory import MemoryAccessPolicy, is_default_access_eligible
 from utils.executors import db_executor, run_blocking
 from utils.memory import canonical_required_processing as required
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
@@ -32,6 +33,16 @@ from utils.memory.required_intake import bounded_normalize, result_guard
 from utils.memory.required_source_admission import source_revisions
 
 MARKER = 'required_intake_candidate'
+
+
+def candidate_allowed(item):
+    return (
+        item.visibility == 'private'
+        and item.valid_to is None
+        and not (item.promotion or {}).get('is_locked')
+        and not (item.promotion or {}).get('is_dismissed')
+        and is_default_access_eligible(item, MemoryAccessPolicy.for_omi_chat(archive_capability=False)).allowed
+    )
 
 
 def read_control(uid, client):
@@ -59,7 +70,12 @@ def read_candidate(uid, memory_id, context):
     item = read_canonical_memory_item(uid, memory_id, db_client=review_store.client())
     if item is None or not item.content or item.uid != uid or item.captured_at >= policy.BACKLOG_CUTOFF:
         return None
-    if not required.is_pending_required_processing(item) or item.source_state.value != 'active':
+    if (
+        not required.is_pending_required_processing(item)
+        or item.source_state.value != 'active'
+        or not candidate_allowed(item)
+        or item.account_generation != context.get('account_generation')
+    ):
         return None
     revisions = source_revisions(uid, item, db_client=review_store.client())
     if revisions is None:
@@ -124,6 +140,8 @@ async def prepare(uid, seed, records, limits, source):
         if attempted >= policy.BACKLOG_ITEMS_PER_PASS:
             break
         visited = {'captured_at': item.captured_at, 'memory_id': item.memory_id}
+        if item.account_generation != control.account_generation or not candidate_allowed(item):
+            continue
         revisions = await run_blocking(db_executor, source_revisions, uid, item, db_client=client)
         if revisions is None:
             continue
@@ -216,6 +234,8 @@ def validate(edit, records, *, authority='dream'):
         )
         if row.get('visibility') != other.get('visibility') or not same_subject:
             raise ValueError('required_intake_subject_mismatch')
+        if other.get('memory_tier') != 'long_term':
+            raise ValueError('required_intake_survivor_not_durable')
 
 
 def apply(uid, edit, records, change, key, row, *, expected_records=None, authority='dream'):
@@ -258,7 +278,24 @@ def _apply(uid, edit, records, change, key, row, *, expected_records=None, autho
         if not outcome.processed:
             raise review_store.ReviewConflict('Required intake deferred')
         return 'applied'
+    survivor = read_canonical_memory_item(uid, edit.other.split('/', 1)[1], db_client=client)
+    if (
+        survivor is None
+        or survivor.tier.value != 'long_term'
+        or survivor.processing_state.value != 'processed'
+        or survivor.account_generation != control.account_generation
+    ):
+        raise review_store.ReviewConflict('Required intake survivor changed')
     audit = dict(item.promotion or {})
+    audit.update(
+        {
+            'route': 'reject',
+            'processing_status': 'processing_blocked',
+            'status': 'completed_duplicate',
+            'target_memory_id': survivor.memory_id,
+            'rationale': 'Retrospective duplicate fully retained by the canonical Long-term survivor',
+        }
+    )
     audit['required_intake_resolution'] = {
         'kind': 'dream_verified_duplicate',
         'survivor_id': edit.other.split('/', 1)[1],

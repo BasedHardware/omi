@@ -28,12 +28,6 @@ def source_revisions(uid, item, *, db_client):
         return {}
     if len(audio) > 4:
         return None
-    # #23669 owns the shared positive provenance rule. An older writer fails
-    # closed if deployed before that dependency, rather than trusting is_user.
-    confident = getattr(owner_attribution, 'confident_owner_segments', None)
-    observe = getattr(relevance_media_metrics, 'observe_owner_memory_admission', None)
-    if confident is None or observe is None:
-        return None
     revisions = {}
     for evidence in audio:
         source_id = evidence.conversation_id or evidence.source_id
@@ -49,12 +43,13 @@ def source_revisions(uid, item, *, db_client):
         if (
             not source
             or source.get('deleted')
+            or source.get('discarded')
             or source.get('is_locked')
             or exclude_from_derived(uid, source, consumer='memories')
         ):
             return None
         segments = [TranscriptSegment.model_validate(row) for row in source.get('transcript_segments', [])]
-        admitted = confident(segments)
+        admitted = owner_attribution.confident_owner_segments(segments)
         allowed_ids = {id(segment) for segment in admitted}
         valid = bool(admitted and evidence.quote_refs)
         for quote in evidence.quote_refs:
@@ -70,7 +65,7 @@ def source_revisions(uid, item, *, db_client):
             ):
                 valid = False
                 break
-        observe(len(segments), len(admitted) if valid else 0)
+        relevance_media_metrics.observe_owner_memory_admission(len(segments), len(admitted) if valid else 0)
         if not valid:
             return None
         revisions[path] = revision

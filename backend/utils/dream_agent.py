@@ -55,6 +55,7 @@ from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
 from utils.model_text import ContextWindow
 from utils.memory.required_intake import retry_sweep
+from utils.memory.canonical_consolidation import complete_receipted_required_intake
 
 TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
 logger = logging.getLogger(__name__)
@@ -897,7 +898,7 @@ async def drain(*, limit=5000):
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
             # Required intake has its own Flex route and no Dream capacity or
             # paid-cohort dependency. Discover owed owners before model waits.
-            await retry_sweep(limit=min(limit, 4990))
+            await retry_sweep(limit=min(limit, 4990), complete_owner=complete_receipted_required_intake)
             if not enabled():
                 return results
             reserved_open = await dream_capacity.available_model(mode='reserved') is not None

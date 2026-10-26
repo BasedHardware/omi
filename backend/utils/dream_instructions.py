@@ -18,4 +18,6 @@ INSTRUCTIONS = (
     'and admit the unique submission. Cite the candidate and every dedupe_ref in evidence. Never retire, '
     'rewrite, merge or dismiss these pending candidates through ordinary cleanup tools. If evidence is '
     'incomplete leave them pending for the next pass.'
+    ' A duplicate survivor must already be Long-term. If only a Short-term neighbor covers the submission, '
+    'leave it pending until that neighbor receives its normal canonical disposition.'
 )

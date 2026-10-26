@@ -298,6 +298,13 @@ _driver(
     serving=False,
 )
 _driver(
+    'utils.memory.canonical_required_processing.list_receipted_required_processing_items',
+    base={'uid': UID},
+    neutrals={'limit': LIMIT},
+    profile='maintenance-required-intake-completion',
+    serving=False,
+)
+_driver(
     'jobs.short_term_lifecycle_worker.fetch_expired_short_term_memory_items_firestore',
     base={'uid': UID},
     neutrals={'now': NOW, 'limit': LIMIT},

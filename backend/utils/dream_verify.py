@@ -24,6 +24,8 @@ INSTRUCTIONS = (
     'the pending source is retained as superseded. With other empty, agree only if none of the supplied '
     'semantic and lexical dedupe_refs already covers the entire submission. All dedupe_refs must be cited. '
     'Admission normalizes the full submission through the required processor; it cannot discard details.'
+    ' A duplicate survivor must be a processed Long-term memory; a covering Short-term neighbor is not yet '
+    'durable enough to retire an authoritative required submission.'
 )
 
 

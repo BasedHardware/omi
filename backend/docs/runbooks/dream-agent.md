@@ -271,9 +271,9 @@ Ledger accounts retain daily-sweep lifecycle authority and still drain outboxes.
 The daily sweep retains new-fact formation, local-day/onboarding receipts, standing
 triggers, summaries and filing. Stranded finalization, ingest-time prevention,
 speaker teaching, task refresh, frame retention, X ingestion and compliance stay
-with their owning pipelines. No Scheduler entry or `.github` workflow becomes
-dead; the dev maintenance schedule still owns required work. Workflow files are
-not edited. See [cleanup inventory](dream-cleanup-fold.md).
+with their owning pipelines. Required intake no longer depends on the dev
+maintenance schedule or its deploy workflows; remaining maintenance duties and
+their retirement belong to [cleanup inventory](dream-cleanup-fold.md).
 
 ## Operations and evidence
 
@@ -345,6 +345,14 @@ and attempts at most five. No new job, scheduler or IAM is required. Do **not**
 deploy `memory-maintenance-job` or create its production scheduler for intake.
 The merged maintenance capture window is unused by this path.
 
+That phase also completes up to five already-receipted required submissions per
+owner through the existing canonical consolidation/graph admission function,
+with no second model call. A required-only processed query prevents ordinary
+observations from consuming this recovery page. This owns the crash window
+between successful normalization and durable admission as well as the former
+maintenance host's completion duty. Non-admitted writer modes are withheld
+before paid work; the retry path never changes writer-mode authority.
+
 Historical rows captured before **2026-10-26 07:55Z** are excluded from forward
 retries and stay hidden until Dream's retrospective pass resolves them. Enable
 `DREAM_REQUIRED_INTAKE_BACKLOG_ENABLED=true` plus the independent
@@ -357,6 +365,8 @@ candidate pending, without offering hidden backlog in owner Review. A verified
 unique submission uses the same required normalizer; a verified full duplicate
 retains the original source/content as a superseded canonical audit row and
 does not rewrite its survivor. Every material detail and subject must match.
+The survivor must already be Long-term; a covering Short-term neighbor leaves
+the submission pending until the neighbor receives its normal disposition.
 The canonical head captured for dedupe is fenced through commit; another write
 defers remaining candidates for a later pass rather than admitting against
 stale neighbors. Normal Dream pass/admission/token budgets still apply.
