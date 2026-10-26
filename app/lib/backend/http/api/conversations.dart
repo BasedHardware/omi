@@ -789,7 +789,13 @@ class SyncUploadHttpException implements Exception {
   final int statusCode;
   final String message;
 
-  const SyncUploadHttpException(this.statusCode, this.message);
+  /// The server's `Retry-After` (delta-seconds) on a 5xx, when provided. The
+  /// sync dispatch and ledger-fence refusals carry one so the client pauses
+  /// instead of failing every remaining batch on the same gate; null when the
+  /// server gave no pacing guidance (e.g. platform-generated 503s).
+  final int? retryAfterSeconds;
+
+  const SyncUploadHttpException(this.statusCode, this.message, {this.retryAfterSeconds});
 
   @override
   String toString() => 'SyncUploadHttpException(status=$statusCode): $message';
@@ -1057,7 +1063,11 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   } else if (isSyncRecoveryWindowExceededResponse(response)) {
     throw const SyncRecoveryWindowExceededException();
   } else if (response.statusCode >= 500) {
-    throw SyncUploadHttpException(response.statusCode, 'Server is temporarily unavailable');
+    throw SyncUploadHttpException(
+      response.statusCode,
+      'Server is temporarily unavailable',
+      retryAfterSeconds: _parseRetryAfterSeconds(response),
+    );
   }
   throw SyncUploadHttpException(response.statusCode, 'Upload failed unexpectedly');
 }

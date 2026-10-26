@@ -498,4 +498,60 @@ void main() {
     expect(SharedPreferencesUtil().getInt('syncRateLimitedUntilMs'), 0);
     expect(SharedPreferencesUtil().getInt('syncBackfillLimitedUntilMs'), 0);
   });
+
+  test('a 5xx with Retry-After installs the account cooldown instead of failing every batch', () async {
+    // Sync dispatch unavailable behind an account gate: the server scopes the
+    // pause via Retry-After on an otherwise-unscoped 503. The next upload must
+    // be refused client-side rather than re-sending the same doomed batch.
+    var uploads = 0;
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
+        uploads++;
+        throw const SyncUploadHttpException(503, 'Server is temporarily unavailable', retryAfterSeconds: 30);
+      },
+    );
+
+    await expectLater(gate.upload([]), throwsA(isA<SyncUploadHttpException>()));
+    expect(uploads, 1);
+    expect(limiter.isLimited, isTrue);
+    expect(limiter.reason, RateLimitReason.backendBusy);
+    expect(limiter.activeRetryAfterSeconds, lessThanOrEqualTo(30));
+
+    await expectLater(gate.upload([]), throwsA(isA<SyncRateLimitedException>()));
+    expect(uploads, 1, reason: 'the cooldown stops the drain before another body upload');
+  });
+
+  test('a 5xx without Retry-After does not install a cooldown', () async {
+    // Platform-generated 503s carry no pacing; the drain's own inter-batch
+    // pause covers them, and the limiter must stay clear so the next batch
+    // still gets a chance.
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async =>
+          throw const SyncUploadHttpException(503, 'Server is temporarily unavailable'),
+    );
+
+    await expectLater(gate.upload([]), throwsA(isA<SyncUploadHttpException>()));
+
+    expect(limiter.isLimited, isFalse);
+  });
 }
