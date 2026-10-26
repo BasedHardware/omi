@@ -97,8 +97,6 @@ BACKEND_UNIT_TEST_TRIGGERS = (
     ".github/workflows/desktop_promote_beta.yml",
     ".github/workflows/desktop_promote_prod.yml",
     ".github/workflows/gcp_backend*.yml",
-    ".github/workflows/gcp_memory_maintenance_job.yml",
-    ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
     ".github/workflows/gcp_notifications_job.yml",
     "scripts/changed-files",
     "scripts/install-git-hooks.sh",

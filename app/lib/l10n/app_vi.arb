@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Tải lên thất bại — {duration} âm thanh vẫn được lưu trên điện thoại của bạn.",
     "audioUploadFailedTapRetry": "Tải lên thất bại — {duration} âm thanh vẫn được lưu trên điện thoại của bạn. Nhấn để thử lại.",
     "audioUploadRetrying": "Đang thử tải lên lại… {duration} âm thanh vẫn được lưu trên điện thoại của bạn",
+    "captureNoAudioFromPendant": "Không có âm thanh từ mặt dây",
     "capturing": "Đang ghi",
     "capturingPhotos": "Đang chụp ảnh",
     "listeningTranscriptWillAppear": "Đang nghe… bản ghi lời sẽ hiển thị ở đây.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Thử kết nối lại",
     "captureBannerRetrySync": "Thử đồng bộ lại",
     "captureWedgeBleExplanation": "Kết nối Bluetooth với Omi của bạn đã bị gián đoạn nên âm thanh không tới ứng dụng. Omi vẫn tiếp tục ghi âm trên thiết bị và sẽ đồng bộ khi kết nối được khôi phục. Thử lại sẽ kết nối lại đường truyền; nếu vẫn tiếp tục thất bại, hãy kiểm tra thiết bị của bạn trong Cài đặt > Thiết bị.",
+    "captureConnecting": "Đang kết nối…",
+    "captureNoAudioDetail": "Mặt dây đang được kết nối, nhưng không có âm thanh nào tới điện thoại của bạn",
     "captureIngressNeedsReconnect": "Âm thanh không đến ứng dụng — kết nối lại Omi của bạn",
     "captureIngressNeedsReconnectExplanation": "Ứng dụng không còn nhận được âm thanh từ thiết bị Omi và không thể khôi phục kết nối tự động. Hãy ngắt kết nối rồi kết nối lại thiết bị — trong cài đặt thiết bị hoặc bằng cách tắt rồi bật nó. Âm thanh đã lưu trên thiết bị sẽ được đồng bộ sau.",
     "captureStillRecording": "Vẫn đang ghi âm",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Xong",
+    "openLoopAnswerRemind": "Nhắc tôi sau",
+    "openLoopAnswerDrop": "Bỏ qua"
 }

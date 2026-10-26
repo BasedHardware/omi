@@ -8620,6 +8620,9 @@ class AppLocalizationsSl extends AppLocalizations {
       'Prepis ni na voljo — snemanje se nadaljuje in vaš zvok se shranjuje.';
 
   @override
+  String get captureNoAudioFromPendant => 'Ni zvoka iz obeska';
+
+  @override
   String get capturing => 'Zajemanje';
 
   @override
@@ -11116,6 +11119,12 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'Bluetooth-povezava z vašim Omijem se je ustavila, zato zvok ne prihaja v aplikacijo. Omi še naprej snema na napravi in se sinhronizira, ko se povezava obnovi. Ponovni poskus ponovno vzpostavi povezavo; če še naprej ne uspeva, preverite napravo v Nastavitve > Naprava.';
+
+  @override
+  String get captureConnecting => 'Povezovanje…';
+
+  @override
+  String get captureNoAudioDetail => 'Obesek je povezan, vendar do vašega telefona ne prihaja noben zvok';
 
   @override
   String get captureIngressNeedsReconnect => 'Zvok ne dosega aplikacije — znova priključite Omi';
@@ -14611,4 +14620,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Končano';
+
+  @override
+  String get openLoopAnswerRemind => 'Spomni me pozneje';
+
+  @override
+  String get openLoopAnswerDrop => 'Opusti';
 }

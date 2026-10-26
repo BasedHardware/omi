@@ -9,7 +9,8 @@
     "backend/tests/unit/test_batch_pipeline_privacy.py",
     "backend/tests/integration/test_batch_pipeline_deletion_firestore.py",
     "backend/tests/unit/test_audio_cleanup_custody.py",
-    "backend/tests/unit/test_sync_staging_lifecycle_guard.py"
+    "backend/tests/unit/test_sync_staging_lifecycle_guard.py",
+    "backend/tests/unit/test_account_deletion_operational_holds.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

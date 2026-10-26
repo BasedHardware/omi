@@ -133,10 +133,9 @@ def test_all_batch_with_compatible_windows_preserves_distinct_pyannote_labels(en
     assert len(evidence_store[-1].clusters) == 4
 
 
-@pytest.mark.parametrize(
-    'mode,window_start,allowed', [('shadow', 0.0, False), ('serve', 0.0, True), ('serve', 11.0, False)]
-)
-def test_decoded_overlap_refuses_only_affected_windows_in_serve(monkeypatch, mode, window_start, allowed):
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+@pytest.mark.parametrize('window_start,allowed', [(0.0, True), (11.0, False)])
+def test_decoded_overlap_refuses_only_affected_windows_in_all_modes(monkeypatch, mode, window_start, allowed):
     from types import SimpleNamespace
     from utils.conversations.audio_placement import AudioPlacement
 
@@ -169,3 +168,5 @@ def test_decoded_overlap_refuses_only_affected_windows_in_serve(monkeypatch, mod
         str(uuid.uuid4()), _conversation([0]), files, [segment], placements, float('inf')
     )
     assert (result is session) is allowed
+    if allowed:
+        assert result.verified_segment_ids == {segment.id}

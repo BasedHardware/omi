@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Odoslanie zlyhalo — zvuk s dĺžkou {duration} zostáva vo vašom telefóne.",
     "audioUploadFailedTapRetry": "Odoslanie zlyhalo — zvuk s dĺžkou {duration} zostáva vo vašom telefóne. Ťuknutím to skúsite znova.",
     "audioUploadRetrying": "Opakuje sa odoslanie… zvuk s dĺžkou {duration} zostáva vo vašom telefóne",
+    "captureNoAudioFromPendant": "Žiadny zvuk z prívesku",
     "capturing": "Záznam",
     "capturingPhotos": "Snímanie fotiek",
     "listeningTranscriptWillAppear": "Počúvam… tu sa zobrazí prepis.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Skúsiť znova pripojiť",
     "captureBannerRetrySync": "Zopakovať synchronizáciu",
     "captureWedgeBleExplanation": "Bluetoothové prepojenie s vaším zariadením Omi sa zastavilo, takže zvuk sa do aplikácie nedostáva. Omi naďalej nahráva na zariadení a po obnovení prepojenia sa synchronizuje. Opätovný pokus prepojenie znovu naviaže; ak to naďalej zlyháva, skontrolujte zariadenie v Nastavenia > Zariadenie.",
+    "captureConnecting": "Pripája sa…",
+    "captureNoAudioDetail": "Prívesok je pripojený, ale žiadny zvuk sa nedostáva do vášho telefónu",
     "captureIngressNeedsReconnect": "Zvuk sa do aplikácie nedostáva — znovu pripojte Omi",
     "captureIngressNeedsReconnectExplanation": "Aplikácia už nedokáže prijímať zvuk zo zariadenia Omi a nepodarilo sa jej automaticky obnoviť pripojenie. Odpojte a znovu pripojte zariadenie — v nastaveniach zariadenia alebo jeho vypnutím a zapnutím. Zvuk uložený v zariadení sa synchronizuje neskôr.",
     "captureStillRecording": "Stále sa nahráva",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Hotovo",
+    "openLoopAnswerRemind": "Pripomenúť neskôr",
+    "openLoopAnswerDrop": "Zahodiť"
 }

@@ -241,11 +241,11 @@ def test_private_http_recovery_writes_only_shadow_state(repository, monkeypatch)
     work = running(repository)
     monkeypatch.setattr(router.WorkerRequest, 'service', lambda self: SimpleNamespace(store=repository.store))
     monkeypatch.setattr(artifact_policy, 'artifacts_for', lambda _: SimpleNamespace(fetch_audio=lambda _: b'audio'))
-    original = shadow_recovery.recover
+    original = shadow_recovery.recover_async
     provider = Mock(return_value={'words': [{'word': 'private transcript'}]})
     monkeypatch.setattr(
         shadow_recovery,
-        'recover',
+        'recover_async',
         lambda repo, artifacts, segment: original(
             repo,
             artifacts,

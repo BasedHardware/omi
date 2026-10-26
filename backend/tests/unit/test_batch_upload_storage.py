@@ -45,7 +45,9 @@ def merge():
     the same module its patches target.
     """
     database_pkg = ModuleType("database")
-    database_pkg.__path__ = []  # type: ignore[attr-defined]
+    # Resolve pure database helpers (including the merge-receipt policy) while
+    # keeping the client and IO modules below explicitly isolated.
+    database_pkg.__path__ = [str(_BACKEND / 'database')]  # type: ignore[attr-defined]
 
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")

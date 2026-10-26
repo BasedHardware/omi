@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "Nabigo ang pag-upload — {duration} na audio ang nakatago sa iyong phone.",
     "audioUploadFailedTapRetry": "Nabigo ang pag-upload — {duration} na audio ang nakatago sa iyong phone. I-tap para subukang muli.",
     "audioUploadRetrying": "Sinusubukang i-upload muli… {duration} na audio ang nakatago sa iyong phone",
+    "captureNoAudioFromPendant": "Walang audio mula sa pendant",
     "capturing": "Kumukuha",
     "capturingPhotos": "Kumukuha ng mga larawan",
     "listeningTranscriptWillAppear": "Nakikinig… lalabas dito ang transcript.",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "Subukang ikonekta muli",
     "captureBannerRetrySync": "Subukang i-sync muli",
     "captureWedgeBleExplanation": "Nag-stall ang Bluetooth link sa iyong Omi, kaya hindi umaabot sa app ang audio. Patuloy na nagre-record ang Omi sa device at mag-si-sync kapag nakabawi ang link. Ang pag-subok muli ay muling nagkokonekta ng link; kung patuloy itong nabibigo, tingnan ang iyong device sa Mga Setting > Device.",
+    "captureConnecting": "Kumokonekta…",
+    "captureNoAudioDetail": "Nakakonekta ang pendant, ngunit walang audio na umaabot sa iyong telepono",
     "captureIngressNeedsReconnect": "Hindi naabot ng audio ang app — i-reconnect ang iyong Omi",
     "captureIngressNeedsReconnectExplanation": "Hindi na makuha ng app ang audio mula sa Omi device at hindi nito mabawi ang koneksyon nang awtomatiko. I-disconnect at i-reconnect ang device — mula sa mga setting ng device, o sa pagpatay at pagbukas nito. Ang audio na naka-save sa device ay magsi-sync sa ibang pagkakataon.",
     "captureStillRecording": "Nagre-record pa rin",
@@ -11859,5 +11862,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Tapos",
+    "openLoopAnswerRemind": "Ipaalala sa akin mamaya",
+    "openLoopAnswerDrop": "Iwanan"
 }

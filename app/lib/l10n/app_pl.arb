@@ -3227,6 +3227,7 @@
     "audioUploadFailedKeptLocal": "Przesyłanie nie powiodło się — {duration} nagrania zachowano na telefonie.",
     "audioUploadFailedTapRetry": "Przesyłanie nie powiodło się — {duration} nagrania zachowano na telefonie. Dotknij, aby ponowić.",
     "audioUploadRetrying": "Ponawianie przesyłania… {duration} nagrania zachowano na telefonie",
+    "captureNoAudioFromPendant": "Brak dźwięku z wisiorka",
     "capturing": "Rejestrowanie",
     "capturingPhotos": "Robienie zdjęć",
     "listeningTranscriptWillAppear": "Słucham… tutaj pojawi się transkrypcja.",
@@ -3529,6 +3530,8 @@
     "captureBannerTryReconnect": "Spróbuj ponownie połączyć",
     "captureBannerRetrySync": "Ponów synchronizację",
     "captureWedgeBleExplanation": "Połączenie Bluetooth z urządzeniem Omi się zawiesiło, więc dźwięk nie dociera do aplikacji. Omi nadal nagrywa na urządzeniu i zsynchronizuje się, gdy połączenie wróci. Ponowienie próby ponownie nawiązuje połączenie; jeśli nadal się nie udaje, sprawdź urządzenie w Ustawienia > Urządzenie.",
+    "captureConnecting": "Łączenie…",
+    "captureNoAudioDetail": "Wisior jest połączony, ale żaden dźwięk nie dociera do Twojego telefonu",
     "captureIngressNeedsReconnect": "Dźwięk nie dociera do aplikacji — połącz ponownie urządzenie Omi",
     "captureIngressNeedsReconnectExplanation": "Aplikacja nie może już odbierać dźwięku z urządzenia Omi i nie udało się automatycznie przywrócić połączenia. Odłącz i ponownie podłącz urządzenie — w ustawieniach urządzenia lub wyłączając i włączając je. Dźwięk zapisany na urządzeniu zostanie zsynchronizowany później.",
     "captureStillRecording": "Nagrywanie trwa",
@@ -4468,5 +4471,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Gotowe",
+    "openLoopAnswerRemind": "Przypomnij później",
+    "openLoopAnswerDrop": "Odrzuć"
 }

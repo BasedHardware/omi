@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Качването не бе успешно — аудио с дължина {duration} е запазено на телефона ви.",
     "audioUploadFailedTapRetry": "Качването не бе успешно — аудио с дължина {duration} е запазено на телефона ви. Докоснете, за да опитате отново.",
     "audioUploadRetrying": "Повторен опит за качване… аудио с дължина {duration} е запазено на телефона ви",
+    "captureNoAudioFromPendant": "Няма звук от висулката",
     "capturing": "Записване",
     "capturingPhotos": "Заснемане на снимки",
     "listeningTranscriptWillAppear": "Слушане… тук ще се появи транскрипция.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Опитайте отново връзката",
     "captureBannerRetrySync": "Повтори синхронизацията",
     "captureWedgeBleExplanation": "Връзката по Bluetooth с вашия Omi прекъсна, така че звукът не стига до приложението. Omi продължава да записва на устройството и ще се синхронизира, щом връзката се възстанови. Повторният опит възстановява връзката; ако продължава да се проваля, проверете устройството си в Настройки > Устройство.",
+    "captureConnecting": "Свързване…",
+    "captureNoAudioDetail": "Висулката е свързана, но до телефона не достига звук",
     "captureIngressNeedsReconnect": "Аудиото не достига до приложението — свържете отново Omi",
     "captureIngressNeedsReconnectExplanation": "Приложението вече не получава звук от устройството Omi и не успя да възстанови връзката автоматично. Откъснете и свържете отново устройството — от настройките на устройството или като го изключите и включите. Звук, запазен на устройството, ще се синхронизира по-късно.",
     "captureStillRecording": "Записът продължава",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Готово",
+    "openLoopAnswerRemind": "Напомни по-късно",
+    "openLoopAnswerDrop": "Изостави го"
 }

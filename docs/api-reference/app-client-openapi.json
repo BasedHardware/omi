@@ -22749,6 +22749,18 @@
             "title": "Conversation Ids",
             "type": "array"
           },
+          "merged_conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable target ID allocated at admission; the worker may not have created it yet",
+            "title": "Merged Conversation Id"
+          },
           "message": {
             "default": "Merge started",
             "description": "Status message",
@@ -23747,6 +23759,93 @@
           }
         },
         "title": "OnboardingStateUpdate",
+        "type": "object"
+      },
+      "OpenLoopAnswerRequest": {
+        "properties": {
+          "action": {
+            "enum": [
+              "done",
+              "remind",
+              "drop"
+            ],
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "OpenLoopAnswerRequest",
+        "type": "object"
+      },
+      "OpenLoopAnswerResponse": {
+        "properties": {
+          "card_id": {
+            "title": "Card Id",
+            "type": "string"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "done",
+              "remind",
+              "dropped"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "card_id",
+          "date",
+          "state"
+        ],
+        "title": "OpenLoopAnswerResponse",
+        "type": "object"
+      },
+      "OpenLoopCard": {
+        "properties": {
+          "card_id": {
+            "title": "Card Id",
+            "type": "string"
+          },
+          "context_line": {
+            "title": "Context Line",
+            "type": "string"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "card_id",
+          "date",
+          "question",
+          "context_line"
+        ],
+        "title": "OpenLoopCard",
+        "type": "object"
+      },
+      "OpenLoopCardsResponse": {
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/OpenLoopCard"
+            },
+            "title": "Cards",
+            "type": "array"
+          }
+        },
+        "title": "OpenLoopCardsResponse",
         "type": "object"
       },
       "OpenLoopDescriptor": {
@@ -67324,6 +67423,206 @@
           }
         ],
         "summary": "Answer Review Item",
+        "tags": [
+          "review"
+        ]
+      }
+    },
+    "/v1/review/open-loops": {
+      "get": {
+        "description": "The day's pending open-loop cards, at most the three the daily pass wrote.\n\nThe day is resolved exactly as the pass dated it for this uid (see\n``open_loops_service.cards_display_day``), with a bounded fallback to the\nprevious day; the zone resolution follows the user usage endpoint: a valid\nrequest zone, else the stored profile zone, else UTC.",
+        "operationId": "get_review_open_loops_v1_review_open_loops_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "time_zone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Time Zone"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenLoopCardsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Review Open Loops",
+        "tags": [
+          "review"
+        ]
+      }
+    },
+    "/v1/review/open-loops/{date}/{card_id}/answer": {
+      "post": {
+        "operationId": "answer_review_open_loop_v1_review_open_loops__date___card_id__answer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "date",
+            "required": true,
+            "schema": {
+              "title": "Date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "title": "Card Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenLoopAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenLoopAnswerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Answer Review Open Loop",
         "tags": [
           "review"
         ]

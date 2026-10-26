@@ -8648,6 +8648,9 @@ class AppLocalizationsTe extends AppLocalizations {
       'ట్రాన్స్‌క్రిప్షన్ అందుబాటులో లేదు — రికార్డింగ్ కొనసాగుతుంది, మీ ఆడియో సేవ్ అవుతోంది.';
 
   @override
+  String get captureNoAudioFromPendant => 'పెండెంట్ నుండి ఆడియో లేదు';
+
+  @override
   String get capturing => 'క్యాప్చర్ అవుతోంది';
 
   @override
@@ -11137,6 +11140,12 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'మీ Omiకి బ్లూటూత్ లింక్ ఆగిపోయింది, కాబట్టి ఆడియో యాప్‌ను చేరడం లేదు. Omi పరికరంలో రికార్డ్ చేయడం కొనసాగిస్తుంది మరియు లింక్ పునరుద్ధరించబడినప్పుడు సింక్ అవుతుంది. మళ్లీ ప్రయత్నించడం వల్ల లింక్ తిరిగి కనెక్ట్ అవుతుంది; అది నిరంతరం విఫలమైతే, సెట్టింగ్‌లు > పరికరంలో మీ పరికరాన్ని తనిఖీ చేయండి.';
+
+  @override
+  String get captureConnecting => 'కనెక్ట్ అవుతోంది…';
+
+  @override
+  String get captureNoAudioDetail => 'పెండెంట్ కనెక్ట్ అయింది, కానీ ఎలాంటి ఆడియో మీ ఫోన్‌కు చేరడం లేదు';
 
   @override
   String get captureIngressNeedsReconnect => 'ఆడియో యాప్‌ను చేరడం లేదు — మీ Omiని మళ్లీ కనెక్ట్ చేయండి';
@@ -14643,4 +14652,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'పూర్తయింది';
+
+  @override
+  String get openLoopAnswerRemind => 'తర్వాత గుర్తు చేయి';
+
+  @override
+  String get openLoopAnswerDrop => 'వదిలేయి';
 }

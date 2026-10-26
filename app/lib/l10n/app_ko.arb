@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "업로드 실패 — {duration} 분량의 오디오가 휴대폰에 보관되어 있습니다.",
     "audioUploadFailedTapRetry": "업로드 실패 — {duration} 분량의 오디오가 휴대폰에 보관되어 있습니다. 탭하여 다시 시도하세요.",
     "audioUploadRetrying": "업로드 재시도 중… {duration} 분량의 오디오가 휴대폰에 보관되어 있습니다",
+    "captureNoAudioFromPendant": "펜던트 오디오 없음",
     "capturing": "캡처 중",
     "capturingPhotos": "사진 캡처 중",
     "listeningTranscriptWillAppear": "듣는 중… 여기에 대화 기록이 표시됩니다.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "다시 연결 시도",
     "captureBannerRetrySync": "동기화 재시도",
     "captureWedgeBleExplanation": "Omi와의 블루투스 연결이 중단되어 오디오가 앱에 도달하지 못합니다. Omi는 기기에서 계속 녹음하며 연결이 복구되면 동기화됩니다. 다시 시도하면 연결이 다시 설정됩니다. 계속 실패하면 설정 > 기기에서 기기를 확인하세요.",
+    "captureConnecting": "연결 중…",
+    "captureNoAudioDetail": "펜던트는 연결되어 있지만 오디오가 휴대전화에 도달하지 않습니다",
     "captureIngressNeedsReconnect": "오디오가 앱에 도달하지 못합니다 — Omi를 다시 연결하세요",
     "captureIngressNeedsReconnectExplanation": "앱이 더 이상 Omi 기기에서 오디오를 받지 못하며 자동으로 연결을 복구하지 못했습니다. 기기의 연결을 해제한 후 다시 연결하세요 — 기기 설정에서 또는 전원을 껐다 켜서. 기기에 저장된 오디오는 나중에 동기화됩니다.",
     "captureStillRecording": "녹음 계속 중",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "완료",
+    "openLoopAnswerRemind": "나중에 알려 줘",
+    "openLoopAnswerDrop": "버리기"
 }

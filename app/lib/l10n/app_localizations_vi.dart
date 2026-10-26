@@ -8602,6 +8602,9 @@ class AppLocalizationsVi extends AppLocalizations {
       'Không thể chép lời — việc ghi vẫn tiếp tục và âm thanh của bạn được lưu.';
 
   @override
+  String get captureNoAudioFromPendant => 'Không có âm thanh từ mặt dây';
+
+  @override
   String get capturing => 'Đang ghi';
 
   @override
@@ -11087,6 +11090,12 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'Kết nối Bluetooth với Omi của bạn đã bị gián đoạn nên âm thanh không tới ứng dụng. Omi vẫn tiếp tục ghi âm trên thiết bị và sẽ đồng bộ khi kết nối được khôi phục. Thử lại sẽ kết nối lại đường truyền; nếu vẫn tiếp tục thất bại, hãy kiểm tra thiết bị của bạn trong Cài đặt > Thiết bị.';
+
+  @override
+  String get captureConnecting => 'Đang kết nối…';
+
+  @override
+  String get captureNoAudioDetail => 'Mặt dây đang được kết nối, nhưng không có âm thanh nào tới điện thoại của bạn';
 
   @override
   String get captureIngressNeedsReconnect => 'Âm thanh không đến ứng dụng — kết nối lại Omi của bạn';
@@ -14584,4 +14593,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Xong';
+
+  @override
+  String get openLoopAnswerRemind => 'Nhắc tôi sau';
+
+  @override
+  String get openLoopAnswerDrop => 'Bỏ qua';
 }

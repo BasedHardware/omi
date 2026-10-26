@@ -8465,6 +8465,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcriptionUnavailableRecordingSaved => '转录不可用 — 录音仍在继续，你的音频已保存。';
 
   @override
+  String get captureNoAudioFromPendant => '挂件没有音频';
+
+  @override
   String get capturing => '正在捕获';
 
   @override
@@ -10903,6 +10906,12 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       '与 Omi 的蓝牙连接已中断，因此音频无法传输到应用。Omi 会继续在设备上录音，并在连接恢复后同步。重试会重新建立连接；如果仍然失败，请在“设置 > 设备”中检查你的设备。';
+
+  @override
+  String get captureConnecting => '正在连接…';
+
+  @override
+  String get captureNoAudioDetail => '挂件已连接，但没有音频传输到您的手机';
 
   @override
   String get captureIngressNeedsReconnect => '音频未送达应用 — 请重新连接您的 Omi';
@@ -14359,4 +14368,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => '完成';
+
+  @override
+  String get openLoopAnswerRemind => '稍后提醒';
+
+  @override
+  String get openLoopAnswerDrop => '放弃';
 }

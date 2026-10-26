@@ -3234,6 +3234,7 @@
     "audioUploadFailedKeptLocal": "Upload mislykkedes — {duration} lyd er gemt på din telefon.",
     "audioUploadFailedTapRetry": "Upload mislykkedes — {duration} lyd er gemt på din telefon. Tryk for at prøve igen.",
     "audioUploadRetrying": "Prøver upload igen… {duration} lyd er gemt på din telefon",
+    "captureNoAudioFromPendant": "Ingen lyd fra vedhænget",
     "capturing": "Optager",
     "capturingPhotos": "Tager billeder",
     "listeningTranscriptWillAppear": "Lytter… en transskription vises her.",
@@ -3536,6 +3537,8 @@
     "captureBannerTryReconnect": "Prøv at forbinde igen",
     "captureBannerRetrySync": "Prøv synkronisering igen",
     "captureWedgeBleExplanation": "Bluetooth-forbindelsen til din Omi er gået i stå, så lyden når ikke frem til appen. Omi optager videre på enheden og synkroniseres, når forbindelsen er tilbage. Prøv igen opretter forbindelsen igen; hvis det fortsat fejler, tjek din enhed under Indstillinger > Enhed.",
+    "captureConnecting": "Forbinder…",
+    "captureNoAudioDetail": "Pendanten er forbundet, men der når ingen lyd din telefon",
     "captureIngressNeedsReconnect": "Lyden når ikke appen — tilslut din Omi igen",
     "captureIngressNeedsReconnectExplanation": "Appen kan ikke længere modtage lyd fra Omi-enheden og kunne ikke gendanne forbindelsen automatisk. Frakobl og tilslut enheden igen — fra enhedsindstillingerne eller ved at slå den fra og til. Lyd, der er gemt på enheden, synkroniseres senere.",
     "captureStillRecording": "Optager stadig",
@@ -4475,5 +4478,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Færdig",
+    "openLoopAnswerRemind": "Mind mig senere",
+    "openLoopAnswerDrop": "Drop det"
 }

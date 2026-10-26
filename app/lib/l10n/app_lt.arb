@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Įkelti nepavyko — {duration} garso įrašo išsaugota jūsų telefone.",
     "audioUploadFailedTapRetry": "Įkelti nepavyko — {duration} garso įrašo išsaugota jūsų telefone. Palieskite, kad bandytumėte dar kartą.",
     "audioUploadRetrying": "Bandoma įkelti dar kartą… {duration} garso įrašo išsaugota jūsų telefone",
+    "captureNoAudioFromPendant": "Iš pakabuko negaunama garso",
     "capturing": "Įrašoma",
     "capturingPhotos": "Fotografuojama",
     "listeningTranscriptWillAppear": "Klausomasi… čia atsiras transkripcija.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Pabandyti prisijungti iš naujo",
     "captureBannerRetrySync": "Pakartoti sinchronizavimą",
     "captureWedgeBleExplanation": "Bluetooth ryšys su jūsų Omi nutrūko, todėl garsas nepasieka programos. Omi toliau įrašinėja įrenginyje ir sinchronizuos, kai ryšys atsistatys. Bandymas iš naujo vėl užmezga ryšį; jei tai ir toliau nepavyksta, patikrinkite įrenginį skiltyje Nustatymai > Įrenginys.",
+    "captureConnecting": "Jungiamasi…",
+    "captureNoAudioDetail": "Pakabukas prijungtas, tačiau joks garsas nepasiekia jūsų telefono",
     "captureIngressNeedsReconnect": "Garsas nepasiekia programos — iš naujo prijunkite Omi",
     "captureIngressNeedsReconnectExplanation": "Programa nebegauna gauti garso iš Omi įrenginio ir nepavyko automatiškai atkurti ryšio. Atjunkite ir vėl prijunkite įrenginį — įrenginio nustatymuose arba jį išjungdami ir vėl įjungdami. Įrenginyje išsaugotas garsas bus sinchronizuotas vėliau.",
     "captureStillRecording": "Įrašymas tęsiamas",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Atlikta",
+    "openLoopAnswerRemind": "Priminti vėliau",
+    "openLoopAnswerDrop": "Atmesti"
 }

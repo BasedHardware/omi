@@ -34,6 +34,9 @@ class AudioChunkReadSession:
         self.deadline = time.monotonic() + MAX_SPEAKER_READ_SECONDS
         self.lock = threading.Lock()
         self.limit_hit = False
+        # Populated by the conversation reader only after decoded coverage and
+        # non-overlap are proven for each window. None retains legacy readers.
+        self.verified_segment_ids: Optional[set[str]] = None
 
     def in_budget(self):
         if self.limit_hit or time.monotonic() >= self.deadline:

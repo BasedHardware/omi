@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "Отпремање није успело — звук трајања {duration} сачуван је на вашем телефону.",
     "audioUploadFailedTapRetry": "Отпремање није успело — звук трајања {duration} сачуван је на вашем телефону. Додирните да бисте покушали поново.",
     "audioUploadRetrying": "Поновни покушај отпремања… звук трајања {duration} сачуван је на вашем телефону",
+    "captureNoAudioFromPendant": "Нема звука са привеска",
     "capturing": "Снимање",
     "capturingPhotos": "Снимање фотографија",
     "listeningTranscriptWillAppear": "Слушам… овде ће се појавити препис.",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "Покушај поново да повежеш",
     "captureBannerRetrySync": "Понови синхронизацију",
     "captureWedgeBleExplanation": "Bluetooth веза са вашим Omi је стала, па звук не стиже до апликације. Omi наставља да снима на уређају и синхронизоваће се када се веза опорави. Поновни покушај поново успоставља везу; ако и даље не успева, проверите уређај у Подешавања > Уређај.",
+    "captureConnecting": "Повезивање…",
+    "captureNoAudioDetail": "Привезак је повезан, али звук не стиже до вашег телефона",
     "captureIngressNeedsReconnect": "Аудио не стиже до апликације — поново повежите Omi",
     "captureIngressNeedsReconnectExplanation": "Апликација више не може да прима аудио са Omi уређаја и није успела аутоматски да поврати везу. Искључите и поново повежите уређај — у подешавањима уређаја или га искључите и укључите. Аудио сачуван на уређају синхронизоваће се касније.",
     "captureStillRecording": "Снимање се наставља",
@@ -11859,5 +11862,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Готово",
+    "openLoopAnswerRemind": "Подсети ме касније",
+    "openLoopAnswerDrop": "Одбаци"
 }

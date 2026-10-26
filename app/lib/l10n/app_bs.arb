@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "Otpremanje nije uspjelo — zvuk trajanja {duration} sačuvan je na vašem telefonu.",
     "audioUploadFailedTapRetry": "Otpremanje nije uspjelo — zvuk trajanja {duration} sačuvan je na vašem telefonu. Dodirnite za ponovni pokušaj.",
     "audioUploadRetrying": "Ponovni pokušaj otpremanja… zvuk trajanja {duration} sačuvan je na vašem telefonu",
+    "captureNoAudioFromPendant": "Nema zvuka s privjeska",
     "capturing": "Snimanje",
     "capturingPhotos": "Snimanje fotografija",
     "listeningTranscriptWillAppear": "Slušam… ovdje će se pojaviti transkript.",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "Pokušaj ponovo povezati",
     "captureBannerRetrySync": "Ponovi sinhronizaciju",
     "captureWedgeBleExplanation": "Bluetooth veza sa vašim Omi je zastala, pa zvuk ne dolazi do aplikacije. Omi nastavlja snimanje na uređaju i sinhronizovaće se kada se veza oporavi. Ponovni pokušaj ponovo uspostavlja vezu; ako i dalje ne uspijeva, provjerite uređaj u Postavke > Uređaj.",
+    "captureConnecting": "Povezivanje…",
+    "captureNoAudioDetail": "Privjesak je povezan, ali zvuk ne dolazi do vašeg telefona",
     "captureIngressNeedsReconnect": "Audio ne stiže do aplikacije — ponovo povežite Omi",
     "captureIngressNeedsReconnectExplanation": "Aplikacija više ne može primati audio s Omi uređaja i nije uspjela automatski vratiti vezu. Isključite i ponovo povežite uređaj — iz postavki uređaja ili ga isključite i uključite. Audio spremljen na uređaju sinkronizirat će se kasnije.",
     "captureStillRecording": "Snimanje se nastavlja",
@@ -11859,5 +11862,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Gotovo",
+    "openLoopAnswerRemind": "Podsjeti me kasnije",
+    "openLoopAnswerDrop": "Odbaci"
 }

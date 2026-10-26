@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Error al subir — se han guardado {duration} de audio en tu teléfono.",
     "audioUploadFailedTapRetry": "Error al subir — se han guardado {duration} de audio en tu teléfono. Toca para reintentar.",
     "audioUploadRetrying": "Reintentando la subida… {duration} de audio guardados en tu teléfono",
+    "captureNoAudioFromPendant": "Sin audio del colgante",
     "capturing": "Capturando",
     "capturingPhotos": "Capturando fotos",
     "listeningTranscriptWillAppear": "Escuchando… aquí aparecerá una transcripción.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Intentar reconectar",
     "captureBannerRetrySync": "Reintentar sincronización",
     "captureWedgeBleExplanation": "El enlace Bluetooth con tu Omi se ha detenido, por lo que el audio no llega a la aplicación. Omi sigue grabando en el dispositivo y se sincronizará cuando el enlace se recupere. Reintentar vuelve a conectar el enlace; si sigue fallando, revisa tu dispositivo en Ajustes > Dispositivo.",
+    "captureConnecting": "Conectando…",
+    "captureNoAudioDetail": "El colgante está conectado, pero ningún audio llega a tu teléfono",
     "captureIngressNeedsReconnect": "El audio no llega a la aplicación — vuelve a conectar tu Omi",
     "captureIngressNeedsReconnectExplanation": "La aplicación ya no puede recibir audio del dispositivo Omi y no pudo restaurar la conexión automáticamente. Desconecta y vuelve a conectar el dispositivo — desde los ajustes del dispositivo o apagándolo y encendiéndolo. El audio guardado en el dispositivo se sincronizará más tarde.",
     "captureStillRecording": "Sigue grabando",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Hecho",
+    "openLoopAnswerRemind": "Recuérdamelo más tarde",
+    "openLoopAnswerDrop": "Descartar"
 }

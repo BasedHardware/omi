@@ -8646,6 +8646,9 @@ class AppLocalizationsCa extends AppLocalizations {
       'La transcripció no està disponible — la gravació continua i l\'àudio es desa.';
 
   @override
+  String get captureNoAudioFromPendant => 'Sense àudio del penjoll';
+
+  @override
   String get capturing => 'Capturant';
 
   @override
@@ -11148,6 +11151,12 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'L\'enllaç Bluetooth amb el vostre Omi s\'ha aturat, per tant l\'àudio no arriba a l\'aplicació. L\'Omi segueix enregistrant al dispositiu i se sincronitzarà quan l\'enllaç es recuperi. Reintentar torna a connectar l\'enllaç; si continua fallant, comproveu el dispositiu a Configuració > Dispositiu.';
+
+  @override
+  String get captureConnecting => 'S’està connectant…';
+
+  @override
+  String get captureNoAudioDetail => 'El penjoll està connectat, però cap àudio no arriba al telèfon';
 
   @override
   String get captureIngressNeedsReconnect => 'L\'àudio no arriba a l\'aplicació — torneu a connectar l\'Omi';
@@ -14658,4 +14667,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Fet';
+
+  @override
+  String get openLoopAnswerRemind => 'Recorda-m\'ho més tard';
+
+  @override
+  String get openLoopAnswerDrop => 'Descarta-ho';
 }

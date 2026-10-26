@@ -16071,6 +16071,12 @@ abstract class AppLocalizations {
   /// **'Transcription is unavailable — recording continues and your audio is saved.'**
   String get transcriptionUnavailableRecordingSaved;
 
+  /// Capture status when the pendant is connected but its audio never arrived and automatic recovery is exhausted. Same wording as the Live Activity notice.
+  ///
+  /// In en, this message translates to:
+  /// **'No audio from pendant'**
+  String get captureNoAudioFromPendant;
+
   /// Live-capture app bar title while both audio and photos are being captured
   ///
   /// In en, this message translates to:
@@ -20162,6 +20168,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The Bluetooth link to your Omi stalled, so audio isn\'t reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.'**
   String get captureWedgeBleExplanation;
+
+  /// Capture status while a pendant link is being verified: no Listening claim and no timer until the subscription is confirmed (CaptureIngressHealth).
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get captureConnecting;
+
+  /// Detail line under the no-audio-from-pendant warning: the link is fine, the audio is not flowing.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant connected, but no audio is reaching your phone'**
+  String get captureNoAudioDetail;
 
   /// Capture recovery banner title for an ingress_recovery_failed episode: automatic recovery is exhausted, so the reader must manually reconnect the device. Not a retry affordance and not an in-progress claim.
   ///
@@ -25790,6 +25808,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your transcript appears in Conversations when processing finishes.'**
   String get livePreviewTranscribingMessage;
+
+  /// Answer button on an open-loop Review card: the follow-up happened.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get openLoopAnswerDone;
+
+  /// Answer button on an open-loop Review card: ask again in two days.
+  ///
+  /// In en, this message translates to:
+  /// **'Remind me later'**
+  String get openLoopAnswerRemind;
+
+  /// Answer button on an open-loop Review card: stop asking about this follow-up.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop it'**
+  String get openLoopAnswerDrop;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

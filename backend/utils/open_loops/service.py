@@ -1,9 +1,8 @@
 """Review-source service functions for open-loop cards.
 
-PR 3 (Review source + mobile UI) calls these; nothing in this PR serves them
-over HTTP. Both functions work on the per-local-day cards document the daily
-pass wrote (``users/{uid}/open_loop_cards/{date}``) and apply the owner's
-answer to the underlying loop:
+The Review routes (PR 3) call these over the per-local-day cards document the
+daily pass wrote (``users/{uid}/open_loop_cards/{date}``); each answer also
+applies to the underlying loop:
 
 - ``done``  → loop resolved. The linked task is completed **only** through a
   strong link — the model asserted the task as the loop's origin
@@ -22,23 +21,29 @@ answer to the underlying loop:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
+from config.refactor_modes import serving_for, shadow_or_serve
 import database.action_items as action_items_db
 import database.open_loops as open_loops_db
 from utils.notifications import sync_action_item_reminder
 from utils.open_loops import store
+from utils.other import daily_recap
 
 logger = logging.getLogger(__name__)
 
 CARD_ACTIONS = ('done', 'remind', 'drop')
 CARD_STATE_BY_ACTION = {'done': 'done', 'remind': 'remind', 'drop': 'dropped'}
-PENDING_STATE = 'pending'
+PENDING_STATE = open_loops_db.CARD_STATE_PENDING
 # Before noon local time the recap (and therefore the pass) has only finished
 # the previous local day — that is the day whose pending cards to list.
 DEFAULT_DAY_NOON_SPLIT_HOUR = 12
+# When the resolved day's pass did not run (or left nothing pending), fall back
+# to the most recent of the previous days that still has pending cards — one
+# missed pass must not blank the whole surface for a day.
+OWNER_FALLBACK_DAYS = 1
 
 
 def _zone(tz: Optional[str]) -> ZoneInfo:
@@ -49,8 +54,8 @@ def _zone(tz: Optional[str]) -> ZoneInfo:
 
 
 def recap_completed_day(tz: Optional[str], now: Optional[datetime] = None) -> str:
-    """The local day the recap most recently completed — the noon-split rule
-    the recap job itself uses (``_display_date_for_now``): before noon local
+    """The local day the legacy recap most recently completed — the noon-split
+    rule the recap job itself uses (``_display_date_for_now``): before noon local
     time, yesterday is the last day whose recap and cards exist."""
     moment = now or store.now_utc()
     local = moment.astimezone(_zone(tz))
@@ -58,8 +63,23 @@ def recap_completed_day(tz: Optional[str], now: Optional[datetime] = None) -> st
     return day.isoformat()
 
 
-def _local_date_str(tz: Optional[str], now: Optional[datetime], date_str: Optional[str]) -> str:
-    return date_str or recap_completed_day(tz, now)
+def cards_display_day(uid: Optional[str], tz: Optional[str], now: Optional[datetime] = None) -> str:
+    """The local day the daily pass most recently dated cards to — the producer's
+    rule, not the reader's: ``daily_recap.scheduled_date`` over the noon-split
+    legacy date. Uids serving ``CALLS_RECAP_MODE`` date every run to
+    ``completed_day`` (always yesterday, no noon split — the pass runs ~01:00
+    local), everyone else to the noon-split day. The branch mirrors
+    ``scheduled_date`` instead of calling it so a Review read never moves the
+    producer's recap-timing shadow counters."""
+    moment = now or store.now_utc()
+    legacy = recap_completed_day(tz, moment)
+    if not shadow_or_serve(daily_recap.FLAG) or not serving_for(daily_recap.FLAG, uid):
+        return legacy
+    return daily_recap.completed_day(tz, moment).isoformat()
+
+
+def _local_date_str(uid: str, tz: Optional[str], now: Optional[datetime], date_str: Optional[str]) -> str:
+    return date_str or cards_display_day(uid, tz, now)
 
 
 def list_pending_cards(
@@ -71,16 +91,48 @@ def list_pending_cards(
     now: Optional[datetime] = None,
     firestore_client: Any = None,
 ) -> List[Dict[str, Any]]:
-    """The day's unanswered cards, in the order the pass ranked them.
+    """One day's unanswered cards, in the order the pass ranked them.
 
-    Only the recap's most recently completed local day (``date_str`` overrides)
-    is listed; older pending cards age out with the day, and their loops either
-    re-surface after the cooldown or expire.
+    Without ``date_str``, the day is the producer's most recent one (see
+    :func:`cards_display_day`); older pending cards age out with the day, and
+    their loops either re-surface after the cooldown or expire.
     """
-    cards = open_loops_db.get_cards(uid, _local_date_str(tz, now, date_str), firestore_client=firestore_client)
+    cards = open_loops_db.get_cards(uid, _local_date_str(uid, tz, now, date_str), firestore_client=firestore_client)
     if not cards:
         return []
     return [card for card in cards if card.get('state') == PENDING_STATE][: max(0, limit)]
+
+
+def list_owner_pending_cards(
+    uid: str,
+    *,
+    tz: Optional[str] = None,
+    now: Optional[datetime] = None,
+    limit: int = 3,
+    firestore_client: Any = None,
+) -> Tuple[str, List[Dict[str, Any]]]:
+    """``(day, pending cards)`` for the owner's Review listing.
+
+    The day is resolved exactly as the pass dated it (``cards_display_day``);
+    when that day has no cards document yet (the pass has not run), the most
+    recent of the previous
+    ``OWNER_FALLBACK_DAYS`` days that still has pending cards is listed
+    instead, so the answer endpoint's date path stays the day the cards
+    actually live in.
+    """
+    day = cards_display_day(uid, tz, now)
+    cards = open_loops_db.get_cards(uid, day, firestore_client=firestore_client)
+    if cards is not None:
+        # The pass ran for this day: an empty or fully answered day stays empty.
+        # Falling back here would resurface yesterday's unanswered cards.
+        return day, [card for card in cards if card.get('state') == PENDING_STATE][: max(0, limit)]
+    base = date.fromisoformat(day)
+    for offset in range(1, OWNER_FALLBACK_DAYS + 1):
+        candidate = (base - timedelta(days=offset)).isoformat()
+        pending = list_pending_cards(uid, limit=limit, date_str=candidate, firestore_client=firestore_client)
+        if pending:
+            return candidate, pending
+    return day, []
 
 
 def answer_card(
@@ -95,34 +147,62 @@ def answer_card(
 ) -> Optional[Dict[str, Any]]:
     """Apply one owner answer (done|remind|drop) to a pending card.
 
-    Returns the updated card, or None when the day/cards/card is missing, the
-    card was already answered, or the action is unknown. Task completion is
-    best-effort: a failing task update never rolls back the loop transition,
-    it logs — the next daily pass re-raises the still-open task anyway.
+    The card's state change is one Firestore transaction
+    (``open_loops_db.transition_card_state``): two answers in flight — on two
+    cards, or a double tap on one — serialize, each preserving the other's
+    committed answer, and a card that is no longer pending answers as None
+    (the route's 409). The loop update runs only after this call's own
+    transition committed, which also makes it idempotent for a repeated
+    answer: a replay never re-resolves, re-snoozes or records a second
+    negative example. Task completion remains best-effort — a failing task
+    update never rolls back the loop transition, it logs; the next daily pass
+    re-raises the still-open task anyway.
     """
     if action not in CARD_ACTIONS:
         return None
     moment = now or store.now_utc()
-    day = _local_date_str(tz, now, date_str)
-    cards = open_loops_db.get_cards(uid, day, firestore_client=firestore_client)
-    if cards is None:
+    day = _local_date_str(uid, tz, now, date_str)
+    card = open_loops_db.transition_card_state(
+        uid, day, str(card_id), CARD_STATE_BY_ACTION[action], moment.isoformat(), firestore_client=firestore_client
+    )
+    if card is None:
         return None
-    position = next((i for i, c in enumerate(cards) if str(c.get('id')) == str(card_id)), None)
-    if position is None or cards[position].get('state') != PENDING_STATE:
-        return None
-    card = cards[position]
 
+    try:
+        _record_answer_on_loop(uid, card, action, moment, tz, firestore_client)
+    except Exception:
+        # The card committed as answered but its loop did not record it. Put the
+        # card back to pending so the owner's retry applies the answer instead of
+        # hitting a 409 that silently loses it; the route returns a 500.
+        try:
+            open_loops_db.transition_card_state(
+                uid,
+                day,
+                str(card_id),
+                PENDING_STATE,
+                None,
+                from_state=CARD_STATE_BY_ACTION[action],
+                firestore_client=firestore_client,
+            )
+        except Exception:
+            logger.exception('open_loop_card_revert_failed card_id=%s date=%s', card_id, day)
+        raise
+    return card
+
+
+def _record_answer_on_loop(
+    uid: str, card: Dict[str, Any], action: str, moment: datetime, tz: Optional[str], firestore_client: Any
+) -> None:
     loops = open_loops_db.get_loops(uid, firestore_client=firestore_client)
     loop = next((l for l in loops if str(l.get('id')) == str(card.get('loop_id'))), None)
-    if loop is not None:
-        open_loops_db.upsert_loop(
-            uid, _apply_answer_to_loop(uid, loop, card, action, moment, tz), firestore_client=firestore_client
-        )
-
-    card = {**card, 'state': CARD_STATE_BY_ACTION[action], 'answered_at': moment.isoformat()}
-    cards[position] = card
-    open_loops_db.set_cards(uid, day, cards, firestore_client=firestore_client)
-    return card
+    if loop is None or loop.get('status') in store.TERMINAL_STATUSES:
+        # Already resolved, dropped or expired since the card was written: the
+        # card answer stands, but it must not re-resolve the loop or complete
+        # its task a second time.
+        return
+    open_loops_db.upsert_loop(
+        uid, _apply_answer_to_loop(uid, loop, card, action, moment, tz), firestore_client=firestore_client
+    )
 
 
 def _complete_linked_task(uid: str, task_id: str, loop_id: Any) -> None:

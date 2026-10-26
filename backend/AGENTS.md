@@ -121,10 +121,13 @@ backend-sync (main.py, Cloud Run)
   ├── ──────► Cloud Tasks queue `account-deletion` ──► POST /v1/users/account-deletion-wipes/run (OIDC, same service)
   └── ──────► Cloud Tasks queue `conversation-finalization` ──► POST /v1/conversation-finalization-jobs/run (OIDC, same service)
 
-Cron jobs: notifications (`modal/job.py`), X sync (`modal/x_connector_sync_job.py`), memory maintenance (`modal/memory_maintenance_job.py`), and frame retention (`modal/frame_request_retention_job.py`).
+Cron jobs: notifications (`modal/job.py`), X sync (`modal/x_connector_sync_job.py`), and frame retention (`modal/frame_request_retention_job.py`).
 ```
 
 Dream agent: `docs/runbooks/dream-agent.md`.
+
+Required intake: canonical capture normalizes inline; Dream retries and dedupes
+the backlog. Ownership, bounds and ramp: `docs/runbooks/dream-agent.md`.
 
 Helm charts: `backend/charts/`.
 
@@ -146,7 +149,6 @@ STT policy: `config/stt_provider_policy.py`. Windowed live rollout: `docs/operat
 - **nllb-translation** (`nllb_translation/`) — GPU translation service. Called by backend when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected.
 - **backend-sync** (`main.py`, same image as backend) — Cloud Run `/v2/sync-local-files` admission: batches ≤6 hours old enter `sync-jobs`; older/untrusted batches enter `sync-backfill` → **backend-sync-backfill**. Fresh keeps its bounded inline fallback; backfill never falls into fresh/inline capacity. Backfill defaults to one in-flight job per UID, four processed speech hours per UID/day, 555 processed speech hours globally/day, a 30-day lookback, and thirty concurrent dispatches (30/second cap). Live fair-use reads only `realtime + sync_fresh`; `sync_backfill` is separately metered. A 45-day Firestore content ledger protects transcription and usage side effects across job expiry and re-upload. Audio playback merges (`/v1/sync/audio/*`) follow the same pattern via queue `audio-merge` building 30-day MP3 artifacts under `playback/` (`AUDIO_MERGE_DISPATCH_MODE`) — per-part files plus one dense per-conversation `conversation.mp3` whose spans manifest + audio_files fingerprint are stamped on the conversation doc (`conversation_audio`); a fingerprint mismatch after late chunks re-enqueues the build. In production, account deletion requires `ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks` and complete Cloud Tasks bindings to enqueue opaque job IDs to queue `account-deletion`, which posts `/v1/users/account-deletion-wipes/run`; startup rejects inline or incomplete configuration, reconciliation only re-dispatches tasks so the OIDC handler is the sole wipe executor, and the post-deploy queue-drain window accepts the former sync OIDC audience only for legacy UID payloads. API success is returned only after the deletion marker is persisted and the wipe task is durably enqueued.
 - **notifications-job** (`modal/job.py`) — Every-15-minute cron job for local-hour delivery, reads Firestore/Redis, sends push notifications and emits the read-only Redis memory check. Automatic Chat materialization and its weekly decision review are retired. No canonical maintenance flags or Typesense secrets; its deploy removes only those bindings and keeps notification env. Recipient reads + run lock: `docs/runbooks/daily-summary-cutover.md`.
-- **memory-maintenance-job** (`modal/memory_maintenance_job.py`) — Cloud Run Job for deterministic TTL, explicit-submission normalization/completion, committed memory outboxes and already-enqueued recurrence delivery. Retrospective semantic cleanup belongs to Dream; the old consolidation planner, cooldown and selector flags are retired. `MEMORY_CANONICAL_MAINTENANCE_ENABLED` owns this host; `MEMORY_ENABLED=on` does not require it. Required normalization uses gateway Flex with `OMI_BACKGROUND_FLEX_CAPABLE=true`; DB claims/settlement and model calls use separate executor steps. The existing dev hourly Scheduler and deploy workflows stay because they own retention and owed delivery. Runtime env validation requires gateway identity and refuses retired planner bindings.
 - **monitoring** (`backend/charts/monitoring/`) — Prometheus/Grafana, Loki/Alloy, alerts and HPA adapters. Sync export flags, sizing and CPU audit: [runbook](docs/runbooks/sync-cloudrun-rightsizing.md).
 - **backend-secrets** (`backend/charts/backend-secrets/`) — ExternalSecret and SecretStore resources that sync backend runtime secrets into GKE namespaces.
 

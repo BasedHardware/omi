@@ -414,12 +414,16 @@ void main() {
 
   test('isFrameDurable is strict: disk written but index not saved, or a cleared generation, is not durable', () async {
     final barrier = Completer<void>();
+    final indexEntered = Completer<void>();
     var gate = true;
     final sync = LocalWalSyncImpl(
       _MockListener(),
       freeDiskBytes: () async => 1 << 40,
       persistWals: (wals) async {
-        if (gate) await barrier.future;
+        if (gate && wals.any((wal) => wal.storage == WalStorage.disk)) {
+          if (!indexEntered.isCompleted) indexEntered.complete();
+          await barrier.future;
+        }
         await WalFileManager.saveWals(wals);
       },
     );
@@ -430,11 +434,16 @@ void main() {
     expect(captured.any(sync.isFrameDurable), isFalse, reason: 'still buffered');
 
     final stopping = sync.stop(); // chunk + flush: audio written, index save gated
-    await pump();
-    expect(sync.testWals.where((w) => w.storage == WalStorage.disk), isNotEmpty, reason: 'disk already marked');
-    expect(captured.any(sync.isFrameDurable), isFalse, reason: 'index save not completed');
-    barrier.complete();
-    await stopping;
+    try {
+      // Disk IO can exceed the old 60 ms pump under full-suite contention.
+      // Observe the actual disk/index boundary rather than elapsed time.
+      await indexEntered.future.timeout(const Duration(seconds: 5));
+      expect(sync.testWals.where((w) => w.storage == WalStorage.disk), isNotEmpty, reason: 'disk already marked');
+      expect(captured.any(sync.isFrameDurable), isFalse, reason: 'index save not completed');
+    } finally {
+      barrier.complete();
+      await stopping;
+    }
     expect(captured.every(sync.isFrameDurable), isTrue, reason: 'disk + index saved, current generation');
 
     sync.clearUserData();

@@ -37,20 +37,18 @@ class NotesIdentity:
     corrections: tuple[str, ...] = ()
 
     def supported(self, name: str, speaker: str | None = None) -> bool:
-        # The owner is allowed even without an is_user voice in this conversation.
         owners = {value.casefold() for value in self.owner_names if value}
         owners.update(token for value in tuple(owners) for token in value.split())
-        if name.casefold() in owners:
-            return True
         named = {key: value.casefold() for key, value in self.speaker_names if value}
-        # An explicit resolved binding cannot be overwritten by a calendar lead.
+        # Profile identity and attendance are context, not proof of which voice
+        # spoke. Preserve owner aliases only for an actually bound owner voice.
         if speaker is not None and speaker in named:
-            return named[speaker] == name.casefold()
+            return named[speaker] == name.casefold() or (named[speaker] in owners and name.casefold() in owners)
+        if name.casefold() in owners and any(value in owners for value in named.values()):
+            return speaker is None
         if speaker is None and name.casefold() in named.values():
             return True
-        return name.casefold() in {value.casefold() for value in self.meeting_names} or _corrected_name(
-            name, self.corrections
-        )
+        return _corrected_name(name, self.corrections)
 
 
 def notes_identity(prefix: Any, inputs: Mapping[str, Any], packet: Mapping[str, Any] | None = None) -> NotesIdentity:

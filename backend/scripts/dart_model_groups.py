@@ -96,6 +96,10 @@ SCHEMA_GROUPS = {
             'ReviewChange',
             'ReviewChangeDiff',
             'ReviewChangesResponse',
+            'OpenLoopCard',
+            'OpenLoopCardsResponse',
+            'OpenLoopAnswerRequest',
+            'OpenLoopAnswerResponse',
         ),
     },
     'entity_pages': {

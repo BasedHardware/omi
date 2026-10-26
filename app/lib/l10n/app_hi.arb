@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "अपलोड विफल रहा — {duration} का ऑडियो आपके फ़ोन पर सुरक्षित है।",
     "audioUploadFailedTapRetry": "अपलोड विफल रहा — {duration} का ऑडियो आपके फ़ोन पर सुरक्षित है। फिर से कोशिश करने के लिए टैप करें।",
     "audioUploadRetrying": "अपलोड फिर से किया जा रहा है… {duration} का ऑडियो आपके फ़ोन पर सुरक्षित है",
+    "captureNoAudioFromPendant": "पेंडेंट से कोई ऑडियो नहीं",
     "capturing": "कैप्चर हो रहा है",
     "capturingPhotos": "फ़ोटो कैप्चर हो रही हैं",
     "listeningTranscriptWillAppear": "सुन रहे हैं… ट्रांसक्रिप्ट यहाँ दिखाई देगा।",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "पुनः कनेक्ट करने का प्रयास करें",
     "captureBannerRetrySync": "सिंक पुनः प्रयास करें",
     "captureWedgeBleExplanation": "आपके Omi से ब्लूटूथ कनेक्शन रुक गया है, इसलिए ऑडियो ऐप तक नहीं पहुँच रहा है। Omi डिवाइस पर रिकॉर्डिंग जारी रखता है और कनेक्शन लौटते ही सिंक हो जाएगा। फिर से कोशिश करने पर कनेक्शन दोबारा जुड़ता है; अगर यह बार-बार विफल रहे, तो सेटिंग > डिवाइस में अपना डिवाइस जाँचें।",
+    "captureConnecting": "कनेक्ट हो रहा है…",
+    "captureNoAudioDetail": "पेंडेंट कनेक्ट है, लेकिन कोई ऑडियो आपके फ़ोन तक नहीं पहुँच रहा है",
     "captureIngressNeedsReconnect": "ऑडियो ऐप तक नहीं पहुँच रहा — अपना Omi फिर से कनेक्ट करें",
     "captureIngressNeedsReconnectExplanation": "ऐप अब Omi डिवाइस से ऑडियो नहीं ले पा रही है और कनेक्शन अपने आप बहाल नहीं हो सका। डिवाइस को डिस्कनेक्ट करके फिर से कनेक्ट करें — डिवाइस सेटिंग से, या उसे बंद करके चालू करके। डिवाइस पर सहेजा गया ऑडियो बाद में सिंक होगा।",
     "captureStillRecording": "अभी भी रिकॉर्ड हो रहा है",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "पूर्ण",
+    "openLoopAnswerRemind": "बाद में याद दिलाएँ",
+    "openLoopAnswerDrop": "इसे छोड़ दें"
 }

@@ -3227,6 +3227,7 @@
     "audioUploadFailedKeptLocal": "Не удалось загрузить — аудио длительностью {duration} сохранено на вашем телефоне.",
     "audioUploadFailedTapRetry": "Не удалось загрузить — аудио длительностью {duration} сохранено на вашем телефоне. Нажмите, чтобы повторить.",
     "audioUploadRetrying": "Повторная попытка загрузки… аудио длительностью {duration} сохранено на вашем телефоне",
+    "captureNoAudioFromPendant": "Нет звука с кулона",
     "capturing": "Запись",
     "capturingPhotos": "Съёмка фото",
     "listeningTranscriptWillAppear": "Слушаю… здесь появится расшифровка.",
@@ -3529,6 +3530,8 @@
     "captureBannerTryReconnect": "Попробовать подключить снова",
     "captureBannerRetrySync": "Повторить синхронизацию",
     "captureWedgeBleExplanation": "Связь Bluetooth с вашим Omi прервалась, поэтому звук не попадает в приложение. Omi продолжает записывать на устройстве и синхронизируется, когда связь восстановится. Повторная попытка переподключает связь; если она продолжает сбиваться, проверьте устройство в разделе Настройки > Устройство.",
+    "captureConnecting": "Подключение…",
+    "captureNoAudioDetail": "Кулон подключён, но звук не поступает на ваш телефон",
     "captureIngressNeedsReconnect": "Звук не доходит до приложения — переподключите Omi",
     "captureIngressNeedsReconnectExplanation": "Приложение больше не может получать звук с устройства Omi и не смогло восстановить соединение автоматически. Отключите и снова подключите устройство — в настройках устройства или выключив и включив его. Звук, сохранённый на устройстве, синхронизируется позже.",
     "captureStillRecording": "Запись продолжается",
@@ -4468,5 +4471,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Готово",
+    "openLoopAnswerRemind": "Напомнить позже",
+    "openLoopAnswerDrop": "Отклонить"
 }

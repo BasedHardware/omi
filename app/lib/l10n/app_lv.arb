@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Augšupielāde neizdevās — {duration} audio ir saglabāts jūsu tālrunī.",
     "audioUploadFailedTapRetry": "Augšupielāde neizdevās — {duration} audio ir saglabāts jūsu tālrunī. Pieskarieties, lai mēģinātu vēlreiz.",
     "audioUploadRetrying": "Atkārtoti mēģina augšupielādēt… {duration} audio ir saglabāts jūsu tālrunī",
+    "captureNoAudioFromPendant": "No kulona nav audio",
     "capturing": "Notiek ierakstīšana",
     "capturingPhotos": "Notiek fotografēšana",
     "listeningTranscriptWillAppear": "Klausos… šeit parādīsies transkripcija.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Mēģināt savienot vēlreiz",
     "captureBannerRetrySync": "Atkārtot sinhronizāciju",
     "captureWedgeBleExplanation": "Bluetooth savienojums ar jūsu Omi ir apstājies, tāpēc audio nesasniedz lietotni. Omi turpina ierakstīt ierīcē un sinhronizēsies, kad savienojums atjaunosies. Atkārtots mēģinājums atkal izveido savienojumu; ja tas joprojām neizdodas, pārbaudiet ierīci sadaļā Iestatījumi > Ierīce.",
+    "captureConnecting": "Savienojas…",
+    "captureNoAudioDetail": "Kulons ir savienots, taču nekāds skaņas signāls nesasniedz jūsu tālruni",
     "captureIngressNeedsReconnect": "Audio nesasniedz lietotni — atkārtoti pievienojiet Omi",
     "captureIngressNeedsReconnectExplanation": "Lietotne vairs nespēj saņemt audio no Omi ierīces un nevarēja automātiski atjaunot savienojumu. Atvienojiet un atkārtoti pievienojiet ierīci — ierīces iestatījumos vai to izslēdzot un ieslēdzot. Ierīcē saglabātais audio tiks sinhronizēts vēlāk.",
     "captureStillRecording": "Ierakstīšana turpinās",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Pabeigts",
+    "openLoopAnswerRemind": "Atgādināt vēlāk",
+    "openLoopAnswerDrop": "Atmest"
 }

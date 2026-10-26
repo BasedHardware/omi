@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Uploaden mislukt — {duration} audio bewaard op je telefoon.",
     "audioUploadFailedTapRetry": "Uploaden mislukt — {duration} audio bewaard op je telefoon. Tik om het opnieuw te proberen.",
     "audioUploadRetrying": "Upload opnieuw proberen… {duration} audio bewaard op je telefoon",
+    "captureNoAudioFromPendant": "Geen audio van hanger",
     "capturing": "Bezig met vastleggen",
     "capturingPhotos": "Foto's vastleggen",
     "listeningTranscriptWillAppear": "Luisteren… hier verschijnt een transcript.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Opnieuw proberen te verbinden",
     "captureBannerRetrySync": "Synchronisatie opnieuw proberen",
     "captureWedgeBleExplanation": "De Bluetooth-verbinding met je Omi is vastgelopen, dus audio komt de app niet meer binnen. Omi blijft opnemen op het apparaat en synchroniseert zodra de verbinding herstelt. Opnieuw proberen herstelt de verbinding; als het blijft mislukken, controleer je apparaat onder Instellingen > Apparaat.",
+    "captureConnecting": "Verbinden…",
+    "captureNoAudioDetail": "De hanger is verbonden, maar er bereikt geen audio je telefoon",
     "captureIngressNeedsReconnect": "Audio bereikt de app niet — verbind je Omi opnieuw",
     "captureIngressNeedsReconnectExplanation": "De app kan geen audio meer ontvangen van het Omi-apparaat en kon de verbinding niet automatisch herstellen. Koppel het apparaat los en opnieuw — via de apparaatinstellingen of door het uit en weer aan te zetten. Audio die op het apparaat is opgeslagen, wordt later gesynchroniseerd.",
     "captureStillRecording": "Neemt nog op",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Klaar",
+    "openLoopAnswerRemind": "Herinner me later",
+    "openLoopAnswerDrop": "Negeren"
 }

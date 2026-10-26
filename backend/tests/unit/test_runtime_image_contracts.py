@@ -115,15 +115,6 @@ def test_a_commented_smoke_marker_does_not_satisfy_the_workflow_contract(contrac
     assert contracts_module.workflow_contract_errors([contract]) == []
 
 
-def test_memory_maintenance_import_smoke_supplies_its_required_nonproduction_config(contracts_module):
-    memory_maintenance_job = _contract(contracts_module, 'memory-maintenance-job')
-
-    assert dict(memory_maintenance_job.smoke_environment) == {
-        'ENCRYPTION_SECRET': '0123456789abcdef0123456789abcdef',
-        'OPENAI_API_KEY': 'fake-memory-maintenance-image-smoke-only',
-    }
-
-
 def test_x_connector_sync_import_smoke_supplies_its_required_nonproduction_config(contracts_module):
     x_connector_sync_job = _contract(contracts_module, 'x-connector-sync-job')
 
@@ -320,27 +311,6 @@ def test_image_smoke_uses_registered_python_executable(contracts_module, monkeyp
     assert contracts_module.smoke_image('omi-nllb:test', [_contract(contracts_module, 'nllb-translation')]) == 0
 
     assert calls[0][:6] == ['docker', 'run', '--rm', '--network=none', '--entrypoint', 'python3']
-
-
-def test_memory_maintenance_smoke_uses_a_non_production_openai_key(contracts_module, monkeypatch):
-    calls = []
-
-    class Result:
-        returncode = 0
-
-    memory_job = _contract(contracts_module, 'memory-maintenance-job')
-    assert memory_job.smoke_environment == (
-        ('ENCRYPTION_SECRET', '0123456789abcdef0123456789abcdef'),
-        ('OPENAI_API_KEY', 'fake-memory-maintenance-image-smoke-only'),
-    )
-
-    monkeypatch.setattr(contracts_module, 'third_party_dependency_modules', lambda _: ())
-    monkeypatch.setattr(contracts_module.subprocess, 'run', lambda command, check: calls.append(command) or Result())
-
-    assert contracts_module.smoke_image('omi-memory-maintenance:test', [memory_job]) == 0
-    assert all('--network=none' in call for call in calls)
-    assert all('ENCRYPTION_SECRET=0123456789abcdef0123456789abcdef' in call for call in calls)
-    assert all('OPENAI_API_KEY=fake-memory-maintenance-image-smoke-only' in call for call in calls)
 
 
 def test_build_smoke_uses_the_registered_dockerfile_and_context(contracts_module, monkeypatch):

@@ -7,8 +7,11 @@ annotation
 Production currently keeps `batch.enabled: false` until the deployer RBAC for
 the `-batch` objects is approved (access change, David) and g2's producer
 exists. Development never installs this writer. `batch.cloudRunRollbackEnabled=false`
-removes the batch resources including its state ConfigMap; save state/audit
-evidence before removing them. `dryRun=true` retains state but suppresses all Cloud Run writes,
+removes the batch resources but retains its state ConfigMap with
+`helm.sh/resource-policy: keep`. Helm creates an empty shell and never templates
+the Job's data, including pending rollback intent; re-enabling reuses that state.
+See [failed-release recovery and state ownership](README.md#state-ownership-and-recovery-from-a-failed-helm-upgrade).
+`dryRun=true` retains state but suppresses all Cloud Run writes,
 including a previously pending rollback. Check active Jobs when stopping: new
 values do not change a running Job. A batch Job has an 840s deadline and no
 automatic Kubernetes retry; its durable intent allows the next scheduled Job

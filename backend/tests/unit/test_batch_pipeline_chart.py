@@ -184,8 +184,8 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     deployment = manifests['Deployment']
     assert deployment['spec']['progressDeadlineSeconds'] == 2400
     pod = deployment['spec']['template']['spec']
-    # Prod runs a fixed two-worker floor (one L4 node each); dev stays at one.
-    assert deployment['spec']['replicas'] == (2 if environment == 'prod' else 1)
+    # Image-only Helm rolls must preserve the approved four-worker prod floor.
+    assert deployment['spec']['replicas'] == (4 if environment == 'prod' else 1)
     assert pod['serviceAccountName'] == 'batch-pipeline-worker'
     # Prod drops the gke-nodepool pin: batch-pipeline-pool and its Spot sibling
     # share the service/env labels and omi.ai taints, so the autoscaler prefers

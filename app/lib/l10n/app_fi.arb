@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Lähetys epäonnistui — {duration} ääntä on tallessa puhelimessasi.",
     "audioUploadFailedTapRetry": "Lähetys epäonnistui — {duration} ääntä on tallessa puhelimessasi. Yritä uudelleen napauttamalla.",
     "audioUploadRetrying": "Yritetään lähetystä uudelleen… {duration} ääntä on tallessa puhelimessasi",
+    "captureNoAudioFromPendant": "Riipuksesta ei kuulu ääntä",
     "capturing": "Tallennetaan",
     "capturingPhotos": "Otetaan kuvia",
     "listeningTranscriptWillAppear": "Kuunnellaan… litterointi näkyy tässä.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Yritä yhdistää uudelleen",
     "captureBannerRetrySync": "Yritä synkronointia uudelleen",
     "captureWedgeBleExplanation": "Omi-laitteeseen muodostettu Bluetooth-yhteys on pysähtynyt, joten ääni ei päädy sovellukseen. Omi jatkaa tallentamista laitteella ja synkronoi, kun yhteys palaa. Uudelleenyrittäminen yhdistää linkin uudelleen; jos se epäonnistuu jatkuvasti, tarkista laittesi kohdasta Asetukset > Laite.",
+    "captureConnecting": "Yhdistetään…",
+    "captureNoAudioDetail": "Riipus on yhdistetty, mutta mikään ääni ei ala puhelimeesi",
     "captureIngressNeedsReconnect": "Ääni ei tavoita sovellusta — yhdistä Omi uudelleen",
     "captureIngressNeedsReconnectExplanation": "Sovellus ei enää saa ääntä Omi-laitteesta eikä onnistunut palauttamaan yhteyttä automaattisesti. Irrota ja yhdistä laite uudelleen — laiteasetuksista tai sammuttamalla ja käynnistämällä se. Laitteeseen tallennettu ääni synkronoidaan myöhemmin.",
     "captureStillRecording": "Tallennus jatkuu",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Valmis",
+    "openLoopAnswerRemind": "Muistuta myöhemmin",
+    "openLoopAnswerDrop": "Ohita"
 }

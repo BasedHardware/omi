@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Не вдалося завантажити — аудіо тривалістю {duration} збережено на вашому телефоні.",
     "audioUploadFailedTapRetry": "Не вдалося завантажити — аудіо тривалістю {duration} збережено на вашому телефоні. Торкніться, щоб повторити.",
     "audioUploadRetrying": "Повторна спроба завантаження… аудіо тривалістю {duration} збережено на вашому телефоні",
+    "captureNoAudioFromPendant": "Немає звуку з кулона",
     "capturing": "Запис",
     "capturingPhotos": "Зйомка фото",
     "listeningTranscriptWillAppear": "Слухаю… тут з'явиться транскрипція.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Спробувати підключити знову",
     "captureBannerRetrySync": "Повторити синхронізацію",
     "captureWedgeBleExplanation": "Зв'язок Bluetooth із вашим Omi перервався, тому звук не потрапляє в застосунок. Omi продовжує запис на пристрої та синхронізується, коли зв'язок відновиться. Повторна спроба знову встановлює зв'язок; якщо він і далі не працює, перевірте пристрій у розділі Налаштування > Пристрій.",
+    "captureConnecting": "З’єднання…",
+    "captureNoAudioDetail": "Кулон підключений, але звук не надходить на ваш телефон",
     "captureIngressNeedsReconnect": "Звук не доходить до застосунку — перепід'єднайте Omi",
     "captureIngressNeedsReconnectExplanation": "Застосунок більше не може отримувати звук із пристрою Omi і не зміг автоматично відновити з'єднання. Від'єднайте та знову під'єднайте пристрій — у налаштуваннях пристрою або вимкнувши та ввімкнувши його. Звук, збережений на пристрої, синхронізується пізніше.",
     "captureStillRecording": "Запис триває",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Готово",
+    "openLoopAnswerRemind": "Нагадати пізніше",
+    "openLoopAnswerDrop": "Відхилити"
 }

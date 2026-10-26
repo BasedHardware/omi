@@ -25,7 +25,7 @@ def idle_state(apps, processes):
     if not isinstance(apps, list) or len(apps) > 1:
         raise ValueError('ambiguous DEV installation metadata')
     if not apps:
-        return {'bundle_id': DEV, 'installed': False, 'running_pids': []}
+        return {'bundle_id': DEV, 'installed': False, 'running_pids': [], 'extension_pids': []}
     app = apps[0]
     if not isinstance(app, dict) or app.get('bundleIdentifier') != DEV:
         raise ValueError('installation metadata is not the exact DEV bundle')
@@ -33,6 +33,7 @@ def idle_state(apps, processes):
     if root.suffix != '.app' or not isinstance(processes, list):
         raise ValueError('incomplete DEV process admission metadata')
     pids = []
+    extensions = []
     for process in processes:
         if not isinstance(process, dict):
             raise ValueError('unclassified process metadata; cannot prove DEV is idle')
@@ -41,8 +42,19 @@ def idle_state(apps, processes):
             pid = process.get('processIdentifier')
             if type(pid) is not int or pid <= 0:
                 raise ValueError('missing DEV PID; cannot prove DEV is idle')
-            pids.append(pid)
-    return {'bundle_id': DEV, 'installed': True, 'running_pids': sorted(pids)}
+            relative = executable.relative_to(root)
+            if relative.parts == ('Runner',):
+                pids.append(pid)
+            elif (len(relative.parts) == 3 and relative.parts[0] == 'PlugIns'
+                  and relative.parts[1].endswith('.appex')
+                  and relative.parts[2] == relative.parts[1][:-len('.appex')]):
+                # iOS may launch a widget after an in-place install. It is not
+                # the main app: record it without blocking or terminating it.
+                extensions.append(pid)
+            else:
+                raise ValueError('unclassified DEV executable; cannot prove main app is idle')
+    return {'bundle_id': DEV, 'installed': True, 'running_pids': sorted(pids),
+            'extension_pids': sorted(extensions)}
 
 
 def query(device, kind, *options):

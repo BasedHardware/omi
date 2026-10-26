@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "اپ لوڈ ناکام ہو گیا — {duration} کا آڈیو آپ کے فون پر محفوظ ہے۔",
     "audioUploadFailedTapRetry": "اپ لوڈ ناکام ہو گیا — {duration} کا آڈیو آپ کے فون پر محفوظ ہے۔ دوبارہ کوشش کرنے کے لیے تھپتھپائیں۔",
     "audioUploadRetrying": "اپ لوڈ دوبارہ کیا جا رہا ہے… {duration} کا آڈیو آپ کے فون پر محفوظ ہے",
+    "captureNoAudioFromPendant": "پینڈنٹ سے کوئی آڈیو نہیں",
     "capturing": "کیپچر ہو رہا ہے",
     "capturingPhotos": "تصاویر کیپچر ہو رہی ہیں",
     "listeningTranscriptWillAppear": "سن رہے ہیں… ٹرانسکرپٹ یہاں ظاہر ہوگا۔",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "دوبارہ کنیکٹ کرنے کی کوشش کریں",
     "captureBannerRetrySync": "ہم وقت کرنے کی دوبارہ کوشش کریں",
     "captureWedgeBleExplanation": "آپ کے Omi سے بلوٹوتھ کنکشن رکاوٹ کا شکار ہے، اس لیے آڈیو ایپ تک نہیں پہنچ رہا۔ Omi ڈیوائس پر ریکارڈنگ جاری رکھتا ہے اور کنکشن بحال ہوتے ہی سنک ہو جائے گا۔ دوبارہ کوشش کرنے سے کنکشن دوبارہ قائم ہوتا ہے؛ اگر یہ بار بار ناکام ہو، تو سیٹنگز > ڈیوائس میں اپنا ڈیوائس چیک کریں۔",
+    "captureConnecting": "کنیکٹ ہو رہا ہے…",
+    "captureNoAudioDetail": "پینڈنٹ منسلک ہے، لیکن کوئی آڈیو آپ کے فون تک نہیں پہنچ رہا",
     "captureIngressNeedsReconnect": "آڈیو ایپ تک نہیں پہنچ رہا — اپنا Omi دوبارہ جوڑیں",
     "captureIngressNeedsReconnectExplanation": "ایپ اب Omi ڈیوائس سے آڈیو حاصل نہیں کر سکتی اور کنکشن خودکار طور پر بحال نہیں ہو سکا۔ ڈیوائس کو غیر منسلک کر کے دوبارہ جوڑیں — ڈیوائس کی ترتیبات سے، یا اسے بند کر کے چالو کر کے۔ ڈیوائس پر محفوظ آڈیو بعد میں سنک ہوگا۔",
     "captureStillRecording": "ریکارڈنگ جاری ہے",
@@ -11859,5 +11862,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "مکمل",
+    "openLoopAnswerRemind": "بعد میں یاد دلائیں",
+    "openLoopAnswerDrop": "چھوڑ دیں"
 }

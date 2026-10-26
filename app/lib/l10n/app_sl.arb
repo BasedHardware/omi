@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "Nalaganje ni uspelo — zvok v dolžini {duration} je shranjen v vašem telefonu.",
     "audioUploadFailedTapRetry": "Nalaganje ni uspelo — zvok v dolžini {duration} je shranjen v vašem telefonu. Tapnite za ponovni poskus.",
     "audioUploadRetrying": "Ponovni poskus nalaganja… zvok v dolžini {duration} je shranjen v vašem telefonu",
+    "captureNoAudioFromPendant": "Ni zvoka iz obeska",
     "capturing": "Zajemanje",
     "capturingPhotos": "Zajemanje fotografij",
     "listeningTranscriptWillAppear": "Poslušam… tukaj se bo prikazal prepis.",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "Poskusi znova povezati",
     "captureBannerRetrySync": "Ponovi sinhronizacijo",
     "captureWedgeBleExplanation": "Bluetooth-povezava z vašim Omijem se je ustavila, zato zvok ne prihaja v aplikacijo. Omi še naprej snema na napravi in se sinhronizira, ko se povezava obnovi. Ponovni poskus ponovno vzpostavi povezavo; če še naprej ne uspeva, preverite napravo v Nastavitve > Naprava.",
+    "captureConnecting": "Povezovanje…",
+    "captureNoAudioDetail": "Obesek je povezan, vendar do vašega telefona ne prihaja noben zvok",
     "captureIngressNeedsReconnect": "Zvok ne dosega aplikacije — znova priključite Omi",
     "captureIngressNeedsReconnectExplanation": "Aplikacija ne more več prejemati zvoka iz naprave Omi in ni uspela samodejno obnoviti povezave. Izklopite in znova priključite napravo — v nastavitvah naprave ali z izklopom in vklopom. Zvok, shranjen v napravi, se bo sinhroniziral pozneje.",
     "captureStillRecording": "Snemanje se nadaljuje",
@@ -11859,5 +11862,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Končano",
+    "openLoopAnswerRemind": "Spomni me pozneje",
+    "openLoopAnswerDrop": "Opusti"
 }

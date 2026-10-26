@@ -44,6 +44,9 @@ class ReasonFamily(StrEnum):
     STAGING_FENCE = 'staging_fence'
     HELD_CONTENT = 'held_content'
     SPEAKER_EVIDENCE = 'speaker_evidence'
+    NOTES_AGENT_FORCE = 'notes_agent_force'
+    NOTES_AGENT_TRANSPORT = 'notes_agent_transport'
+    SYNC_DISPATCH = 'sync_dispatch'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -135,6 +138,14 @@ class StagingRetryOutcome(StrEnum):
     EXHAUSTED = 'exhausted'
     PERMANENT = 'permanent'
     RETAINED = 'retained'
+
+
+class SyncDispatchFailureReason(StrEnum):
+    """Closed reasons for a sync v2 staging/dispatch refusal."""
+
+    UNKNOWN = 'unknown'
+    DISPATCH_HOLD = 'dispatch_hold'
+    STAGING_FAILED = 'staging_failed'
 
 
 class WorkOutcome(StrEnum):
@@ -410,6 +421,28 @@ class FallbackReason(StrEnum):
     ACQUIRE_UNSETTLED = 'acquire_unsettled'
     MARKER_TIMEOUT = 'marker_timeout'
     PREAMBLE_TIMEOUT = 'preamble_timeout'
+
+
+class NotesAgentForceReason(StrEnum):
+    """Why an agentic notes run was given a system-directed submit turn (first reason only)."""
+
+    UNKNOWN = 'unknown'
+    LOOKUP_CAP = 'lookup_cap'
+    SUBMISSION_REJECTED = 'submission_rejected'
+    TEXT_ONLY_RESPONSE = 'text_only_response'
+    PRIOR_REJECTION = 'prior_rejection'
+    TURN_LIMIT = 'turn_limit'
+    COST_LIMIT = 'cost_limit'
+    DEADLINE = 'deadline'
+
+
+class NotesAgentTransportReason(StrEnum):
+    """Why a notes run could not use the managed tool transport."""
+
+    UNKNOWN = 'unknown'
+    MISSING_OWNER = 'missing_owner'
+    BYOK = 'byok'
+    UNSUPPORTED_MODEL = 'unsupported_model'
 
 
 def reason_values(enum: type[StrEnum]) -> frozenset[str]:

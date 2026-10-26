@@ -10312,6 +10312,10 @@
     "@transcriptionUnavailableRecordingSaved": {
         "description": "Live-capture empty state when the plan is out of transcription credits"
     },
+    "captureNoAudioFromPendant": "No audio from pendant",
+    "@captureNoAudioFromPendant": {
+        "description": "Capture status when the pendant is connected but its audio never arrived and automatic recovery is exhausted. Same wording as the Live Activity notice."
+    },
     "capturing": "Capturing",
     "@capturing": {
         "description": "Live-capture app bar title while both audio and photos are being captured"
@@ -13197,6 +13201,14 @@
     "captureWedgeBleExplanation": "The Bluetooth link to your Omi stalled, so audio isn't reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.",
     "@captureWedgeBleExplanation": {
         "description": "Details sheet body for a BLE-health capture recovery episode: what stalled, that audio is safe, and what retry does."
+    },
+    "captureConnecting": "Connecting…",
+    "@captureConnecting": {
+        "description": "Capture status while a pendant link is being verified: no Listening claim and no timer until the subscription is confirmed (CaptureIngressHealth)."
+    },
+    "captureNoAudioDetail": "Pendant connected, but no audio is reaching your phone",
+    "@captureNoAudioDetail": {
+        "description": "Detail line under the no-audio-from-pendant warning: the link is fine, the audio is not flowing."
     },
     "captureIngressNeedsReconnect": "Audio isn't reaching the app — reconnect your Omi",
     "@captureIngressNeedsReconnect": {
@@ -17821,5 +17833,17 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "@livePreviewTranscribingMessage": {
         "description": "Explains, under Transcribing…, where and when the transcript appears; not an error"
+    },
+    "openLoopAnswerDone": "Done",
+    "@openLoopAnswerDone": {
+        "description": "Answer button on an open-loop Review card: the follow-up happened."
+    },
+    "openLoopAnswerRemind": "Remind me later",
+    "@openLoopAnswerRemind": {
+        "description": "Answer button on an open-loop Review card: ask again in two days."
+    },
+    "openLoopAnswerDrop": "Drop it",
+    "@openLoopAnswerDrop": {
+        "description": "Answer button on an open-loop Review card: stop asking about this follow-up."
     }
 }

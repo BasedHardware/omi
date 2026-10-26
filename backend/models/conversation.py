@@ -962,6 +962,9 @@ class MergeConversationsResponse(BaseModel):
     message: str = Field(default="Merge started", description="Status message")
     warning: Optional[str] = Field(default=None, description="Warning message (e.g., large time gaps)")
     conversation_ids: List[str] = Field(description="All conversation IDs being merged")
+    merged_conversation_id: Optional[str] = Field(
+        default=None, description="Stable target ID allocated at admission; the worker may not have created it yet"
+    )
 
 
 class SpeakerAnalytics(BaseModel):

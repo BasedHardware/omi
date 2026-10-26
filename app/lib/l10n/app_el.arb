@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Η μεταφόρτωση απέτυχε — ήχος διάρκειας {duration} διατηρείται στο τηλέφωνό σας.",
     "audioUploadFailedTapRetry": "Η μεταφόρτωση απέτυχε — ήχος διάρκειας {duration} διατηρείται στο τηλέφωνό σας. Πατήστε για επανάληψη.",
     "audioUploadRetrying": "Νέα προσπάθεια μεταφόρτωσης… ήχος διάρκειας {duration} διατηρείται στο τηλέφωνό σας",
+    "captureNoAudioFromPendant": "Δεν υπάρχει ήχος από το μενταγιόν",
     "capturing": "Καταγραφή",
     "capturingPhotos": "Λήψη φωτογραφιών",
     "listeningTranscriptWillAppear": "Ακρόαση… εδώ θα εμφανιστεί η απομαγνητοφώνηση.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Δοκιμή επανασύνδεσης",
     "captureBannerRetrySync": "Επανάληψη συγχρονισμού",
     "captureWedgeBleExplanation": "Η σύνδεση Bluetooth με το Omi σου διακόπηκε, οπότε ο ήχος δεν φτάνει στην εφαρμογή. Το Omi συνεχίζει να καταγράφει στη συσκευή και θα συγχρονιστεί μόλις επανέλθει η σύνδεση. Η επανάληψη επανασυνδέει τη σύνδεση· αν εξακολουθεί να αποτυγχάνει, έλεγξε τη συσκευή σου στις Ρυθμίσεις > Συσκευή.",
+    "captureConnecting": "Σύνδεση…",
+    "captureNoAudioDetail": "Το μενταγιόν είναι συνδεδεμένο, αλλά κανένας ήχος δεν φτάνει στο τηλέφωνό σας",
     "captureIngressNeedsReconnect": "Ο ήχος δεν φτάνει στην εφαρμογή — συνδέστε ξανά το Omi",
     "captureIngressNeedsReconnectExplanation": "Η εφαρμογή δεν μπορεί πια να λαμβάνει ήχο από τη συσκευή Omi και δεν κατάφερε να επαναφέρει τη σύνδεση αυτόματα. Αποσυνδέστε και συνδέστε ξανά τη συσκευή — από τις ρυθμίσεις της ή απενεργοποιώντας την και ενεργοποιώντας την. Ήχος που έχει αποθηκευτεί στη συσκευή θα συγχρονιστεί αργότερα.",
     "captureStillRecording": "Η εγγραφή συνεχίζεται",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Ολοκληρώθηκε",
+    "openLoopAnswerRemind": "Υπενθύμιση αργότερα",
+    "openLoopAnswerDrop": "Απόρριψη"
 }

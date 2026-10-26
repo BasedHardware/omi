@@ -809,6 +809,69 @@ def render_docs(environment='prod', *extra, overlay=True):
     return [obj for obj in yaml.safe_load_all(subprocess.check_output([*command, *extra], text=True)) if obj]
 
 
+@pytest.mark.parametrize('environment,batch_enabled', [('dev', False), ('prod', False), ('prod', True)])
+@pytest.mark.parametrize('enabled', [False, True])
+def test_helm_state_configmaps_keep_job_owned_fields_out_of_apply(environment, batch_enabled, enabled):
+    docs = render_docs(
+        environment,
+        '--set',
+        f'batch.enabled={str(batch_enabled).lower()}',
+        '--set',
+        f'enabled={str(enabled).lower()}',
+    )
+    state_names = {f'{environment}-omi-incluster-guards-state'}
+    if batch_enabled:
+        state_names.add(f'{environment}-omi-incluster-guards-batch-state')
+    states = {
+        obj['metadata']['name']: obj
+        for obj in docs
+        if obj['kind'] == 'ConfigMap' and obj['metadata']['name'] in state_names
+    }
+    assert set(states) == state_names
+    if not enabled:
+        # First migration directly from an old release to the kill switch must
+        # still update both existing shells, rather than pruning unannotated state.
+        assert len(docs) == len(states)
+    for obj in states.values():
+        # No data (including empty/null maps), immutable, hook or lookup payload:
+        # SSA must leave the live rollback marker, streak and pending intent alone.
+        assert set(obj) == {'apiVersion', 'kind', 'metadata'}
+        assert obj['metadata'] == {
+            'name': obj['metadata']['name'],
+            'namespace': f'{environment}-omi-backend',
+            'annotations': {'helm.sh/resource-policy': 'keep'},
+        }
+
+
+@pytest.mark.parametrize('has_annotations', [False, True])
+def test_first_parakeet_state_write_preserves_helm_annotations(monkeypatch, has_annotations):
+    client = FakeClient()
+    original_kube = client.kube
+    annotations = {
+        'helm.sh/resource-policy': 'keep',
+        'meta.helm.sh/release-name': 'prod-omi-incluster-guards',
+        'meta.helm.sh/release-namespace': 'prod-omi-backend',
+    }
+
+    def kube(path, patch=None):
+        if path == 'state' and patch is None:
+            metadata = {'resourceVersion': '7'}
+            if has_annotations:
+                metadata['annotations'] = deepcopy(annotations)
+            return {'metadata': metadata}
+        return original_kube(path, patch)
+
+    monkeypatch.setattr(client, 'kube', kube)
+    assert guard.run(client, False, 0) == 0
+    state_patch = next(patch for path, patch in client.patches if path == 'state')
+    persisted = state_patch[2]['value']
+    if has_annotations:
+        assert all(persisted[key] == value for key, value in annotations.items())
+    assert persisted['helm.sh/resource-policy'] == 'keep'
+    assert persisted['omi.me/parakeet-guard-verdict'] == 'WARMUP'
+    assert client.state['since'] == 0
+
+
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_helm_rbac_and_cpu_placement(environment):
     objs = render(environment)
@@ -863,7 +926,9 @@ def test_helm_rbac_and_cpu_placement(environment):
         adapter['prometheus']['url'].replace('{{ .Release.Namespace }}', f'{environment}-omi-monitoring') + ':9090'
     )
     assert env['PROMETHEUS_URL'] == expected_url
-    assert not render(environment, '--set', 'enabled=false')
+    disabled = render(environment, '--set', 'enabled=false')
+    assert set(disabled) == {'ConfigMap'}
+    assert disabled['ConfigMap']['metadata']['name'] == f'{environment}-omi-incluster-guards-state'
 
 
 def test_cloud_run_gate_refuses_unapproved_identity_or_namespace():
@@ -1136,6 +1201,16 @@ class Kube:
     @property
     def state(self):
         return json.loads(self.cm['data']['state'])
+
+
+def test_first_batch_state_write_initializes_an_empty_configmap(tmp_path):
+    kube, cloud = Kube(), Cloud()
+    kube.cm.pop('data')
+    kube.cm['metadata']['annotations'] = {'helm.sh/resource-policy': 'keep'}
+    assert batch.run(kube, cloud, tmp_path / 'missing-snapshot.json', now=100) == 1
+    assert kube.state['since'] == 100
+    assert kube.cm['metadata']['annotations'] == {'helm.sh/resource-policy': 'keep'}
+    assert not cloud.writes
 
 
 def sample(identity='id', since=0, now=1800):

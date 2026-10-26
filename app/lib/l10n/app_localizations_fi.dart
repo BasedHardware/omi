@@ -8600,6 +8600,9 @@ class AppLocalizationsFi extends AppLocalizations {
       'Litterointi ei ole käytettävissä — tallennus jatkuu ja äänesi tallennetaan.';
 
   @override
+  String get captureNoAudioFromPendant => 'Riipuksesta ei kuulu ääntä';
+
+  @override
   String get capturing => 'Tallennetaan';
 
   @override
@@ -11090,6 +11093,12 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'Omi-laitteeseen muodostettu Bluetooth-yhteys on pysähtynyt, joten ääni ei päädy sovellukseen. Omi jatkaa tallentamista laitteella ja synkronoi, kun yhteys palaa. Uudelleenyrittäminen yhdistää linkin uudelleen; jos se epäonnistuu jatkuvasti, tarkista laittesi kohdasta Asetukset > Laite.';
+
+  @override
+  String get captureConnecting => 'Yhdistetään…';
+
+  @override
+  String get captureNoAudioDetail => 'Riipus on yhdistetty, mutta mikään ääni ei ala puhelimeesi';
 
   @override
   String get captureIngressNeedsReconnect => 'Ääni ei tavoita sovellusta — yhdistä Omi uudelleen';
@@ -14588,4 +14597,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Valmis';
+
+  @override
+  String get openLoopAnswerRemind => 'Muistuta myöhemmin';
+
+  @override
+  String get openLoopAnswerDrop => 'Ohita';
 }

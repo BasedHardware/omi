@@ -26,6 +26,24 @@ def wav(seconds=6):
     return output.getvalue()
 
 
+def self_lid_context(*, language='en', confidence=0.99, probe_seconds=6.0, **overrides):
+    from utils.batch_pipeline.audio import INTAKE_CONTEXT_VERSION
+
+    return {
+        'version': INTAKE_CONTEXT_VERSION,
+        'owner_id': 'synthetic-owner',
+        'job_id': 'synthetic-job',
+        'content_id': 'synthetic-content',
+        'segment_id': 'synthetic-segment',
+        'source': 'omi',
+        'stt_language': language,
+        'stt_language_evidence': 'self_lid',
+        'stt_language_confidence': confidence,
+        'stt_language_probe_seconds': probe_seconds,
+        **overrides,
+    }
+
+
 @pytest.fixture(autouse=True)
 def defaults(monkeypatch):
     monkeypatch.delenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', raising=False)
@@ -127,6 +145,127 @@ def test_worker_long_lid_and_declared_supported_permission_remain_available():
     assert stt_language(context, duration_seconds=6) is None
     assert stt_language(context, duration_seconds=20) == 'en'
     assert stt_language({**context, 'stt_language_evidence': 'declared'}, duration_seconds=6) == 'en'
+
+
+@pytest.mark.parametrize(
+    'seconds,confidence,safe',
+    [(5.99, 0.984, False), (5.99, 0.985, True), (6.0, 0.949, False), (6.0, 0.95, True), (65.0, 0.95, True)],
+)
+def test_worker_self_lid_reapplies_shared_floor_and_probe_bound(seconds, confidence, safe):
+    from diarizer.batch_pipeline_models import stt_language
+
+    context = self_lid_context(confidence=confidence, probe_seconds=min(seconds, 30.0))
+    result = stt_language(
+        context,
+        duration_seconds=seconds,
+        expected_owner_id='synthetic-owner',
+        expected_segment_id='synthetic-segment',
+    )
+    assert (result == 'en') is safe
+
+
+@pytest.mark.parametrize('confidence', [True, False, float('nan'), float('inf'), -0.01, 0.949, 1.01, '0.99', None])
+def test_worker_self_lid_rejects_invalid_or_below_floor_confidence(confidence):
+    from diarizer.batch_pipeline_models import stt_language
+
+    result = stt_language(
+        self_lid_context(confidence=confidence),
+        duration_seconds=6,
+        expected_owner_id='synthetic-owner',
+        expected_segment_id='synthetic-segment',
+    )
+    assert result is None
+
+
+@pytest.mark.parametrize('probe_seconds', [None, True, float('nan'), float('inf'), -1, 0, 30.1, '6', 5.5])
+def test_worker_self_lid_rejects_invalid_or_mismatched_probe_duration(probe_seconds):
+    from diarizer.batch_pipeline_models import stt_language
+
+    result = stt_language(
+        self_lid_context(probe_seconds=probe_seconds),
+        duration_seconds=6,
+        expected_owner_id='synthetic-owner',
+        expected_segment_id='synthetic-segment',
+    )
+    assert result is None
+
+
+@pytest.mark.parametrize('duration_seconds', [None, True, float('nan'), float('inf'), 0, -1, '6'])
+def test_worker_self_lid_rejects_invalid_item_duration(duration_seconds):
+    from diarizer.batch_pipeline_models import stt_language
+
+    result = stt_language(
+        self_lid_context(),
+        duration_seconds=duration_seconds,
+        expected_owner_id='synthetic-owner',
+        expected_segment_id='synthetic-segment',
+    )
+    assert result is None
+
+
+@pytest.mark.parametrize(
+    'key,value',
+    [
+        ('owner_id', 'other-owner'),
+        ('segment_id', 'other-segment'),
+        ('source', ''),
+        ('job_id', None),
+        ('content_id', None),
+        ('version', 999),
+        ('version', True),
+    ],
+)
+def test_worker_self_lid_requires_matching_intake_provenance(key, value):
+    from diarizer.batch_pipeline_models import stt_language
+
+    context = self_lid_context()
+    context[key] = value
+    result = stt_language(
+        context,
+        duration_seconds=6,
+        expected_owner_id='synthetic-owner',
+        expected_segment_id='synthetic-segment',
+    )
+    assert result is None
+
+
+def test_worker_preserves_only_valid_unsupported_self_lid_as_multilingual_route():
+    from config.prerecorded_language import language_class
+    from diarizer.batch_pipeline_models import stt_language
+
+    result = stt_language(
+        self_lid_context(language='ar', confidence=0.0),
+        duration_seconds=6,
+        expected_owner_id='synthetic-owner',
+        expected_segment_id='synthetic-segment',
+    )
+    assert result == 'ar' and language_class(result) == 'unsupported'
+
+
+def test_worker_preserves_valid_unknown_self_lid_for_multilingual_route():
+    from config.prerecorded_language import language_class
+    from diarizer.batch_pipeline_models import stt_language
+
+    result = stt_language(
+        self_lid_context(language='und', confidence=0.0),
+        duration_seconds=6,
+        expected_owner_id='synthetic-owner',
+        expected_segment_id='synthetic-segment',
+    )
+    assert result == 'und' and language_class(result) == 'unknown'
+
+
+@pytest.mark.parametrize('language', ['', 'e', 'MULTI', 'en\u2603', 'en\n', 'en--us', 'a' * 9])
+def test_worker_rejects_malformed_self_lid_language(language):
+    from diarizer.batch_pipeline_models import stt_language
+
+    result = stt_language(
+        self_lid_context(language=language),
+        duration_seconds=6,
+        expected_owner_id='synthetic-owner',
+        expected_segment_id='synthetic-segment',
+    )
+    assert result is None
 
 
 def test_only_explicit_short_guard_kill_restores_the_previous_floor(monkeypatch):
@@ -341,6 +480,78 @@ async def test_cpu_intake_freezes_detection_proof_instead_of_primary_setting(mon
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('sample_value', [1, 2])
+async def test_self_lid_intake_context_roundtrips_through_real_batch_worker(monkeypatch, sample_value):
+    from types import SimpleNamespace
+    from utils.batch_pipeline import intake
+    from utils.batch_pipeline.audio import audio_unit, read_context
+    from utils.batch_pipeline.artifacts import ProtectionContext
+    from utils.stt import language_gate
+    from testing.sync_cloud_tasks_stack import batch_providers
+    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+    from utils.batch_pipeline.contracts import ValidationFailureWork
+
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    cohort = Mock(wraps=language_gate.enforced_for)
+    monkeypatch.setattr(language_gate, 'enforced_for', cohort)
+    monkeypatch.setattr(
+        language_gate,
+        'self_detect',
+        lambda _probe, *, surface: language_gate.SelfVerdict('en', 0.99, 0.99, 6.0),
+    )
+    monkeypatch.setattr(lid, 'detect', lambda *args, **kwargs: pytest.fail('valid self-LID must skip vendor LID'))
+    monkeypatch.setattr(batch_providers, 'write_event', Mock())
+    staged = []
+
+    def authorize(store, seed, snapshots):
+        snapshots['user'] = {'language': 'en', 'transcription_preferences': {'single_language_mode': False}}
+        return ProtectionContext('standard', 0)
+
+    def stage(work, body):
+        staged.append((work, body))
+        raise RuntimeError('stop after synthetic staging')
+
+    def units(*args, **kwargs):
+        yield audio_unit(100, bytes([sample_value, 0]) * 96000)
+
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda _: MemoryStore())
+    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
+    monkeypatch.setattr(intake, 'decode_units', units)
+    monkeypatch.setattr(intake, 'artifacts_for', lambda _: SimpleNamespace(stage_audio=stage))
+    response = await intake.accept_upload(
+        uid='synthetic-owner',
+        job_id='new',
+        content_id='new',
+        paths=[],
+        lane='fresh',
+        recording_age_seconds=0,
+        source='omi',
+        should_lock=False,
+        conversation_id=None,
+        client_device_id=None,
+        client_platform='ios',
+        policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=False),
+    )
+    assert response.status_code == 503 and len(staged) == 1
+    assert cohort.call_count == 1
+    assert cohort.call_args.args[0] == 'synthetic-owner'
+    work, body = staged[0]
+    context = read_context(body)
+    assert context['stt_language'] == 'en'
+    assert context['stt_language_evidence'] == 'self_lid'
+    assert context['stt_language_confidence'] == 0.99
+    assert context['stt_language_probe_seconds'] == 6.0
+
+    # ModeRoutingWorker composes the real StagedAudio decoder and PipelineWorker;
+    # only the model leaves are synthetic.
+    artifacts = SimpleNamespace(fetch_audio=lambda _: body, persist_result=Mock(return_value='synthetic-result'))
+    results = batch_providers.ModeRoutingWorker(artifacts).process_batch([work])
+    assert len(results) == 1 and not isinstance(results[0], ValidationFailureWork)
+    artifacts.persist_result.assert_called_once()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('mode', ['draining', 'dark'])
 @pytest.mark.parametrize(
     'user_language,single,code,confidence,route,frozen,probed,evidence',
@@ -415,18 +626,46 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
 def test_worker_accepts_self_lid_evidence_with_its_own_floors():
     from diarizer.batch_pipeline_models import stt_language
 
-    context = {
-        'stt_language': 'en',
-        'stt_language_evidence': 'self_lid',
-        'stt_language_confidence': 0.95,
-        'stt_language_probe_seconds': 8.0,
-    }
-    assert stt_language(context) == 'en'
+    context = self_lid_context(confidence=0.95, probe_seconds=8.0)
+    identity = dict(expected_owner_id='synthetic-owner', expected_segment_id='synthetic-segment')
+    assert stt_language(context, duration_seconds=8, **identity) == 'en'
     # Below one second the self gate never proves support on its own.
-    assert stt_language({**context, 'stt_language_probe_seconds': 0.5, 'stt_language_confidence': 0.999}) is None
+    assert (
+        stt_language(
+            {**context, 'stt_language_probe_seconds': 0.5, 'stt_language_confidence': 0.999},
+            duration_seconds=0.5,
+            **identity
+        )
+        is None
+    )
     # A short probe needs the higher floor, not the >=6 s one.
-    assert stt_language({**context, 'stt_language_probe_seconds': 3.0}) is None
-    assert stt_language({**context, 'stt_language_probe_seconds': 3.0, 'stt_language_confidence': 0.985}) == 'en'
+    assert stt_language({**context, 'stt_language_probe_seconds': 3.0}, duration_seconds=3, **identity) is None
+    assert (
+        stt_language(
+            {**context, 'stt_language_probe_seconds': 3.0, 'stt_language_confidence': 0.985},
+            duration_seconds=3,
+            **identity
+        )
+        == 'en'
+    )
+
+
+@pytest.mark.parametrize(
+    'seconds,confidence,expected',
+    [(6.000375, 0.95, 'en'), (5.999625, 0.95, None), (0.999625, 0.999, None), (1.000375, 0.999, 'en')],
+)
+def test_worker_accepts_legacy_rounded_probe_but_uses_measured_floor(seconds, confidence, expected):
+    from diarizer.batch_pipeline_models import stt_language
+
+    assert (
+        stt_language(
+            self_lid_context(confidence=confidence, probe_seconds=round(seconds, 3)),
+            duration_seconds=seconds,
+            expected_owner_id='synthetic-owner',
+            expected_segment_id='synthetic-segment',
+        )
+        == expected
+    )
 
 
 @pytest.mark.parametrize('probe_seconds', [None, '8', True, float('nan'), -1])
@@ -451,7 +690,7 @@ def test_batch_intake_enforces_the_self_gate_on_its_uid_cohort(monkeypatch):
         'self_detect',
         Mock(return_value=lid.language_gate.SelfVerdict('en', 0.99, 0.99, 8.0)),
     )
-    decision = lid.resolve_language('multi', wav(), surface='batch', cohort_key='synthetic-owner')
+    decision = lid.resolve_language('multi', wav(8), surface='batch', cohort_key='synthetic-owner')
     assert decision.evidence == 'self_lid' and decision.parakeet_safe
     client.post.assert_not_called()
 

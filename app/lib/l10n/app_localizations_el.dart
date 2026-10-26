@@ -8659,6 +8659,9 @@ class AppLocalizationsEl extends AppLocalizations {
       'Η απομαγνητοφώνηση δεν είναι διαθέσιμη — η εγγραφή συνεχίζεται και ο ήχος σας αποθηκεύεται.';
 
   @override
+  String get captureNoAudioFromPendant => 'Δεν υπάρχει ήχος από το μενταγιόν';
+
+  @override
   String get capturing => 'Καταγραφή';
 
   @override
@@ -11161,6 +11164,12 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'Η σύνδεση Bluetooth με το Omi σου διακόπηκε, οπότε ο ήχος δεν φτάνει στην εφαρμογή. Το Omi συνεχίζει να καταγράφει στη συσκευή και θα συγχρονιστεί μόλις επανέλθει η σύνδεση. Η επανάληψη επανασυνδέει τη σύνδεση· αν εξακολουθεί να αποτυγχάνει, έλεγξε τη συσκευή σου στις Ρυθμίσεις > Συσκευή.';
+
+  @override
+  String get captureConnecting => 'Σύνδεση…';
+
+  @override
+  String get captureNoAudioDetail => 'Το μενταγιόν είναι συνδεδεμένο, αλλά κανένας ήχος δεν φτάνει στο τηλέφωνό σας';
 
   @override
   String get captureIngressNeedsReconnect => 'Ο ήχος δεν φτάνει στην εφαρμογή — συνδέστε ξανά το Omi';
@@ -14679,4 +14688,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Ολοκληρώθηκε';
+
+  @override
+  String get openLoopAnswerRemind => 'Υπενθύμιση αργότερα';
+
+  @override
+  String get openLoopAnswerDrop => 'Απόρριψη';
 }

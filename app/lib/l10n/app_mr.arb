@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "अपलोड अयशस्वी — {duration} ऑडिओ तुमच्या फोनवर जतन केला आहे.",
     "audioUploadFailedTapRetry": "अपलोड अयशस्वी — {duration} ऑडिओ तुमच्या फोनवर जतन केला आहे. पुन्हा प्रयत्न करण्यासाठी टॅप करा.",
     "audioUploadRetrying": "अपलोड पुन्हा करत आहे… {duration} ऑडिओ तुमच्या फोनवर जतन केला आहे",
+    "captureNoAudioFromPendant": "पेंडंटमधून ऑडिओ नाही",
     "capturing": "कॅप्चर होत आहे",
     "capturingPhotos": "फोटो कॅप्चर होत आहेत",
     "listeningTranscriptWillAppear": "ऐकत आहे… येथे ट्रान्सक्रिप्ट दिसेल.",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "पुन्हा कनेक्ट करण्याचा प्रयत्न करा",
     "captureBannerRetrySync": "सिंक पुन्हा प्रयत्न करा",
     "captureWedgeBleExplanation": "तुमच्या Omi शी असलेला ब्लूटूथ दुवा तुटला आहे, म्हणून ऑडिओ अ‍ॅपपर्यंत पोहोचत नाही. Omi डिव्हाइसवर रेकॉर्डिंग सुरू ठेवते आणि दुवा पुन्हा स्थापित झाल्यावर सिंक होईल. पुन्हा प्रयत्न केल्याने दुवा पुन्हा जोडला जातो; तो सतत अयशस्वी होत असल्यास, सेटिंग्ज > डिव्हाइसमध्ये तुमचे डिव्हाइस तपासा.",
+    "captureConnecting": "जोडत आहे…",
+    "captureNoAudioDetail": "पेंडंट कनेक्टेड आहे, पण तुमच्या फोनपर्यंत कोणताही ऑडियो पोहोचत नाही",
     "captureIngressNeedsReconnect": "ऑडिओ अॅपपर्यंत पोहोचत नाही — तुमचे Omi पुन्हा कनेक्ट करा",
     "captureIngressNeedsReconnectExplanation": "अॅप आता Omi डिव्हाइसमधून ऑडिओ घेऊ शकत नाही आणि कनेक्शन आपोआप पुनर्स्थापित होऊ शकले नाही. डिव्हाइस डिस्कनेक्ट करा आणि पुन्हा कनेक्ट करा — डिव्हाइस सेटिंग्जमधून, किंवा बंद करून चालू करून. डिव्हाइसवर जतन केलेले ऑडियो नंतर सिंक होईल.",
     "captureStillRecording": "अजूनही रेकॉर्डिंग सुरू आहे",
@@ -11859,5 +11862,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "पूर्ण",
+    "openLoopAnswerRemind": "नंतर लक्षात आणून द्या",
+    "openLoopAnswerDrop": "टाकून द्या"
 }

@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Muat naik gagal — {duration} audio disimpan dalam telefon anda.",
     "audioUploadFailedTapRetry": "Muat naik gagal — {duration} audio disimpan dalam telefon anda. Ketik untuk cuba lagi.",
     "audioUploadRetrying": "Mencuba muat naik semula… {duration} audio disimpan dalam telefon anda",
+    "captureNoAudioFromPendant": "Tiada audio daripada loket",
     "capturing": "Merakam",
     "capturingPhotos": "Mengambil foto",
     "listeningTranscriptWillAppear": "Mendengar… transkrip akan dipaparkan di sini.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Cuba sambung semula",
     "captureBannerRetrySync": "Cuba segerak semula",
     "captureWedgeBleExplanation": "Pautan Bluetooth ke Omi anda tersekat, jadi audio tidak sampai ke aplikasi. Omi terus merakam pada peranti dan akan disegerakkan apabila pautan pulih. Mencuba semula menyambung semula pautan; jika ia terus gagal, semak peranti anda di Tetapan > Peranti.",
+    "captureConnecting": "Menyambung…",
+    "captureNoAudioDetail": "Pendant disambungkan, tetapi tiada audio mencapai telefon anda",
     "captureIngressNeedsReconnect": "Audio tidak mencapai aplikasi — sambungkan semula Omi anda",
     "captureIngressNeedsReconnectExplanation": "Aplikasi tidak lagi dapat menerima audio daripada peranti Omi dan tidak dapat memulihkan sambungan secara automatik. Putuskan sambungan dan sambungkan semula peranti — daripada tetapan peranti, atau dengan mematikan dan menyalakannya. Audio yang disimpan pada peranti akan disegerakkan kemudian.",
     "captureStillRecording": "Masih merakam",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Selesai",
+    "openLoopAnswerRemind": "Ingatkan saya nanti",
+    "openLoopAnswerDrop": "Buang"
 }

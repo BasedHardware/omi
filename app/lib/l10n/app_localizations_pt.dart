@@ -8608,6 +8608,9 @@ class AppLocalizationsPt extends AppLocalizations {
       'Transcrição indisponível — a gravação continua e seu áudio está sendo salvo.';
 
   @override
+  String get captureNoAudioFromPendant => 'Sem áudio do pingente';
+
+  @override
   String get capturing => 'Capturando';
 
   @override
@@ -11104,6 +11107,12 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'O link Bluetooth com o seu Omi parou, então o áudio não está chegando ao aplicativo. O Omi continua gravando no dispositivo e sincronizará assim que o link se recuperar. Tentar novamente reconecta o link; se continuar falhando, verifique seu dispositivo em Ajustes > Dispositivo.';
+
+  @override
+  String get captureConnecting => 'Conectando…';
+
+  @override
+  String get captureNoAudioDetail => 'O pingente está conectado, mas nenhum áudio está chegando ao seu telefone';
 
   @override
   String get captureIngressNeedsReconnect => 'O áudio não está chegando ao aplicativo — reconecte seu Omi';
@@ -14612,4 +14621,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Concluído';
+
+  @override
+  String get openLoopAnswerRemind => 'Lembrar-me mais tarde';
+
+  @override
+  String get openLoopAnswerDrop => 'Descartar';
 }

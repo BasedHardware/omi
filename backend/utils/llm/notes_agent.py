@@ -45,6 +45,7 @@ from utils.llm.shaped_agent import (
     validate_output,
 )
 from utils.model_text import ContextWindow
+from utils.observability.reasons import NotesAgentForceReason, ReasonFamily, reason_label
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,9 @@ EVIDENCE = 'evidence'
 SEND_BACKS = {FORMAT: 1, 'content': 1, EVIDENCE: 1}
 
 RUNS = PromCounter('omi_notes_agent_runs_total', 'Agentic notes runs by how they ended', ['stop'])
+FORCED_RUNS = PromCounter(
+    'omi_notes_agent_forced_runs_total', 'Agentic notes runs that required a system-directed submit turn', ['reason']
+)
 DECISIONS = PromCounter('omi_notes_agent_decisions_total', 'Agentic notes eligibility decisions', ['reason'])
 TOOL_USE = PromCounter('omi_notes_agent_tool_use_total', 'Agentic notes read-tool calls by tool', ['tool'])
 REPAIRS = PromCounter('omi_notes_agent_repairs_total', 'Static repairs and rejections of submissions', ['kind'])
@@ -113,6 +117,7 @@ class NotesAgentResult:
     cost_usd: float = 0.0
     latency_seconds: float = 0.0
     forced: bool = False
+    force_reason: Optional[str] = None
     rejections: list[str] = field(default_factory=list)
     repairs: list[str] = field(default_factory=list)
     tools: Counter = field(default_factory=Counter)
@@ -179,20 +184,25 @@ async def run_notes_agent(
     last_identity_repaired = False
     send_backs = SendBackBudget(SEND_BACKS)
     result = NotesAgentResult(submission=None, stop='no_submission')
-    state: dict[str, Any] = {'last_turn_cost': 0.0, 'force': False}
+    state: dict[str, Any] = {'last_turn_cost': 0.0, 'force': False, 'force_reason': None}
 
-    def must_submit(index: int) -> bool:
-        return bool(
-            state['force']
-            or index >= budget.max_turns - 1
-            or result.tool_calls >= budget.max_tool_calls
-            or result.cost_usd + state['last_turn_cost'] >= budget.max_cost_usd
-            or clock() - started >= budget.force_submit_after_seconds
-        )
+    def forced_reason(index: int) -> Optional[str]:
+        if state['force']:
+            return state['force_reason'] or 'prior_rejection'
+        if index >= budget.max_turns - 1:
+            return 'turn_limit'
+        if result.cost_usd + state['last_turn_cost'] >= budget.max_cost_usd:
+            return 'cost_limit'
+        if clock() - started >= budget.force_submit_after_seconds:
+            return 'deadline'
+        return None
 
     async def model_turn(_shape: Mount, messages: list[Any]) -> Turn:
-        forced = must_submit(result.turns)
+        reason = forced_reason(result.turns)
+        forced = reason is not None
         result.forced = result.forced or forced
+        if forced and result.force_reason is None:
+            result.force_reason = reason
         reply = await complete(messages, _force_submit_choice() if forced else 'required')
         result.turns += 1
         turn_cost = estimate_cost_usd(reply.prompt_tokens, reply.cached_tokens, reply.completion_tokens)
@@ -204,6 +214,7 @@ async def run_notes_agent(
         if not reply.tool_calls and not forced:
             # A text-only answer still ends in a submit: ask once, forced.
             state['force'] = True
+            state['force_reason'] = 'text_only_response'
             reply.tool_calls = []
         assistant = {
             'role': 'assistant',
@@ -288,9 +299,18 @@ async def run_notes_agent(
                     for kind in dict.fromkeys(problem.kind for problem in sent_back):
                         REPAIRS.labels(kind='rejected_' + kind).inc()
                     # A note sent back to investigate keeps its lookups; a format fix resubmits next turn.
-                    state['force'] = result.tool_calls >= budget.min_tool_calls and not any(
-                        problem.kind == EVIDENCE for problem in sent_back
+                    # With no lookups left there is nothing to investigate, so evidence rejections force too.
+                    at_cap = result.tool_calls >= budget.max_tool_calls
+                    state['force'] = (
+                        state.get('force', False)
+                        or at_cap
+                        or (
+                            result.tool_calls >= budget.min_tool_calls
+                            and not any(problem.kind == EVIDENCE for problem in sent_back)
+                        )
                     )
+                    if state['force'] and not state.get('force_reason'):
+                        state['force_reason'] = 'lookup_cap' if at_cap else 'submission_rejected'
                     responses.append(_tool_reply(call, {'status': 'rejected', 'fix': verdict}))
                     continue
                 accepted = payload
@@ -301,6 +321,7 @@ async def run_notes_agent(
                 continue
             if result.tool_calls >= budget.max_tool_calls:
                 state['force'] = True
+                state['force_reason'] = 'lookup_cap'
                 responses.append(_tool_reply(call, {'error': 'lookup budget exhausted; call submit_notes now'}))
                 continue
             result.tool_calls += 1
@@ -426,6 +447,10 @@ def record_decision(reason: str) -> None:
 
 def record_run(result: NotesAgentResult) -> None:
     RUNS.labels(stop=result.stop).inc()
+    if result.forced:
+        FORCED_RUNS.labels(
+            reason=reason_label(ReasonFamily.NOTES_AGENT_FORCE, result.force_reason or 'unknown', NotesAgentForceReason)
+        ).inc()
     TOOL_CALLS.observe(result.tool_calls)
     TURNS.observe(max(1, result.turns))
     COST.observe(result.cost_usd)
@@ -440,7 +465,7 @@ def record_run(result: NotesAgentResult) -> None:
     logger.info(
         'conversation_notes_agent_receipt stop=%s turns=%s tool_calls=%s tools=%s prompt_tokens=%s '
         'cached_tokens=%s completion_tokens=%s est_cost_usd=%.5f cache_ratio=%.3f latency_seconds=%.1f '
-        'forced=%s rejections=%s repairs=%s',
+        'forced=%s force_reason=%s rejections=%s repairs=%s',
         result.stop,
         result.turns,
         result.tool_calls,
@@ -452,6 +477,7 @@ def record_run(result: NotesAgentResult) -> None:
         result.cache_ratio,
         result.latency_seconds,
         result.forced,
+        result.force_reason or 'none',
         len(result.rejections),
         ','.join(result.repairs) or 'none',
     )

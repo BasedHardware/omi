@@ -7,6 +7,7 @@ from typing import Protocol, Sequence
 
 
 from config.batch_pipeline import Priority
+from config.batch_language_recovery import language_guarded, below_silence_threshold
 from utils.batch_pipeline.capacity import PoolCapacity as PoolCapacity
 from utils.batch_pipeline.errors import validate_worker_failure
 from utils.observability.reasons import WorkerValidationReason, WorkOutcome, reason_values
@@ -118,6 +119,31 @@ def validate_measured_vad(seconds, duration=None):
     return seconds
 
 
+def held_vad_census(job, seconds=None):
+    """Held speech is cumulative evidence: a later lower estimate cannot erase it."""
+    duration = job['duration_seconds']
+    prior = validate_measured_vad(job.get('measured_held_vad_speech_seconds'), duration)
+    measured = validate_measured_vad(seconds, duration)
+    known = [value for value in (prior, measured) if value is not None]
+    return max(known) if known else None
+
+
+def held_silence_allowed(job, seconds=None, *, independent=False):
+    """Every route respects prior speech; guarded subframes need independent proof."""
+    census = held_vad_census(job, seconds)
+    if census is None:
+        return False
+    if independent:
+        return below_silence_threshold(census)
+    return not language_guarded(job) and census == 0
+
+
+def held_result_allowed(job, outcome, seconds=None, *, independent=False):
+    if outcome == 'silence':
+        return held_silence_allowed(job, seconds, independent=independent)
+    return outcome != 'no_recoverable_speech' or not language_guarded(job)
+
+
 def vad_receipt(audio_uri, captured_samples, speech_seconds):
     return {
         'version': 1,
@@ -153,8 +179,7 @@ def attach_held_vad(job, seconds=None, receipt=None, *, receipt_field='worker_va
         ):
             raise ValueError('invalid bound VAD receipt')
         job[receipt_field] = dict(receipt)
-    if measured is not None or 'measured_held_vad_speech_seconds' not in job:
-        job['measured_held_vad_speech_seconds'] = measured
+    job['measured_held_vad_speech_seconds'] = held_vad_census(job, measured)
 
 
 @dataclass(frozen=True)
