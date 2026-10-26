@@ -56,6 +56,7 @@ static volatile bool mic_running = false;
  * both this module and the nrfx PDM driver log a spurious error). */
 static K_SEM_DEFINE(mic_stopped_sem, 0, 1);
 static atomic_t mic_stop_req = ATOMIC_INIT(0);
+static atomic_t mic_user_paused = ATOMIC_INIT(0);
 
 #define MAX_FRAMES (MAX_SAMPLE_RATE / 10)
 static int16_t mono_buffer[MAX_FRAMES];
@@ -273,7 +274,7 @@ void set_mic_callback(mix_handler callback)
     callback_func = callback;
 }
 
-void mic_pause()
+static void mic_pause_internal(void)
 {
     if (!mic_running) {
         return;
@@ -292,7 +293,7 @@ void mic_pause()
     }
 }
 
-void mic_resume()
+static void mic_resume_internal(void)
 {
     LOG_INF("Resuming microphone");
     if (!mic_running) {
@@ -305,9 +306,41 @@ void mic_resume()
     }
 }
 
+void mic_pause()
+{
+    atomic_set(&mic_user_paused, 1);
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    atomic_clear(&aad_req_sleep);
+    atomic_clear(&aad_wake_pending);
+    if (atomic_get(&aad_in_sleep)) {
+        (void) gpio_pin_interrupt_configure_dt(&aad_wake, GPIO_INT_DISABLE);
+        return;
+    }
+#endif
+    mic_pause_internal();
+}
+
+void mic_resume()
+{
+    atomic_clear(&mic_user_paused);
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    if (atomic_get(&aad_in_sleep)) {
+        atomic_set(&aad_wake_pending, 1);
+        k_sem_give(&aad_sem);
+        return;
+    }
+#endif
+    mic_resume_internal();
+}
+
 bool mic_is_running()
 {
     return mic_running;
+}
+
+bool mic_is_paused(void)
+{
+    return atomic_get(&mic_user_paused) != 0;
 }
 
 bool mic_in_aad_sleep(void)
@@ -362,8 +395,8 @@ static void aad_wake_isr(const struct device *dev, struct gpio_callback *cb, uin
 /* Drop the mic into T5838 hardware AAD sleep (aad thread context). */
 static void enter_hw_aad(void)
 {
-    aad_wake_irq(false); /* mask WAKE during config bit-bang */
-    mic_pause();         /* stop PDM peripheral */
+    aad_wake_irq(false);  /* mask WAKE during config bit-bang */
+    mic_pause_internal(); /* stop PDM peripheral */
     k_msleep(AAD_PDM_SETTLE_MS);
     pdm_hw_disable();                   /* fully release the CLK pin for bit-banging */
     t5838_aad_enter();                  /* program AAD mode-A + clock into sleep */
@@ -400,7 +433,7 @@ static void exit_hw_aad(void)
     atomic_set(&aad_in_sleep, 0);
     atomic_set(&aad_woke, 1); /* reset silence timer in mic ctx */
     sd_request_power(true);   /* power on + remount SD before audio starts flowing */
-    mic_resume();             /* dmic START reclaims CLK via pinctrl */
+    mic_resume_internal();    /* dmic START reclaims CLK via pinctrl */
     LOG_INF("AAD: WAKE -> mic resumed");
 }
 
@@ -416,12 +449,12 @@ static void aad_thread_fn(void *p1, void *p2, void *p3)
          * stays asleep and adds no idle CPU wakeups. */
         k_sem_take(&aad_sem, K_FOREVER);
 
-        if (atomic_cas(&aad_req_sleep, 1, 0) && !atomic_get(&aad_in_sleep)) {
+        if (atomic_cas(&aad_req_sleep, 1, 0) && !atomic_get(&aad_in_sleep) && !atomic_get(&mic_user_paused)) {
             enter_hw_aad();
         }
 
         if (atomic_cas(&aad_wake_pending, 1, 0)) {
-            if (atomic_get(&aad_in_sleep)) {
+            if (atomic_get(&aad_in_sleep) && !atomic_get(&mic_user_paused)) {
                 exit_hw_aad();
             }
         }
