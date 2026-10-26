@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "上传失败 — {duration} 的音频已保留在你的手机上。",
     "audioUploadFailedTapRetry": "上传失败 — {duration} 的音频已保留在你的手机上。轻点重试。",
     "audioUploadRetrying": "正在重试上传… {duration} 的音频已保留在你的手机上",
+    "captureNoAudioFromPendant": "挂件没有音频",
     "capturing": "正在捕获",
     "capturingPhotos": "正在拍摄照片",
     "listeningTranscriptWillAppear": "正在聆听… 文字记录将显示在这里。",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "尝试重新连接",
     "captureBannerRetrySync": "重试同步",
     "captureWedgeBleExplanation": "与 Omi 的蓝牙连接已中断，因此音频无法传输到应用。Omi 会继续在设备上录音，并在连接恢复后同步。重试会重新建立连接；如果仍然失败，请在“设置 > 设备”中检查你的设备。",
+    "captureConnecting": "正在连接…",
+    "captureNoAudioDetail": "挂件已连接，但没有音频传输到您的手机",
     "captureIngressNeedsReconnect": "音频未送达应用 — 请重新连接您的 Omi",
     "captureIngressNeedsReconnectExplanation": "应用已无法再从 Omi 设备接收音频，且未能自动恢复连接。请断开并重新连接设备 — 在设备设置中操作，或将设备关机后重启。设备上已保存的音频稍后会同步。",
     "captureStillRecording": "仍在录音",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "完成",
+    "openLoopAnswerRemind": "稍后提醒",
+    "openLoopAnswerDrop": "放弃"
 }

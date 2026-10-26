@@ -181,8 +181,9 @@ extension _WalJobCompletion on LocalWalSyncImpl {
               // backend stale guard (mark_job_completed only sets 'failed'
               // when total>0). String hint is a fallback if the structural
               // signal ever becomes ambiguous.
-              final capacityLimited = syncJobIsBackendBusy(s) || isPacedBackfillReasonCode(s.reasonCode);
-              if (capacityLimited) {
+              final capacityLimited = syncJobIsBackendBusy(s);
+              final admissionPaced = capacityLimited || isPacedSyncAdmissionReasonCode(s.reasonCode);
+              if (admissionPaced) {
                 SyncRateLimiter.instance.markLimited(
                   retryAfterSeconds: s.retryAfter ?? 600,
                   reason: RateLimitReason.backendBusy,
@@ -195,7 +196,7 @@ extension _WalJobCompletion on LocalWalSyncImpl {
               // and re-spent the budget, with the needs-attention banner never
               // clearing. Retire it to a terminal state instead, the way an
               // out-of-window rejection already does. The file stays on disk.
-              final permanentInput = !capacityLimited && syncJobFailureIsPermanent(s);
+              final permanentInput = !admissionPaced && syncJobFailureIsPermanent(s);
               for (final w in members) {
                 if (!_stillUploadedUnder(w, jobId)) continue;
                 changed = true;
@@ -207,7 +208,7 @@ extension _WalJobCompletion on LocalWalSyncImpl {
                 } else {
                   w.status = WalStatus.miss;
                   w.jobId = null;
-                  if (!capacityLimited) {
+                  if (!admissionPaced) {
                     w.retryCount += 1;
                     w.lastRetryAt = nowSecs;
                   }
@@ -222,8 +223,9 @@ extension _WalJobCompletion on LocalWalSyncImpl {
                   'totalSegments': s.totalSegments,
                   'retryCount': w.retryCount,
                   'capacityLimited': capacityLimited,
+                  'admissionPaced': admissionPaced,
                   'permanentInput': permanentInput,
-                  'retryCountBumped': !capacityLimited,
+                  'retryCountBumped': !admissionPaced,
                 });
               }
             }

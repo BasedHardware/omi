@@ -892,6 +892,12 @@ OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL = Counter(
     ['mode', 'app_build'],
 )
 
+OMI_SYNC_DISPATCH_FAILURES_TOTAL = Counter(
+    'omi_sync_dispatch_failures_total',
+    'Sync v2 Cloud Tasks staging failures by closed reason',
+    ['reason'],
+)
+
 OMI_SYNC_LANE_JOBS_TOTAL = Counter(
     'omi_sync_lane_jobs_total',
     'Sync jobs admitted by lane, capture-time trust, and outcome',

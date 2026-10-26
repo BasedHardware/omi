@@ -8613,6 +8613,9 @@ class AppLocalizationsUk extends AppLocalizations {
       'Транскрипція недоступна — запис триває, а ваше аудіо зберігається.';
 
   @override
+  String get captureNoAudioFromPendant => 'Немає звуку з кулона';
+
+  @override
   String get capturing => 'Запис';
 
   @override
@@ -11111,6 +11114,12 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'Зв\'язок Bluetooth із вашим Omi перервався, тому звук не потрапляє в застосунок. Omi продовжує запис на пристрої та синхронізується, коли зв\'язок відновиться. Повторна спроба знову встановлює зв\'язок; якщо він і далі не працює, перевірте пристрій у розділі Налаштування > Пристрій.';
+
+  @override
+  String get captureConnecting => 'З’єднання…';
+
+  @override
+  String get captureNoAudioDetail => 'Кулон підключений, але звук не надходить на ваш телефон';
 
   @override
   String get captureIngressNeedsReconnect => 'Звук не доходить до застосунку — перепід\'єднайте Omi';
@@ -14614,4 +14623,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Готово';
+
+  @override
+  String get openLoopAnswerRemind => 'Нагадати пізніше';
+
+  @override
+  String get openLoopAnswerDrop => 'Відхилити';
 }

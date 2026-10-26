@@ -69,6 +69,7 @@ from config.refactor_modes import serving_for
 from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
+from utils.conversations.relevance_media_metrics import observe_owner_memory_admission
 from utils.llm.notes_short_clip import quiet_minimum
 from utils.llm.output_language import resolve_output_language
 from utils.conversations.deterministic_minimum import (
@@ -120,7 +121,11 @@ from utils.conversations.projection_payload import (
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
-from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
+from utils.conversations.owner_attribution import (
+    OwnerAttributionEvidence,
+    may_attribute_to_owner,
+    confident_owner_segments,
+)
 from utils.conversations.speaker_resolution import resolve_speakers_for_processing
 from utils.observability.owner_identity_retry import identity_pass
 from utils.memory.memory_service import MemoryService
@@ -1019,6 +1024,16 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     # configuration contract that Pusher qualification is meant to exercise.
     db_client = getattr(db_client_module, 'db', None)
     MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
+    if serving_for('SPEAKER_EVIDENCE_MODE', uid) and conversation.source != ConversationSource.external_integration:
+        owner_segments = confident_owner_segments(conversation.transcript_segments)
+        observe_owner_memory_admission(len(conversation.transcript_segments), len(owner_segments))
+        if not owner_segments:
+            # No new memory and no empty replacement of earlier memories. A
+            # later confident resolution/manual correction may retry normally.
+            return
+        # Quote grounding and the L1 fingerprint must see this same owner-only
+        # input. Never mutate the retained transcript or the notes/task input.
+        conversation = conversation.model_copy(update={'transcript_segments': owner_segments})
     sweep_owned_mode = _sweep_owned_writer_mode(uid)
     if sweep_owned_mode is not None:
         logger.info(
@@ -2763,6 +2778,12 @@ def process_conversation(
     conversation.status = ConversationStatus.completed
     content_excluded = exclude_from_derived(uid, conversation, consumer='notes')
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
+    if user_kept and not conversation.discarded:
+        # Commit restore authority with visibility, before derived work can fail.
+        payload['sync_relevance_user_kept'] = True
+        if conversation.sync_relevance == 'review':
+            conversation.sync_relevance = 'keep'
+            payload['sync_relevance'] = 'keep'
     if serving_for('MEDIA_NOISE_MODE', uid):
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True if content_excluded else None
     from config.sync_reprocess import dedupe_enabled

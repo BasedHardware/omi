@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "ההעלאה נכשלה — {duration} של אודיו נשמרו בטלפון שלך.",
     "audioUploadFailedTapRetry": "ההעלאה נכשלה — {duration} של אודיו נשמרו בטלפון שלך. יש להקיש כדי לנסות שוב.",
     "audioUploadRetrying": "מנסה להעלות שוב… {duration} של אודיו נשמרו בטלפון שלך",
+    "captureNoAudioFromPendant": "אין שמע מהתליון",
     "capturing": "מתבצעת הקלטה",
     "capturingPhotos": "מצלם תמונות",
     "listeningTranscriptWillAppear": "מאזין… התמלול יופיע כאן.",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "נסה להתחבר מחדש",
     "captureBannerRetrySync": "נסה שוב לסנכרן",
     "captureWedgeBleExplanation": "חיבור ה-Bluetooth ל-Omi שלך נקטע, לכן השמע לא מגיע לאפליקציה. Omi ממשיך להקליט במכשיר ויסתנכרן ברגע שהחיבור יחזור. ניסיון חוזר מחבר מחדש את הקישור; אם זה ממשיך להיכשל, בדוק את המכשיר בהגדרות > מכשיר.",
+    "captureConnecting": "מתחבר…",
+    "captureNoAudioDetail": "התליון מחובר, אבל שמע לא מגיע לטלפון שלך",
     "captureIngressNeedsReconnect": "האודיו לא מגיע לאפליקציה — חבר מחדש את ה-Omi",
     "captureIngressNeedsReconnectExplanation": "האפליקציה כבר לא מצליחה לקבל אודיו ממכשיר ה-Omi ולא הצליחה לשחזר את החיבור אוטומטית. נתק וחבר מחדש את המכשיר — מהגדרות המכשיר או על ידי כיבוי והדלקה. אודיו שנשמר במכשיר יסונכרן מאוחר יותר.",
     "captureStillRecording": "עדיין מקליט",
@@ -11859,5 +11862,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "בוצע",
+    "openLoopAnswerRemind": "הזכר לי מאוחר יותר",
+    "openLoopAnswerDrop": "ותר על זה"
 }

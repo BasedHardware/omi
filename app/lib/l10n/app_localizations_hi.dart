@@ -8581,6 +8581,9 @@ class AppLocalizationsHi extends AppLocalizations {
       'ट्रांसक्रिप्शन उपलब्ध नहीं है — रिकॉर्डिंग जारी है और आपका ऑडियो सहेजा जा रहा है।';
 
   @override
+  String get captureNoAudioFromPendant => 'पेंडेंट से कोई ऑडियो नहीं';
+
+  @override
   String get capturing => 'कैप्चर हो रहा है';
 
   @override
@@ -11068,6 +11071,12 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'आपके Omi से ब्लूटूथ कनेक्शन रुक गया है, इसलिए ऑडियो ऐप तक नहीं पहुँच रहा है। Omi डिवाइस पर रिकॉर्डिंग जारी रखता है और कनेक्शन लौटते ही सिंक हो जाएगा। फिर से कोशिश करने पर कनेक्शन दोबारा जुड़ता है; अगर यह बार-बार विफल रहे, तो सेटिंग > डिवाइस में अपना डिवाइस जाँचें।';
+
+  @override
+  String get captureConnecting => 'कनेक्ट हो रहा है…';
+
+  @override
+  String get captureNoAudioDetail => 'पेंडेंट कनेक्ट है, लेकिन कोई ऑडियो आपके फ़ोन तक नहीं पहुँच रहा है';
 
   @override
   String get captureIngressNeedsReconnect => 'ऑडियो ऐप तक नहीं पहुँच रहा — अपना Omi फिर से कनेक्ट करें';
@@ -14567,4 +14576,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'पूर्ण';
+
+  @override
+  String get openLoopAnswerRemind => 'बाद में याद दिलाएँ';
+
+  @override
+  String get openLoopAnswerDrop => 'इसे छोड़ दें';
 }

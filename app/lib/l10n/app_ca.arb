@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Error en pujar — s'han conservat {duration} d'àudio al telèfon.",
     "audioUploadFailedTapRetry": "Error en pujar — s'han conservat {duration} d'àudio al telèfon. Toca per tornar-ho a provar.",
     "audioUploadRetrying": "Tornant a provar la pujada… s'han conservat {duration} d'àudio al telèfon",
+    "captureNoAudioFromPendant": "Sense àudio del penjoll",
     "capturing": "Capturant",
     "capturingPhotos": "Capturant fotos",
     "listeningTranscriptWillAppear": "Escoltant… aquí apareixerà una transcripció.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Prova de tornar a connectar",
     "captureBannerRetrySync": "Reintenta la sincronització",
     "captureWedgeBleExplanation": "L'enllaç Bluetooth amb el vostre Omi s'ha aturat, per tant l'àudio no arriba a l'aplicació. L'Omi segueix enregistrant al dispositiu i se sincronitzarà quan l'enllaç es recuperi. Reintentar torna a connectar l'enllaç; si continua fallant, comproveu el dispositiu a Configuració > Dispositiu.",
+    "captureConnecting": "S’està connectant…",
+    "captureNoAudioDetail": "El penjoll està connectat, però cap àudio no arriba al telèfon",
     "captureIngressNeedsReconnect": "L'àudio no arriba a l'aplicació — torneu a connectar l'Omi",
     "captureIngressNeedsReconnectExplanation": "L'aplicació ja no pot rebre àudio del dispositiu Omi i no ha pogut restaurar la connexió automàticament. Desconnecteu i torneu a connectar el dispositiu — des de la configuració del dispositiu o apagant-lo i engegant-lo. L'àudio desat al dispositiu se sincronitzarà més tard.",
     "captureStillRecording": "Encara s'està gravant",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Fet",
+    "openLoopAnswerRemind": "Recorda-m'ho més tard",
+    "openLoopAnswerDrop": "Descarta-ho"
 }

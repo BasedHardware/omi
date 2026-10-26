@@ -8596,6 +8596,9 @@ class AppLocalizationsNo extends AppLocalizations {
       'Transkripsjon er ikke tilgjengelig — opptaket fortsetter og lyden din lagres.';
 
   @override
+  String get captureNoAudioFromPendant => 'Ingen lyd fra anheng';
+
+  @override
   String get capturing => 'Tar opp';
 
   @override
@@ -11089,6 +11092,12 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'Bluetooth-koblingen til Omi-en din har stanset, så lyden når ikke fram til appen. Omi fortsetter å ta opp på enheten og synkroniseres når koblingen er tilbake. Prøv igjen kobler til igjen; hvis det fortsetter å feile, sjekk enheten din under Innstillinger > Enhet.';
+
+  @override
+  String get captureConnecting => 'Kobler til…';
+
+  @override
+  String get captureNoAudioDetail => 'Pendanten er koblet til, men ingen lyd når telefonen din';
 
   @override
   String get captureIngressNeedsReconnect => 'Lyden når ikke appen — koble til Omi-enheten din på nytt';
@@ -14587,4 +14596,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Ferdig';
+
+  @override
+  String get openLoopAnswerRemind => 'Minn meg senere';
+
+  @override
+  String get openLoopAnswerDrop => 'Dropp det';
 }

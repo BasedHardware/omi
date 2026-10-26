@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Uppladdningen misslyckades — {duration} ljud finns kvar på din telefon.",
     "audioUploadFailedTapRetry": "Uppladdningen misslyckades — {duration} ljud finns kvar på din telefon. Tryck för att försöka igen.",
     "audioUploadRetrying": "Försöker ladda upp igen… {duration} ljud finns kvar på din telefon",
+    "captureNoAudioFromPendant": "Inget ljud från hänget",
     "capturing": "Spelar in",
     "capturingPhotos": "Tar foton",
     "listeningTranscriptWillAppear": "Lyssnar… en transkription visas här.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Försök ansluta igen",
     "captureBannerRetrySync": "Försök synka igen",
     "captureWedgeBleExplanation": "Bluetooth-länken till din Omi har stannat, så ljudet når inte appen. Omi fortsätter spela in på enheten och synkar när länken återkommer. Försök igen återupprättar länken; om det fortsätter att misslyckas, kontrollera din enhet i Inställningar > Enhet.",
+    "captureConnecting": "Ansluter…",
+    "captureNoAudioDetail": "Pendanten är ansluten, men ingen ljud når din telefon",
     "captureIngressNeedsReconnect": "Ljudet når inte appen — anslut din Omi igen",
     "captureIngressNeedsReconnectExplanation": "Appen kan inte längre ta emot ljud från Omi-enheten och kunde inte återställa anslutningen automatiskt. Koppla från och anslut enheten igen — från enhetsinställningarna eller genom att stänga av och slå på den. Ljud som sparats på enheten synkroniseras senare.",
     "captureStillRecording": "Spelar fortfarande in",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Klar",
+    "openLoopAnswerRemind": "Påminn mig senare",
+    "openLoopAnswerDrop": "Släpp det"
 }

@@ -34,6 +34,7 @@ from models.agent_edit import HarnessEdit
 from utils.agent_capabilities import tools as dream_tools
 from utils.agent_capabilities import verifiers
 from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_verify
+from utils import dream_required_intake
 from utils.dream_cost import (
     conservative_attempt_micro,
     minute_burndown_tokens,
@@ -47,6 +48,8 @@ from utils.dream_metrics import record_pass, error_code, record_reclaimed
 from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
 from utils.model_text import ContextWindow
+from utils.memory.required_intake import retry_sweep
+from utils.memory.canonical_consolidation import complete_receipted_required_intake
 
 TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
 logger = logging.getLogger(__name__)
@@ -188,7 +191,14 @@ async def run_session(
     }
     session = Session(
         uid,
-        OwnerSearch(uid),
+        OwnerSearch(
+            uid,
+            required_candidates={
+                ref: row[dream_required_intake.MARKER]
+                for ref, row in records.items()
+                if dream_required_intake.MARKER in row
+            },
+        ),
         limits,
         seed,
         authority='dream',
@@ -198,6 +208,7 @@ async def run_session(
         # Dream reviews the owner's day: temporal search defaults to the trailing 24 hours.
         context_window=ContextWindow.trailing_day(label='dream day'),
     )
+    session.counters['search_embedding_token_upper_bound'] += seed.get('required_intake_embedding_tokens', 0)
     stage = 'session'
 
     async def active():
@@ -207,6 +218,8 @@ async def run_session(
             raise ValueError('dream_disabled')
         if lease is not None:
             await run_blocking(db_executor, dream_store.assert_lease, uid, lease['run_id'])
+        if seed.get('required_intake_candidates'):
+            await run_blocking(db_executor, dream_required_intake.assert_owner_active, uid)
         stage = previous
 
     session.check_active = active
@@ -589,7 +602,10 @@ async def run_session(
                     # The default two-verifier path records unverified and does not
                     # enqueue it. A non-default chain's unverified result uses the
                     # same offer path as a split. Disagreement is never offered.
-                    if decision == 'disagree' or (decision == 'unverified' and default_policy):
+                    if item.kind == 'resolve_required_memory' and (decision != 'agree' or not auto_allowed):
+                        # A split never spills hidden submissions into Review.
+                        report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': 'intake_deferred'})
+                    elif decision == 'disagree' or (decision == 'unverified' and default_policy):
                         report['outcomes'].append(
                             {'key': item.key, 'kind': item.kind, 'status': 'verifier_' + decision}
                         )
@@ -775,6 +791,13 @@ async def run_pass(
                 report = {'status': 'not_admitted'}
                 record_pass(report)
                 return report
+        if not dry_run and not canary:
+            assert lease is not None
+            intake_scope = ACTIVE_RUN.set((uid, lease['run_id']))
+            try:
+                seed, records = await dream_required_intake.prepare(uid, seed, records, limits, OwnerSearch(uid))
+            finally:
+                ACTIVE_RUN.reset(intake_scope)
         if limits.bucket == 'empty' and not seed.get('targets'):
             report: dict[str, Any] = {
                 'status': 'not_admitted',
@@ -863,12 +886,17 @@ MIN_PASS_SECONDS = 300
 
 
 async def drain(*, limit=5000):
-    if not enabled() or limit <= 0:
+    if limit <= 0:
         return []
     results = []
     drain_deadline = time.monotonic() + DRAIN_TIMEOUT_SECONDS
     try:
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
+            # Required intake has its own Flex route and no Dream capacity or
+            # paid-cohort dependency. Discover owed owners before model waits.
+            await retry_sweep(limit=min(limit, 4990), complete_owner=complete_receipted_required_intake)
+            if not enabled():
+                return results
             reserved_open = await dream_capacity.available_model(mode='reserved') is not None
             if not reserved_open and not on_demand_enabled():
                 # The first check can only start the probe that refreshes stale evidence; recheck

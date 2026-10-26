@@ -6,6 +6,18 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Sync storage round trips
+
+Sync assignment strictly decodes retained server-only `open_loop_extractions`
+before the conversation write codec runs, just like manual speaker receipts.
+Assignment and donor redirects still commit in one transaction; an unreadable
+retained extraction aborts the write rather than becoming empty content.
+Protection migration and mixed-protection smart absorbs re-encode the retained
+extraction at the destination protection level. Client conversation models omit
+both the extraction and its compression marker. Persistence/finalize diagnostics
+emit only closed `value_error_reason` tokens: `open_loop_extractions_not_object`,
+`other_value_error`, or `none` for other exception types.
+
 ## Desktop local segment upload
 
 Desktop local finalization preserves stored utterance boundaries, timestamps and
@@ -401,6 +413,14 @@ GPT-5.6-family or Luna. Unrelated STT keys do not disable OpenAI cache opt-out.
 Backend-listen and pusher share the private Firestore `dream-agent` cohort in
 their deployment environment; no UID env binding is required. Existing
 conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
+Required memory submissions also normalize inline after their canonical capture
+commits (one Flex attempt, 12-second batch budget). The same existing scheduled
+Dream sweep retries pending stragglers independently of Dream cleanup capacity;
+historical required intake remains hidden until the separate retrospective
+dedupe ramp admits it. Conversation-derived candidates in the speaker-evidence
+serving cohort require owner-bound quote evidence before paid work, and source
+revisions are fenced at canonical apply. Original capture is retained. See the
+required-intake ownership, switches and cost/ramp in [the Dream runbook](runbooks/dream-agent.md#memory-intake-is-independent-of-dream-cleanup).
 Shadow writes only admission state and encrypted reports, preserving finalization, user records, questions and vocabulary. See [the dream runbook](runbooks/dream-agent.md).
 Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live and offline-sync keyterms;
 read failure uses existing terms with fallback telemetry.
@@ -575,8 +595,13 @@ Gate 3 uses the id-free `event=sync_lineage_resolve stage=assignment` creation
 outcomes `created_clear|created_overlap|created_unknown`. Only lineage-admitted,
 S1-validated creates emit; unknown includes a closed `incomplete_reason` field,
 and every reason remains unmeasured and blocks widening. Clear/overlap omit it.
-Classification reuses assignment's transactional read cache and changes no routing
-or persistence. See `utils/sync/ARCHITECTURE.md` for the closed count buckets and
+Classification reuses assignment's transactional read cache. A lineage-eligible
+stamp-gap reroute with retained new speech first runs bounded metadata discovery
+once outside the transaction, then restarts with its candidate hints and diagnostics.
+The reroute rechecks all fences and live candidates transactionally, using the same
+live-overlap selector as untargeted intake. Targets that remain valid and repeat-only
+acknowledgments add no discovery query. Creates that never run discovery report
+`discovery_skipped`; `not_recorded` is reserved for missing diagnostics. See `utils/sync/ARCHITECTURE.md` for the closed count buckets and
 lookup-completeness rules and ordered reason set.
 The full API `backend-integration` image also mounts sync and listen routes and carries the same gate. `desktop-backend` has a separate router set with neither site. Deploy renderers reject missing or divergent prod literals and chart drift. Persisted refresh debt from an admitted append survives narrowing without reappending speech; open live rows leave that refresh to finalization. Stage the chart before gated code, drain sync work across mixed writer revisions, and use only a compatible historical Helm release for rollback. See the deployment details in `utils/sync/ARCHITECTURE.md`.
 
@@ -3738,19 +3763,20 @@ inventory — after placement, before any embedding or cache upload — and
 proves it end to end: every listed object must carry a positive generation
 and correspond to a manifest timestamp/span pair in strict whole-manifest
 correspondence (including objects outside the requested windows — a
-conservative refusal that accepts an availability cost), and every pending
-trusted window must map onto unambiguous actual coverage. All listed objects
-are then prefetched within the session budget (at most 32 downloads, 64 MiB,
-30 seconds) with each download pinned to its listed generation and decoded
-to PCM before a single embedding call: a span's declared duration must match
-the decoded duration, a spanless object's extent is its actual decoded end,
-and any positive overlap between distinct objects — including identical
-extents — refuses. A late-arriving chunk, a missing or extra object, a
-duplicate, a malformed entry, missing generation (as on storage providers
-that do not expose one), or a span whose decoded sample count mismatches all
-refuse the whole read with `unverified_inventory`/`unaligned_audio` before
-any embedding or cache upload; a generation that changes between listing and
-download fails the pinned fetch rather than substituting replacement PCM.
+conservative refusal that accepts an availability cost). The reader then proves
+each pending trusted window separately. Only objects whose declared extent could
+intersect that window are downloaded, sharing the existing 32-download, 64 MiB,
+30-second budget. Unknown Opus durations remain unbounded until decoded; the next
+filename is never treated as proof of an object's end. Downloads pin the listed
+generation. Declared spans must agree with decoded duration, while coverage uses
+the actual sample extent. Missing bytes, decode failure, overlapping extents or a
+coverage hole abstain that window. Other independently proven windows remain usable,
+including cached PCM proven before a later window exhausts the I/O budget. Refused
+windows cannot borrow a neighbouring vector or identity. If none is proven, the
+read refuses as `unverified_inventory`/`unaligned_audio` before embedding/cache upload.
+Malformed inventory/manifest entries, missing generation and whole-manifest
+count/pair contradictions still refuse globally. A generation change fails the
+pinned fetch rather than substituting replacement PCM.
 `omi_audio_placement_total{reason=...}` counts each `locate` per attempt, and
 `omi_conversation_speaker_resolution_reasons_total{outcome,reason}` breaks
 each stage outcome down by `capture_span|sync|v2|mixed|cached|none`
@@ -3770,6 +3796,19 @@ roundoff, without padding or interpolation. A gap outside an embeddable base
 subclip does not withdraw that subclip. Live, sync and v2 placements share this
 policy after inventory admission.
 Existing embedding/cache formats, keys and download/time/embedding caps stay intact.
+
+Batch projection retains provider timestamp precision through word grouping and
+clips the validator's permitted EOF overrun to the actual admitted PCM duration.
+Every validated word is retained. Zero-duration words, including words wholly
+inside the permitted EOF overrun, remain isolated anonymous point segments;
+grouping cannot lend them a neighbouring voice or fabricate positive duration.
+It does not round these sample-backed clocks to legacy centiseconds: that rounding
+can put a segment 5 ms beyond EOF while coverage tolerates only 1 ms. The sync
+playback uploader stamps exact input sample count/rate/start on every new Opus
+rendition, independently of archive routing admission. The existing Opus header
+retains original PCM length, so partial final frames do not claim padded audio.
+Bucket routing, retention, sync consent and archive rollout remain under their
+existing controls. This is forward processing; it schedules no historical reprocess.
 
 For `outcome="no_embeddings"`, `reason` is exactly one of `all_short`, `no_eligible`,
 `chunk_boundary`, `clip_too_short`, `embed_failed`, `budget`, `max_embeddings`,
@@ -4065,6 +4104,15 @@ negative offset and is marked `unplaced`; it remains visible without claiming
 seek alignment. Fresh live writes advance `sync_content_revision` for every
 adopted target, so an older processor cannot overwrite a delayed live final.
 Neither safeguard depends on the lineage rollout allowlist.
+
+MCP detail, batch-detail and search projections expose nonnegative transcript
+offsets. They clamp pre-origin `start`/`end` and search `start_ms`/`end_ms` at
+zero without changing the stored segments, pinned `started_at`, text, ordering
+or fetch budgets. A line wholly before the origin therefore has a zero-duration
+public interval: it remains unplaced text and supplies no valid playback window.
+The shared transcript-search builder retains its original clocks for in-app
+consumers; only MCP response projection applies this display contract. No data
+repair or reprocessing is scheduled by a read.
 
 This admission creates no hidden donor and no pending merge debt. Lookup failure
 uses ordinary retained sync publication immediately; live document capacity
@@ -5063,6 +5111,9 @@ validated manifest) → unvalidated manifest → capture coverage hole. Only aft
 those gates pass does the actual inventory/read proof run; its checks retain
 execution order: read budget/listing, object metadata, manifest inventory,
 count/pair equality, blob fetch/decode, decoded duration, overlap, coverage.
+After global inventory validation, decoded checks run per requested window;
+the first refusal is terminal only when no window is proven. A partial result
+retains the existing `partial` primary outcome.
 No clock, storage, embedding, eligibility or proof read is added to classify it.
 `read_budget` includes the existing download/byte/deadline/transient-listing
 budget refusal, not proof that audio is absent. `no_proven_window` includes
@@ -5832,7 +5883,27 @@ admission paused until accepted-work completion, visible synthetic canary and at
 of correctness sentinels pass. Scaling all integration traffic to one instance is a temporary
 capacity tradeoff, not a distributed projection fence (revision overlap remains possible).
 
+## Batch worker admission refusals
+
+GPU admission refusals use a durable per-unit backoff of 30, 60, 120, 240 then 300
+seconds, while honoring longer policy retry delays through 24 hours. Both the
+initial admission and the pre-ASR recheck retain those delays. A successful
+authorization alone does not reset the streak; a completed worker result does.
+Refusals refund the provider attempt and retain audio. Shutdown/GPU-abort refunds
+do not increment the streak. Unevaluated authority removes a stale prior allow
+and stays BLIND. The worker's explicit metrics registry exposes fixed
+`admission_policy_deferred` and `admission_unevaluated_deferred` event counts
+only after a fenced defer commits; no identities or dynamic reason labels.
+
 ## Durable live and desktop record admission (dark)
+
+Batch self-LID evidence is bound to the authenticated item's owner, segment and
+versioned intake context. The worker requires nonempty job, content and source
+provenance, a finite probability, and a probe duration matching the first 30
+seconds (or the whole shorter item). Older millisecond-rounded probe durations
+remain readable; confidence floors use the measured item duration so rounding
+cannot turn a short clip into permission. Unsupported language evidence remains
+available for multilingual recovery, never permission for fixed-language STT.
 
 `BATCH_PIPELINE_LIVE_ADMISSION_ENABLED=false` is the sole new producer control.
 When true, retained server-STT captures use the existing
@@ -6880,8 +6951,9 @@ by clients until their opt-in paths serve.
 Notes enforce speaker identity independently of the packet rollout. The output
 contract carries the original speaker-authority map separately from prompt
 roster inference. A People spelling or `search_people` hit cannot identify an
-unresolved speaker: a resolved binding, this conversation's calendar/tile roster,
-or an affirmative owner correction must corroborate it. Model-authored evidence
+unresolved speaker: a resolved binding or an affirmative owner correction must
+corroborate it. Calendar/tile attendance and the account profile do not bind a
+voice. Model-authored evidence
 lines do not authorize identities. Unsupported participants are removed and their
 names become “a speaker” across visible notes, tasks and events; names actually
 heard in speech remain hedged, without expanding them from the People catalog.
@@ -6925,6 +6997,44 @@ the refactor families while retaining the prerecorded-language gate allowlist.
 
 ### Wave 2 evidence and consumers
 
+The nine wave-2 percentage controls share the `capture-speaker-notes:wave2`
+account bucket in `config.refactor_modes`. Equal percentages select the same
+accounts across producers and consumers, and larger steps contain smaller
+ones. Digest admission remains additive; `off` overrides both. Other mode
+families and sampled shadow writers retain their existing salts. Deploy this
+parser consistently before a percentage ramp.
+
+For accounts serving `SPEAKER_EVIDENCE_MODE`, conversation memory formation
+accepts only a prompt-local copy of segments with a unique trusted owner cluster
+and a positive producer match (`conversation_voice` or
+`speaker_evidence_v2`) plus `speaker_identity_status=user`, or an explicit manual
+owner label. A legacy `is_user` boolean, carried label, unavailable/ambiguous
+identity or contradictory owner clusters cannot authorize memory formation.
+No eligible speech means no paid eager extraction and no empty replacement of
+earlier memories. Quote grounding and the extraction fingerprint see the same
+filtered input; notes, tasks, retained transcripts/audio and explicit external
+text intake keep their own inputs and authorities. Shadow/off and accounts
+outside the aligned serve cohort retain their existing memory input. Measure
+admitted and withheld memory sources per day before expanding the cohort.
+The deployment-wide canonical mutation readiness fence remains unconditional.
+The looser live-embedding operating point alone is insufficient; V2 provenance
+requires its actual owner candidate to be label-eligible and confident.
+In `omi_media_noise_shadow_total`, `check=owner_memory_source` counts admitted
+(`agree`) versus fully withheld (`disagree`) serving-cohort source attempts.
+`check=owner_memory_segments` counts included/excluded segments with the same
+outcomes. These are aggregate attempt volumes, including retries, not unique
+created memories or labeled speaker correctness. Compare daily windows and
+existing memory creation telemetry before expanding; an absent series is unknown.
+
+V2 manual evidence records the segment IDs its receipt binds. A short excerpt
+contributes only its own speech duration to media admission, never its whole
+voice's duration. Old evidence without that scope abstains from exclusion.
+Explicit restore and its persisted user-kept marker reach classification before
+the media minimum, so later reprocessing cannot hide a restored card again.
+
+Notes do not bind a likely speaker suggestion to a name: likely and unknown
+voices remain anonymous, with statements attributed as "someone said".
+
 Speaker refinement uses the same evidence record: count hints cannot merge
 confident distinct identities, and desktop-channel/near-field anchors remain
 explicit candidates. Live text-only introductions cannot create or link people
@@ -6938,6 +7048,12 @@ Memory/task entrypoints and daily/simple/comprehensive recaps use the same
 eligibility helper. Restoring a recording protects it, reclassification clears
 its exclusion, and successful reprocessing clears the terminal marker. Shadow
 preserves transcripts, labels and derived output; it never writes media edges.
+On clients with the existing Show discarded/restore capability (currently
+iOS/Android), both media and noise minima are hidden from the default feed.
+Bystander classification uses noise. Explicit keep/restore overrides automatic
+hiding and reprocessing clears the derived-effect suppression marker. Other
+clients need a visible restore surface before enabling equivalent hiding; a
+wire decoder accepting `discarded` alone is not that product capability.
 
 Cross-device reconciliation runs at completed-conversation finalization. Wall
 time proposes candidates; ordered shared speech must confirm every group pair.
@@ -6954,6 +7070,8 @@ unwired. Closed clients query coverage. Server SNR/confidence is optional and
 not consistently persisted; absent measurements retain source/duration ranking.
 This branch does not repair historical derived effects or release audio based
 on inferred alignment.
+The remaining generalized streaming/quality-assembly work is scoped in
+[streaming cross-device design](cross_device_streaming_design.md).
 
 Database-writing shadow paths use `refactor_modes.shadow_sampled`: capture
 coverage, speaker evidence and boundary evidence each declare

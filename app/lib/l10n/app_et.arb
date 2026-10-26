@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Üleslaadimine ebaõnnestus — {duration} heli on sinu telefonis alles.",
     "audioUploadFailedTapRetry": "Üleslaadimine ebaõnnestus — {duration} heli on sinu telefonis alles. Uuesti proovimiseks puuduta.",
     "audioUploadRetrying": "Üleslaadimist proovitakse uuesti… {duration} heli on sinu telefonis alles",
+    "captureNoAudioFromPendant": "Ripatsist ei tule heli",
     "capturing": "Salvestamine",
     "capturingPhotos": "Fotode jäädvustamine",
     "listeningTranscriptWillAppear": "Kuulan… siia ilmub transkriptsioon.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Proovi uuesti ühendada",
     "captureBannerRetrySync": "Proovi sünkroonimist uuesti",
     "captureWedgeBleExplanation": "Bluetooth-ühendus sinu Omiga on seiskunud, seega ei jõua heli rakendusse. Omi jätkab salvestamist seadmes ja sünkroonib, kui ühendus taastub. Uuesti proovimine ühendab lingi uuesti; kui see ikka ebaõnnestub, kontrolli seadet jaotises Seaded > Seade.",
+    "captureConnecting": "Ühendamine…",
+    "captureNoAudioDetail": "Ripats on ühendatud, kuid ükski heli ei jõua teie telefonini",
     "captureIngressNeedsReconnect": "Heli ei jõua rakendusse — ühenda Omi uuesti",
     "captureIngressNeedsReconnectExplanation": "Rakendus ei saa enam Omi seadmelt heli kätte ega suutnud ühendust automaatselt taastada. Ühenda seade lahti ja tagasi — seadete kaudu või välja ja sisse lülitades. Seadmesse salvestatud heli sünkroniseeritakse hiljem.",
     "captureStillRecording": "Salvestamine jätkub",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Tehtud",
+    "openLoopAnswerRemind": "Meenuta hiljem",
+    "openLoopAnswerDrop": "Jäta ära"
 }

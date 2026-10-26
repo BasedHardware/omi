@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "আপলোড ব্যর্থ হয়েছে — {duration} অডিও আপনার ফোনে রাখা আছে।",
     "audioUploadFailedTapRetry": "আপলোড ব্যর্থ হয়েছে — {duration} অডিও আপনার ফোনে রাখা আছে। আবার চেষ্টা করতে ট্যাপ করুন।",
     "audioUploadRetrying": "আবার আপলোডের চেষ্টা চলছে… {duration} অডিও আপনার ফোনে রাখা আছে",
+    "captureNoAudioFromPendant": "পেনড্যান্ট থেকে কোনো অডিও নেই",
     "capturing": "ক্যাপচার হচ্ছে",
     "capturingPhotos": "ছবি ক্যাপচার হচ্ছে",
     "listeningTranscriptWillAppear": "শুনছি… এখানে একটি ট্রান্সক্রিপ্ট দেখা যাবে।",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "আবার সংযোগের চেষ্টা করুন",
     "captureBannerRetrySync": "সিঙ্ক আবার চেষ্টা করুন",
     "captureWedgeBleExplanation": "আপনার Omi-এর সঙ্গে Bluetooth সংযোগ বিচ্ছিন্ন হয়ে গেছে, তাই অডিও অ্যাপে পৌঁছাচ্ছে না। Omi ডিভাইসে রেকর্ড করা চালিয়ে যাচ্ছে এবং সংযোগ ফিরলে সিঙ্ক হবে। আবার চেষ্টা করলে সংযোগ পুনরায় স্থাপিত হয়; বারবার ব্যর্থ হলে সেটিংস > ডিভাইস থেকে আপনার ডিভাইস পরীক্ষা করুন।",
+    "captureConnecting": "সংযোগ করা হচ্ছে…",
+    "captureNoAudioDetail": "পেনড্যান্ট সংযুক্ত আছে, কিন্তু কোনো অডিও আপনার ফোনে পৌঁছাচ্ছে না",
     "captureIngressNeedsReconnect": "অডিও অ্যাপে পৌঁছাচ্ছে না — Omi পুনরায় সংযুক্ত করুন",
     "captureIngressNeedsReconnectExplanation": "অ্যাপটি আর Omi ডিভাইস থেকে অডিও আনতে পারছে না এবং স্বয়ংক্রিয়ভাবে সংযোগ পুনরুদ্ধার করতে পারেনি। ডিভাইসটি বিচ্ছিন্ন করে আবার সংযুক্ত করুন — ডিভাইস সেটিংস থেকে, অথবা বন্ধ করে চালু করে। ডিভাইসে সংরক্ষিত অডিও পরে সিঙ্ক হবে।",
     "captureStillRecording": "এখনও রেকর্ড হচ্ছে",
@@ -11859,5 +11862,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "সম্পন্ন",
+    "openLoopAnswerRemind": "পরে মনে করিয়ে দিন",
+    "openLoopAnswerDrop": "বাদ দিন"
 }

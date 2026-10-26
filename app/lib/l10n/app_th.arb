@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "อัปโหลดไม่สำเร็จ — เก็บเสียง {duration} ไว้ในโทรศัพท์ของคุณแล้ว",
     "audioUploadFailedTapRetry": "อัปโหลดไม่สำเร็จ — เก็บเสียง {duration} ไว้ในโทรศัพท์ของคุณแล้วแตะเพื่อลองอีกครั้ง",
     "audioUploadRetrying": "กำลังลองอัปโหลดอีกครั้ง… เก็บเสียง {duration} ไว้ในโทรศัพท์ของคุณแล้ว",
+    "captureNoAudioFromPendant": "ไม่มีเสียงจากจี้",
     "capturing": "กำลังบันทึก",
     "capturingPhotos": "กำลังถ่ายภาพ",
     "listeningTranscriptWillAppear": "กำลังฟัง… ข้อความถอดเสียงจะแสดงที่นี่",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "ลองเชื่อมต่อใหม่",
     "captureBannerRetrySync": "ลองซิงค์อีกครั้ง",
     "captureWedgeBleExplanation": "การเชื่อมต่อบลูทูธกับ Omi ของคุณหยุดชะงัก จึงทำให้เสียงไม่ถึงแอป Omi ยังคงบันทึกบนอุปกรณ์ต่อไปและจะซิงก์เมื่อการเชื่อมต่อกลับมา การลองใหม่จะเชื่อมต่อให้อีกครั้ง หากยังล้มเหลวอยู่ให้ตรวจสอบอุปกรณ์ของคุณใน การตั้งค่า > อุปกรณ์",
+    "captureConnecting": "กำลังเชื่อมต่อ…",
+    "captureNoAudioDetail": "พลอยห้อยเชื่อมต่ออยู่ แต่ไม่มีเสียงใดถึงโทรศัพท์ของคุณ",
     "captureIngressNeedsReconnect": "เสียงไม่ถึงแอป — เชื่อมต่อ Omi ของคุณใหม่",
     "captureIngressNeedsReconnectExplanation": "แอปไม่สามารถรับเสียงจากอุปกรณ์ Omi ได้อีกต่อไปและไม่สามารถกู้คืนการเชื่อมต่อโดยอัตโนมัติ ให้ยกเลิกการเชื่อมต่อและเชื่อมต่ออุปกรณ์ใหม่ — จากการตั้งค่าอุปกรณ์หรือปิดแล้วเปิดใหม่ เสียงที่บันทึกไว้ในอุปกรณ์จะซิงก์ในภายหลัง",
     "captureStillRecording": "ยังบันทึกอยู่",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "เสร็จแล้ว",
+    "openLoopAnswerRemind": "เตือนฉันทีหลัง",
+    "openLoopAnswerDrop": "ทิ้งไป"
 }

@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "アップロードに失敗しました — {duration} の音声はスマートフォンに保存されています。",
     "audioUploadFailedTapRetry": "アップロードに失敗しました — {duration} の音声はスマートフォンに保存されています。タップして再試行。",
     "audioUploadRetrying": "アップロードを再試行中… {duration} の音声はスマートフォンに保存されています",
+    "captureNoAudioFromPendant": "ペンダントの音声がありません",
     "capturing": "キャプチャ中",
     "capturingPhotos": "写真をキャプチャ中",
     "listeningTranscriptWillAppear": "聞き取り中… ここに文字起こしが表示されます。",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "再接続を試す",
     "captureBannerRetrySync": "同期を再試行",
     "captureWedgeBleExplanation": "OmiとのBluetoothリンクが停止したため、音声がアプリに届いていません。Omiはデバイスで録音を続けており、リンクが回復すると同期されます。再試行するとリンクが再接続されます。引き続き失敗する場合は、設定 > デバイスでデバイスを確認してください。",
+    "captureConnecting": "接続中…",
+    "captureNoAudioDetail": "ペンダントは接続されていますが、音声がスマートフォンに届いていません",
     "captureIngressNeedsReconnect": "オーディオがアプリに届いていません — Omiを再接続してください",
     "captureIngressNeedsReconnectExplanation": "アプリはOmiデバイスからのオーディオを受信できず、接続を自動的に復元できませんでした。デバイスの接続を解除して再接続してください — デバイス設定から、または電源を切って入れ直してください。デバイスに保存されたオーディオは後で同期されます。",
     "captureStillRecording": "録音は継続中",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "完了",
+    "openLoopAnswerRemind": "後でリマインド",
+    "openLoopAnswerDrop": "破棄"
 }

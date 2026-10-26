@@ -132,6 +132,8 @@ class QueueMetrics:
             'committed',
             'quarantined',
             'recovery_held',
+            'admission_policy_deferred',
+            'admission_unevaluated_deferred',
         }:
             raise ValueError('metric event must be a static worker transition')
         self.events.labels(event).inc()

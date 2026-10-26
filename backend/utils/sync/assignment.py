@@ -55,6 +55,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 _T = TypeVar('_T')
 
+
+class SyncAssignmentDiscoveryRequired(Exception):
+    """Restart read-only stamp-gap planning with bounded live metadata hints."""
+
+
 # Firestore rejects any write that leaves a document above 1 MiB
 # (FIRESTORE_MAX_DOCUMENT_BYTES), and a temporal merge only ever grows the
 # canonical conversation. When the canonical's next write is estimated above
@@ -180,6 +185,7 @@ def assign_in_transaction(
     absorbed: list[str] | None = None,
     live_lookup_complete: bool = False,
     live_lookup_incomplete_reason: str | None = None,
+    discover_on_stamp_gap: bool = False,
 ) -> tuple[dict, bool, list[dict]]:
     """Production transaction body; injected codecs preserve encryption in adapters.
 
@@ -299,6 +305,7 @@ def assign_in_transaction(
         # redirects its late repair audio to the survivor; temporal fallback would
         # recreate the donor as a duplicate row. A deleted survivor supersedes it.
         target_id, target = resolve(target_id)
+
     # Discovery is a hint only. Re-read every candidate under the same
     # transaction as the append, so deletion, lifecycle and provenance win.
     temporal_live = False
@@ -706,11 +713,20 @@ def assign_in_transaction(
             if no_op['id'] == target_id and live_stats is not None and live_stats['sync_retry']:
                 no_op['_sync_lineage_completion_pending'] = True
             return no_op, False, []
+        if discover_on_stamp_gap:
+            # No writes have happened. The adapter discovers outside this
+            # transaction, then retries the target, deletion and lease fences
+            # along with every candidate read before committing the reroute.
+            raise SyncAssignmentDiscoveryRequired()
         refused_id = target_id
         target_id, target, target_hint = None, None, None
         live_stats = None
         stamp_fallback_live = False
         excluded = frozenset({refused_id})
+        # Reroute discovery is observation-only. Read every hint before writes
+        # for contention and gate-3 classification, without adopting a live row.
+        for cid in live_candidate_ids:
+            load(cid)
         chosen = plan(excluded, chosen.kept)
         stamp_gap_refused = True
     if (

@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "فشل الرفع — تم الاحتفاظ بـ {duration} من الصوت على هاتفك.",
     "audioUploadFailedTapRetry": "فشل الرفع — تم الاحتفاظ بـ {duration} من الصوت على هاتفك. اضغط لإعادة المحاولة.",
     "audioUploadRetrying": "جارٍ إعادة محاولة الرفع… تم الاحتفاظ بـ {duration} من الصوت على هاتفك",
+    "captureNoAudioFromPendant": "لا يوجد صوت من القلادة",
     "capturing": "جارٍ الالتقاط",
     "capturingPhotos": "جارٍ التقاط الصور",
     "listeningTranscriptWillAppear": "جارٍ الاستماع… سيظهر النص هنا.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "حاول إعادة الاتصال",
     "captureBannerRetrySync": "أعد محاولة المزامنة",
     "captureWedgeBleExplanation": "تعطّل اتصال البلوتوث بجهاز Omi، لذا لا يصل الصوت إلى التطبيق. يواصل Omi التسجيل على الجهاز وسيتمت المزامنة بمجرد استعادة الاتصال. إعادة المحاولة تعيد إنشاء الاتصال؛ إذا استمر الفشل، تحقق من جهازك من الإعدادات > الجهاز.",
+    "captureConnecting": "جارٍ الاتصال…",
+    "captureNoAudioDetail": "القلادة متصلة، لكن لا صوت يصل إلى هاتفك",
     "captureIngressNeedsReconnect": "الصوت لا يصل إلى التطبيق — أعد توصيل Omi",
     "captureIngressNeedsReconnectExplanation": "لم يعد التطبيق يستقبل الصوت من جهاز Omi ولم يتمكن من استعادة الاتصال تلقائياً. افصل الجهاز وأعد توصيله — من إعدادات الجهاز أو بإيقاف تشغيله وتشغيله. أي صوت يُحفظ على الجهاز سيُزامَن لاحقاً.",
     "captureStillRecording": "لا يزال التسجيل جاريًا",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "تم",
+    "openLoopAnswerRemind": "ذكّرني لاحقًا",
+    "openLoopAnswerDrop": "استبعدها"
 }

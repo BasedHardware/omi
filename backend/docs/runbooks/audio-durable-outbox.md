@@ -89,8 +89,10 @@ prove deployed playback or an installed client's WAL retention.
 
 `omi_audio_custody_would_drop_total{stage}` counts averted loss paths;
 `omi_audio_custody_backpressure_total{stage}` counts producer waits;
-`omi_audio_custody_failures_total{stage}` distinguishes commit and projection
-failures; `omi_audio_custody_commits_total` counts complete immutable receipts.
+`omi_audio_custody_failures_total{stage,reason}` distinguishes commit and projection
+failures; `reason` is `conflict` (deterministic projection mismatch, never retried),
+`transient` (non-deterministic failure that exhausted its bounded requeue passes),
+or `other`; `omi_audio_custody_commits_total` counts complete immutable receipts.
 `omi_audio_custody_last_risk_timestamp_seconds` also exposes a refusal before
 the first scrape, when a counter increase has no observed zero baseline.
 The source Grafana rule `omi-audio-custody-pressure` alerts immediately on any

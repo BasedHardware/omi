@@ -239,7 +239,7 @@ from utils.sync.intake_completion import (
 )
 from utils.sync.lanes import SyncLane
 from utils.sync.telemetry import bounded_correlation_ref as _bounded_correlation_ref
-from utils.sync.telemetry import bounded_exception_class, finalize_exception_site
+from utils.sync.telemetry import bounded_exception_class, finalize_exception_site, value_error_reason
 from utils.sync.telemetry import bounded_exception_type as _bounded_exception_type
 from utils.sync.telemetry import bounded_sync_lane as _bounded_sync_lane
 from utils.sync.telemetry import bounded_sync_language as _bounded_retry_language
@@ -376,7 +376,7 @@ def _record_sync_segment_outcome(
             # completing. A later retry may duplicate this metric, but not the
             # customer-visible transcription result.
             logger.warning('event=sync_transcription_metric outcome=dedupe_failed kind=segment')
-    log = logger.info if outcome in _NON_ERROR_SEGMENT_OUTCOMES else logger.error
+    log = logger.debug if outcome in _NON_ERROR_SEGMENT_OUTCOMES else logger.error
     reason = _sync_failure_reason(None if outcome in _NON_ERROR_SEGMENT_OUTCOMES else phase, exception)
     log(
         'event=sync_transcription_segment outcome=%s provider=%s model=%s lane=%s retryable=%s '
@@ -969,7 +969,7 @@ def retrieve_vad_segments(
         raise  # Re-raise to ensure thread failure is visible
 
     segments = _merge_and_cap_vad_segments(voice_segments)
-    logger.info('event=sync_vad outcome=success segment_count=%d', len(segments))
+    logger.debug('event=sync_vad outcome=success segment_count=%d', len(segments))
 
     aseg = AudioSegment.from_wav(path)
     path_dir = '/'.join(path.split('/')[:-1])
@@ -1887,7 +1887,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 response['new_memories'].discard(conversation_id)
                 response['updated_memories'].discard(conversation_id)
                 response.get('_merged', {}).pop(conversation_id, None)
-        logger.info('event=sync_assignment outcome=superseded')
+        logger.debug('event=sync_assignment outcome=superseded')
         _set_deferred_segment_outcome(
             deferred_outcome, outcome=TranscriptionOutcome.SUCCESS, provider=provider, model=model, retryable=False
         )
@@ -1902,19 +1902,21 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             # never log exception text, document IDs, paths, or transcript.
             logger.error(
                 'event=sync_persistence_exception exception_type=%s firestore_error=%s firestore_doc_kind=%s '
-                'job_ref=%s attempt_ref=%s',
+                'job_ref=%s attempt_ref=%s value_error_reason=%s',
                 _bounded_exception_type(e),
                 _firestore_error_class(e),
                 _firestore_doc_kind(e),
                 _bounded_correlation_ref(job_id),
                 _bounded_correlation_ref(attempt_ref),
+                value_error_reason(e),
             )
         if phase == 'finalize':
             logger.error(
-                'event=sync_finalize_exception exception_type=%s site=%s firestore_error=%s',
+                'event=sync_finalize_exception exception_type=%s site=%s firestore_error=%s value_error_reason=%s',
                 _bounded_exception_type(e),
                 finalize_exception_site(e),
                 _firestore_error_class(e),
+                value_error_reason(e),
             )
         fingerprint = _persistence_failure_fingerprint(e, phase, sync_lane)
         if phase in ('persistence', 'finalize'):
@@ -3078,7 +3080,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             if task_mode:
                 already_processed = await run_blocking(db_executor, get_processed_segments, job_id)
             if already_processed:
-                logger.info(
+                logger.debug(
                     'event=sync_transcription_retry outcome=deduplicated segment_count=%d', len(already_processed)
                 )
 

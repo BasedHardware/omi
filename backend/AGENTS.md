@@ -126,6 +126,9 @@ Cron jobs: notifications (`modal/job.py`), X sync (`modal/x_connector_sync_job.p
 
 Dream agent: `docs/runbooks/dream-agent.md`.
 
+Required intake: canonical capture normalizes inline; Dream retries and dedupes
+the backlog. Ownership, bounds and ramp: `docs/runbooks/dream-agent.md`.
+
 Helm charts: `backend/charts/`.
 
 STT policy: `config/stt_provider_policy.py`. Windowed live rollout: `docs/operational/windowed-live-stt.md`.

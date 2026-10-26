@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "பதிவேற்றம் தோல்வியடைந்தது — {duration} ஆடியோ உங்கள் ஃபோனில் வைக்கப்பட்டுள்ளது.",
     "audioUploadFailedTapRetry": "பதிவேற்றம் தோல்வியடைந்தது — {duration} ஆடியோ உங்கள் ஃபோனில் வைக்கப்பட்டுள்ளது. மீண்டும் முயல தட்டவும்.",
     "audioUploadRetrying": "பதிவேற்றம் மீண்டும் முயலப்படுகிறது… {duration} ஆடியோ உங்கள் ஃபோனில் வைக்கப்பட்டுள்ளது",
+    "captureNoAudioFromPendant": "பதக்கத்திலிருந்து ஆடியோ இல்லை",
     "capturing": "பதிவுசெய்கிறது",
     "capturingPhotos": "புகைப்படங்கள் எடுக்கப்படுகின்றன",
     "listeningTranscriptWillAppear": "கேட்கிறது… டிரான்ஸ்கிரிப்ட் இங்கே தோன்றும்.",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "மீண்டும் இணைக்க முயற்சிக்கவும்",
     "captureBannerRetrySync": "ஒத்திசைவை மீண்டும் முயற்சிக்கவும்",
     "captureWedgeBleExplanation": "உங்கள் Omi-உடனான புளூடூத் இணைப்பு தடைபட்டுள்ளது, எனவே ஆடியோ ஆப்பை அடையவில்லை. Omi சாதனத்தில் பதிவு செய்வதைத் தொடர்கிறது, இணைப்பு மீட்டமைக்கப்பட்டவுடன் ஒத்திசைக்கப்படும். மீண்டும் முயற்சிப்பது இணைப்பை மீண்டும் ஏற்படுத்தும்; தொடர்ந்து தோல்வியுற்றால், அமைப்புகள் > சாதனம் பகுதியில் உங்கள் சாதனத்தைச் சரிபார்க்கவும்.",
+    "captureConnecting": "இணைக்கிறது…",
+    "captureNoAudioDetail": "பெண்டன்ட் இணைக்கப்பட்டுள்ளது, ஆனால் எந்த ஆடியோவும் உங்கள் போனை அடையவில்லை",
     "captureIngressNeedsReconnect": "ஆடியோ ஆப்பை அடையவில்லை — உங்கள் Omi-ஐ மீண்டும் இணைக்கவும்",
     "captureIngressNeedsReconnectExplanation": "ஆப்பால் Omi சாதனத்திலிருந்து ஆடியோவை இனி பெற முடியவில்லை, இணைப்பை தானாக மீட்கவும் முடியவில்லை. சாதனத்தைத் துண்டித்து மீண்டும் இணைக்கவும் — சாதன அமைப்புகளிலிருந்து அல்லது அணைத்து மீண்டும் இயக்கி. சாதனத்தில் சேமிக்கப்பட்ட ஆடியோ பின்னர் ஒத்திசைக்கப்படும்.",
     "captureStillRecording": "இன்னும் பதிவாகிறது",
@@ -11859,5 +11862,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "முடிந்தது",
+    "openLoopAnswerRemind": "பின்னர் நினைவூட்டு",
+    "openLoopAnswerDrop": "விட்டுவிடு"
 }

@@ -3288,6 +3288,7 @@
     "audioUploadFailedKeptLocal": "A feltöltés sikertelen — {duration} hanganyag a telefonodon maradt.",
     "audioUploadFailedTapRetry": "A feltöltés sikertelen — {duration} hanganyag a telefonodon maradt. Koppints az újrapróbálkozáshoz.",
     "audioUploadRetrying": "Feltöltés újrapróbálása… {duration} hanganyag a telefonodon maradt",
+    "captureNoAudioFromPendant": "Nincs hang a medálból",
     "capturing": "Rögzítés",
     "capturingPhotos": "Fotók rögzítése",
     "listeningTranscriptWillAppear": "Figyelek… itt jelenik meg az átirat.",
@@ -3590,6 +3591,8 @@
     "captureBannerTryReconnect": "Próbálja újra a csatlakozást",
     "captureBannerRetrySync": "Szinkronizálás újrapróbálása",
     "captureWedgeBleExplanation": "Az Omi eszközzel létesített Bluetooth-kapcsolat megakadt, így a hang nem jut el az alkalmazásba. Az Omi tovább rögzít az eszközön, és a kapcsolat helyreállása után szinkronizál. Az újrapróbálás újra létrehozza a kapcsolatot; ha továbbra is sikertelen, ellenőrizze az eszközt a Beállítások > Eszköz alatt.",
+    "captureConnecting": "Csatlakozás…",
+    "captureNoAudioDetail": "A medál csatlakoztatva, de egyetlen hang sem ér el a telefonjára",
     "captureIngressNeedsReconnect": "A hang nem ér el az appba — csatlakoztasd újra az Omit",
     "captureIngressNeedsReconnectExplanation": "Az app már nem tud hangot fogadni az Omi eszköztől, és nem sikerült automatikusan helyreállítania a kapcsolatot. Válaszd le és csatlakoztasd újra az eszközt — az eszközbeállításokban, vagy kikapcsolással majd bekapcsolással. Az eszközön mentett hang később szinkronizálódik.",
     "captureStillRecording": "A felvétel folytatódik",
@@ -4529,5 +4532,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Kész",
+    "openLoopAnswerRemind": "Emlékeztessen később",
+    "openLoopAnswerDrop": "Eldobás"
 }

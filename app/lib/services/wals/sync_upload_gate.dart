@@ -248,14 +248,18 @@ class SyncUploadGate {
         );
         return result;
       } on SyncRateLimitedException catch (error) {
-        _limiter.markLimited(
-          retryAfterSeconds: error.retryAfterSeconds,
-          reason: error.kind.cooldownReason,
-        );
-        // Paced historical recovery is the server asking us to wait. The WAL
+        if (error.reasonCode == 'dispatch_hold') {
+          _limiter.markDispatchHoldLimited(retryAfterSeconds: error.retryAfterSeconds);
+        } else {
+          _limiter.markLimited(
+            retryAfterSeconds: error.retryAfterSeconds,
+            reason: error.kind.cooldownReason,
+          );
+        }
+        // Paced admission is the server asking this account to wait. The WAL
         // stays pending and retries on Retry-After; it is not a user-visible
         // upload failure. Fair-use and unscoped 429s still are.
-        if (!isPacedBackfillReasonCode(error.reasonCode) && error.reasonCode != 'sync_content_in_progress') {
+        if (!isPacedSyncAdmissionReasonCode(error.reasonCode) && error.reasonCode != 'sync_content_in_progress') {
           _recordUploadFailure(
             error,
             attemptId: attemptId,
@@ -481,7 +485,7 @@ class RecordingUploadTelemetry {
 
   static String failureClass(Object error) {
     // Expected backfill backoff never reaches here: the gate does not mint
-    // Recording Upload Failed for [isPacedBackfillReasonCode]. An unscoped
+    // Recording Upload Failed for [isPacedSyncAdmissionReasonCode]. An unscoped
     // rate limit is still `rate_limited`.
     if (error is SyncRateLimitedException) return 'rate_limited';
     if (error is TimeoutException) return 'timeout';

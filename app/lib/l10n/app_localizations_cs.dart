@@ -8595,6 +8595,9 @@ class AppLocalizationsCs extends AppLocalizations {
       'Přepis není k dispozici — nahrávání pokračuje a váš zvuk se ukládá.';
 
   @override
+  String get captureNoAudioFromPendant => 'Žádný zvuk z přívěsku';
+
+  @override
   String get capturing => 'Záznam';
 
   @override
@@ -11087,6 +11090,12 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'Bluetooth spojení s vaším zařízením Omi se zaseklo, takže zvuk se do aplikace nedostává. Omi na zařízení dál nahrává a po obnovení spojení se synchronizuje. Opakování pokusu spojení znovu naváže; pokud to dál nefunguje, zkontrolujte zařízení v Nastavení > Zařízení.';
+
+  @override
+  String get captureConnecting => 'Připojování…';
+
+  @override
+  String get captureNoAudioDetail => 'Přívěsek je připojen, ale žádný zvuk nedochází do vašeho telefonu';
 
   @override
   String get captureIngressNeedsReconnect => 'Zvuk se do aplikace nedostává — znovu připojte Omi';
@@ -14582,4 +14591,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Hotovo';
+
+  @override
+  String get openLoopAnswerRemind => 'Připomenout později';
+
+  @override
+  String get openLoopAnswerDrop => 'Zahodit';
 }

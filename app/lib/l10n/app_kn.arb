@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "ಅಪ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ — {duration} ಆಡಿಯೊ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಸಲಾಗಿದೆ.",
     "audioUploadFailedTapRetry": "ಅಪ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ — {duration} ಆಡಿಯೊ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಸಲಾಗಿದೆ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ.",
     "audioUploadRetrying": "ಅಪ್‌ಲೋಡ್ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲಾಗುತ್ತಿದೆ… {duration} ಆಡಿಯೊ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಸಲಾಗಿದೆ",
+    "captureNoAudioFromPendant": "ಪೆಂಡೆಂಟ್‌ನಿಂದ ಆಡಿಯೊ ಇಲ್ಲ",
     "capturing": "ಸೆರೆಹಿಡಿಯಲಾಗುತ್ತಿದೆ",
     "capturingPhotos": "ಫೋಟೋಗಳನ್ನು ಸೆರೆಹಿಡಿಯಲಾಗುತ್ತಿದೆ",
     "listeningTranscriptWillAppear": "ಆಲಿಸಲಾಗುತ್ತಿದೆ… ಪ್ರತಿಲಿಪಿ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "ಮರುಸಂಪರ್ಕಿಸಲು ಪ್ರಯತ್ನಿಸಿ",
     "captureBannerRetrySync": "ಸಿಂಕ್ ಅನ್ನು ಮರುಪ್ರಯತ್ನಿಸಿ",
     "captureWedgeBleExplanation": "ನಿಮ್ಮ Omi ಗೆ Bluetooth ಸಂಪರ್ಕ ನಿಂತಿದೆ, ಆದ್ದರಿಂದ ಆಡಿಯೊ ಆ್ಯಪ್ ತಲುಪುತ್ತಿಲ್ಲ. Omi ಸಾಧನದಲ್ಲಿ ರೆಕಾರ್ಡ್ ಮಾಡುವುದನ್ನು ಮುಂದುವರಿಸುತ್ತದೆ ಮತ್ತು ಸಂಪರ್ಕ ಮರಳಿ ಬಂದಾಗ ಸಿಂಕ್ ಆಗುತ್ತದೆ. ಮರುಪ್ರಯತ್ನಿಸುವುದರಿಂದ ಸಂಪರ್ಕ ಮರಳಿ ಜೋಡಿಸಲ್ಪಡುತ್ತದೆ; ಇದು ಮುಂದುವರಿದು ವಿಫಲವಾದರೆ, ಸೆಟ್ಟಿಂಗ್‌ಗಳು > ಸಾಧನದಲ್ಲಿ ನಿಮ್ಮ ಸಾಧನವನ್ನು ಪರಿಶೀಲಿಸಿ.",
+    "captureConnecting": "ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…",
+    "captureNoAudioDetail": "ಪೆಂಡೆಂಟ್ ಸಂಪರ್ಕಗೊಂಡಿದೆ, ಆದರೆ ಯಾವುದೇ ಆಡಿಯೊ ನಿಮ್ಮ ಫೋನ್ ತಲುಪುತ್ತಿಲ್ಲ",
     "captureIngressNeedsReconnect": "ಆಡಿಯೊ ಅಪ್ಲಿಕೇಶನ್ ಅನ್ನು ತಲುಪುತ್ತಿಲ್ಲ — ನಿಮ್ಮ Omi ಅನ್ನು ಮರುಸಂಪರ್ಕಿಸಿ",
     "captureIngressNeedsReconnectExplanation": "ಅಪ್ಲಿಕೇಶನ್ ಈಗ Omi ಸಾಧನದಿಂದ ಆಡಿಯೊ ಸ್ವೀಕರಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ ಮತ್ತು ಸಂಪರ್ಕವನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮರುಸ್ಥಾಪಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಸಾಧನವನ್ನು ಸಂಪರ್ಕ ಕಡಿದು ಮರುಸಂಪರ್ಕಿಸಿ — ಸಾಧನ ಸೆಟ್ಟಿಂಗ್‌ಗಳಿಂದ ಅಥವಾ ಆಫ್ ಮಾಡಿ ಆನ್ ಮಾಡಿ. ಸಾಧನದಲ್ಲಿ ಉಳಿಸಿದ ಆಡಿಯೊ ನಂತರ ಸಿಂಕ್ ಆಗುತ್ತದೆ.",
     "captureStillRecording": "ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ",
@@ -11859,5 +11862,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "ಮುಗಿದಿದೆ",
+    "openLoopAnswerRemind": "ನಂತರ ನೆನಪಿಸು",
+    "openLoopAnswerDrop": "ಬಿಡು"
 }

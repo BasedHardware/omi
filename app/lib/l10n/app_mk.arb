@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "Прикачувањето не успеа — аудио со времетраење {duration} е зачувано на вашиот телефон.",
     "audioUploadFailedTapRetry": "Прикачувањето не успеа — аудио со времетраење {duration} е зачувано на вашиот телефон. Допрете за да се обидете повторно.",
     "audioUploadRetrying": "Повторен обид за прикачување… аудио со времетраење {duration} е зачувано на вашиот телефон",
+    "captureNoAudioFromPendant": "Нема звук од приврзокот",
     "capturing": "Снимање",
     "capturingPhotos": "Снимање фотографии",
     "listeningTranscriptWillAppear": "Слушам… овде ќе се појави транскрипт.",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "Обиди се да поврзеш повторно",
     "captureBannerRetrySync": "Повтори ја синхронизацијата",
     "captureWedgeBleExplanation": "Bluetooth-врската со вашиот Omi застана, така што звукот не стига до апликацијата. Omi продолжува да снима на уредот и ќе се синхронизира кога ќе се врати врската. Обидот повторно ја воспоставува врската; ако продолжува да не успева, проверете го уредот во Поставки > Уред.",
+    "captureConnecting": "Се поврзува…",
+    "captureNoAudioDetail": "Привесоката е поврзана, но никој звук не стигнува до вашиот телефон",
     "captureIngressNeedsReconnect": "Аудиото не стига до апликацијата — повторно поврзете го Omi",
     "captureIngressNeedsReconnectExplanation": "Апликацијата повеќе не може да прима аудио од уредот Omi и не успеа автоматски да ја обнови врската. Исклучете и повторно поврзете го уредот — од поставките за уред или со гаснење и палење. Аудиото зачувано на уредот ќе се синхронизира подоцна.",
     "captureStillRecording": "Снимањето продолжува",
@@ -11859,5 +11862,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Завршено",
+    "openLoopAnswerRemind": "Потсети ме подоцна",
+    "openLoopAnswerDrop": "Отфрли"
 }

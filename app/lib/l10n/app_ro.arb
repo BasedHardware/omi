@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Încărcarea a eșuat — {duration} de audio păstrat pe telefonul tău.",
     "audioUploadFailedTapRetry": "Încărcarea a eșuat — {duration} de audio păstrat pe telefonul tău. Atinge pentru a reîncerca.",
     "audioUploadRetrying": "Se reîncearcă încărcarea… {duration} de audio păstrat pe telefonul tău",
+    "captureNoAudioFromPendant": "Niciun sunet de la pandantiv",
     "capturing": "Se capturează",
     "capturingPhotos": "Se capturează fotografii",
     "listeningTranscriptWillAppear": "Ascult… aici va apărea o transcriere.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Încearcă reconectarea",
     "captureBannerRetrySync": "Reîncearcă sincronizarea",
     "captureWedgeBleExplanation": "Legătura Bluetooth cu Omi-ul tău s-a blocat, deci audioul nu mai ajunge în aplicație. Omi continuă să înregistreze pe dispozitiv și se va sincroniza când legătura revine. Reîncercarea reconectează legătura; dacă continuă să eșueze, verifică dispozitivul în Setări > Dispozitiv.",
+    "captureConnecting": "Se conectează…",
+    "captureNoAudioDetail": "Pandantivul este conectat, dar niciun audio nu ajunge la telefonul tău",
     "captureIngressNeedsReconnect": "Audio nu ajunge la aplicație — reconectați-vă Omi",
     "captureIngressNeedsReconnectExplanation": "Aplicația nu mai poate primi audio de la dispozitivul Omi și nu a reușit să recupereze conexiunea automat. Deconectează și reconectează dispozitivul — din setările dispozitivului sau stingându-l și repornindu-l. Audio salvat pe dispozitiv se va sincroniza mai târziu.",
     "captureStillRecording": "Înregistrarea continuă",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Gata",
+    "openLoopAnswerRemind": "Amintește-mi mai târziu",
+    "openLoopAnswerDrop": "Renunță"
 }

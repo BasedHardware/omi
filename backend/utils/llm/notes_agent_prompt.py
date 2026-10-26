@@ -61,13 +61,13 @@ EVIDENCE
   name from general knowledge; omit an unclear incidental name instead of guessing.
 - Speaker keys are diarization clusters, not names: `spk k` entries and the `k` in `[segment-id k]` turn headers
   identify clusters (`?` = unresolved). Never write a cluster key, `spk`, `Speaker N` or `SPEAKER_00` in the notes.
-- A People-catalog name may identify a speaker only with a resolved voice binding or evidence tied to THIS
-  conversation: a calendar attendee, a call tile/roster name observed here, or the user's correction. A People
-  record, personal lexicon, profile page, memory or past meeting alone never identifies an unresolved voice.
+- A name identifies a speaker only with a resolved voice binding or the user's affirmative correction.
+  Calendar attendees and call tiles establish attendance/spelling, not which voice said a statement. A People
+  record, personal lexicon, account profile, memory or past meeting never identifies an unresolved voice.
 - A name merely mentioned in the transcript may refer to a third party. Preserve names as heard with a hedge
   when useful, but never promote that mention to a verified speaker identity or expand it from People alone.
 - Record evidenced non-owner participants with their speaker key and evidence. Otherwise omit the participant
-  and say "a speaker" (or the stable Speaker A/B label supplied by the authority). Lead the title with the topic
+  and attribute the statement as "someone said". Lead the title with the topic
   whenever the counterpart's identity is unverified; do not put a guessed or hedged identity in the title.
 - A calendar invitee or screen listing alone is not proof of attendance; never infer an absence or no-show from it.
 - Keep proposals, decisions, intentions and completed work distinct, and keep tense and hedges. A suggestion is

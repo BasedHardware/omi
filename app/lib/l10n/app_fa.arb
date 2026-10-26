@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "بارگذاری ناموفق بود — {duration} صدا روی گوشی شما نگه داشته شد.",
     "audioUploadFailedTapRetry": "بارگذاری ناموفق بود — {duration} صدا روی گوشی شما نگه داشته شد. برای تلاش دوباره ضربه بزنید.",
     "audioUploadRetrying": "تلاش دوباره برای بارگذاری… {duration} صدا روی گوشی شما نگه داشته شده است",
+    "captureNoAudioFromPendant": "صدایی از آویز نمی‌رسد",
     "capturing": "در حال ضبط",
     "capturingPhotos": "در حال گرفتن عکس",
     "listeningTranscriptWillAppear": "در حال گوش دادن… متن پیاده‌شده اینجا نمایش داده می‌شود.",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "تلاش برای اتصال مجدد",
     "captureBannerRetrySync": "تلاش برای همگام‌سازی مجدد",
     "captureWedgeBleExplanation": "اتصال بلوتوث با Omi شما قطع شده است، بنابراین صدا به برنامه نمی‌رسد. Omi همچنان روی دستگاه ضبط می‌کند و پس از بازگشت اتصال همگام‌سازی می‌شود. تلاش دوباره اتصال را دوباره برقرار می‌کند؛ اگر همچنان ناموفق بود، دستگاه خود را در تنظیمات > دستگاه بررسی کنید.",
+    "captureConnecting": "در حال اتصال…",
+    "captureNoAudioDetail": "آویز متصل است، اما هیچ صدایی به تلفن شما نمی‌رسد",
     "captureIngressNeedsReconnect": "صدا به برنامه نمی‌رسد — Omi را دوباره وصل کنید",
     "captureIngressNeedsReconnectExplanation": "برنامه دیگر نمی‌تواند صدا را از دستگاه Omi دریافت کند و نتوانست اتصال را به‌طور خودکار بازیابی کند. دستگاه را قطع و دوباره وصل کنید — از تنظیمات دستگاه یا با خاموش و روشن کردن آن. صدای ذخیره‌شده روی دستگاه بعداً همگام‌سازی می‌شود.",
     "captureStillRecording": "ضبط ادامه دارد",
@@ -11859,5 +11862,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "انجام شد",
+    "openLoopAnswerRemind": "بعدً یادآوری کن",
+    "openLoopAnswerDrop": "رهاش کن"
 }

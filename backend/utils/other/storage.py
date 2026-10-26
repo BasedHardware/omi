@@ -64,6 +64,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+class AudioChunkContentConflict(ValueError):
+    """A v2 upload found different bytes at its content-addressed name.
+
+    Deterministic: retrying the same payload replays the same collision, so
+    the durable projection treats it as terminal instead of transient. Other
+    upload failures (including wrapped probe/read errors raised as plain
+    ``ValueError``) stay retryable.
+    """
+
+
 # Per-request fan-out limits for storage_executor (#7387)
 _STORAGE_CHUNK_SEM = threading.BoundedSemaphore(32)
 # 4 → 2 in #7526 was load-shedding while the pool was full of sleeping
@@ -755,15 +766,15 @@ def upload_audio_chunk(
             payload = upload_data
             path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus'
         blob = bucket.blob(path)
-        wanted_metadata = None
-        if audio_archive.admitted(uid, 'SYNC'):
-            wanted_metadata = {
-                **span_blob_metadata({'start': timestamp, 'samples': len(chunk_data) // 2, 'sample_rate': 16000}),
-                'canonical': 'false',
-                'codec': 'opus',
-                'rendition': 'sync-pcm-reencode',
-            }
-            blob.metadata = wanted_metadata
+        # The playback writer always knows the exact input sample extent.
+        # Speaker evidence needs that clock even when archive routing is off.
+        wanted_metadata = {
+            **span_blob_metadata({'start': timestamp, 'samples': len(chunk_data) // 2, 'sample_rate': 16000}),
+            'canonical': 'false',
+            'codec': 'opus',
+            'rendition': 'sync-pcm-reencode',
+        }
+        blob.metadata = wanted_metadata
         try:
             # Create-only: a retried upload of the same rendition must not
             # overwrite the committed object and mint a superseded generation
@@ -1015,7 +1026,7 @@ def upload_audio_chunks_batch(
                             # Identical retry: never overwrite or double-write.
                             # Exit the playback gate before the optional archive.
                             break
-                        raise ValueError(f'v2 audio blob content conflict at {path}')
+                        raise AudioChunkContentConflict(f'v2 audio blob content conflict at {path}')
                     blob.metadata = {
                         **(blob.metadata or {}),
                         **span_blob_metadata(span),

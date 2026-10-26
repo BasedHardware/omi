@@ -27,6 +27,15 @@ HEAD_OWNER_BUDGET = 64
 logger = logging.getLogger(__name__)
 
 
+def _admission_retry_delay(value: object, streak: int) -> float:
+    minimum = min(300, 30 * 2 ** (streak - 1))
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return minimum
+    if isinstance(value, float) and not math.isfinite(value):
+        return minimum
+    return max(minimum, min(86400, value))
+
+
 def owner_key(owner_id: str) -> str:
     return hashlib.sha256(owner_id.encode()).hexdigest()
 
@@ -444,6 +453,7 @@ class Scheduler:
                 return False, False
             job.update(state='result_ready', result=asdict(result), ready_at=now)
             job.pop('retry_started_at', None)
+            job.pop('admission_refusals', None)
             tx.put('jobs', result.segment_id, job)
             return True, True
 
@@ -526,7 +536,14 @@ class Scheduler:
         return bool(outcome)
 
     def defer(
-        self, segment_id: str, token: str, now: float, retry_after: float = 30, *, held_reason: str | None = None
+        self,
+        segment_id: str,
+        token: str,
+        now: float,
+        retry_after: float = 30,
+        *,
+        held_reason: str | None = None,
+        admission_refused: bool = False,
     ) -> bool:
         """Policy/capacity refusal is waiting, not a provider failure attempt.
 
@@ -541,9 +558,21 @@ class Scheduler:
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
                 return False
+            delay = retry_after
+            if admission_refused:
+                previous = job.get('admission_refusals', 0)
+                previous = previous if type(previous) is int and 0 <= previous <= 5 else 0
+                streak = min(previous + 1, 5)
+                job['admission_refusals'] = streak
+                # Bad/missing authority stays deferred; it never grants compute.
+                delay = _admission_retry_delay(delay, streak)
+                if not held_reason:
+                    # A prior allow is not the latest decision when this RPC
+                    # was unevaluated. Preserve BLIND instead of a false hold.
+                    job.pop('compute_decision', None)
             job.update(
                 state='retry',
-                available_at=now + max(1, min(86400, retry_after)),
+                available_at=now + max(1, min(86400, delay)),
                 attempt=max(0, job['attempt'] - 1),
                 token='',
                 lease_until=0.0,
@@ -553,7 +582,13 @@ class Scheduler:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        deferred = self.store.run(commit)
+        if deferred and admission_refused and self.metrics:
+            try:
+                self.metrics.record('admission_policy_deferred' if held_reason else 'admission_unevaluated_deferred')
+            except Exception:
+                pass  # Metrics cannot turn a committed defer into a retry.
+        return deferred
 
     def release(self, segment_id: str, token: str, now: float) -> bool:
         """Expire a held lease now: the lease-expiry transition without the wait.

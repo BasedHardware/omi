@@ -1,11 +1,13 @@
 """Open-loop card service: pending listing and answer transitions.
 
-``list_pending_cards``/``answer_card`` are the functions PR 3's Review source
-calls; these tests pin their contracts: the recap-day default listing window,
-per-timezone snooze/history days, ask-only vs strong task links (Done
-completes a task only through the app's own completion path —
-``mark_action_item_completed`` + reminder reconciliation #5085), and the
-drop → negative-example record.
+``list_pending_cards``/``answer_card`` are the functions the Review routes
+call; these tests pin their contracts: the producer's recap-day rule per
+cohort (legacy noon split vs ``CALLS_RECAP_MODE`` serving, with the
+one-day fallback), per-timezone snooze/history days, ask-only vs strong task
+links (Done completes a task only through the app's own completion path —
+``mark_action_item_completed`` + reminder reconciliation #5085), the
+drop → negative-example record, and the answer transaction's serialization of
+concurrent answers.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -14,10 +16,12 @@ from unittest.mock import Mock
 
 import pytest
 
+from config.refactor_modes import uid_digest
 import utils.open_loops.service as service
 from database.open_loops import get_cards, get_loops, set_cards, upsert_loop
 from tests.support.open_loops_store_fake import FakeFirestore
 from utils.open_loops import store
+from utils.other import daily_recap
 
 NOW = datetime(2026, 10, 26, 15, 0, tzinfo=timezone.utc)
 DATE_STR = '2026-10-26'
@@ -140,6 +144,92 @@ def test_list_pending_cards_for_a_day_the_pass_did_not_run(cards_env):
     assert service.list_pending_cards(UID, date_str='2026-10-20', firestore_client=cards_env.fake) == []
 
 
+def test_cards_display_day_always_matches_the_producers_scheduled_date(monkeypatch):
+    """Drift guard: the reader resolves the day with the producer's own rule
+    (``daily_recap.scheduled_date``), every cohort and mode, so the listing can
+    never aim at a day the pass did not date cards to."""
+    cohorts = {'off': None, 'shadow': None, 'shadow-cohort': None, 'serve': None}
+    for mode in cohorts:
+        monkeypatch.setenv('CALLS_RECAP_MODE', mode)
+        monkeypatch.setenv('CALLS_RECAP_MODE_SERVE_PERCENT', '0')
+        if mode == 'shadow-cohort':
+            monkeypatch.setenv('CALLS_RECAP_MODE_SERVE_UID_SHA256S', uid_digest(UID))
+        for uid in (UID, 'someone-else'):
+            for tz in ('Africa/Lagos', 'Pacific/Kiritimati', None):
+                for utc_hour in (0, 2, 9, 12, 14, 23):
+                    moment = datetime(2026, 10, 26, utc_hour, 30, tzinfo=timezone.utc)
+                    # scheduled_date hands the caller a date or the legacy string;
+                    # the reader always speaks the document id form.
+                    assert service.cards_display_day(uid, tz, moment) == str(
+                        daily_recap.scheduled_date(uid, tz, moment, service.recap_completed_day(tz, moment))
+                    ), (mode, uid, tz, utc_hour)
+
+
+def test_legacy_recap_users_keep_the_noon_split_morning_and_afternoon(cards_env, monkeypatch):
+    """Without CALLS_RECAP_MODE serving, the pass dates cards with the
+    noon-split rule — before noon yesterday, after noon today."""
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'off')
+    tz = 'Africa/Lagos'  # UTC+1, no DST: 09:00/15:00 local = 08:00/14:00 UTC
+    set_cards(UID, '2026-10-25', [_card(card_id='ol-25', question='yesterday card')], firestore_client=cards_env.fake)
+    set_cards(UID, '2026-10-26', [_card(card_id='ol-26', question='today card')], firestore_client=cards_env.fake)
+    morning = datetime(2026, 10, 26, 8, 0, tzinfo=timezone.utc)  # 09:00 local
+    day, pending = service.list_owner_pending_cards(UID, tz=tz, now=morning, firestore_client=cards_env.fake)
+    assert (day, [c['question'] for c in pending]) == ('2026-10-25', ['yesterday card'])
+    afternoon = datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc)  # 15:00 local
+    day, pending = service.list_owner_pending_cards(UID, tz=tz, now=afternoon, firestore_client=cards_env.fake)
+    assert (day, [c['question'] for c in pending]) == ('2026-10-26', ['today card'])
+
+
+def test_serving_recap_users_list_the_completed_day_morning_and_afternoon(cards_env, monkeypatch):
+    """CALLS_RECAP_MODE serving dates cards with ``completed_day`` — always
+    yesterday, no noon split (the pass runs ~01:00 local). At 15:00 local the
+    noon split would read a document that does not exist until tomorrow's
+    pass; the producer's rule keeps listing the day that was written."""
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
+    tz = 'Africa/Lagos'  # UTC+1, no DST
+    set_cards(UID, '2026-10-25', [_card(card_id='ol-25', question='yesterday card')], firestore_client=cards_env.fake)
+    for local_hour, utc_hour in ((9, 8), (15, 14)):
+        moment = datetime(2026, 10, 26, utc_hour, 0, tzinfo=timezone.utc)
+        assert service.cards_display_day(UID, tz, moment) == '2026-10-25'
+        day, pending = service.list_owner_pending_cards(UID, tz=tz, now=moment, firestore_client=cards_env.fake)
+        assert (day, [c['question'] for c in pending]) == ('2026-10-25', ['yesterday card'])
+
+
+def test_owner_listing_falls_back_to_the_previous_local_day(cards_env, monkeypatch):
+    """A missed pass (the resolved day has no document) must not blank the
+    surface: the previous day's still-pending cards are listed, under their own
+    day — the answer endpoint's date path."""
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
+    tz = 'Africa/Lagos'
+    set_cards(UID, '2026-10-24', [_card(card_id='ol-24', question='older card')], firestore_client=cards_env.fake)
+    afternoon = datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc)  # 15:00 local
+    day, pending = service.list_owner_pending_cards(UID, tz=tz, now=afternoon, firestore_client=cards_env.fake)
+    assert (day, [c['question'] for c in pending]) == ('2026-10-24', ['older card'])
+
+
+def test_owner_listing_falls_back_only_over_pending_cards(cards_env, monkeypatch):
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
+    tz = 'Africa/Lagos'
+    set_cards(UID, '2026-10-25', [_card(state='done')], firestore_client=cards_env.fake)
+    set_cards(UID, '2026-10-24', [_card(state='remind')], firestore_client=cards_env.fake)
+    afternoon = datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc)
+    assert service.list_owner_pending_cards(UID, tz=tz, now=afternoon, firestore_client=cards_env.fake) == (
+        '2026-10-25',
+        [],
+    )
+
+
+def test_owner_listing_does_not_reach_beyond_the_fallback_window(cards_env, monkeypatch):
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
+    tz = 'Africa/Lagos'
+    set_cards(UID, '2026-10-23', [_card(card_id='ol-23', question='stale card')], firestore_client=cards_env.fake)
+    afternoon = datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc)
+    assert service.list_owner_pending_cards(UID, tz=tz, now=afternoon, firestore_client=cards_env.fake) == (
+        '2026-10-25',
+        [],
+    )
+
+
 def test_answer_done_completes_a_strongly_linked_task_through_the_app_path(cards_env):
     loop = _loop(
         linked_task_id='task-9',
@@ -251,6 +341,73 @@ def test_answer_card_rejects_unknown_action_missing_card_and_repeats(cards_env):
     )
 
 
+def test_a_repeated_answer_never_touches_the_loop_again(cards_env):
+    """The loop update belongs to the call whose transition committed, so a
+    replayed answer is a no-op everywhere: no second snooze, resolve or
+    negative example."""
+    _seed(cards_env, [_card()])
+    assert service.answer_card(UID, LOOP_ID, 'drop', date_str=DATE_STR, now=NOW, firestore_client=cards_env.fake)
+    loop_after_answer = get_loops(UID, firestore_client=cards_env.fake)[0]
+    assert loop_after_answer['status'] == 'dropped'
+    assert (
+        service.answer_card(UID, LOOP_ID, 'done', date_str=DATE_STR, now=NOW, firestore_client=cards_env.fake) is None
+    )
+    assert get_loops(UID, firestore_client=cards_env.fake)[0] == loop_after_answer
+
+
+def test_answers_in_flight_never_resurrect_each_other(cards_env):
+    """Done on card a while Drop on card b commits mid-flight: a's whole-
+    document write used to restore b to pending from its stale read. The
+    answer transaction aborts on that contention and re-reads, so both
+    committed answers survive — and drop still records exactly one negative
+    example."""
+    _seed(
+        cards_env,
+        [_card(card_id='ol-a', loop_id='ol-a'), _card(card_id='ol-b', loop_id='ol-b')],
+        loops=[_loop(id='ol-a', stable_key='ol-a'), _loop(id='ol-b', stable_key='ol-b')],
+    )
+
+    def drop_b_while_a_holds_its_read(path):
+        cards_env.fake.on_transaction_read = None  # one shot: only a's read interleaves
+        answered = service.answer_card(UID, 'ol-b', 'drop', date_str=DATE_STR, now=NOW, firestore_client=cards_env.fake)
+        assert answered is not None and answered['state'] == 'dropped'
+
+    cards_env.fake.on_transaction_read = drop_b_while_a_holds_its_read
+    answered = service.answer_card(UID, 'ol-a', 'done', date_str=DATE_STR, now=NOW, firestore_client=cards_env.fake)
+    assert answered is not None and answered['state'] == 'done'
+
+    states = {c['id']: c['state'] for c in get_cards(UID, DATE_STR, firestore_client=cards_env.fake)}
+    assert states == {'ol-a': 'done', 'ol-b': 'dropped'}
+    loops = {l['id']: l for l in get_loops(UID, firestore_client=cards_env.fake)}
+    assert loops['ol-a']['status'] == 'resolved'
+    assert loops['ol-b']['status'] == 'dropped'
+    assert len(loops['ol-b']['negative_examples']) == 1
+
+
+def test_a_double_tap_answers_once_and_records_one_negative_example(cards_env):
+    """Two identical answers racing on one card: exactly one transitions, the
+    loser comes back as None (the route's 409), and the loop's drop history and
+    negative examples are written once."""
+    _seed(cards_env, [_card()])
+    taps = []
+
+    def first_tap_while_second_holds_its_read(path):
+        cards_env.fake.on_transaction_read = None
+        taps.append(
+            service.answer_card(UID, LOOP_ID, 'drop', date_str=DATE_STR, now=NOW, firestore_client=cards_env.fake)
+        )
+
+    cards_env.fake.on_transaction_read = first_tap_while_second_holds_its_read
+    second = service.answer_card(UID, LOOP_ID, 'drop', date_str=DATE_STR, now=NOW, firestore_client=cards_env.fake)
+
+    assert taps[0]['state'] == 'dropped'
+    assert second is None  # the retry found the card already answered
+    loop = get_loops(UID, firestore_client=cards_env.fake)[0]
+    assert loop['status'] == 'dropped'
+    assert len(loop['negative_examples']) == 1
+    assert [h['status'] for h in loop['history']].count('dropped') == 1
+
+
 def test_task_completion_failure_never_rolls_back_the_loop_transition(cards_env, monkeypatch, caplog):
     _seed(
         cards_env,
@@ -266,3 +423,61 @@ def test_task_completion_failure_never_rolls_back_the_loop_transition(cards_env,
     assert answered['state'] == 'done'
     loop = get_loops(UID, firestore_client=cards_env.fake)[0]
     assert loop['status'] == 'resolved'
+
+
+def test_owner_listing_never_falls_back_over_a_day_the_pass_ran(cards_env, monkeypatch):
+    """Today's document exists but is fully answered (or the pass wrote zero
+    cards): the listing stays empty instead of resurfacing yesterday's
+    unanswered cards, whose loops may have expired or resolved since."""
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
+    tz = 'Africa/Lagos'
+    set_cards(UID, '2026-10-25', [_card(state='done')], firestore_client=cards_env.fake)
+    set_cards(UID, '2026-10-24', [_card(card_id='ol-24', question='older card')], firestore_client=cards_env.fake)
+    afternoon = datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc)
+    assert service.list_owner_pending_cards(UID, tz=tz, now=afternoon, firestore_client=cards_env.fake) == (
+        '2026-10-25',
+        [],
+    )
+    set_cards(UID, '2026-10-25', [], firestore_client=cards_env.fake)
+    assert service.list_owner_pending_cards(UID, tz=tz, now=afternoon, firestore_client=cards_env.fake) == (
+        '2026-10-25',
+        [],
+    )
+
+
+def test_answer_on_a_terminal_loop_never_re_resolves_or_completes_its_task(cards_env):
+    loop = _loop(
+        status='expired',
+        linked_task_id='task-9',
+        task_link='model',
+        linked_task_title=TASK_TITLE,
+    )
+    _seed(cards_env, [_card(question=STRONG_QUESTION)], loops=[loop])
+    answered = service.answer_card(UID, LOOP_ID, 'done', date_str=DATE_STR, now=NOW, firestore_client=cards_env.fake)
+    assert answered['state'] == 'done'
+    stored = get_loops(UID, firestore_client=cards_env.fake)[0]
+    assert stored['status'] == 'expired' and stored['history'] == loop['history']
+    assert cards_env.task_completions == []
+
+
+def test_a_failed_loop_write_puts_the_card_back_so_a_retry_applies(cards_env, monkeypatch):
+    _seed(cards_env, [_card()])
+    real_upsert = service.open_loops_db.upsert_loop
+    calls = {'n': 0}
+
+    def flaky_upsert(*args, **kwargs):
+        calls['n'] += 1
+        if calls['n'] == 1:
+            raise RuntimeError('firestore unavailable')
+        return real_upsert(*args, **kwargs)
+
+    monkeypatch.setattr(service.open_loops_db, 'upsert_loop', flaky_upsert)
+    with pytest.raises(RuntimeError):
+        service.answer_card(UID, LOOP_ID, 'drop', date_str=DATE_STR, now=NOW, firestore_client=cards_env.fake)
+    # the card is pending again, not a silent 409 on retry
+    assert [c['id'] for c in service.list_pending_cards(UID, date_str=DATE_STR, firestore_client=cards_env.fake)] == [
+        LOOP_ID
+    ]
+    answered = service.answer_card(UID, LOOP_ID, 'drop', date_str=DATE_STR, now=NOW, firestore_client=cards_env.fake)
+    assert answered['state'] == 'dropped'
+    assert get_loops(UID, firestore_client=cards_env.fake)[0]['status'] == 'dropped'

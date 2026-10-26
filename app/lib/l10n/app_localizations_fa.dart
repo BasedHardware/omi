@@ -8597,6 +8597,9 @@ class AppLocalizationsFa extends AppLocalizations {
       'پیاده‌سازی متن در دسترس نیست — ضبط ادامه دارد و صدای شما ذخیره می‌شود.';
 
   @override
+  String get captureNoAudioFromPendant => 'صدایی از آویز نمی‌رسد';
+
+  @override
   String get capturing => 'در حال ضبط';
 
   @override
@@ -11081,6 +11084,12 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'اتصال بلوتوث با Omi شما قطع شده است، بنابراین صدا به برنامه نمی‌رسد. Omi همچنان روی دستگاه ضبط می‌کند و پس از بازگشت اتصال همگام‌سازی می‌شود. تلاش دوباره اتصال را دوباره برقرار می‌کند؛ اگر همچنان ناموفق بود، دستگاه خود را در تنظیمات > دستگاه بررسی کنید.';
+
+  @override
+  String get captureConnecting => 'در حال اتصال…';
+
+  @override
+  String get captureNoAudioDetail => 'آویز متصل است، اما هیچ صدایی به تلفن شما نمی‌رسد';
 
   @override
   String get captureIngressNeedsReconnect => 'صدا به برنامه نمی‌رسد — Omi را دوباره وصل کنید';
@@ -14578,4 +14587,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'انجام شد';
+
+  @override
+  String get openLoopAnswerRemind => 'بعدً یادآوری کن';
+
+  @override
+  String get openLoopAnswerDrop => 'رهاش کن';
 }

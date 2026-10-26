@@ -281,5 +281,7 @@ def test_posthog_constructor_failure_is_fail_open_at_public_extraction_boundary(
         raise RuntimeError('private')
 
     monkeypatch.setattr(product_telemetry.importlib, 'import_module', broken)
-    process_conversation.extract_memories('uid-1', SimpleNamespace(id='conv-1'))
+    process_conversation.extract_memories(
+        'uid-1', SimpleNamespace(id='conv-1', source=ConversationSource.external_integration)
+    )
     assert constructor == [True]

@@ -3227,6 +3227,7 @@
     "audioUploadFailedKeptLocal": "Yükleme başarısız — {duration} ses telefonunuzda saklanıyor.",
     "audioUploadFailedTapRetry": "Yükleme başarısız — {duration} ses telefonunuzda saklanıyor. Yeniden denemek için dokunun.",
     "audioUploadRetrying": "Yükleme yeniden deneniyor… {duration} ses telefonunuzda saklanıyor",
+    "captureNoAudioFromPendant": "Kolyeden ses gelmiyor",
     "capturing": "Kaydediliyor",
     "capturingPhotos": "Fotoğraf çekiliyor",
     "listeningTranscriptWillAppear": "Dinleniyor… transkript burada görünecek.",
@@ -3529,6 +3530,8 @@
     "captureBannerTryReconnect": "Yeniden bağlanmayı dene",
     "captureBannerRetrySync": "Senkronizasyonu yeniden dene",
     "captureWedgeBleExplanation": "Omi cihazınızdaki Bluetooth bağlantısı kesildi, bu nedenle ses uygulamaya ulaşmıyor. Omi cihazda kaydetmeye devam ediyor ve bağlantı geri geldiğinde senkronize olacak. Yeniden denemek bağlantıyı yeniden kurar; başarısız olmaya devam ederse Ayarlar > Cihaz bölümünden cihazınızı kontrol edin.",
+    "captureConnecting": "Bağlanıyor…",
+    "captureNoAudioDetail": "Kolye bağlı, ancak telefonunuza hiçbir ses ulaşmıyor",
     "captureIngressNeedsReconnect": "Ses uygulamaya ulaşmıyor — Omi'nizi yeniden bağlayın",
     "captureIngressNeedsReconnectExplanation": "Uygulama artık Omi cihazından ses alamıyor ve bağlantıyı otomatik olarak kurtaramadı. Cihazın bağlantısını kesip yeniden bağlayın — cihaz ayarlarından veya cihazı kapatıp açarak. Cihazda kayıtlı ses daha sonra eşitlenecek.",
     "captureStillRecording": "Kayıt sürüyor",
@@ -4468,5 +4471,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Tamamlandı",
+    "openLoopAnswerRemind": "Daha sonra hatırlat",
+    "openLoopAnswerDrop": "Yoksay"
 }

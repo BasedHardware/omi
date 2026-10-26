@@ -369,7 +369,7 @@ class AppState: ObservableObject {
   var recordingDuration: TimeInterval { RecordingTimer.shared.duration }
 
   var hasActiveConversationFilters: Bool {
-    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil
+    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil || showDiscardedConversations
   }
 
   // Live speaker segments moved to LiveTranscriptMonitor to avoid triggering global re-renders
@@ -383,9 +383,11 @@ class AppState: ObservableObject {
   @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
   @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
   let conversationRepository = ConversationRepository()
+  let conversationRestored = PassthroughSubject<ServerConversation, Never>()
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
+  @Published var showDiscardedConversations: Bool = false
   @Published var selectedDateFilter: Date? = nil
   @Published var selectedFolderId: String? = nil
 
@@ -716,6 +718,7 @@ class AppState: ObservableObject {
     selectedFolderId = nil
     selectedDateFilter = nil
     showStarredOnly = false
+    showDiscardedConversations = false
     totalConversationsCount = nil
     filteredConversationsCount = nil
     conversationsError = nil

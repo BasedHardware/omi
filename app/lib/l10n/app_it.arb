@@ -3192,6 +3192,7 @@
     "audioUploadFailedKeptLocal": "Caricamento non riuscito — {duration} di audio conservati sul telefono.",
     "audioUploadFailedTapRetry": "Caricamento non riuscito — {duration} di audio conservati sul telefono. Tocca per riprovare.",
     "audioUploadRetrying": "Nuovo tentativo di caricamento… {duration} di audio conservati sul telefono",
+    "captureNoAudioFromPendant": "Nessun audio dal ciondolo",
     "capturing": "Acquisizione in corso",
     "capturingPhotos": "Acquisizione foto",
     "listeningTranscriptWillAppear": "In ascolto… qui apparirà una trascrizione.",
@@ -3494,6 +3495,8 @@
     "captureBannerTryReconnect": "Prova a riconnettere",
     "captureBannerRetrySync": "Riprova sincronizzazione",
     "captureWedgeBleExplanation": "Il collegamento Bluetooth con il tuo Omi si è interrotto, quindi l'audio non arriva all'app. Omi continua a registrare sul dispositivo e si sincronizzerà non appena il collegamento si ripristina. Riprova riconnette il collegamento; se continua a non funzionare, controlla il dispositivo in Impostazioni > Dispositivo.",
+    "captureConnecting": "Connessione…",
+    "captureNoAudioDetail": "Il pendente è collegato, ma nessun audio raggiunge il tuo telefono",
     "captureIngressNeedsReconnect": "L'audio non raggiunge l'app — riconnetti il tuo Omi",
     "captureIngressNeedsReconnectExplanation": "L'app non riesce più a ricevere audio dal dispositivo Omi e non è riuscita a ripristinare la connessione automaticamente. Scollega e ricollega il dispositivo — dalle impostazioni del dispositivo o spegnendolo e riaccendendolo. L'audio salvato sul dispositivo verrà sincronizzato in seguito.",
     "captureStillRecording": "Registrazione in corso",
@@ -4433,5 +4436,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Fatto",
+    "openLoopAnswerRemind": "Ricordamelo più tardi",
+    "openLoopAnswerDrop": "Ignora"
 }

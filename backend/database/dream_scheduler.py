@@ -194,3 +194,40 @@ def candidates(*, limit=5000, now=None, firestore_client=None):
         .stream(timeout=3)
     )
     return [row.id for row in rows]
+
+
+def required_retry_page(*, limit=4990, firestore_client=None):
+    """Independent rotating owner inventory for owed intake, never paid-gated.
+
+    Reuse the projected, indexed Dream discovery query. Its own cursor is
+    committed only through the completed prefix, so a pass deadline cannot
+    skip unvisited owners. No new queue, job or Scheduler is involved.
+    """
+    database = firestore_client if firestore_client is not None else get_firestore_client()
+    cursor = database.collection('dream_scheduler').document('required_intake')
+    before = (cursor.get(timeout=3).to_dict() or {}).get('after')
+    after = before
+    owners = []
+    budget = max(0, min(4990, limit))
+    while len(owners) < budget:
+        rows = candidate_page(after=after, limit=min(499, budget - len(owners)), firestore_client=database)
+        if not rows:
+            break
+        owners.extend(row.id for row in rows)
+        after = rows[-1].id
+    return owners, before
+
+
+def finish_required_retry_page(before, after, *, firestore_client=None):
+    database = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = database.collection('dream_scheduler').document('required_intake')
+
+    @firestore.transactional
+    def finish(tx):
+        current = (ref.get(transaction=tx).to_dict() or {}).get('after')
+        if current == before:
+            tx.set(ref, {'after': after})
+
+    firestore_transaction_retry.run_with_transaction_contention_retry(
+        database.transaction, finish, operation_name='dream_required_retry_cursor'
+    )

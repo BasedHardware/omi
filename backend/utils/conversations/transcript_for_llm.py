@@ -24,7 +24,11 @@ from config.refactor_modes import serving_for
 from database.auth import get_user_name
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
-from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
+from utils.conversations.owner_attribution import (
+    OwnerAttributionEvidence,
+    may_attribute_to_owner,
+    confident_owner_segments,
+)
 from utils.conversations.wake_word import WAKE_WORD_MARKER, escape_spoken_wake_word_marker, find_wake_word_segment_ids
 from utils.speakers.display import DisplayParticipants, display_participants
 
@@ -374,8 +378,13 @@ def render_cluster_transcript(
     Copies are prompt-only. It never rewrites stored segment labels or infers an
     identity from calendar, contacts, story content or a numeric speaker key.
     """
-    safe, owner_note = owner_safe_transcript_segments(segments)
-    rows = [SimpleNamespace(**dict(row)) if isinstance(row, Mapping) else row for row in safe]
+    rows = [SimpleNamespace(**{'is_user': False, **dict(row)}) if isinstance(row, Mapping) else row for row in segments]
+    trusted_owner_rows = {id(row) for row in confident_owner_segments(rows)}
+    rows = [
+        _clear_owner_claim(row) if getattr(row, 'is_user', False) and id(row) not in trusted_owner_rows else row
+        for row in rows
+    ]
+    rows, owner_note = owner_safe_transcript_segments(rows)
     display = display_participants(
         rows,
         names=names,
@@ -396,6 +405,10 @@ def render_cluster_transcript(
         segment_id = str(getattr(row, 'id', None) or f'moment-{index}')
         participant = display.for_segment(row)
         key, name = participant.key, participant.name
+        if name and name.startswith('likely '):
+            # Suggestions remain useful on speaker-review surfaces, but do not
+            # become a named speaker binding in summaries.
+            name = None
         # If a fallback cluster has contradictory labels, retain no named claim.
         if key in labels and labels[key] != name:
             labels[key] = None

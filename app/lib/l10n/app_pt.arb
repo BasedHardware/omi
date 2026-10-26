@@ -3227,6 +3227,7 @@
     "audioUploadFailedKeptLocal": "Falha no envio — {duration} de áudio guardados no seu telefone.",
     "audioUploadFailedTapRetry": "Falha no envio — {duration} de áudio guardados no seu telefone. Toque para tentar novamente.",
     "audioUploadRetrying": "Tentando enviar novamente… {duration} de áudio guardados no seu telefone",
+    "captureNoAudioFromPendant": "Sem áudio do pingente",
     "capturing": "Capturando",
     "capturingPhotos": "Capturando fotos",
     "listeningTranscriptWillAppear": "Ouvindo… uma transcrição aparecerá aqui.",
@@ -3529,6 +3530,8 @@
     "captureBannerTryReconnect": "Tentar reconectar",
     "captureBannerRetrySync": "Repetir sincronização",
     "captureWedgeBleExplanation": "O link Bluetooth com o seu Omi parou, então o áudio não está chegando ao aplicativo. O Omi continua gravando no dispositivo e sincronizará assim que o link se recuperar. Tentar novamente reconecta o link; se continuar falhando, verifique seu dispositivo em Ajustes > Dispositivo.",
+    "captureConnecting": "Conectando…",
+    "captureNoAudioDetail": "O pingente está conectado, mas nenhum áudio está chegando ao seu telefone",
     "captureIngressNeedsReconnect": "O áudio não está chegando ao aplicativo — reconecte seu Omi",
     "captureIngressNeedsReconnectExplanation": "O aplicativo não consegue mais receber áudio do dispositivo Omi e não conseguiu restaurar a conexão automaticamente. Desconecte e reconecte o dispositivo — nas configurações do dispositivo ou desligando-o e ligando-o. O áudio salvo no dispositivo será sincronizado depois.",
     "captureStillRecording": "Ainda gravando",
@@ -4468,5 +4471,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Concluído",
+    "openLoopAnswerRemind": "Lembrar-me mais tarde",
+    "openLoopAnswerDrop": "Descartar"
 }
