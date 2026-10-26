@@ -132,7 +132,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -140,7 +148,10 @@
       "instatus_component": "live-transcription",
       "alert_identity": "cew923rcn3ncwb",
       "component": "live-transcription",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -278,12 +289,23 @@
       "severity": "critical",
       "alert_identity": "aew926uoh6o00c",
       "component": "live-transcription",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -420,7 +442,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -428,7 +458,10 @@
       "instatus_component": "live-transcription",
       "alert_identity": "dew91uem0dnggb",
       "component": "live-transcription",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -543,7 +576,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -551,7 +592,10 @@
       "instatus_component": "live-transcription",
       "alert_identity": "dew92a2egu8sge",
       "component": "live-transcription",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -687,7 +731,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -695,7 +747,10 @@
       "instatus_component": "live-transcription",
       "alert_identity": "few91zm7mujggb",
       "component": "live-transcription",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -810,7 +865,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -818,7 +881,10 @@
       "instatus_component": "live-transcription",
       "alert_identity": "bfobs1pusherdeg01",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -954,7 +1020,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -962,7 +1036,10 @@
       "instatus_component": "speech-processing",
       "alert_identity": "dew9ala448r9cc",
       "component": "speech-processing",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -1100,12 +1177,23 @@
       "severity": "critical",
       "alert_identity": "few9anlyv16v4a",
       "component": "speech-processing",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -1242,7 +1330,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -1250,7 +1346,10 @@
       "instatus_component": "speech-processing",
       "alert_identity": "bew9aeqgx2w3kf",
       "component": "speech-processing",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -1391,7 +1490,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -1399,7 +1506,10 @@
       "instatus_component": "speech-processing",
       "alert_identity": "cew9aupbed0xsd",
       "component": "speech-processing",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -1535,7 +1645,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -1543,7 +1661,10 @@
       "instatus_component": "speech-processing",
       "alert_identity": "eew9ai0vlsyrke",
       "component": "speech-processing",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -1705,7 +1826,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -1713,7 +1842,10 @@
       "instatus_component": "api",
       "alert_identity": "cew4j7ruiik1sd",
       "component": "api",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     }
   },
   {
@@ -1880,12 +2012,23 @@
       "severity": "critical",
       "alert_identity": "cew4jcnpa68sga",
       "component": "api",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -2044,7 +2187,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -2052,7 +2203,10 @@
       "instatus_component": "api",
       "alert_identity": "bew4jihxc1beob",
       "component": "api",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     }
   },
   {
@@ -2218,7 +2372,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -2226,7 +2388,10 @@
       "instatus_component": "api",
       "alert_identity": "bew4iwy0hzmyob",
       "component": "api",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     }
   },
   {
@@ -2388,7 +2553,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -2396,7 +2569,10 @@
       "instatus_component": "api",
       "alert_identity": "cew97rzyegdtsa",
       "component": "api",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -2560,12 +2736,23 @@
       "severity": "critical",
       "alert_identity": "cew97uqu791q8a",
       "component": "api",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -2722,7 +2909,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -2730,7 +2925,10 @@
       "instatus_component": "api",
       "alert_identity": "cew97x299of7kb",
       "component": "api",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -2896,7 +3094,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -2904,7 +3110,10 @@
       "instatus_component": "api",
       "alert_identity": "dew97fqr33oxsd",
       "component": "api",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -3019,7 +3228,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -3027,7 +3244,10 @@
       "instatus_component": "api",
       "alert_identity": "bfobs1syncenq01",
       "component": "api",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -3165,12 +3385,23 @@
       "severity": "critical",
       "alert_identity": "dfpgfzd3t1m9sf",
       "component": "speech-processing",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -3306,12 +3537,23 @@
       "severity": "critical",
       "alert_identity": "efpossz9hmsqod",
       "component": "speech-processing",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -3449,12 +3691,23 @@
       "severity": "warning",
       "alert_identity": "efpnx71qc88aob",
       "component": "speech-processing",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -3593,12 +3846,23 @@
       "severity": "warning",
       "alert_identity": "efpgg049laqyof",
       "component": "speech-processing",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -3737,12 +4001,23 @@
       "severity": "warning",
       "alert_identity": "omi-parakeet-stream-capacity-warning",
       "component": "speech-processing",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -3881,12 +4156,23 @@
       "severity": "critical",
       "alert_identity": "omi-parakeet-stream-capacity-critical",
       "component": "speech-processing",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -4023,7 +4309,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -4031,7 +4325,10 @@
       "instatus_component": "live-transcription",
       "alert_identity": "bevzeigrns5xca",
       "component": "live-transcription",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -4169,12 +4466,23 @@
       "severity": "critical",
       "alert_identity": "cevzen5b94z5sb",
       "component": "live-transcription",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -4312,7 +4620,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -4320,7 +4636,10 @@
       "instatus_component": "live-transcription",
       "alert_identity": "eew9yw583gnwgd",
       "component": "live-transcription",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -4461,7 +4780,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -4469,7 +4796,10 @@
       "instatus_component": "live-transcription",
       "alert_identity": "aevzf0r8z6ayoe",
       "component": "live-transcription",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -4617,7 +4947,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -4625,7 +4963,10 @@
       "instatus_component": "live-transcription",
       "alert_identity": "fevzfwkmrjncwc",
       "component": "live-transcription",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -4768,12 +5109,23 @@
       "severity": "critical",
       "alert_identity": "bevykefxxe0owd",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -4890,12 +5242,23 @@
       "severity": "ticket",
       "alert_identity": "omi-listen-audio-decode-failures",
       "component": "live-transcription",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -4992,15 +5355,23 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-listen-neg-zone-no-traffic",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"],
+      "group_by": [
+        "alertname"
+      ],
       "group_wait": "30s",
       "group_interval": "5m",
-      "repeat_interval": "4h"
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -5097,15 +5468,23 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-listen-websocket-zone-skew",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"],
+      "group_by": [
+        "alertname"
+      ],
       "group_wait": "5m",
       "group_interval": "1h",
-      "repeat_interval": "24h"
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -5272,7 +5651,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -5280,7 +5667,10 @@
       "instatus_component": "plugins",
       "alert_identity": "eew96lge97gg0e",
       "component": "plugins",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -5444,12 +5834,23 @@
       "severity": "critical",
       "alert_identity": "eew96o25qztvkf",
       "component": "plugins",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -5608,7 +6009,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -5616,7 +6025,10 @@
       "instatus_component": "plugins",
       "alert_identity": "cew96qrmucp34c",
       "component": "plugins",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -5782,7 +6194,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -5790,7 +6210,10 @@
       "instatus_component": "plugins",
       "alert_identity": "bew95rob32tc0d",
       "component": "plugins",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -5942,7 +6365,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -5950,7 +6381,10 @@
       "instatus_component": "api",
       "alert_identity": "dew9b4o7boa2oe",
       "component": "api",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     }
   },
   {
@@ -6116,7 +6550,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -6124,7 +6566,10 @@
       "instatus_component": "plugins",
       "alert_identity": "bew99eq18r8jkf",
       "component": "plugins",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     }
   },
   {
@@ -6282,7 +6727,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -6290,7 +6743,10 @@
       "instatus_component": "plugins",
       "alert_identity": "few99rmi823uof",
       "component": "plugins",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     }
   },
   {
@@ -6458,12 +6914,23 @@
       "severity": "ticket",
       "alert_identity": "eew99oe8y6qyod",
       "component": "plugins",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -6579,12 +7046,20 @@
       "instatus_component": "speech-processing",
       "alert_identity": "tz_parakeet_rps_zero",
       "component": "speech-processing",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -6700,12 +7175,20 @@
       "instatus_component": "live-transcription",
       "alert_identity": "tz_backend_listen_lb_zero",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -6821,12 +7304,20 @@
       "instatus_component": "live-transcription",
       "alert_identity": "tz_backend_listen_pods_zero",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -6942,12 +7433,20 @@
       "instatus_component": "live-transcription",
       "alert_identity": "tz_pusher_connections_zero",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -7063,12 +7562,23 @@
       "instatus_component": "live-transcription",
       "alert_identity": "tz_backend_listen_ws_drop",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -7204,12 +7714,20 @@
       "instatus_component": "api",
       "alert_identity": "tz_backend_cloudrun_zero",
       "component": "api",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -7328,12 +7846,23 @@
       "instatus_component": "ai-chat",
       "alert_identity": "bfobs1llmgfb01",
       "component": "ai-chat",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -7488,12 +8017,23 @@
       "instatus_component": "ai-chat",
       "alert_identity": "omi-journey-chat-fail",
       "component": "ai-chat",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -7628,12 +8168,23 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-journey-pusher-fail",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -7768,12 +8319,23 @@
       "instatus_component": "speech-processing",
       "alert_identity": "omi-journey-capture-fail",
       "component": "speech-processing",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -7788,10 +8350,16 @@
       {
         "refId": "A",
         "queryType": "",
-        "relativeTimeRange": {"from": 1800, "to": 0},
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
         "datasourceUid": "prometheus",
         "model": {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "clamp_min(delta((max(listen_finalization_durable_jobs{state=\"accepted\"}))[30m:]), 0)",
           "instant": true,
           "intervalMs": 1000,
@@ -7802,10 +8370,16 @@
       {
         "refId": "B",
         "queryType": "",
-        "relativeTimeRange": {"from": 1800, "to": 0},
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
         "datasourceUid": "prometheus",
         "model": {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "sum(clamp_min(delta((max by (state) (listen_finalization_durable_jobs{state=~\"success|failure|stale\"}))[30m:]), 0))",
           "instant": true,
           "intervalMs": 1000,
@@ -7816,10 +8390,16 @@
       {
         "refId": "C",
         "queryType": "",
-        "relativeTimeRange": {"from": 0, "to": 0},
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
         "datasourceUid": "__expr__",
         "model": {
-          "datasource": {"type": "__expr__", "uid": "__expr__"},
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
           "expression": "$A >= 5 && $B == 0",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -7830,11 +8410,37 @@
       {
         "refId": "D",
         "queryType": "",
-        "relativeTimeRange": {"from": 0, "to": 0},
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
         "datasourceUid": "__expr__",
         "model": {
-          "conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["D"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}],
-          "datasource": {"type": "__expr__", "uid": "__expr__"},
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
           "expression": "C",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -7864,11 +8470,24 @@
       "instatus_component": "speech-processing",
       "alert_identity": "omi-capture-finalization-dead-emission",
       "component": "speech-processing",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
-    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"},
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
     "record": null
   },
   {
@@ -7964,12 +8583,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-journey-scrape-missing",
       "component": "observability",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -8065,12 +8695,23 @@
       "instatus_component": "ai-chat",
       "alert_identity": "omi-llm-gateway-client-reachability",
       "component": "ai-chat",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -8166,12 +8807,23 @@
       "instatus_component": "ai-chat",
       "alert_identity": "omi-llm-gateway-no-ready-endpoints",
       "component": "ai-chat",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -8180,7 +8832,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Resilience",
-  "title": "Live transcription - attempt failure rate elevated",
+    "title": "Live transcription - attempt failure rate elevated",
     "condition": "D",
     "data": [
       {
@@ -8196,7 +8848,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-        "expr": "sum(increase(omi_live_stt_accepted_total[30m]))",
+          "expr": "sum(increase(omi_live_stt_accepted_total[30m]))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -8216,7 +8868,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-        "expr": "sum(increase(omi_live_stt_terminal_total{outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_live_stt_accepted_total[30m])), 1)",
+          "expr": "sum(increase(omi_live_stt_terminal_total{outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_live_stt_accepted_total[30m])), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -8306,12 +8958,23 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-journey-live-transcription-fail",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -8406,12 +9069,23 @@
       "instatus_component": "speech-processing",
       "alert_identity": "omi-parakeet-ready-pod-no-success",
       "component": "speech-processing",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -8506,12 +9180,23 @@
       "instatus_component": "speech-processing",
       "alert_identity": "omi-parakeet-fatal-cuda",
       "component": "speech-processing",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -8605,12 +9290,23 @@
       "severity": "critical",
       "alert_identity": "cft8izabmcjk0e",
       "component": "speech-processing",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -8704,12 +9400,23 @@
       "severity": "warning",
       "alert_identity": "dft8iyoy04s8wf",
       "component": "speech-processing",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -8847,12 +9554,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-cloud-run-metric-names-unnormalized",
       "component": "observability",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -8990,12 +9708,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-cloud-run-egress-query-rejected",
       "component": "observability",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -9133,12 +9862,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-cloud-run-egress-down",
       "component": "observability",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -9277,12 +10017,23 @@
       "severity": "critical",
       "instatus_component": "ai-chat",
       "component": "llm-gateway",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -9418,12 +10169,23 @@
       "severity": "critical",
       "instatus_component": "ai-chat",
       "component": "llm-gateway",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -9559,12 +10321,23 @@
       "severity": "critical",
       "instatus_component": "ai-chat",
       "component": "llm-gateway",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -9703,12 +10476,23 @@
       "severity": "critical",
       "instatus_component": "observability",
       "component": "observability",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -9847,12 +10631,20 @@
       "severity": "critical",
       "instatus_component": "ai-chat",
       "component": "ai-chat",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -9947,12 +10739,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-firestore-notfound-dod-step",
       "component": "firestore",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -10047,12 +10850,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-firestore-notfound-ceiling",
       "component": "firestore",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -10147,12 +10961,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-firestore-metric-absent",
       "component": "firestore",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -10247,12 +11072,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-firestore-read-spend-daily",
       "component": "firestore",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -10347,12 +11183,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-firestore-family-read-step",
       "component": "firestore",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -10447,12 +11294,23 @@
       "instatus_component": "observability",
       "alert_identity": "omi-firestore-metric-stale",
       "component": "firestore",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -10550,12 +11408,23 @@
       "instatus_component": "speech-processing",
       "alert_identity": "omi-capture-finalization-memory-fence",
       "component": "speech-processing",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -10691,12 +11560,20 @@
       "instatus_component": "speech-processing",
       "alert_identity": "omi-journey-capture-success-critical",
       "component": "speech-processing",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -10832,12 +11709,20 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-journey-pusher-success-critical",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -10993,12 +11878,20 @@
       "instatus_component": "ai-chat",
       "alert_identity": "omi-journey-chat-success-critical",
       "component": "ai-chat",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -11134,12 +12027,23 @@
       "instatus_component": "speech-processing",
       "alert_identity": "omi-journey-capture-settle-gap",
       "component": "speech-processing",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -11278,12 +12182,23 @@
       "instatus_component": "speech-processing",
       "alert_identity": "omi-capture-oldest-nonterminal",
       "component": "speech-processing",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -11422,12 +12337,23 @@
       "instatus_component": "speech-processing",
       "alert_identity": "omi-capture-dead-letter-surge",
       "component": "speech-processing",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -11536,7 +12462,10 @@
       "component": "api",
       "impact": "product",
       "instatus_component": "api",
-      "severity": "critical"
+      "severity": "critical",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/d2d782ef-f537-46b8-969d-f73561ec7d07",
@@ -11549,7 +12478,15 @@
     },
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -11561,9 +12498,111 @@
     "title": "Durable queue - oldest ready item stalled",
     "condition": "C",
     "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds) or max(omi_queue_oldest_ready_sample_unknown) > 0", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
-      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "B", "type": "reduce"}},
-      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "B", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "threshold"}}
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds) or max(omi_queue_oldest_ready_sample_unknown) > 0",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
     ],
     "updated": "2026-09-03T00:00:00Z",
     "noDataState": "Alerting",
@@ -11585,12 +12624,23 @@
       "instatus_component": "api",
       "alert_identity": "omi-queue-oldest-ready",
       "component": "api",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -11717,7 +12767,7 @@
       "threshold": "exhausted / listen-accepted > 0.35 with >= 50 accepted sockets in 5m, for 10m",
       "user_impact": "Live transcription is failing for a large minority of sessions; clients reconnect and audio falls to offline sync. This is the standing 16-25% degradation becoming worse, not yet the 2026-09-19 outage.",
       "scope": "backend-listen live STT selection (omi_fallback_total component=stt_selection outcome=exhausted over omi_listen_accepted_total).",
-      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge \u2014 increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
+      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge — increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
       "safe_next_action": "Confirm the ratio on Resilience / Fallbacks panel 15, then inspect which to_mode is exhausting (panel 16) before changing provider credentials or capacity.",
       "runbook": "backend/docs/runbooks/resilience-dashboards.md",
       "evaluated_bad": "0.817 (2026-09-19 04:40Z 2m) / 0.888 (09:30Z 2m)",
@@ -11728,12 +12778,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -11860,7 +12921,7 @@
       "threshold": "exhausted / listen-accepted > 0.60 with >= 50 accepted sockets in 5m, for 5m",
       "user_impact": "Most live sessions die in initialize_stt(); clients reconnect every ~35s and conversations fragment. This is the 2026-09-19 04:40Z failure class (82-89%), separated from the 16-25% standing baseline.",
       "scope": "backend-listen live STT selection (omi_fallback_total component=stt_selection outcome=exhausted over omi_listen_accepted_total).",
-      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge \u2014 increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
+      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge — increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
       "safe_next_action": "Confirm panel 15 is above 0.60, then check Deepgram/Parakeet fallback-leg health on panel 16 and the live-STT failure-ratio panel before rolling credentials or disabling a provider.",
       "runbook": "backend/docs/runbooks/resilience-dashboards.md",
       "evaluated_bad": "0.817 (2026-09-19 04:40Z 2m) / 0.888 (09:30Z 2m)",
@@ -11871,12 +12932,20 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -12014,12 +13083,23 @@
       "component": "live-transcription",
       "impact": "product",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -12137,12 +13217,20 @@
       "component": "live-transcription",
       "impact": "product",
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -12322,12 +13410,23 @@
       "component": "speech-processing",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "speech-processing"
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -12464,12 +13563,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -12606,12 +13716,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -12748,12 +13869,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -12890,12 +14022,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -13032,12 +14175,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -13174,12 +14328,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -13296,12 +14461,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -13418,17 +14594,26 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
-
-
   {
     "uid": "omi-modulate-failing-soniox",
     "orgID": 1,
@@ -13562,12 +14747,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -13704,12 +14900,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -13846,12 +15053,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -13988,12 +15206,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -14130,12 +15359,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -14272,12 +15512,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -14394,12 +15645,20 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -14536,12 +15795,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -14678,12 +15948,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -14820,12 +16101,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -14962,12 +16254,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -15104,12 +16407,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -15246,12 +16560,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -15388,7 +16713,10 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -15398,7 +16726,10 @@
       ],
       "group_wait": "5m",
       "group_interval": "1h",
-      "repeat_interval": "24h"
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -15535,12 +16866,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -15677,7 +17019,10 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -15687,7 +17032,10 @@
       ],
       "group_wait": "5m",
       "group_interval": "1h",
-      "repeat_interval": "24h"
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -15824,12 +17172,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -15966,12 +17325,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -16108,12 +17478,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -16270,12 +17651,23 @@
       "component": "speaker-recognition",
       "impact": "product",
       "severity": "warning",
-      "instatus_component": "speech-processing"
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -16415,12 +17807,23 @@
       "component": "live-transcription",
       "impact": "infrastructure",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -16557,12 +17960,23 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -16734,12 +18148,23 @@
       "component": "daily-recap",
       "impact": "product",
       "severity": "warning",
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -16855,12 +18280,20 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-slo-live-critical",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -16976,12 +18409,23 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-slo-live-warning",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -17097,12 +18541,20 @@
       "instatus_component": "ai-chat",
       "alert_identity": "omi-slo-chat-critical",
       "component": "ai-chat",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -17218,12 +18670,23 @@
       "instatus_component": "ai-chat",
       "alert_identity": "omi-slo-chat-warning",
       "component": "ai-chat",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -17339,12 +18802,20 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-slo-pusher-critical",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -17460,12 +18931,23 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-slo-pusher-warning",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -17579,12 +19061,23 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-slo-live-signal-dead",
       "component": "live-transcription",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -17704,7 +19197,10 @@
       "alert_identity": "omi-datasource-prometheus",
       "component": "monitoring",
       "impact": "infrastructure",
-      "datasource_uid": "prometheus"
+      "datasource_uid": "prometheus",
+      "tier": "page",
+      "audience": "human",
+      "owner": "observability"
     }
   },
   {
@@ -17844,7 +19340,10 @@
       "alert_identity": "omi-datasource-cloud-monitoring",
       "component": "monitoring",
       "impact": "infrastructure",
-      "datasource_uid": "beuxmaq8oxhq8e"
+      "datasource_uid": "beuxmaq8oxhq8e",
+      "tier": "page",
+      "audience": "human",
+      "owner": "observability"
     }
   },
   {
@@ -17963,7 +19462,10 @@
       "alert_identity": "omi-datasource-gmp",
       "component": "monitoring",
       "impact": "infrastructure",
-      "datasource_uid": "gmp-cloud-run"
+      "datasource_uid": "gmp-cloud-run",
+      "tier": "page",
+      "audience": "human",
+      "owner": "observability"
     }
   },
   {
@@ -18099,7 +19601,10 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -18109,7 +19614,10 @@
       ],
       "group_wait": "30s",
       "group_interval": "5m",
-      "repeat_interval": "4h"
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -18248,7 +19756,10 @@
       "instatus_component": "speech-processing",
       "alert_identity": "omi-capture-summary-never-published",
       "component": "speech-processing",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -18397,7 +19908,10 @@
       "instatus_component": "speech-processing",
       "alert_identity": "omi-capture-summary-stale",
       "component": "speech-processing",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -18407,7 +19921,10 @@
       ],
       "group_wait": "30s",
       "group_interval": "5m",
-      "repeat_interval": "4h"
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -18544,7 +20061,10 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -18554,7 +20074,10 @@
       ],
       "group_wait": "5m",
       "group_interval": "1h",
-      "repeat_interval": "24h"
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -18648,7 +20171,10 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-listen-neg-endpoint-coverage",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -18658,7 +20184,10 @@
       ],
       "group_wait": "5m",
       "group_interval": "1h",
-      "repeat_interval": "24h"
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -18752,7 +20281,10 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-listen-neg-endpoints-unattached",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -18762,7 +20294,10 @@
       ],
       "group_wait": "30s",
       "group_interval": "5m",
-      "repeat_interval": "4h"
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -18856,7 +20391,10 @@
       "instatus_component": "live-transcription",
       "alert_identity": "omi-listen-neg-exporter-stale",
       "component": "live-transcription",
-      "impact": "user-experience"
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -18866,7 +20404,10 @@
       ],
       "group_wait": "5m",
       "group_interval": "1h",
-      "repeat_interval": "24h"
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -19005,12 +20546,23 @@
       "component": "backend",
       "impact": "product",
       "instatus_component": "api",
-      "severity": "warning"
+      "severity": "warning",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -19148,7 +20700,10 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -19158,7 +20713,10 @@
       ],
       "group_wait": "5m",
       "group_interval": "1h",
-      "repeat_interval": "24h"
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -19295,7 +20853,10 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -19305,7 +20866,10 @@
       ],
       "group_wait": "5m",
       "group_interval": "1h",
-      "repeat_interval": "24h"
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -19443,7 +21007,10 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -19453,7 +21020,10 @@
       ],
       "group_wait": "5m",
       "group_interval": "1h",
-      "repeat_interval": "24h"
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -19571,7 +21141,10 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -19739,7 +21312,10 @@
       "impact": "user-experience",
       "severity": "critical",
       "instatus_component": "api",
-      "alert_identity": "omi-sync-failure-reason-step"
+      "alert_identity": "omi-sync-failure-reason-step",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -19749,7 +21325,10 @@
       ],
       "group_wait": "30s",
       "group_interval": "5m",
-      "repeat_interval": "4h"
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -19887,7 +21466,10 @@
       "impact": "user-experience",
       "severity": "warning",
       "instatus_component": "api",
-      "alert_identity": "omi-sync-total-failure-share-ceiling"
+      "alert_identity": "omi-sync-total-failure-share-ceiling",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -19897,7 +21479,10 @@
       ],
       "group_wait": "5m",
       "group_interval": "1h",
-      "repeat_interval": "24h"
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -20061,7 +21646,10 @@
       "impact": "infrastructure",
       "severity": "warning",
       "instatus_component": "observability",
-      "alert_identity": "omi-firestore-commit-resource-exhausted"
+      "alert_identity": "omi-firestore-commit-resource-exhausted",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
     },
     "isPaused": false,
     "notification_settings": {
@@ -20071,7 +21659,10 @@
       ],
       "group_wait": "5m",
       "group_interval": "1h",
-      "repeat_interval": "24h"
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -20209,7 +21800,10 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -20219,7 +21813,10 @@
       ],
       "group_wait": "5m",
       "group_interval": "1h",
-      "repeat_interval": "24h"
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -20336,7 +21933,10 @@
       "impact": "user-experience",
       "severity": "critical",
       "instatus_component": "api",
-      "alert_identity": "omi-sync-provider-budget-exhausted"
+      "alert_identity": "omi-sync-provider-budget-exhausted",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
@@ -20347,6 +21947,1654 @@
       "group_wait": "30s",
       "group_interval": "5m",
       "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-pressure-sampler-stuck",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - pressure sampler stuck",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((max by (namespace, pod) (omi_stt_window_batch_pressure_replicas{job=\"backend-listen-metrics\",state=\"fresh\"}) == 0) + 1) or on (namespace, pod) (time() - max by (namespace, pod) (omi_stt_window_batch_pressure_progress_timestamp_seconds{job=\"backend-listen-metrics\"} > 0) > 15)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-24T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "summary": "Live STT pressure sampler has no fresh observations or has stopped progressing for five minutes",
+      "user_impact": "This listen pod refuses Parakeet windows after its bounded cache expires and shifts audio to paid STT.",
+      "scope": "Per backend-listen namespace/pod; no traffic floor, so a quiet broken pod remains visible.",
+      "verification": "Hermetic sampler and alert behavior tests; live delivery requires authorized monitoring provisioning.",
+      "safe_next_action": "Inspect fetch_failures_total by cause and refresh_total reset_client outcomes. Check pool discovery and sampler progress; if recovery fails, have the rollout lead replace affected listen pods. Do not disable pressure admission.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "fresh == 0 OR no sampler start/valid response within 15s, continuously for 5m. Telegram group_wait adds 30s.",
+      "evaluated_bad": "One zero-fresh pod among healthy pods fires after 5m, including at zero admissions; a frozen positive fresh gauge fires after progress ages 15s plus 5m.",
+      "evaluated_good": "A valid response resets progress; recovered freshness before 5m clears pending. Missing scrape targets use existing coverage alerts."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-pressure-sampler-stuck",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-audio-custody-pressure",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pusher",
+    "title": "Audio custody - prevented drop or archive failure",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(increase(omi_audio_custody_would_drop_total[5m])) or vector(0)) + (sum(increase(omi_audio_custody_failures_total[5m])) or vector(0)) + (sum(increase(pusher_queue_drops_total{queue=~\"private.*|audio.*\"}[5m])) or vector(0)) + (sum(increase(pusher_private_cloud_upload_drops_total[5m])) or vector(0)) + ((max(omi_audio_custody_last_risk_timestamp_seconds) > time() - 300) or vector(0))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "summary": "Audio storage pressure or a custody commit failed; captured frames remain unacknowledged.",
+      "user_impact": "Recording delivery may pause while the producer retains unacknowledged audio. A receipt is required before releasing the final copy.",
+      "scope": "Consented live capture in backend-listen and pusher.",
+      "verification": "Inspect omi_audio_custody_would_drop_total and omi_audio_custody_failures_total by stage; reconcile immutable manifest generations and decode a byte-integrity canary.",
+      "safe_next_action": "Restore archive writes or relieve projection pressure. Do not delete buffers, receipts or source WALs. Lead owns emergency rollback and the next train.",
+      "runbook": "backend/docs/runbooks/audio-durable-outbox.md",
+      "threshold": "Any would-be audio drop or failed custody operation in five minutes"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-audio-custody-pressure",
+      "component": "live-transcription",
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    }
+  },
+  {
+    "uid": "omi-device-local-wal-stuck",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals",
+    "title": "omi-device-local-wal-stuck",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "devices",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select round(uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01)) from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Local WAL Stuck' and timestamp > now() - interval 1 hour\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "median",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "B",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select coalesce(quantile(0.5)(c), 0) from (select toStartOfHour(timestamp) h, uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01) c from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Local WAL Stuck' and timestamp > now() - interval 7 day and timestamp < now() - interval 1 hour group by h)\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 10 && $A > 2 * $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/8bf7bd3f-8dbc-4f86-a532-557bfac0d7ac",
+      "description": "Device has WALs stuck pending upload (exhausted retries).",
+      "runbook": "data/run-2026-10-13-two-lane-nemotron/walcap-pendant-drop-2026-10-25.md",
+      "safe_next_action": "Break down by app_version/platform in PostHog for the same filter; compare with release times. Never contact users (10-24 ruling).",
+      "scope": "PostHog project 302298, distinct devices per rolling hour, scaled by omi_sample_pct. Aggregates only.",
+      "summary": "Device signal local-wal-stuck: distinct devices in the last hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Affected phones are failing to capture, store or upload audio, so conversations go missing or arrive late.",
+      "verification": "Rerun the rule's HogQL in PostHog project 302298 for the same window, broken down by app_version and platform, and confirm the rise is not a single build or one device."
+    },
+    "labels": {
+      "alert_identity": "omi-device-local-wal-stuck",
+      "audience": "agent",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "agent"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-recording-start-failed",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals",
+    "title": "omi-device-recording-start-failed",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "devices",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select round(uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01)) from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Recording Start Failed' and timestamp > now() - interval 1 hour\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "median",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "B",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select coalesce(quantile(0.5)(c), 0) from (select toStartOfHour(timestamp) h, uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01) c from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Recording Start Failed' and timestamp > now() - interval 7 day and timestamp < now() - interval 1 hour group by h)\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 10 && $A > 2 * $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/8bf7bd3f-8dbc-4f86-a532-557bfac0d7ac",
+      "description": "Capture could not start after an ID was prepared.",
+      "runbook": "data/run-2026-10-13-two-lane-nemotron/walcap-pendant-drop-2026-10-25.md",
+      "safe_next_action": "Break down by app_version/platform in PostHog for the same filter; compare with release times. Never contact users (10-24 ruling).",
+      "scope": "PostHog project 302298, distinct devices per rolling hour, scaled by omi_sample_pct. Aggregates only.",
+      "summary": "Device signal recording-start-failed: distinct devices in the last hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Affected phones are failing to capture, store or upload audio, so conversations go missing or arrive late.",
+      "verification": "Rerun the rule's HogQL in PostHog project 302298 for the same window, broken down by app_version and platform, and confirm the rise is not a single build or one device."
+    },
+    "labels": {
+      "alert_identity": "omi-device-recording-start-failed",
+      "audience": "agent",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "agent"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-upload-failed",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals",
+    "title": "omi-device-upload-failed",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "devices",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select round(uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01)) from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Recording Upload Failed' and timestamp > now() - interval 1 hour\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "median",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "B",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select coalesce(quantile(0.5)(c), 0) from (select toStartOfHour(timestamp) h, uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01) c from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Recording Upload Failed' and timestamp > now() - interval 7 day and timestamp < now() - interval 1 hour group by h)\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 10 && $A > 2 * $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/8bf7bd3f-8dbc-4f86-a532-557bfac0d7ac",
+      "description": "Offline-audio upload requests throwing (10% sampled, reweighted).",
+      "runbook": "data/run-2026-10-13-two-lane-nemotron/walcap-pendant-drop-2026-10-25.md",
+      "safe_next_action": "Break down by app_version/platform in PostHog for the same filter; compare with release times. Never contact users (10-24 ruling).",
+      "scope": "PostHog project 302298, distinct devices per rolling hour, scaled by omi_sample_pct. Aggregates only.",
+      "summary": "Device signal upload-failed: distinct devices in the last hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Affected phones are failing to capture, store or upload audio, so conversations go missing or arrive late.",
+      "verification": "Rerun the rule's HogQL in PostHog project 302298 for the same window, broken down by app_version and platform, and confirm the rise is not a single build or one device."
+    },
+    "labels": {
+      "alert_identity": "omi-device-upload-failed",
+      "audience": "agent",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "agent"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-wal-backlog-age-24h",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals",
+    "title": "omi-device-wal-backlog-age-24h",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "devices",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select round(uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01)) from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Local WAL Stuck' and toFloat(properties.oldest_pending_age_seconds) > 86400 and timestamp > now() - interval 1 hour\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "median",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "B",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select coalesce(quantile(0.5)(c), 0) from (select toStartOfHour(timestamp) h, uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01) c from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Local WAL Stuck' and toFloat(properties.oldest_pending_age_seconds) > 86400 and timestamp > now() - interval 7 day and timestamp < now() - interval 1 hour group by h)\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 5 && $A > 2 * $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/8bf7bd3f-8dbc-4f86-a532-557bfac0d7ac",
+      "description": "Oldest pending WAL older than 24h: upload backlog not draining.",
+      "runbook": "data/run-2026-10-13-two-lane-nemotron/walcap-pendant-drop-2026-10-25.md",
+      "safe_next_action": "Break down by app_version/platform in PostHog for the same filter; compare with release times. Never contact users (10-24 ruling).",
+      "scope": "PostHog project 302298, distinct devices per rolling hour, scaled by omi_sample_pct. Aggregates only.",
+      "summary": "Device signal wal-backlog-age-24h: distinct devices in the last hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Affected phones are failing to capture, store or upload audio, so conversations go missing or arrive late.",
+      "verification": "Rerun the rule's HogQL in PostHog project 302298 for the same window, broken down by app_version and platform, and confirm the rise is not a single build or one device."
+    },
+    "labels": {
+      "alert_identity": "omi-device-wal-backlog-age-24h",
+      "audience": "agent",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "agent"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-wal-backlog-over-cap",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals",
+    "title": "omi-device-wal-backlog-over-cap",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "devices",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select round(uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01)) from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Local WAL Stuck' and toFloat(properties.pending_wal_count) > 720 and timestamp > now() - interval 1 hour\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "median",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "B",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select coalesce(quantile(0.5)(c), 0) from (select toStartOfHour(timestamp) h, uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01) c from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Local WAL Stuck' and toFloat(properties.pending_wal_count) > 720 and timestamp > now() - interval 7 day and timestamp < now() - interval 1 hour group by h)\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 5 && $A > 2 * $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/8bf7bd3f-8dbc-4f86-a532-557bfac0d7ac",
+      "description": "Pending WAL count above the 720 retention cap: next stop is count_cap audio refusal.",
+      "runbook": "data/run-2026-10-13-two-lane-nemotron/walcap-pendant-drop-2026-10-25.md",
+      "safe_next_action": "Break down by app_version/platform in PostHog for the same filter; compare with release times. Never contact users (10-24 ruling).",
+      "scope": "PostHog project 302298, distinct devices per rolling hour, scaled by omi_sample_pct. Aggregates only.",
+      "summary": "Device signal wal-backlog-over-cap: distinct devices in the last hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "These phones are past the 720-WAL retention cap; the next step is pendant audio being refused (count_cap).",
+      "verification": "Rerun the rule's HogQL in PostHog project 302298 for the same window, broken down by app_version and platform, and confirm the rise is not a single build or one device."
+    },
+    "labels": {
+      "alert_identity": "omi-device-wal-backlog-over-cap",
+      "audience": "human",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "page"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-wedge-count-cap",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals",
+    "title": "omi-device-wedge-count-cap",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "devices",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select round(uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01)) from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Capture Wedge Detected' and properties.block_reason = 'count_cap' and timestamp > now() - interval 1 hour\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "median",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "B",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select coalesce(quantile(0.5)(c), 0) from (select toStartOfHour(timestamp) h, uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01) c from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Capture Wedge Detected' and properties.block_reason = 'count_cap' and timestamp > now() - interval 7 day and timestamp < now() - interval 1 hour group by h)\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 10 && $A > 2 * $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/8bf7bd3f-8dbc-4f86-a532-557bfac0d7ac",
+      "description": "Pendant audio refused because >720 WALs retained (local_wal_sync.dart count_cap). P0 2026-10-25; hotfix lane walcap.",
+      "runbook": "data/run-2026-10-13-two-lane-nemotron/walcap-pendant-drop-2026-10-25.md",
+      "safe_next_action": "Break down by app_version/platform in PostHog for the same filter; compare with release times. Never contact users (10-24 ruling).",
+      "scope": "PostHog project 302298, distinct devices per rolling hour, scaled by omi_sample_pct. Aggregates only.",
+      "summary": "Device signal wedge-count-cap: distinct devices in the last hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Pendant audio is being refused on these phones; the dropped audio is never stored and cannot be recovered.",
+      "verification": "Rerun the rule's HogQL in PostHog project 302298 for the same window, broken down by app_version and platform, and confirm the rise is not a single build or one device."
+    },
+    "labels": {
+      "alert_identity": "omi-device-wedge-count-cap",
+      "audience": "human",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "page"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-wedge-disk-reserve",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals",
+    "title": "omi-device-wedge-disk-reserve",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "devices",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select round(uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01)) from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Capture Wedge Detected' and properties.block_reason = 'disk_reserve' and timestamp > now() - interval 1 hour\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "median",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "B",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select coalesce(quantile(0.5)(c), 0) from (select toStartOfHour(timestamp) h, uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01) c from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Capture Wedge Detected' and properties.block_reason = 'disk_reserve' and timestamp > now() - interval 7 day and timestamp < now() - interval 1 hour group by h)\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 5 && $A > 2 * $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/8bf7bd3f-8dbc-4f86-a532-557bfac0d7ac",
+      "description": "Capture refused for low device storage.",
+      "runbook": "data/run-2026-10-13-two-lane-nemotron/walcap-pendant-drop-2026-10-25.md",
+      "safe_next_action": "Break down by app_version/platform in PostHog for the same filter; compare with release times. Never contact users (10-24 ruling).",
+      "scope": "PostHog project 302298, distinct devices per rolling hour, scaled by omi_sample_pct. Aggregates only.",
+      "summary": "Device signal wedge-disk-reserve: distinct devices in the last hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Affected phones are failing to capture, store or upload audio, so conversations go missing or arrive late.",
+      "verification": "Rerun the rule's HogQL in PostHog project 302298 for the same window, broken down by app_version and platform, and confirm the rise is not a single build or one device."
+    },
+    "labels": {
+      "alert_identity": "omi-device-wedge-disk-reserve",
+      "audience": "agent",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "agent"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-wedge-other",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals",
+    "title": "omi-device-wedge-other",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "devices",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select round(uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01)) from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Capture Wedge Detected' and properties.block_reason is null and timestamp > now() - interval 1 hour\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "cg2a731fc60hsa",
+        "model": {
+          "columns": [
+            {
+              "selector": "0",
+              "text": "median",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "cg2a731fc60hsa"
+          },
+          "format": "table",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "parser": "backend",
+          "refId": "B",
+          "root_selector": "results",
+          "source": "url",
+          "type": "json",
+          "url": "https://us.posthog.com/api/projects/302298/query/",
+          "url_options": {
+            "body_content_type": "application/json",
+            "body_type": "raw",
+            "data": "{\"query\": {\"kind\": \"HogQLQuery\", \"query\": \"select coalesce(quantile(0.5)(c), 0) from (select toStartOfHour(timestamp) h, uniq(distinct_id) * 100 / greatest(coalesce(max(toFloat(properties.omi_sample_pct)), 100), 0.01) c from events where event in ('Capture Wedge Detected','Local WAL Stuck','Recording Start Failed','Recording Upload Failed') and event = 'Capture Wedge Detected' and properties.block_reason is null and timestamp > now() - interval 7 day and timestamp < now() - interval 1 hour group by h)\"}, \"refresh\": \"blocking\"}",
+            "method": "POST"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 10 && $A > 2 * $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/8bf7bd3f-8dbc-4f86-a532-557bfac0d7ac",
+      "description": "Capture wedge without a block reason (ingress stalls).",
+      "runbook": "data/run-2026-10-13-two-lane-nemotron/walcap-pendant-drop-2026-10-25.md",
+      "safe_next_action": "Break down by app_version/platform in PostHog for the same filter; compare with release times. Never contact users (10-24 ruling).",
+      "scope": "PostHog project 302298, distinct devices per rolling hour, scaled by omi_sample_pct. Aggregates only.",
+      "summary": "Device signal wedge-other: distinct devices in the last hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Affected phones are failing to capture, store or upload audio, so conversations go missing or arrive late.",
+      "verification": "Rerun the rule's HogQL in PostHog project 302298 for the same window, broken down by app_version and platform, and confirm the rise is not a single build or one device."
+    },
+    "labels": {
+      "alert_identity": "omi-device-wedge-other",
+      "audience": "agent",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "agent"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   }

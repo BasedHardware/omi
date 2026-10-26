@@ -46,8 +46,6 @@ on:
       - '.github/workflows/gcp_firestore_indexes.yml'
       - '.github/workflows/gcp_backend*.yml'
       - '.github/workflows/gcp_llm_gateway.yml'
-      - '.github/workflows/gcp_memory_maintenance_job.yml'
-      - '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
       - '.github/workflows/gcp_notifications_job.yml'
       - '.github/workflows/gcp_x_connector_sync_job.yml'
       - '.github/scripts/check_backend_deploy_source_admission.py'
@@ -96,8 +94,6 @@ on:
       - '.github/workflows/gcp_firestore_indexes.yml'
       - '.github/workflows/gcp_backend*.yml'
       - '.github/workflows/gcp_llm_gateway.yml'
-      - '.github/workflows/gcp_memory_maintenance_job.yml'
-      - '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
       - '.github/workflows/gcp_notifications_job.yml'
       - '.github/workflows/gcp_x_connector_sync_job.yml'
       - '.github/scripts/check_backend_deploy_source_admission.py'
@@ -170,11 +166,13 @@ jobs:
     # cancelled shards mid-run while their test step was still inside budget
     # (conclusion 'cancelled' → gate "backend unit shards result was
     # 'cancelled'"; four such 917-920s walls in the week to 2026-10-22:
-    # 39741901310, 39739120103, 39676205452, 39668020536). 20m holds the
-    # 720s budget plus worst-plausible setup (apt is step-capped at 3m) and
-    # teardown; slow TEST steps still fail loudly through the step's own
-    # 720s budget check, so this ceiling stays a hang bound, not the gate.
-    timeout-minutes: 20
+    # 39741901310, 39739120103, 39676205452, 39668020536). 25m holds the
+    # 720s budget plus worst-plausible setup with the apt step capped at 10m
+    # (72s worst checkout + ~90s toolchain + ~570s apt cold allowance,
+    # 2026-10-23) and teardown; slow TEST steps still fail loudly through
+    # the step's own 720s budget check, so this ceiling stays a hang bound,
+    # not the gate.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -213,57 +211,87 @@ jobs:
 
       - name: Identify native audio package cache
         id: native-audio-image
-        run: |
-          echo "image=${ImageOS:?}-${ImageVersion:?}" >> "$GITHUB_OUTPUT"
-          echo "imageos=${ImageOS:?}" >> "$GITHUB_OUTPUT"
+        run: echo "imageos=${ImageOS:?}" >> "$GITHUB_OUTPUT"
 
       - name: Restore native audio replay packages
         id: native-audio-apt
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/native-audio-apt/*.deb
-          key: native-audio-apt-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-audio-image.outputs.image }}-ffmpeg-libopus0
-          # ImageVersion bumps roll out without warning and otherwise force a
-          # cold 62.8 MB download on every shard of the first runs that land
-          # on the new image (2026-10-22: image 20261021.345.10, runs
-          # 39790722827 and 39791659773 timed out downloading). The .deb set
-          # tracks the ubuntu24 distro repos, not the image patch version, so
-          # fall back to the newest saved image of the same runner OS.
+          # The closure follows the distro, not the runner image patch. Keep
+          # one shared main cache instead of an image key per PR merge ref.
+          key: native-audio-apt-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-audio-image.outputs.imageos }}-ffmpeg-libopus0
+          # Reuse an existing v1 closure while main seeds the stable key.
           restore-keys: |
             native-audio-apt-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-audio-image.outputs.imageos }}-
 
       - name: Install native audio replay dependencies
-        # Cold downloads hit the old 3m ceiling in runs 39737797248,
-        # 39741657961 and 39741511929. Keep a bounded cold-cache allowance.
-        # Warm runs must stay off the network entirely: apt-get update fetches
-        # indexes even when every .deb is already local, and on a throttled
-        # mirror it alone ate the full 5m budget (run 39782487842 shard 3:
-        # cache restored 12:57:16Z, step timed out 13:02:29Z inside update),
-        # so replay the cached closure with dpkg and let apt repair only if
-        # that replay fails.
-        timeout-minutes: 5
+        # Run 40009383869 shards 3/4 exhausted repeated connections to
+        # azure.archive.ubuntu.com. Cold downloads use Ubuntu's official
+        # HTTPS archives via step-local sources, never the runner mirrorlist.
+        # Slice downloads only: killing an install can interrupt dpkg.
+        # 7m + 72s checkout + 90s toolchain + 720s test budget leaves 198s
+        # inside the 25m job for cache save and post-job cleanup.
+        timeout-minutes: 7
         run: |
-          if compgen -G "$HOME"/.cache/native-audio-apt/*.deb > /dev/null; then
-            if ! sudo dpkg -i "$HOME"/.cache/native-audio-apt/*.deb; then
-              sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
-              sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Dir::Cache::archives="$HOME/.cache/native-audio-apt" -o APT::Keep-Downloaded-Packages=true install -y -f --no-install-recommends ffmpeg libopus0
+          COLD_BUDGET=300
+          SLICE=120
+          cache_dir="$HOME/.cache/native-audio-apt"
+          if compgen -G "$cache_dir/*.deb" > /dev/null; then
+            # Warm replay stays entirely offline.
+            if sudo dpkg -i "$cache_dir"/*.deb; then
+              exit 0
             fi
-          else
-            sudo install -d -m 0755 "$HOME/.cache/native-audio-apt/partial"
-            sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
-            sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Dir::Cache::archives="$HOME/.cache/native-audio-apt" -o APT::Keep-Downloaded-Packages=true install -y --no-install-recommends ffmpeg libopus0
+            # Recover a failed replay before apt resolves missing deps. An
+            # incomplete closure may still need the download/repair below.
+            if ! sudo dpkg --configure -a; then
+              echo "::warning::Cached replay needs apt dependency repair"
+            fi
           fi
+          sudo install -d -m 0755 "$cache_dir/partial"
+          . /etc/os-release
+          sources=$(mktemp --suffix=.sources)
+          trap 'rm -f "$sources"' EXIT
+          cat > "$sources" <<EOF
+          Types: deb
+          URIs: https://archive.ubuntu.com/ubuntu
+          Suites: ${VERSION_CODENAME:?} ${VERSION_CODENAME}-updates
+          Components: main universe
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 
-      # Seed the cache before tests, so an unrelated test failure cannot force
-      # another cold download. Cache archives only; apt performs the install.
-      # One writer only: the six shards save the same key in parallel and the
-      # cache service reserves per key, so concurrent saves lose entries
-      # ("Unable to reserve cache ... another job may be creating this cache",
-      # run 39790722827 shard 1 at 13:53:38Z while shards 2/3 were still
-      # downloading). A restore-keys fallback hit also reports cache-hit
-      # 'false', so shard 1 backfills the exact key for its image version.
+          Types: deb
+          URIs: https://security.ubuntu.com/ubuntu
+          Suites: ${VERSION_CODENAME}-security
+          Components: main universe
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+          apt_options=(
+            -o "Dir::Etc::sourcelist=$sources" -o Dir::Etc::sourceparts=-
+            -o "Dir::Cache::archives=$cache_dir" -o APT::Keep-Downloaded-Packages=true
+          )
+          recycle_download() {
+            local rc=1 remaining slice
+            while (( SECONDS < COLD_BUDGET )); do
+              remaining=$((COLD_BUDGET - SECONDS))
+              slice=$((remaining < SLICE ? remaining : SLICE))
+              rc=0
+              sudo timeout --signal=TERM --kill-after=5 "${slice}s" apt-get "${apt_options[@]}" -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 "$@" || rc=$?
+              if [ "$rc" -eq 0 ]; then return 0; fi
+              echo "::warning::apt download exited $rc; $((COLD_BUDGET - SECONDS))s of cold budget left"
+            done
+            return "$rc"
+          }
+          recycle_download -o APT::Update::Error-Mode=any update -qq
+          recycle_download install --download-only -y -f --no-install-recommends ffmpeg libopus0
+          # No network or timeout slices during dpkg's transaction. Fail if
+          # the downloaded closure is incomplete; never hide missing codecs.
+          sudo apt-get "${apt_options[@]}" -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install --no-download -y -f --no-install-recommends ffmpeg libopus0
+
+      # Seed before tests even if a later test fails. Only main shard 1
+      # writes: PR merge-ref copies cannot be shared and churn the cache quota
+      # (2026-10-23: seven PR copies for one main entry). PRs restore from main.
       - name: Save native audio replay packages
-        if: steps.native-audio-apt.outputs.cache-hit != 'true' && matrix.shard == 1
+        if: github.ref == 'refs/heads/main' && steps.native-audio-apt.outputs.cache-hit != 'true' && matrix.shard == 1
         uses: actions/cache/save@v6
         with:
           path: ~/.cache/native-audio-apt/*.deb

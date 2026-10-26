@@ -75,6 +75,18 @@ def indexed_list_reads_enabled() -> bool:
     return os.getenv('OMI_INDEXED_LIST_READS_ENABLED', '').strip().lower() in {'1', 'true', 'on', 'yes'}
 
 
+def canonical_demand_window_enabled() -> bool:
+    """Size raw canonical reads to page demand without changing candidate policy."""
+    return os.getenv('OMI_CANONICAL_DEMAND_WINDOW_ENABLED', '').strip().lower() != 'false'
+
+
+def canonical_scan_window_size(demand: int, raw_chunk: int, *, indexed: bool, filtered: bool = False) -> int:
+    """Keep indexed batching unchanged; remove only surplus raw candidates."""
+    if indexed:
+        return min(500, demand)
+    return min(raw_chunk, demand) if canonical_demand_window_enabled() and not filtered else raw_chunk
+
+
 def _env_float(name: str) -> Optional[float]:
     raw = os.environ.get(name)
     if raw is None or not str(raw).strip():

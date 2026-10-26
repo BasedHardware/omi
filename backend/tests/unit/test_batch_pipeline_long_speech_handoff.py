@@ -98,6 +98,7 @@ def test_retry_still_runs_otherwise(monkeypatch, language, speech_seconds, env):
 
 
 def test_no_recovery_route_keeps_the_retry(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
     # Without the RecoveryWork handoff the retry is the only remaining attempt.
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false')

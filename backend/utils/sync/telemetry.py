@@ -47,6 +47,27 @@ def bounded_exception_type(error: BaseException) -> str:
     return name if name.replace('_', '').isalnum() and len(name) <= 64 else 'Exception'
 
 
+# The Firestore SDK reports its own transaction failures as ValueError, not as
+# api_core errors. Match bounded message prefixes only; never emit the message.
+# Mirrors database._client's commit-exhausted prefix (utils cannot import database).
+_SDK_COMMIT_EXHAUSTED_PREFIX = 'failed to commit transaction'
+_SDK_NO_TRANSACTION_ID = 'the transaction has no transaction id'
+
+
+def value_error_reason(error: BaseException) -> str:
+    """Closed diagnostic tokens only; never copy exception text into telemetry."""
+    if not isinstance(error, ValueError):
+        return 'none'
+    if error.args == ('open_loop_extractions must be an object',):
+        return 'open_loop_extractions_not_object'
+    text = str(error).lower()
+    if text.startswith(_SDK_COMMIT_EXHAUSTED_PREFIX):
+        return 'sdk_commit_attempts_exhausted'
+    if _SDK_NO_TRANSACTION_ID in text:
+        return 'sdk_transaction_not_in_progress'
+    return 'other_value_error'
+
+
 def bounded_exception_reason(error: BaseException) -> str:
     """Log-safe exception text so a bare ``assert`` is visible as ``empty``."""
     text = ' '.join(str(error).split())

@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/open_loops.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/providers/review_provider.dart';
 
@@ -44,6 +46,8 @@ Map<String, dynamic> _samePersonJson() => {
     };
 
 ReviewItem _item(Map<String, dynamic> json) => ReviewItem.fromJson(json)!;
+
+const ApiResult<OpenLoopCardsResponse> _noCards = ApiSuccess(OpenLoopCardsResponse(cards: []));
 
 Map<String, dynamic> _proposalJson({String id = 'agent_proposal:a', String kind = 'retire_task'}) => {
       'item_id': id,
@@ -178,6 +182,7 @@ void main() {
         reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
         loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [item], remainingToday: 1)),
         sendAnswer: (_, __) async => const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 409)),
+        loadOpenLoopCards: () async => _noCards,
       );
       await provider.load();
       expect(await provider.answer(item, const ReviewAnswer.acceptProposal()), isFalse);
@@ -190,9 +195,11 @@ void main() {
   group('ReviewProvider', () {
     test('a 404 turns the surface off; success turns it on', () async {
       final off = ReviewProvider(
-          isEligible: () => true,
-          reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
-          loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)),
+        loadOpenLoopCards: () async => _noCards,
+      );
       await off.load();
       expect(off.availability, ReviewAvailability.off);
 
@@ -200,6 +207,7 @@ void main() {
         isEligible: () => true,
         reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
         loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [_item(_speakerJson('a'))], remainingToday: 2)),
+        loadOpenLoopCards: () async => _noCards,
       );
       await on.load();
       expect(on.availability, ReviewAvailability.on);
@@ -232,6 +240,7 @@ void main() {
           calls++;
           return ApiSuccess(ReviewItemsResponse(items: [_item(_speakerJson('a'))], remainingToday: 1));
         },
+        loadOpenLoopCards: () async => _noCards,
       );
       await provider.load();
       expect(calls, 1);
@@ -240,9 +249,11 @@ void main() {
 
     test('a transient failure keeps the surface state and reports it', () async {
       final provider = ReviewProvider(
-          isEligible: () => true,
-          reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
-          loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.server)));
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.server)),
+        loadOpenLoopCards: () async => _noCards,
+      );
       await provider.load();
       expect(provider.availability, ReviewAvailability.unknown);
       expect(provider.loadFailed, isTrue);
@@ -258,6 +269,7 @@ void main() {
         loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [a, b], remainingToday: 2)),
         sendAnswer: (_, __) async =>
             succeed ? const ApiSuccess(1) : const ApiFailure(ApiProblem(ApiProblemKind.server)),
+        loadOpenLoopCards: () async => _noCards,
       );
       await provider.load();
 
@@ -281,6 +293,7 @@ void main() {
           items: [_item(_speakerJson('a', conversationId: 'conv-9')), _item(_samePersonJson())],
           remainingToday: 2,
         )),
+        loadOpenLoopCards: () async => _noCards,
       );
       await provider.load();
       expect(provider.questionAbout('person:b')?.itemId, 'same_person:x');
@@ -299,6 +312,7 @@ void main() {
           played.add(id);
           return true;
         },
+        loadOpenLoopCards: () async => _noCards,
       );
       await provider.load();
       await provider.togglePlay(provider.items.single);
@@ -320,11 +334,175 @@ void main() {
           calls++;
           return const ApiSuccess([]);
         },
+        loadOpenLoopCards: () async => _noCards,
       );
       await provider.load();
       expect(await provider.conversationEntities('c1'), isEmpty);
       await provider.loadProjects();
       expect(calls, 0);
+    });
+
+    test('open-loop cards load beside the questions and drop malformed rows', () async {
+      final provider = ReviewProvider(
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [_item(_speakerJson('a'))], remainingToday: 1)),
+        loadOpenLoopCards: () async => ApiSuccess(OpenLoopCardsResponse.fromGeneratedWireJson({
+          'cards': [
+            {
+              'card_id': 'ol-1',
+              'date': '2026-10-26',
+              'question': 'Did Maya send the vendor write-up?',
+              'context_line': "From Monday's Pricing sync, due Tuesday",
+            },
+            {'card_id': '', 'date': '2026-10-26', 'question': 'No id'},
+            {'card_id': 'ol-3', 'date': '2026-10-26'},
+          ],
+        })),
+      );
+      await provider.load();
+      expect(provider.openLoopCards, hasLength(1));
+      final card = provider.openLoopCards.single;
+      expect(card.cardId, 'ol-1');
+      expect(card.question, 'Did Maya send the vendor write-up?');
+      expect(card.contextLine, "From Monday's Pricing sync, due Tuesday");
+    });
+
+    test('a cards failure keeps the questions working and the page unchanged', () async {
+      final provider = ReviewProvider(
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [_item(_speakerJson('a'))], remainingToday: 1)),
+        loadOpenLoopCards: () async => const ApiFailure(ApiProblem(ApiProblemKind.server)),
+      );
+      await provider.load();
+      expect(provider.loadFailed, isFalse);
+      expect(provider.items, hasLength(1));
+      expect(provider.openLoopCards, isEmpty);
+    });
+
+    test('the surface turning off clears the cards too', () async {
+      final provider = ReviewProvider(
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)),
+        loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [
+          OpenLoopCard(cardId: 'ol-1', date: '2026-10-26', question: 'Done?'),
+        ])),
+      );
+      await provider.load();
+      expect(provider.availability, ReviewAvailability.off);
+      expect(provider.openLoopCards, isEmpty, reason: 'the cards share the Review surface');
+    });
+
+    test('an answered open-loop card leaves at once and comes back when the send fails', () async {
+      var succeed = false;
+      const a = OpenLoopCard(cardId: 'ol-1', date: '2026-10-26', question: 'Did Maya send it?');
+      const b = OpenLoopCard(cardId: 'ol-2', date: '2026-10-26', question: 'Did you file the bug?');
+      final provider = ReviewProvider(
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () async => const ApiSuccess(ReviewItemsResponse(items: [], remainingToday: 0)),
+        loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [a, b])),
+        sendOpenLoopAnswer: (card, action) async => succeed
+            ? ApiSuccess(OpenLoopAnswerResult(cardId: card.cardId, state: action.wire))
+            : const ApiFailure(ApiProblem(ApiProblemKind.server)),
+      );
+      await provider.load();
+
+      final failed = provider.answerOpenLoop(a, OpenLoopAction.done);
+      expect(provider.openLoopCards.map((c) => c.cardId), ['ol-2'], reason: 'optimistic removal');
+      expect(await failed, OpenLoopAnswerStatus.failed);
+      expect(provider.openLoopCards.map((c) => c.cardId), ['ol-1', 'ol-2'], reason: 'rollback');
+
+      succeed = true;
+      expect(await provider.answerOpenLoop(a, OpenLoopAction.done), OpenLoopAnswerStatus.saved);
+      expect(provider.openLoopCards.map((c) => c.cardId), ['ol-2']);
+    });
+
+    test('a 409 open-loop answer stays gone and is a conflict for that request only', () async {
+      const a = OpenLoopCard(cardId: 'ol-1', date: '2026-10-26', question: 'Did Maya send it?');
+      const b = OpenLoopCard(cardId: 'ol-2', date: '2026-10-26', question: 'Did you file the bug?');
+      var conflict = true;
+      final provider = ReviewProvider(
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () async => const ApiSuccess(ReviewItemsResponse(items: [], remainingToday: 0)),
+        loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [a, b])),
+        sendOpenLoopAnswer: (card, action) async => conflict
+            ? const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 409))
+            : const ApiFailure(ApiProblem(ApiProblemKind.server)),
+      );
+      await provider.load();
+      expect(
+        await provider.answerOpenLoop(a, OpenLoopAction.remind),
+        OpenLoopAnswerStatus.conflict,
+      );
+      expect(provider.openLoopCards.map((c) => c.cardId), ['ol-2'], reason: 'answered on another device; stays gone');
+      // The next answer's outcome is its own: a plain failure is a failure.
+      conflict = false;
+      expect(await provider.answerOpenLoop(b, OpenLoopAction.done), OpenLoopAnswerStatus.failed);
+    });
+
+    test('a failed send restores only its own card, keeping concurrent successes', () async {
+      const a = OpenLoopCard(cardId: 'ol-1', date: '2026-10-26', question: 'Did Maya send it?');
+      const b = OpenLoopCard(cardId: 'ol-2', date: '2026-10-26', question: 'Did you file the bug?');
+      const c = OpenLoopCard(cardId: 'ol-3', date: '2026-10-26', question: 'Did you ping Ann?');
+      final pendingA = Completer<ApiResult<OpenLoopAnswerResult>>();
+      final provider = ReviewProvider(
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () async => const ApiSuccess(ReviewItemsResponse(items: [], remainingToday: 0)),
+        loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [a, b, c])),
+        sendOpenLoopAnswer: (card, action) => card.cardId == 'ol-1'
+            ? pendingA.future
+            : Future<ApiResult<OpenLoopAnswerResult>>.value(
+                ApiSuccess(OpenLoopAnswerResult(cardId: card.cardId, state: action.wire)),
+              ),
+      );
+      await provider.load();
+
+      // Done on a is in flight when Done on b succeeds and leaves the list.
+      final aAnswer = provider.answerOpenLoop(a, OpenLoopAction.done);
+      expect(await provider.answerOpenLoop(b, OpenLoopAction.done), OpenLoopAnswerStatus.saved);
+      expect(provider.openLoopCards.map((x) => x.cardId), ['ol-3']);
+
+      pendingA.complete(const ApiFailure(ApiProblem(ApiProblemKind.server)));
+      expect(await aAnswer, OpenLoopAnswerStatus.failed);
+      // Only a returns, at its original position; b's committed answer is not
+      // resurrected by a stale pre-tap snapshot.
+      expect(provider.openLoopCards.map((x) => x.cardId), ['ol-1', 'ol-3']);
+    });
+
+    test('a failed send does not duplicate a card a concurrent reload already restored', () async {
+      const a = OpenLoopCard(cardId: 'ol-1', date: '2026-10-26', question: 'Did Maya send it?');
+      const b = OpenLoopCard(cardId: 'ol-2', date: '2026-10-26', question: 'Did you file the bug?');
+      final pendingAnswer = Completer<ApiResult<OpenLoopAnswerResult>>();
+      final pendingReload = Completer<ApiResult<OpenLoopCardsResponse>>();
+      var cardsLoad = 0;
+      final provider = ReviewProvider(
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () async => const ApiSuccess(ReviewItemsResponse(items: [], remainingToday: 0)),
+        loadOpenLoopCards: () => cardsLoad++ == 0
+            ? Future<ApiResult<OpenLoopCardsResponse>>.value(const ApiSuccess(OpenLoopCardsResponse(cards: [a, b])))
+            : pendingReload.future,
+        sendOpenLoopAnswer: (card, action) async => pendingAnswer.future,
+      );
+      await provider.load();
+
+      final answer = provider.answerOpenLoop(a, OpenLoopAction.done);
+      final reload = provider.load();
+      // The server still lists a (the answer has not landed); the reload
+      // restores it while the send is in flight.
+      pendingReload.complete(const ApiSuccess(OpenLoopCardsResponse(cards: [a, b])));
+      await reload;
+      expect(provider.openLoopCards.map((x) => x.cardId), ['ol-1', 'ol-2']);
+
+      pendingAnswer.complete(const ApiFailure(ApiProblem(ApiProblemKind.server)));
+      expect(await answer, OpenLoopAnswerStatus.failed);
+      expect(provider.openLoopCards.map((x) => x.cardId), ['ol-1', 'ol-2'],
+          reason: 'no duplicate of the reloaded card');
     });
   });
 }

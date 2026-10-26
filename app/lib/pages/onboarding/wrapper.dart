@@ -171,7 +171,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // Precache next image for smoother transitions
       _precacheNextImage(_controller!.index);
       if (_controller!.index == kSpeechProfilePage && _knowledgeGraphPrebuildFuture == null) {
-        _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError((_) {});
+        _knowledgeGraphPrebuildFuture = KnowledgeGraphApi.prebuildForOnboarding().catchError((_) {});
       }
       // Read the flag two steps ahead so the decision is ready when the reader taps Continue.
       if (_controller!.index == kSpeechProfilePage) {
@@ -501,32 +501,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     await SharedPreferencesUtil().clear();
     await AuthService.instance.signOut();
     navigator.pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
-  }
-
-  Future<void> _prebuildKnowledgeGraph() async {
-    try {
-      final current = await KnowledgeGraphApi.getKnowledgeGraph();
-      // Canonical graphs are derived on read, even when no relationships exist.
-      // Do not schedule the legacy mutation rejected by the canonical fence.
-      if (current['canonical'] == true) return;
-      final nodes = current['nodes'] as List<dynamic>? ?? const [];
-      final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
-      if (hasGraph) return;
-    } catch (_) {
-      // Continue to rebuild below.
-    }
-
-    final rebuildResult = await KnowledgeGraphApi.rebuildKnowledgeGraph();
-    final status = rebuildResult['status'];
-    // 'canonical_up_to_date' is the synthetic client status returned on HTTP 409.
-    if (status == 'canonical_up_to_date') {
-      return;
-    }
-    await KnowledgeGraphApi.waitForGraphStability(
-      timeout: const Duration(seconds: 25),
-      interval: const Duration(seconds: 2),
-      stabilityChecks: 1,
-    );
   }
 
   void _updateBackgroundImage(int pageIndex) {

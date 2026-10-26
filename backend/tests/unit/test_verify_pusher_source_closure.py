@@ -168,22 +168,19 @@ def test_fat_repository_still_selects_the_fat_closure() -> None:
     assert fat & role == fat  # the fat closure is a subset of the role closure
 
 
-def test_source_closure_excludes_builder_stage_copies() -> None:
+def test_source_closure_excludes_builder_stage_copies(tmp_path) -> None:
     """Multi-stage --from= copies reference builder artifacts, not repo source."""
-    import tempfile
-
     module = _load_module()
-    with tempfile.NamedTemporaryFile(mode="w", suffix="Dockerfile", delete=False) as f:
-        f.write(
-            "FROM base AS builder\n"
-            "COPY backend/pusher/pylock.toml /tmp/pylock.toml\n"
-            "FROM base\n"
-            "COPY --from=builder /opt/venv /opt/venv\n"
-            "COPY backend/config/ ./config/\n"
-            "COPY backend/pusher/ ./pusher/\n"
-        )
-        f.flush()
-        sources = module.final_stage_copy_sources(Path(f.name))
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text(
+        "FROM base AS builder\n"
+        "COPY backend/pusher/pylock.toml /tmp/pylock.toml\n"
+        "FROM base\n"
+        "COPY --from=builder /opt/venv /opt/venv\n"
+        "COPY backend/config/ ./config/\n"
+        "COPY backend/pusher/ ./pusher/\n"
+    )
+    sources = module.final_stage_copy_sources(dockerfile)
     assert "backend/config/" in sources
     assert "backend/pusher/" in sources
     # Builder-stage copies must NOT be included.

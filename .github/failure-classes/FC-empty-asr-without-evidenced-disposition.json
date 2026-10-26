@@ -11,7 +11,11 @@
     "backend/database/batch_pipeline_terminal_empty.py",
     "backend/tests/unit/test_batch_pipeline_terminal_empty.py",
     "backend/tests/unit/test_sync_empty_recovery.py",
-    "backend/tests/unit/test_sync_empty_recovery_intent.py"
+    "backend/tests/unit/test_sync_empty_recovery_intent.py",
+    "backend/tests/unit/test_batch_language_recovery.py",
+    "backend/tests/unit/test_soniox_batch.py",
+    "backend/utils/batch_pipeline/contracts.py",
+    "backend/tests/unit/test_batch_held_vad_census.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

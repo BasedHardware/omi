@@ -26,6 +26,8 @@ from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event, Structured
 from models.structured_extraction import (
     AgentNotesSubmission,
+    OpenLoopAgentNotesSubmission,
+    OpenLoopStructuredExtraction,
     RichStructuredExtraction,
     StructuredExtraction,
 )
@@ -64,9 +66,11 @@ from utils.llm.meeting_notes_validation import (
     validate_structured_source_segment_ids,
 )
 from config.refactor_modes import serving_for
+from config.open_loops import open_loops_enabled
 from utils.llm.notes_packet import PACKET_RULES, select_notes_packet, _local_started_at_iso
 from utils.llm.notes_output_contract import finish_notes_contract, OUTPUT_RULES
-from utils.llm.notes_output import NotesOutput
+from utils.llm.notes_identity import notes_identity
+from utils.llm.notes_output import NotesOutput, OpenLoopNotesOutput
 from utils.llm.notes_observability import current_run, observe_notes
 from utils.llm.notes_effort import bind_notes_effort
 
@@ -86,6 +90,8 @@ from utils.llm.prompt_cache import (
 )
 from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 from utils.llm.conversation_prompt_prefix import shared_conversation_cache_supported
+from utils.open_loops.extraction import capture_into_sink
+from utils.open_loops.prompts import OPEN_LOOP_EXTRACTION_RULES
 
 try:
     from utils.llm.gateway_client import should_route_features_through_gateway
@@ -304,6 +310,9 @@ CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
 # at two attempts plus one inter-attempt delay bound (3x).
 NOTES_LOOP_DEADLINE_SECONDS = 3 * CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
 # Screen-OCR rows already parsed from the context are a follow-up; this gate counts frames only.
+# The gate counts approved frames available (`screen_frame_count` from the wiring),
+# never the attached-image budget: MAX_NOTES_FRAME_IMAGES caps attached images at
+# four, so counting images alone kept this >=5 threshold unreachable.
 _NOTES_TIER_MIN_WORDS = 1500
 _NOTES_TIER_MIN_SCREEN_FRAMES = 5
 
@@ -417,27 +426,50 @@ Do not infer attendance, absence, or a no-show from either listing.
     )
 
 
+def _notes_output_schema(uid: Optional[str], *, agent: bool = False) -> type[Any]:
+    """The one-shot parser target: v2/legacy arm, plus open-loop fields when enabled.
+
+    Open-loop extraction rides a flag-gated subclass so the switch-off prompt
+    bytes (format instructions render this schema) and the agentic submit tool
+    stay byte-identical to the pre-feature contract.
+    """
+    v2 = serving_for('NOTES_PACKET_V2_MODE', uid)
+    open_loops = open_loops_enabled()
+    if v2:
+        return OpenLoopNotesOutput if open_loops else NotesOutput
+    if agent:
+        return OpenLoopAgentNotesSubmission if open_loops else AgentNotesSubmission
+    return OpenLoopStructuredExtraction if open_loops else StructuredExtraction
+
+
 def get_conversation_notes(
     prefix: ConversationPromptPrefix,
     *,
     uid: Optional[str] = None,
+    open_loop_out: Optional[dict[str, Any]] = None,
     **kwargs: Any,
 ) -> Structured:
     if route_for_uid(uid) != 'new':
         raise RuntimeError('Shaped notes disabled; restore the previous image for legacy serving')
-    return _get_shaped_conversation_notes(prefix, uid=uid, **kwargs)
+    return _get_shaped_conversation_notes(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
 
 
 @observe_notes
 def _get_shaped_conversation_notes(
-    prefix: ConversationPromptPrefix, *, uid: Optional[str] = None, **kwargs: Any
+    prefix: ConversationPromptPrefix,
+    *,
+    uid: Optional[str] = None,
+    open_loop_out: Optional[dict[str, Any]] = None,
+    **kwargs: Any,
 ) -> Structured:
     frames = kwargs.get('screen_frames') or ()
     # Never reuse the old prefix metadata: it may already have bound a roster.
     context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
     words = _word_count(context)
     rich_mode = kwargs.get('rich_context_enabled', False)
-    screen_count = len(frames)
+    # Approved-frame volume, not attached images: reads can fail or hit the budget
+    # cap, and the escalation gate must still see the screen-heavy meeting.
+    screen_count = max(kwargs.get('screen_frame_count') or 0, len(frames))
     escalated, escalation_reason = _shaped_notes_tier(words, screen_count)
     _record_shaped_notes_tier(escalated, escalation_reason, words, screen_count)
     if not prefix.has_usable_content and not frames:
@@ -446,6 +478,8 @@ def _get_shaped_conversation_notes(
     from utils.llm.action_item_v2 import instructions_for
 
     mount = replace(mount, instructions=instructions_for(uid, mount.instructions))
+    if open_loops_enabled():
+        mount = replace(mount, instructions=mount.instructions + '\n\n' + OPEN_LOOP_EXTRACTION_RULES)
     evidence = [
         {
             'role': 'user',
@@ -458,6 +492,10 @@ def _get_shaped_conversation_notes(
                     'account_owner_name': prefix.account_owner_name or next(iter(prefix.owner_names), None),
                     'open_tasks': kwargs.get('existing_action_items') or [],
                     'capture_evidence': context,
+                    # The background pack plus owner-confirmed corrections the agentic
+                    # writer gets as `background`; without this key the one-shot path
+                    # silently dropped both whenever the agent lane was unavailable.
+                    **({'meeting_context': kwargs['meeting_context']} if kwargs.get('meeting_context') else {}),
                     **({'known_spellings': prefix.known_spellings} if prefix.known_spellings else {}),
                     **({'title_people': title_people_block(prefix)} if not rich_mode else {}),
                 },
@@ -470,6 +508,7 @@ def _get_shaped_conversation_notes(
     packet = select_notes_packet(
         legacy_packet, prefix=prefix, uid=uid, capture_evidence=context, words=words, inputs=kwargs
     )
+    kwargs['notes_identity'] = notes_identity(prefix, kwargs, packet)
     if serving_for('NOTES_PACKET_V2_MODE', uid):
         evidence[0]['content'] = json.dumps(packet, ensure_ascii=False, default=str)
         mount = replace(mount, instructions=mount.instructions + '\n\n' + PACKET_RULES + '\n\n' + OUTPUT_RULES)
@@ -486,10 +525,11 @@ def _get_shaped_conversation_notes(
         uid=uid, prefix=prefix, model=model, capture_evidence=context, words=words, frames=frames, kwargs=kwargs
     )
     if agent_payload is not None:
+        validated_agent_output = _notes_output_schema(uid, agent=True).model_validate(agent_payload)
+        # The agent's submit tool does not request open-loop fields yet: leave the
+        # sink untouched so a reprocess keeps earlier extractions instead of nulling them.
         return _finish_shaped_notes(
-            (NotesOutput if serving_for('NOTES_PACKET_V2_MODE', uid) else AgentNotesSubmission)
-            .model_validate(agent_payload)
-            .to_structured(),
+            validated_agent_output.to_structured(),
             prefix,
             rich_mode,
             kwargs['tz'],
@@ -497,9 +537,7 @@ def _get_shaped_conversation_notes(
             words=words,
             inputs=kwargs,
         )
-    extraction_parser = PydanticOutputParser(
-        pydantic_object=NotesOutput if serving_for('NOTES_PACKET_V2_MODE', uid) else StructuredExtraction
-    )
+    extraction_parser = PydanticOutputParser(pydantic_object=_notes_output_schema(uid))
     format_instructions = extraction_parser.get_format_instructions()
     static_instructions = mount.instructions + '\n\n' + format_instructions
     if not rich_mode and not serving_for('NOTES_PACKET_V2_MODE', uid):
@@ -527,8 +565,10 @@ def _get_shaped_conversation_notes(
             return await run_loop(mount, evidence, model_turn)
 
     result = asyncio.run(invoke())
-    output_schema = NotesOutput if serving_for('NOTES_PACKET_V2_MODE', uid) else StructuredExtraction
-    structured = output_schema.model_validate(result.value).to_structured()
+    output_schema = _notes_output_schema(uid)
+    validated_output = output_schema.model_validate(result.value)
+    capture_into_sink(validated_output, open_loop_out)
+    structured = validated_output.to_structured()
     return _finish_shaped_notes(structured, prefix, rich_mode, kwargs['tz'], uid=uid, words=words, inputs=kwargs)
 
 

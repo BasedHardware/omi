@@ -103,6 +103,14 @@ CLIENT_SEEN_TTL_SECONDS = 14 * 24 * 60 * 60
 # The marker is rewritten at most this often per uid, so polling is not a write.
 CLIENT_SEEN_REFRESH_SECONDS = 60 * 60
 
+# --------------------------------------------------------------------------- live poll reads
+
+# /v1/episodes/live answers the additive last-closed recap from a per-process
+# cache for this long while a live episode is on screen (the recap changes only
+# when an episode closes). When no live episode is on screen the read stays
+# fresh: that is the recovery-navigation answer the recap exists for.
+LAST_CLOSED_CACHE_SECONDS = 30
+
 # --------------------------------------------------------------------------- moments
 
 # A moment ends when the live stream pauses for this long, or when it grows past

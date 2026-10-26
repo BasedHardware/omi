@@ -38,8 +38,15 @@ _RUNTIME_MODULES = (
     "utils.memory.canonical_memory_adapter",
     "utils.memory.required_promotion",
     "utils.memory.canonical_required_processing",
+    "utils.memory.required_intake",
     "utils.memory.short_term_promotion",
 )
+
+
+@pytest.fixture(autouse=True)
+def _manual_processor_ownership(monkeypatch):
+    # This suite explicitly drives required normalization and retry clocks.
+    monkeypatch.setenv('MEMORY_REQUIRED_INTAKE_ENABLED', 'false')
 
 
 def _load_runtime() -> None:

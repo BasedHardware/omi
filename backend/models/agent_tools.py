@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import Field, field_validator, model_validator
 
 from models.dream_edit import Strict, Term
-from models.agent_edit import HarnessEdit
+from models.agent_edit import HarnessEdit, DreamHarnessEdit
 from models.agent_refs import canonical_collection
 from models.review import SamePersonItem, SpellingQuestionPayload
 from models.dream_edit import QUESTION_VALUE_DESCRIPTION
@@ -70,6 +70,10 @@ class Read(Strict):
 
 class ProposeEdit(Strict):
     edit: HarnessEdit
+
+
+class DreamProposeEdit(Strict):
+    edit: DreamHarnessEdit
 
 
 class HarnessQuestion(Strict):
@@ -160,11 +164,19 @@ TOOLS = {
 }
 
 
-def tool_schemas():
+def tool_model(name, authority='user'):
+    return DreamProposeEdit if name == 'propose_edit' and authority == 'dream' else TOOLS[name][1]
+
+
+def tool_schemas(*, authority='user'):
     return tuple(
         {
             'type': 'function',
-            'function': {'name': name, 'description': description, 'parameters': model.model_json_schema()},
+            'function': {
+                'name': name,
+                'description': description,
+                'parameters': tool_model(name, authority).model_json_schema(),
+            },
         }
-        for name, (description, model) in TOOLS.items()
+        for name, (description, _model) in TOOLS.items()
     )

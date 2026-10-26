@@ -2,7 +2,6 @@ import 'package:omi/services/on_device/on_device_background.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
-import 'package:omi/services/proactivity/proactivity_runtime.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/services/telemetry/client_telemetry_transport.dart';
@@ -619,7 +618,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     // legacy/allow projection cannot admit one offline upload.
     final resumeUser = FirebaseAuth.instance.currentUser;
     final resumeOwner = (resumeUser != null && !resumeUser.isAnonymous) ? resumeUser.uid : null;
-    await ProactivityRuntime.outbox.bindOwner(resumeOwner);
     await AccountCutoverRuntime.instance.bindAuthenticatedOwner(resumeOwner);
     SyncReconciler.instance.onForeground();
     unawaited(SyncUploadGate.instance.reconcileFairUseStatus());
@@ -631,19 +629,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     if (state == AppLifecycleState.resumed) {
       OnboardingSyncRuntime.setActive(true);
-      unawaited(ProactivityRuntime.outbox.flush());
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordResumed();
-        _performanceTelemetry.setForeground(true);
+        _performanceTelemetry.onLifecycleState(state);
         PlatformManager.instance.analytics.recordTelemetryHealth();
       }
       unawaited(_refreshAccountCutoverThenWakeUploads());
+    } else if (state == AppLifecycleState.inactive || state == AppLifecycleState.hidden) {
+      // Dart timers are throttled before `paused` arrives, so the lag
+      // watchdog must already be stopped here or the background gap reads as
+      // UI stalls on the last visible surface.
+      if (!PhysicalQualification.enabled) {
+        _performanceTelemetry.onLifecycleState(state);
+      }
     } else if (state == AppLifecycleState.paused) {
       OnboardingSyncRuntime.setActive(false);
       ClientTelemetry.instance.onBackground();
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordBackgrounded();
-        _performanceTelemetry.setForeground(false);
+        _performanceTelemetry.onLifecycleState(state);
       }
       SyncReconciler.instance.onBackground();
       _onAppPaused();

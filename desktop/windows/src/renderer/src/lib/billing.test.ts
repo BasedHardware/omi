@@ -252,9 +252,16 @@ describe('currentPlanSubtitle', () => {
     ).toBe('Pro Monthly • $49/mo')
   })
   it('uses the price owner id despite a stale legacy title', () => {
-    const catalog = CATALOG.map((p) => ({ ...p, title: p.id === 'architect' ? 'Omi Pro' : p.title }))
-    expect(currentPlanSubtitle(sub({ plan: 'architect', status: 'active', current_price_id: 'price_arch_m' }), catalog))
-      .toBe('Architect Monthly • $99/mo')
+    const catalog = CATALOG.map((p) => ({
+      ...p,
+      title: p.id === 'architect' ? 'Omi Pro' : p.title
+    }))
+    expect(
+      currentPlanSubtitle(
+        sub({ plan: 'architect', status: 'active', current_price_id: 'price_arch_m' }),
+        catalog
+      )
+    ).toBe('Architect Monthly • $99/mo')
   })
   it('shows the free-tier line otherwise', () => {
     expect(currentPlanSubtitle(sub({ plan: 'basic' }), CATALOG)).toBe(
@@ -289,9 +296,7 @@ describe('currentPlanPeriodText', () => {
   })
   it('is empty when a cancellation is pending and the end date is missing', () => {
     expect(
-      currentPlanPeriodText(
-        sub({ plan: 'operator', status: 'active', cancel_at_period_end: true })
-      )
+      currentPlanPeriodText(sub({ plan: 'operator', status: 'active', cancel_at_period_end: true }))
     ).toBe('')
     expect(
       currentPlanPeriodText(
@@ -453,6 +458,40 @@ function makeDeps(over: Partial<CheckoutDeps> = {}): CheckoutDeps {
 }
 
 describe('startCheckout', () => {
+  it('a checkout 409 is an existing subscription, an upgrade 409 a pending cancellation', async () => {
+    const conflict = Object.assign(new Error('Conflict'), { response: { status: 409 } })
+    const checkout = makeDeps({ createCheckoutSession: vi.fn().mockRejectedValue(conflict) })
+    expect(
+      await startCheckout(
+        { priceId: 'price_op_m', currentSubscription: sub({ plan: 'basic' }) },
+        checkout
+      )
+    ).toEqual({ kind: 'existing_subscription' })
+
+    const upgrade = makeDeps({ upgradeSubscription: vi.fn().mockRejectedValue(conflict) })
+    expect(
+      await startCheckout(
+        {
+          priceId: 'price_op_m',
+          currentSubscription: sub({
+            plan: 'unlimited',
+            status: 'active',
+            cancel_at_period_end: false
+          })
+        },
+        upgrade
+      )
+    ).toEqual({ kind: 'blocked' })
+
+    const other = Object.assign(new Error('Server'), { response: { status: 500 } })
+    await expect(
+      startCheckout(
+        { priceId: 'price_op_m', currentSubscription: sub({ plan: 'basic' }) },
+        makeDeps({ createCheckoutSession: vi.fn().mockRejectedValue(other) })
+      )
+    ).rejects.toBe(other)
+  })
+
   it('upgrades an active paid sub in place (no browser)', async () => {
     const deps = makeDeps()
     const res = await startCheckout(
@@ -521,7 +560,9 @@ describe('startCheckout', () => {
   it('names the plan and renew date when a cancel-pending subscription is reactivated', async () => {
     const end = Math.floor(new Date('2026-11-03T00:00:00').getTime() / 1000)
     const deps = makeDeps({
-      createCheckoutSession: vi.fn().mockResolvedValue({ status: 'reactivated', next_billing_date: end })
+      createCheckoutSession: vi
+        .fn()
+        .mockResolvedValue({ status: 'reactivated', next_billing_date: end })
     })
     const res = await startCheckout(
       {

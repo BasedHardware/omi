@@ -31,6 +31,7 @@ from utils.conversations.summary_delivery import (
     refusal as summary_repair_refusal,
     repair_fenced,
 )
+from utils.episodes.finalize import schedule_after_finalization
 from utils.executors import postprocess_executor, submit_with_context
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.metrics import record_conversation_relevance
@@ -70,14 +71,14 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     context = PROCESS_CONTEXT.get()
     if conversation_data and conversation_data.get('deleted') and conversation_data.get('sync_merged_into'):
-        canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
         if context is not None:
+            canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
             # The outbox transfers custody atomically before acknowledging this donor.
             context['redirect_to' if canonical else 'defer_reason'] = canonical or 'redirect_unresolved'
             return
-        if canonical:
-            conversation_id = canonical
-            conversation_data = conversations_db.get_conversation(uid, canonical)
+        conversation_data = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
+        if conversation_data:
+            conversation_id = conversation_data['id']
     if not conversation_data or conversation_data.get('deleted'):
         if context is not None:
             if conversation_data and conversation_data.get('deleted'):
@@ -191,6 +192,11 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
         and not processed_conversation.discarded
     ):
         submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
+
+    # Episodes: the WAL row joins the live episode covering it, so Home folds it under the
+    # live row instead of a second capture's fragment. Off this lane, fail-open; a later
+    # WAL append re-runs it and is a no-op once joined.
+    schedule_after_finalization(uid, conversation_id, ProcessingTrigger.SYNC_UPDATE)
 
     logger.info('event=sync_reprocess_callback outcome=processed')
     return processed_conversation

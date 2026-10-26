@@ -145,6 +145,102 @@ void main() {
     await flush();
   }
 
+  test('retired cleanup cannot stop a replacement response after a native stop settles', () async {
+    SharedPreferencesUtil().voiceResponseMode = 2;
+    final stopped = Completer<void>();
+    var holdStop = false;
+    var fallbackStops = 0;
+    service.debugHooks = VoicePlaybackDebugHooks(
+      probeOutput: () async => const VoicePlaybackOutputSnapshot(
+          headphonesConnected: true, checkFailed: false, route: VoiceReplyPlaybackOutputRoute.bluetooth),
+      stopPlayback: () => holdStop ? stopped.future : Future.value(),
+      stopSpeak: () async => fallbackStops++,
+    );
+    await service.beginResponse(messageId: 'old');
+    holdStop = true;
+    final cleanup = service.interruptResponse(messageId: 'old', source: VoiceReplyPlaybackInterruptSource.streamError);
+    await pumpEventQueue();
+    holdStop = false;
+    await service.beginResponse(messageId: 'replacement');
+    stopped.complete();
+    await cleanup;
+    expect(fallbackStops, 0, reason: 'old cleanup cannot stop fallback belonging to a newer response');
+  });
+
+  for (final skip in ['mode off', 'no headphones', 'revoked admission']) {
+    test('skipped $skip attempt must not abandon existing response cleanup', () async {
+      SharedPreferencesUtil().voiceResponseMode = 2;
+      final stopped = Completer<void>();
+      var holdStop = false;
+      var headphones = true;
+      var fallbackStops = 0;
+      service.debugHooks = VoicePlaybackDebugHooks(
+        probeOutput: () async => VoicePlaybackOutputSnapshot(
+            headphonesConnected: headphones, checkFailed: false, route: VoiceReplyPlaybackOutputRoute.bluetooth),
+        stopPlayback: () => holdStop ? stopped.future : Future<void>.value(),
+        stopSpeak: () async => fallbackStops++,
+      );
+      await service.beginResponse(messageId: 'old');
+      holdStop = true;
+      final cleanup =
+          service.interruptResponse(messageId: 'old', source: VoiceReplyPlaybackInterruptSource.streamError);
+      await pumpEventQueue();
+      holdStop = false;
+      if (skip == 'mode off') SharedPreferencesUtil().voiceResponseMode = 0;
+      if (skip == 'no headphones') {
+        SharedPreferencesUtil().voiceResponseMode = 1;
+        headphones = false;
+      }
+      await service.beginResponse(messageId: 'not-admitted', canBegin: () => skip != 'revoked admission');
+      stopped.complete();
+      await cleanup;
+      expect(fallbackStops, 1,
+          reason: 'A skipped attempt owns no playback; existing cleanup must still stop fallback and release audio');
+    });
+  }
+
+  for (final skip in ['mode off', 'no headphones', 'revoked admission']) {
+    test('skipped $skip attempt must let an admitted begin finish clearing prior audio', () async {
+      SharedPreferencesUtil().voiceResponseMode = 2;
+      final cancelEntered = Completer<void>();
+      final cancelDone = Completer<void>();
+      final response = Completer<TtsAudioStream?>();
+      var headphones = true;
+      var playerStops = 0;
+      service.debugHooks = VoicePlaybackDebugHooks(
+        probeOutput: () async => VoicePlaybackOutputSnapshot(
+            headphonesConnected: headphones, checkFailed: false, route: VoiceReplyPlaybackOutputRoute.bluetooth),
+        stopPlayback: () async => playerStops++,
+        synthesizeStream: ({required text, voiceId}) => TtsSynthesisRequest(
+          response: response.future,
+          cancel: () {
+            if (!cancelEntered.isCompleted) cancelEntered.complete();
+            return cancelDone.future;
+          },
+        ),
+      );
+      await service.beginResponse(messageId: 'old');
+      service.updateStreamingResponse(messageId: 'old', fullText: _firstSentence, isFinal: true);
+      await pumpEventQueue();
+      final preparing = service.beginResponse(messageId: 'preparing-replacement');
+      await cancelEntered.future;
+      if (skip == 'mode off') SharedPreferencesUtil().voiceResponseMode = 0;
+      if (skip == 'no headphones') {
+        SharedPreferencesUtil().voiceResponseMode = 1;
+        headphones = false;
+      }
+      await service.beginResponse(messageId: 'not-admitted', canBegin: () => skip != 'revoked admission');
+      cancelDone.complete();
+      await preparing;
+      try {
+        expect(playerStops, 2, reason: 'A skipped begin cannot abandon prior audio cleanup already in progress');
+      } finally {
+        response.complete(null);
+        await pumpEventQueue();
+      }
+    });
+  }
+
   test('mode off emits skipped once and does not probe output', () async {
     SharedPreferencesUtil().voiceResponseMode = 0;
     await service.beginResponse(messageId: 'off');

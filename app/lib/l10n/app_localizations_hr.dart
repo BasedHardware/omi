@@ -4437,6 +4437,10 @@ class AppLocalizationsHr extends AppLocalizations {
   String get continueText => 'Nastavi';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Već imate pretplatu. Upravljajte postojećom pretplatom umjesto pokretanja nove.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Prvo se ponovno pretplati da promijeniš plan.';
 
   @override
@@ -8623,6 +8627,9 @@ class AppLocalizationsHr extends AppLocalizations {
       'Transkripcija nije dostupna — snimanje se nastavlja i vaš zvuk je spremljen.';
 
   @override
+  String get captureNoAudioFromPendant => 'Nema zvuka s privjeska';
+
+  @override
   String get capturing => 'Snimanje';
 
   @override
@@ -11121,6 +11128,12 @@ class AppLocalizationsHr extends AppLocalizations {
       'Bluetooth veza s vašim Omijem je zastala, pa zvuk ne dolazi do aplikacije. Omi nastavlja snimati na uređaju i sinkronizirat će se kada se veza oporavi. Ponovni pokušaj ponovno uspostavlja vezu; ako i dalje ne uspijeva, provjerite uređaj u Postavke > Uređaj.';
 
   @override
+  String get captureConnecting => 'Povezivanje…';
+
+  @override
+  String get captureNoAudioDetail => 'Privjesak je povezan, ali zvuk ne dolazi do vašeg telefona';
+
+  @override
   String get captureIngressNeedsReconnect => 'Audio ne stiže do aplikacije — ponovno povežite Omi';
 
   @override
@@ -11149,13 +11162,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Pohrana je gotovo puna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovno povezati kad je privjesak uključen i u blizini. Sve dosad snimljeno je sigurno.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi će se sam ponovno povezati';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12284,12 +12290,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Provjerite vezu';
-
-  @override
-  String get forYou => 'Za vas';
-
-  @override
-  String get stopThese => 'Zaustavi ovo';
 
   @override
   String get dismiss => 'Sakrij';
@@ -14452,6 +14452,25 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Bilješke se ne ažuriraju. Zasad pogledajte transkript.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Snimanje · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Prethodna epizoda';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Dijelovi na čekanju: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Otvori prethodnu epizodu';
+
+  @override
   String get episodeNotesSoon => 'Bilješke se pojavljuju nakon prvih minuta razgovora.';
 
   @override
@@ -14588,4 +14607,34 @@ class AppLocalizationsHr extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Gotovo. $percent% popusta sljedećih $months mjeseca.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Ostali';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Gotovo';
+
+  @override
+  String get openLoopAnswerRemind => 'Podsjeti me kasnije';
+
+  @override
+  String get openLoopAnswerDrop => 'Odbaci';
 }

@@ -40,6 +40,7 @@ from utils.batch_pipeline.recovery_disposition import (
     silence_payload,
     terminal_empty_payload,
     result_outcome,
+    result_vad_evidence,
 )
 from utils.batch_pipeline.speech_redrive import redrive_one
 
@@ -99,6 +100,9 @@ def inspect_unit(store, artifacts, sid, uid, key, attestation):
     _, _, spans = inspect_audio(item, artifacts.fetch_audio(item))
     require(spent_canary(job) or exhausted(job, attestation), 'missing_exhaustion_evidence')
     if not spans:
+        from utils.batch_pipeline.contracts import held_silence_allowed
+
+        require(held_silence_allowed(job, 0), 'held_speech_blocks_silence')
         return 'silence'
     has_padded_empty = (
         job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1}
@@ -141,13 +145,16 @@ def apply_one(store, artifacts, sid, uid, key, decision, digest, attestation, pa
     item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
     uri = artifacts.find_recovery_result(item, marker['token'])
     if uri:
-        require(result_outcome(artifacts.load_result(item, uri)) == decision, 'artifact_outcome_changed')
+        payload = artifacts.load_result(item, uri)
+        require(result_outcome(payload) == decision, 'artifact_outcome_changed')
     else:
         _, duration, spans = inspect_audio(item, artifacts.fetch_audio(item))
         require(bool(spans) == (decision == 'no_recoverable_speech'), 'vad_changed')
         payload = terminal_empty_payload(duration, spans) if spans else silence_payload(duration)
         uri = artifacts.persist_recovery_result(item, payload, marker['token'])
-    changed = protocol.complete(sid, marker['token'], digest, uri, time.time())
+    changed = protocol.complete(
+        sid, marker['token'], digest, uri, time.time(), measured_held_vad_speech_seconds=result_vad_evidence(payload)
+    )
     if changed and decision == 'no_recoverable_speech':
         log_terminal_empty()
     return 'completed' if changed else 'fenced'

@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter, transactional
+from utils.speakers import auto_enroll
 
 
 class _PeopleScanMemo:
@@ -177,15 +178,28 @@ def dismiss_person_transaction(transaction: Any, person_ref: Any) -> bool:
         return False
     raw = snapshot.to_dict()
     data = raw if isinstance(raw, dict) else {}
+    has_pool = isinstance(data.get(auto_enroll.POOL_FIELD), str)
+    if data.get('is_dismissed') is True and not has_pool:
+        return True
+    authority_change = None
+    if has_pool:
+        owner_ref = person_ref.parent.parent
+        owner = owner_ref.get(transaction=transaction)
+        if owner.exists:
+            authority_change = (owner_ref, auto_enroll.authority_after(owner.to_dict() or {}, {person_ref.id: None}))
     if data.get('is_dismissed') is True:
+        if authority_change is not None:
+            transaction.update(*authority_change)
         return True
     now = datetime.now(timezone.utc)
     _invalidate_people_scans()
+    if authority_change is not None:
+        transaction.update(*authority_change)
     transaction.update(
         person_ref,
         {
             'is_dismissed': True,
-            'dismissed_at': now,
+            'dismissed_at': data.get('dismissed_at') or now,
             'updated_at': now,
         },
     )

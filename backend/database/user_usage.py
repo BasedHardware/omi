@@ -10,6 +10,8 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
+from . import monthly_usage_totals
+from .firestore_read_origin import read_origin
 from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from .firestore_index_registry import HOURLY_USAGE_UTC_DAY_QUERY
 from .llm_usage import nest_usage_fields, resolve_usage_plan_id
@@ -424,7 +426,12 @@ def update_hourly_usage(
         update_doc['platforms'] = firestore.ArrayUnion([platform])
 
     update_doc.update(hourly_shadow(updates, usage_metadata))
-    hourly_usage_ref.set(nest_usage_fields(update_doc), merge=True)
+
+    def write(transaction):
+        transaction.set(hourly_usage_ref, nest_usage_fields(update_doc), merge=True)
+        monthly_usage_totals.queue_increment(transaction, user_ref, date, update_doc)
+
+    monthly_usage_totals.commit_fenced(user_ref, write, firestore_client=client)
 
 
 @firestore.transactional
@@ -433,14 +440,21 @@ def _update_hourly_usage_once_transaction(
     marker_ref: Any,
     usage_ref: Any,
     update_doc: Dict[str, Any],
+    *,
+    firestore_client: Any,
 ) -> bool:
-    marker_snapshot = marker_ref.get(transaction=transaction)
-    marker_data = marker_snapshot.to_dict() or {} if marker_snapshot.exists else {}
-    if marker_data.get('usage_committed_at') is not None:
-        return False
-    transaction.set(marker_ref, {'usage_committed_at': datetime.now(timezone.utc)}, merge=True)
-    transaction.set(usage_ref, update_doc, merge=True)
-    return True
+    user_ref = usage_ref.parent.parent
+    with monthly_usage_totals.publication_fence(user_ref, transaction, firestore_client=firestore_client):
+        marker_snapshot = marker_ref.get(transaction=transaction)
+        marker_data = marker_snapshot.to_dict() or {} if marker_snapshot.exists else {}
+        if marker_data.get('usage_committed_at') is not None:
+            return False
+        transaction.set(marker_ref, {'usage_committed_at': datetime.now(timezone.utc)}, merge=True)
+        transaction.set(usage_ref, update_doc, merge=True)
+        monthly_usage_totals.queue_increment(
+            transaction, user_ref, datetime.strptime(update_doc['id'], '%Y-%m-%d-%H'), update_doc
+        )
+        return True
 
 
 @cache_writer('usage_month_cache')
@@ -479,33 +493,37 @@ def update_hourly_usage_once(
         cost_exclusion=cost_exclusion,
         usage_metadata=usage_metadata,
     )
-    return _update_hourly_usage_once_transaction(client.transaction(), marker_ref, usage_ref, update_doc)
+    return _update_hourly_usage_once_transaction(
+        client.transaction(), marker_ref, usage_ref, update_doc, firestore_client=client
+    )
 
 
 @cache_writer('usage_month_cache')
 def batch_update_hourly_usage(uid: str, hourly_updates: Dict[datetime, Dict[str, Any]]) -> None:
     """Batch updates or creates usage stats for multiple hours."""
-    batch_size = 400
+    batch_size = 200  # hourly set + monthly invalidation, below the 500-write limit
     items: List[Tuple[datetime, Dict[str, Any]]] = list(hourly_updates.items())
+    user_ref = db.collection('users').document(uid)
 
     for i in range(0, len(items), batch_size):
-        batch = db.batch()
         chunk = items[i : i + batch_size]
-        for date, updates in chunk:
-            doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
-            hourly_usage_ref = db.collection('users').document(uid).collection('hourly_usage').document(doc_id)
 
-            update_doc: Dict[str, Any] = updates.copy()
-            # Add year, month, day, hour fields for querying
-            update_doc['year'] = date.year
-            update_doc['month'] = date.month
-            update_doc['day'] = date.day
-            update_doc['hour'] = date.hour
-            update_doc['id'] = doc_id
-            update_doc['last_updated'] = datetime.now(timezone.utc)
+        def write(transaction):
+            affected_months = set()
+            for date, updates in chunk:
+                doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
+                hourly_usage_ref = user_ref.collection('hourly_usage').document(doc_id)
 
-            batch.set(hourly_usage_ref, update_doc, merge=True)
-        batch.commit()
+                update_doc: Dict[str, Any] = updates.copy()
+                # Preserve absolute merge semantics and invalidate in the same commit.
+                update_doc.update(year=date.year, month=date.month, day=date.day, hour=date.hour, id=doc_id)
+                update_doc['last_updated'] = datetime.now(timezone.utc)
+                transaction.set(hourly_usage_ref, update_doc, merge=True)
+                affected_months.add(date.replace(day=1, hour=0, minute=0, second=0, microsecond=0))
+            for date in affected_months:
+                monthly_usage_totals.queue_invalidation(transaction, user_ref, date)
+
+        monthly_usage_totals.commit_fenced(user_ref, write, firestore_client=db)
 
 
 def get_today_usage_stats(uid: str, start: datetime, end: datetime) -> Dict[str, Any]:
@@ -604,18 +622,26 @@ def _s4_month_cache(since=False):
 @_s4_month_cache()
 def get_monthly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given month from Firestore."""
+    projected = monthly_usage_totals.read_monthly_totals(uid, date, firestore_client=db)
+    if projected is not None:
+        return projected
     user_ref = db.collection('users').document(uid)
     hourly_usage_collection = user_ref.collection('hourly_usage')
 
     query = hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year)).where(
         filter=FieldFilter('month', '==', date.month)
     )
-    return _aggregate_stats(query)
+    with read_origin('job:usage_month_total_fallback'):
+        return _aggregate_stats(query)
 
 
 @_s4_month_cache(since=True)
 def get_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given month from Firestore, starting from a specific date."""
+    projected = monthly_usage_totals.read_monthly_totals(uid, date, start_date=start_date, firestore_client=db)
+    if projected is not None:
+        record_firestore_read(FirestoreReadFamily.LISTEN_MONTHLY_USAGE, FirestoreReadMode.BOUNDED, 1)
+        return projected
     user_ref = db.collection('users').document(uid)
     hourly_usage_collection = user_ref.collection('hourly_usage')
 
@@ -626,7 +652,8 @@ def get_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime
         .where(filter=FieldFilter('month', '==', date.month))
         .where(filter=FieldFilter('id', '>=', start_doc_id))
     )
-    stats, document_count = _aggregate_stats_with_count(query.stream())
+    with read_origin('job:usage_month_total_fallback'):
+        stats, document_count = _aggregate_stats_with_count(query.stream())
     record_firestore_read(
         FirestoreReadFamily.LISTEN_MONTHLY_USAGE,
         FirestoreReadMode.UNBOUNDED,

@@ -77,6 +77,14 @@ def merge_surplus(clusters, centroids, hint, *, channel_ids=()):
         for key, candidate in by_key.items():
             match = right_keys.get(key)
             candidate.label_eligible &= bool(match and match.label_eligible)
+            if candidate.source == 'manual' and match is not None:
+                # Preserve every explicit excerpt; an older unscoped receipt
+                # remains unknown rather than becoming a narrower known scope.
+                candidate.segment_ids = (
+                    sorted(set(candidate.segment_ids) | set(match.segment_ids))
+                    if candidate.segment_ids is not None and match.segment_ids is not None
+                    else None
+                )
         for key, candidate in right_keys.items():
             if key not in by_key:
                 candidate.label_eligible = False

@@ -7,8 +7,10 @@ No transcript, credential, request header, or raw exception is stored here.
 
 from __future__ import annotations
 
+import logging
 import math
 import os
+import socket
 from hashlib import sha256
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Literal, Mapping, TypedDict
@@ -16,10 +18,14 @@ from typing import Any, Callable, Literal, Mapping, TypedDict
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from config.firestore_read_levers import lever_enabled
 from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
+from config.occasion_conversations import LIFECYCLE_V2_MODE_ENV
+from config.refactor_modes import cohort_configured
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from database.quiet_check_retirement import stop_quiet_check_for_conversation, stop_quiet_checks_for_job
 from database._client import document_id_from_seed, get_firestore_client
 from database.conversation_terminal_title import (
     dead_letter_conversation_updates,
@@ -29,6 +35,9 @@ from database.conversation_terminal_title import (
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_index_registry import (
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
+    FINALIZATION_BYOK_RECLAIM_QUERY,
+    FINALIZATION_BYOK_ABANDONMENT_QUERY,
+    FINALIZATION_STALE_IN_PROGRESS_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
 )
 from database.people_stats_cache import invalidate_people_stats_cache
@@ -118,6 +127,11 @@ class FinalizationClaim(TypedDict):
     lease_epoch: int | None
     attempt_count: int
     created_at: datetime | None
+
+
+def _candidate_queries_enabled() -> bool:
+    key = os.getenv('HOSTNAME') or f"{os.getenv('K_REVISION', '')}:{socket.gethostname()}"
+    return lever_enabled('finjob_candidate_queries', key)
 
 
 def _now() -> datetime:
@@ -822,6 +836,7 @@ def create_or_get_finalization_intent(
         create_intent_in_transaction,
         operation_name='conversation_finalization_intent',
     )
+    stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
     if intent['created']:
         invalidate_people_stats_cache(uid)
     return intent
@@ -1390,7 +1405,7 @@ def mark_finalization_dead_letter(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_mark_finalization_dead_letter_txn)
-    return transactional(
+    closed = transactional(
         transaction,
         _job_ref(client, job_id),
         dispatch_generation,
@@ -1402,6 +1417,9 @@ def mark_finalization_dead_letter(
         failure_code,
         lambda uid: user_time_zone(client, uid),
     )
+    if closed:
+        stop_quiet_checks_for_job(job_id, firestore_client=client)
+    return closed
 
 
 def get_finalization_job(job_id: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
@@ -1534,7 +1552,7 @@ def record_meeting_receipt(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_record_meeting_receipt_txn)
-    return transactional(
+    result = transactional(
         transaction,
         _conversation_ref(client, uid, conversation_id),
         client.collection(FINALIZATION_JOBS_COLLECTION),
@@ -1547,6 +1565,9 @@ def record_meeting_receipt(
         dedup_speech_s,
         _now(),
     )
+    if result['status'] == 'recorded':
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
+    return result
 
 
 def mark_meeting_receipt_intent_persisted(job_id: str, intent_id: str, *, firestore_client: Any = None) -> bool:
@@ -1730,6 +1751,8 @@ def _claim_finalization_replay_txn(
     if byok_only and not job.get('requires_byok'):
         return _intent_from_job(snapshot.id, job)
     if status == 'blocked_byok' or status in TERMINAL_JOB_STATUSES:
+        if 'reconcile_after_at' in job:
+            transaction.update(job_ref, {'reconcile_after_at': firestore.DELETE_FIELD, 'updated_at': now})
         return _intent_from_job(snapshot.id, job)
     if status == 'leased':
         lease_expires_at = job.get('lease_expires_at')
@@ -1807,9 +1830,10 @@ def claim_finalization_replay(
 
 
 def recover_stranded_byok_jobs(*, limit: int = 50, firestore_client: Any = None) -> dict[str, int]:
-    """Rotate through at most 50 rows per active status using the existing age index.
+    """Rotate through at most 50 rows per active status in creation-time order.
 
-    Persisted CAS cursors prevent a stable non-BYOK prefix from starving legacy
+    The candidate-query lever adds ``requires_byok == True`` before the page
+    cap; otherwise retain the existing all-payer age query. Persisted CAS cursors prevent a stable non-BYOK prefix from starving legacy
     rows. Candidate reads are advisory; each reclaim rereads ownership inside a
     transaction. Failed rows are revisited on the next rotation.
     """
@@ -1817,12 +1841,18 @@ def recover_stranded_byok_jobs(*, limit: int = 50, firestore_client: Any = None)
     collection = client.collection(FINALIZATION_JOBS_COLLECTION)
     page_size = max(1, min(limit, 50))
     result = {'scanned': 0, 'blocked': 0, 'errors': 0}
+    candidate_queries = _candidate_queries_enabled()
     for status in ('queued', 'leased'):
         state_ref = client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(f'byok_reclaim_{status}')
         state = state_ref.get().to_dict() or {}
-        query = FINALIZATION_OLDEST_NONTERMINAL_QUERY.build(
-            collection, {'status': status}, field_filter_factory=FieldFilter
-        ).order_by('created_at')
+        if candidate_queries:
+            query = FINALIZATION_BYOK_RECLAIM_QUERY.build(
+                collection, {'status': status, 'requires_byok': True}, field_filter_factory=FieldFilter
+            ).order_by('created_at')
+        else:
+            query = FINALIZATION_OLDEST_NONTERMINAL_QUERY.build(
+                collection, {'status': status}, field_filter_factory=FieldFilter
+            ).order_by('created_at')
         path = state.get('resume_after_path')
         if isinstance(path, str) and path.startswith(FINALIZATION_JOBS_COLLECTION + '/'):
             cursor = client.document(path).get()
@@ -1851,21 +1881,118 @@ def recover_stranded_byok_jobs(*, limit: int = 50, firestore_client: Any = None)
     return result
 
 
+def _advance_finalization_replay_cursor_txn(
+    transaction: Any, ref: Any, generation: int, cursor: dict[str, Any] | None
+) -> bool:
+    state = ref.get(transaction=transaction).to_dict() or {}
+    if int(state.get('generation', 0)) != generation:
+        return False
+    transaction.set(ref, {'generation': generation + 1, 'cursor': cursor, 'updated_at': _now()})
+    return True
+
+
 def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: Any = None) -> list[dict[str, Any]]:
-    """Return a bounded server-side page of jobs whose replay delay elapsed."""
+    """Rotate a bounded due page even when every selected worker fails to advance.
+
+    Persist the original ordered values, not a document snapshot re-read after
+    mutation. A repaired/deleted last row must not rewind or skip the next page.
+    Freeze each sweep cutoff so recurring successors cannot keep the window
+    full forever. CAS fences competing scans. A crash after reservation delays
+    these rows until bounded wrap; it never removes the durable obligation.
+    """
     client = _client(firestore_client)
-    result: list[dict[str, Any]] = []
-    collection = client.collection(FINALIZATION_JOBS_COLLECTION)
     try:
-        safe_limit = max(1, min(int(limit), 500))
+        safe_limit = max(1, min(int(limit), 2000))
     except (ValueError, TypeError):
         safe_limit = 100
-    query = collection.where('reconcile_after_at', '<=', _now()).limit(max(1, min(safe_limit, 100)))
+    state_ref = client.collection('conversation_recovery_state').document('finalization_replay')
+    state = state_ref.get().to_dict() or {}
+    cursor = state.get('cursor')
+    cutoff = cursor.get('cutoff') if isinstance(cursor, dict) else None
+    if not isinstance(cutoff, datetime):
+        cutoff = _now()
+    query = (
+        client.collection(FINALIZATION_JOBS_COLLECTION)
+        .where('reconcile_after_at', '<=', cutoff)
+        .order_by('reconcile_after_at')
+        .order_by('__name__')
+    )
+    # The SDK only adds implicit name ordering for snapshot cursors. With a
+    # value dict it silently drops name unless that order is explicit.
+    if (
+        isinstance(cursor, dict)
+        and isinstance(cursor.get('reconcile_after_at'), datetime)
+        and isinstance(cursor.get('job_id'), str)
+    ):
+        query = query.start_after(
+            {
+                'reconcile_after_at': cursor['reconcile_after_at'],
+                '__name__': client.collection(FINALIZATION_JOBS_COLLECTION).document(cursor['job_id']),
+            }
+        )
+    snapshots = list(query.limit(safe_limit).stream())
+    next_cursor = None
+    if len(snapshots) == safe_limit:
+        last = snapshots[-1]
+        next_cursor = {
+            'reconcile_after_at': (last.to_dict() or {})['reconcile_after_at'],
+            'job_id': last.id,
+            'cutoff': cutoff,
+        }
+    firestore.transactional(_advance_finalization_replay_cursor_txn)(
+        client.transaction(), state_ref, int(state.get('generation', 0)), next_cursor
+    )
+    logging.getLogger(__name__).info(
+        'event=finalization_replay_page project=%s database=%s selected=%s quiet=%s resumed=%s',
+        getattr(client, 'project', 'injected'),
+        getattr(client, '_database', '(default)'),
+        len(snapshots),
+        sum((snapshot.to_dict() or {}).get('kind') == 'listen_quiet_check' for snapshot in snapshots),
+        bool(cursor),
+    )
+    return [(snapshot.to_dict() or {}) | {'job_id': snapshot.id} for snapshot in snapshots]
+
+
+def get_finalization_replay_oldest_overdue_age_seconds(*, firestore_client: Any = None) -> float:
+    """Measure the true head independently of the rotating replay window."""
+    now = _now()
+    query = (
+        _client(firestore_client)
+        .collection(FINALIZATION_JOBS_COLLECTION)
+        .where('reconcile_after_at', '<=', now)
+        .order_by('reconcile_after_at')
+        .limit(1)
+    )
     for snapshot in query.stream():
-        job = snapshot.to_dict() or {}
-        if job.get('status') in {'queued', 'leased', 'waiting_quiet'}:
-            result.append(job | {'job_id': snapshot.id})
-    return result
+        return max(0.0, (now - (snapshot.to_dict() or {})['reconcile_after_at']).total_seconds())
+    return 0.0
+
+
+def defer_finalization_replay(candidate: dict[str, Any], *, firestore_client: Any = None) -> bool:
+    """Back off only the exact overdue snapshot that failed to make progress."""
+    client = _client(firestore_client)
+    ref = client.collection(FINALIZATION_JOBS_COLLECTION).document(candidate['job_id'])
+
+    @firestore.transactional
+    def defer(transaction: Any) -> bool:
+        current = ref.get(transaction=transaction).to_dict() or {}
+        now = _now()
+        due = current.get('reconcile_after_at')
+        if not isinstance(due, datetime) or due > now:
+            return False
+        if any(
+            current.get(key) != candidate.get(key) for key in ('status', 'dispatch_generation', 'reconcile_after_at')
+        ):
+            return False
+        updates: dict[str, Any] = {'reconcile_after_at': now + timedelta(seconds=60), 'updated_at': now}
+        if current.get('kind') != 'listen_quiet_check' and (
+            current.get('status') in TERMINAL_JOB_STATUSES or current.get('status') == 'blocked_byok'
+        ):
+            updates['reconcile_after_at'] = firestore.DELETE_FIELD
+        transaction.update(ref, updates)
+        return True
+
+    return defer(client.transaction())
 
 
 def get_stale_processing_orphan_candidates(
@@ -1994,24 +2121,41 @@ def scan_in_progress_conversations(
     page_size: int = 100,
     max_scan: int = 2000,
     resume_after_path: str | None = None,
+    finished_before: datetime | None = None,
     firestore_client: Any = None,
     content_due_before: datetime | None = None,
 ) -> dict[str, Any]:
     """Return a bounded window of ``status == 'in_progress'`` conversation rows.
 
-    The legacy query shape is fixed: a single-equality ``collection_group`` on
-    ``conversations.status == 'in_progress'``, limited per page, optionally
-    resuming after the persisted cursor snapshot. Every recovery predicate is
-    evaluated Python-side by the caller; no extra Firestore predicate may be
-    added to that legacy shape. The always-on fast recovery caller explicitly
-    selects the content-bearing, due-by-finished_at collection-group index.
-    This avoids rotating through historical empty stubs before finding a
-    recently expired recording. Lease and admission guards remain transactional.
+    The default-off path preserves the status-only scan and main's explicit
+    content-bearing due scan. With the candidate-query lever and a caller cutoff,
+    the status-only scan instead pushes ``finished_at <= finished_before`` into
+    the query. The content-bearing fast recovery scan retains its own cutoff,
+    predicates and cursor behavior regardless of the candidate-query lever.
+    Lease and admission guards remain transactional.
+
+    The pushdown is admission-equivalent only while no uid can serve lifecycle
+    v2: ``recovery_admission_refusal`` clocks v2-serving uids by
+    ``last_speech_at or finished_at`` (``speech_clock``), and v2 serving
+    suppresses legacy ``finished_at`` writes, so a v2-serving uid can hold a
+    missing or fresh ``finished_at`` with a stale ``last_speech_at``. Such a row
+    must stay reachable by this status-only catch-all (it is the only
+    ``finished_at``-agnostic recovery owner), so while any v2 serve cohort can
+    exist (``LIFECYCLE_V2_MODE=serve`` or a configured shadow cohort) the
+    candidate shape is withheld and the status-only scan runs.
 
     Returns ``{'rows', 'scanned', 'resume_after_path', 'exhausted'}`` where each
     row is ``{'uid', 'conversation_id', 'path', 'data'}``.
     """
     client = _client(firestore_client)
+    candidate_queries = (
+        content_due_before is None
+        and _candidate_queries_enabled()
+        and finished_before is not None
+        and not cohort_configured(LIFECYCLE_V2_MODE_ENV)
+    )
+    if finished_before is not None and finished_before.tzinfo is None:
+        finished_before = finished_before.replace(tzinfo=timezone.utc)
     page_size = max(1, min(page_size, 100))
     rows: list[dict[str, Any]] = []
     scanned = 0
@@ -2022,20 +2166,34 @@ def scan_in_progress_conversations(
     if resume_after_path:
         fetched = client.document(resume_after_path).get()
         if getattr(fetched, 'exists', False):
-            cursor_snapshot = fetched
+            # A status-only cursor from before rollout can lack the range
+            # field. Such a snapshot cannot seed the new ordered query.
+            if not candidate_queries or isinstance((fetched.to_dict() or {}).get('finished_at'), datetime):
+                cursor_snapshot = fetched
 
     while scanned < max_scan:
-        query = (
-            client.collection_group(CONVERSATIONS_COLLECTION)
-            .where(filter=firestore.FieldFilter('status', '==', 'in_progress'))
-            .limit(page_size)
-        )
-        if content_due_before is not None:
+        if candidate_queries:
             query = (
-                query.where(filter=firestore.FieldFilter('has_content', '==', True))
-                .where(filter=firestore.FieldFilter('finished_at', '<=', content_due_before))
+                FINALIZATION_STALE_IN_PROGRESS_QUERY.build(
+                    client.collection_group(CONVERSATIONS_COLLECTION),
+                    {'status': 'in_progress', 'finished_before': finished_before},
+                    field_filter_factory=FieldFilter,
+                )
                 .order_by('finished_at')
+                .limit(page_size)
             )
+        else:
+            query = (
+                client.collection_group(CONVERSATIONS_COLLECTION)
+                .where(filter=firestore.FieldFilter('status', '==', 'in_progress'))
+                .limit(page_size)
+            )
+            if content_due_before is not None:
+                query = (
+                    query.where(filter=firestore.FieldFilter('has_content', '==', True))
+                    .where(filter=firestore.FieldFilter('finished_at', '<=', content_due_before))
+                    .order_by('finished_at')
+                )
         if cursor_snapshot is not None:
             query = query.start_after(cursor_snapshot)
         page = list(query.stream())
@@ -2332,7 +2490,10 @@ def complete_unstampable_orphan_conversation(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_complete_unstampable_orphan_conversation_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now() - stale_after)
+    completed = transactional(transaction, _conversation_ref(client, uid, conversation_id), _now() - stale_after)
+    if completed:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
+    return completed
 
 
 def _complete_orphan_conversation_txn(
@@ -2386,7 +2547,7 @@ def complete_orphan_conversation(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_complete_orphan_conversation_txn)
-    return transactional(
+    completed = transactional(
         transaction,
         _conversation_ref(client, uid, conversation_id),
         expected_admitted_at,
@@ -2394,6 +2555,9 @@ def complete_orphan_conversation(
         uid,
         lambda zone_uid: user_time_zone(client, zone_uid),
     )
+    if completed:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
+    return completed
 
 
 def _renew_processing_lease_txn(transaction: Any, conversation_ref: Any, now: datetime) -> bool:
@@ -2470,7 +2634,10 @@ def recover_deferred_processing_failure(uid: str, conversation_id: str, *, fires
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_recover_deferred_processing_failure_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id))
+    completed = transactional(transaction, _conversation_ref(client, uid, conversation_id))
+    if completed:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
+    return completed
 
 
 def _job_last_activity_at(job: Mapping[str, Any]) -> datetime | None:
@@ -2493,7 +2660,7 @@ def get_abandoned_byok_job_candidates(
     """Return a bounded window of BYOK jobs that no consumer can ever claim again.
 
     The sweep never executes finalization or reads credentials. Its bounded
-    single-field query selects all BYOK rows, including blocked_byok; eligibility
+    default single-field query selects all BYOK rows, including blocked_byok; eligibility
     is checked after pagination and again in the terminal transaction:
 
     * ``status`` in ``queued`` / ``leased`` / ``blocked_byok``.
@@ -2502,7 +2669,7 @@ def get_abandoned_byok_job_candidates(
       that instant in ``byok_last_activity_at`` before updating bookkeeping;
       reconnect clears it and refreshes activity. Unknown age fails closed.
 
-    The cross-collection sweep is a single-equality query on
+    With the lever off, the sweep is a single-equality query on
     ``requires_byok == True``, served by Firestore's automatic single-field index
     (no composite index is registered or deployed). Because exclusion happens
     after the page cap, the sweep pages with a ``start_after`` cursor and stops
@@ -2510,9 +2677,15 @@ def get_abandoned_byok_job_candidates(
     ``None`` once ``exhausted``) so repeated bounded sweeps cover the whole
     collection and a stable terminal prefix cannot starve a later stranded row.
 
+    With ``finjob_candidate_queries`` enabled the same name-ordered sweep
+    additionally filters to active statuses, excluding terminal history before
+    the page cap. Age stays client-side: BYOK activity takes precedence over
+    bookkeeping ``updated_at`` and legacy rows fall back to ``created_at``.
+
     Returns ``{'candidates', 'resume_after_path', 'exhausted'}``.
     """
     client = _client(firestore_client)
+    candidate_queries = _candidate_queries_enabled()
     now = _now()
     cutoff = now - abandoned_after
     try:
@@ -2538,7 +2711,15 @@ def get_abandoned_byok_job_candidates(
         # A vanished cursor document wraps the sweep back to the top (safe re-scan).
 
     while len(collected) < safe_limit and scanned < safe_max_scan:
-        query = collection.where(filter=firestore.FieldFilter('requires_byok', '==', True)).limit(page_size)
+        if candidate_queries:
+            query = FINALIZATION_BYOK_ABANDONMENT_QUERY.build(
+                collection,
+                {'requires_byok': True, 'statuses': ['queued', 'leased', 'blocked_byok']},
+                field_filter_factory=FieldFilter,
+            )
+        else:
+            query = collection.where(filter=firestore.FieldFilter('requires_byok', '==', True))
+        query = query.limit(page_size)
         if cursor_snapshot is not None:
             query = query.start_after(cursor_snapshot)
         page = list(query.stream())
@@ -2727,7 +2908,7 @@ def abandon_byok_finalization_job(
     now = _now()
     transaction = client.transaction()
     transactional = firestore.transactional(_abandon_byok_finalization_job_txn)
-    return transactional(
+    result = transactional(
         transaction,
         _job_ref(client, job_id),
         expected_status,
@@ -2739,6 +2920,9 @@ def abandon_byok_finalization_job(
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
         lambda uid: user_time_zone(client, uid),
     )
+    if result['status'] == 'abandoned':
+        stop_quiet_checks_for_job(job_id, firestore_client=client)
+    return result
 
 
 def get_byok_abandonment_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:

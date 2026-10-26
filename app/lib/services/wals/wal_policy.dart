@@ -4,7 +4,6 @@ part of 'local_wal_sync.dart';
 /// STALE_THRESHOLD_SECONDS without ever reaching a worker. See backend issue
 /// #7469 — if this string changes, update here and keep the structural check
 /// below ('failed' with totalSegments==0) as the durable signal.
-const _liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 
 /// Phone-local safety copies include 10-second pendant chunks. The 720-file
 /// threshold spans every account bucket and represents about two hours when
@@ -15,6 +14,18 @@ const _liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 const int maxRetainedCaptureWalCount = 720;
 
 const int minFreeDiskReserveBytes = 512 * 1024 * 1024;
+
+extension _PendantBufferPolicy on LocalWalSyncImpl {
+  int _countPendantBuffered() {
+    var count = _frames.where(_isPendantFrame).length;
+    for (final wal in _wals) {
+      if (wal.storage == WalStorage.mem && _isPendantWal(wal)) {
+        count += wal.totalFrames;
+      }
+    }
+    return count;
+  }
+}
 
 class WalRetentionRisk {
   const WalRetentionRisk({
@@ -31,8 +42,6 @@ class WalRetentionRisk {
 
   final String reason;
 }
-
-bool isLiveCaptureWal(Wal wal, int nowSeconds) => nowSeconds - wal.timerStart <= _liveCaptureMaxAgeSeconds;
 
 /// The capture manifest is immutable per conversation, so claiming one for a
 /// partial batch strands the siblings that did not fit.
@@ -103,6 +112,16 @@ int? transcriptStartOnDevice(Iterable<(String, double)> segmentEnds, Map<String,
 }
 
 const _kDefinitiveUploadRefusalStatusCodes = {400, 413};
+
+/// Pause before the next batch after [streak] consecutive unscoped 5xx
+/// refusals. Exponential from 2s, capped at 30s: long enough that a shedding
+/// or restarting backend gets breathing room within a drain, short enough that
+/// a healthy drain's total added latency stays bounded (~1min worst case).
+@visibleForTesting
+int syncServerUnavailablePauseSeconds(int streak) {
+  if (streak <= 0) return 0;
+  return min(30, 2 * (1 << min(streak - 1, 4)));
+}
 
 @visibleForTesting
 bool isDefinitiveUploadRefusal(Object error) =>

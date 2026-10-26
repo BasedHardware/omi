@@ -1,0 +1,9 @@
+fastapi==0.121.0
+uvicorn==0.30.5
+python-multipart==0.0.31
+requests==2.33.1
+requests-toolbelt==1.0.0
+pydantic==2.13.4
+cryptography==48.0.1
+PyJWT==2.13.0
+../omi-plugin-sdk

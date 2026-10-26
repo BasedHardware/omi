@@ -112,6 +112,7 @@ def http(monkeypatch):
         for dependency in getattr(getattr(route, 'dependant', None), 'dependencies', []):
             app.dependency_overrides[dependency.call] = lambda: 'uid-1'
     monkeypatch.setattr(router_module.service, 'live_episode', lambda uid: None)
+    monkeypatch.setattr(router_module.service, 'last_closed_episode', lambda uid, fresh=False: None)
     monkeypatch.setattr(router_module.service, 'episode_for_conversation', lambda uid, cid: None)
     return TestClient(app, headers={'X-Omi-App-Channel': 'beta'})
 

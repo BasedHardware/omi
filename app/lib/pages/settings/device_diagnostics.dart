@@ -203,6 +203,11 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'firmware_diagnostics_latest': (extended['firmware_diagnostics'] as List?)?.lastOrNull,
       'lifecycle_events': extended['lifecycle_events'] ?? [],
       'ble_log': extended['ble_log'] ?? [],
+      'connect_pending_since_ms': extended['connect_pending_since_ms'],
+      'saved_reconnect_enabled': extended['saved_reconnect_enabled'],
+      'reconnect_suppressed': extended['reconnect_suppressed'],
+      'reconnect_scan_active': extended['reconnect_scan_active'],
+      'reconnect_scan_results_seen': extended['reconnect_scan_results_seen'],
       'capture_health': extended['capture_health'] ?? {},
       'capture_health_history': extended['capture_health_history'] ?? [],
     };

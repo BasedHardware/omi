@@ -115,16 +115,18 @@ void main() {
     expect(isAutoUploadEligible(wal), isTrue);
   });
 
-  test('a backend-busy failure is terminal for neither status nor budget', () async {
-    final sync = syncWithVerdict(failedJob(reasonCode: 'backfill_capacity', totalSegments: 0));
-    sync.testWals = [uploadedWal()];
+  for (final reasonCode in ['backfill_capacity', 'dispatch_hold']) {
+    test('$reasonCode is terminal for neither status nor budget', () async {
+      final sync = syncWithVerdict(failedJob(reasonCode: reasonCode, totalSegments: 0));
+      sync.testWals = [uploadedWal()];
 
-    await sync.reconcileUploadedWals();
+      await sync.reconcileUploadedWals();
 
-    final wal = sync.testWals.single;
-    expect(wal.status, WalStatus.miss);
-    expect(wal.retryCount, 0, reason: 'capacity limits are the server being busy, not bad audio');
-  });
+      final wal = sync.testWals.single;
+      expect(wal.status, WalStatus.miss);
+      expect(wal.retryCount, 0, reason: 'server admission holds are not bad audio');
+    });
+  }
 
   test('every WAL sharing the rejected job is retired together', () async {
     final sync = syncWithVerdict(failedJob(reasonCode: 'sync_invalid_audio', totalSegments: 2));

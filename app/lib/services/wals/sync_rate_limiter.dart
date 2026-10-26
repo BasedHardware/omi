@@ -57,12 +57,17 @@ class SyncRateLimiter extends ChangeNotifier {
   static const int _defaultCooldownSeconds = 1800; // 30 minutes
   static const int _maxFairUseCooldownSeconds = 30 * 24 * 60 * 60;
   static const int _maxBackendBusyCooldownSeconds = 24 * 60 * 60;
+  static const int _defaultDispatchHoldCooldownSeconds = 60;
+  static const int _maxDispatchHoldCooldownSeconds = 60 * 60;
 
   // In-memory cooldown for backendBusy. Intentionally not persisted so an
   // app restart re-probes the backend state instead of trusting a stale
   // local timer.
   int _backendBusyUntilMs = 0;
   RateLimitReason _inMemoryReason = RateLimitReason.backendBusy;
+  int _dispatchHoldBackoffLevel = 0;
+  int _dispatchHoldUntilMs = 0;
+  int _dispatchHoldLastCooldownMs = 0;
   Timer? _expiryTimer;
 
   /// Whether a server-confirmed fair-use cooldown is persisted, including an
@@ -79,6 +84,9 @@ class SyncRateLimiter extends ChangeNotifier {
 
   bool get isBackendBusyLimited =>
       _inMemoryReason == RateLimitReason.backendBusy && _backendBusyUntilMs > _clock().millisecondsSinceEpoch;
+
+  @visibleForTesting
+  int get dispatchHoldBackoffLevelForTesting => _dispatchHoldBackoffLevel;
 
   bool get isLimited {
     final now = _clock().millisecondsSinceEpoch;
@@ -132,6 +140,36 @@ class SyncRateLimiter extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Pause after a scoped destructive-operation fence. Each further hold
+  /// doubles the server's Retry-After, up to one hour. The next upload can only
+  /// run after a cooldown expires, so a hold that arrives soon after expiry is
+  /// the same fence still held and keeps the backoff. A successful upload
+  /// resets it, and so does a quiet gap of twice the last cooldown.
+  void markDispatchHoldLimited({int? retryAfterSeconds}) {
+    final nowMs = _clock().millisecondsSinceEpoch;
+    if (_dispatchHoldUntilMs > 0 && nowMs - _dispatchHoldUntilMs > 2 * _dispatchHoldLastCooldownMs) {
+      _dispatchHoldBackoffLevel = 0;
+    }
+
+    var seconds =
+        (retryAfterSeconds != null && retryAfterSeconds > 0) ? retryAfterSeconds : _defaultDispatchHoldCooldownSeconds;
+    for (var i = 0; i < _dispatchHoldBackoffLevel && seconds < _maxDispatchHoldCooldownSeconds; i++) {
+      seconds = seconds > _maxDispatchHoldCooldownSeconds ~/ 2 ? _maxDispatchHoldCooldownSeconds : seconds * 2;
+    }
+    if (seconds > _maxDispatchHoldCooldownSeconds) seconds = _maxDispatchHoldCooldownSeconds;
+    if (_dispatchHoldBackoffLevel < 16) _dispatchHoldBackoffLevel++;
+
+    _dispatchHoldLastCooldownMs = Duration(seconds: seconds).inMilliseconds;
+    _dispatchHoldUntilMs = nowMs + _dispatchHoldLastCooldownMs;
+    final untilMs = _dispatchHoldUntilMs;
+    if (untilMs >= _backendBusyUntilMs) {
+      _inMemoryReason = RateLimitReason.backendBusy;
+      _backendBusyUntilMs = untilMs;
+    }
+    _scheduleExpiryNotification();
+    notifyListeners();
+  }
+
   int? get activeRetryAfterSeconds {
     final deadline = until;
     if (deadline == null) return null;
@@ -143,6 +181,9 @@ class SyncRateLimiter extends ChangeNotifier {
   /// Clear the cooldown after any successful upload.
   void clear() {
     _backendBusyUntilMs = 0;
+    _dispatchHoldBackoffLevel = 0;
+    _dispatchHoldUntilMs = 0;
+    _dispatchHoldLastCooldownMs = 0;
     SharedPreferencesUtil().saveInt(_prefKeyUntil, 0);
     SharedPreferencesUtil().saveString(_prefKeyReason, '');
     _scheduleExpiryNotification();

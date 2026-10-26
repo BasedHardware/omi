@@ -184,14 +184,16 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     deployment = manifests['Deployment']
     assert deployment['spec']['progressDeadlineSeconds'] == 2400
     pod = deployment['spec']['template']['spec']
-    # Prod runs a fixed two-worker floor (one L4 node each); dev stays at one.
-    assert deployment['spec']['replicas'] == (2 if environment == 'prod' else 1)
+    # Image-only Helm rolls must preserve the approved four-worker prod floor.
+    assert deployment['spec']['replicas'] == (4 if environment == 'prod' else 1)
     assert pod['serviceAccountName'] == 'batch-pipeline-worker'
-    assert pod['nodeSelector'] == {
-        'cloud.google.com/gke-nodepool': 'batch-pipeline-pool',
-        'service': 'batch-pipeline',
-        'env': stage,
-    }
+    # Prod drops the gke-nodepool pin: batch-pipeline-pool and its Spot sibling
+    # share the service/env labels and omi.ai taints, so the autoscaler prefers
+    # Spot while the on-demand pool stays the fallback. Dev keeps the pool pin.
+    expected_selector = {'service': 'batch-pipeline', 'env': stage}
+    if environment != 'prod':
+        expected_selector['cloud.google.com/gke-nodepool'] = 'batch-pipeline-pool'
+    assert pod['nodeSelector'] == expected_selector
     assert {(item['key'], item['operator'], item['value'], item['effect']) for item in pod['tolerations']} == {
         ('omi.ai/batch-pipeline', 'Equal', 'true', 'NoSchedule'),
         ('nvidia.com/gpu', 'Equal', 'present', 'NoSchedule'),

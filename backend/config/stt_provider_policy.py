@@ -17,6 +17,7 @@ class STTServingSurface(str, Enum):
     STREAMING = 'streaming'
     PRERECORDED = 'prerecorded'
     PTT = 'ptt'
+    HELD_RECOVERY = 'held_recovery'
 
 
 DEEPGRAM_CLOUD_PROVIDER: Final = 'deepgram_cloud'
@@ -120,9 +121,9 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
             STTServingSurface.PTT,
         }
     ),
-    # Streaming only: transcribe_voice_message_stream dispatches Parakeet and
-    # Modulate alone, and the batch path has no Soniox client.
-    SONIOX_PROVIDER: frozenset({STTServingSurface.STREAMING}),
+    # Async is admitted only for bounded, language-guarded held recovery; general
+    # prerecorded/PTT selection continues to use its existing providers.
+    SONIOX_PROVIDER: frozenset({STTServingSurface.STREAMING, STTServingSurface.HELD_RECOVERY}),
 }
 
 # Held batch recovery used to spend one more multilingual call after Modulate

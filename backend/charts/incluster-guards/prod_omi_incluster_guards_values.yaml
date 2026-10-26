@@ -1,0 +1,11 @@
+namespace: prod-omi-backend
+hpaName: prod-omi-parakeet
+prometheusUrl: http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc:9090
+dryRun: false
+batch:
+  # false until the deployer RBAC for -batch objects is approved (access change, David) and g2's producer exists
+  enabled: false
+  cloudRunRollbackEnabled: true
+  gcpServiceAccount: omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com
+floorSchedule:
+  enabled: true
