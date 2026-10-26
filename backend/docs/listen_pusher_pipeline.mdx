@@ -6823,8 +6823,9 @@ conversation and reach the coverage ledger/client only after all original
 frames accepted at that snapshot's checkpoint have immutable receipts. This
 also fences out-of-order success behind an earlier failed window. Up to 32
 conversation snapshots can wait; overflow withholds coverage ACKs rather than
-discarding audio or releasing WAL. Client WALs retain up to an active window
-plus storage latency, and idle partial windows wait for the next boundary or
+discarding audio or releasing WAL. Audio-only WAL release waits for pack
+completion plus storage latency; coalesced coverage can include the next pack
+and retain WAL into the following active window. Idle partial windows wait for the next boundary or
 disconnect. See [durable audio custody](runbooks/audio-durable-outbox.md).
 Continuation uploads stage encrypted chunks by deterministic session and index,
 retain incomplete/expired assemblies for client retry, and only return a completed

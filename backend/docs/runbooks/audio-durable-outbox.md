@@ -56,8 +56,10 @@ opcode 203 with the same receipt when the caller opts in with
 WAL release is a separate compatibility/deployment requirement; this server
 change cannot certify the retention behavior of already installed legacy apps.
 Windowed custody increases time-to-ACK and client WAL retention from roughly
-one relay cycle to up to one active 60-second pack plus storage latency (or an
-earlier boundary). A partial idle window stays unacknowledged until more audio
+one relay cycle to pack completion: up to an active 60-second pack plus storage
+latency for audio-only receipts (or an earlier boundary). A coalesced coverage
+snapshot can include frames from the next pack, so coverage-based WAL release
+may wait into the following active window as well. A partial idle window stays unacknowledged until more audio
 closes its window or disconnect flushes it. During outages, WAL retention lasts
 through successful retry; there is no timed early release. A mid-window pod
 loss has issued no audio or coverage custody ACK for that uncommitted window.
