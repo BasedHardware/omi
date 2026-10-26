@@ -9,6 +9,8 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock
 
+import langchain_core.tools  # noqa: F401
+import pydantic  # noqa: F401
 import pytest
 
 from evals.user_voice.eval_user_voice import run_blind_user_voice_eval

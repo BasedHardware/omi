@@ -823,14 +823,15 @@ def get_or_build_user_voice_profile(
             )
         except Exception:
             conversations = []
+        if chat_messages is None:
+            try:
+                import database.chat as chat_db
 
-    if chat_messages is None:
-        try:
-            import database.chat as chat_db
-
-            chat_messages = chat_db.get_messages(uid, limit=100)
-        except Exception:
-            chat_messages = []
+                chat_messages = chat_db.get_messages(uid, limit=100)
+            except Exception:
+                chat_messages = []
+    elif chat_messages is None:
+        chat_messages = []
 
     lines = extract_user_lines_for_person(
         conversations,
