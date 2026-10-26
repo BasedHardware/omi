@@ -105,6 +105,11 @@ checks:
     triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13980: IQ rating plugin must filter human names, guard OpenAI API exceptions, retain batches on anomalous 200 responses, and run hermetic stdlib-only unit tests"
+  - id: iq-rating-auth-tests
+    command: ["python3", "plugins/iq_rating/test_iq_auth.py"]
+    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "iq-rating's data-plane routes (/iq/api, /iq/hide, /iq/unhide, /iq/adjust, /iq/preload, /iq/refresh) page through memories and conversations with the app's secret and serve private user data from a bare uid; the shared-secret guard must fail closed 503 when unconfigured, reject missing/invalid tokens with 401, safely emit JSON data islands, and prevent token leakage in share URLs"
   - id: open-meteo-app-tests
     command: ["python3", "plugins/omi-open-meteo-app/test_main.py"]
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]

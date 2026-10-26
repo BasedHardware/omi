@@ -48,10 +48,19 @@ if "fastapi" not in sys.modules:
                 self.status_code = status_code
                 self.detail = detail
 
+        class Request:
+            pass
+
+        class Depends:
+            def __init__(self, *args, **kwargs):
+                pass
+
         fastapi.APIRouter = APIRouter
         fastapi.FastAPI = FastAPI
         fastapi.Query = Query
         fastapi.HTTPException = HTTPException
+        fastapi.Request = Request
+        fastapi.Depends = Depends
         sys.modules["fastapi"] = fastapi
 
         responses = types.ModuleType("fastapi.responses")
@@ -88,6 +97,9 @@ if "requests" not in sys.modules:
         sys.modules["requests"] = requests
 
 PLUGIN_DIR = Path(__file__).resolve().parent
+_PARENT = str(PLUGIN_DIR.parent)
+if _PARENT not in sys.path:
+    sys.path.insert(0, _PARENT)
 spec = importlib.util.spec_from_file_location("iq_rating_main", PLUGIN_DIR / "main.py")
 main = importlib.util.module_from_spec(spec)
 sys.modules["iq_rating_main"] = main
