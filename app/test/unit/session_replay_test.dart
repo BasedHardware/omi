@@ -34,6 +34,7 @@ class _Replay {
       start: () async => calls.add('start'),
       stop: () async => calls.add('stop'),
       isRecording: () async => nativeActive,
+      requestFrame: () => frames++,
     );
   }
 
@@ -44,6 +45,7 @@ class _Replay {
   bool flag;
   Object? flagError;
   bool nativeActive = true;
+  int frames = 0;
   Completer<bool>? nextRead;
   late final SessionReplay replay;
 }
@@ -208,6 +210,21 @@ void main() {
       async.flushMicrotasks();
       expect(r.calls, ['start', 'stop', 'start']);
       expect(r.reads, hasLength(1), reason: 'the flag is read once per identity');
+    });
+  });
+
+  test('while recording a frame is requested every tick, so a screen that went still is captured', () {
+    fakeAsync((async) {
+      final r = _Replay()..replay.attach();
+      r.identity.value = 'u1';
+      async.flushMicrotasks();
+      expect(r.frames, 1, reason: 'the first capture does not wait for the screen to change');
+      async.elapse(const Duration(seconds: 6));
+      expect(r.frames, 4);
+
+      r.replay.foreground = false;
+      async.elapse(const Duration(seconds: 10));
+      expect(r.frames, 4, reason: 'no frames while not recording');
     });
   });
 

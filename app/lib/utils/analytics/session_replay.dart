@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
@@ -18,8 +19,9 @@ import 'package:omi/utils/platform/platform_service.dart';
 /// "Record user sessions" on, so that switch would record every user from launch. Recording starts
 /// through the SDK's start API once the flag resolves true for the settled analytics identity, and
 /// stops when product analytics is turned off, the identity changes, the app leaves the foreground,
-/// or the server marks the account or build as in App Review. The SDK paints a black box over every
-/// text and image on the device before a frame is encoded, so unmasked pixels never leave the phone.
+/// or the server hides subscription UI (App Review, also BYOK and reviewer accounts). On the device,
+/// before a frame is encoded, the SDK paints a black box over every Text, text field and Image widget;
+/// content painted another way (a canvas, a decoration image) needs a `PostHogMaskWidget`.
 class SessionReplay {
   SessionReplay({
     ValueListenable<bool>? consent,
@@ -30,6 +32,7 @@ class SessionReplay {
     Future<void> Function()? start,
     Future<void> Function()? stop,
     Future<bool> Function()? isRecording,
+    void Function()? requestFrame,
     this.activationChecks = const [Duration(seconds: 2), Duration(seconds: 3), Duration(seconds: 5)],
   })  : _consent = consent ?? AnalyticsManager.trackingConsent,
         _identity = identity ?? AnalyticsManager.settledIdentity,
@@ -38,13 +41,13 @@ class SessionReplay {
         _forceFlag = forceFlag ?? SessionReplayGate.debugOverrideActive,
         _start = start ?? (() => Posthog().startSessionRecording(resumeCurrent: true)),
         _stop = stop ?? Posthog().stopSessionRecording,
-        _isRecording = isRecording ?? Posthog().isSessionReplayActive;
+        _isRecording = isRecording ?? Posthog().isSessionReplayActive,
+        _requestFrame = requestFrame ?? (() => SchedulerBinding.instance.scheduleFrame());
 
   static final SessionReplay instance = SessionReplay();
 
   /// At most one masked screenshot every 2 s (the SDK default is 1 s). Each capture walks the
-  /// widget tree and hashes the frame on the UI isolate (INV-PERF-1); a screen that does not redraw
-  /// costs nothing.
+  /// widget tree and hashes the frame on the UI isolate (INV-PERF-1); an unchanged frame is not sent.
   static const throttleDelay = Duration(seconds: 2);
 
   /// True once a config carrying these settings went to `Posthog().setup` (which stores it before
@@ -72,6 +75,7 @@ class SessionReplay {
   final Future<void> Function() _start;
   final Future<void> Function() _stop;
   final Future<bool> Function() _isRecording;
+  final void Function() _requestFrame;
 
   /// Waits after a start before asking the native SDK whether it records. It can decline silently
   /// (project recording off, a sample rate, opted out), and the Dart capture ticker must not keep
@@ -83,6 +87,7 @@ class SessionReplay {
   bool? _appReview;
   bool _foreground = true;
   bool _recording = false;
+  Timer? _frameTicker;
   bool _declined = false;
   int _identityGeneration = 0;
   int _recordingGeneration = 0;
@@ -167,6 +172,11 @@ class SessionReplay {
     _recording = true;
     try {
       await _start();
+      if (generation != _recordingGeneration) return;
+      // The SDK captures on the first frame after each tick, so a screen that settles between two
+      // ticks and then stays still would replay as the screen before it. A frame per tick bounds that.
+      _requestFrame();
+      _frameTicker = Timer.periodic(throttleDelay, (_) => _requestFrame());
       for (final wait in activationChecks) {
         await Future<void>.delayed(wait);
         if (generation != _recordingGeneration) return;
@@ -183,6 +193,8 @@ class SessionReplay {
   }
 
   void _stopRecording() {
+    _frameTicker?.cancel();
+    _frameTicker = null;
     _recordingGeneration++;
     _recording = false;
     unawaited(_stop().catchError((Object _) {}));

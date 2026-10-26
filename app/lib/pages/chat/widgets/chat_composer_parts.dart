@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/message_provider.dart';
@@ -213,15 +214,22 @@ class ChatSelectedFilesStrip extends StatelessWidget {
                 margin: const EdgeInsets.only(right: OmiSpacing.xs),
                 width: 60,
                 height: 60,
-                decoration: BoxDecoration(
-                  color: OmiColors.surface2,
-                  borderRadius: OmiRadius.lgAll,
-                  image: preview != null
-                      ? DecorationImage(image: FileImage(preview), fit: BoxFit.cover, onError: (_, __) {})
-                      : null,
-                ),
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
                 child: Stack(
                   children: [
+                    // Replay's image masking cannot see a decoration image, so the photo gets its own
+                    // masked layer: a mask around the whole tile covers only its icons once it holds two.
+                    if (preview != null)
+                      Positioned.fill(
+                        child: PostHogMaskWidget(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: OmiRadius.lgAll,
+                              image: DecorationImage(image: FileImage(preview), fit: BoxFit.cover, onError: (_, __) {}),
+                            ),
+                          ),
+                        ),
+                      ),
                     if (preview == null)
                       Center(
                         child: Icon(

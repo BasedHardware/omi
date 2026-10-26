@@ -13,9 +13,9 @@ abstract final class SessionReplayGate {
   static bool get debugOverrideActive => kDebugMode && _debugOverride == '1';
 
   /// Product analytics on, the flag resolved true for the settled identity, and not App Review.
-  /// [appReview] is the server's answer (subscription UI hidden), null until the subscription
-  /// loads. App Review installs carry a sandbox receipt, so a [sandboxInstall] (TestFlight or App
-  /// Review) waits for that answer before recording.
+  /// [appReview] is true when the server hides subscription UI, the app's App Review switch (it also
+  /// covers BYOK and reviewer accounts), and null until the subscription loads. App Review installs
+  /// carry a sandbox receipt, so a [sandboxInstall] (TestFlight or App Review) waits for the answer.
   static bool allowed({
     required bool trackingEnabled,
     required bool flagEnabled,

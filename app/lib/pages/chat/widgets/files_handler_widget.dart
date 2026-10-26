@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/ui/ui.dart';
@@ -142,15 +143,18 @@ class FilesHandlerWidget extends StatelessWidget {
 
     return CachedNetworkImage(
       imageUrl: thumbnail,
-      imageBuilder: (context, imageProvider) => Container(
-        margin: const EdgeInsets.only(bottom: 6, top: 2),
-        decoration: BoxDecoration(
-          color: OmiColors.surface2,
-          borderRadius: OmiRadius.mdAll,
-          image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+      // A decoration image is not an Image widget, so replay's image masking cannot see it.
+      imageBuilder: (context, imageProvider) => PostHogMaskWidget(
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 6, top: 2),
+          decoration: BoxDecoration(
+            color: OmiColors.surface2,
+            borderRadius: OmiRadius.mdAll,
+            image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+          ),
+          width: width,
+          height: height,
         ),
-        width: width,
-        height: height,
       ),
       placeholder: (context, url) => SizedBox(
         width: width,
