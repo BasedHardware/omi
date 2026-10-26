@@ -15,12 +15,26 @@ skips — same fail-open posture as the rest of ``database/redis_db.py``.
 
 from datetime import datetime, timezone
 import logging
-from typing import Tuple
+from typing import Any, Tuple
 
 from database.redis_db import r, try_catch_decorator
 
 _TTL_SECONDS = 40 * 24 * 3600  # 40 days — comfortably past any month rollover
 logger = logging.getLogger(__name__)
+
+
+def _clean_uid(uid: object) -> str | None:
+    """Normalize and guard user identifier.
+
+    Strips leading/trailing whitespace, and rejects None, empty strings,
+    non-string inputs, or excessively long identifiers (>128 chars).
+    """
+    if uid is None or not isinstance(uid, str):
+        return None
+    cleaned = uid.strip()
+    if not cleaned or len(cleaned) > 128:
+        return None
+    return cleaned
 
 
 def _period_id(now: datetime) -> str:
@@ -41,48 +55,69 @@ def _key(uid: str, period_id: str) -> str:
 
 
 @try_catch_decorator
-def _read_count(uid: str, period_id: str) -> int:
-    raw = r.get(_key(uid, period_id))
-    return int(raw) if raw else 0
+def _read_count(uid: str, period_id: str, client: Any = None) -> int:
+    redis_instance = client if client is not None else r
+    raw = redis_instance.get(_key(uid, period_id))
+    try:
+        return int(raw) if raw is not None else 0
+    except (TypeError, ValueError):
+        return 0
 
 
-def get_current_month_count(uid: str) -> Tuple[int, int]:
-    """Return (calls_initiated, reset_at_epoch) for the current monthly bucket."""
+def get_current_month_count(uid: object, *, client: Any = None) -> Tuple[int, int]:
+    """Return (calls_initiated, reset_at_epoch) for the current monthly bucket.
+
+    Fails open by returning (0, reset_at_epoch) when uid is invalid.
+    """
     now = datetime.now(timezone.utc)
-    count = _read_count(uid, _period_id(now)) or 0
+    clean_uid = _clean_uid(uid)
+    if clean_uid is None:
+        return 0, _period_reset_epoch(now)
+    count = _read_count(clean_uid, _period_id(now), client=client) or 0
     return count, _period_reset_epoch(now)
 
 
-def reserve_current_month_slot(uid: str, monthly_limit: int) -> Tuple[bool, int, int]:
+def reserve_current_month_slot(uid: object, monthly_limit: object, *, client: Any = None) -> Tuple[bool, int, int]:
     """Atomically reserve one free-tier call slot.
 
-    Returns (reserved, used_before_reservation, reset_at_epoch). Redis failures
-    fail open to match the non-critical quota posture used by this module.
+    Returns (reserved, used_before_reservation, reset_at_epoch).
+    Fails open on invalid uid or Redis infrastructure errors to prevent
+    blocking calls. Fails closed (False) when monthly_limit is non-positive or invalid.
     """
     now = datetime.now(timezone.utc)
     reset_at = _period_reset_epoch(now)
-    if monthly_limit <= 0:
+
+    clean_uid = _clean_uid(uid)
+    if clean_uid is None:
+        return True, 0, reset_at
+
+    if isinstance(monthly_limit, bool) or not isinstance(monthly_limit, int) or monthly_limit <= 0:
         return False, 0, reset_at
 
-    key = _key(uid, _period_id(now))
+    key = _key(clean_uid, _period_id(now))
+    redis_instance = client if client is not None else r
     try:
-        used_after = int(r.incr(key, 1))
-        r.expire(key, _TTL_SECONDS)
+        used_after = int(redis_instance.incr(key, 1))
+        redis_instance.expire(key, _TTL_SECONDS)
         if used_after > monthly_limit:
-            r.decr(key, 1)
+            redis_instance.decr(key, 1)
             return False, used_after - 1, reset_at
         return True, used_after - 1, reset_at
     except Exception as e:
-        logger.error(f'Error reserving phone call quota {e}')
+        logger.error(f"Error reserving phone call quota: {e}")
         return True, 0, reset_at
 
 
 @try_catch_decorator
-def increment_current_month(uid: str) -> None:
+def increment_current_month(uid: object, *, client: Any = None) -> None:
     """Atomically bump the current month's call counter by 1."""
+    clean_uid = _clean_uid(uid)
+    if clean_uid is None:
+        return
     now = datetime.now(timezone.utc)
-    key = _key(uid, _period_id(now))
-    pipe = r.pipeline()
+    key = _key(clean_uid, _period_id(now))
+    redis_instance = client if client is not None else r
+    pipe = redis_instance.pipeline()
     pipe.incr(key, 1)
     pipe.expire(key, _TTL_SECONDS)
     pipe.execute()
