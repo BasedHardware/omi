@@ -1773,6 +1773,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED:
+              value: 'false'
+              category: ops_kill
             BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
               value: https://backend-integration-dt5lrfkkoa-uc.a.run.app
               category: service_auth
@@ -3294,6 +3297,7 @@ environments:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_DURABLE_STATUS_RECONCILIATION: {value: 'true', category: rollout}
             SYNC_TASKS_OIDC_AUDIENCE:
               env_var: SYNC_TASKS_HANDLER_URL
@@ -4067,6 +4071,9 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
+            SONIOX_API_KEY:
+              secret: SONIOX_API_KEY
+              version: latest
           env:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
@@ -4243,6 +4250,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED:
+              value: 'false'
+              category: ops_kill
             BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
               value: https://backend-integration-hhibjajaja-uc.a.run.app
               category: service_auth
@@ -4301,6 +4311,7 @@ environments:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED

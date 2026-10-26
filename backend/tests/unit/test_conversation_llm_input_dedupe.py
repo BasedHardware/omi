@@ -226,6 +226,40 @@ def test_invalid_checkpoint_output_is_a_cache_miss(enabled, monkeypatch):
     assert generate.call_count == 2
 
 
+def _counter_value(name, feature):
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value(name, {'feature': feature}) or 0
+
+
+def test_evaluation_counters_report_hit_miss_and_checkpoint_error(enabled, monkeypatch):
+    from models.conversation import Structured
+
+    skipped = _counter_value('conversation_llm_input_dedupe_skipped_total', 'notes')
+    misses = _counter_value('conversation_llm_input_dedupe_misses_total', 'notes')
+    errors = _counter_value('conversation_llm_input_dedupe_checkpoint_errors_total', 'notes')
+    l1_misses = _counter_value('conversation_llm_input_dedupe_misses_total', 'l1')
+
+    generate = Mock(return_value=Structured(title='Fresh'))
+    hashes = {}
+    dedupe.notes('u', enabled, 'input', generate, hashes)
+    assert _counter_value('conversation_llm_input_dedupe_misses_total', 'notes') == misses + 1
+    assert _counter_value('conversation_llm_input_dedupe_checkpoint_errors_total', 'notes') == errors
+
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **k: {**hashes, 'structured': generate.return_value.model_dump()})
+    dedupe.notes('u', enabled, 'input', generate, {})
+    assert _counter_value('conversation_llm_input_dedupe_skipped_total', 'notes') == skipped + 1
+    assert _counter_value('conversation_llm_input_dedupe_misses_total', 'notes') == misses + 1
+
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **k: {**hashes, 'structured': 'invalid stored shape'})
+    dedupe.notes('u', enabled, 'input', generate, {})
+    assert _counter_value('conversation_llm_input_dedupe_misses_total', 'notes') == misses + 2
+    assert _counter_value('conversation_llm_input_dedupe_checkpoint_errors_total', 'notes') == errors + 1
+
+    dedupe.l1_input('u', enabled, {'text': 'same'})
+    assert _counter_value('conversation_llm_input_dedupe_misses_total', 'l1') == l1_misses + 1
+
+
 @pytest.mark.parametrize('enabled_flag', [False, True])
 def test_l1_checkpoint_uses_injected_client_even_when_disabled(memory_stack, monkeypatch, enabled_flag):
     from database import _client

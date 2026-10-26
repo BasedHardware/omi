@@ -465,17 +465,17 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
     _, store = api
     service = routes.serving_for_stage('dev')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
-    entered, release = threading.Event(), threading.Event()
+    entered, release = asyncio.Event(), asyncio.Event()
 
-    def recover(segment, owner):
+    async def recover(segment, owner):
         entered.set()
-        assert release.wait(5)
+        await release.wait()
         return 'recovered'
 
     service.recovery = Mock()
-    service.recovery.recover.side_effect = recover
     from unittest.mock import AsyncMock
 
+    service.recovery.recover_async = AsyncMock(side_effect=recover)
     service.reconcile_async = AsyncMock()
     task = asyncio.create_task(
         routes.recover_quarantine(
@@ -483,7 +483,7 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
         )
     )
     try:
-        assert await asyncio.to_thread(entered.wait, 2)
+        await asyncio.wait_for(entered.wait(), 2)
         assert not task.done()  # The request stays active during the provider call.
         service.reconcile_async.assert_not_awaited()
     finally:
@@ -492,7 +492,8 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
     service.reconcile_async.assert_awaited_once_with(
         owner_id=store.rows['jobs', 'synthetic']['owner_id'], recovered='synthetic'
     )
-    assert service.recovery.recover.call_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
+    assert service.recovery.recover_async.await_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
+    service.recovery.recover.assert_not_called()
 
 
 def test_recovery_task_rejects_foreign_stage_and_missing_oidc(api, monkeypatch):

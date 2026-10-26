@@ -64,8 +64,10 @@ installing. Logs and failures remain alongside successful receipts.
 
 Reserve an idle device with its owner. Before installation and each launch,
 the physical iOS runner checks the exact DEV installation URL against native
-process metadata; Android checks the DEV package PID. A running main process or
-extension, a failed query, or incomplete metadata blocks the operation. It never
+process metadata; Android checks the DEV package PID. A running main process,
+a failed query, or incomplete metadata blocks the operation. Known DEV
+`PlugIns/<name>.appex/<name>` extension processes are recorded separately without blocking
+admission or being terminated. Unclassified DEV executables still block. It never
 force-stops an unowned app. These are point-in-time checks: the owner must keep
 the device idle for the batch. Only the VM-attested harness PID may be stopped.
 
@@ -130,6 +132,7 @@ accepted profile baseline.
 | iTerm AppleScript times out before a worker PID appears | The controlling app may need Automation permission. A command-file fallback was tried during qualification and stopped at an iTerm modal open-file warning, so unattended command-file fallback is not used. An atomic claim and caller identity/expiry checks reject duplicate or stale delayed launches. Use the approved `--aqua-app Terminal` route, or arrange permission/modal handling with the owner. Never alter TCC or blindly dismiss a warning. |
 | iOS simulator profile build refused | Flutter 3.44.5 forbids AOT profile/release on iOS simulators. Use physical iOS for acceptance. The lower runner's `--simulator-qualification` is debug only, with invocation-only simulator overrides. |
 | Heavy slot seems occupied forever | Inspect ownership and liveness with the workspace/host tools. An orphan Android emulator once retained a slot after its owner died. CPU/RSS alone is not permission to kill it. Ask its owner/lead before stopping it; never reset shared locks or kill another lane. |
+| DEV is idle before install but admission reports BatteryWidget afterward | iOS may launch the DEV widget extension after an in-place install. Main Runner PIDs must block admission; direct `PlugIns/<name>.appex/<name>` executables are recorded as `extension_pids` without blocking or being terminated. Nested helpers or mismatched executable names remain unclassified and block admission. Never treat an extension PID as permission to terminate another app or weaken unknown-metadata checks. |
 | Home missing a provider / ServiceManager not initialized | Compose the existing production shell once, with real Conversation/Sync/LocalRecordings/People providers and the WAL ledger. Supply inert Device/PhoneCall/native boundaries explicitly. Do not initialize real hardware/account services to make a synthetic fixture pass. |
 | Global navigator key already attached | Do not mount two production shells. Restore cache through the one Home mount. |
 | Transcript finder has no scroll extent | Open the Transcript tab and wait for mounted content. `fadePointers` does not drive real-device frames reliably. `fullyLive` adds pump frames; benchmarkLive still requests idle frames in Flutter3.44.5. HeavyProfileBinding suppresses that tail request while forwarding genuine app requests, and a quiet-widget probe rejects artificial idle rendering. |

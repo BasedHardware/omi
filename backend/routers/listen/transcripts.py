@@ -462,14 +462,8 @@ class TranscriptProcessor:
         updated: List[TranscriptSegment] = []
         removed: List[str] = []
         if segments:
-            # The client may retire its WAL after a transcript/coverage ACK.
-            # Never commit that transcript while its final audio copy is only
-            # in this pod. A refused barrier leaves the normal persistence
-            # retry path and source custody intact.
-            receiver = getattr(self.host, 'receiver', None)
-            archive = getattr(receiver, 'raw_archive', None)
-            if archive is not None and archive.durable:
-                await archive.ensure_durable()
+            # Transcript delivery stays live. Coverage publication below waits
+            # for the original audio's window receipt before releasing WAL.
             # Preserve unmerged speech until the transaction reads the current receipt.
             # Apply live identity to the fresh copy as well: the merge compares
             # speaker_match_source, and a recognized persisted word has

@@ -82,12 +82,15 @@ class MemoryStore:
         ][:limit]
 
     def oldest(self, priority, *, ready_only):
+        from database.batch_pipeline_store import is_allowance_policy_hold
+
         jobs = [
             v['enqueued_at']
             for (table, _), v in self.rows.items()
             if table == 'jobs'
             and v['priority'] == priority
             and (v['state'] == 'ready' if ready_only else v['merge_pending'])
+            and (ready_only or not is_allowance_policy_hold(v))
         ]
         return min(jobs) if jobs else None
 

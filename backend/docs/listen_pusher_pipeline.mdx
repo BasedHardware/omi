@@ -6,6 +6,16 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Desktop local segment upload
+
+Desktop local finalization preserves stored utterance boundaries, timestamps and
+speaker metadata when sending `/v1/conversations/from-segments`. Consecutive
+utterances from one speaker must not become one recording-length segment:
+silence gaps are not speech evidence. The legacy transport compacts only when
+the upload exceeds its 500-segment limit; continuation transport sends the
+original utterances in chunks of at most 500. This path carries local speaker
+evidence and does not run the batch GPU diarizer when cloud audio sync is off.
+
 ## Explicit tags teach retained speaker voices
 
 Manual speaker receipts and their durable jobs can enroll a vector-only voice
@@ -6155,6 +6165,72 @@ speech) already skip ASR and diarization. Set
 `worker.diarizeSpeechOnlyEnabled=false` to restore full-unit diarization.
 Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
 
+### Independent language-guarded batch recovery
+
+The worker's `unsupported_language` handoff covers unsupported and unknown
+language routes; Parakeet never runs on those windows. CPU quarantine recovery
+uses Modulate, then at most one independent Soniox async `stt-async-v5` attempt
+when Modulate returns valid empty or fails. Shadow recovery preserves the typed
+worker reason and uses the same independent route and measured disposition,
+without writing transcripts or user usage. This does not change general
+prerecorded/PTT routing. No existing exact-window legacy transcript adapter is
+available here; a live preview cannot substitute for the transcript of record.
+
+Only two validated empty recognizers and fewer than 512 original 16 kHz samples
+(32 ms strict VAD) authorize silence. Zero-VAD guarded windows also require both
+recognizers. Unknown VAD, either provider error, a full positive frame, or words
+contradicting zero VAD retain custody. Receipts include provider, outcome, word
+count (null for unobserved) and original measured VAD seconds; T2 retains the
+maximum prior/new measured held value. A later CPU zero cannot erase positive
+worker evidence; per-provider receipts still retain their own local measurements.
+The retained census also gates silence and saved-silence settlement/replay.
+This applies to ordinary recovery, paid redrive, silent-only/terminal operator
+disposition and shadow settlement/reaping. A validated saved result supplies its
+measurement to the atomic fence; prior positive speech is never cleared by a
+later zero. Ordinary VAD-only silence needs a measured zero, and guarded units
+cannot bypass independent recovery through the legacy no-provider tools.
+The 32 ms boundary is a conservative Silero frame-resolution
+proposal supported by synthetic tests, not labeled evidence about held audio.
+
+`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults off in code;
+`false` stops new Soniox calls without substituting another Modulate attempt.
+`BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS` defaults to 60 and can only
+lower that hard per-unit cap. Company-funded allowance, privacy, original
+ledger and single paid-intent fences apply. No paid POST is retried. The Soniox
+incremental public-rate estimate is $0.000556/20 s or $0.001667/60 s; actual
+token-based vendor billing is authoritative. Temporary vendor resources have
+best-effort cleanup and may persist to documented 30-day expiry after a crash.
+
+`config/prerecorded_stt.py` owns the Soniox model/key requirement shared by
+runtime and deployment validation. The CPU recovery audience requires a bound
+`SONIOX_API_KEY` when this path is enabled. A missing key refuses before the
+independent claim; it cannot consume that attempt. David approved the existing
+secret's production backend-integration binding (lead ruling ce5485), included
+here; dev remains unbound. Op1 verifies the live binding and accessor permission
+before deployment. Any needed IAM grant requires separate approval. Both
+dev/prod CPU recovery manifests and code remain off under ruling 404ca5.
+The worker chart also pins `worker.independentLanguageRecoveryEnabled=false`,
+keeping the separately deployed reader aligned. The approved config change must
+align both controls; no new Soniox credential is exposed to the GPU worker.
+The rollout lead owns a 2026-10-26 morning review, then op1 uses an exact-ID
+one-unit canary, verifies recovered words or evidenced hold and clean T1/T2/T4,
+and expands the approved ten-unit prefix only after lead approval. Keep batch
+admission at its approved percentage until the existing ramp gates clear;
+report an unactivated path at the morning review rather than silently deferring it.
+
+The serving coordinator awaits Soniox requests and polling outside the shared
+sync executor, using the shared async STT client and releasing its semaphore
+between requests. Short fenced continuations use the existing executor; no
+transaction stays open across the independent provider wait. The private
+operator CLI retains a synchronous driver in its own process.
+
+Existing held units require an explicit new `--independent-language --paid-epoch 3`
+plan digest. Epoch 1 and any spent Modulate epoch 2 remain immutable evidence;
+an automatic Soniox claim forbids another operator Soniox call. Deploy this CPU
+role and the operator CLI from the reviewed source, not just the GPU worker.
+See [language recovery runbook](runbooks/batch-language-recovery.md) for costs,
+receipts, exact-scope redrive, stop conditions and rollback.
+
 ### Legacy sync double-empty recovery (dark)
 
 `SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED` defaults to `false`. When enabled,
@@ -6815,6 +6891,23 @@ one-shot fallback before persistence. Regression: the 2026-10-23 empty-evidence
 packet incorrectly named Michael Liebmann as an unresolved counterpart.
 
 Live durability → coverage ledger → committed event is the custody ordering.
+LISTEN's raw archive commits at its 60-second/boundary/4096-frame windows and
+disconnect tail. The one-second relay neither awaits storage commits nor
+flushes an active pack. Transcript persistence and live STT
+delivery continue at their existing cadence. Coverage snapshots coalesce by
+conversation and reach the coverage ledger/client only after all original
+frames accepted at that snapshot's checkpoint have immutable receipts. This
+also fences out-of-order success behind an earlier failed window. Up to 32
+conversation snapshots can wait; overflow withholds coverage ACKs rather than
+discarding audio or releasing WAL. Audio-only WAL release waits for pack
+completion plus storage latency; coalesced coverage can include the next pack
+and retain WAL into the following active window. Idle partial windows wait for the next boundary or
+disconnect. See [durable audio custody](runbooks/audio-durable-outbox.md).
+With cloud-storage consent, an archive that accepted no frames cannot certify
+coverage. Missing/disabled cloud-storage consent follows the pre-custody
+transcript receipt contract: coverage ledger/ACK publication follows the
+successful durable transcript transaction, with no audio receipt or archive
+obligation. This avoids waiting forever for a consent-forbidden upload.
 Continuation uploads stage encrypted chunks by deterministic session and index,
 retain incomplete/expired assemblies for client retry, and only return a completed
 receipt after durable projection. Tombstone-first deletion purges staging even

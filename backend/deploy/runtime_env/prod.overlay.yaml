@@ -739,6 +739,9 @@ overlay:
           REPEAT_WORK_REVISION_ENABLED:
             value: 'false'
             category: rollout
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
           SYNC_DURABLE_STATUS_RECONCILIATION:
             value: 'true'
             category: rollout
@@ -1442,6 +1445,11 @@ overlay:
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-integration:
+        # Approved recovery-only binding; op1 pre-binds and verifies access before deploy.
+        secrets:
+          SONIOX_API_KEY:
+            secret: SONIOX_API_KEY
+            version: latest
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
@@ -1452,6 +1460,8 @@ overlay:
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
+          # Lead ruling01d584: activation waits for approved CPU-role secret access.
+          BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'false', category: ops_kill}
           BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
             value: https://backend-integration-hhibjajaja-uc.a.run.app
             category: service_auth
@@ -1639,6 +1649,9 @@ overlay:
             category: rollout
           REPEAT_WORK_REVISION_ENABLED:
             value: 'false'
+            category: rollout
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
+            value: 'true'
             category: rollout
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'true'

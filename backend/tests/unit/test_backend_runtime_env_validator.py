@@ -543,7 +543,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_integration_events_secret(payload)
     payload = re.sub(
         r'("backend-integration":\s*\{.*?"env":\s*\[)',
-        r'\1{"name": "BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE", '
+        r'\1{"name": "BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED", "value": "false"},'
+        r'{"name": "BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE", '
         r'"value": "https://backend-integration-dt5lrfkkoa-uc.a.run.app"},',
         payload,
         count=1,
@@ -1451,6 +1452,40 @@ def test_parakeet_cloud_run_surface_requires_hosted_endpoint():
                 'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
             )
         ]
+
+
+def test_approved_soniox_binding_is_only_prod_recovery_and_gate_stays_off():
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    for stage in ('dev', 'prod'):
+        services = manifest['environments'][stage]['cloud_run']['services']
+        holders = {name for name, service in services.items() if 'SONIOX_API_KEY' in service.get('secrets', {})}
+        assert holders == ({'backend-integration'} if stage == 'prod' else set())
+        assert (
+            services['backend-integration']['env']['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED']['value']
+            == 'false'
+        )
+
+
+@pytest.mark.parametrize('binding', [None, {'value': ' '}, {'secret': 'SONIOX_API_KEY', 'version': 'latest'}])
+@pytest.mark.parametrize('disabled', [False, True])
+def test_recovery_host_requires_shared_soniox_contract(binding, disabled):
+    validator = load_validator()
+    env_map = {'BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE': {'value': 'https://synthetic-recovery'}}
+    if disabled:
+        env_map['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'] = {'value': 'false'}
+    secrets = {} if binding is None else {'SONIOX_API_KEY': binding}
+    services = {'synthetic-recovery': {'env': env_map, 'secrets': secrets}}
+    errors = validator._validate_prerecorded_stt_contract('dev', {'cloud_run': {'services': services}})
+    configured = binding is not None and 'secret' in binding
+    assert errors == (
+        []
+        if disabled or configured
+        else [
+            validator.ValidationError(
+                'dev/cloud_run/synthetic-recovery', 'independent held recovery requires non-empty SONIOX_API_KEY'
+            )
+        ]
+    )
 
 
 def test_dev_cloud_run_prerecorded_stt_services_require_both_bindings():
