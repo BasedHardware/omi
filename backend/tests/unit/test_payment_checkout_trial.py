@@ -71,3 +71,64 @@ def test_no_trial_requested_keeps_the_old_checkout():
     assert result['session_id'] == 'cs_test'
     assert captured['trial_period_days'] is None
     assert captured['customer_id'] == 'cus_existing'
+
+
+def test_promo_code_suppresses_trial_period_days_on_checkout_endpoint():
+    """A promotion code on a trial checkout suppresses trial_period_days so the
+    initial invoice is not $0 and Stripe's minimum_amount check passes (#23300)."""
+    captured = {}
+
+    def create_session(
+        uid, price_id, idempotency_key, customer_id=None, promotion_code_id=None, trial_period_days=None
+    ):
+        captured['promotion_code_id'] = promotion_code_id
+        captured['trial_period_days'] = trial_period_days
+        return SimpleNamespace(url='https://checkout.stripe.com/c/pay/cs_test', id='cs_test')
+
+    promo_obj = SimpleNamespace(id='promo_unlimited_year')
+    with (
+        patch.object(payment, 'is_purchasable_price_id', return_value=True),
+        patch.object(payment.subscription_utils, 'can_user_make_payment', return_value=(True, '')),
+        patch.object(payment.subscription_utils, 'new_buyer_single_plan_violation', return_value=None, create=True),
+        patch.object(payment, '_try_reactivate_subscription', return_value=None),
+        patch.object(payment.users_db, 'get_stripe_customer_id', return_value=None),
+        patch.object(payment.stripe.PromotionCode, 'list', return_value=SimpleNamespace(data=[promo_obj])),
+        patch.object(payment.stripe_utils, 'create_subscription_checkout_session', side_effect=create_session),
+    ):
+        result = payment.create_checkout_session_endpoint(
+            CreateCheckoutRequest(price_id='price_1', trial_days=7, promotion_code='OMI-4FHY-W6SR'),
+            uid='uid_1',
+        )
+
+    assert result['session_id'] == 'cs_test'
+    assert captured['promotion_code_id'] == 'promo_unlimited_year'
+    assert captured['trial_period_days'] is None
+
+
+def test_stripe_helper_omits_trial_period_days_when_promotion_code_present():
+    """create_subscription_checkout_session omits subscription_data.trial_period_days
+    when promotion_code_id is provided so minimum_amount codes are not rejected (#23300)."""
+    import importlib
+    from unittest.mock import MagicMock
+    import utils.stripe as stripe_utils
+
+    if isinstance(getattr(stripe_utils, 'create_subscription_checkout_session', None), MagicMock):
+        stripe_utils = importlib.reload(stripe_utils)
+
+    captured = {}
+
+    def fake_session_create(**params):
+        captured.update(params)
+        return SimpleNamespace(url='https://checkout.stripe.com/c/pay/cs_test', id='cs_test')
+
+    with patch('utils.stripe.stripe.checkout.Session.create', side_effect=fake_session_create):
+        stripe_utils.create_subscription_checkout_session(
+            uid='uid_1',
+            price_id='price_unlimited_yearly',
+            idempotency_key='idem_1',
+            promotion_code_id='promo_unlimited_year',
+            trial_period_days=7,
+        )
+
+    assert captured['discounts'] == [{'promotion_code': 'promo_unlimited_year'}]
+    assert 'trial_period_days' not in captured['subscription_data']

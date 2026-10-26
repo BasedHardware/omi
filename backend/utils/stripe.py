@@ -80,7 +80,10 @@ def create_subscription_checkout_session(
         }
 
         if trial_period_days:
-            session_params['subscription_data']['trial_period_days'] = trial_period_days
+            # A free trial makes the initial Checkout invoice $0, so Stripe rejects
+            # promotion codes with a minimum_amount restriction (issue #23300).
+            if not promotion_code_id:
+                session_params['subscription_data']['trial_period_days'] = trial_period_days
 
         if promotion_code_id:
             session_params['discounts'] = [{'promotion_code': promotion_code_id}]
