@@ -4475,5 +4475,8 @@
     "livePreviewListening": "Listening… words appear here as you speak.",
     "livePreviewStarting": "Starting live preview…",
     "livePreviewTranscribingTitle": "Transcribing…",
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes."
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "Færdig",
+    "openLoopAnswerRemind": "Mind mig senere",
+    "openLoopAnswerDrop": "Drop det"
 }

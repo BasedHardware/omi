@@ -25790,6 +25790,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your transcript appears in Conversations when processing finishes.'**
   String get livePreviewTranscribingMessage;
+
+  /// Answer button on an open-loop Review card: the follow-up happened.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get openLoopAnswerDone;
+
+  /// Answer button on an open-loop Review card: ask again in two days.
+  ///
+  /// In en, this message translates to:
+  /// **'Remind me later'**
+  String get openLoopAnswerRemind;
+
+  /// Answer button on an open-loop Review card: stop asking about this follow-up.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop it'**
+  String get openLoopAnswerDrop;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -266,7 +266,8 @@ async def test_fatal_gpu_restarts_without_fail_or_attempt_charge_then_fresh_work
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('dispatch', [False, True])
-async def test_worker_dispatch_denial_defers_without_quarantining_or_losing_audio(monkeypatch, dispatch):
+@pytest.mark.parametrize('policy_retry', [60, 3600, 86400])
+async def test_worker_dispatch_denial_defers_without_quarantining_or_losing_audio(monkeypatch, dispatch, policy_retry):
     from utils.batch_pipeline.contracts import HeldWork
 
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
@@ -279,7 +280,7 @@ async def test_worker_dispatch_denial_defers_without_quarantining_or_losing_audi
         # reason, exactly like an owner whose allowance exhausted mid-flight.
         if len(calls) == 1:
             return {'allowed': calls[-1]}
-        return {'allowed': [], 'retry_after': {}, 'held_reason': {'first': 'allowance_exhausted'}}
+        return {'allowed': [], 'retry_after': {'first': policy_retry}, 'held_reason': {'first': 'allowance_exhausted'}}
 
     class RecheckingWorker:
         def process_batch(self, items, *, authorize_dispatch):
@@ -293,7 +294,7 @@ async def test_worker_dispatch_denial_defers_without_quarantining_or_losing_audi
     assert job['compute_decision'] == {
         'reason': 'allowance_exhausted',
         'outcome': 'held',
-        'at': job['available_at'] - 60,
+        'at': job['available_at'] - policy_retry,
     }
     assert ('results', 'first') not in store.rows
     assert calls == [['first'], ['first']]

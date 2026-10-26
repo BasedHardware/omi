@@ -14622,4 +14622,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Klaar';
+
+  @override
+  String get openLoopAnswerRemind => 'Herinner me later';
+
+  @override
+  String get openLoopAnswerDrop => 'Negeren';
 }
