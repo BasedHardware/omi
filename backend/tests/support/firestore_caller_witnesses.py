@@ -39,7 +39,6 @@ import utils.conversations.meeting_context_pack as meeting_context_pack
 import utils.imports.limitless as limitless
 import utils.llm.fair_use_classifier as fair_use_classifier
 import utils.llm.goals as llm_goals
-import utils.llm.user_voice as llm_user_voice
 import utils.other.notifications as notifications_utils
 import utils.retrieval.tool_services.conversations as tool_conversations
 import utils.retrieval.tools.conversation_tools as conversation_tools
@@ -401,6 +400,8 @@ def _run_goal_context(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -
 
 
 def _run_user_voice_profile(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    import utils.llm.user_voice as llm_user_voice
+
     _stub(monkeypatch, llm_user_voice, 'get_cached_user_voice_profile', lambda *a, **k: None)
     _stub(monkeypatch, llm_user_voice, 'cache_user_voice_profile', lambda *a, **k: None)
     trial(capture, llm_user_voice.get_or_build_user_voice_profile, 'u1', 'Alex', opt_in=True, chat_messages=[])
