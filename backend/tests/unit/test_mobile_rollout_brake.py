@@ -115,6 +115,7 @@ class BrakeTests(unittest.TestCase):
         self.assertEqual(
             parse_qs(urlsplit(play.commit_request.uri).query)["changesInReviewBehavior"], ["ERROR_IF_IN_REVIEW"]
         )
+        self.assertEqual(parse_qs(urlsplit(play.commit_request.uri).query)["changesNotSentForReview"], ["true"])
         for _, args in play.calls:
             self.assertEqual(args["packageName"], "com.friend.ios")
             if "track" in args:
@@ -244,6 +245,7 @@ class BrakeTests(unittest.TestCase):
         self.assertEqual(
             parse_qs(urlsplit(play.commit_request.uri).query)["changesInReviewBehavior"], ["ERROR_IF_IN_REVIEW"]
         )
+        self.assertEqual(parse_qs(urlsplit(play.commit_request.uri).query)["changesNotSentForReview"], ["true"])
         self.assertEqual([args["track"] for name, args in play.calls if name == "update"], ["production"])
 
     def test_stage_refuses_unless_superseded_release_is_halted(self):

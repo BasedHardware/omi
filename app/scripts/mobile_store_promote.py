@@ -456,7 +456,13 @@ def submit_android(
             track="production",
             body={"track": "production", "releases": [release]},
         ).execute()
-        client.edits().commit(packageName=PACKAGE_NAME, editId=edit_id).execute()
+        # changesNotSentForReview: Play rejects this app's automated commits
+        # ("Changes cannot be sent for review automatically"); every committed
+        # edit is held until a human clicks Send for review in Play Console ->
+        # Publishing overview, which is the runbook's only manual step.
+        client.edits().commit(
+            packageName=PACKAGE_NAME, editId=edit_id, changesNotSentForReview=True
+        ).execute()
     except Exception as exc:
         # Surface Play's own API message (error code + field-level detail) inside
         # the train log; a bare "rejected" line cost a 2026-10-19 1%->10% ladder
