@@ -206,10 +206,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate Environment Input
+        env:
+          REQUESTED_BY: ${{ github.event.inputs.requested_by }}
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
+          fi
+          if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
+            if [[ -z "${REQUESTED_BY//[[:space:]]/}" ]]; then
+              echo "::error::prod dispatches must name their requester: pass -f requested_by=<lane label or session> (e.g. op1, train:<name>)."
+              exit 1
+            fi
+            echo "requested_by=${REQUESTED_BY}"
           fi
 
       - name: Checkout

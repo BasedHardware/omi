@@ -2324,3 +2324,36 @@ def test_backend_prod_boundary_rejects_dispatches_without_a_requester(tmp_path):
 
     development = run_boundary('development', '')
     assert development.returncode == 0, development.stderr
+
+
+def test_backend_traffic_repair_prod_dispatch_needs_a_requester(tmp_path):
+    """repair-traffic-only is an independent prod mutation path: it skips
+    validate-production-boundary and validates in its own first step, so the
+    requester check must live there too (Luna round 1, PR #23694)."""
+    workflow = _gcp_backend_workflow()
+    steps = workflow['jobs']['repair-traffic']['steps']
+    step = next(step for step in steps if step.get('name') == 'Validate Environment Input')
+    assert step['env']['REQUESTED_BY'] == '${{ github.event.inputs.requested_by }}'
+
+    script = tmp_path / 'repair.sh'
+    # Expand the inline github.event.inputs.environment expressions the way the
+    # dispatcher does; literal ${{ }} is not valid bash.
+    script.write_text(
+        re.sub(r'\$\{\{\s*github\.event\.inputs\.(\w+)\s*\}\}', r'${INPUT_\1}', step['run']),
+        encoding='utf-8',
+    )
+
+    def run_repair(environment: str, requested_by: str) -> subprocess.CompletedProcess:
+        env = {**os.environ, 'INPUT_environment': environment, 'REQUESTED_BY': requested_by}
+        return subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
+
+    rejected = run_repair('prod', '')
+    assert rejected.returncode != 0
+    assert '::error::' in rejected.stdout and 'requested_by' in rejected.stdout
+
+    accepted = run_repair('prod', 'op1')
+    assert accepted.returncode == 0, accepted.stderr
+    assert 'requested_by=op1' in accepted.stdout
+
+    development = run_repair('development', '')
+    assert development.returncode == 0, development.stderr
