@@ -67,6 +67,20 @@ def clamp_capture_time(capture_time: float, *, now: Optional[float] = None) -> f
     return min(capture_time, effective_now)
 
 
+def capture_clock_offset(max_file_end: float, *, now: Optional[float] = None) -> float:
+    """The one server-clock normalization offset for an accepted request.
+
+    ``max_file_end`` is the furthest file end the request claims, on the
+    capture (phone) clock; subtracting the returned offset moves the whole
+    request onto the server clock with its newest audio ending at ``now``.
+    Requests whose clock is behind the server (or on time) get 0. Temporal
+    comparisons against server-clock rows use shifted times; capture-time
+    identity, chunk and lineage keys keep the raw filename times.
+    """
+    effective_now = time.time() if now is None else now
+    return max(0.0, max_file_end - effective_now)
+
+
 class CaptureTimeWindowError(ValueError):
     """``parse_sync_filename_timestamp`` window violation, carrying the closed reason."""
 

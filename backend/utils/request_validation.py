@@ -97,7 +97,7 @@ def parse_timezone_aware_datetime(value: str, field_name: str) -> datetime:
 MAX_IMAGE_CHUNK_TOTAL = 4096
 
 
-def parse_sync_filename_timestamp(path: str) -> int | float:
+def parse_sync_filename_timestamp(path: str, *, enforce_window: bool = True) -> int | float:
     """Parse and validate the unix timestamp in a sync upload/segment filename.
 
     Upload filenames are expected to end with _<unix-seconds-or-millis>.bin;
@@ -106,6 +106,12 @@ def parse_sync_filename_timestamp(path: str) -> int | float:
     tz=timezone.utc). Capture times may sit ahead of the server clock within
     the shared future-skew tolerance (utils.sync.capture_clock); beyond it or
     before 2024-01-01 the timestamp is implausible and rejected.
+
+    ``enforce_window=False`` skips the plausibility window for internal
+    WAL/VAD clock reads: segment names are derived as source capture time plus
+    a speech offset, so a name derived from an admitted near-tolerance source
+    can legitimately sit past the window. Admission boundaries (staging) keep
+    the default and own the window check.
     """
     filename = path.split('/')[-1]
     timestamp_part = filename.rsplit('_', 1)[1] if '_' in filename else filename
@@ -127,9 +133,10 @@ def parse_sync_filename_timestamp(path: str) -> int | float:
     except (OSError, OverflowError, ValueError) as e:
         raise ValueError('invalid timestamp') from e
 
-    rejection = capture_time_rejection(timestamp_dt)
-    if rejection is not None:
-        raise CaptureTimeWindowError(rejection)
+    if enforce_window:
+        rejection = capture_time_rejection(timestamp_dt)
+        if rejection is not None:
+            raise CaptureTimeWindowError(rejection)
     return timestamp
 
 

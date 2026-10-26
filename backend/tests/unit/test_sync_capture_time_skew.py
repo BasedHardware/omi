@@ -13,7 +13,7 @@ and counts every disposition in ``omi_sync_capture_time_total``.
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock, patch
 from prometheus_client import REGISTRY
 
 import pytest
@@ -208,3 +208,267 @@ def test_clamp_capture_time_moves_only_future_times():
     now = datetime.now(timezone.utc).timestamp()
     assert capture_clock.clamp_capture_time(now - 10, now=now) == now - 10
     assert capture_clock.clamp_capture_time(now + 170, now=now) == now
+
+
+# --- one request-wide server-clock offset (fix round) ---
+
+
+def test_capture_clock_offset_moves_only_time_ahead_of_server():
+    now = datetime.now(timezone.utc).timestamp()
+    assert capture_clock.capture_clock_offset(now + 180.5, now=now) == 180.5
+    assert capture_clock.capture_clock_offset(now - 30, now=now) == 0
+
+
+def test_internal_wal_clock_read_allows_derived_offsets_beyond_the_window():
+    """Admission validates the source capture time once; derived names ride along.
+
+    ``retrieve_vad_segments`` names each WAV after source capture time + speech
+    offset, so a name derived from an admitted near-tolerance source can sit
+    beyond the window; internal clock math (sorting, identity, the request
+    offset) must still read it. The admission parser keeps refusing it.
+    """
+    from utils.sync.files import get_timestamp_from_path
+
+    derived = _filename(650)  # e.g. an admitted +590 s source plus 60 s of speech offset
+
+    with pytest.raises(CaptureTimeWindowError):
+        parse_sync_filename_timestamp(derived)
+    assert get_timestamp_from_path(derived) > datetime.now(timezone.utc).timestamp() + 600
+    with pytest.raises(ValueError):
+        get_timestamp_from_path('audio_omi_opus_16000_1_fs160_not-a-number.bin')
+
+
+def test_offset_shifted_session_bounds_bind_the_live_conversation():
+    """A +171 s skewed live capture must keep targeting its live conversation.
+
+    The raw phone-clock audio bounds miss the 60 s trailing allowance in
+    ``select_recording_session_target``; the same bounds on the server clock
+    (the router shifts them by the one request offset) bind.
+    """
+    from utils.sync.recording_session_target import select_recording_session_target
+
+    server_now = datetime.now(timezone.utc).timestamp()
+    row = {
+        'id': 'live',
+        'started_at': datetime.fromtimestamp(server_now - 60, tz=timezone.utc),
+        'finished_at': datetime.fromtimestamp(server_now - 10, tz=timezone.utc),
+        'source': 'omi',
+        'client_device_id': 'pendant',
+        'external_data': {'recording_session_id': 'rec-live'},
+    }
+    raw_start, raw_end = server_now + 111, server_now + 161  # phone clock +171 s
+
+    assert (
+        select_recording_session_target(
+            [row],
+            'rec-live',
+            source='omi',
+            client_device_id='pendant',
+            is_locked=False,
+            audio_start_seconds=raw_start,
+            audio_end_seconds=raw_end,
+        )
+        is None
+    )
+
+    offset = capture_clock.capture_clock_offset(raw_end)
+    assert (
+        select_recording_session_target(
+            [row],
+            'rec-live',
+            source='omi',
+            client_device_id='pendant',
+            is_locked=False,
+            audio_start_seconds=raw_start - offset,
+            audio_end_seconds=raw_end - offset,
+        )
+        == 'live'
+    )
+
+
+def test_v2_route_shifts_recording_session_bounds_to_server_clock(client, monkeypatch):
+    """The router applies the one offset before the bounds enter any dispatch."""
+    from fastapi.responses import JSONResponse
+
+    captured = {}
+
+    async def fake_record_response(**_kwargs):
+        return router.RecordUploadRoute.BATCH
+
+    async def fake_accept_batch_upload(**kwargs):
+        captured.update(kwargs)
+        return JSONResponse(status_code=202, content={'job_id': 'j', 'status': 'queued'})
+
+    monkeypatch.setattr(router, 'registered_record_response', fake_record_response)
+    monkeypatch.setattr(router, 'accept_batch_upload', fake_accept_batch_upload)
+
+    server_now = datetime.now(timezone.utc).timestamp()
+    raw_end = server_now + 161  # phone clock +171 s over a conversation that ended 10 s ago
+    raw_start = raw_end - 50
+    filename = _filename(160)  # file start strictly inside the claimed audio interval
+
+    response = client.post(
+        '/v2/sync-local-files',
+        params={
+            'recording_session_id': 'rec-live',
+            'audio_start_seconds': raw_start,
+            'audio_end_seconds': raw_end,
+        },
+        files=[('files', (filename, b'\x00' * 32, 'application/octet-stream'))],
+    )
+
+    assert response.status_code == 202, response.text
+    intake = captured['intake_context']
+    offset = capture_clock.capture_clock_offset(raw_end)
+    assert intake['audio_start_seconds'] == pytest.approx(raw_start - offset, abs=1.0)
+    assert intake['audio_end_seconds'] == pytest.approx(raw_end - offset, abs=1.0)
+    assert intake['audio_end_seconds'] <= server_now + 1.0
+
+
+@patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='url')
+@patch('utils.sync.pipeline.prerecorded', return_value=(['word'], 'en'))
+@patch('utils.sync.pipeline.postprocess_words')
+@patch('utils.sync.pipeline.get_timestamp_from_path')
+def _run_skewed_segment(
+    raw_start, request_offset, bind_closest, mock_timestamp, mock_postprocess, _mock_prerecorded, _mock_signed_url
+):
+    """Run process_segment for a skewed-stamped file with the request offset applied.
+
+    ``raw_start`` is the raw filename timestamp (capture clock), ``request_offset``
+    the one request-wide offset the coordinator computed, and ``bind_closest``
+    whether the closest-conversation lookup returns the seeded live row.
+    Returns (store, response, errors, closest_seen, now_test); the live
+    conversation runs on the server clock, 60 s back.
+    """
+    from copy import deepcopy
+    from unittest.mock import MagicMock
+
+    from models.transcript_segment import TranscriptSegment
+
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from tests.unit.test_sync_cross_job_assignment import chunk, intake
+    from utils.sync import pipeline
+
+    now_test = datetime.now(timezone.utc).timestamp()
+    mock_timestamp.return_value = raw_start
+    mock_postprocess.return_value = [
+        TranscriptSegment(text='Skewed capture speech', start=0.0, end=10.0, is_user=False)
+    ]
+    store = StrictFirestore()
+    live = None
+    if bind_closest:
+        live = chunk('live', now_test - 60)
+        live['sync_content_revision'] = 1  # discovered candidates must stay auto-mergeable
+        store.rows[('users', 'u', 'conversations', 'live')] = deepcopy(live)
+    closest_seen = {}
+
+    def fake_closest(_uid, start, end, **_kwargs):
+        closest_seen.update(start=start, end=end)
+        return live if bind_closest else None
+
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors: list = []
+    with patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', side_effect=fake_closest), patch(
+        'utils.conversations.lifecycle.ingest_sync_conversation',
+        side_effect=lambda uid, incoming, **kw: intake(store, incoming, **kw),
+    ), patch('utils.sync.pipeline.identify_speakers_for_segments'), patch(
+        'utils.sync.pipeline.conversations_db.get_manual_speaker_receipt', return_value={}
+    ), patch(
+        'utils.sync.pipeline.get_wav_duration', return_value=10
+    ):
+        result = pipeline.process_segment(
+            'seg_123.wav',
+            'u',
+            response,
+            MagicMock(),
+            errors,
+            client_device_id='pendant',
+            capture_time_offset=request_offset,
+        )
+    assert result and errors == []
+    return store, response, closest_seen, now_test
+
+
+def test_skewed_segment_merges_into_live_conversation_through_closest_lookup():
+    """The ±120 s window must compare server-clock times, not the raw +171 s stamp."""
+    from tests.unit.test_sync_cross_job_assignment import conversations
+
+    now_test = datetime.now(timezone.utc).timestamp()
+    store, _response, closest_seen, now_test = _run_skewed_segment(now_test + 171, 181.0, True)
+
+    assert closest_seen['start'] == pytest.approx(now_test - 10, abs=1.0)
+    assert closest_seen['end'] == pytest.approx(now_test, abs=1.0)
+    # The skewed upload merged into the existing conversation; none was created.
+    assert len(conversations(store)) == 1
+    assert conversations(store)[0]['id'] == 'live'
+
+
+def test_skewed_segment_stores_the_full_duration_pair():
+    """A 10 s segment stamped +171 s keeps its 10 s duration and finishes by now."""
+    from tests.unit.test_sync_cross_job_assignment import conversations
+
+    now_test = datetime.now(timezone.utc).timestamp()
+    store, _response, _closest_seen, now_test = _run_skewed_segment(now_test + 171, 181.0, False)
+
+    (stored,) = conversations(store)
+    duration = (stored['finished_at'] - stored['started_at']).total_seconds()
+    assert duration == pytest.approx(10.0, abs=0.05)
+    assert stored['started_at'].timestamp() == pytest.approx(now_test - 10, abs=1.0)
+    assert stored['finished_at'].timestamp() <= datetime.now(timezone.utc).timestamp()
+
+
+@patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='url')
+@patch('utils.sync.pipeline.prerecorded', return_value=(['word'], 'en'))
+@patch('utils.sync.pipeline.postprocess_words')
+@patch('utils.sync.pipeline.get_timestamp_from_path')
+def test_minimal_redrive_attach_lookup_compares_on_server_clock(
+    mock_timestamp, mock_postprocess, _mock_prerecorded, _mock_signed_url
+):
+    """The attach-first fallback lookup also receives server-clock bounds."""
+    from models.transcript_segment import TranscriptSegment
+
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from tests.unit.test_sync_cross_job_assignment import conversations, intake
+    from utils.sync import pipeline
+
+    now_test = datetime.now(timezone.utc).timestamp()
+    mock_timestamp.return_value = now_test + 171
+    mock_postprocess.return_value = [
+        TranscriptSegment(text='Skewed capture speech', start=0.0, end=10.0, is_user=False)
+    ]
+    attached = {}
+
+    def fake_attach(_uid, start, end, _capture):
+        attached.update(start=start, end=end)
+        return None
+
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors: list = []
+    store = StrictFirestore()
+    with patch.object(
+        pipeline.minimal_redrive, 'select_service', lambda *a, **k: ('modulate', 'multi', 'velma-2')
+    ), patch.object(pipeline.minimal_redrive, 'attach_target', fake_attach), patch(
+        'utils.conversations.lifecycle.ingest_sync_conversation',
+        side_effect=lambda uid, incoming, **kw: intake(store, incoming, **kw),
+    ), patch(
+        'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None
+    ), patch(
+        'utils.sync.pipeline.identify_speakers_for_segments'
+    ), patch(
+        'utils.sync.pipeline.conversations_db.get_manual_speaker_receipt', return_value={}
+    ), patch(
+        'utils.sync.pipeline.get_wav_duration', return_value=10
+    ):
+        result = pipeline.process_segment(
+            'seg_123.wav',
+            'u',
+            response,
+            MagicMock(),
+            errors,
+            redrive_mode='minimal',
+            capture_time_offset=181.0,
+        )
+    assert result and errors == []
+    assert attached['start'] == pytest.approx(now_test - 10, abs=1.0)
+    assert attached['end'] == pytest.approx(now_test, abs=1.0)
+    assert len(conversations(store)) == 1

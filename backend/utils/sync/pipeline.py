@@ -180,6 +180,7 @@ from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD, clock_run_from_path, segm
 from utils.sync.capture_clock import (
     CaptureTimeWindowError,
     SyncCaptureTimeRejected,
+    capture_clock_offset,
     capture_time_rejection,
     clamp_capture_time,
 )
@@ -1454,6 +1455,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
     cap_dispatch_lane: str = 'sync',
     redrive_mode: str | None = None,
     recording_session_id: str | None = None,
+    capture_time_offset: float = 0.0,
 ):
     if cap_dispatch_lane not in LANES:
         raise ValueError('unknown cap dispatch lane')
@@ -1692,14 +1694,20 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
         # Lines are timed from the first word, speech_offset seconds into this file.
         segment_end_timestamp = timestamp + speech_offset + max(segment.end for segment in transcript_segments)
+        # Server-clock views of the same two instants: every comparison against
+        # server-clock rows (attach-first fallback, closest conversation) uses
+        # the one request-wide offset, while chunk identity and lineage below
+        # keep the raw capture-clock timestamp so retry anchors stay stable.
+        server_timestamp = timestamp - capture_time_offset
+        server_segment_end_timestamp = segment_end_timestamp - capture_time_offset
         # Minimal redrive attaches first; lineage-bound segments keep their plan.
         target_conversation_id = minimal_redrive.segment_target(
             redrive_mode,
             target_conversation_id,
             lineage_binding,
             uid,
-            timestamp,
-            segment_end_timestamp,
+            server_timestamp,
+            server_segment_end_timestamp,
             source,
             client_device_id,
             is_locked,
@@ -1711,7 +1719,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         closest_memory = (
             None
             if target_conversation_id
-            else get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
+            else get_closest_conversation_to_timestamps(uid, server_timestamp, server_segment_end_timestamp)
         )
         candidate_id = target_conversation_id or (closest_memory['id'] if closest_memory else None)
         owner_reserved = False
@@ -1750,14 +1758,20 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             if audio_bytes is not None and not private_cloud_sync_enabled:
                 audio_bytes = None
         shift_to_vad_file_clock(transcript_segments, speech_offset)
-        # Stored times clamp to server now: a phone clock ahead within the
-        # shared skew tolerance must not create future-started conversations.
-        # Identity/lineage math above keeps the raw filename timestamp so
-        # retry anchors stay stable.
-        started_at = datetime.fromtimestamp(clamp_capture_time(timestamp), tz=timezone.utc)
+        # Stored times move onto the server clock as a pair: the same
+        # request-wide offset subtracts from both ends, so duration is
+        # preserved and finish <= server now; one captured `now` backstops
+        # both clamps. Identity/lineage math above keeps the raw filename
+        # timestamp so retry anchors stay stable.
+        stored_now = time.time()
+        started_at = datetime.fromtimestamp(
+            clamp_capture_time(timestamp - capture_time_offset, now=stored_now), tz=timezone.utc
+        )
         create_memory = CreateConversation(
             started_at=started_at,
-            finished_at=datetime.fromtimestamp(clamp_capture_time(segment_end_timestamp), tz=timezone.utc),
+            finished_at=datetime.fromtimestamp(
+                clamp_capture_time(segment_end_timestamp - capture_time_offset, now=stored_now), tz=timezone.utc
+            ),
             transcript_segments=transcript_segments,
             source=source,
             language=language,
@@ -3134,6 +3148,18 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     p: await run_blocking(sync_executor, compute_sync_segment_id, uid, p) for p in segmented_paths
                 }
 
+            # One server-clock offset per request, computed once after
+            # segmentation: the furthest segment end (VAD names carry the
+            # source capture clock) minus server now. Every temporal
+            # comparison and stored pair in process_segment shifts by it;
+            # chunk identity and lineage keys keep raw capture-clock times.
+            request_capture_offset = await run_blocking(
+                sync_executor,
+                lambda: capture_clock_offset(
+                    max(get_timestamp_from_path(path) + get_wav_duration(path) for path in segmented_paths)
+                ),
+            )
+
             # Chronological order + turnstile: STT runs in parallel (per chunk), but
             # conversation assignment is serialized oldest-first so adjacent chunks merge
             # instead of racing into separate conversations (#6551, #5747).
@@ -3207,6 +3233,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     ),
                     **({'cap_content_id': content_id} if cap_enabled(uid, 'sync') else {}),
                     **({'redrive_mode': redrive_mode} if redrive_mode else {}),
+                    capture_time_offset=request_capture_offset,
                 )
                 if deferred_outcome.get('provider'):
                     with segment_lock:

@@ -190,7 +190,12 @@ from utils.sync.pipeline import (
     retrieve_vad_segments,
     SyncConversationPersistenceFenced,
 )
-from utils.sync.capture_clock import INVALID_CAPTURE_TIME_CODE, INVALID_CAPTURE_TIME_DETAIL, SyncCaptureTimeRejected
+from utils.sync.capture_clock import (
+    INVALID_CAPTURE_TIME_CODE,
+    INVALID_CAPTURE_TIME_DETAIL,
+    SyncCaptureTimeRejected,
+    capture_clock_offset,
+)
 from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.sync.rate_limit import (
@@ -1227,6 +1232,23 @@ async def sync_local_files_v2(
                 status_code=400,
                 content={'code': INVALID_CAPTURE_TIME_CODE, 'detail': INVALID_CAPTURE_TIME_DETAIL},
             )
+
+        # One server-clock offset per request shifts the client's
+        # recording-session audio bounds onto the server clock before any
+        # temporal comparison (recording-session binding compares them against
+        # server-clock conversation rows). Files keep their raw capture-clock
+        # names and keys; only these two comparison inputs move.
+        if isinstance(audio_start_seconds, (int, float)) and isinstance(audio_end_seconds, (int, float)):
+            max_file_end = float(audio_end_seconds)
+            for filename in filenames:
+                try:
+                    max_file_end = max(max_file_end, float(get_timestamp_from_path(filename)))
+                except (IndexError, ValueError):
+                    continue  # Admission above rejects unparseable names with the typed 400.
+            session_clock_offset = capture_clock_offset(max_file_end)
+            if session_clock_offset > 0:
+                audio_start_seconds -= session_clock_offset
+                audio_end_seconds -= session_clock_offset
 
         if manifest_claims is not None and not await run_blocking(
             sync_executor, manifest_claims_match_paths, manifest_claims, paths
