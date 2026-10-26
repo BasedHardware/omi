@@ -19,6 +19,13 @@ APP_ID = "6502156163"
 PACKAGE_NAME = "com.friend.ios"
 VERSION_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 BUILD_RE = re.compile(r"^[1-9][0-9]*$")
+# Play currently rejects this app's automated review submission ("Changes
+# cannot be sent for review automatically"), so every commit holds its
+# changes for the Play Console -> Publishing overview -> Send for review
+# press. The daily train reads this flag to park the exposure ladder (a
+# held hop is invisible to the API). Flip to False only after a commit
+# without the parameter succeeds again, and park-free the ladder then.
+CHANGES_NOT_SENT_FOR_REVIEW = True
 
 
 # A version in any of these states is in Apple's hands or approved and waiting.
@@ -456,7 +463,15 @@ def submit_android(
             track="production",
             body={"track": "production", "releases": [release]},
         ).execute()
-        client.edits().commit(packageName=PACKAGE_NAME, editId=edit_id).execute()
+        # changesNotSentForReview: Play rejects this app's automated commits
+        # ("Changes cannot be sent for review automatically"); every committed
+        # edit is held until a human clicks Send for review in Play Console ->
+        # Publishing overview, which is the runbook's only manual step.
+        client.edits().commit(
+            packageName=PACKAGE_NAME,
+            editId=edit_id,
+            changesNotSentForReview=CHANGES_NOT_SENT_FOR_REVIEW,
+        ).execute()
     except Exception as exc:
         # Surface Play's own API message (error code + field-level detail) inside
         # the train log; a bare "rejected" line cost a 2026-10-19 1%->10% ladder

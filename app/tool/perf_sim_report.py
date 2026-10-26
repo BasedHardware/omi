@@ -9,6 +9,7 @@ import argparse
 from collections import Counter
 import json
 import math
+import re
 from pathlib import Path
 
 SCENARIOS = (
@@ -142,6 +143,51 @@ def summarize(directory, expected_runs):
     if expected_runs < 3 and first.get('timeline_enabled') is not True:
         raise ValueError('baseline needs at least 3 runs; only opt-in timeline diagnostics permit fewer')
     eligible = heavy_shape and first.get('timeline_enabled') is False and all(r.get("acceptance_eligible") is True and r["build_mode"] == "profile" for r in reports)
+    virtual = first.get('virtual_qualification') is True
+    if any(report.get('virtual_qualification', False) != virtual for report in reports):
+        raise ValueError('receipts disagree on virtual qualification')
+    if virtual:
+        runtime = identities[0].get('virtual_runtime', {})
+        protocol = identities[0].get('launch_protocol', {})
+        warmups = protocol.get('warmup_runs')
+        if (runtime.get('kind') not in ('android-emulator', 'ios-simulator')
+                or not runtime.get('runtime_build') or type(warmups) is not int or not 1 <= warmups <= 3
+                or protocol.get('measured_runs') != expected_runs or protocol.get('outlier_policy') != 'retain-all'):
+            raise ValueError('virtual qualification requires pinned runtime and retained warmup protocol')
+        kind = runtime['kind']
+        expected_platform, expected_mode = ('android', 'profile') if kind == 'android-emulator' else ('ios', 'debug')
+        if identities[0]['platform'] != expected_platform or first['build_mode'] != expected_mode:
+            raise ValueError('virtual runtime kind does not match platform/build mode')
+        host = runtime.get('host', {})
+        if (not isinstance(host, dict) or not re.fullmatch(r'[a-f0-9]{64}', str(host.get('node_sha256', '')))
+                or not host.get('platform') or not host.get('architecture')
+                or type(host.get('logical_cpus')) is not int or host['logical_cpus'] <= 0):
+            raise ValueError('virtual qualification requires host identity')
+        if protocol.get('host_load_policy') != 'load1-per-logical-cpu<=1/v1':
+            raise ValueError('virtual qualification requires fixed host load admission')
+        for prefix, count in (('warmup', warmups), ('receipt', expected_runs)):
+            for index in range(1, count + 1):
+                host = json.loads((directory / f'{prefix}-{index}-host-load.json').read_text())
+                samples = host.get('samples', [])
+                if (host.get('policy') != protocol['host_load_policy'] or host.get('passed') is not True
+                        or host.get('command_exit_code') != 0 or len(samples) < 2
+                        or samples[0].get('phase') != 'before' or samples[-1].get('phase') != 'after'
+                        or any(type(s.get('logical_cpus')) is not int or s['logical_cpus'] <= 0
+                               or not math.isfinite(s['load_1_5_15m'][0])
+                               or not 0 <= s['load_1_5_15m'][0] <= s['logical_cpus'] for s in samples)):
+                    raise ValueError('host overload or missing launch load evidence invalidates entire batch')
+        if expected_platform == 'android' and identities[0].get('native_harness') != {
+                'package': 'com.friend.ios.dev', 'firebase_auto_initializer_absent': True}:
+            raise ValueError('missing native heavy APK admission')
+        for index in range(1, warmups + 1):
+            warmup = json.loads((directory / f'warmup-{index}.json').read_text())
+            warmup_report = validate(warmup.get('heavy_profile', {}))
+            if warmup.get('heavy_run') != identities[0]:
+                raise ValueError('warmup differs from measured source/binary/runtime/protocol')
+            for key in ('dataset', 'build_mode', 'scenario_order', 'timeline_enabled', 'pacing', 'virtual_qualification'):
+                if warmup_report.get(key) != first.get(key):
+                    raise ValueError(f'warmup differs from measured {key}')
+        eligible = False
     summary = {
         "runs": len(paths), "build_mode": first["build_mode"],
         "identity": identities[0],
@@ -152,12 +198,17 @@ def summarize(directory, expected_runs):
         "variance_pass": not failures, "variance_failures": failures,
         "acceptance_eligible": eligible,
         "accepted_baseline": eligible and not failures,
+        "virtual_qualification": virtual,
+        "qualified_virtual_baseline": (virtual and heavy_shape and not failures and expected_runs >= 3
+                                       and first['build_mode'] == 'profile' and not first['timeline_enabled']),
         "heavy_dataset": heavy_shape,
         "cpu_rankings": cpu_rankings,
         "over_100ms": sum(r["scenarios"][s]["frames_over_100ms"] for r in reports for s in SCENARIOS),
     }
     (directory / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print("VARIANCE:", "FAIL" if failures else "PASS")
+    if virtual:
+        print('VIRTUAL QUALIFICATION:', 'PASS' if summary['qualified_virtual_baseline'] else 'FAIL/DIAGNOSTIC')
     print("ACCEPTANCE:", "PASS" if eligible and not failures else
           "FAIL — p90 variance" if eligible else "NOT ELIGIBLE — debug/ablation/timeline diagnostics")
     return summary

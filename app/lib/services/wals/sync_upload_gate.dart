@@ -278,6 +278,18 @@ class SyncUploadGate {
         }
         rethrow;
       } catch (error) {
+        if (error is SyncUploadHttpException && error.statusCode >= 500 && (error.retryAfterSeconds ?? 0) > 0) {
+          // An unscoped 5xx with an explicit Retry-After (sync dispatch
+          // unavailable while an account gate holds, ledger-fence cutover) is
+          // the server asking this account to pause — the same instruction a
+          // scoped 503/429 encodes. Without this, a drain keeps failing every
+          // remaining batch against the same gate for as long as it holds.
+          // backendBusy is in-memory, so an app restart re-probes immediately.
+          _limiter.markLimited(
+            retryAfterSeconds: error.retryAfterSeconds,
+            reason: RateLimitReason.backendBusy,
+          );
+        }
         _recordUploadFailure(
           error,
           attemptId: attemptId,

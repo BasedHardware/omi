@@ -8,7 +8,8 @@ from statistics import median
 
 
 def compare(before, after):
-    if before.get('accepted_baseline') is not True:
+    virtual = before.get('qualified_virtual_baseline') is True
+    if before.get('accepted_baseline') is not True and not virtual:
         raise ValueError('reference is not an accepted three-run profile baseline')
     for key in ('dataset', 'frame_policy', 'build_mode', 'timeline_enabled', 'pacing', 'runs'):
         if before.get(key) != after.get(key):
@@ -18,6 +19,16 @@ def compare(before, after):
     for key in ('device_id', 'device_os_version', 'platform', 'flutter_revision', 'harness_sha256'):
         if not before.get('identity', {}).get(key) or before['identity'][key] != after.get('identity', {}).get(key):
             raise ValueError(f'incomparable or missing {key}; qualify a new baseline')
+    if virtual:
+        if after.get('virtual_qualification') is not True:
+            raise ValueError('virtual and physical evidence cannot be compared')
+        if any(not value['identity'].get('virtual_runtime', {}).get('host') for value in (before, after)):
+            raise ValueError('virtual comparison requires host identity; qualify a new baseline')
+        for key in ('virtual_runtime', 'launch_protocol'):
+            if not before['identity'].get(key) or before['identity'][key] != after['identity'].get(key):
+                raise ValueError(f'incomparable virtual {key}')
+    elif after.get('virtual_qualification') is True:
+        raise ValueError('physical and virtual evidence cannot be compared')
     result = {'before': before['identity'], 'after': after['identity'],
               'current_variance_pass': after.get('variance_pass'), 'scenarios': {}}
     for name, old in before['scenarios'].items():

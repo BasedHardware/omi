@@ -131,7 +131,9 @@ cloud_tasks:
     max_attempts: 5
     min_backoff: 60s
     max_backoff: 300s
-    log_sampling_ratio: 1.0
+    # No alert, logs-based metric, or runbook reads task_operations_log entries;
+    # queue depth/age alerting uses platform metrics, so 10% dispatch records suffice.
+    log_sampling_ratio: 0.1
   sync-backfill-fresh:
     # Same rate and retry as sync-backfill (train ceiling 90 = 15 x 6 bounded by
     # the worker cap x concurrency 6). Attempts and doublings are unmanaged
@@ -141,7 +143,7 @@ cloud_tasks:
     max_attempts: 5
     min_backoff: 5s
     max_backoff: 60s
-    log_sampling_ratio: 1.0
+    log_sampling_ratio: 0.1
   enrichment:
     # Contract (a)/(d), lane 9. Created by the first prod config-train at M3.
     enabled: false

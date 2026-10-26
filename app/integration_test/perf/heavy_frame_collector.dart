@@ -1,6 +1,7 @@
 import 'package:flutter/scheduler.dart';
 import 'dart:developer' as developer;
 import 'dart:ui' show FramePhase;
+import 'dart:math' as math;
 
 /// Per-scenario engine FrameTiming statistics for the profile-mode perf
 /// harness. One collector instance runs for the whole test; [begin] opens a
@@ -67,6 +68,16 @@ class HeavyFrameCollector {
       ...summarize(name, frames, _wall[name]!),
       'start_vm_us': _openedVmUs,
       'end_vm_us': developer.Timeline.now,
+      'frame_timings': [
+        for (final frame in frames)
+          {
+            'build_us': frame.buildDuration.inMicroseconds,
+            'raster_us': frame.rasterDuration.inMicroseconds,
+            'total_us': frame.totalSpan.inMicroseconds,
+            'vsync_start_us': frame.timestampInMicroseconds(FramePhase.vsyncStart),
+            'build_start_us': frame.timestampInMicroseconds(FramePhase.buildStart),
+          }
+      ],
       'slow_frames': [
         for (final frame in frames.where((f) => f.totalSpan.inMicroseconds > 100000).take(20))
           {
@@ -88,7 +99,9 @@ class HeavyFrameCollector {
     int count(List<int> micros, int threshold) => micros.where((us) => us > threshold).length;
     int percentile(List<int> sorted, double p) {
       if (sorted.isEmpty) return 0;
-      final index = ((sorted.length - 1) * p).round();
+      // Nearest rank: p90 consistently includes the worst frame for both six
+      // and seven samples. The old rounded (n-1)*p switched rank at seven.
+      final index = math.max(0, (sorted.length * p).ceil() - 1);
       return sorted[index];
     }
 
@@ -97,6 +110,7 @@ class HeavyFrameCollector {
     final totalUs = frames.map((f) => f.totalSpan.inMicroseconds).toList()..sort();
     return {
       'scenario': name,
+      'percentile_method': 'nearest-rank/v1',
       'frame_count': frames.length,
       'wall_ms': wall.inMilliseconds,
       'build_p50_us': percentile(buildUs, 0.50),

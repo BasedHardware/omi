@@ -264,11 +264,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final WalCoverageTelemetryEmitter? _staleWalTelemetry;
   DateTime? _lastStaleWalReportAt;
   final Future<int?> Function()? _freeDiskBytesOverride;
+  final Future<void> Function(Duration duration)? _sleepOverride;
   final WalBacklogTelemetry _backlogTelemetry;
   final PendantRingCustody _custody;
   final Future<DeviceConnection?> Function(String deviceId)? _connectionResolver;
 
   DateTime _now() => _nowOverride?.call() ?? DateTime.now();
+
+  Future<void> _sleep(Duration duration) => (_sleepOverride ?? Future<void>.delayed)(duration);
 
   Timer Function(Duration, void Function(Timer)) get _periodic => _periodicOverride ?? Timer.periodic;
 
@@ -294,6 +297,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     WalCoverageTelemetryEmitter? coverageTelemetry,
     WalCoverageTelemetryEmitter? staleWalTelemetry,
     Future<int?> Function()? freeDiskBytes,
+    Future<void> Function(Duration duration)? sleep,
     PendantRingCustody? custody,
     Future<DeviceConnection?> Function(String deviceId)? connectionResolver,
   })  : _jobPollerOverride = jobPoller,
@@ -307,6 +311,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _coverageTelemetryOverride = coverageTelemetry,
         _staleWalTelemetry = staleWalTelemetry,
         _freeDiskBytesOverride = freeDiskBytes,
+        _sleepOverride = sleep,
         _custody = custody ?? PendantRingCustody.shared,
         _connectionResolver = connectionResolver;
 
@@ -2007,6 +2012,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     int batchesCompleted = 0;
     int batchesFailed = 0;
     int corruptedCount = 0;
+    // Consecutive 5xx refusals without server pacing guidance. Each unmetered
+    // retry spends a full multipart body upload against a server that just
+    // said it cannot serve; a short growing pause breaks that loop while the
+    // gate-level Retry-After cooldown handles the scoped variants.
+    int serverUnavailableStreak = 0;
     final totalFilesToUpload = wals.length;
 
     final attemptedWalIds = <String>{};
@@ -2183,6 +2193,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
         _clearRecoveryMarkers(batchWals, generation);
         batchesCompleted++;
+        serverUnavailableStreak = 0;
         reportUploadProgress();
       } on SyncRateLimitedException {
         // The cooldown is account-global, so every remaining batch would hit it too.
@@ -2278,6 +2289,20 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           'statusCode': e.statusCode,
           'terminal': definitive,
         });
+        if (e.statusCode >= 500 && (e.retryAfterSeconds ?? 0) <= 0) {
+          // Unscoped 5xx (e.g. platform shedding under load): the server gave
+          // no pacing, so the drain pauses briefly and grows the pause with
+          // each consecutive refusal instead of immediately re-uploading the
+          // next full batch into the same condition.
+          serverUnavailableStreak++;
+          final pause = syncServerUnavailablePauseSeconds(serverUnavailableStreak);
+          DebugLogManager.logEvent('local_upload_server_unavailable_pause', {
+            'statusCode': e.statusCode,
+            'streak': serverUnavailableStreak,
+            'pauseSeconds': pause,
+          });
+          if (!_isCancelled && _isCurrent(generation)) await _sleep(Duration(seconds: pause));
+        }
         if (authenticationFailed) {
           await _saveWalsToFile(generation);
           _notifyUpdated(generation);

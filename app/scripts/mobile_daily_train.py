@@ -1069,6 +1069,24 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
                 f"a human decides halt or resume in Play Console"
             )
             return f"android=staged-halted {staged_version} {codes[0]}"
+        if promote.CHANGES_NOT_SENT_FOR_REVIEW:
+            # Held-changes mode: every hop would commit held (queued in Play's
+            # Publishing overview, invisible to this API), so the train cannot
+            # know the previous hop is live. Hopping blind stacks held hops and
+            # a single Send-for-review press would then release full exposure
+            # with no observation windows. Park the ladder: the operator sends
+            # each held change for review and advances exposure in Play Console
+            # until Play again accepts automated review submission (see
+            # .github/agent-docs/mobile-release-process.md).
+            log(
+                f"Android production staged {staged_version} {codes[0]} @{current:.0%} parked: Play holds "
+                f"committed changes for manual review submission; a human sends them and advances "
+                f"exposure in Play Console"
+            )
+            return (
+                f"android=staged {staged_version} {codes[0]} @{current:.0%} "
+                f"parked (held-changes mode; manual review submission)"
+            )
         receipt = _gate_receipt_dt(str(staged.get("name") or ""))
         now = datetime.now(timezone.utc)
         if receipt is None:
@@ -1271,6 +1289,16 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
     except promote.PromotionError as exc:
         raise TrainError(str(exc)) from exc
     if STAGED_ROLLOUT_FRACTION is not None:
+        if promote.CHANGES_NOT_SENT_FOR_REVIEW:
+            log(
+                f"Android production staged rollout started: {candidate.version} ({candidate.version_code}) "
+                f"at {STAGED_ROLLOUT_FRACTION:.0%}; held for review submission — send it from Play Console "
+                f"-> Publishing overview; haltable in Play Console"
+            )
+            return (
+                f"android=staged {candidate.version} ({candidate.version_code}) "
+                f"@{STAGED_ROLLOUT_FRACTION:.0%} (held; send for review in Play Console)"
+            )
         log(
             f"Android production staged rollout started: {candidate.version} ({candidate.version_code}) "
             f"at {STAGED_ROLLOUT_FRACTION:.0%}; haltable in Play Console"

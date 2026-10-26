@@ -363,6 +363,10 @@ workflows:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
         submit_as_draft: false
+        # Play rejects automated edits.commit for this app ("set the query
+        # parameter changesNotSentForReview to true"); held changes are sent
+        # from Play Console -> Publishing overview -> Send for review.
+        changes_not_sent_for_review: true
 
   # ============================================
   # PRODUCTION RELEASE WORKFLOWS (Triggered by tags)
@@ -925,6 +929,9 @@ workflows:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
         submit_as_draft: false
+        # Same Play constraint as the internal auto track: automated commits
+        # must hold changes for the Console's Send for review step.
+        changes_not_sent_for_review: true
         release_promotion:
           track: "alpha"
 
