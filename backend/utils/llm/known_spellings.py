@@ -141,10 +141,13 @@ def conversation_known_spellings(uid: str) -> str:
 def _people_spellings(uid: str):
     # Names need no voice-learning ledger projection (which can perform extra
     # transactions). Reuse the active-People reader without that projection.
+    # Spelling hints are read-only: inside a sync-task attempt (and only there,
+    # behind the people_scan_dedupe lever) repeated hint scans may reuse the
+    # attempt memo; every live authority People read still busts that memo.
     cache = _run_people.get()
     if cache is not None and uid in cache:
         return cache[uid]
-    people = list_people(get_firestore_client(), uid, limit=MAX_PEOPLE_READ)
+    people = list_people(get_firestore_client(), uid, limit=MAX_PEOPLE_READ, memoize=True)
     spellings = _trusted_people_spellings(people)
     if cache is not None:
         cache[uid] = spellings

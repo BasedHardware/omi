@@ -311,3 +311,45 @@ def test_serialization_failure_preserves_live_result(db, monkeypatch):
         assert hint(db) == hint(db)
         assert people._people_scan_memo.get().entries == {}
     assert len(db.scans) == 2
+
+
+class _NoMemories:
+    def read(self, uid, limit=0, budget=None):
+        return []
+
+
+def test_known_spellings_hint_reader_reuses_attempt_scan(db, monkeypatch):
+    from utils.llm import known_spellings
+
+    monkeypatch.setattr(known_spellings, 'get_firestore_client', lambda: db)
+    with people.people_scan_attempt():
+        first = known_spellings._people_spellings('u1')
+        assert first == known_spellings._people_spellings('u1') == [{'name': 'Alice'}]
+    assert db.scans == [('u1', 200)]
+
+
+@pytest.mark.parametrize('raw', ['', '{"people_scan_dedupe":0}'])
+def test_known_spellings_off_path_keeps_live_reads(db, monkeypatch, raw):
+    from utils.llm import known_spellings
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', raw)
+    monkeypatch.setattr(known_spellings, 'get_firestore_client', lambda: db)
+    with people.people_scan_attempt():
+        assert known_spellings._people_spellings('u1') == [{'name': 'Alice'}]
+        db.rows['u1']['p1']['name'] = 'Renamed live'
+        assert known_spellings._people_spellings('u1') == [{'name': 'Renamed live'}]
+    assert db.scans == [('u1', 200), ('u1', 200)]
+
+
+def test_vocabulary_hint_reader_reuses_attempt_scan(db, monkeypatch):
+    from utils.stt import vocabulary
+
+    monkeypatch.setattr('database._client.get_firestore_client', lambda: db)
+    monkeypatch.setattr('utils.memory.memory_service.MemoryService', _NoMemories)
+    monkeypatch.setattr('database.redis_db.get_enabled_apps', lambda uid: [])
+    monkeypatch.setattr('database.dream_store.vocabulary', lambda uid: [])
+    with people.people_scan_attempt():
+        first = vocabulary._sources('u1')
+        assert first == vocabulary._sources('u1')
+    assert first and first[0] == 'Alice'
+    assert db.scans == [('u1', 200)]

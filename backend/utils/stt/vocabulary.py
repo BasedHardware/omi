@@ -84,7 +84,11 @@ def _sources(uid):
     from database.redis_db import get_enabled_apps, get_app_cache_by_id
     from database import dream_store
 
-    people = list_people(get_firestore_client(), uid, limit=200)
+    # STT name hints are read-only: inside a sync-task attempt (and only there,
+    # behind the people_scan_dedupe lever) repeated hint scans may reuse the
+    # attempt memo; the process TTL cache above still governs cross-attempt
+    # reuse and every live authority People read busts the memo.
+    people = list_people(get_firestore_client(), uid, limit=200, memoize=True)
     budget = ListReadBudget(deadline_monotonic=time.monotonic() + 1.5, max_documents=240)
     memories = [
         {'content': row.content} for row in MemoryService().read(uid, limit=80, budget=budget) if not row.is_locked
