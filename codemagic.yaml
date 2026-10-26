@@ -916,7 +916,8 @@ workflows:
 
           # Post-publish scripts also run after a failed build. Persist the exact
           # identity only after Flutter has completed successfully.
-          printf '%s\n%s\n%s\n' "$BUILD_NAME" "$BUILD_NUMBER" "${CM_BUILD_ID:?CM_BUILD_ID is required}" \
+          printf '%s\n%s\n%s\n%s\n' "$BUILD_NAME" "$BUILD_NUMBER" "${CM_TAG:?CM_TAG is required}" \
+            "${CM_BUILD_ID:?CM_BUILD_ID is required}" \
             > "$HOME/.omi-android-prod-internal-build-identity"
 
 
@@ -937,10 +938,9 @@ workflows:
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
-        # Bind this internal release to one Codemagic run. The alpha promotion
-        # checks this identifier so a failed duplicate upload cannot promote
-        # another run's release with the same version and code.
-        release_name: "$BUILD_NAME [$CM_BUILD_ID]"
+        # Publishing-block variables are evaluated before build scripts run.
+        # These built-in values bind the release to its tag and Codemagic run.
+        release_name: "$CM_TAG [$CM_BUILD_ID]"
         submit_as_draft: false
         # Same Play constraint as the internal auto track: automated commits
         # must hold changes for the Console's Send for review step.
@@ -957,6 +957,7 @@ workflows:
             {
               read -r PROMOTE_BUILD_NAME
               read -r PROMOTE_BUILD_NUMBER
+              read -r PROMOTE_BUILD_TAG
               read -r PROMOTE_BUILD_ID
             } < "$IDENTITY"
             python3 scripts/mobile_store_promote.py \
@@ -964,6 +965,7 @@ workflows:
               --platform android \
               --version "${PROMOTE_BUILD_NAME:?missing Android build name}" \
               --android-build "${PROMOTE_BUILD_NUMBER:?missing Android build number}" \
+              --build-tag "${PROMOTE_BUILD_TAG:?missing Android release tag}" \
               --build-id "${PROMOTE_BUILD_ID:?missing Codemagic build ID}"
 
   ios-prod-patch:

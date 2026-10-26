@@ -20,6 +20,10 @@ PACKAGE_NAME = "com.friend.ios"
 VERSION_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 BUILD_RE = re.compile(r"^[1-9][0-9]*$")
 BUILD_ID_RE = re.compile(r"^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$")
+BUILD_TAG_RE = re.compile(
+    r"^v(?P<version>(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))"
+    r"\+(?P<build>[1-9][0-9]{0,9})-(?:mobile|android)-cm$"
+)
 # Play currently rejects this app's automated review submission ("Changes
 # cannot be sent for review automatically"), so every commit holds its
 # changes for the Play Console -> Publishing overview -> Send for review
@@ -70,6 +74,17 @@ def require_build_id(value: str | None, label: str = "CM_BUILD_ID") -> str:
     if value is None or not BUILD_ID_RE.fullmatch(value):
         raise PromotionError(f"{label} must be a UUID")
     return value.lower()
+
+
+def require_build_tag(value: str | None, version: str, label: str = "CM_TAG") -> str:
+    match = BUILD_TAG_RE.fullmatch(value or "")
+    if (
+        match is None
+        or match.group("version") != version
+        or int(match.group("build")) > 2_100_000_000
+    ):
+        raise PromotionError(f"{label} must be a valid Android release tag for {version}")
+    return value
 
 
 def require_notes(path: Path, version: str, platform: str) -> str:
@@ -352,7 +367,8 @@ def select_play_release(
 
 
 PRODUCTION_NAME_VERSION_RE = re.compile(
-    r"^\s*((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))"
+    r"^\s*v?((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))"
+    r"(?:\+[1-9][0-9]{0,9}-(?:mobile|ios|android)-cm)?"
     r"(?:\s*\(.*\)|\s*\[[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\])?\s*$"
 )
 
@@ -361,9 +377,10 @@ def production_release_version(name: str) -> str | None:
     """Return the X.Y.Z a Play production release name carries, if any.
 
     Play Console labels a production release by its build name and may suffix the
-    version code ("1.0.552 (1246)"). Codemagic internal releases suffix their
-    build UUID in brackets. Older or hand-named releases may carry no version at
-    all; only a recognised version participates in the ordering check.
+    version code ("1.0.552 (1246)"). Codemagic internal releases use their
+    versioned tag and build UUID ("v1.0.552+1246-android-cm [UUID]"). Older or
+    hand-named releases may carry no version; only a recognised version
+    participates in the ordering check.
     """
     match = PRODUCTION_NAME_VERSION_RE.fullmatch(name)
     return match.group(1) if match else None
@@ -396,13 +413,14 @@ def play_track(client: object, edit_id: str, track: str) -> object:
 
 
 def promote_internal_android_to_alpha(
-    client: object, edit_id: str, version: str, build_number: str, build_id: str
+    client: object, edit_id: str, version: str, build_number: str, build_tag: str, build_id: str
 ) -> None:
     """Promote only this Codemagic run's completed internal release to alpha."""
     version_parts(version)
     build_number = require_build(build_number, "BUILD_NUMBER")
+    build_tag = require_build_tag(build_tag, version)
     build_id = require_build_id(build_id)
-    expected_name = f"{version} [{build_id}]"
+    expected_name = f"{build_tag} [{build_id}]"
     try:
         internal = play_track(client, edit_id, "internal")
         alpha = play_track(client, edit_id, "alpha")
@@ -593,6 +611,7 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     parser.add_argument("--ios-build")
     parser.add_argument("--android-build")
+    parser.add_argument("--build-tag")
     parser.add_argument("--build-id")
     args = parser.parse_args()
     try:
@@ -600,9 +619,10 @@ def main() -> int:
             if args.platform != "android" or args.ios_build:
                 raise PromotionError("internal-to-alpha promotion requires Android only")
             build_number = require_build(args.android_build, "BUILD_NUMBER")
+            build_tag = require_build_tag(args.build_tag, args.version)
             build_id = require_build_id(args.build_id)
             client, edit_id = play_edit()
-            promote_internal_android_to_alpha(client, edit_id, args.version, build_number, build_id)
+            promote_internal_android_to_alpha(client, edit_id, args.version, build_number, build_tag, build_id)
             print(f"Promoted Android {args.version} ({build_number}) from internal to alpha; held for review submission")
             return 0
         if args.confirm != "submit-for-review":
