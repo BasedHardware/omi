@@ -539,6 +539,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          # Lead ruling01d584: activation waits for approved CPU-role secret access.
+          BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'false', category: ops_kill}
           BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
             value: https://backend-integration-dt5lrfkkoa-uc.a.run.app
             category: service_auth

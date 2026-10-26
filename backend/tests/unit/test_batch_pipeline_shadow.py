@@ -13,7 +13,7 @@ from database import batch_pipeline_store as storage
 from database.batch_pipeline_shadow import ShadowStore, identity
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.artifacts import ArtifactStore
-from utils.batch_pipeline.contracts import WorkItem, RecoveryWork
+from utils.batch_pipeline.contracts import WorkItem, RecoveryWork, ValidationFailureWork
 from utils.batch_pipeline.projection import Projector, ProjectionBlocked
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.batch_pipeline.shadow_recovery import recover
@@ -35,7 +35,7 @@ def repository(monkeypatch):
     return ShadowStore(store, clock=lambda: 7200, busy=lambda: False)
 
 
-def running(repository, name='one', *, duration=300):
+def running(repository, name='one', *, duration=300, guarded=False):
     repository.offer('worker-' + name)
     reservation = repository.reserve('synthetic-owner', name, 'deep')
     assert reservation
@@ -44,12 +44,121 @@ def running(repository, name='one', *, duration=300):
     )
     assert repository.ready(reservation, item, '')
     assert repository.take('worker-' + name) == item
-    assert repository.handoff(item.segment_id, RecoveryWork(item.segment_id, padded_retry='skipped_long_speech'))
+    evidence = (
+        ValidationFailureWork(item.segment_id, 'vad_windows', 'unsupported_language')
+        if guarded
+        else RecoveryWork(item.segment_id, padded_retry='skipped_long_speech')
+    )
+    assert repository.handoff(item.segment_id, evidence)
     return item
 
 
 def row(repository, segment):
     return repository.store.run(lambda tx: tx.get('shadow_jobs', segment))
+
+
+@pytest.mark.parametrize(
+    'speech,expected', [(0, 'empty'), (0.016, 'empty'), (0.032, 'failed_held'), (4.384, 'failed_held')]
+)
+def test_guarded_shadow_handoff_uses_two_distinct_recognizers(repository, speech, expected):
+    item = running(repository, duration=20, guarded=True)
+    assert row(repository, item.segment_id)['worker_failure']['reason'] == 'unsupported_language'
+    spans = [{'start': 0, 'end': speech}] if speech else []
+    first, second = (Mock(side_effect=MultilingualEmpty(20, spans)) for _ in range(2))
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            stt=first,
+            second_stt=second,
+            inspect=lambda *a: (b'', 20, spans),
+        )
+        == expected
+    )
+    settled = row(repository, item.segment_id)
+    assert settled['paid_providers'] == ['modulate', 'soniox']
+    assert settled['speech_seconds'] == speech
+    assert settled['recognizers'] == {
+        p: {'provider': p, 'outcome': 'empty', 'word_count': 0, 'vad_speech_seconds': speech}
+        for p in ('modulate', 'soniox')
+    }
+    assert first.call_args.kwargs['force_recognition'] is True
+    assert first.call_count == second.call_count == 1
+
+
+@pytest.mark.parametrize('failure', ['error', 'words_without_vad', 'disabled'])
+def test_guarded_shadow_zero_vad_requires_two_valid_empty_answers(repository, monkeypatch, failure):
+    from utils.batch_pipeline.recovery_disposition import WordsWithoutVad
+
+    item = running(repository, duration=20, guarded=True)
+    first = Mock(side_effect=(WordsWithoutVad(2) if failure == 'words_without_vad' else TimeoutError()))
+    second = Mock(side_effect=MultilingualEmpty(20, []))
+    if failure == 'disabled':
+        monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
+    expected = 'paid_skipped' if failure == 'disabled' else 'failed_held'
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            stt=first,
+            second_stt=second,
+            inspect=lambda *a: (b'', 20, []),
+        )
+        == expected
+    )
+    settled = row(repository, item.segment_id)
+    assert settled['speech_seconds'] == 0
+    if failure == 'disabled':
+        first.assert_not_called()
+        second.assert_not_called()
+        assert settled['paid_providers'] == []
+    else:
+        assert first.call_count == second.call_count == 1
+        assert settled['recognizers']['modulate']['word_count'] == (2 if failure == 'words_without_vad' else None)
+
+
+@pytest.mark.parametrize('provider', ['modulate', 'soniox'])
+def test_guarded_shadow_recovers_words_and_never_repeats(repository, provider):
+    from utils.batch_pipeline.recovery_recognizers import words_payload
+
+    item = running(repository, duration=20, guarded=True)
+    spans = [{'start': 0, 'end': 2}]
+    payload = words_payload(20, spans, [{'text': 'Synthetic', 'timestamp': [0, 1], 'speaker': '0'}], 'vi')
+    first = Mock(return_value=payload) if provider == 'modulate' else Mock(side_effect=MultilingualEmpty(20, spans))
+    second = Mock(return_value=payload)
+    artifacts = SimpleNamespace(fetch_audio=lambda _: b'synthetic')
+    assert (
+        recover(
+            repository, artifacts, item.segment_id, stt=first, second_stt=second, inspect=lambda *a: (b'', 20, spans)
+        )
+        == 'recovered'
+    )
+    settled = row(repository, item.segment_id)
+    assert settled['recognizers'][provider]['word_count'] == 1
+    assert settled['paid_providers'] == (['modulate'] if provider == 'modulate' else ['modulate', 'soniox'])
+    assert recover(repository, artifacts, item.segment_id, stt=first, second_stt=second) == 'held'
+    assert first.call_count == 1 and second.call_count == int(provider == 'soniox')
+
+
+def test_guarded_shadow_missing_key_refuses_without_claim(repository, monkeypatch):
+    monkeypatch.delenv('SONIOX_API_KEY', raising=False)
+    item = running(repository, duration=20, guarded=True)
+    first = Mock(side_effect=MultilingualEmpty(20, []))
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+            item.segment_id,
+            stt=first,
+            inspect=lambda *a: (b'', 20, []),
+        )
+        == 'failed_held'
+    )
+    settled = row(repository, item.segment_id)
+    assert settled['paid_providers'] == ['modulate']
+    assert settled['recognizers']['soniox']['outcome'] == 'refused'
 
 
 def test_cohort_is_static_independent_and_disjoint(monkeypatch):

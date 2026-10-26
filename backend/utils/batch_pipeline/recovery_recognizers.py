@@ -5,6 +5,8 @@ import wave
 
 from config.batch_pipeline import empty_asr_disposition_enabled
 from config.policy import RecoveryPolicy
+from config.prerecorded_stt import missing_provider_environment
+from config.stt_provider_policy import provider_is_enabled, STTServingSurface
 from utils.batch_pipeline.contracts import projection_speech_spans
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
@@ -37,13 +39,7 @@ def recognizer_attempt(operation):
 
 
 def independent_ready():
-    from utils.stt.soniox_batch import require_environment, SonioxBatchError
-
-    try:
-        require_environment()
-        return True
-    except SonioxBatchError:
-        return False
+    return provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY) and not missing_provider_environment('soniox')
 
 
 def transcribe(item, binding, audio, *, multilingual=None, force_recognition=False):

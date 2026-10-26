@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from utils.stt import soniox_batch as module
+from config.prerecorded_stt import PrerecordedSTTConfigurationError
 
 FILE = '11111111-1111-4111-8111-111111111111'
 TRANSCRIPTION = '22222222-2222-4222-8222-222222222222'
@@ -161,7 +162,7 @@ def test_deadline_bounds_polling_without_resubmission(key):
 def test_missing_key_refuses_before_http(monkeypatch):
     monkeypatch.delenv('SONIOX_API_KEY', raising=False)
     factory = Mock()
-    with pytest.raises(module.SonioxBatchError):
+    with pytest.raises(PrerecordedSTTConfigurationError):
         module.transcribe(b'synthetic', 5, client_factory=factory)
     factory.assert_not_called()
 

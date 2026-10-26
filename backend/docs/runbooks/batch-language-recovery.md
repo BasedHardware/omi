@@ -90,7 +90,12 @@ No live provider acceptance or cleanup has been tested using customer content.
 Deploy the CPU backend role that runs `QuarantineRecovery` and use the same source
 for the operator CLI. The GPU worker itself does not contain this adapter. Verify
 `SONIOX_API_KEY` availability without printing it. This PR does not change secret
-bindings or deploy workflows; a missing key refuses the operator before starting
+bindings or deploy workflows. The dev/prod CPU recovery manifests pin the
+kill switch false until David approves access to the existing secret (lead
+ruling 01d584); code still defaults on. The lead owns the 2026-10-26 morning
+approval/ramp review. After approval, op1 canaries one exact unit and expands
+only with clean T1/T2/T4 plus lead approval; flag activation and key binding
+belong to a separate approved config change. A missing key refuses the operator before starting
 its paid intent and leaves automatic recovery held with a `refused` receipt.
 It does not consume the independent attempt, so explicit recovery can proceed
 after the runtime configuration is corrected.

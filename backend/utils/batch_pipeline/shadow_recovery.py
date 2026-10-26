@@ -5,10 +5,50 @@ from types import SimpleNamespace
 from config.batch_pipeline_shadow import shadow_percent
 from config.policy import RecoveryPolicy
 from config.batch_pipeline_empty_asr import terminal_empty_allowed
-from config.batch_language_recovery import language_guarded, below_silence_threshold
+from config.batch_language_recovery import language_guarded, below_silence_threshold, allowed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.recovery_disposition import inspect_audio, MultilingualEmpty, padded_empty
+from utils.batch_pipeline.recovery_recognizers import recognizer_attempt, independent_ready
+
+
+def guarded_recovery(repository, segment, item, job, audio, duration, spans, stt, second_stt, ready):
+    """Mirror the serving disposition without writing content or user accounting."""
+    speech = sum(span['end'] - span['start'] for span in spans)
+    receipts = {}
+
+    def receipt(provider, outcome, count):
+        receipts[provider] = {
+            'provider': provider,
+            'outcome': outcome,
+            'word_count': count,
+            'vad_speech_seconds': speech,
+        }
+
+    if not spans and not allowed(duration):
+        receipt('soniox', 'refused', None)
+        return 'paid_skipped', receipts
+    if not repository.paid(segment, 'modulate'):
+        receipt('modulate', 'refused', None)
+        return 'paid_skipped', receipts
+    payload, first, count = recognizer_attempt(
+        lambda: stt(
+            item, SimpleNamespace(language=job.get('language')), audio, multilingual=True, force_recognition=True
+        )
+    )
+    receipt('modulate', first, count)
+    if payload is not None:
+        return 'recovered', receipts
+    if not allowed(duration) or not ready() or not repository.paid(segment, 'soniox'):
+        receipt('soniox', 'refused', None)
+        return 'failed_held', receipts
+    payload, second, count = recognizer_attempt(lambda: second_stt(item, audio, MultilingualEmpty(duration, spans)))
+    receipt('soniox', second, count)
+    if payload is not None:
+        return 'recovered', receipts
+    if first == second == 'empty' and below_silence_threshold(speech):
+        return 'empty', receipts
+    return 'failed_held', receipts
 
 
 def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspect=inspect_audio):
@@ -26,12 +66,25 @@ def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspec
         return 'held'
     item = WorkItem(**job['item'])
     policy = RecoveryPolicy.from_dict(job['recovery_policy'])
-    speech, vad, outcome = 0.0, 'unknown', 'error'
+    speech, vad, outcome, receipts = 0.0, 'unknown', 'error', None
     try:
         audio = artifacts.fetch_audio(item)
-        _, _, spans = inspect(item, audio)
+        _, duration, spans = inspect(item, audio)
         speech, vad = sum(span['end'] - span['start'] for span in spans), 'strict'
-        if not spans:
+        if language_guarded(job):
+            outcome, receipts = guarded_recovery(
+                repository,
+                segment,
+                item,
+                job,
+                audio,
+                duration,
+                spans,
+                stt,
+                second_stt,
+                independent_ready if second_stt is second_transcribe else lambda: True,
+            )
+        elif not spans:
             outcome = 'empty'
         elif not shadow_percent() or not repository.paid(segment, 'modulate'):
             outcome = 'paid_skipped'
@@ -73,5 +126,5 @@ def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspec
                 outcome = 'failed_held'
     except Exception:
         outcome = 'error'
-    repository.finish(segment, outcome, speech=speech, vad=vad)
+    repository.finish(segment, outcome, speech=speech, vad=vad, recognizers=receipts)
     return outcome

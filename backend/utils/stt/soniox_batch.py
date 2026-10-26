@@ -12,6 +12,7 @@ from uuid import UUID
 
 import httpx
 from config.batch_language_recovery import allowed
+from config.prerecorded_stt import SONIOX_HELD_RECOVERY_MODEL, require_provider_environment
 
 from config.stt_provider_policy import (
     normalized_stt_language,
@@ -22,21 +23,13 @@ from config.stt_provider_policy import (
 
 logger = logging.getLogger(__name__)
 BASE_URL = 'https://api.soniox.com/v1'
-MODEL = 'stt-async-v5'
+MODEL = SONIOX_HELD_RECOVERY_MODEL
 DEADLINE_SECONDS = 120
 
 
 class SonioxBatchError(ValueError):
     def __init__(self):
         super().__init__('soniox_batch_failed')
-
-
-def require_environment():
-    if (
-        not provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
-        or not (os.getenv('SONIOX_API_KEY') or '').strip()
-    ):
-        raise SonioxBatchError()
 
 
 def resource_id(value):
@@ -87,7 +80,9 @@ def transcript_words(payload, duration):
 def transcribe(audio, duration, *, language=None, client_factory=httpx.Client, clock=time.monotonic, sleep=time.sleep):
     if not allowed(duration):
         raise SonioxBatchError()
-    require_environment()
+    if not provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY):
+        raise SonioxBatchError()
+    require_provider_environment('soniox')
     file_id, transcription_id = None, None
     deadline = clock() + DEADLINE_SECONDS
     headers = {'Authorization': 'Bearer ' + os.environ['SONIOX_API_KEY']}

@@ -36,7 +36,7 @@ def guarded(setup, monkeypatch, legacy_dependencies, *, speech=1, automatic=True
 
     soniox = Mock(return_value=([], 'multi'))
     monkeypatch.setattr(soniox_batch, 'transcribe', soniox)
-    monkeypatch.setattr('utils.stt.soniox_batch.require_environment', lambda: None)
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-only-key')
     monkeypatch.setattr('utils.batch_pipeline.quarantine_recovery.sync_allowed', lambda *a, **kw: True)
     monkeypatch.setattr('utils.batch_pipeline.speech_redrive.sync_allowed', lambda *a, **kw: True)
     modulate.return_value = ([], 'multi')
@@ -481,14 +481,13 @@ def test_recorded_provider_error_cannot_be_promoted_to_valid_empty():
 
 def test_missing_soniox_key_does_not_burn_the_independent_attempt(setup, monkeypatch, legacy_dependencies):
     client, store, binding, artifacts, _, soniox, recovery, _ = guarded(setup, monkeypatch, legacy_dependencies)
-    from utils.stt.soniox_batch import SonioxBatchError
     from config.batch_language_recovery import independent_attempted
 
-    monkeypatch.setattr('utils.stt.soniox_batch.require_environment', Mock(side_effect=SonioxBatchError()))
+    monkeypatch.delenv('SONIOX_API_KEY', raising=False)
     assert recovery.recover('bad', binding.owner_id) == 'failed_held'
     assert not independent_attempted(row(client))
     soniox.assert_not_called()
-    monkeypatch.setattr('utils.stt.soniox_batch.require_environment', lambda: None)
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-only-key')
     soniox.return_value = (WORDS, 'vi')
     assert (
         redrive_one(

@@ -116,9 +116,7 @@ def redrive_one(
     # Check deployment dependencies before spending the sole intent. No fallback
     # to Parakeet is permitted if the alternate provider is unconfigured.
     if independent:
-        from utils.stt.soniox_batch import require_environment
-
-        require_environment()
+        require_provider_environment(PrerecordedSTTService.SONIOX)
     else:
         require_provider_environment(PrerecordedSTTService.MODULATE)
     if not protocol.start(sid, token, plan_digest, clock()):
