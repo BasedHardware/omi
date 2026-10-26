@@ -102,7 +102,7 @@ final class ConversationRepositoryTests: XCTestCase {
     _ = try await repository.restore(id: restored.id)
     await repository.load(query: .all)
     var cachedPaint: ServerConversation?
-    let offline = try await repository.detail(id: restored.id) { cachedPaint = $0 }
+    let offline = try await repository.detail(id: restored.id, seed: restored) { cachedPaint = $0 }
     XCTAssertEqual(cachedPaint?.transcriptSegments.first?.text, "Retained transcript")
     XCTAssertEqual(offline.transcriptSegments.first?.text, "Retained transcript")
     XCTAssertTrue(offline.transcriptSegmentsIncluded)
@@ -139,7 +139,7 @@ final class ConversationRepositoryTests: XCTestCase {
     let repository = ConversationRepository(remote: remote, local: FakeConversationLocal(detailResult: cached))
     _ = try await repository.restore(id: restored.id)
     var cachedPaint: ServerConversation?
-    let offline = try await repository.detail(id: restored.id) { cachedPaint = $0 }
+    let offline = try await repository.detail(id: restored.id, seed: restored) { cachedPaint = $0 }
     XCTAssertEqual(cachedPaint?.transcriptSegments.first?.text, "Cached retained transcript")
     XCTAssertEqual(offline.transcriptSegments.first?.text, "Cached retained transcript")
     XCTAssertFalse(offline.discarded)
