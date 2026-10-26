@@ -181,7 +181,7 @@ created by this infrastructure PR.
 from the fresh 0% watcher. False/missing values block qualification.
 
 ```bash
-nice -n 19 python -m scripts.qualify_parakeet_shape \
+PYTHONPATH=backend nice -n 19 backend/.venv/bin/python -m scripts.qualify_parakeet_shape \
   --control http://ISOLATED_CONTROL_SERVICE.prod-omi-backend.svc.cluster.local:8080 \
   --candidate http://prod-omi-parakeet-g24.prod-omi-backend.svc.cluster.local:8080 \
   --manifest "$G24_RECEIPTS/corpus/manifest.json" \
