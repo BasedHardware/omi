@@ -19,6 +19,13 @@ INSTRUCTIONS = (
     'same attribute. Tasks created or edited by the user are protected. Duplicate captures '
     'require overlapping time and matching speech. Return one independent agree/disagree '
     'decision with reason per supplied id. Missing or insufficient evidence means disagree.'
+    ' For resolve_required_memory, the target is a hidden historical authoritative submission. With other '
+    'set, agree only if that existing same-subject memory preserves EVERY material detail of the submission; '
+    'the pending source is retained as superseded. With other empty, agree only if none of the supplied '
+    'semantic and lexical dedupe_refs already covers the entire submission. All dedupe_refs must be cited. '
+    'Admission normalizes the full submission through the required processor; it cannot discard details.'
+    ' A duplicate survivor must be a processed Long-term memory; a covering Short-term neighbor is not yet '
+    'durable enough to retire an authoritative required submission.'
 )
 
 

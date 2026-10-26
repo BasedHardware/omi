@@ -4457,6 +4457,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get continueText => 'Fortfahren';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Du hast bereits ein Abonnement. Verwalte dein bestehendes Abonnement, statt ein neues abzuschließen.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Abonnieren Sie zuerst erneut, um den Plan zu wechseln.';
 
   @override
@@ -8665,6 +8669,9 @@ class AppLocalizationsDe extends AppLocalizations {
       'Transkription nicht verfügbar — die Aufnahme läuft weiter und Ihr Audio wird gespeichert.';
 
   @override
+  String get captureNoAudioFromPendant => 'Kein Ton vom Anhänger';
+
+  @override
   String get capturing => 'Aufnahme läuft';
 
   @override
@@ -11175,6 +11182,12 @@ class AppLocalizationsDe extends AppLocalizations {
       'Die Bluetooth-Verbindung zu deinem Omi ist ins Stocken geraten, deshalb erreicht das Audio die App nicht. Omi nimmt auf dem Gerät weiter auf und synchronisiert, sobald die Verbindung wiederhergestellt ist. Erneut versuchen stellt die Verbindung wieder her; wenn es weiter fehlschlägt, prüfe dein Gerät unter Einstellungen > Gerät.';
 
   @override
+  String get captureConnecting => 'Verbindung wird hergestellt…';
+
+  @override
+  String get captureNoAudioDetail => 'Der Anhänger ist verbunden, aber kein Ton erreicht dein Telefon';
+
+  @override
   String get captureIngressNeedsReconnect => 'Audio erreicht die App nicht — verbinde Omi erneut';
 
   @override
@@ -11203,13 +11216,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Speicher fast voll';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi verbindet sich von selbst neu';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12343,12 +12349,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Verbindung prüfen';
-
-  @override
-  String get forYou => 'Für dich';
-
-  @override
-  String get stopThese => 'Diese stoppen';
 
   @override
   String get dismiss => 'Ausblenden';
@@ -14543,6 +14543,26 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable =>
+      'Die laufenden Notizen werden nicht aktualisiert. Sieh dir vorerst das Transkript an.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Aufnahme · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Vorherige Episode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Ausstehende Abschnitte: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Vorherige Episode öffnen';
+
+  @override
   String get episodeNotesSoon => 'Notizen erscheinen nach den ersten Gesprächsminuten.';
 
   @override
@@ -14679,4 +14699,41 @@ class AppLocalizationsDe extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Erledigt. $percent% Rabatt für die nächsten $months Monate.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Andere';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Erledigt';
+
+  @override
+  String get openLoopAnswerRemind => 'Später erinnern';
+
+  @override
+  String get openLoopAnswerDrop => 'Verwerfen';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi verbindet sich von selbst neu';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher.';
 }

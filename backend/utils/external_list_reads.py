@@ -1,5 +1,6 @@
 """Authorized external list caching, normalized queries, and bounded read seams."""
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -8,7 +9,7 @@ import time
 from concurrent.futures import Future
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from threading import BoundedSemaphore
+from threading import BoundedSemaphore, Lock
 from typing import Any
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -31,8 +32,12 @@ VERSIONED_TTL_SECONDS = 900
 MAX_BODY_BYTES = 256 * 1024
 MAX_ENTRY_BYTES = MAX_BODY_BYTES + 8192
 MAX_CACHE_POPULATIONS = 32
+MAX_CACHE_WAITERS = 8
 _population_slots = BoundedSemaphore(MAX_CACHE_POPULATIONS)
+_waiter_slots = BoundedSemaphore(MAX_CACHE_WAITERS)
 _client: Any = None
+_flights: dict[str, tuple[float, Future]] = {}
+_flight_lock = Lock()
 _HEADERS = frozenset(
     {
         'x-omi-effective-limit',
@@ -73,6 +78,7 @@ class _Entry:
     started: float
     ttl: int = TTL_SECONDS
     version: str | None = None
+    flight: Future | None = None
 
     def event(self, outcome: str) -> None:
         EXTERNAL_LIST_CACHE_TOTAL.labels(route=self.route, outcome=outcome).inc()
@@ -127,6 +133,79 @@ class _Entry:
             EXTERNAL_LIST_CACHE_TOTAL.labels(route=self.route, outcome='stored').inc()
         except Exception:
             _fail_open('cache_write')
+
+    def join(self, request: Request, response: Response | None) -> Response | None:
+        """Batch simultaneous identical misses after every caller's auth gates.
+
+        Only sync route workers wait. A busy/unavailable leader falls back to
+        each request's original read within one second, without queueing more
+        populations or extending the original cache freshness interval.
+        """
+        if not lever_enabled('OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED'):
+            return None
+        try:
+            asyncio.get_running_loop()
+            return None
+        except RuntimeError:
+            pass
+        now = time.monotonic()
+        with _flight_lock:
+            for key, (deadline, pending) in list(_flights.items()):
+                if deadline <= now:
+                    del _flights[key]
+                    if not pending.done():
+                        pending.set_result(None)
+            existing = _flights.get(self.key)
+            if existing is None:
+                if len(_flights) < MAX_CACHE_POPULATIONS:
+                    self.flight = Future()
+                    _flights[self.key] = (self.started + min(self.ttl, TTL_SECONDS), self.flight)
+                return None
+            pending = existing[1]
+        slots = _waiter_slots
+        if not slots.acquire(blocking=False):
+            self.event('coalesce_saturated')
+            return None
+        try:
+            result = pending.result(timeout=min(1.0, max(0.0, existing[0] - now)))
+        except TimeoutError:
+            self.event('coalesce_timeout')
+            return None
+        finally:
+            slots.release()
+        if result is None:
+            return None
+        body, headers, expires_at = result
+        if (
+            time.time() >= expires_at
+            or not lever_enabled('OMI_EXTERNAL_LIST_CACHE_ENABLED')
+            or not lever_enabled('OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED')
+            or (self.version is not None and action_item_versions.version(self.uid) != self.version)
+        ):
+            return None
+        request.state.external_list_cache_entry = None
+        self.event('coalesced')
+        return Response(
+            content=body, media_type='application/json', headers={**headers, **(response.headers if response else {})}
+        )
+
+    def complete(self, response: Response | None) -> None:
+        if self.flight is None:
+            return
+        result = None
+        # The sync follower rechecks its captured writer version before use.
+        # Completion runs on the event loop and must never perform Redis I/O.
+        if response is not None and self.eligible(response):
+            result = (
+                bytes(response.body),
+                {k: v for k, v in response.headers.items() if k.lower() in _HEADERS},
+                self.expires_at,
+            )
+        with _flight_lock:
+            if not self.flight.done():
+                self.flight.set_result(result)
+            if _flights.get(self.key, (None, None))[1] is self.flight:
+                del _flights[self.key]
 
 
 def cached_list_response(
@@ -189,7 +268,7 @@ def cached_list_response(
     except Exception:
         _fail_open('cache_read')
     EXTERNAL_LIST_CACHE_TOTAL.labels(route=route, outcome='miss').inc()
-    return None
+    return entry.join(request, response)
 
 
 def _queue_population(entry: _Entry, response: Response) -> None:
@@ -223,11 +302,16 @@ class ExternalListCacheRoute(APIRoute):
         original = super().get_route_handler()
 
         async def handler(request: Request):
-            response = await original(request)
-            entry = getattr(request.state, 'external_list_cache_entry', None)
-            if entry is not None:
-                _queue_population(entry, response)
-            return response
+            response = None
+            try:
+                response = await original(request)
+                return response
+            finally:
+                entry = getattr(request.state, 'external_list_cache_entry', None)
+                if entry is not None:
+                    entry.complete(response)
+                    if response is not None:
+                        _queue_population(entry, response)
 
         return handler
 

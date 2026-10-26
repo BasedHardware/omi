@@ -3,11 +3,31 @@
 from dataclasses import dataclass
 import math
 import os
-from typing import Any
+from typing import Any, Literal
 
 from database.batch_pipeline_projection import ProjectionBlocked
+from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
+from config.sync_live_dedupe import sync_live_dedupe_active_for
 from models.geolocation import Geolocation
 from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding
+
+ProjectionBlockReason = Literal[
+    'intake_binding_mismatch',
+    'invalid_recording_clock',
+    'invalid_recording_identity',
+    'invalid_recording_interval',
+    'invalid_upload_filenames',
+    'lineage_identity_missing',
+    'lineage_ambiguous',
+    'other',
+]
+
+
+def _blocked(message: str, reason: ProjectionBlockReason) -> ProjectionBlocked:
+    """Keep the refusal message/type while attaching a closed log-safe reason."""
+    error = ProjectionBlocked(message)
+    setattr(error, 'block_reason', reason)
+    return error
 
 
 @dataclass(frozen=True)
@@ -15,6 +35,12 @@ class ResolvedContext:
     target_id: str | None
     binding_reason: str | None = None
     geolocation: Geolocation | None = None
+    lineage_eligible: bool = False
+
+
+def require_repair_manifest(item, binding, manifest, required):
+    if required and not binding.record_origin and (not item.requires_compute_admission or manifest is None):
+        raise ProjectionBlocked('repair requires authenticated lineage manifest')
 
 
 def resolve_context(
@@ -24,6 +50,7 @@ def resolve_context(
     client: Any,
     *,
     projection_item: WorkItem | None = None,
+    require_lineage_fence: bool = False,
 ) -> ResolvedContext:
     expected = {
         'owner_id': item.owner_id,
@@ -38,7 +65,7 @@ def resolve_context(
         'conversation_id': binding.target_conversation_id,
     }
     if any(context.get(key) != value for key, value in expected.items()):
-        raise ProjectionBlocked('authenticated intake metadata binding mismatch')
+        raise _blocked('authenticated intake metadata binding mismatch', 'intake_binding_mismatch')
     geo = context.get('geolocation')
     if geo is not None:
         from utils.conversations.location import resolve_geolocation
@@ -52,11 +79,11 @@ def resolve_context(
     start, end = context.get('audio_start_seconds'), context.get('audio_end_seconds')
     for value in (start, end):
         if value is not None and (type(value) not in (float, int) or not math.isfinite(value)):
-            raise ProjectionBlocked('invalid intake recording clock')
+            raise _blocked('invalid intake recording clock', 'invalid_recording_clock')
     if origin is not None and (not isinstance(origin, str) or not origin or len(origin) > 256):
-        raise ProjectionBlocked('invalid intake recording identity')
+        raise _blocked('invalid intake recording identity', 'invalid_recording_identity')
     if start is not None and end is not None and start > end:
-        raise ProjectionBlocked('invalid intake recording interval')
+        raise _blocked('invalid intake recording interval', 'invalid_recording_interval')
     from utils.sync.recording_lineage import (
         lineage_resolution_requested,
         plan_segment_targets,
@@ -72,7 +99,7 @@ def resolve_context(
         else [os.path.basename(path) for path in context.get('raw_capture_paths') or []]
     )
     if not isinstance(filenames, list) or any(not isinstance(name, str) for name in filenames):
-        raise ProjectionBlocked('invalid intake upload filenames')
+        raise _blocked('invalid intake upload filenames', 'invalid_upload_filenames')
     requested = lineage_resolution_requested(
         item.owner_id,
         origin,
@@ -83,10 +110,12 @@ def resolve_context(
         filenames=filenames,
         stage='batch_projection',
     )
+    if require_lineage_fence and (not requested or not sync_live_dedupe_active_for(item.owner_id)):
+        raise ProjectionBlocked('repair requires active proven lineage fence')
     reason = None
     if requested:
         if not isinstance(origin, str):
-            raise ProjectionBlocked('recording identity required for lineage resolution')
+            raise _blocked('recording identity required for lineage resolution', 'lineage_identity_missing')
         reasons: dict = {}
         targets = plan_segment_targets(
             [projection_item.segment_id],
@@ -103,7 +132,11 @@ def resolve_context(
         )
         target, reason = targets.get(projection_item.segment_id), reasons.get(projection_item.segment_id)
         if ambiguous_binding_pending(item.owner_id, reason):
-            raise ProjectionBlocked('recording generation binding remains ambiguous')
+            error = ProjectionGenerationAmbiguous('recording generation binding remains ambiguous')
+            setattr(error, 'block_reason', 'lineage_ambiguous')
+            raise error
+        if require_lineage_fence and (reason not in {'bound', 'stamp_overridden'} or not target):
+            raise ProjectionBlocked('repair requires proven generation disposition')
     elif origin and start is not None and end is not None:
         from utils.sync.recording_session_target import resolve_recording_session_sync_target
 
@@ -117,4 +150,4 @@ def resolve_context(
             end,
             firestore_client=client,
         )
-    return ResolvedContext(target, reason, geo)
+    return ResolvedContext(target, reason, geo, lineage_eligible=requested)

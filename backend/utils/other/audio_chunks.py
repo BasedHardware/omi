@@ -13,6 +13,7 @@ from google.api_core.exceptions import (
 )
 
 from utils.other import storage
+from utils.other.raw_audio_read import select_raw_pcm
 
 MAX_SPEAKER_DOWNLOADS = 32
 MAX_SPEAKER_BYTES = 64 * 1024 * 1024
@@ -33,6 +34,9 @@ class AudioChunkReadSession:
         self.deadline = time.monotonic() + MAX_SPEAKER_READ_SECONDS
         self.lock = threading.Lock()
         self.limit_hit = False
+        # Populated by the conversation reader only after decoded coverage and
+        # non-overlap are proven for each window. None retains legacy readers.
+        self.verified_segment_ids: Optional[set[str]] = None
 
     def in_budget(self):
         if self.limit_hit or time.monotonic() >= self.deadline:
@@ -239,4 +243,6 @@ def iter_audio_chunk_pcm(
             with storage.get_storage_chunk_semaphore():
                 pcm = storage.download_and_decode_chunk_blob(bucket, chunk['path'], uid, sample_rate)
         if pcm:
+            if chunk['path'].startswith(f'raw-live/{uid}/'):
+                pcm = select_raw_pcm(pcm, chunk, sample_rate)
             yield chunk_start(chunk), pcm

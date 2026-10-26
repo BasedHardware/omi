@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-unresolved-head-blocks-projection",
+  "violated_contract": "An unresolved generation must not strand unrelated committed results behind an owner watermark, and releasing that dependency must not assign unproven text or erase custody.",
+  "canonical_prevention": "Persist a versioned quarantined receipt with transactional binding, predecessor and privacy fences, advance only at the final part, fence older readers, retain incomplete upload custody, expose aged obligations, and reuse ordinary idempotent projection for repair.",
+  "canonical_prevention_artifact": [
+    "backend/tests/integration/test_batch_pipeline_projection_firestore.py",
+    "backend/tests/unit/test_batch_pipeline_projection_repair.py",
+    "backend/tests/unit/test_batch_pipeline_metrics.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/batch_pipeline/", "backend/database/batch_pipeline_projection*"],
+  "status": "open"
+}

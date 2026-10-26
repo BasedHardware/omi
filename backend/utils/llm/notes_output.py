@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal, Optional, cast
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
+from models.conversation_emoji import CATEGORY_EMOJI, DEFAULT_EMOJI, NEUTRAL_EMOJI, fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
 from models.structured_extraction import (
@@ -12,10 +13,20 @@ from models.structured_extraction import (
     ExtractedActionItem,
     ExtractedEvent,
     ExtractedInsight,
+    ExtractedOpenLoop,
+    ExtractedObservedIssue,
     ExtractedRichSection,
     MeetingType,
     SALIENCE_DESCRIPTION,
+    scrub_open_loop_fields,
 )
+
+# A submission that never chose an emoji must not silently store the pydantic
+# default: every conversation served with the v2 contract would pin 🧠 (the
+# 2026-10-23 rollout). The shared category fallback in models.conversation_emoji
+# is the deterministic stand-in; it is re-exported here for the existing
+# notes-output importers (backfill tooling, tests).
+__all__ = ['CATEGORY_EMOJI', 'DEFAULT_EMOJI', 'NEUTRAL_EMOJI', 'fallback_emoji']
 
 
 class NotesOutput(BaseModel):
@@ -23,7 +34,7 @@ class NotesOutput(BaseModel):
 
     title: str = ''
     overview: str = ''
-    emoji: str = '🧠'
+    emoji: str = Field(description='An emoji to represent the conversation', default=DEFAULT_EMOJI)
     category: CategoryEnum = CategoryEnum.other
     sections: list[ExtractedRichSection] = Field(default_factory=list)
     action_items: list[ExtractedActionItem] = Field(default_factory=list)
@@ -84,7 +95,7 @@ class NotesOutput(BaseModel):
         structured = Structured(
             title=self.title,
             overview=self.overview,
-            emoji=self.emoji,
+            emoji=fallback_emoji(self.emoji, self.category),
             category=cast(
                 Any, self.category
             ),  # SDK and backend enums share values; Pydantic converts at this boundary.
@@ -113,3 +124,31 @@ def submit_tool() -> dict[str, Any]:
             'parameters': NotesOutput.model_json_schema(),
         },
     }
+
+
+class OpenLoopNotesOutput(NotesOutput):
+    """NotesOutput plus the OPEN_LOOPS_ENABLED open-loop fields.
+
+    A subclass so the flag-off v2 format instructions (and the agentic
+    ``submit_notes`` tool schema, which renders NotesOutput) stay byte-identical
+    while the switch is off. The fields never reach ``to_structured``; the
+    serving seam persists them in the server-only conversation field.
+    """
+
+    delegated_by_user: list[ExtractedOpenLoop] = Field(
+        default_factory=list,
+        description='Deliverables the account owner asked or instructed someone else to do',
+    )
+    commitments_by_others: list[ExtractedOpenLoop] = Field(
+        default_factory=list,
+        description="Deliverables others said they would do for the owner or the owner's project",
+    )
+    observed_issue_or_blocker: Optional[ExtractedObservedIssue] = Field(
+        default=None,
+        description='At most one observed work defect or errand blocker; null for most conversations',
+    )
+
+    @model_validator(mode='before')
+    @classmethod
+    def keep_usable_open_loops(cls, data: Any) -> Any:
+        return scrub_open_loop_fields(data)

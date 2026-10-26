@@ -106,7 +106,12 @@ def entries():
             domains={
                 'namespace': namespaces,
                 'after': [None, (2.0, 'result-100')],
-                'states': [('pending', 'persisted', 'ready'), ('pending',), ('persisted', 'ready')],
+                'states': [
+                    ('pending', 'persisted', 'ready'),
+                    ('pending',),
+                    ('persisted', 'ready'),
+                    ('pending', 'persisted', 'ready', 'quarantine_held'),
+                ],
             },
             neutrals={'limit': (100, 'bounded page size only')},
         ),

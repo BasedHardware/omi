@@ -24,7 +24,7 @@ from .isolation import LOOPBACK_HOSTS as _LOOPBACK_HOSTS, install_no_egress_guar
 install_no_egress_guard()
 
 from .events import write_event  # noqa: E402
-from .storage import configure_storage_dir, patch_google_storage  # noqa: E402
+from .storage import configure_storage_dir, patch_google_storage, read_signed_url  # noqa: E402
 
 _ROLES = frozenset({'admission', 'worker', 'batch-serving'})
 
@@ -334,9 +334,6 @@ elif ROLE == 'worker':
         write_event('providers', {'event': 'conversation_persisted', 'conversation_id': completed.id})
         return completed
 
-    def _delete_segment_blob_immediately(path: str, *_args: Any, **_kwargs: Any) -> None:
-        sync_pipeline.delete_syncing_temporal_file(path)
-
     _original_delete_staged_blobs_async = sync_router._delete_staged_blobs_async
     _original_run_full_pipeline = sync_router._run_full_pipeline_background_async
     _original_mark_sync_content_completed = sync_pipeline.mark_sync_content_completed
@@ -349,13 +346,13 @@ elif ROLE == 'worker':
             raise RuntimeError('controlled Sync worker execution failure')
         return await _original_run_full_pipeline(*args, **kwargs)
 
-    async def _delete_staged_blobs_with_controlled_failure(blob_paths: list[str]) -> None:
+    async def _delete_staged_blobs_with_controlled_failure(blob_paths: list[str], **custody) -> None:
         global _cleanup_failures_remaining
         if _cleanup_failures_remaining:
             _cleanup_failures_remaining -= 1
             write_event('jobs', {'event': 'intentional_cleanup_failure', 'blob_count': len(blob_paths)})
             raise RuntimeError('controlled Sync staged-cleanup failure')
-        await _original_delete_staged_blobs_async(blob_paths)
+        await _original_delete_staged_blobs_async(blob_paths, **custody)
 
     def _mark_sync_content_completed_with_controlled_failure(*args: Any, **kwargs: Any) -> Any:
         global _pre_ledger_failures_remaining, _post_ledger_failures_remaining
@@ -376,8 +373,8 @@ elif ROLE == 'worker':
     sync_pipeline.vad_is_empty = _local_vad
     sync_pipeline.get_prerecorded_service = lambda _language='en': ('parakeet', 'en', 'parakeet')
     sync_pipeline.prerecorded = _local_prerecorded
+    sync_pipeline._download_audio_bytes = read_signed_url
     sync_pipeline.process_conversation = _local_process_conversation
-    sync_pipeline.schedule_syncing_temporal_file_deletion = _delete_segment_blob_immediately
     sync_pipeline.mark_sync_content_completed = _mark_sync_content_completed_with_controlled_failure
     sync_router._run_full_pipeline_background_async = _run_full_pipeline_with_controlled_worker_failure
     sync_router._delete_staged_blobs_async = _delete_staged_blobs_with_controlled_failure

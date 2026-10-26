@@ -130,6 +130,28 @@ def _install_action_item_write_fences() -> None:
 _install_action_item_write_fences()
 
 
+def _install_memory_change_heads() -> None:
+    try:
+        from database.memory_change_head import install_write_heads
+    except ImportError:
+        return
+    install_write_heads()
+
+
+_install_memory_change_heads()
+
+
+def _install_list_projection_writer() -> None:
+    try:
+        from database.list_projection import install_list_projection_writer
+    except ImportError:
+        return
+    install_list_projection_writer()
+
+
+_install_list_projection_writer()
+
+
 _firestore_client = None
 _firestore_client_lock = Lock()
 _customer_firestore_client = None
@@ -491,6 +513,9 @@ def run_transactional(
     session have no way to distinguish it from a real write failure.
     ``initial_transaction`` lets an outer contention budget own the first transaction;
     expiry still replaces it with a new transaction under the existing attempt limit.
+    A nested contention budget that owns the attempts too passes ``attempts=1``:
+    the expiry restart then happens as one bounded outer retry instead of
+    inner restarts, so a single budget bounds the whole chain count.
 
     ``transient=True`` is the idempotent-caller opt-in. It also restarts on contention,
     ``DeadlineExceeded``, ``ServiceUnavailable``, and ``ResourceExhausted``, with
@@ -498,7 +523,9 @@ def run_transactional(
     commit can be ambiguous, so the callable must re-read and refuse a second
     increment. Backoff runs in this helper, after the callable has returned, so a
     lock held only inside the callable is not held during the sleep. The default
-    path still retries only an expired transaction id and does not sleep.
+    path still retries only an expired transaction id, now with the same
+    equal-jitter backoff so an inner restart does not land inside the same
+    contention spike that retired the previous id.
     ``outcome`` receives ``retried_ok`` or ``exhausted`` when set.
     """
     predicate = is_retryable_firestore_transaction_error if transient else is_expired_transaction_error
@@ -525,10 +552,10 @@ def run_transactional(
                     attempts,
                     firestore_failure_reason(error),
                 )
-                delay = equal_jitter_delay(attempt, random_value or random.random)
-                (sleep or time.sleep)(delay)
             else:
                 logger.warning('Firestore transaction expired, restarting attempt=%d/%d', attempt, attempts)
+            delay = equal_jitter_delay(attempt, random_value or random.random)
+            (sleep or time.sleep)(delay)
 
 
 class _LazyFirestoreClient:

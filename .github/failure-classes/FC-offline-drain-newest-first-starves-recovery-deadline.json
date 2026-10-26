@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-offline-drain-newest-first-starves-recovery-deadline",
+  "violated_contract": "Offline-sync pending audio is refused permanently by the server once it ages past the automatic-recovery window (SYNC_BACKFILL_MAX_AGE_SECONDS, 30 days; the 422 backfill_lookback_exceeded response retires the recording terminal). A drain that always attempts the newest pending WALs first spends every interrupted run — rate-limit break, cancelled sync, app backgrounding — on the audio with the most deadline slack, so the oldest recordings are attempted last indefinitely, age past the window, and are refused without any per-file failure ever being observed: newer audio syncs normally while oldest_pending_age grows for weeks.",
+  "canonical_prevention": "Order the drain by deadline, not recency: live capture (the only audio still able to claim its running conversation) leads newest-first, and everything older drains oldest-first, so any truncation costs the audio with the most slack instead of the least. Pin it with batch-selection tests that feed mixed live/historical WAL sets and assert the oldest historical WAL forms the first batch while live capture still leads and conversation grouping is unchanged.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/local_wal_sync_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/sync_upload_batch.dart"
+  ],
+  "status": "open"
+}

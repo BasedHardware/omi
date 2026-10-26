@@ -4416,6 +4416,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get continueText => 'Pokračovat';
 
   @override
+  String get checkoutExistingSubscription => 'Předplatné již máte. Místo nového předplatného spravujte to stávající.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Chcete-li změnit plán, nejprve se znovu přihlaste.';
 
   @override
@@ -8592,6 +8595,9 @@ class AppLocalizationsCs extends AppLocalizations {
       'Přepis není k dispozici — nahrávání pokračuje a váš zvuk se ukládá.';
 
   @override
+  String get captureNoAudioFromPendant => 'Žádný zvuk z přívěsku';
+
+  @override
   String get capturing => 'Záznam';
 
   @override
@@ -11086,6 +11092,12 @@ class AppLocalizationsCs extends AppLocalizations {
       'Bluetooth spojení s vaším zařízením Omi se zaseklo, takže zvuk se do aplikace nedostává. Omi na zařízení dál nahrává a po obnovení spojení se synchronizuje. Opakování pokusu spojení znovu naváže; pokud to dál nefunguje, zkontrolujte zařízení v Nastavení > Zařízení.';
 
   @override
+  String get captureConnecting => 'Připojování…';
+
+  @override
+  String get captureNoAudioDetail => 'Přívěsek je připojen, ale žádný zvuk nedochází do vašeho telefonu';
+
+  @override
   String get captureIngressNeedsReconnect => 'Zvuk se do aplikace nedostává — znovu připojte Omi';
 
   @override
@@ -11114,13 +11126,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Úložiště je téměř plné';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi se znovu připojí sám';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12250,12 +12255,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Zkontrolujte připojení';
-
-  @override
-  String get forYou => 'Pro vás';
-
-  @override
-  String get stopThese => 'Zastavit tyto';
 
   @override
   String get dismiss => 'Skrýt';
@@ -14435,6 +14434,25 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Průběžné poznámky se neaktualizují. Zatím si zobrazte přepis.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Nahrávání · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Předchozí epizoda';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Čekající části: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Otevřít předchozí epizodu';
+
+  @override
   String get episodeNotesSoon => 'Poznámky se objeví po prvních minutách hovoru.';
 
   @override
@@ -14571,4 +14589,41 @@ class AppLocalizationsCs extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Hotovo. Sleva $percent % na dalších $months měsíců.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Ostatní';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Hotovo';
+
+  @override
+  String get openLoopAnswerRemind => 'Připomenout později';
+
+  @override
+  String get openLoopAnswerDrop => 'Zahodit';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi se znovu připojí sám';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.';
 }

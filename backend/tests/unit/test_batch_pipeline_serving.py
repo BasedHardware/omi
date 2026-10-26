@@ -288,6 +288,89 @@ def test_held_partial_scan_runs_on_a_slow_cadence_behind_its_kill_switch(monkeyp
     Serving(MemoryStore(), projector=SimpleNamespace(sweep=lambda: None)).reconcile()
 
 
+def test_budget_stopped_held_pass_resumes_next_tick_and_carries_its_bounds(monkeypatch):
+    from utils.batch_pipeline import serving as serving_module
+
+    clock = {'monotonic': 10_000.0}
+    monkeypatch.setattr(
+        serving_module, 'time', SimpleNamespace(monotonic=lambda: clock['monotonic'], time=lambda: 1_000_000.0)
+    )
+    results = [
+        {'partial': 0, 'waiting': 32, 'error': 0, 'units': 32, 'more': 1},
+        {'partial': 3, 'waiting': 2, 'error': 0, 'units': 5, 'more': 0},
+    ]
+    projector = Mock()
+    projector.sweep_held = Mock(side_effect=results)
+    service = Serving(MemoryStore(), projector=projector)
+    service.reconcile()
+    call = projector.sweep_held.call_args
+    assert call.kwargs['deadline'] - clock['monotonic'] == serving_module.HELD_PARTIAL_TICK_SECONDS
+    assert call.kwargs['max_pages'] == (
+        serving_module.HELD_PARTIAL_READS_PER_HOUR // (32 * serving_module.HELD_PARTIAL_READS_PER_UNIT)
+    )
+    # A pass stopped mid-backlog does not wait out the interval.
+    assert service.held_partial_due == clock['monotonic']
+    clock['monotonic'] += 1
+    service.reconcile()
+    assert projector.sweep_held.call_count == 2
+    # A short page ends the pass and re-arms the slow interval.
+    assert service.held_partial_due == clock['monotonic'] + serving_module.HELD_PARTIAL_INTERVAL_SECONDS
+    assert service.held_partial_reads == [
+        (10_000.0, 32 * serving_module.HELD_PARTIAL_READS_PER_UNIT),
+        (10_001.0, 5 * serving_module.HELD_PARTIAL_READS_PER_UNIT),
+    ]
+
+
+def test_held_partial_kill_switch_stops_even_a_resuming_pass(monkeypatch):
+    projector = Mock()
+    projector.sweep_held = Mock(return_value={'partial': 0, 'waiting': 4, 'error': 0, 'units': 4, 'more': 1})
+    service = Serving(MemoryStore(), projector=projector)
+    service.reconcile()
+    assert projector.sweep_held.call_count == 1 and service.held_partial_due <= time.monotonic()
+    monkeypatch.setenv('BATCH_PIPELINE_HELD_PARTIAL_ENABLED', 'false')
+    service.reconcile()
+    assert projector.sweep_held.call_count == 1
+
+
+def test_held_partial_governor_charges_the_sweeps_exact_reads(monkeypatch):
+    from utils.batch_pipeline import serving as serving_module
+
+    clock = {'monotonic': 20_000.0}
+    monkeypatch.setattr(
+        serving_module, 'time', SimpleNamespace(monotonic=lambda: clock['monotonic'], time=lambda: 1_000_000.0)
+    )
+    projector = Mock()
+    projector.sweep_held = Mock(
+        return_value={'partial': 2, 'waiting': 0, 'error': 0, 'units': 32, 'reads': 500, 'more': 0}
+    )
+    service = Serving(MemoryStore(), projector=projector)
+    service.reconcile()
+    # A sweep that reports its own reads (sibling-heavy uploads cost more than
+    # the per-unit estimate) is charged exactly what it reported.
+    assert projector.sweep_held.call_count == 1
+    assert service.held_partial_reads == [(20_000.0, 500)]
+
+
+def test_held_partial_read_governor_defers_the_sweep_until_the_window_refills(monkeypatch):
+    from utils.batch_pipeline import serving as serving_module
+
+    clock = {'monotonic': 50_000.0}
+    monkeypatch.setattr(
+        serving_module, 'time', SimpleNamespace(monotonic=lambda: clock['monotonic'], time=lambda: 1_000_000.0)
+    )
+    projector = Mock()
+    projector.sweep_held = Mock(return_value={'partial': 0, 'waiting': 0, 'error': 0, 'units': 0, 'more': 0})
+    service = Serving(MemoryStore(), projector=projector)
+    service.held_partial_reads = [(clock['monotonic'], serving_module.HELD_PARTIAL_READS_PER_HOUR)]
+    service.reconcile()
+    service.reconcile()
+    # The hourly window is spent: no sweep, and the gate retries for free.
+    assert projector.sweep_held.call_count == 0 and service.held_partial_due == clock['monotonic']
+    clock['monotonic'] += serving_module.HELD_PARTIAL_WINDOW_SECONDS
+    service.reconcile()
+    assert projector.sweep_held.call_count == 1
+
+
 def test_recovery_is_scheduled_inside_service_but_metrics_reconcile_does_not_dispatch():
     from unittest.mock import Mock
 
@@ -382,17 +465,17 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
     _, store = api
     service = routes.serving_for_stage('dev')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
-    entered, release = threading.Event(), threading.Event()
+    entered, release = asyncio.Event(), asyncio.Event()
 
-    def recover(segment, owner):
+    async def recover(segment, owner):
         entered.set()
-        assert release.wait(5)
+        await release.wait()
         return 'recovered'
 
     service.recovery = Mock()
-    service.recovery.recover.side_effect = recover
     from unittest.mock import AsyncMock
 
+    service.recovery.recover_async = AsyncMock(side_effect=recover)
     service.reconcile_async = AsyncMock()
     task = asyncio.create_task(
         routes.recover_quarantine(
@@ -400,7 +483,7 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
         )
     )
     try:
-        assert await asyncio.to_thread(entered.wait, 2)
+        await asyncio.wait_for(entered.wait(), 2)
         assert not task.done()  # The request stays active during the provider call.
         service.reconcile_async.assert_not_awaited()
     finally:
@@ -409,7 +492,8 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
     service.reconcile_async.assert_awaited_once_with(
         owner_id=store.rows['jobs', 'synthetic']['owner_id'], recovered='synthetic'
     )
-    assert service.recovery.recover.call_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
+    assert service.recovery.recover_async.await_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
+    service.recovery.recover.assert_not_called()
 
 
 def test_recovery_task_rejects_foreign_stage_and_missing_oidc(api, monkeypatch):

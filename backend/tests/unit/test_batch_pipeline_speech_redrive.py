@@ -14,12 +14,13 @@ from tests.unit.test_batch_pipeline_empty_disposition import wav, work, enable, 
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from utils.batch_pipeline.quarantine_recovery import transcribe
+from utils.batch_pipeline.recovery_recognizers import transcribe
 from utils.batch_pipeline.recovery_disposition import RecoveryFailure
 from utils.batch_pipeline.speech_redrive import redrive_one
 
 
 def enabled(setup, monkeypatch, legacy_dependencies):
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false')
     client, store, binding, artifacts, _, _ = setup
     legacy = enable(monkeypatch, legacy_dependencies, speech=True)
     monkeypatch.setenv('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', 'true')
@@ -345,3 +346,29 @@ def test_paid_epoch_attributes_provider_audio_to_modulate(setup, monkeypatch, le
     )
     meter.assert_called_once_with('sync', 'accepted', 'modulate', 5, False)
     alternate.assert_called_once()
+
+
+@pytest.mark.parametrize('access', ['capped', 'byok', 'reviewer', 'paid', 'kill_off'])
+def test_default_on_speech_redrive_does_not_buy_unfunded_recovery(setup, monkeypatch, legacy_dependencies, access):
+    from types import SimpleNamespace
+    from utils import stt_cap_dispatch as cap
+
+    client, store, binding, artifacts, legacy, alternate, old = enabled(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false' if access == 'kill_off' else 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    if access == 'byok':
+        row(client)['policy'] = {'provider_reason': 'byok'}
+    resolver = Mock(
+        return_value=SimpleNamespace(managed=access in {'reviewer', 'paid'}, reason='plan_allowance_exhausted')
+    )
+    monkeypatch.setattr(cap, 'funded_allowance', resolver)
+    result = redrive_one(
+        store, artifacts, 'bad', binding.owner_id, 'plan', old, server_flags=SERVING_ENV, clock=lambda: 100
+    )
+    assert alternate.call_count == (0 if access == 'capped' else 1)
+    legacy.assert_not_called()
+    if access == 'capped':
+        assert result == 'allowance_held' and row(client)['speech_redrive']['state'] == 'prepared'
+    if access in {'byok', 'kill_off'}:
+        resolver.assert_not_called()

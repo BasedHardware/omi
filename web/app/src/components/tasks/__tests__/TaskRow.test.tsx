@@ -31,7 +31,8 @@ describe('TaskRow', () => {
     );
 
     await user.hover(screen.getByText('Preview task'));
-    await user.dblClick(screen.getByTitle('Snooze 1 day'));
+    // Motion dispatches onHoverStart after rendering, beyond user.hover's events.
+    await user.dblClick(await screen.findByTitle('Snooze 1 day'));
 
     expect(onSnooze).toHaveBeenCalledWith('task-1', 1);
     expect(onEnterSelectionMode).not.toHaveBeenCalled();

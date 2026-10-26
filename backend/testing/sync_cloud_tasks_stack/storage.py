@@ -7,9 +7,14 @@ module replaces only the cloud client leaf before those helpers import it.
 from __future__ import annotations
 
 import os
+import base64
+import hashlib
+import json
 import shutil
+from io import BytesIO
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
+from urllib.parse import urlsplit
 
 from google.api_core.exceptions import PreconditionFailed
 from google.cloud.exceptions import NotFound as BlobNotFound
@@ -60,6 +65,7 @@ class LocalBlob:
         self.content_type: str | None = None
         self.chunk_size: int | None = None
         self._pinned_generation = generation
+        self.metageneration = 1
 
     @property
     def generation(self) -> int | None:
@@ -71,6 +77,21 @@ class LocalBlob:
     @property
     def size(self) -> int | None:
         return self.path.stat().st_size if self.path.is_file() else None
+
+    @property
+    def md5_hash(self) -> str:
+        return base64.b64encode(hashlib.md5(self.path.read_bytes()).digest()).decode()
+
+    @property
+    def metadata_path(self) -> Path:
+        key = hashlib.sha256(f'{self.bucket.name}/{self.name}'.encode()).hexdigest()
+        return storage_dir().parent / 'storage-metadata' / f'{key}.json'
+
+    def _save_metadata(self) -> None:
+        self.metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        pending = self.metadata_path.with_suffix(f'.{os.getpid()}.tmp')
+        pending.write_text(json.dumps(self.metadata or {}))
+        pending.replace(self.metadata_path)
 
     def _check_generation(self, if_generation_match: int | None) -> None:
         current = self.generation
@@ -102,6 +123,8 @@ class LocalBlob:
         if not self.exists():
             raise BlobNotFound(self.name)
         self._check_generation(if_generation_match)
+        if self.metadata_path.exists():
+            self.metadata = json.loads(self.metadata_path.read_text())
 
     def upload_from_file(
         self,
@@ -131,6 +154,7 @@ class LocalBlob:
         finally:
             staged.unlink(missing_ok=True)
         self.content_type = content_type
+        self._save_metadata()
         write_event('storage', {'event': 'blob_uploaded', 'bucket': self.bucket.name, 'bytes': len(payload)})
 
     def upload_from_filename(self, filename: str, *_args: Any, **_kwargs: Any) -> None:
@@ -154,12 +178,8 @@ class LocalBlob:
     def upload_from_string(
         self, data: bytes | str, content_type: str | None = None, *_args: Any, **_kwargs: Any
     ) -> None:
-        destination = self.path
-        destination.parent.mkdir(parents=True, exist_ok=True)
         payload = data.encode() if isinstance(data, str) else data
-        destination.write_bytes(payload)
-        self.content_type = content_type
-        write_event('storage', {'event': 'blob_uploaded', 'bucket': self.bucket.name, 'bytes': len(payload)})
+        self.upload_from_file(BytesIO(payload), content_type=content_type, **_kwargs)
 
     def download_as_bytes(self, *_args: Any, if_generation_match: int | None = None, **_kwargs: Any) -> bytes:
         if not self.exists():
@@ -174,18 +194,20 @@ class LocalBlob:
             self._check_generation(if_generation_match)
         if self.path.exists():
             self.path.unlink()
+        self.metadata_path.unlink(missing_ok=True)
         write_event('storage', {'event': 'blob_deleted', 'bucket': self.bucket.name})
 
     def generate_signed_url(self, *_args: Any, **_kwargs: Any) -> str:
         # The deterministic STT leaf consumes this opaque local-only value.
         job_id = PurePosixPath(self.name).parent.name
-        return f'sync-stack://staged/{job_id}' if job_id else 'sync-stack://staged'
+        token = base64.urlsafe_b64encode(json.dumps([self.bucket.name, self.name]).encode()).decode()
+        return f'sync-stack://staged/{token}/{job_id}'
 
     def make_public(self, *_args: Any, **_kwargs: Any) -> None:
         return None
 
     def patch(self, *_args: Any, **_kwargs: Any) -> None:
-        return None
+        self._save_metadata()
 
 
 class LocalBucket:
@@ -220,6 +242,18 @@ class LocalStorageClient:
 
     def get_bucket(self, name: str) -> LocalBucket:
         return self.bucket(name)
+
+
+def read_signed_url(url: str) -> bytes:
+    """Replace the external signed-URL HTTP download with the same local blob."""
+    parsed = urlsplit(url)
+    parts = parsed.path.strip('/').split('/')
+    if parsed.scheme != 'sync-stack' or parsed.netloc != 'staged' or len(parts) != 2:
+        raise ValueError('unknown local signed URL')
+    bucket, name = json.loads(base64.urlsafe_b64decode(parts[0]).decode())
+    if not bucket or PurePosixPath(bucket).name != bucket or bucket in {'.', '..'}:
+        raise ValueError('unsafe local bucket')
+    return LocalStorageClient().bucket(bucket).blob(name).download_as_bytes()
 
 
 def patch_google_storage() -> None:

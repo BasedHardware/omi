@@ -51,7 +51,8 @@ LiveCaptureSummary? summarizeLiveCapture(AppLocalizations l10n, CaptureProvider 
   final liveSource = provider.liveCaptureSource;
   final isDeviceRecording = liveSource != null && liveSource != 'phone';
   // Keep automatic repair and legitimate pendant sleep quiet: a restored link alone is not Listening.
-  final unverified = isDeviceRecording && !provider.isPaused && !provider.pendantCaptureVerified;
+  final noAudio = isDeviceRecording && !provider.isPaused && provider.pendantCaptureActionRequired;
+  final unverified = isDeviceRecording && !provider.isPaused && !provider.pendantCaptureVerified && !noAudio;
   final prefs = SharedPreferencesUtil();
 
   if ((isDeviceRecording && prefs.batchModeEnabled) ||
@@ -91,6 +92,8 @@ LiveCaptureSummary? summarizeLiveCapture(AppLocalizations l10n, CaptureProvider 
   final displayState = liveCaptureDisplayState(
     audioInterrupted: micTaken,
     paused: isPaused,
+    pendantNoAudio: noAudio,
+    pendantUnverified: unverified,
     transcriptionUnavailable: hasTerminalTranscriptionFailure,
     bufferingFor: provider.customSttBufferingDuration,
     reconnecting: interruption == CaptureInterruption.recovering,

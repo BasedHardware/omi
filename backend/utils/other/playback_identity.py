@@ -11,23 +11,70 @@ def source_fingerprint(chunks: list[dict[str, Any]]) -> str | None:
     if not chunks or any(not c.get('path') or not c.get('generation') for c in chunks):
         return None
     manifest = [
-        {key: c.get(key) for key in ('bucket', 'path', 'generation', 'md5_hash', 'crc32c', 'timestamp', 'size', 'span')}
+        {
+            **{
+                key: c.get(key)
+                for key in ('bucket', 'path', 'generation', 'md5_hash', 'crc32c', 'timestamp', 'size', 'span')
+            },
+            **({'raw_source_start': c['raw_source_start']} if 'raw_source_start' in c else {}),
+        }
         for c in chunks
     ]
     payload = {'format': 'mp3-48k-16khz-gapfill-v1', 'chunks': manifest}
     return hashlib.sha256(json.dumps(payload, sort_keys=True, allow_nan=False).encode()).hexdigest()
 
 
+_RAW_FRAGMENT_MARKERS = ('raw_source_start', 'pcm_sha256', 'raw_end')
+
+
+def resolve_sources(audio_file: dict[str, Any], chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Resolve current entries only when the complete immutable manifest matches."""
+    expected = audio_file.get('source_fingerprint')
+    timestamps = set(audio_file['chunk_timestamps'])
+    selected = [chunk for chunk in chunks if chunk['timestamp'] in timestamps]
+    if not expected or source_fingerprint(selected) == expected:
+        return selected
+    aliases = {
+        chunk['legacy_timestamp']
+        for chunk in chunks
+        if chunk.get('legacy_timestamp') in timestamps and chunk['timestamp'] not in timestamps
+    }
+    compatible = []
+    for chunk in chunks:
+        if chunk.get('legacy_timestamp') in aliases:
+            compatible.append(({**chunk, 'timestamp': chunk['legacy_timestamp']}, chunk))
+        elif chunk['timestamp'] in timestamps and chunk['timestamp'] not in aliases:
+            compatible.append((chunk, chunk))
+    compatible.sort(key=lambda pair: (pair[0]['timestamp'], pair[0]['path']))
+    # Only the lookup clock changes in this compatibility view. Generations,
+    # checksums, paths, spans and raw selectors must still match the old hash.
+    if source_fingerprint([view for view, _ in compatible]) == expected:
+        return [current for _, current in compatible]
+    # Stamps created before raw-fragment projection hash the encoded manifest
+    # alone, under filename keys; raw pack fragments only add coverage and carry
+    # no md5/crc identity, so they are not part of those stamps. Re-hash the
+    # encoded-only view before refusing, or every pre-fragment audio_file fails
+    # validation forever once one raw fragment appears in the listing.
+    legacy = []
+    for chunk in chunks:
+        if any(marker in chunk for marker in _RAW_FRAGMENT_MARKERS):
+            continue
+        view = dict(chunk)
+        if 'legacy_timestamp' in view:
+            view['timestamp'] = view.pop('legacy_timestamp')
+        if view['timestamp'] in timestamps:
+            legacy.append((view, chunk))
+    legacy.sort(key=lambda pair: (pair[0]['timestamp'], pair[0]['path']))
+    if source_fingerprint([view for view, _ in legacy]) == expected:
+        return [current for _, current in legacy]
+    raise RuntimeError('playback source manifest changed')
+
+
 def validate_sources(audio_files: list[dict[str, Any]], chunks: list[dict[str, Any]]) -> None:
     """Refuse changed sources under a stamped identity, including mid-build overwrite."""
     for af in audio_files:
-        expected = af.get('source_fingerprint')
-        if not expected:
-            continue
-        timestamps = set(af['chunk_timestamps'])
-        selected = [chunk for chunk in chunks if chunk['timestamp'] in timestamps]
-        if source_fingerprint(selected) != expected:
-            raise RuntimeError('playback source manifest changed')
+        if af.get('source_fingerprint'):
+            resolve_sources(af, chunks)
 
 
 def retain_aliases(audio_files: list[dict[str, Any]], previous: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -40,7 +87,24 @@ def retain_aliases(audio_files: list[dict[str, Any]], previous: list[dict[str, A
     result = [dict(af) for af in audio_files]
     for old in previous:
         timestamps = set(old.get('chunk_timestamps') or [])
-        matches = [af for af in result if timestamps and timestamps <= set(af.get('chunk_timestamps') or [])]
+
+        def covers(af: dict[str, Any]) -> bool:
+            current = set(af.get('chunk_timestamps') or [])
+            if not timestamps or not current:
+                return False
+            if timestamps <= current:
+                return True
+            if not timestamps <= current | {round(stamp, 3) for stamp in current}:
+                return False
+            # A rounded handle must cover the entire old part, not merely a
+            # nearby tiny raw fragment. Ambiguous/split groups retain no alias.
+            if old.get('duration') is None or af.get('duration') is None:
+                return False
+            return min(current) <= min(timestamps) + 0.001 and (
+                min(current) + af['duration'] >= min(timestamps) + old['duration'] - 0.001
+            )
+
+        matches = [af for af in result if covers(af)]
         if len(matches) != 1:
             continue
         target = matches[0]

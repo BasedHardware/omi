@@ -77,6 +77,12 @@ def create_subscription_checkout_session(
                     'sub_type': 'unlimited',
                 }
             },
+            # Charge in the price's own currency, the one every paywall shows. With the
+            # account's Adaptive Pricing on, a non-US buyer who saw a USD price card was
+            # charged a converted local-currency amount; Google Play rejected Android
+            # release 1504 for that mismatch. It also keeps a promotion code's
+            # minimum_amount evaluated against the USD-authored price (issue #23299).
+            'adaptive_pricing': {'enabled': False},
         }
 
         if trial_period_days:

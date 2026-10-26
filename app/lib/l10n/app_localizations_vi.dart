@@ -4432,6 +4432,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get continueText => 'Tiếp tục';
 
   @override
+  String get checkoutExistingSubscription => 'Bạn đã có gói đăng ký. Hãy quản lý gói hiện tại thay vì bắt đầu gói mới.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Hãy đăng ký lại trước để đổi gói.';
 
   @override
@@ -8599,6 +8602,9 @@ class AppLocalizationsVi extends AppLocalizations {
       'Không thể chép lời — việc ghi vẫn tiếp tục và âm thanh của bạn được lưu.';
 
   @override
+  String get captureNoAudioFromPendant => 'Không có âm thanh từ mặt dây';
+
+  @override
   String get capturing => 'Đang ghi';
 
   @override
@@ -11086,6 +11092,12 @@ class AppLocalizationsVi extends AppLocalizations {
       'Kết nối Bluetooth với Omi của bạn đã bị gián đoạn nên âm thanh không tới ứng dụng. Omi vẫn tiếp tục ghi âm trên thiết bị và sẽ đồng bộ khi kết nối được khôi phục. Thử lại sẽ kết nối lại đường truyền; nếu vẫn tiếp tục thất bại, hãy kiểm tra thiết bị của bạn trong Cài đặt > Thiết bị.';
 
   @override
+  String get captureConnecting => 'Đang kết nối…';
+
+  @override
+  String get captureNoAudioDetail => 'Mặt dây đang được kết nối, nhưng không có âm thanh nào tới điện thoại của bạn';
+
+  @override
   String get captureIngressNeedsReconnect => 'Âm thanh không đến ứng dụng — kết nối lại Omi của bạn';
 
   @override
@@ -11114,13 +11126,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Bộ nhớ gần đầy';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi sẽ tự kết nối lại';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12247,12 +12252,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Kiểm tra kết nối';
-
-  @override
-  String get forYou => 'Dành Cho Bạn';
-
-  @override
-  String get stopThese => 'Dừng Loại Này';
 
   @override
   String get dismiss => 'Ẩn';
@@ -14436,6 +14435,25 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Ghi chú trực tiếp chưa cập nhật. Tạm thời hãy xem bản chép lời.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Đang ghi âm · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Phiên trước';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Đoạn đang chờ: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Mở phiên trước';
+
+  @override
   String get episodeNotesSoon => 'Ghi chú xuất hiện sau vài phút đầu trò chuyện.';
 
   @override
@@ -14573,4 +14591,41 @@ class AppLocalizationsVi extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Xong. Giảm $percent% trong $months tháng tới.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Những người khác';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Xong';
+
+  @override
+  String get openLoopAnswerRemind => 'Nhắc tôi sau';
+
+  @override
+  String get openLoopAnswerDrop => 'Bỏ qua';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi sẽ tự kết nối lại';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.';
 }

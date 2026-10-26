@@ -1143,6 +1143,7 @@ Stream<String> makeMultipartStreamingApiCall({
   Map<String, String> fields = const {},
   String fileFieldName = 'files',
   ApiStreamingSeams? seams,
+  Future<void>? abort,
 }) async* {
   // Setup-deadline abort: without this, the timeout below abandons the wait
   // but the POST keeps running and can still reach the server — a retry then
@@ -1177,7 +1178,9 @@ Stream<String> makeMultipartStreamingApiCall({
           fields: fields,
           fileFieldName: fileFieldName,
           method: 'POST',
-          abortTrigger: setupAbort.future,
+          // A caller's abort (for example a total response deadline) also ends the
+          // request mid-body, so a stalled stream cannot keep the turn running.
+          abortTrigger: abort == null ? setupAbort.future : Future.any([setupAbort.future, abort]),
         );
 
     var response = await send(await buildRequest()).timeout(ApiClient.streamSetupTimeout);

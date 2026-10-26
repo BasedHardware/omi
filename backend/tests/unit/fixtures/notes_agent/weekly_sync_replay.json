@@ -1,5 +1,5 @@
 {
-  "description": "Synthetic weekly sync (no real user data). The owner and one remote participant whose name appears only on the call tile; the model looks at the screenshot, then submits.",
+  "description": "Synthetic weekly sync (no real user data). The owner and one remote participant have resolved voice bindings; the model checks the call tile and spelling, then submits.",
   "owner_name": "Riley Tan",
   "frame": {
     "frame_id": "frame-tile-1",
@@ -72,7 +72,7 @@
             "participants": [
               {
                 "name": "Maya Okafor",
-                "speaker": "1",
+                "speaker": "c1",
                 "evidence_kind": "screen",
                 "evidence": "Zoom tile in screenshot frame-tile-1"
               }

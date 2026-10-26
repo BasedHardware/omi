@@ -892,8 +892,8 @@ async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake,
     monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,sync,batch')
     monkeypatch.setattr(cap_policy, '_BATCH_LANE_READY', True)
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
-    gate = Mock(return_value=False)  # the owner's keyless allowance is exhausted
-    monkeypatch.setattr(admission, 'sync_allowed', gate)
+    gate = Mock(return_value=(False, 'allowance_exhausted'))  # the owner's keyless allowance is exhausted
+    monkeypatch.setattr(admission, 'sync_admission', gate)
     monkeypatch.setattr(admission, 'get_hard_restriction_status', Mock(return_value=(False, None)))
     monkeypatch.setattr(admission, 'is_daily_audio_ceiling_exceeded', Mock(return_value=False))
     monkeypatch.setattr(admission, 'reserve_backfill_speech', Mock(return_value=type('R', (), {'allowed': True})()))
@@ -902,7 +902,11 @@ async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake,
         assert receipt['allowed'] == [lease.item.segment_id]
         gate.assert_not_called()
     else:
-        assert receipt == {'allowed': [], 'retry_after': {lease.item.segment_id: 60}}
+        assert receipt == {
+            'allowed': [],
+            'retry_after': {lease.item.segment_id: 60},
+            'held_reason': {lease.item.segment_id: 'allowance_exhausted'},
+        }
 
 
 # --- a legacy_final_pass_v1 conversation in draining/dark (M3 review; lead ruling b209a5) ---------
@@ -970,3 +974,40 @@ async def test_final_pass_owner_keeps_the_legacy_receipt_at_on(dark_intake, monk
     monkeypatch.setattr(final_pass_rehome, 'upload_rehome', lambda *a, **k: pytest.fail('re-home ran at on'))
     assert await dark_intake.intake.accept_upload(**{**UPLOAD, 'conversation_id': 'record'}) is None
     assert dark_intake.calls == []
+
+
+@pytest.mark.parametrize('access', ['capped', 'byok', 'reviewer', 'paid', 'kill_off'])
+def test_default_provider_gate_uses_batch_scope_without_vendor_spend(world, monkeypatch, access):
+    from types import SimpleNamespace
+    from utils import stt_cap_dispatch as cap
+
+    _, store = world
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false' if access == 'kill_off' else 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    route = SttRoute('provider', 'byok', 'modulate', 'ja') if access == 'byok' else JA
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', route)
+    resolver = Mock(
+        return_value=SimpleNamespace(managed=access in {'reviewer', 'paid'}, reason='plan_allowance_exhausted')
+    )
+    monkeypatch.setattr(cap, 'funded_allowance', resolver)
+    artifacts, vendor = Artifacts(), Vendor()
+    runner = ProviderSttStage(store, artifacts, stt=vendor, inspect=lambda *_: SPEECH, clock=lambda: 200)
+    result = runner.run('p1')
+    assert vendor.calls == (0 if access == 'capped' else 1)
+    if access == 'capped':
+        assert result.outcome == 'deferred' and job(store, 'p1')['state'] == PENDING
+        assert artifacts.fetches == 0
+    if access in {'byok', 'kill_off'}:
+        resolver.assert_not_called()
+
+
+def test_allowance_exhausted_during_inspection_leaves_vendor_intent_unspent(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    vendor = Vendor()
+    allowed = Mock(side_effect=[True, False])
+    result = stage(store, Artifacts(), vendor, allowed=allowed).run('p1')
+    assert result.outcome == 'deferred' and vendor.calls == 0
+    assert job(store, 'p1')['state'] == PENDING
+    assert 'provider_intent' not in job(store, 'p1')

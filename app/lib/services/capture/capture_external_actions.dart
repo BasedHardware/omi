@@ -1,3 +1,4 @@
+import 'package:omi/models/voice_question_result.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -10,7 +11,7 @@ abstract interface class CaptureExternalActions {
 
   String? get topConversationId;
 
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionResult> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
@@ -66,13 +67,14 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
   String? get topConversationId => null;
 
   @override
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionResult> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
     required BleAudioCodec codec,
     required bool playResponseAudio,
-  }) async {}
+  }) async =>
+      const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable);
 
   @override
   void addProcessingConversation(ServerConversation conversation) {}

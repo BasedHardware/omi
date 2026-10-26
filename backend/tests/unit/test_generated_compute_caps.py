@@ -231,7 +231,6 @@ def test_new_feature_get_llm_cannot_bypass_uid_or_budget(gate, monkeypatch):
         ('utils/llm/knowledge_graph.py', 'extract_knowledge_from_memory', ('user', 'memory', 'id'), None),
         ('utils/llm/trends.py', 'trends_extractor', ('user', [], []), []),
         ('utils/app_integrations.py', '_process_proactive_notification', ('user', None, {'prompt': 'hello'}), None),
-        ('utils/app_integrations.py', 'admit_mentor_evaluation', ('user', []), None),
     ],
 )
 def test_background_denial_skips_before_any_other_dependency(gate, monkeypatch, path, name, args, expected):

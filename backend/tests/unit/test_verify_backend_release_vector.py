@@ -969,7 +969,7 @@ def test_retry_derives_a_new_vector_and_accepts_only_the_converged_attempt() -> 
     assert verifier.evaluate(retry, _documents(retry)) == []
 
 
-def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence() -> None:
+def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence(tmp_path) -> None:
     """Regression for the missing positional ``errors`` argument.
 
     ``main()`` builds ``errors`` via ``evaluate()`` and then renders
@@ -979,16 +979,13 @@ def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence(
     positional argument: 'errors'`` before writing any evidence. Both edited
     deploy workflows hit this path.
     """
-    import tempfile
-
     expectation = _expectation()
     documents = _documents(expectation)
 
     monkeypatch_collect = pytest.MonkeyPatch()
     monkeypatch_collect.setattr(verifier, 'collect_documents', lambda commands: documents)
 
-    with tempfile.NamedTemporaryFile('r+', suffix='.json', delete=False) as handle:
-        evidence_path = Path(handle.name)
+    evidence_path = tmp_path / 'evidence.json'
 
     argv = [
         'verify_backend_release_vector.py',

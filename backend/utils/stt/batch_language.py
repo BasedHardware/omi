@@ -4,7 +4,7 @@ API contract: https://docs.modulate.ai/api-reference/language-detection/batch
 No recognizer text participates in the decision. Errors/uncertainty stay multilingual.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from io import BytesIO
 import math
 import os
@@ -38,6 +38,17 @@ MAX_PROBE_SECONDS = 30
 MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024
 MIN_CONFIDENCE = MIN_AUDIO_LID_CONFIDENCE
 LID_URL = 'https://platform.modulate.ai/api/velma-2-language-detection-batch'
+
+
+def _finite_number(value) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 DETECTIONS = Counter(
     'omi_batch_pipeline_language_detection_total', 'Independent audio LID routing', ['detected_language', 'decision']
 )
@@ -56,12 +67,15 @@ class LanguageDecision:
 
     @property
     def parakeet_safe(self):
+        confidence = self.confidence
+        if not _finite_number(confidence) or not 0 <= confidence <= 1:
+            return False
         if self.evidence == 'self_lid':
             # confidence is P(supported) over the Parakeet-25 set, not a top-1 score.
             floor = self_lid_confidence_floor(self.probe_seconds)
-            return floor is not None and language_class(self.language) == 'supported' and floor <= self.confidence <= 1
+            return floor is not None and language_class(self.language) == 'supported' and confidence >= floor
         minimum = audio_lid_confidence_floor(self.probe_seconds) if self.evidence == 'audio_lid' else MIN_CONFIDENCE
-        return language_class(self.language) == 'supported' and minimum <= self.confidence <= 1
+        return language_class(self.language) == 'supported' and confidence >= minimum
 
 
 def probe_wav(audio: bytes, *, sample_rate=16000, channels=1, encoding=None) -> tuple[bytes, float]:
@@ -138,9 +152,7 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
             or len(code) != 2
             or not code.isascii()
             or not code.isalpha()
-            or isinstance(confidence, bool)
-            or not isinstance(confidence, (int, float))
-            or not math.isfinite(confidence)
+            or not _finite_number(confidence)
             or not 0 <= confidence <= 1
         ):
             outcome = 'invalid_response'
@@ -172,19 +184,50 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
 
 
 def _self_gate(audio: bytes, surface: str, cohort_key, audio_options) -> tuple[bool, language_gate.SelfVerdict | None]:
-    """(enforced, verdict). Batch intake is shadow-only until its GPU worker accepts self_lid evidence."""
+    """(enforced, verdict), using the shared percentage cohort on every intake surface."""
     try:
-        probe, _ = probe_wav(audio, **audio_options)
+        probe, probe_seconds = probe_wav(audio, **audio_options)
     except Exception:
         return False, None
-    enforced = surface != 'batch' and language_gate.enforced_for(cohort_key, probe)
+    enforced = language_gate.enforced_for(cohort_key, probe)
     if not enforced and not language_gate_shadow_enabled():
         return False, None
-    return enforced, language_gate.self_detect(probe, surface=surface)
+    verdict = language_gate.self_detect(probe, surface=surface)
+    if verdict is not None:
+        reported_seconds = verdict.audio_seconds
+        # The model service's duration must describe the bounded bytes sent by
+        # this process. Use our decoded measurement for the short-clip floor.
+        if not _finite_number(reported_seconds) or abs(reported_seconds - probe_seconds) > 0.1:
+            verdict = None
+        else:
+            verdict = replace(verdict, audio_seconds=probe_seconds)
+    return enforced, verdict
 
 
 def _self_decision(verdict: language_gate.SelfVerdict) -> LanguageDecision:
     return LanguageDecision(verdict.language, verdict.p_supported, 'self_lid', verdict.audio_seconds)
+
+
+def compare_shadow_pair(audio: bytes, *, before_call, surface='batch_shadow') -> bool:
+    """Compare identical bounded audio without consulting enforcement or selecting a route.
+
+    Each call needs a fresh privacy/funding check. A caller must already hold a
+    durable, at-most-once fleet probe reservation. No recognizer is invoked.
+    """
+    if not language_gate_shadow_enabled():
+        return False
+    probe, seconds = probe_wav(audio)
+    if not before_call():
+        return False
+    verdict = language_gate.self_detect(probe, surface=surface)
+    if verdict is not None:
+        if not _finite_number(verdict.audio_seconds) or abs(verdict.audio_seconds - seconds) > 0.1:
+            verdict = None
+        else:
+            verdict = replace(verdict, audio_seconds=seconds)
+    vendor = detect(probe, before_probe=before_call)
+    language_gate.record_shadow(surface, verdict, vendor)
+    return verdict is not None and vendor.evidence == 'audio_lid' and vendor.confidence >= 0.9
 
 
 def resolve_language(

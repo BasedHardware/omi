@@ -138,6 +138,7 @@ def test_invalid_failure_codes_cannot_persist_private_error_messages():
 
 @pytest.mark.asyncio
 async def test_kill_switch_restores_retry_with_backoff(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'false')
 
     def broken(_):

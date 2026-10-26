@@ -69,7 +69,7 @@ class _TTLReads:
         if self.discovery and key.endswith(':dream-agent') and not value:
             _dream_cohort_degraded('unavailable' if value is None else 'empty')
         with self.lock:
-            entry.expires = time.monotonic() + TTL_SECONDS
+            entry.expires = min(time.monotonic() + TTL_SECONDS, getattr(value, 'deadline', float('inf')))
             entry.future.set_result(value)
 
     def request(self, key: str, *, background: bool) -> Future:

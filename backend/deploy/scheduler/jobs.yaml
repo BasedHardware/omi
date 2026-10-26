@@ -82,25 +82,6 @@ environments:
           min_backoff: 5s
         attempt_deadline: 180s
         owner: backend/routers/enrichment.py
-      - name: memory-maintenance-hourly
-        region: us-central1
-        schedule: "0 * * * *"
-        time_zone: Etc/UTC
-        state: PAUSED
-        target:
-          type: http
-          uri: https://run.googleapis.com/v2/projects/based-hardware-dev/locations/us-central1/jobs/memory-maintenance-job:run
-          method: POST
-          oauth:
-            service_account: memory-maintenance-scheduler@based-hardware-dev.iam.gserviceaccount.com
-            scope: https://www.googleapis.com/auth/cloud-platform
-        retry:
-          max_backoff: 3600s
-          max_doublings: 5
-          max_retry: 0s
-          min_backoff: 5s
-        attempt_deadline: 180s
-        owner: .github/workflows/gcp_memory_maintenance_job_auto_dev.yml
       - name: frame-request-retention-hourly
         lifecycle: planned
         region: us-central1

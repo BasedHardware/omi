@@ -4390,6 +4390,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get continueText => 'המשך';
 
   @override
+  String get checkoutExistingSubscription => 'כבר יש לך מנוי. אפשר לנהל את המנוי הקיים במקום להתחיל מנוי חדש.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'הירשמו מחדש קודם כדי לשנות תוכנית.';
 
   @override
@@ -8527,6 +8530,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transcriptionUnavailableRecordingSaved => 'התמלול אינו זמין — ההקלטה ממשיכה והאודיו שלך נשמר.';
 
   @override
+  String get captureNoAudioFromPendant => 'אין שמע מהתליון';
+
+  @override
   String get capturing => 'מתבצעת הקלטה';
 
   @override
@@ -11000,6 +11006,12 @@ class AppLocalizationsHe extends AppLocalizations {
       'חיבור ה-Bluetooth ל-Omi שלך נקטע, לכן השמע לא מגיע לאפליקציה. Omi ממשיך להקליט במכשיר ויסתנכרן ברגע שהחיבור יחזור. ניסיון חוזר מחבר מחדש את הקישור; אם זה ממשיך להיכשל, בדוק את המכשיר בהגדרות > מכשיר.';
 
   @override
+  String get captureConnecting => 'מתחבר…';
+
+  @override
+  String get captureNoAudioDetail => 'התליון מחובר, אבל שמע לא מגיע לטלפון שלך';
+
+  @override
   String get captureIngressNeedsReconnect => 'האודיו לא מגיע לאפליקציה — חבר מחדש את ה-Omi';
 
   @override
@@ -11028,13 +11040,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'האחסון כמעט מלא';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi יתחבר מחדש מעצמו';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12159,12 +12164,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'בדקו את החיבור';
-
-  @override
-  String get forYou => 'בשבילך';
-
-  @override
-  String get stopThese => 'הפסקת אלה';
 
   @override
   String get dismiss => 'סגירה';
@@ -14333,6 +14332,25 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'ההערות בזמן אמת אינן מתעדכנות. בינתיים אפשר לצפות בתמלול.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'הקלטה · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'הפרק הקודם';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'מקטעים ממתינים: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'פתח את הפרק הקודם';
+
+  @override
   String get episodeNotesSoon => 'ההערות יופיעו אחרי הדקות הראשונות של השיחה.';
 
   @override
@@ -14469,4 +14487,41 @@ class AppLocalizationsHe extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'בוצע. $percent% הנחה ב-$months החודשים הבאים.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'אחרים';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'בוצע';
+
+  @override
+  String get openLoopAnswerRemind => 'הזכר לי מאוחר יותר';
+
+  @override
+  String get openLoopAnswerDrop => 'ותר על זה';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi יתחבר מחדש מעצמו';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.';
 }
