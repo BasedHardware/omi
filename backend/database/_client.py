@@ -603,9 +603,8 @@ def delete_collection_recursive(collection_ref: Any, *, client: Any, batch_size:
         for doc in docs:
             batch.delete(doc.reference)
         if (
-            collection_ref.id == 'people'
-            and collection_ref.parent is not None
-            and collection_ref.parent.parent.id == 'users'
+            getattr(collection_ref, 'id', None) == 'people'
+            and getattr(getattr(getattr(collection_ref, 'parent', None), 'parent', None), 'id', None) == 'users'
         ):
             bump_people_generation(batch, docs[0].reference)
         batch.commit()
