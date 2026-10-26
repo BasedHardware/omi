@@ -14,6 +14,7 @@ enum ConversationSearchResultFilter {
     starredOnly: Bool,
     date: Date?,
     folderId: String?,
+    includeDiscarded: Bool = false,
     calendar: Calendar = .current
   ) -> [ServerConversation] {
     let dateRange: (start: Date, end: Date)? = date.flatMap { selectedDate in
@@ -23,6 +24,7 @@ enum ConversationSearchResultFilter {
     }
 
     return conversations.filter { conversation in
+      if conversation.deleted || (!includeDiscarded && conversation.discarded) { return false }
       if starredOnly && !conversation.starred { return false }
       if let folderId, conversation.folderId != folderId { return false }
       if let dateRange {
@@ -228,6 +230,9 @@ struct ConversationsPage: View {
         guard Self.shouldReplaceSelectedConversation(selectedConversation, with: refreshed) else { return }
         self.selectedConversation = refreshed
       }
+      .onReceive(appState.conversationRestored) { restored in
+        searchResults = searchResults.map { $0.id == restored.id ? restored : $0 }
+      }
       .dismissableSheet(isPresented: $showCreateFolderSheet) {
         FolderFormSheet(folder: nil, onDismiss: { showCreateFolderSheet = false })
           .environmentObject(appState)
@@ -393,6 +398,10 @@ struct ConversationsPage: View {
       if !isLive {
         isLiveTranscriptExpanded = false
       }
+    }
+    .onChange(of: appState.showDiscardedConversations) { _, _ in
+      searchResults = []
+      if !searchQuery.isEmpty { performSearch(query: searchQuery) }
     }
     // A row that becomes hidden behind its event's row must not stay selected for
     // a merge or delete the user can no longer see.
@@ -630,7 +639,8 @@ struct ConversationsPage: View {
       searchResults,
       starredOnly: appState.showStarredOnly,
       date: appState.selectedDateFilter,
-      folderId: appState.selectedFolderId
+      folderId: appState.selectedFolderId,
+      includeDiscarded: appState.showDiscardedConversations
     )
   }
 
@@ -931,6 +941,13 @@ struct ConversationsPage: View {
 
       Section("Refine") {
         Button {
+          Task { await appState.toggleDiscardedConversations() }
+        } label: {
+          Text(appState.showDiscardedConversations ? "Hide Discarded" : "Show Discarded")
+        }
+        .accessibilityIdentifier("conversations-show-discarded")
+
+        Button {
           Task {
             isFilteringStarred = true
             await appState.toggleStarredFilter()
@@ -983,7 +1000,7 @@ struct ConversationsPage: View {
     .popover(isPresented: $showDatePicker) {
       datePickerPopover
     }
-    .help("Filter conversations by collection, starred status, or date")
+    .help("Filter conversations by collection, starred status, date, or show discarded")
     .accessibilityIdentifier("conversations-filter-menu")
   }
 
@@ -1012,6 +1029,13 @@ struct ConversationsPage: View {
   private var activeConversationFilters: [PageActiveFilter] {
     var filters: [PageActiveFilter] = []
 
+    if appState.showDiscardedConversations {
+      filters.append(
+        PageActiveFilter(id: "discarded", title: "Including discarded") {
+          Task { await appState.toggleDiscardedConversations() }
+        })
+    }
+
     if appState.showStarredOnly {
       filters.append(
         PageActiveFilter(id: "starred", title: "Starred") {
@@ -1038,6 +1062,7 @@ struct ConversationsPage: View {
 
   private var activeConversationFilterCount: Int {
     (appState.showStarredOnly ? 1 : 0)
+      + (appState.showDiscardedConversations ? 1 : 0)
       + (appState.selectedDateFilter == nil ? 0 : 1)
       + (appState.selectedFolderId == nil ? 0 : 1)
   }
