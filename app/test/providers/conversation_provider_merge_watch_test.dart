@@ -305,6 +305,26 @@ void main() {
       expect(reopened.conversations, isEmpty);
     });
 
+    test('old backend cleanup preserves unrelated cached rows pending deletion for undo', () async {
+      SharedPreferencesUtil().cachedConversations = [row('a'), row('b'), row('unrelated-undo')];
+      final provider = ConversationProvider(
+        isSignedIn: () => true,
+        mergeConversationFetcher: (_) async => missing,
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      )
+        ..mergeProbeInterval = const Duration(milliseconds: 5)
+        ..conversations = [row('a'), row('b')]
+        ..memoriesToDelete = {'unrelated-undo': row('unrelated-undo')};
+      addTearDown(provider.dispose);
+      final settled = Completer<void>();
+      provider.addListener(() {
+        if (!settled.isCompleted && provider.conversations.isEmpty) settled.complete();
+      });
+      provider.watchMerge(['a', 'b']);
+      await settled.future.timeout(const Duration(seconds: 5));
+      expect((await SharedPreferencesUtil().loadCachedConversations()).map((c) => c.id), ['unrelated-undo']);
+    });
+
     test('another backend does not restore this backend journal', () async {
       final before = ConversationProvider(isSignedIn: () => true);
       before.watchMerge(['a', 'b'], targetId: 'target');

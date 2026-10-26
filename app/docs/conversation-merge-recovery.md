@@ -21,6 +21,8 @@ entry only after its cache write completes, so simultaneous completions preserve
 both targets across offline reopen. A failed transaction does not poison later
 work, and a late completion cannot restore a target already incorporated by a
 later merge. Target HTTP reads remain outside the persistence queue.
+Cache pruning removes only authoritative merged-away IDs; unrelated rows pending
+deletion remain available for Undo, including through the old-server fallback.
 
 Pending source/target IDs are journaled by account and API origin. Reopening or
 refreshing restores observation without submitting another merge. After the fast window, a source still marked merging remains observed at a

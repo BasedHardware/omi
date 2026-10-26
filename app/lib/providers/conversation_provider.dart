@@ -994,7 +994,8 @@ class ConversationProvider extends ChangeNotifier {
             SharedPreferencesUtil().uid != owner) {
           return;
         }
-        await SharedPreferencesUtil().cacheConversations(_filterPendingDeletes(cacheRows));
+        await SharedPreferencesUtil()
+            .cacheConversations(cacheRows.where((row) => !_mergedAwayConversationIds.contains(row.id)).toList());
       }).catchError((Object e) {
         Logger.debug('ConversationProvider: caching conversations failed: $e');
       }));
@@ -2327,7 +2328,8 @@ class ConversationProvider extends ChangeNotifier {
             conversations.removeWhere((row) => ids.contains(row.id));
             searchedConversations.removeWhere((row) => ids.contains(row.id));
             processingConversations.removeWhere((row) => ids.contains(row.id));
-            await SharedPreferencesUtil().cacheConversations(_filterPendingDeletes(cached));
+            await SharedPreferencesUtil()
+                .cacheConversations(cached.where((row) => !_mergedAwayConversationIds.contains(row.id)).toList());
           });
           if (!current()) return;
           final ok = await fetchConversations(restoreMergeWatches: false);
