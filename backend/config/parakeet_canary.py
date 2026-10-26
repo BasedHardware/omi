@@ -60,6 +60,7 @@ class ShapeRoute:
     drained: bool = False
     identity: str = ''
     counted: bool = False
+    measured: bool = False
     _lock: LockType = field(default_factory=threading.Lock, init=False, repr=False)
 
     @property
@@ -78,4 +79,5 @@ class ShapeRoute:
             self.selected = secrets.randbelow(1_000_000) < lease.get('percent', 0) * 10_000
         if self.selected and (not lease or lease.get('percent', 0) == 0 or lease.get('identity') != self.identity):
             self.drained = True
+        self.measured = bool(lease and lease.get('identity') == self.identity and not self.drained)
         return CANDIDATE if self.selected and not self.drained else None

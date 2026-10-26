@@ -73,6 +73,11 @@ def test_control_cannot_be_promoted_mid_session(lease):
     assert route.resolve() is None
     lease(percent=5)
     assert route.resolve() is None
+    assert route.measured
+    lease(identity='b' * 64)
+    assert route.resolve() is None
+    assert not route.measured  # old control sessions do not bias a new experiment
+    assert routing.ShapeRoute().resolve() == routing.CANDIDATE
 
 
 def test_replacement_threads_cannot_see_half_initialized_assignment(lease, monkeypatch):

@@ -904,7 +904,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                         first_text_seconds = max(0.0, time.monotonic() - self._first_speech_at)
                         # A leg that crossed a kill/identity boundary cannot
                         # populate the next experiment's fresh lookback.
-                        if not self._shape_route.drained:
+                        if self._routing_cohort is not None and self._shape_route.measured:
                             SHAPE_FIRST_TEXT.labels(arm=self._shape_route.arm).observe(first_text_seconds)
                         record_metric(
                             WINDOW_FIRST_TEXT,
@@ -1353,14 +1353,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             else None
         )
         shape_arm = 'canary' if self._shape_url else 'control'
-        if not self._shape_route.counted:
+        shape_measured = self._routing_cohort is not None and self._shape_route.measured
+        if shape_measured and not self._shape_route.counted:
             SHAPE_SESSIONS.labels(arm=self._shape_route.arm).inc()
             self._shape_route.counted = True
         started = time.monotonic()
         outcome = 'error'
         self._posts_since_anchor = min(1000000, self._posts_since_anchor + 1)
         self._post_in_flight = True
-        SHAPE_INFLIGHT.labels(arm=shape_arm).inc()
+        if shape_measured:
+            SHAPE_INFLIGHT.labels(arm=shape_arm).inc()
         try:
             if self.replica_scoped and self._shape_url is None:
                 try:
@@ -1415,9 +1417,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self.fail('provider_5xx')
             raise
         finally:
-            SHAPE_INFLIGHT.labels(arm=shape_arm).dec()
-            SHAPE_POST.labels(arm=shape_arm).observe(time.monotonic() - started)
-            SHAPE_OUTCOME.labels(arm=shape_arm, outcome=outcome).inc()
+            if shape_measured:
+                SHAPE_INFLIGHT.labels(arm=shape_arm).dec()
+                SHAPE_POST.labels(arm=shape_arm).observe(time.monotonic() - started)
+                SHAPE_OUTCOME.labels(arm=shape_arm, outcome=outcome).inc()
             WINDOW_POSTS.labels(outcome=outcome).inc()
             WINDOW_LATENCY.observe(time.monotonic() - started)
             WINDOW_CONTEXT.observe(dur)

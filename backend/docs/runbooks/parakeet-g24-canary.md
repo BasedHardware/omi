@@ -97,6 +97,9 @@ URL, and `expires`. Selection is random per managed listen session, pinned
 across its replacement window legs. No UID/session labels are exported.
 The assignment series counts each session once, not one replica out of eight.
 Existing control sessions never enter the experiment mid-session.
+Only managed sessions assigned under the current lease identity populate
+experiment histograms; unrelated and previous-revision control sessions are
+excluded so they cannot bias the randomized comparison.
 
 Every subsequent window checks the lease on an executor. Invalid/missing or
 expired config, 0%, or a changed identity permanently drains that session to
