@@ -1,10 +1,20 @@
-{{- if .Values.enabled }}
 {{- if ne .Release.Namespace .Values.namespace }}
 {{- fail "release namespace must equal values.namespace" }}
 {{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-state
+  namespace: {{ .Values.namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+# Retain the shell even on a first upgrade with enabled=false: old releases
+# have no keep annotation yet. Only the Job owns data and verdict annotations.
+{{- if .Values.enabled }}
 {{- if not (regexMatch "@sha256:[a-f0-9]{64}$" .Values.image) }}
 {{- fail "guard image must be pinned by sha256 digest" }}
 {{- end }}
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -74,16 +84,6 @@ data:
   floors.json: |
 {{ .Values.floorSchedule.hours | toJson | indent 4 }}
 {{- end }}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ .Release.Name }}-state
-  namespace: {{ .Values.namespace }}
-  annotations:
-    helm.sh/resource-policy: keep
-# Only the Job owns data and verdict annotations. An empty shell also lets
-# upgrades relinquish legacy data.state ownership without resetting live state.
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
@@ -182,21 +182,13 @@ spec:
               configMap:
                 name: {{ .Release.Name }}-script
 {{- end }}
-{{- if and .Values.enabled .Values.batch.enabled .Values.batch.cloudRunRollbackEnabled }}
+{{- if and .Values.batch.enabled .Values.batch.cloudRunRollbackEnabled }}
 {{- if or (ne .Values.namespace "prod-omi-backend") (ne .Release.Namespace .Values.namespace) }}
 {{- fail "batch rollback is approved only in prod-omi-backend" }}
 {{- end }}
 {{- if ne .Values.batch.gcpServiceAccount "omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com" }}
 {{- fail "batch rollback requires the dedicated approved GSA" }}
 {{- end }}
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: {{ .Release.Name }}-batch
-  namespace: {{ .Values.namespace }}
-  annotations:
-    iam.gke.io/gcp-service-account: {{ .Values.batch.gcpServiceAccount | quote }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -206,6 +198,15 @@ metadata:
   annotations:
     helm.sh/resource-policy: keep
 # Pending rollback intent belongs to the Job, never to a Helm apply/rollback.
+{{- if .Values.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-batch
+  namespace: {{ .Values.namespace }}
+  annotations:
+    iam.gke.io/gcp-service-account: {{ .Values.batch.gcpServiceAccount | quote }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -315,4 +316,5 @@ spec:
               configMap:
                 name: {{ .Values.batch.safetyConfigMap | quote }}
                 optional: true
+{{- end }}
 {{- end }}

@@ -810,8 +810,15 @@ def render_docs(environment='prod', *extra, overlay=True):
 
 
 @pytest.mark.parametrize('environment,batch_enabled', [('dev', False), ('prod', False), ('prod', True)])
-def test_helm_state_configmaps_keep_job_owned_fields_out_of_apply(environment, batch_enabled):
-    docs = render_docs(environment, '--set', f'batch.enabled={str(batch_enabled).lower()}')
+@pytest.mark.parametrize('enabled', [False, True])
+def test_helm_state_configmaps_keep_job_owned_fields_out_of_apply(environment, batch_enabled, enabled):
+    docs = render_docs(
+        environment,
+        '--set',
+        f'batch.enabled={str(batch_enabled).lower()}',
+        '--set',
+        f'enabled={str(enabled).lower()}',
+    )
     state_names = {f'{environment}-omi-incluster-guards-state'}
     if batch_enabled:
         state_names.add(f'{environment}-omi-incluster-guards-batch-state')
@@ -821,6 +828,10 @@ def test_helm_state_configmaps_keep_job_owned_fields_out_of_apply(environment, b
         if obj['kind'] == 'ConfigMap' and obj['metadata']['name'] in state_names
     }
     assert set(states) == state_names
+    if not enabled:
+        # First migration directly from an old release to the kill switch must
+        # still update both existing shells, rather than pruning unannotated state.
+        assert len(docs) == len(states)
     for obj in states.values():
         # No data (including empty/null maps), immutable, hook or lookup payload:
         # SSA must leave the live rollback marker, streak and pending intent alone.
@@ -915,7 +926,9 @@ def test_helm_rbac_and_cpu_placement(environment):
         adapter['prometheus']['url'].replace('{{ .Release.Namespace }}', f'{environment}-omi-monitoring') + ':9090'
     )
     assert env['PROMETHEUS_URL'] == expected_url
-    assert not render(environment, '--set', 'enabled=false')
+    disabled = render(environment, '--set', 'enabled=false')
+    assert set(disabled) == {'ConfigMap'}
+    assert disabled['ConfigMap']['metadata']['name'] == f'{environment}-omi-incluster-guards-state'
 
 
 def test_cloud_run_gate_refuses_unapproved_identity_or_namespace():

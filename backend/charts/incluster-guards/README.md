@@ -32,6 +32,14 @@ state. Neither kill
 switch undoes an already applied rollback; that requires a separately approved
 HPA change. Helm manages only the state ConfigMap shells; each Job owns its
 mutable data. A serving identity change still resets arming.
+The state shells render even when `enabled=false`, so a first 0.3.2 upgrade
+using the global kill switch applies retention rather than pruning old state
+before that annotation exists. Optional batch state still requires
+`batch.enabled=true` and `batch.cloudRunRollbackEnabled=true`; disabling the
+global guard does not change those settings or create new batch object names.
+When migrating a release that previously installed the batch writer, retain
+both batch settings for the first 0.3.2 upgrade (the global kill switch can be
+false). After that succeeds, either batch setting can be disabled safely.
 
 ## State ownership and recovery from a failed Helm upgrade
 
