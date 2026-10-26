@@ -20,6 +20,7 @@ from config.policy import RecoveryPolicy
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
 from database.batch_pipeline_shadow_hook import mirror_refresh
+from database.batch_pipeline_speech_redrive import independent_redrive
 
 from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
 from utils.batch_pipeline.voice_centroids import deadline as voice_deadline, FINALIZED_TTL
@@ -179,11 +180,18 @@ def register_batch_artifact(
         )
         redrive = job.get('speech_redrive') or {}
         redrive_write = (
-            policy.speech_empty_multilingual
+            (
+                (policy.speech_empty_multilingual and redrive.get('paid_epoch') == 2)
+                or (
+                    policy.recovery_enabled
+                    and independent_redrive(job)
+                    and redrive.get('paid_epoch') == 3
+                    and redrive.get('provider') == 'soniox'
+                )
+            )
             and job.get('state') == 'quarantined'
             and job.get('recovery_state') in {'held', 'failed_held'}
             and redrive.get('state') == 'running'
-            and redrive.get('paid_epoch') == 2
             and redrive.get('privacy_generation') == expected_generation
             and bool(redrive.get('token'))
             and uri.endswith(f"/{redrive['token']}.enc")
