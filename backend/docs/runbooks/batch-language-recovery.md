@@ -1,0 +1,103 @@
+# Language-guarded batch recovery
+
+Owner: batch record lane; release and redrive owner: rollout lead/operator.
+
+`worker_failure.reason=unsupported_language` covers both unsupported/blocked and
+unknown/blocked routes. Parakeet did **not** run on these units. Recovery first
+uses Modulate. If it fails, one independent Soniox async attempt runs before the
+unit settles. This does not change general prerecorded or PTT routing and does
+not reactivate Deepgram.
+
+The independent attempt has a durable, token/privacy-fenced claim. No HTTP POST
+is retried, including uncertain replies. A repeated delivery reconciles only the
+create-only encrypted result; it cannot buy another call. An automatic Soniox
+attempt also prevents an operator from buying Soniox again for the same unit.
+
+## Dispositions and receipts
+
+- Words from either recognizer recover the unit through ordinary ordered merge
+  and projection.
+- Two **validated empty** recognizers and less than **512 original samples
+  (32 ms)** of strict VAD classify as silence. The result retains original VAD
+  spans/seconds and both provider/zero-word receipts in separate measured fields.
+  Compare sample counts, so floating-point subtraction cannot clear a full frame.
+- A full positive VAD frame, unknown/invalid VAD, provider failure or malformed
+  response cannot authorize this silence disposition. Keep custody held.
+- The job's `recovery.recognizers` / `speech_redrive.recognizers` stores provider,
+  outcome, word count (null means unobserved), and measured VAD seconds. The job's
+  `measured_held_vad_speech_seconds` remains the T2 census value. `refused` means
+  the independent recognizer did not run; it is never counted as an empty answer.
+
+Threshold evidence: local Silero evaluates 512 samples at 16 kHz, one 32 ms frame
+(`utils/stt/local_vad.py`). Only the clipped final frame can be shorter. Synthetic
+tests cover 0/16/32/64/320/4384 ms, the 511/512-sample boundary, and floating-point
+subtraction at that boundary. This is a conservative resolution-based proposal,
+**not labeled evidence of false positives or the language of any held audio**.
+The current measured 64 ms, 320 ms and 4.384 s units all remain held if Soniox is
+empty. Their transcripts require recovered words; this fix does not promise the
+batch re-ramp will clear.
+
+## Spend and rollback
+
+`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults **on**; `false`
+stops new Soniox attempts. It never falls back to another Modulate call. Rollback:
+set it false on the recovery role/operator, retaining all held obligations.
+
+`BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS` defaults to **60** and can only
+lower the hard 60-second per-unit ceiling. Invalid/nonfinite values refuse spend.
+Each unit gets at most one independent submission across automatic and explicit
+recovery. Company-funded Soniox rechecks the batch allowance even for units
+originally admitted with customer-funded credentials. Larger units stay held
+for a separately reviewed recovery plan. Polling has a 120 s budget and 60-GET
+ceiling; individual requests have at most a 20 s I/O timeout. Cleanup uses two
+bounded requests. Recovery never automatically resubmits a timed-out job.
+
+Soniox's published async estimate is **$0.10/audio hour**: approximately
+**$0.000556 per 20 s unit**, **$0.001667 at the 60 s cap**. The ten RCA units total
+176.527125 s, about **$0.004904 incremental Soniox spend** if all run once; the
+ten-unit duration ceiling is about **$0.016667**. These are estimates, not vendor
+usage measurements or a guaranteed token bill; actual billing is token-based.
+Prior Modulate spend is already incurred and is not included. Valid empty Soniox
+responses are metered as accepted provider audio too.
+
+Sources checked 2026-10-26: [Soniox pricing](https://soniox.com/pricing),
+[model](https://soniox.com/docs/stt/models),
+[async request](https://soniox.com/docs/api-reference/stt/transcriptions/create_transcription),
+[token response](https://soniox.com/docs/api-reference/stt/transcriptions/get_transcription_transcript).
+
+The adapter uploads only canonical WAV bytes in memory, with no account IDs,
+provenance, public URLs or transcript logging. It deletes only its own temporary
+vendor upload/transcription after the attempt. Original Omi artifacts stay in
+custody. Cleanup errors emit `event=soniox_batch_cleanup outcome=failed`; a crash
+or lost upload acknowledgement can leave vendor data until automatic expiry.
+Soniox documents [30-day async retention](https://soniox.com/docs/security-and-privacy).
+No live provider acceptance or cleanup has been tested using customer content.
+
+## Existing held units: operator-owned release step
+
+Deploy the CPU backend role that runs `QuarantineRecovery` and use the same source
+for the operator CLI. The GPU worker itself does not contain this adapter. Verify
+`SONIOX_API_KEY` availability without printing it. This PR does not change secret
+bindings or deploy workflows; a missing key refuses the operator before starting
+its paid intent and leaves automatic recovery held with an error receipt.
+
+For the seven untouched epoch-2 units and three spent Modulate epoch-2 units,
+use `scripts/batch_pipeline_speech_redrive.py` with **both**
+`--independent-language --paid-epoch 3`. It requires exact private
+`--unit-ids-file` IDs, the usual owner/time bounds, immutable cohort manifest,
+fresh dry-run census/plan digest approval, and explicit serving flags for unpinned
+policy. An independent dry run uses metadata only; every selected unit is shown
+as a potential paid attempt, not as verified speech. Apply measures VAD in memory.
+Run separately per owner, canary with `--apply-limit 1`, inspect only aggregate
+receipts, then expand the exact approved prefix. A failed-held canary stops the
+script; do not reset its token to continue spending. The operator must obtain
+the lead's next instruction for the remaining prefix.
+
+Epoch 1 stays unchanged. For the three already-paid units, epoch 2 is preserved
+verbatim as `speech_redrive.prior_speech_redrive`; the new Soniox token is epoch 3.
+The approval digest binds that prior token. A running or unsettled epoch 2 cannot
+be replaced. Preserve the previous `--silent` setting; replacement refuses a
+suppression change. Existing Modulate plans cannot silently switch to Soniox.
+
+No production audio, transcripts, account data or vendor calls are needed to
+develop or locally verify this path. Use only synthetic fixtures.

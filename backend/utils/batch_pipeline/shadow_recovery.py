@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from config.batch_pipeline_shadow import shadow_percent
 from config.policy import RecoveryPolicy
 from config.batch_pipeline_empty_asr import terminal_empty_allowed
+from config.batch_language_recovery import language_guarded, below_silence_threshold
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.recovery_disposition import inspect_audio, MultilingualEmpty, padded_empty
@@ -12,7 +13,12 @@ from utils.batch_pipeline.recovery_disposition import inspect_audio, Multilingua
 
 def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspect=inspect_audio):
     # These import the provider clients only at invocation, on the CPU backend.
-    from utils.batch_pipeline.quarantine_recovery import transcribe, second_transcribe, second_provider_eligible
+    from utils.batch_pipeline.quarantine_recovery import (
+        transcribe,
+        second_transcribe,
+        second_provider_eligible,
+        SECOND_PROVIDER,
+    )
 
     stt, second_stt = stt or transcribe, second_stt or second_transcribe
     job = repository.start_recovery(segment)
@@ -40,7 +46,8 @@ def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspec
                 if policy.terminal_empty_disposition and padded_empty(job) and terminal_empty_allowed(empty.spans):
                     outcome = 'empty'
                 elif second_provider_eligible(job, empty):
-                    if not repository.paid(segment, 'deepgram'):
+                    provider = 'soniox' if language_guarded(job) else SECOND_PROVIDER
+                    if not repository.paid(segment, provider):
                         outcome = 'paid_skipped'
                     else:
                         try:
@@ -49,7 +56,11 @@ def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspec
                         except MultilingualEmpty:
                             outcome = (
                                 'empty'
-                                if policy.terminal_empty_disposition and terminal_empty_allowed(empty.spans)
+                                if (
+                                    below_silence_threshold(speech)
+                                    if language_guarded(job)
+                                    else policy.terminal_empty_disposition and terminal_empty_allowed(empty.spans)
+                                )
                                 else 'failed_held'
                             )
                         except BatchPrivacyBlocked:

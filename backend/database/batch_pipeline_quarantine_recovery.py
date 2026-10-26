@@ -71,7 +71,7 @@ class RecoveryStore:
                     and ledger.get('status') == 'completed'
                     and ledger.get('job_id') == binding.job_id
                     and job.get('speech_redrive', {}).get('state') == 'completed'
-                    and job.get('result', {}).get('outcome') in {'success', 'no_recoverable_speech'}
+                    and job.get('result', {}).get('outcome') in {'success', 'no_recoverable_speech', 'silence'}
                 )
                 or (
                     allow_completed_terminal

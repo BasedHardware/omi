@@ -225,7 +225,7 @@ class ShadowStore:
 
     def paid(self, segment, provider):
         """Each provider is reserved once, across replicas/retries and hour rollover."""
-        if provider not in {'modulate', 'deepgram'} or not shadow_percent():
+        if provider not in {'modulate', 'deepgram', 'soniox'} or not shadow_percent():
             return False
         now, limit = self.clock(), paid_recovery_limit()
         hour = str(int(now // 3600))
