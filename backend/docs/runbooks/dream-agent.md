@@ -352,6 +352,18 @@ observations from consuming this recovery page. This owns the crash window
 between successful normalization and durable admission as well as the former
 maintenance host's completion duty. Non-admitted writer modes are withheld
 before paid work; the retry path never changes writer-mode authority.
+Both per-owner phases rotate their bounded 100-row scans; withheld/corrupt rows
+cannot pin later submissions or receipts. Cursor advancement uses account,
+generation and compare-and-set fences. Completion checks rejection, dismissal
+and locks before planning and inside the canonical transaction.
+
+For async DB callers, post-commit normalization is awaited after the DB worker
+returns: claim and settlement use DB leaves, while Flex waits use the LLM pool.
+The returned single/batch memory view and prompt cache reflect successful
+normalization. A raw synchronous DB-pool submission without an async boundary
+defers to Dream rather than holding a shared DB worker. No task is detached.
+Durable account-deletion/destructive-operation fences precede provider calls,
+including explicit text and retrospective embeddings.
 
 Historical rows captured before **2026-10-26 07:55Z** are excluded from forward
 retries and stay hidden until Dream's retrospective pass resolves them. Enable
@@ -370,6 +382,14 @@ the submission pending until the neighbor receives its normal disposition.
 The canonical head captured for dedupe is fenced through commit; another write
 defers remaining candidates for a later pass rather than admitting against
 stale neighbors. Normal Dream pass/admission/token budgets still apply.
+Top-k or paginated search never proves uniqueness. A unique admission requires
+an exhaustive canonical inventory within 100 raw rows and the pass read-byte
+budget. A larger or inaccessible inventory permits only a verified positive
+duplicate disposition; possible unique submissions remain pending. The lead
+must measure this coverage tail and choose a bounded recovery plan before
+expanding the backlog cohort; do not label it cleared from a top-k search.
+The shared edit contract permits up to 101 citations only for this bounded
+required-intake capability; other edit kinds retain their ten-ref limit.
 
 For the speaker-evidence serving cohort, automatically conversation-derived
 required items must bind every quote to a confident owner segment before paid
@@ -392,7 +412,8 @@ backlog is **$5.07** of normalization if every row is unique; existing Dream
 search/planning/verification and Firestore reads are additional metered costs,
 not included in that estimate. Measure vendor usage before declaring total cost.
 Rollback either switch to stop its new effects; preserve committed receipts and
-duplicate dispositions. Source merge is not deployed recovery: verify the
+duplicate dispositions. Both switches are checked inside canonical apply,
+including in-flight backlog work. Source merge is not deployed recovery: verify the
 serving release SHA and payload-free `required_intake_inline` /
 `required_intake_retry` log counts, then authorized metadata-only pending-age and
 duplicate/admission receipts after release.

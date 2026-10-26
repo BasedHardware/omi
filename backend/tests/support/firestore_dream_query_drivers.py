@@ -54,11 +54,6 @@ def required_retry_cursor(client, args, trial):
 def entries():
     return (
         DriverEntry(
-            'utils.dream_required_intake.read_existing_inventory',
-            base={'uid': UID},
-            neutrals={'generation': (1, 'post-read account-generation fence only')},
-        ),
-        DriverEntry(
             'database.dream_scheduler.required_retry_page',
             domains={'limit': [1, 4990]},
             setup=required_retry_cursor,

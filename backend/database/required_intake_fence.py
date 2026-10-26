@@ -9,7 +9,7 @@ from database.account_deletion_policy import account_deletion_blocks_access, nor
 from database.legal_holds import assert_no_destructive_operation_transaction
 from database.memory_collections import MemoryCollections
 
-_sources = ContextVar[tuple[str, dict[str, datetime], str | None] | None]('required_intake_sources', default=None)
+_sources = ContextVar[tuple[str, dict[str, datetime], str | None, bool] | None]('required_intake_sources', default=None)
 
 
 class RequiredIntakeSourceChanged(RuntimeError):
@@ -17,8 +17,8 @@ class RequiredIntakeSourceChanged(RuntimeError):
 
 
 @contextmanager
-def source_scope(uid, revisions, *, completion_id=None):
-    token = _sources.set((uid, revisions, completion_id))
+def source_scope(uid, revisions, *, completion_id=None, backlog=False):
+    token = _sources.set((uid, revisions, completion_id, backlog))
     try:
         yield
     finally:
@@ -39,6 +39,10 @@ def assert_current(uid, transaction, client):
     scope = _sources.get()
     if scope is None:
         return
+    from config import required_memory_intake as policy
+
+    if not policy.enabled() or (scope[3] and not policy.backlog_enabled(uid)):
+        raise RequiredIntakeSourceChanged('required_intake_disabled')
     if scope[0] != uid:
         raise RequiredIntakeSourceChanged('required_intake_source_owner_changed')
     for path, expected in scope[1].items():

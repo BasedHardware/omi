@@ -195,6 +195,55 @@ async def test_retry_rotates_past_a_full_withheld_page(db, monkeypatch):
     assert positions == [None, {'captured_at': rows[99].captured_at, 'memory_id': rows[99].memory_id}]
 
 
+@pytest.mark.asyncio
+async def test_corrupt_source_does_not_pin_a_valid_retry(db, monkeypatch):
+    monkeypatch.setattr(
+        processing, 'list_pending_required_processing_items', lambda *a, **kw: [item('corrupt'), stored(db)]
+    )
+
+    def source(uid, row, **kw):
+        if row.memory_id == 'corrupt':
+            raise ValueError('synthetic invalid source shape')
+        return {}
+
+    monkeypatch.setattr(intake, 'source_revisions', source)
+    monkeypatch.setattr(intake, 'normalize', normalized)
+    assert await intake.retry_owner(UID, db_client=db, now=NOW + timedelta(minutes=20)) == 1
+
+
+def test_completion_failure_does_not_pin_a_valid_receipt(db, monkeypatch):
+    monkeypatch.setattr(intake, 'normalize', normalized)
+    assert intake.after_capture(UID, stored(db), db_client=db).processed
+    monkeypatch.setattr(
+        consolidation,
+        'list_receipted_required_processing_items',
+        lambda *a, **kw: [item('corrupt', processed=True), stored(db)],
+    )
+    actual = consolidation.complete_required_memory_item
+
+    def complete(uid, row, **kw):
+        if row.memory_id == 'corrupt':
+            raise ValueError('synthetic invalid source shape')
+        return actual(uid, row, **kw)
+
+    monkeypatch.setattr(consolidation, 'complete_required_memory_item', complete)
+    result = consolidation.complete_receipted_required_intake(UID, db_client=db, now=NOW, run_id='corrupt-source')
+    assert result.failed_memory_ids == ['corrupt'] and result.promoted_memory_ids == ['new']
+
+
+def test_backlog_kill_switch_is_rechecked_at_canonical_apply(db, monkeypatch):
+    row = historical_candidate(db)
+
+    def disable_during_normalize(item, **kw):
+        monkeypatch.setenv('DREAM_REQUIRED_INTAKE_BACKLOG_ENABLED', 'false')
+        return normalized(item)
+
+    monkeypatch.setattr(backlog, 'bounded_normalize', disable_during_normalize)
+    with pytest.raises((review_store.ReviewConflict, ValueError)):
+        backlog.apply(UID, resolution(row, other=''), {'memory_items/new': row}, None, 'switch-race', row)
+    assert stored(db).processing_state.value == 'pending'
+
+
 def test_completion_rotates_past_a_full_uncompletable_page(db, monkeypatch):
     rows = []
     for index in range(101):
@@ -252,6 +301,7 @@ def test_existing_inventory_has_explicit_coverage_cap_and_skips_pending(db):
 @pytest.mark.asyncio
 async def test_paginated_neighbors_are_not_unique_coverage(db, monkeypatch):
     historical_candidate(db)
+    monkeypatch.setattr(processing, 'list_pending_required_processing_items', lambda *a, **kw: [stored(db)])
     monkeypatch.setattr(backlog, 'read_existing_inventory', lambda *a, **kw: ({}, False))
     survivor = {
         'id': 'survivor',

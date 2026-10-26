@@ -546,7 +546,10 @@ def complete_receipted_required_intake(uid, *, db_client, now, run_id, limit=5):
         try:
             if complete_required_memory_item(uid, item, db_client=db_client, now=now, run_id=run_id):
                 report.promoted_memory_ids.append(item.memory_id)
-        except ConsolidationApplySkipped:
+        except Exception as error:
+            logging.getLogger(__name__).warning(
+                'required_intake_completion_deferred error_type=%s', type(error).__name__
+            )
             report.failed_memory_ids.append(item.memory_id)
     if visited is not None or cursor:
         required_intake_cursors.finish(uid, 'completion', before, visited, generation, db_client=db_client)

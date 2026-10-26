@@ -8,6 +8,7 @@ as a superseded audit row. No old submission is made visible to seek duplicates.
 
 from datetime import datetime, timezone
 import json
+import logging
 from functools import partial
 import time
 from typing import Any, Literal, cast
@@ -213,6 +214,9 @@ async def prepare(uid, seed, records, limits, source):
         exhaustive = exhaustive and _bytes({**records, **additions, **all_rows}) <= min(
             22000, limits.read_bytes // 2 - 2000
         )
+        logging.getLogger(__name__).info(
+            'required_intake_backlog coverage_complete=%s inventory_neighbors=%d', exhaustive, len(all_rows)
+        )
         neighbors = dict(all_rows) if exhaustive else {}
         complete = True
         chunks = [text[offset : offset + 500] for offset in range(0, len(text), 500)]
@@ -309,7 +313,7 @@ def validate(edit, records, *, authority='dream'):
 
 def apply(uid, edit, records, change, key, row, *, expected_records=None, authority='dream'):
     try:
-        with source_scope(uid, (row.get(MARKER) or {}).get('source_revisions', {})):
+        with source_scope(uid, (row.get(MARKER) or {}).get('source_revisions', {}), backlog=True):
             return _apply(uid, edit, records, change, key, row, expected_records=expected_records, authority=authority)
     except RequiredIntakeSourceChanged as error:
         raise review_store.ReviewConflict('Required intake source changed') from error

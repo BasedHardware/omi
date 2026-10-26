@@ -232,18 +232,27 @@ async def retry_owner(uid, *, db_client=None, now=None):
         if not policy.enabled() or attempted >= policy.RETRY_ITEMS_PER_OWNER:
             break
         visited = {'captured_at': item.captured_at, 'memory_id': item.memory_id}
-        revisions = await run_blocking(db_executor, source_revisions, uid, item, db_client=client)
+        try:
+            revisions = await run_blocking(db_executor, source_revisions, uid, item, db_client=client)
+        except Exception as error:
+            record_deferred(error)
+            continue
         if revisions is None:
             continue
-        with source_scope(uid, revisions):
-            result = await required.process_required_memory_item_async(
-                uid,
-                item.memory_id,
-                db_client=client,
-                processor=normalize,
-                timeout_seconds=policy.INLINE_TIMEOUT_SECONDS,
-                result_guard=partial(result_guard, time.monotonic() + policy.INLINE_TIMEOUT_SECONDS),
-            )
+        try:
+            with source_scope(uid, revisions):
+                result = await required.process_required_memory_item_async(
+                    uid,
+                    item.memory_id,
+                    db_client=client,
+                    processor=normalize,
+                    timeout_seconds=policy.INLINE_TIMEOUT_SECONDS,
+                    result_guard=partial(result_guard, time.monotonic() + policy.INLINE_TIMEOUT_SECONDS),
+                )
+        except Exception as error:
+            attempted += 1  # Conservatively charge an unknown provider/settlement outcome.
+            record_deferred(error)
+            continue
         attempted += int(result.attempted)
         processed += int(result.processed)
     if policy.enabled() and (visited is not None or cursor):
