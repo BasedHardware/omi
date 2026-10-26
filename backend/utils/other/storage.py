@@ -42,6 +42,7 @@ from database.redis_db import (
 )
 from database.legal_holds import external_write_fence, destructive_operation_gate
 from utils.other import audio_packs
+from utils.other.account_deletion_holds import release_operational_hold_for_account_deletion
 from utils.request_validation import parse_sync_filename_timestamp
 from utils import encryption
 from utils.sync.staged_prefetch import MAX_FILE_BYTES, StagedBytes, staged_prefetch
@@ -180,14 +181,23 @@ def _owner_uid_from_sync_path(file_path: str) -> Optional[str]:
     return None
 
 
-def _delete_owner_bucket_prefix(bucket: Any, prefix: str) -> int:
+def _delete_owner_bucket_prefix(bucket: Any, prefix: str, *, account_deletion_uid: str | None = None) -> int:
     """Delete and verify one owner prefix, failing closed on a torn purge."""
 
     listing_kwargs = {'versions': True} if _uses_real_gcs_bucket(bucket) else {}
     blobs = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
     deleted = 0
     for blob in blobs:
-        blob.delete()
+        if account_deletion_uid is not None and (
+            getattr(blob, 'temporary_hold', None) is True or getattr(bucket, 'name', None) == 'syncing-local'
+        ):
+            release_operational_hold_for_account_deletion(account_deletion_uid, blob)
+        if _uses_real_gcs_bucket(bucket):
+            # Keep the verified/approved generation and its hold metadata fixed
+            # through deletion; a new preservation marker forces re-review.
+            blob.delete(if_generation_match=blob.generation, if_metageneration_match=blob.metageneration)
+        else:
+            blob.delete()
         deleted += 1
     remaining = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
     if remaining:
@@ -269,7 +279,7 @@ def delete_all_user_storage_objects(uid: str) -> int:
                         if lookup.exists():
                             lookup.delete()
                             deleted += 1
-            deleted += _delete_owner_bucket_prefix(bucket, prefix)
+            deleted += _delete_owner_bucket_prefix(bucket, prefix, account_deletion_uid=uid)
     return deleted
 
 
