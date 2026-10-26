@@ -4,6 +4,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -157,6 +158,16 @@ void main() {
     });
   });
 
+  test('older admission response without target ID remains decodable', () {
+    final response = MergeConversationsResponse.fromJson({
+      'status': 'merging',
+      'message': 'Merge started',
+      'conversation_ids': ['a', 'b'],
+    });
+    expect(response.mergedConversationId, isNull);
+    expect(response.conversationIds, ['a', 'b']);
+  });
+
   group('persisted provider watch', () {
     setUp(() async {
       Env.overrideApiBaseUrl('http://127.0.0.1:1/');
@@ -188,6 +199,30 @@ void main() {
       expect(reopened.conversations.map((c) => c.id), ['target']);
       expect((await SharedPreferencesUtil().loadCachedConversations()).map((c) => c.id), ['target']);
       expect(SharedPreferencesUtil().getString('pendingConversationMerges:merge-owner'), contains('[]'));
+    });
+
+    test('old backend source 404s remove stale cache even when its list is empty', () async {
+      SharedPreferencesUtil().cachedConversations = [row('a'), row('b')];
+      final provider = ConversationProvider(
+        isSignedIn: () => true,
+        mergeConversationFetcher: (_) async => missing,
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      )
+        ..mergeProbeInterval = const Duration(milliseconds: 5)
+        ..conversations = [row('a'), row('b')];
+      addTearDown(provider.dispose);
+      final settled = Completer<void>();
+      provider.addListener(() {
+        if (!settled.isCompleted && provider.conversations.isEmpty) settled.complete();
+      });
+      provider.watchMerge(['a', 'b']);
+      await settled.future.timeout(const Duration(seconds: 5));
+      expect(await SharedPreferencesUtil().loadCachedConversations(), isEmpty);
+      final reopened = ConversationProvider(
+          isSignedIn: () => true, conversationListFetcher: () async => (items: <ServerConversation>[], ok: false));
+      addTearDown(reopened.dispose);
+      await reopened.fetchConversations();
+      expect(reopened.conversations, isEmpty);
     });
 
     test('another backend does not restore this backend journal', () async {

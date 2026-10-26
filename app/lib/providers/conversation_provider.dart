@@ -2295,6 +2295,18 @@ class ConversationProvider extends ChangeNotifier {
         // Do not immediately restore this expired watch through its own
         // refresh. A later resume/manual refresh can retry the saved journal.
         if (sourcesGone) {
+          // An older backend supplies no target ID. Even an empty or failed
+          // list read must not resurrect sources whose point reads proved 404.
+          final cached = await _conversationCacheLoader();
+          if (!current()) return;
+          _conversationFetchRevision++;
+          _searchRequestGeneration++;
+          _mergedAwayConversationIds.addAll(ids);
+          conversations.removeWhere((row) => ids.contains(row.id));
+          searchedConversations.removeWhere((row) => ids.contains(row.id));
+          processingConversations.removeWhere((row) => ids.contains(row.id));
+          await SharedPreferencesUtil().cacheConversations(cached.where((row) => !ids.contains(row.id)).toList());
+          if (!current()) return;
           final ok = await fetchConversations(restoreMergeWatches: false);
           if (ok && current()) {
             _pendingMerges.remove(key);
