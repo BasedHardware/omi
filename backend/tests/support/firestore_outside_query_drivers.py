@@ -281,13 +281,14 @@ _driver(
 _driver(
     'utils.memory.canonical_consolidation._required_intake_page',
     base={'uid': UID},
-    domains={'cursor': [None, {'captured_at': T0, 'memory_id': 'memory-1'}]},
+    domains={'cursor': [None, {'captured_at': T0, 'memory_id': 'memory-1'}], 'captured_after': [None, T0]},
     profile='maintenance-required-intake',
     serving=False,
 )
 _driver(
     'utils.memory.canonical_required_processing.list_pending_required_processing_items',
     base={'uid': UID},
+    domains={'captured_after': [None, T0]},
     neutrals={'limit': LIMIT},
     profile='maintenance-required-processing',
     serving=False,

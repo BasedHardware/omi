@@ -1,12 +1,15 @@
 """Bounded Firestore query contract for canonical required-memory processing."""
 
+import pytest
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from models.memory_evidence import SourceState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
 from utils.memory.canonical_required_processing import (
+    MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV,
     list_pending_required_processing_items,
+    maintenance_captured_after,
     run_required_memory_processing,
 )
 from utils.memory.required_promotion import (
@@ -89,6 +92,8 @@ class _Query:
                 rows = [row for row in rows if _nested_value(row[1], field_path) == expected]
             elif op_string == "in":
                 rows = [row for row in rows if _nested_value(row[1], field_path) in expected]
+            elif op_string == ">=":
+                rows = [row for row in rows if _nested_value(row[1], field_path) >= expected]
             else:
                 raise AssertionError(f"unexpected operator: {op_string}")
 
@@ -217,3 +222,46 @@ def test_required_processing_limit_zero_does_not_query() -> None:
     report = run_required_memory_processing("uid-zero", db_client=_Boom(), limit=0)
     assert report.attempted_count == 0
     assert report.processed_memory_ids == []
+
+
+def test_forward_window_excludes_pre_window_items_before_streaming() -> None:
+    window_start = NOW - timedelta(days=1)
+    backlog = [_item(f"backlog-{index:02d}", captured_at=NOW - timedelta(days=30, hours=index)) for index in range(3)]
+    fresh = [_item(f"fresh-{index:02d}", captured_at=NOW - timedelta(hours=index)) for index in range(2)]
+    db = _Db(
+        [(f"users/{UID}/memory_items/{item.memory_id}", item.model_dump(mode="python")) for item in [*backlog, *fresh]]
+    )
+
+    pending = list_pending_required_processing_items(UID, db_client=db, limit=25, captured_after=window_start)
+
+    assert [item.memory_id for item in pending] == ["fresh-01", "fresh-00"]
+    assert ("captured_at", ">=", window_start) in db.filters
+    assert db.order_fields == ["captured_at", "memory_id"]
+
+
+def test_forward_window_absent_keeps_the_unwindowed_query(monkeypatch) -> None:
+    monkeypatch.delenv(MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV, raising=False)
+    items = [_item("old", captured_at=NOW - timedelta(days=30)), _item("new", captured_at=NOW)]
+    db = _Db([(f"users/{UID}/memory_items/{item.memory_id}", item.model_dump(mode="python")) for item in items])
+
+    pending = list_pending_required_processing_items(UID, db_client=db, limit=25)
+
+    assert [item.memory_id for item in pending] == ["old", "new"]
+    assert all(operator != ">=" for _field, operator, _value in db.filters)
+
+
+def test_maintenance_captured_after_env_contract(monkeypatch) -> None:
+    monkeypatch.delenv(MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV, raising=False)
+    assert maintenance_captured_after() is None
+    monkeypatch.setenv(MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV, "")
+    assert maintenance_captured_after() is None
+    monkeypatch.setenv(MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV, "2026-10-27T00:00:00Z")
+    assert maintenance_captured_after() == datetime(2026, 10, 27, tzinfo=timezone.utc)
+    monkeypatch.setenv(MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV, "2026-10-27T02:00:00+02:00")
+    assert maintenance_captured_after() == datetime(2026, 10, 27, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setenv(MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV, "2026-10-27T00:00:00")
+    with pytest.raises(ValueError, match="UTC offset"):
+        maintenance_captured_after()
+    monkeypatch.setenv(MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV, "not-a-timestamp")
+    with pytest.raises(ValueError, match="RFC3339"):
+        maintenance_captured_after()

@@ -2010,6 +2010,9 @@ environments:
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
               value: 'true'
+            MEMORY_MAINTENANCE_CAPTURED_AFTER:
+              category: memory_rollout
+              value: ''
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -4515,6 +4518,9 @@ environments:
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
               value: 'true'
+            MEMORY_MAINTENANCE_CAPTURED_AFTER:
+              category: memory_rollout
+              value: ''
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
