@@ -45,8 +45,9 @@ def idle_state(apps, processes):
             relative = executable.relative_to(root)
             if relative.parts == ('Runner',):
                 pids.append(pid)
-            elif (len(relative.parts) >= 3 and relative.parts[0] == 'PlugIns'
-                  and relative.parts[1].endswith('.appex')):
+            elif (len(relative.parts) == 3 and relative.parts[0] == 'PlugIns'
+                  and relative.parts[1].endswith('.appex')
+                  and relative.parts[2] == relative.parts[1][:-len('.appex')]):
                 # iOS may launch a widget after an in-place install. It is not
                 # the main app: record it without blocking or terminating it.
                 extensions.append(pid)

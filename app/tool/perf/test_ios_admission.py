@@ -26,7 +26,9 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(state['extension_pids'], [42])
 
     def test_unclassified_dev_executable_still_fails_closed(self):
-        for suffix in ('/Helper', '/Other/Widget.appex/Widget', '/PlugIns/Unknown/Runner', '/PlugIns/Widget.appex'):
+        for suffix in ('/Helper', '/Other/Widget.appex/Widget', '/PlugIns/Unknown/Runner', '/PlugIns/Widget.appex',
+                       '/PlugIns/BatteryWidget.appex/Frameworks/Helper.framework/Helper',
+                       '/PlugIns/BatteryWidget.appex/Helper'):
             with self.subTest(suffix=suffix), self.assertRaises(ValueError):
                 admission.idle_state([APP], [
                     {'executable': 'file://' + ROOT + suffix, 'processIdentifier': 42}])
