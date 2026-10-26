@@ -38,6 +38,7 @@ from utils.memory.canonical_required_processing import (
     ProcessedRequiredMemory,
     commit_required_processing,
     is_pending_required_processing,
+    maintenance_captured_after,
 )
 
 CONSOLIDATION_BY = "canonical_batched_consolidation"
@@ -766,10 +767,17 @@ def _pending_observation_ids(uid, *, db_client):
     cursor = ref.get().to_dict() or {}
     rows = _required_intake_page(uid, db_client=db_client, cursor=cursor)
     items = [parse_snapshot_strict(MemoryItem, row) for row in rows]
+    # The forward-only maintenance window applies to observations too: without
+    # it the first post-deploy rotation would plan decisions for the whole
+    # pre-deploy backlog one oldest page at a time. Pre-window rows stay
+    # untouched until a separate ruling; the cursor still advances past them.
+    window_start = maintenance_captured_after()
     ids = []
     for item in items:
         if item.uid != uid:
             raise ValueError('observation_intake_owner_mismatch')
+        if window_start is not None and item.captured_at < window_start:
+            continue
         audit = item.promotion or {}
         if not audit.get('route') and not audit.get('required'):
             ids.append(item.memory_id)

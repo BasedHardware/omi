@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -69,6 +70,29 @@ REQUIRED_PROCESSING_RETRY_BASE_SECONDS = 300
 REQUIRED_PROCESSING_RETRY_MAX_SECONDS = 3600
 REQUIRED_PROCESSING_RETRY_STATE_SCHEMA_VERSION = "canonical_required_processing_retry.v1"
 REQUIRED_PROCESSING_STATUS_BLOCKED = "processing_blocked"
+MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV = "MEMORY_MAINTENANCE_CAPTURED_AFTER"
+
+
+def maintenance_captured_after() -> Optional[datetime]:
+    """Forward-only maintenance window start (UTC), or None when unset.
+
+    Prod sets this to the maintenance-job deploy timestamp so required
+    processing and observation intake only decide post-deploy items; unset
+    preserves the pre-window behavior for dev and tests. An unparseable or
+    offset-less value fails the run closed instead of silently replaying the
+    pre-window backlog.
+    """
+    raw = os.getenv(MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV, "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV} must be an RFC3339 timestamp, got {raw!r}") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"{MEMORY_MAINTENANCE_CAPTURED_AFTER_ENV} must carry a UTC offset, got {raw!r}")
+    return parsed.astimezone(timezone.utc)
+
 
 REQUIRED_PROCESSING_SYSTEM_PROMPT = """
 You normalize an explicit, authoritative memory submission before Omi admits it
@@ -478,6 +502,7 @@ def list_pending_required_processing_items(
     *,
     db_client: Any = None,
     limit: int = 25,
+    captured_after: Optional[datetime] = None,
 ) -> List[MemoryItem]:
     client = db_client if db_client is not None else default_db_client
     requested_limit = max(1, min(limit, MAX_REQUIRED_PROCESSING_QUERY_SCAN))
@@ -499,6 +524,11 @@ def list_pending_required_processing_items(
         },
         field_filter_factory=FieldFilter,
     )
+    if captured_after is not None:
+        # The captured_at range rides the same composite index: equality
+        # prefix plus one range on the first ordered field stays within the
+        # declared index contract.
+        query = query.where(filter=FieldFilter("captured_at", ">=", captured_after))
     snapshots = query.order_by("captured_at").order_by("memory_id").limit(scan_limit).stream()
     pending: List[MemoryItem] = []
     for snapshot in snapshots:
@@ -1127,6 +1157,7 @@ async def run_required_memory_processing_async(
         uid,
         db_client=db_client,
         limit=MAX_REQUIRED_PROCESSING_QUERY_SCAN,
+        captured_after=maintenance_captured_after(),
     )
     for item in items:
         if report.attempted_count >= min(limit, MAX_REQUIRED_PROCESSING_ITEMS_PER_PASS):
@@ -1226,6 +1257,7 @@ def run_required_memory_processing(
         uid,
         db_client=client,
         limit=MAX_REQUIRED_PROCESSING_QUERY_SCAN,
+        captured_after=maintenance_captured_after(),
     )
     for item in items:
         if report.attempted_count >= attempt_limit:
