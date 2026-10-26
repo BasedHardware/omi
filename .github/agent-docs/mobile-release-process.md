@@ -50,10 +50,31 @@ the query parameter changesNotSentForReview to true."), so every Play-side
 commit holds its changes for manual review submission — Codemagic publishing
 via `changes_not_sent_for_review: true` in `codemagic.yaml`, and our own
 scripts via the `changesNotSentForReview` commit parameter
-(`mobile_store_promote.py`, `mobile_rollout_brake.py`). After the pipeline
-commits, the only human step is Play Console → Publishing overview →
-Send for review; until that press, a committed change is neither live nor
-in review, so treat an un-pressed Publishing overview as the release hold.
+(`mobile_store_promote.py`, `mobile_rollout_brake.py`; the flag is the
+`CHANGES_NOT_SENT_FOR_REVIEW` constant there, read by the train below).
+After the pipeline commits, the only human step is Play Console →
+Publishing overview → Send for review; until that press, a committed change
+is neither live nor in review, so treat an un-pressed Publishing overview as
+the release hold. Two consequences:
+
+- Distribution evidence: a settled Codemagic publishing action only proves
+  the edit committed — testers cannot install a held change. The operator
+  gate treats Android internal distribution as done only after the press
+  (and Play's review where applicable), not on the publishing action alone,
+  and the Android baseline advances only then.
+- The press submits every pending change together, not just ours: check
+  Publishing overview for unrelated pending changes (listing edits, store
+  listings, other apps' automated edits) before pressing, exactly as the
+  brake's operator prerequisites require for its own commits.
+
+While the flag is set, the daily train parks the Android exposure ladder
+(`mobile_daily_train.py` reads `CHANGES_NOT_SENT_FOR_REVIEW`): a held hop is
+invisible to the API, so hopping blind could stack 10% -> 50% -> 100% as
+held changes and one press would then release full exposure with no
+observation windows. The train still stages a new candidate (the press plus
+review gate its first exposure step); exposure then advances in Play
+Console. When a commit without the parameter succeeds again, flip the
+constant to `False`, drop the Codemagic flags, and the ladder resumes.
 
 ## Release notes
 
@@ -216,10 +237,11 @@ A legacy Play draft holding the selected code converts straight into the
 staged rollout. Setting `STAGED_ROLLOUT_FRACTION = None` restores the
 queue-for-human behavior: candidates are written as `draft` releases (a human
 presses Release in Play Console), and any rollout already in flight is parked
-for a human instead of being advanced further. Every Play commit above —
-the staged write and each ladder hop — lands as a held change: it goes live
-only after the human Play Console → Publishing overview → Send for review
-press (see "Store and distribution behavior").
+for a human instead of being advanced further. The staged write lands as a
+held change (see "Store and distribution behavior"): it goes live only after
+the human Play Console → Publishing overview → Send for review press, and in
+held-changes mode the train parks the ladder — it never hops a rollout whose
+liveness it cannot read; the operator advances exposure in Play Console.
 
 Release notes: the train runs `collect` for a **new** candidate version in
 its checkout (unreleased fragments fold into `releases/<version>.json`
