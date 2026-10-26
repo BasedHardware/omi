@@ -1,8 +1,9 @@
 """Golden behavior of payment.py at origin/main e52113704226, before extraction.
 
 These assertions intentionally preserve uncomfortable behavior (trialing grants
-paid access, past_due loses it, and old same-subscription events overwrite newer
-ones). Changing those is a separate product/bug-fix review, not a refactor.
+paid access, and old same-subscription events overwrite newer ones).
+Note: per #23301 / PR #23311, past_due now preserves paid access through the end
+of the paid period (grace), aligning with canceled paid-through semantics.
 """
 
 import asyncio
@@ -125,9 +126,9 @@ def test_every_lifecycle_status_and_paid_plan_preserves_bytes_and_effect_order(l
     assert run(lane) == {'status': 'success'}
     paid = status in ('active', 'trialing')
     # Portal "cancel immediately" fires canceled while the period is still live;
-    # the paid-through grace (FC-early-terminal-strips-paid-period) keeps the paid
-    # plan until period end instead of downgrading to Basic on the spot.
-    keeps_paid = paid or status == 'canceled'
+    # the paid-through grace (FC-early-terminal-strips-paid-period and #23301 past_due)
+    # keeps the paid plan until period end instead of downgrading to Basic on the spot.
+    keeps_paid = paid or status in ('canceled', 'past_due')
     expected = Subscription(
         plan=plan if keeps_paid else PlanType.basic,
         status=SubscriptionStatus.active,
@@ -146,12 +147,13 @@ def test_every_lifecycle_status_and_paid_plan_preserves_bytes_and_effect_order(l
     )
 
 
+@pytest.mark.parametrize('status', ['canceled', 'past_due'])
 @pytest.mark.parametrize('kind', EVENTS)
 @pytest.mark.parametrize('period_end', [None, 0, NOW - 1, NOW, NOW + 1])
-def test_stale_different_subscription_only_shielded_by_valid_stored_paid_period(lane, kind, period_end):
+def test_stale_different_subscription_only_shielded_by_valid_stored_paid_period(lane, status, kind, period_end):
     lane.current = Subscription(plan=PlanType.plus, stripe_subscription_id='sub-new', current_period_end=period_end)
     before = lane.current.model_dump_json()
-    lane.event = event(kind, 'canceled', sub_id='sub-old')
+    lane.event = event(kind, status, sub_id='sub-old')
     assert run(lane) == {'status': 'success'}
     if period_end and period_end >= NOW:
         assert lane.current.model_dump_json() == before
@@ -242,14 +244,15 @@ def test_schedule_event_status_matrix(lane, kind, status, schedule_status):
     if schedule_status == 'active':
         assert lane.calls == []
         return
-    assert lane.current.plan == (PlanType.plus if status in ('active', 'trialing') else PlanType.basic)
+    paid_or_grace = status in ('active', 'trialing', 'past_due')
+    assert lane.current.plan == (PlanType.plus if paid_or_grace else PlanType.basic)
     assert (
         lane.current.cancel_at_period_end is True
         if schedule_status == 'canceled'
-        else lane.current.cancel_at_period_end == (status in ('active', 'trialing'))
+        else lane.current.cancel_at_period_end == paid_or_grace
     )
     assert [name for name, _ in lane.calls] == ['write', 'credits', 'trial_cache'] + (
-        ['fair_use'] if schedule_status == 'completed' and status in ('active', 'trialing') else []
+        ['fair_use'] if schedule_status == 'completed' and paid_or_grace else []
     )
 
 
