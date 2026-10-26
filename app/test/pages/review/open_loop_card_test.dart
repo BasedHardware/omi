@@ -114,18 +114,33 @@ void main() {
     expect(find.text('Couldn’t save your answer. Try again.'), findsOneWidget);
   });
 
-  testWidgets('a 409 keeps the card gone and reports the conflict', (tester) async {
-    final provider = _provider([_card], send: (card, action) async {
-      return const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 409));
-    });
+  testWidgets('a 409 keeps the card gone and reports the conflict for that request', (tester) async {
+    const a = OpenLoopCard(cardId: 'ol-1', date: '2026-10-26', question: 'Did Maya send it?');
+    const b = OpenLoopCard(cardId: 'ol-2', date: '2026-10-26', question: 'Did you file the bug?');
+    var conflict = true;
+    final provider = _provider([a, b],
+        send: (card, action) async => conflict
+            ? const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 409))
+            : const ApiFailure(ApiProblem(ApiProblemKind.server)));
     await _loaded(provider);
-    await tester.pumpWidget(_host(provider, const OpenLoopQuestionCard(card: _card)));
+    await tester.pumpWidget(
+      _host(
+        provider,
+        const Column(children: [OpenLoopQuestionCard(card: a), OpenLoopQuestionCard(card: b)]),
+      ),
+    );
 
-    await tester.tap(find.text('Drop it'));
+    await tester.tap(find.text('Drop it').first);
     await tester.pumpAndSettle();
 
-    expect(provider.openLoopCards, isEmpty, reason: 'answered on another device; stays gone');
-    expect(provider.lastOpenLoopConflict, isTrue);
+    expect(provider.openLoopCards.map((c) => c.cardId), ['ol-2'], reason: 'answered on another device; stays gone');
     expect(find.text('This question is out of date, so nothing changed.'), findsOneWidget);
+
+    // The next failing answer is its own request: the plain failure message.
+    conflict = false;
+    await tester.tap(find.text('Done').last);
+    await tester.pumpAndSettle();
+    expect(find.text("Couldn’t save your answer. Try again."), findsOneWidget);
+    expect(find.text('This question is out of date, so nothing changed.'), findsNothing);
   });
 }

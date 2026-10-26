@@ -67418,7 +67418,7 @@
     },
     "/v1/review/open-loops": {
       "get": {
-        "description": "The day's pending open-loop cards, at most the three the daily pass wrote.\n\nThe recap-day window follows the same zone resolution as the user usage\nendpoint: a valid request zone, else the stored profile zone, else UTC.",
+        "description": "The day's pending open-loop cards, at most the three the daily pass wrote.\n\nThe day is resolved exactly as the pass dated it for this uid (see\n``open_loops_service.cards_display_day``), with a bounded fallback to the\nprevious day; the zone resolution follows the user usage endpoint: a valid\nrequest zone, else the stored profile zone, else UTC.",
         "operationId": "get_review_open_loops_v1_review_open_loops_get",
         "parameters": [
           {

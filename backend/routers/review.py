@@ -1,6 +1,8 @@
 """Default-off Review and entity pages. All storage is scoped to the auth uid."""
 
 import os
+import re
+from datetime import datetime
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -91,19 +93,39 @@ def _valid_zone(value: str | None) -> str | None:
     return value
 
 
+# The cards documents are keyed by the pass's ISO local day, and card ids are
+# loop ids: 'ol-<16 hex>' (store.stable_key) or 'task-<task id>' (a task-born
+# loop). Malformed values are rejected here, before any Firestore read, instead
+# of surfacing as a store error.
+_OPEN_LOOP_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+_OPEN_LOOP_CARD_ID = re.compile(r'^(ol-[0-9a-f]{16}|task-[A-Za-z0-9_-]{1,64})$')
+
+
+def _valid_open_loop_date(value: str) -> bool:
+    if not _OPEN_LOOP_DATE.fullmatch(value):
+        return False
+    try:
+        datetime.strptime(value, '%Y-%m-%d')
+    except ValueError:
+        return False
+    return True
+
+
 @router.get('/v1/review/open-loops', response_model=OpenLoopCardsResponse, tags=['review'])
 def get_review_open_loops(uid: str = ReadUser, time_zone: str | None = Query(default=None, max_length=64)):
     """The day's pending open-loop cards, at most the three the daily pass wrote.
 
-    The recap-day window follows the same zone resolution as the user usage
-    endpoint: a valid request zone, else the stored profile zone, else UTC.
+    The day is resolved exactly as the pass dated it for this uid (see
+    ``open_loops_service.cards_display_day``), with a bounded fallback to the
+    previous day; the zone resolution follows the user usage endpoint: a valid
+    request zone, else the stored profile zone, else UTC.
     """
     if not open_loops_enabled():
         return OpenLoopCardsResponse()
     tz = _valid_zone(time_zone) or _valid_zone(notification_db.get_user_time_zone(uid))
-    day = open_loops_service.recap_completed_day(tz)
+    day, pending = open_loops_service.list_owner_pending_cards(uid, tz=tz)
     cards = []
-    for card in open_loops_service.list_pending_cards(uid, date_str=day, tz=tz):
+    for card in pending:
         card_id = str(card.get('id') or '')
         question = str(card.get('question') or '')
         if not card_id or not question:
@@ -123,6 +145,10 @@ def get_review_open_loops(uid: str = ReadUser, time_zone: str | None = Query(def
 def answer_review_open_loop(date: str, card_id: str, request: OpenLoopAnswerRequest, uid: str = WriteUser):
     if not open_loops_enabled():
         raise HTTPException(status_code=404, detail='open_loops_disabled')
+    if not _valid_open_loop_date(date):
+        raise HTTPException(status_code=422, detail='invalid_open_loop_date')
+    if not _OPEN_LOOP_CARD_ID.fullmatch(card_id):
+        raise HTTPException(status_code=422, detail='invalid_open_loop_card_id')
     card = open_loops_service.answer_card(uid, card_id, request.action, date_str=date)
     if card is None:
         day_cards = get_open_loop_cards(uid, date) or []

@@ -101,7 +101,9 @@ class OpenLoopQuestionCard extends StatelessWidget {
   }
 }
 
-/// Sends [action] for [card] through the shared provider; says so if it did not save.
+/// Sends [action] for [card] through the shared provider; says so if it did not
+/// save. The message follows this request's outcome, per card: a 409 means the
+/// card was answered elsewhere, anything else is a failed send.
 Future<bool> answerOpenLoopCard(BuildContext context, OpenLoopCard card, OpenLoopAction action) async {
   final provider = context.read<ReviewProvider>();
   // A sheet may close before the answer settles; the root navigator outlives it.
@@ -109,13 +111,13 @@ Future<bool> answerOpenLoopCard(BuildContext context, OpenLoopCard card, OpenLoo
   final failedMessage = context.l10n.reviewAnswerFailed;
   final conflictMessage = context.l10n.reviewQuestionOutOfDate;
   OmiHaptics.light();
-  final saved = await provider.answerOpenLoop(card, action);
-  if (!saved) {
+  final outcome = await provider.answerOpenLoop(card, action);
+  if (outcome != OpenLoopAnswerStatus.saved) {
     OmiHaptics.error();
     final target = context.mounted ? context : host;
     if (target.mounted) {
-      OmiFeedback.error(target, provider.lastOpenLoopConflict ? conflictMessage : failedMessage);
+      OmiFeedback.error(target, outcome == OpenLoopAnswerStatus.conflict ? conflictMessage : failedMessage);
     }
   }
-  return saved;
+  return outcome == OpenLoopAnswerStatus.saved;
 }

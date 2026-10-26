@@ -32,6 +32,10 @@ typedef ReviewClipPlayer = Future<bool> Function(String itemId, Uint8List wav);
 /// Whether the Review surface exists for this account. Unknown until the first load answers.
 enum ReviewAvailability { unknown, on, off }
 
+/// The outcome of one open-loop card answer, per request: a 409 (answered on
+/// another device) stays gone and is reported differently from a send failure.
+enum OpenLoopAnswerStatus { saved, conflict, failed }
+
 /// The few questions Omi needs the user to answer, shared by the Home entry card, the Review page,
 /// and the same cards shown in context (a transcript, a person page).
 ///
@@ -226,34 +230,28 @@ class ReviewProvider extends ChangeNotifier {
     }
   }
 
-  /// True when the last failed open-loop answer was a 409: answered elsewhere, stays gone.
-  bool lastOpenLoopConflict = false;
-
-  /// Sends an open-loop card answer. The card leaves the list immediately and
-  /// comes back if the send fails, except a 409 (answered on another device),
-  /// which means it is answered and stays gone.
-  Future<bool> answerOpenLoop(OpenLoopCard card, OpenLoopAction action) async {
-    lastOpenLoopConflict = false;
+  /// Sends an open-loop card answer. The card leaves the list immediately; on
+  /// failure only that card comes back, at its original position — a concurrent
+  /// answer or reload that changed the list meanwhile is kept, never rolled
+  /// back with a stale snapshot. A 409 means the card was answered elsewhere
+  /// and stays gone.
+  Future<OpenLoopAnswerStatus> answerOpenLoop(OpenLoopCard card, OpenLoopAction action) async {
     final index = openLoopCards.indexWhere((c) => c.cardId == card.cardId);
-    if (index < 0) return false;
-    final before = openLoopCards;
+    if (index < 0) return OpenLoopAnswerStatus.failed;
     openLoopCards = [...openLoopCards]..removeAt(index);
     _notify();
     switch (await _sendOpenLoopAnswer(card, action)) {
       case ApiSuccess():
-        return true;
+        return OpenLoopAnswerStatus.saved;
       case ApiFailure(:final problem):
         Logger.debug('open loop answer failed: $problem');
-        if (problem.statusCode == 409) {
-          lastOpenLoopConflict = true;
-          _notify();
-          return false;
-        }
+        if (problem.statusCode == 409) return OpenLoopAnswerStatus.conflict;
         if (!openLoopCards.any((c) => c.cardId == card.cardId)) {
-          openLoopCards = before;
+          final at = index <= openLoopCards.length ? index : openLoopCards.length;
+          openLoopCards = [...openLoopCards]..insert(at, card);
         }
         _notify();
-        return false;
+        return OpenLoopAnswerStatus.failed;
     }
   }
 
