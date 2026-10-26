@@ -143,7 +143,7 @@ def release_operational_hold_for_account_deletion(uid: str, blob: Any, *, firest
     expected_meta = match['metageneration']
     receipt_identity = {
         'schema_version': 1,
-        'plan_sha256': approval['plan_sha256'],
+        'plan_sha256': plan_digest(plan),
         'campaign': plan['campaign'],
         'bucket': blob.bucket.name,
         'object_sha256': name_hash,
