@@ -91,6 +91,9 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     final title = named.isEmpty ? l10n.episodeListeningNow : named;
     final topics = named.isEmpty ? EpisodePresentation.topics(episode) : '';
     final peopleNamed = _peopleCount(capture);
+    // A pendant whose recovery was exhausted owes audio: the row names the failure
+    // and offers the one action that can fix it, instead of claiming Listening.
+    final noAudio = state == CaptureDisplayState.noAudio;
     // Paused (or waiting) shows no clock: a time that keeps counting while nothing listens misleads.
     final status = listening
         ? (episode == null ? l10n.episodeCaptureFor : l10n.episodeLiveFor)(elapsed)
@@ -139,7 +142,7 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         borderRadius: OmiRadius.mdAll,
-                        border: Border.all(color: OmiColors.border),
+                        border: Border.all(color: noAudio ? OmiColors.warning : OmiColors.border),
                       ),
                       child: OmiBreathingDot(live: listening),
                     ),
@@ -150,21 +153,33 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
                         children: [
                           Text(
                             title,
-                            style: Theme.of(context).textTheme.titleMedium,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(color: noAudio ? OmiColors.warning : null),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 3),
                           Text(
                             rest,
-                            style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+                            style:
+                                OmiType.subhead.copyWith(color: noAudio ? OmiColors.warning : OmiColors.textTertiary),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
                     ),
-                    Icon(Icons.chevron_right_rounded, color: OmiColors.textDisabled),
+                    if (noAudio)
+                      OmiButton.secondary(
+                        key: const Key('home_live_episode_reconnect'),
+                        label: l10n.reconnect,
+                        onPressed: () => capture.reconnectRecordingPendant(),
+                        size: OmiButtonSize.compact,
+                      )
+                    else
+                      Icon(Icons.chevron_right_rounded, color: OmiColors.textDisabled),
                   ],
                 ),
               ),

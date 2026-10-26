@@ -29,9 +29,22 @@ class CaptureIngressHealth {
   final bool recoverySpent;
   final bool reconnectSpent;
 
-  bool verifiedAt(DateTime now) =>
+  /// Whether this snapshot proves the pendant is capturing. A flowing lease is
+  /// one proof; a confirmed-subscription quiet is the other: the pendant only
+  /// sends audio while there is sound, so silence after a confirmed
+  /// subscription is healthy listening, not a lapsed link. Anything else —
+  /// an unconfirmed or expired subscription, a repair, a reconnect, an
+  /// exhausted recovery — is not.
+  bool verifiedAt(DateTime now) => subscriptionConfirmed && (audioLeaseValid(now) || phase == 'quiet');
+
+  /// A current audio lease: audio actually arrived, and recently. The proof a
+  /// zero-byte dispute (a wedge episode) still needs — a confirmed subscription
+  /// alone does not show the link delivers, which is exactly what it disputes.
+  bool audioLeaseValid(DateTime now) =>
       phase == 'flowing' && subscriptionConfirmed && now.millisecondsSinceEpoch < validUntilMs;
 
+  /// Native recovery is exhausted and audio still is not arriving. Only the
+  /// user can restore the link; surfaces may say so and offer a reconnect.
   bool get actionable => phase == 'actionRequired';
 
   static CaptureIngressHealth? parse(String json) {

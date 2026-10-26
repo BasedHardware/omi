@@ -140,6 +140,7 @@ class CaptureController extends ChangeNotifier
   final Future<CreateConversationResponse?> Function()? _processInProgressConversationOverride;
   final Future<InProgressProcessOutcome> Function()? _processInProgressOutcomeOverride;
   final Future<DeviceConnection?> Function(String deviceId)? _deviceConnectionLoader;
+  final Future<void> Function(String deviceId)? _pendantReconnectLoader;
   final ValueListenable<PhoneCallState>? _omiCallState;
   final CaptureNativeWriterGate _nativeWriterGate;
   final CaptureWedgeMonitor? _wedgeMonitorOverride;
@@ -402,6 +403,7 @@ class CaptureController extends ChangeNotifier
     Future<CreateConversationResponse?> Function()? processInProgressConversation,
     Future<InProgressProcessOutcome> Function()? processInProgressOutcome,
     Future<DeviceConnection?> Function(String deviceId)? deviceConnectionLoader,
+    Future<void> Function(String deviceId)? pendantReconnect,
     ValueListenable<PhoneCallState>? omiCallState,
     CaptureNativeWriterGate? nativeWriterGate,
     CaptureWedgeMonitor? captureWedgeMonitor,
@@ -428,6 +430,7 @@ class CaptureController extends ChangeNotifier
         _processInProgressConversationOverride = processInProgressConversation,
         _processInProgressOutcomeOverride = processInProgressOutcome,
         _deviceConnectionLoader = deviceConnectionLoader,
+        _pendantReconnectLoader = pendantReconnect,
         _omiCallState = omiCallState,
         _nativeWriterGate = nativeWriterGate ?? const NoopCaptureNativeWriterGate(),
         _wedgeMonitorOverride = captureWedgeMonitor,
@@ -803,6 +806,13 @@ class CaptureController extends ChangeNotifier
       throw StateError('Recording changed');
     }
     final target = SystemSurfaceTarget(recordingId: recordingId, conversationRevision: conversationRevision);
+    // A reconnect is a device action, not a capture transition, so it does not
+    // ride the coordinator's event fence; it re-establishes the link the
+    // capture then keeps.
+    if (action == 'reconnect') {
+      await reconnectRecordingPendant();
+      return;
+    }
     final CaptureEvent event;
     switch (action) {
       case 'pause':
@@ -1135,6 +1145,28 @@ class CaptureController extends ChangeNotifier
   bool get pendantCaptureVerified {
     if (!CaptureIngressHealth.hideUnverifiedListening || !_usesNativeIngress) return true;
     return _ingressPort!.ingressHealth(_recordingDevice!.id)?.verifiedAt(_now()) ?? false;
+  }
+
+  /// Native recovery is exhausted while the pendant still owes audio: the link
+  /// is there but no confirmed subscription ever delivered sound, and no
+  /// automatic repair is left. The one ingress state surfaces may present as a
+  /// failure with a reconnect action; every other unverified moment is a wait.
+  bool get pendantCaptureActionRequired {
+    if (!CaptureIngressHealth.hideUnverifiedListening || !_usesNativeIngress) return false;
+    return _ingressPort!.ingressHealth(_recordingDevice!.id)?.actionable ?? false;
+  }
+
+  /// A reader's Reconnect from a capture surface (Live Activity, Home, the
+  /// device page): one disconnect-and-reconnect of the recording pendant
+  /// through the shared managed path — the same recovery the wedge monitor's
+  /// own retry uses. Native capture health sees the fresh link as a new
+  /// generation and re-verifies it; this never loops and never spends the
+  /// native recovery budget's own radio work.
+  Future<void> reconnectRecordingPendant() async {
+    final device = _recordingDevice;
+    if (lifetime.isClosed || device == null) throw StateError('No pendant to reconnect');
+    await (_pendantReconnectLoader?.call(device.id) ??
+        ServiceManager.instance().device.recoverConnection(device.id, shouldRetry: () => true));
   }
 
   Future<void> _setIngressAuthorized(bool authorized) async {

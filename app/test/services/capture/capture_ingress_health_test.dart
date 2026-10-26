@@ -20,14 +20,21 @@ void main() {
 
   tearDown(() => BleBridge.instance.onPeripheralDisconnected(device, null));
 
-  test('only a confirmed flowing lease proves capture; expiry fails closed', () {
-    for (final phase in ['inactive', 'unverified', 'repairing', 'reconnecting', 'quiet', 'actionRequired']) {
+  test('a confirmed flowing lease or a confirmed-subscription quiet proves capture; expiry fails closed', () {
+    for (final phase in ['inactive', 'unverified', 'repairing', 'reconnecting', 'actionRequired']) {
       expect(CaptureIngressHealth.parse(snapshot(phase: phase))!.verifiedAt(now), isFalse);
     }
+    // The pendant sends audio only while there is sound, so silence on a confirmed
+    // subscription is healthy listening, not a lapsed link — the audio lease in the
+    // snapshot is already empty when native reports quiet.
+    final quiet = CaptureIngressHealth.parse(snapshot(phase: 'quiet'))!;
+    expect(quiet.validUntilMs, 130000, reason: 'the fixture keeps a lease; quiet must not depend on it');
+    expect(CaptureIngressHealth.parse(snapshot(phase: 'quiet', confirmed: false))!.verifiedAt(now), isFalse);
     expect(CaptureIngressHealth.parse(snapshot(confirmed: false))!.verifiedAt(now), isFalse);
     final flowing = CaptureIngressHealth.parse(snapshot())!;
     expect(flowing.verifiedAt(now), isTrue);
     expect(flowing.verifiedAt(now.add(const Duration(seconds: 30))), isFalse);
+    expect(quiet.verifiedAt(now), isTrue);
     expect(CaptureIngressHealth.parse('{}'), isNull);
     expect(CaptureIngressHealth.parse('broken'), isNull);
   });

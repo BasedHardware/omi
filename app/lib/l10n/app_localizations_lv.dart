@@ -8618,6 +8618,9 @@ class AppLocalizationsLv extends AppLocalizations {
       'Transkripcija nav pieejama — ierakstīšana turpinās, un jūsu audio tiek saglabāts.';
 
   @override
+  String get captureNoAudioFromPendant => 'No kulona nav audio';
+
+  @override
   String get capturing => 'Notiek ierakstīšana';
 
   @override
@@ -11115,6 +11118,12 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'Bluetooth savienojums ar jūsu Omi ir apstājies, tāpēc audio nesasniedz lietotni. Omi turpina ierakstīt ierīcē un sinhronizēsies, kad savienojums atjaunosies. Atkārtots mēģinājums atkal izveido savienojumu; ja tas joprojām neizdodas, pārbaudiet ierīci sadaļā Iestatījumi > Ierīce.';
+
+  @override
+  String get captureConnecting => 'Savienojas…';
+
+  @override
+  String get captureNoAudioDetail => 'Kulons ir savienots, taču nekāds skaņas signāls nesasniedz jūsu tālruni';
 
   @override
   String get captureIngressNeedsReconnect => 'Audio nesasniedz lietotni — atkārtoti pievienojiet Omi';

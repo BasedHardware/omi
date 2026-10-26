@@ -8642,6 +8642,9 @@ class AppLocalizationsMk extends AppLocalizations {
       'Транскрипцијата не е достапна — снимањето продолжува и вашето аудио се зачувува.';
 
   @override
+  String get captureNoAudioFromPendant => 'Нема звук од приврзокот';
+
+  @override
   String get capturing => 'Снимање';
 
   @override
@@ -11144,6 +11147,12 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'Bluetooth-врската со вашиот Omi застана, така што звукот не стига до апликацијата. Omi продолжува да снима на уредот и ќе се синхронизира кога ќе се врати врската. Обидот повторно ја воспоставува врската; ако продолжува да не успева, проверете го уредот во Поставки > Уред.';
+
+  @override
+  String get captureConnecting => 'Се поврзува…';
+
+  @override
+  String get captureNoAudioDetail => 'Привесоката е поврзана, но никој звук не стигнува до вашиот телефон';
 
   @override
   String get captureIngressNeedsReconnect => 'Аудиото не стига до апликацијата — повторно поврзете го Omi';

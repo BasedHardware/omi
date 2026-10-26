@@ -51,6 +51,10 @@ class _Device extends ChangeNotifier implements DeviceProvider {
 }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
+  @override
+  bool get pendantCaptureActionRequired => false;
+  @override
+  bool get pendantCaptureVerified => true;
   bool streaming = false;
   bool paused = false;
   double rate = 1;

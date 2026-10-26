@@ -135,7 +135,12 @@ void main() {
           case 'health':
             BleBridge.instance.onCaptureHealth(uuid, jsonEncode(step['snapshot']));
             final health = BleBridge.instance.ingressHealth(uuid)!;
-            expect(health.verifiedAt(DateTime.now()), isFalse);
+            // The incident never delivers audio, so only its settled quiet (a confirmed
+            // subscription over silence) verifies; every transitional snapshot does not.
+            expect(
+              health.verifiedAt(DateTime.now()),
+              step['snapshot']['phase'] == 'quiet' && step['snapshot']['subscription_confirmed'] == true,
+            );
             expect(health.actionable, isFalse);
           case 'disconnected':
             BleBridge.instance.onPeripheralDisconnected(uuid, 'capture_recovery');

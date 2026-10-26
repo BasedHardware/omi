@@ -8594,6 +8594,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Transcription is unavailable — recording continues and your audio is saved.';
 
   @override
+  String get captureNoAudioFromPendant => 'No audio from pendant';
+
+  @override
   String get capturing => 'Capturing';
 
   @override
@@ -11076,6 +11079,12 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get captureWedgeBleExplanation =>
       'The Bluetooth link to your Omi stalled, so audio isn\'t reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.';
+
+  @override
+  String get captureConnecting => 'Connecting…';
+
+  @override
+  String get captureNoAudioDetail => 'Pendant connected, but no audio is reaching your phone';
 
   @override
   String get captureIngressNeedsReconnect => 'Audio isn\'t reaching the app — reconnect your Omi';
