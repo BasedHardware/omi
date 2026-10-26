@@ -1374,6 +1374,7 @@ class TestAsyncCoordinatorBehavioral:
         saved_modules = {}
         stubs = {}
         from database.sync_jobs import SyncLedgerFenceMode
+        from database.legal_holds import DestructiveOperationInProgress as actual_destructive_operation_in_progress
 
         prior_utils = sys.modules.get('utils')
         prior_utils_sync = sys.modules.get('utils.sync')
@@ -1406,6 +1407,7 @@ class TestAsyncCoordinatorBehavioral:
             'database.users',
             'database.user_usage',
             'database.sync_ledger',
+            'database.legal_holds',
             'database.sync_empty_recovery',
             'database.firestore_read_metrics',
             'firebase_admin',
@@ -1474,6 +1476,8 @@ class TestAsyncCoordinatorBehavioral:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        sys.modules['database.legal_holds'].DestructiveOperationInProgress = actual_destructive_operation_in_progress
 
         # routers/sync.py resolves its handler budget at import time against the
         # dispatch deadline; a MagicMock attr cannot be compared inside min().
@@ -3432,6 +3436,8 @@ class TestV2EndpointExecution:
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
+        from database.legal_holds import DestructiveOperationInProgress as actual_destructive_operation_in_progress
+
         heavy_deps = [
             'redis',
             'database',
@@ -3442,6 +3448,7 @@ class TestV2EndpointExecution:
             'database.users',
             'database.user_usage',
             'database.sync_ledger',
+            'database.legal_holds',
             'database.sync_empty_recovery',
             'database.firestore_read_metrics',
             'firebase_admin',
@@ -3510,6 +3517,8 @@ class TestV2EndpointExecution:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        sys.modules['database.legal_holds'].DestructiveOperationInProgress = actual_destructive_operation_in_progress
 
         # routers/sync.py resolves its handler budget at import time against the
         # dispatch deadline; a MagicMock attr cannot be compared inside min().

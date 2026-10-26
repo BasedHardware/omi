@@ -68,7 +68,7 @@ void main() {
           );
           expect(isSyncUploadRateLimitResponse(response), isTrue);
           expect(
-            isPacedBackfillReasonCode(syncRateLimitReasonCode(response)),
+            isPacedSyncAdmissionReasonCode(syncRateLimitReasonCode(response)),
             isTrue,
           );
           expect(
@@ -87,7 +87,7 @@ void main() {
         );
         expect(isSyncUploadRateLimitResponse(fairUse), isTrue);
         expect(
-          isPacedBackfillReasonCode(syncRateLimitReasonCode(fairUse)),
+          isPacedSyncAdmissionReasonCode(syncRateLimitReasonCode(fairUse)),
           isFalse,
         );
 
@@ -99,7 +99,7 @@ void main() {
         expect(isSyncUploadRateLimitResponse(unscoped), isTrue);
         expect(syncRateLimitReasonCode(unscoped), isNull);
         expect(
-          isPacedBackfillReasonCode(syncRateLimitReasonCode(unscoped)),
+          isPacedSyncAdmissionReasonCode(syncRateLimitReasonCode(unscoped)),
           isFalse,
         );
       },
@@ -118,9 +118,21 @@ void main() {
         );
         expect(isSyncUploadRateLimitResponse(capacity), isTrue);
         expect(
-          isPacedBackfillReasonCode(syncRateLimitReasonCode(capacity)),
+          isPacedSyncAdmissionReasonCode(syncRateLimitReasonCode(capacity)),
           isTrue,
         );
+
+        final dispatchHold = http.Response(
+          '{"code":"dispatch_hold"}',
+          503,
+          headers: {
+            'x-omi-rate-limit-reason': 'dispatch_hold',
+            'retry-after': '3600',
+          },
+        );
+        expect(isSyncUploadRateLimitResponse(dispatchHold), isTrue);
+        expect(isPacedSyncAdmissionReasonCode(syncRateLimitReasonCode(dispatchHold)), isTrue);
+        expect(syncRateLimitKindForResponse(dispatchHold), SyncRateLimitKind.backendCapacity);
 
         final finalizationRetry = http.Response(
           '{"detail":"Sync recovery finalization is retrying; local audio remains available."}',
@@ -168,7 +180,7 @@ void main() {
     test(
       'paced 429 and header-scoped 503 stay a cooldown and do not emit Recording Upload Failed',
       () async {
-        for (final reason in ['backfill_paced', 'backfill_capacity']) {
+        for (final reason in ['backfill_paced', 'backfill_capacity', 'dispatch_hold']) {
           limiter.clear();
           final events = <({String name, Map<String, dynamic> properties})>[];
           var uploads = 0;
@@ -188,8 +200,9 @@ void main() {
               uploads++;
               throw SyncRateLimitedException(
                 kind: SyncRateLimitKind.backendCapacity,
-                retryAfterSeconds: 60,
+                retryAfterSeconds: reason == 'dispatch_hold' ? 3600 : 60,
                 reasonCode: reason,
+                statusCode: reason == 'dispatch_hold' ? 503 : 429,
               );
             },
           );
@@ -209,7 +222,10 @@ void main() {
             reason: 'Retry-After must close admission; the client must not loop faster',
           );
           expect(limiter.reason, RateLimitReason.backendBusy);
-          expect(limiter.activeRetryAfterSeconds, inInclusiveRange(59, 60));
+          expect(
+            limiter.activeRetryAfterSeconds,
+            reason == 'dispatch_hold' ? inInclusiveRange(3599, 3600) : inInclusiveRange(59, 60),
+          );
           expect(events.map((event) => event.name), [
             RecordingUploadTelemetry.startedEvent,
           ]);
@@ -318,7 +334,7 @@ void main() {
     }
 
     test(
-      'a paced 429 leaves the recording pending and keeps the file',
+      'a scoped dispatch hold leaves the recording pending and keeps the file without retry spend',
       () async {
         final events = <({String name, Map<String, dynamic> properties})>[];
         final wal = Wal(
@@ -348,8 +364,9 @@ void main() {
             }) async {
               throw SyncRateLimitedException(
                 kind: SyncRateLimitKind.backendCapacity,
-                retryAfterSeconds: 60,
-                reasonCode: 'backfill_paced',
+                retryAfterSeconds: 3600,
+                reasonCode: 'dispatch_hold',
+                statusCode: 503,
               );
             },
             telemetryEmitter: (name, properties) => events.add((name: name, properties: properties)),
@@ -371,7 +388,7 @@ void main() {
           events.map((event) => event.name),
           isNot(contains(RecordingUploadTelemetry.failedEvent)),
         );
-        expect(limiter.activeRetryAfterSeconds, inInclusiveRange(59, 60));
+        expect(limiter.activeRetryAfterSeconds, inInclusiveRange(3599, 3600));
       },
     );
 
