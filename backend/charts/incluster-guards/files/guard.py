@@ -720,6 +720,7 @@ def run(client, dry_run, now=None):
                 'op': 'add',
                 'path': '/metadata/annotations',
                 'value': {
+                    **cm.get('metadata', {}).get('annotations', {}),
                     'omi.me/batch-safety-verdict': batch['verdict'],
                     'omi.me/parakeet-guard-verdict': verdict,
                 },

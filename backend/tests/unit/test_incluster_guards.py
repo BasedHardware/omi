@@ -809,6 +809,52 @@ def render_docs(environment='prod', *extra, overlay=True):
     return [obj for obj in yaml.safe_load_all(subprocess.check_output([*command, *extra], text=True)) if obj]
 
 
+@pytest.mark.parametrize('environment,batch_enabled', [('dev', False), ('prod', False), ('prod', True)])
+def test_helm_state_configmaps_keep_job_owned_fields_out_of_apply(environment, batch_enabled):
+    docs = render_docs(environment, '--set', f'batch.enabled={str(batch_enabled).lower()}')
+    state_names = {f'{environment}-omi-incluster-guards-state'}
+    if batch_enabled:
+        state_names.add(f'{environment}-omi-incluster-guards-batch-state')
+    states = {
+        obj['metadata']['name']: obj
+        for obj in docs
+        if obj['kind'] == 'ConfigMap' and obj['metadata']['name'] in state_names
+    }
+    assert set(states) == state_names
+    for obj in states.values():
+        # No data (including empty/null maps), immutable, hook or lookup payload:
+        # SSA must leave the live rollback marker, streak and pending intent alone.
+        assert set(obj) == {'apiVersion', 'kind', 'metadata'}
+        assert obj['metadata'] == {
+            'name': obj['metadata']['name'],
+            'namespace': f'{environment}-omi-backend',
+            'annotations': {'helm.sh/resource-policy': 'keep'},
+        }
+
+
+def test_first_parakeet_state_write_preserves_helm_annotations(monkeypatch):
+    client = FakeClient()
+    original_kube = client.kube
+    annotations = {
+        'helm.sh/resource-policy': 'keep',
+        'meta.helm.sh/release-name': 'prod-omi-incluster-guards',
+        'meta.helm.sh/release-namespace': 'prod-omi-backend',
+    }
+
+    def kube(path, patch=None):
+        if path == 'state' and patch is None:
+            return {'metadata': {'resourceVersion': '7', 'annotations': deepcopy(annotations)}}
+        return original_kube(path, patch)
+
+    monkeypatch.setattr(client, 'kube', kube)
+    assert guard.run(client, False, 0) == 0
+    state_patch = next(patch for path, patch in client.patches if path == 'state')
+    persisted = state_patch[2]['value']
+    assert all(persisted[key] == value for key, value in annotations.items())
+    assert persisted['omi.me/parakeet-guard-verdict'] == 'WARMUP'
+    assert client.state['since'] == 0
+
+
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_helm_rbac_and_cpu_placement(environment):
     objs = render(environment)
@@ -1136,6 +1182,16 @@ class Kube:
     @property
     def state(self):
         return json.loads(self.cm['data']['state'])
+
+
+def test_first_batch_state_write_initializes_an_empty_configmap(tmp_path):
+    kube, cloud = Kube(), Cloud()
+    kube.cm.pop('data')
+    kube.cm['metadata']['annotations'] = {'helm.sh/resource-policy': 'keep'}
+    assert batch.run(kube, cloud, tmp_path / 'missing-snapshot.json', now=100) == 1
+    assert kube.state['since'] == 100
+    assert kube.cm['metadata']['annotations'] == {'helm.sh/resource-policy': 'keep'}
+    assert not cloud.writes
 
 
 def sample(identity='id', since=0, now=1800):

@@ -80,8 +80,10 @@ kind: ConfigMap
 metadata:
   name: {{ .Release.Name }}-state
   namespace: {{ .Values.namespace }}
-data:
-  state: '{}'
+  annotations:
+    helm.sh/resource-policy: keep
+# Only the Job owns data and verdict annotations. An empty shell also lets
+# upgrades relinquish legacy data.state ownership without resetting live state.
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
@@ -201,8 +203,9 @@ kind: ConfigMap
 metadata:
   name: {{ .Release.Name }}-batch-state
   namespace: {{ .Values.namespace }}
-data:
-  state: '{}'
+  annotations:
+    helm.sh/resource-policy: keep
+# Pending rollback intent belongs to the Job, never to a Helm apply/rollback.
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
