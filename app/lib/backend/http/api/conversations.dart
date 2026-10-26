@@ -22,6 +22,8 @@ import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
 
+part 'sync_job_fetch.dart';
+
 /// Whether a non-200 response from POST /v1/conversations (process in-progress
 /// conversation) is a benign race rather than a failure worth crash-reporting.
 ///
@@ -472,34 +474,70 @@ class ConversationApi {
     );
     return switch (sent) {
       ApiFailure(:final problem) => ApiFailure(problem),
-      ApiSuccess(:final data, :final truncated) => switch (decodeApiRows<ServerConversation>(
-          data,
-          ServerConversation.fromJson,
-          fallback: recordFallback,
-        )) {
-          ApiSuccess(:final data, :final rejectedRows) => ApiSuccess(
-              data,
-              rejectedRows: rejectedRows,
-              truncated: truncated,
-            ),
+      ApiSuccess(:final data, :final truncated) => switch (await _decodeOffUi(data, conversationRowsDecoder)) {
+          ApiSuccess(:final data, :final rejectedRows) => _rows(data, rejectedRows, truncated),
           ApiFailure(:final problem) => ApiFailure(problem),
         },
     };
   }
 
-  Future<ApiResult<ServerConversation>> byId(String id) {
-    return executeApi<ServerConversation>(
+  static ApiResult<List<ServerConversation>> _rows(List<ServerConversation> rows, int rejectedRows, bool truncated) {
+    // decodeApiRows' partial-decode report, raised here because the decode may run on another isolate.
+    if (rejectedRows > 0) {
+      recordFallback(
+        const ApiFallbackEvent(reason: ApiFallbackReason.partialDecode, outcome: ApiFallbackOutcome.degraded),
+      );
+    }
+    return ApiSuccess(rows, rejectedRows: rejectedRows, truncated: truncated);
+  }
+
+  /// Unlocked conversations carry full transcripts, so a list page or one
+  /// detail body can be megabytes. Parse large bodies off the UI isolate: this
+  /// runs on Home's load-more while the user scrolls, and on the detail open
+  /// right after a tap. [decode] is read before the hop because the other
+  /// isolate has its own copy of every global.
+  static Future<R> _decodeOffUi<R>(String body, R Function(String) decode) => offUiIsolate(
+        () => decode(body),
+        size: body.length,
+        threshold: conversationListBackgroundParseBytes,
+        debugName: 'conversation_parse',
+      );
+
+  Future<ApiResult<ServerConversation>> byId(String id) async {
+    final sent = await executeApi<String>(
       request: ApiRequest(url: '${_baseUrl}v1/conversations/$id', method: 'GET'),
       send: _send,
-      decode: (body) {
-        final decoded = jsonDecode(body);
-        if (decoded is! Map<String, dynamic>) {
-          throw const FormatException('conversation detail is not an object');
-        }
-        return ServerConversation.fromJson(decoded);
-      },
+      decode: (body) => body,
     );
+    switch (sent) {
+      case ApiFailure(:final problem):
+        return ApiFailure(problem);
+      case ApiSuccess(:final data, :final truncated):
+        try {
+          return ApiSuccess(await _decodeOffUi(data, conversationDetailDecoder), truncated: truncated);
+        } on FormatException {
+          return const ApiFailure(ApiProblem(ApiProblemKind.decode));
+        }
+    }
   }
+}
+
+/// The list-page and detail decoders [ConversationApi] runs off the UI isolate.
+/// Tests swap them to prove where they run; production never reassigns them.
+@visibleForTesting
+ApiResult<List<ServerConversation>> Function(String body) conversationRowsDecoder = decodeConversationRows;
+@visibleForTesting
+ServerConversation Function(String body) conversationDetailDecoder = decodeConversationDetail;
+
+ApiResult<List<ServerConversation>> decodeConversationRows(String body) =>
+    decodeApiRows<ServerConversation>(body, ServerConversation.fromJson);
+
+ServerConversation decodeConversationDetail(String body) {
+  final decoded = jsonDecode(body);
+  if (decoded is! Map<String, dynamic>) {
+    throw const FormatException('conversation detail is not an object');
+  }
+  return ServerConversation.fromJson(decoded);
 }
 
 /// Fetches conversation-lifetime photo bytes for storage-backed photos. Legacy
@@ -751,7 +789,13 @@ class SyncUploadHttpException implements Exception {
   final int statusCode;
   final String message;
 
-  const SyncUploadHttpException(this.statusCode, this.message);
+  /// The server's `Retry-After` (delta-seconds) on a 5xx, when provided. The
+  /// sync dispatch and ledger-fence refusals carry one so the client pauses
+  /// instead of failing every remaining batch on the same gate; null when the
+  /// server gave no pacing guidance (e.g. platform-generated 503s).
+  final int? retryAfterSeconds;
+
+  const SyncUploadHttpException(this.statusCode, this.message, {this.retryAfterSeconds});
 
   @override
   String toString() => 'SyncUploadHttpException(status=$statusCode): $message';
@@ -870,7 +914,9 @@ int? _parseRetryAfterSeconds(http.Response response) {
 SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) {
   final reason = syncRateLimitReasonCode(response);
   if (reason == 'fair_use') return SyncRateLimitKind.fairUse;
-  if (reason == 'backfill_capacity' || reason == 'backfill_paced') return SyncRateLimitKind.backendCapacity;
+  if (reason == 'backfill_capacity' || reason == 'backfill_paced' || reason == 'dispatch_hold') {
+    return SyncRateLimitKind.backendCapacity;
+  }
   return SyncRateLimitKind.edgeThrottle;
 }
 
@@ -881,15 +927,15 @@ String? syncRateLimitReasonCode(http.Response response) {
   return reason;
 }
 
-/// Historical-recovery pacing the backend asks the client to wait out.
+/// Account-scoped admission pacing the backend asks the client to wait out.
 ///
-/// One predicate for the upload response and the job reconciler. `backfill_paced`
-/// and `backfill_capacity` stay pending and retry on Retry-After; they are not
-/// a second failure taxonomy.
-bool isPacedBackfillReasonCode(String? reasonCode) {
+/// These reasons stay pending and retry on Retry-After without spending a WAL
+/// retry; they are not a second failure taxonomy.
+bool isPacedSyncAdmissionReasonCode(String? reasonCode) {
   switch (reasonCode?.trim().toLowerCase()) {
     case 'backfill_paced':
     case 'backfill_capacity':
+    case 'dispatch_hold':
       return true;
     default:
       return false;
@@ -899,11 +945,11 @@ bool isPacedBackfillReasonCode(String? reasonCode) {
 /// Upload responses that are admission throttles rather than processing failures.
 ///
 /// Every 429 is a throttle. A 503 is a throttle only when the backend scopes it
-/// with `backfill_capacity`. An unscoped 503, including job-status finalization
-/// retry and `sync_dispatch_unavailable`, is not this predicate.
+/// with a recognized admission reason. Unknown 503 reasons remain generic,
+/// including job-status finalization retry and `sync_dispatch_unavailable`.
 bool isSyncUploadRateLimitResponse(http.Response response) {
   if (response.statusCode == 429) return true;
-  return response.statusCode == 503 && syncRateLimitReasonCode(response) == 'backfill_capacity';
+  return response.statusCode == 503 && isPacedSyncAdmissionReasonCode(syncRateLimitReasonCode(response));
 }
 
 /// The server still owns these bytes; wait without spending recording retries.
@@ -1019,7 +1065,11 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   } else if (isSyncRecoveryWindowExceededResponse(response)) {
     throw const SyncRecoveryWindowExceededException();
   } else if (response.statusCode >= 500) {
-    throw SyncUploadHttpException(response.statusCode, 'Server is temporarily unavailable');
+    throw SyncUploadHttpException(
+      response.statusCode,
+      'Server is temporarily unavailable',
+      retryAfterSeconds: _parseRetryAfterSeconds(response),
+    );
   }
   throw SyncUploadHttpException(response.statusCode, 'Upload failed unexpectedly');
 }
@@ -1046,16 +1096,6 @@ SyncJobFetchOutcome syncJobFetchOutcomeForStatusCode(int statusCode) {
   if (statusCode == 404 || statusCode == 403) return SyncJobFetchOutcome.notFound;
   if (statusCode != 200) return SyncJobFetchOutcome.transient;
   return SyncJobFetchOutcome.ok;
-}
-
-class SyncJobFetch {
-  final SyncJobFetchOutcome outcome;
-  final SyncJobStatusResponse? status;
-  final SyncRateLimitedException? rateLimit;
-  const SyncJobFetch(this.outcome, [this.status]) : rateLimit = null;
-  const SyncJobFetch.throttled(this.rateLimit)
-      : outcome = SyncJobFetchOutcome.throttled,
-        status = null;
 }
 
 /// Single GET of a sync job's status — no polling loop. The reconciler owns
@@ -1299,11 +1339,13 @@ class MergeConversationsResponse {
   final String message;
   final String? warning;
   final List<String> conversationIds;
+  final String? mergedConversationId;
 
   MergeConversationsResponse({
     required this.status,
     required this.message,
     this.warning,
+    this.mergedConversationId,
     required this.conversationIds,
   });
 
@@ -1316,6 +1358,7 @@ class MergeConversationsResponse {
       status: generated.status,
       message: generated.message,
       warning: generated.warning,
+      mergedConversationId: generated.mergedConversationId,
       conversationIds: generated.conversationIds,
     );
   }

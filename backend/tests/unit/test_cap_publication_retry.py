@@ -39,7 +39,7 @@ from database._client import (
     is_retryable_firestore_transaction_error,
     run_transactional,
 )
-from database.firestore_transaction_retry import FirestoreContentionExhausted
+from database.firestore_transaction_retry import FirestoreContentionExhausted, equal_jitter_delay
 from routers.listen.contracts import ListenSessionState
 from routers.listen.receiver import ListenReceiver, mark_listen_internal_error
 from utils.observability import held_content as held_metrics
@@ -101,6 +101,22 @@ def test_default_run_transactional_does_not_retry_contention_or_sleep():
     with pytest.raises(Aborted):
         run_transactional(client, operation, sleep=lambda _delay: (_ for _ in ()).throw(AssertionError('slept')))
     assert calls == [1]
+
+
+def test_default_run_transactional_expired_restart_sleeps_equal_jitter_backoff():
+    seen, delays = [], []
+
+    def operation(tx):
+        seen.append(tx)
+        if len(seen) < 3:
+            raise InvalidArgument(EXPIRED)
+        return 'ok'
+
+    client = SimpleNamespace(transaction=lambda: object())
+    assert run_transactional(client, operation, sleep=delays.append, random_value=lambda: 0.5) == 'ok'
+    assert len(seen) == 3 and seen[0] is not seen[1] and seen[1] is not seen[2]
+    assert delays == [equal_jitter_delay(1, lambda: 0.5), equal_jitter_delay(2, lambda: 0.5)]
+    assert delays[0] > 0 and delays[1] > delays[0]
 
 
 @pytest.mark.parametrize('error', [DeadlineExceeded('deadline'), ServiceUnavailable('unavailable')])

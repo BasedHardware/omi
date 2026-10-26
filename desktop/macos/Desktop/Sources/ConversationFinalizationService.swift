@@ -270,9 +270,11 @@ actor ConversationFinalizationService {
         captureInterval: Self.captureInterval(of: bundle.session), conversationID: nil, fetchSelectionWindow: nil)
     }
 
-    var merged: [APIClient.UploadSegment] = []
-    for seg in bundle.segments {
-      let upload = APIClient.UploadSegment(
+    // Keep timed utterances even when a local source uses one speaker throughout.
+    // Merging by identity alone turns an entire recording (including silence)
+    // into one segment and loses the windows used by transcript reads/evidence.
+    let segments = bundle.segments.map { seg in
+      APIClient.UploadSegment(
         text: seg.text,
         speaker: seg.speakerLabel ?? String(format: "SPEAKER_%02d", seg.speaker),
         speaker_id: seg.speaker,
@@ -281,33 +283,15 @@ actor ConversationFinalizationService {
         start: seg.startTime,
         end: seg.endTime
       )
-      if let last = merged.last,
-        last.speaker_id == upload.speaker_id,
-        last.speaker == upload.speaker,
-        last.is_user == upload.is_user,
-        last.person_id == upload.person_id
-      {
-        merged[merged.count - 1] = APIClient.UploadSegment(
-          text: last.text + " " + upload.text,
-          speaker: last.speaker,
-          speaker_id: last.speaker_id,
-          is_user: last.is_user,
-          person_id: last.person_id,
-          start: last.start,
-          end: upload.end
-        )
-      } else {
-        merged.append(upload)
-      }
     }
 
     let chunked = await ClientRefactorFlags.chunks
     // refactor: superseded by SegmentContinuationUpload when clients_from_segments_chunks=serve
-    let uploadSegments = chunked ? merged : Self.compactSegmentsForBackendLimit(merged)
-    if uploadSegments.count != merged.count {
+    let uploadSegments = chunked ? segments : Self.compactSegmentsForBackendLimit(segments)
+    if uploadSegments.count != segments.count {
       log("event=refactor_shadow lane=L5 check=segment_compaction outcome=disagree")
       log(
-        "ConversationFinalization: Compacted local session \(sessionId) from \(merged.count) to \(uploadSegments.count) segments for backend upload"
+        "ConversationFinalization: Compacted local session \(sessionId) from \(segments.count) to \(uploadSegments.count) segments for backend upload"
       )
     }
 

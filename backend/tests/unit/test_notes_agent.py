@@ -9,11 +9,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from langchain_openai import ChatOpenAI
 
 from llm_gateway.gateway.accounting import rate_card_for
 
 from utils.conversations import notes_agent_tools as tools
 from utils.conversations.screen_people_leads import screen_people_leads
+from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
 from utils.llm import conversation_processing as notes
 from utils.llm import notes_agent as agent
 from utils.llm import notes_agent_policy as policy
@@ -23,6 +25,8 @@ from utils.llm import shaped_agent
 from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.llm.notes_output_contract import check_notes, nested_bullet_count, repair_notes
+from utils.llm.notes_identity import NotesIdentity
+from utils.llm.gateway_client import GatewayContextChatOpenAI
 
 FIXTURE = Path(__file__).parent / 'fixtures' / 'notes_agent' / 'weekly_sync_replay.json'
 OWNER = 'synthetic-owner'
@@ -100,6 +104,20 @@ def test_mirrored_prices_match_the_gateway_rate_card():
     assert rates.input_micro_usd_per_million == round(policy.INPUT_USD_PER_MILLION * 1_000_000)
     assert rates.cached_input_micro_usd_per_million == round(policy.CACHED_INPUT_USD_PER_MILLION * 1_000_000)
     assert rates.output_micro_usd_per_million == round(policy.OUTPUT_USD_PER_MILLION * 1_000_000)
+
+
+def test_transport_requires_gateway_tool_support_not_the_prompt_cache_flag(monkeypatch):
+    monkeypatch.setattr(serving, 'has_byok_keys', lambda: False)
+    gateway_model = GatewayContextChatOpenAI.model_construct(model='omi:auto:conv-structure')
+    direct_model = ChatOpenAI.model_construct(model='gpt-6-luna')
+
+    assert serving.transport_ready(gateway_model)
+    assert not serving.transport_ready(direct_model)
+    assert serving.transport_skip_reason(OWNER, gateway_model) is None
+    assert serving.transport_skip_reason(OWNER, direct_model) == 'unsupported_model'
+    assert serving.transport_skip_reason(None, gateway_model) == 'missing_owner'
+    monkeypatch.setattr(serving, 'has_byok_keys', lambda: True)
+    assert serving.transport_skip_reason(OWNER, gateway_model) == 'byok'
 
 
 # ---------------------------------------------------------------- tool scoping
@@ -310,18 +328,42 @@ def test_tool_cap_forces_submit_and_answers_overflow_with_submit_now():
     assert toolbox.calls == result.tool_calls == 6
     assert model.choices[:2] == ['required', 'required']
     assert model.choices[2] == {'type': 'function', 'function': {'name': prompt.SUBMIT}}
+    assert result.force_reason == 'lookup_cap'
     overflow = [m for m in model.requests[2] if m.get('role') == 'tool' and 'budget exhausted' in m['content']]
     assert len(overflow) == 2
+
+
+def test_lookup_cap_alone_allows_a_voluntary_submit():
+    class SubmitAtCap:
+        def __init__(self):
+            self.choices = []
+
+        async def __call__(self, messages, tool_choice):
+            self.choices.append(tool_choice)
+            if len(self.choices) == 1:
+                calls = [call('search_people', {'query': 'Maya'}, index) for index in range(2)]
+                return agent.CompletionTurn(tool_calls=calls)
+            return agent.CompletionTurn(tool_calls=[call(prompt.SUBMIT, submission(), 3)])
+
+    model = SubmitAtCap()
+    result = run_agent(model, policy.NotesAgentBudget(max_turns=4, max_tool_calls=2))
+
+    assert result.stop == 'submitted' and not result.forced
+    assert result.force_reason is None
+    assert model.choices == ['required', 'required']
+    assert result.tool_calls == 2
 
 
 def test_last_turn_and_cost_cap_force_submit():
     model = ScriptedModel()
     result = run_agent(model, policy.NotesAgentBudget(max_turns=3, max_tool_calls=15))
     assert model.choices[-1]['function']['name'] == prompt.SUBMIT and result.turns == 3
+    assert result.force_reason == 'turn_limit'
     # ~$0.0101 per turn: the second turn would cross the 2-cent cap, so it must submit.
     pricey = ScriptedModel(prompt_tokens=100000, completion=200)
     result = run_agent(pricey, policy.NotesAgentBudget(max_turns=9, max_tool_calls=15))
     assert result.turns == 2 and isinstance(pricey.choices[1], dict) and result.submission is not None
+    assert result.force_reason == 'cost_limit'
 
 
 def test_wall_clock_forces_submit():
@@ -329,6 +371,7 @@ def test_wall_clock_forces_submit():
     model = ScriptedModel()
     result = run_agent(model, policy.NotesAgentBudget(max_turns=9, max_tool_calls=15), clock=lambda: next(ticks, 100))
     assert isinstance(model.choices[1], dict) and result.stop == 'forced_submit'
+    assert result.force_reason == 'deadline'
 
 
 def test_bad_submission_is_returned_once_per_failure_class_then_repaired():
@@ -352,6 +395,7 @@ def test_bad_submission_is_returned_once_per_failure_class_then_repaired():
     assert 'at least' not in result.rejections[0] and 'at least 480' in result.rejections[1]
     assert [s['heading'] for s in result.submission['sections']] == ['Discussion']
     assert 'action_section_dropped' in result.repairs
+    assert result.force_reason == 'submission_rejected'
 
 
 def test_text_only_reply_is_nudged_into_a_forced_submit():
@@ -365,6 +409,7 @@ def test_text_only_reply_is_nudged_into_a_forced_submit():
     model = Chatty()
     result = run_agent(model, policy.NotesAgentBudget(max_turns=4, max_tool_calls=6))
     assert result.submission is not None and isinstance(model.choices[1], dict)
+    assert result.force_reason == 'text_only_response'
 
 
 # ---------------------------------------------------------------- cache-stable prefix
@@ -496,7 +541,9 @@ def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
         started_at=START,
         timezone_name='UTC',
         language_code='en',
-        speaker_map={0: fixture['owner_name'], 1: None},
+        # This happy-path writer replay has a resolved voice binding. Calendar
+        # and screen attendance alone no longer authorize the participant.
+        speaker_map={0: fixture['owner_name'], 1: 'Maya Okafor'},
         transcript_segment_ids=[sid for sid, _spk, _text in fixture['segments']],
         known_spellings='Known spellings\n{"spelling": "Quorbi"}',
     )
@@ -525,11 +572,12 @@ def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
         yield model
 
     monkeypatch.setattr(notes, 'get_llm', lambda *args, **kwargs: object())
-    monkeypatch.setattr(serving, 'transport_ready', lambda model: True)
+    monkeypatch.setattr(serving, 'transport_skip_reason', lambda uid, model: None)
     monkeypatch.setattr(serving, 'model_supports_explicit_cache', lambda model: True)
     monkeypatch.setattr(serving, 'langchain_complete', fake_complete)
     monkeypatch.setattr(serving, 'isolated_notes_model', isolated)
     monkeypatch.setattr(serving, 'owner_profile', lambda uid: 'Founder of a hardware startup.')
+    monkeypatch.setattr(tools, 'gather_prior_meetings', lambda *args, **kwargs: [])
     monkeypatch.setattr(tools.calendar_db, 'get_meetings_in_time_range', lambda *a, **k: [])
     monkeypatch.setattr(tools.screen_activity_db, 'get_screen_activity', lambda *a, **k: [])
     monkeypatch.setattr(tools, 'load_people_documents', lambda uid: [{'id': 'p1', 'name': 'Maya Okafor'}])
@@ -544,6 +592,7 @@ def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
         task_intelligence_capture=False,
         existing_action_items=[{'description': 'Follow up on Quorbi pilot pricing'}],
         screen_frames=(frame,),
+        roster=MeetingRoster((RosterEntry('Maya Okafor', None, None, 'human', 'screen_activity'),), None, False),
         rich_context_enabled=False,
     )
     assert structured.title.startswith('Maya Okafor')
@@ -733,3 +782,138 @@ def test_v2_retains_one_shot_fallback_when_no_usable_submission_exists():
     )
     result = run_agent(complete, budget, contract_v2=True)
     assert result.submission is None and 'salvaged_submission' not in result.repairs
+
+
+@pytest.mark.parametrize('contract_v2', [False, True])
+@pytest.mark.parametrize('enabled', [False, True])
+def test_people_only_speaker_binding_is_rejected_then_sanitized_at_budget_exhaustion(contract_v2, enabled, monkeypatch):
+    monkeypatch.setenv('SPEAKER_IDENTITY_REPAIR_ENABLED', 'on' if enabled else 'off')
+    repairs = []
+    monkeypatch.setattr(agent, 'record_identity_repair', lambda: repairs.append(True))
+    bad = submission(
+        title='Michael Liebmann: agents',
+        overview='Michael Liebmann proposed agents.',
+        participants=[
+            {'name': 'Michael Liebmann', 'speaker': 'c1', 'evidence_kind': 'people', 'evidence': 'People match'}
+        ],
+        sections=[{'heading': 'Agents', 'body_markdown': '- Michael proposed an agent.'}],
+    )
+
+    async def complete(messages, tool_choice):
+        return agent.CompletionTurn(tool_calls=[call(prompt.SUBMIT, bad)])
+
+    result = run_agent(
+        complete,
+        policy.NotesAgentBudget(max_turns=2, min_tool_calls=0, max_tool_calls=2),
+        words=20,
+        contract_v2=contract_v2,
+        identity=NotesIdentity(speaker_names=(('c1', None),)),
+    )
+    if not enabled:
+        assert result.submission is not None
+        assert result.submission['participants'][0]['name'] == 'Michael Liebmann'
+        assert result.submission['overview'] == bad['overview']
+        assert result.rejections == []
+        assert repairs == []
+        return
+    assert any('Unsupported speaker identity' in rejection for rejection in result.rejections)
+    assert result.submission is not None
+    assert result.submission['participants'] == []
+    assert 'Michael' not in str(result.submission)
+    assert repairs == [True]
+
+
+def test_people_only_binding_cannot_escape_through_salvaged_submission():
+    turns = []
+
+    async def complete(messages, tool_choice):
+        turns.append(messages)
+        if len(turns) > 1:
+            raise TimeoutError('synthetic deadline')
+        return agent.CompletionTurn(
+            tool_calls=[
+                call(
+                    prompt.SUBMIT,
+                    submission(
+                        title='Michael Liebmann: agents',
+                        overview='Michael proposed agents.',
+                        participants=[{'name': 'Michael Liebmann', 'speaker': 'c1', 'evidence': 'People match'}],
+                        sections=[{'heading': 'Agents', 'body_markdown': '- Michael proposed agents.'}],
+                    ),
+                )
+            ]
+        )
+
+    result = run_agent(
+        complete,
+        policy.NotesAgentBudget(max_turns=2, min_tool_calls=0, max_tool_calls=2),
+        words=20,
+        contract_v2=True,
+        identity=NotesIdentity(),
+    )
+    assert 'salvaged_submission' in result.repairs
+    assert 'Michael' not in str(result.submission)
+
+
+def test_people_lookup_and_overlapping_calendar_never_authorize_a_voice(toolbox, monkeypatch):
+    box, _ = toolbox
+    box.identity = NotesIdentity()
+    found = run(box.call('search_people', {'query': 'Maya'}))
+    assert json.loads(found.content)['people'][0]['name'] == 'Maya Okafor'
+    assert box.identity == NotesIdentity()
+    assert not box.identity.supported('Maya Okafor')
+    meetings = [
+        {
+            'start_time': START - timedelta(days=1),
+            'end_time': START - timedelta(days=1) + timedelta(minutes=30),
+            'participants': [{'name': 'Historical Person'}],
+        },
+        {'start_time': START, 'end_time': START + timedelta(minutes=30), 'participants': [{'name': 'Maya Okafor'}]},
+    ]
+    monkeypatch.setattr(tools.calendar_db, 'get_meetings_in_time_range', lambda *a, **kw: meetings)
+    run(box.call('get_calendar', {}))
+    assert box.identity.meeting_names == ('Maya Okafor',)
+    assert not box.identity.supported('Maya Okafor')
+    assert not box.identity.supported('Maya Okafor', 'c1')
+    assert not box.identity.supported('Historical Person')
+
+
+def test_call_window_identity_requires_a_sighting_during_this_conversation():
+    during = screen_people_leads(CALL_ROWS, started_at=START, finished_at=START + timedelta(minutes=30))
+    assert during[0]['call_seen_during_conversation']
+    earlier = [{**CALL_ROWS[0], 'timestamp': (START - timedelta(minutes=2)).isoformat()}]
+    before = screen_people_leads(earlier, started_at=START, finished_at=START + timedelta(minutes=30))
+    assert not before[0].get('call_seen_during_conversation')
+
+
+def test_an_evidence_rejection_at_the_lookup_cap_forces_the_next_turn(monkeypatch):
+    """At the cap there is nothing left to investigate: an evidence send-back
+    must force the next turn, not spend it on a lookup that will be refused."""
+    reviews = []
+
+    def review(arguments, **kwargs):
+        reviews.append(kwargs)
+        if len(reviews) == 1:
+            return [agent.Problem(agent.EVIDENCE, 'Name the speaker from the calendar invite.')], None
+        return [], arguments
+
+    monkeypatch.setattr(agent, '_review_submission', review)
+
+    class SubmitAtCap:
+        def __init__(self):
+            self.choices = []
+
+        async def __call__(self, messages, tool_choice):
+            self.choices.append(tool_choice)
+            if len(self.choices) == 1:
+                calls = [call('search_people', {'query': 'Maya'}, index) for index in range(2)]
+                return agent.CompletionTurn(tool_calls=calls)
+            return agent.CompletionTurn(tool_calls=[call(prompt.SUBMIT, submission(), len(self.choices) + 2)])
+
+    model = SubmitAtCap()
+    result = run_agent(model, policy.NotesAgentBudget(max_turns=5, max_tool_calls=2))
+
+    assert model.choices[:2] == ['required', 'required']
+    assert model.choices[2] == {'type': 'function', 'function': {'name': prompt.SUBMIT}}
+    assert result.forced and result.force_reason == 'lookup_cap'
+    assert result.tool_calls == 2 and len(reviews) == 2

@@ -2,15 +2,50 @@
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from google.api_core.exceptions import NotFound
 
-from database import conversation_tombstones
+from database import batch_pipeline_purge as purge, conversation_tombstones
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.user_data_deletion import purge_user_subtree
 from scripts.batch_pipeline_ttl import ttl_resources
 from utils.batch_pipeline.retention import delete_batch_object, purge_batch_storage_owner
+
+
+def test_pending_privacy_artifact_repairs_identity_only_after_object_erasure(monkeypatch):
+    monkeypatch.setattr(purge, 'mirror_refresh', MagicMock())
+    reference = MagicMock()
+    snapshot = SimpleNamespace(id='receipt', reference=reference)
+    pending = datetime.now(timezone.utc) + timedelta(minutes=5)
+    data = {'uri': 'gs://synthetic/owned-object', 'write_pending_until': pending, 'owner_key': 'mismatched'}
+
+    def erase(owner, uri):
+        assert owner == 'synthetic-owner' and uri == data['uri']
+        reference.update.assert_not_called()
+
+    purge._erase_artifact('synthetic-owner', 'batch_pipeline_prod', snapshot, data, erase)
+    update = reference.update.call_args.args[0]
+    assert update['owner_id'] == 'synthetic-owner'
+    assert update['owner_key'] == privacy_owner_key('synthetic-owner')
+    assert update['erasure_requested'] is True and update['cleanup_after'] == pending
+    assert update['expires_at'] is purge.firestore.DELETE_FIELD
+    reference.delete.assert_not_called()
+
+
+def test_privacy_artifact_foreign_uri_cannot_repair_or_ack_erasure(monkeypatch):
+    monkeypatch.setenv('BUCKET_BATCH_PIPELINE', 'synthetic-batch')
+    factory = MagicMock()
+    monkeypatch.setattr('utils.other.local_storage.create_storage_client', factory)
+    reference = MagicMock()
+    snapshot = SimpleNamespace(id='receipt', reference=reference)
+    foreign = f'gs://synthetic-batch/batch-pipeline/batch_pipeline_prod/owners/{privacy_owner_key("other")}/audio/x'
+    with pytest.raises(ValueError, match='outside configured owner storage'):
+        purge._erase_artifact('synthetic-owner', 'batch_pipeline_prod', snapshot, {'uri': foreign}, delete_batch_object)
+    factory.assert_not_called()
+    reference.update.assert_not_called()
+    reference.delete.assert_not_called()
 
 
 class Ref:
@@ -110,12 +145,22 @@ def test_owner_orphan_sweep_stays_inside_owner_namespace_and_checks_versions(mon
 
 def test_completion_ttl_manifest_is_stage_bounded_and_has_no_privacy_authorities():
     resources = ttl_resources('demo-synthetic', 'synthetic-db')
-    assert len(resources) == len(set(resources)) == 14
+    assert len(resources) == len(set(resources)) == 18
     assert all(resource.endswith('/fields/expires_at') for resource in resources)
     assert {resource.split('/collectionGroups/')[1].split('/')[0] for resource in resources} == {
         f'batch_pipeline_{stage}_{table}'
         for stage in ('prod', 'dev')
-        for table in ('jobs', 'results', 'artifacts', 'projections', 'intakes', 'shadow_jobs', 'shadow_spend')
+        for table in (
+            'jobs',
+            'results',
+            'artifacts',
+            'projections',
+            'intakes',
+            'shadow_jobs',
+            'shadow_spend',
+            'shadow_lid_probes',
+            'shadow_lid_spend',
+        )
     }
     with pytest.raises(ValueError):
         ttl_resources('foreign/path')
@@ -143,4 +188,4 @@ def test_from_segments_ttl_policy_is_separately_reviewable_and_defaults_do_not_e
     assert ttl_resources('demo-synthetic', policy_path=policy) == [
         'projects/demo-synthetic/databases/(default)/collectionGroups/from_segments_chunks/fields/expires_at'
     ]
-    assert len(ttl_resources('demo-synthetic')) == 14
+    assert len(ttl_resources('demo-synthetic')) == 18

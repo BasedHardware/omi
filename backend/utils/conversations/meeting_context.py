@@ -144,9 +144,22 @@ _NON_PERSON_WORDS = {
 # "Aryan Gupta and Nik"); only `_split_roster` may take such a line apart.
 _JOINER_WORDS = {'and', 'with', 'vs', 'versus', 'or', 'et'}
 
+# Zoom's speaking-indicator glyph OCRs as a run of I/l bars, often with a w/W
+# lead, glued to the tile name: "IllNik Shevchenko", "wIllNik Shevchenko". Each
+# row then reads as a different name, so the persistence count never reaches
+# MIN_TILE_ROWS. Only a bar-run directly followed by a Capitalised token is a
+# glyph: "Illinois Smith", "William Smith" and "VIII Nik" all keep their lead.
+# Conversation 79e8e434: the real case recovered once these prefixes strip.
+_TILE_GLYPH_PREFIX = re.compile(r'^(?:[wW]?[Il]{1,4})(?=[A-Z][a-z])')
+
+
+def strip_leading_tile_glyphs(line: str) -> str:
+    """Drop a speaking-indicator glyph OCR prefix glued to a tile-name line."""
+    return _TILE_GLYPH_PREFIX.sub('', line)
+
 
 def _clean_line(raw_line: str) -> str:
-    return re.sub(r'\s+', ' ', raw_line).strip(' •|*·-—\t')
+    return strip_leading_tile_glyphs(re.sub(r'\s+', ' ', raw_line).strip(' •|*·-—\t'))
 
 
 def _looks_like_person_name(value: str) -> bool:

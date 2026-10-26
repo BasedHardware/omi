@@ -22,6 +22,8 @@ except ImportError:  # pragma: no cover - local unit tests mock Firestore.
     _firestore_transactional = None
 
 from database._client import data_plane_db as db
+from database.dream_effect_fence import assert_active as assert_dream_effect_active
+from database.required_intake_fence import assert_current as assert_required_intake_sources_current
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.legal_holds import (
     DestructiveGateTakeover,
@@ -2048,6 +2050,8 @@ def _apply_long_term_patch_firestore_transaction(
     # account-wide fence.  Without this transactional read, a delayed legacy
     # review acceptance could recreate content after a tombstone committed but
     # before its required review/correction scrub completed.
+    assert_dream_effect_active(uid, transaction)
+    assert_required_intake_sources_current(uid, transaction, db_client)
     assert_no_destructive_operation_transaction(transaction, db_client, uid=uid)
     # The deletion authority must be part of this very transaction, not only a
     # best-effort preflight.  Otherwise a wipe can race a canonical apply and

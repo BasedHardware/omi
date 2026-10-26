@@ -90,6 +90,32 @@ void main() {
     expect(find.text('Speaker 1'), findsOneWidget);
   });
 
+  testWidgets('live short epochs render unnamed while preserving correction identities', (tester) async {
+    await setupSharedPreferences();
+    await tester.binding.setSurfaceSize(const Size(800, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final rows = [for (var id = 4; id <= 8; id++) segmentFor('epoch-$id', id)];
+    final edited = <int>[];
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+          body: TranscriptWidget(
+        segments: rows,
+        followLatest: true,
+        editSegment: (_, id) => edited.add(id),
+      )),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Speaker'), findsNWidgets(5));
+    for (var id = 1; id <= 8; id++) {
+      expect(find.text('Speaker $id'), findsNothing);
+    }
+    await tester.tap(find.text('Speaker').at(1));
+    await tester.pump();
+    expect(edited, [5]);
+  });
+
   group('Speaker label display', () {
     for (final source in ['auto', 'manual']) {
       testWidgets('Omi speaker with $source label stays inert', (tester) async {

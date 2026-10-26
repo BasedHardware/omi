@@ -8,6 +8,7 @@ import os
 import time
 
 import httpx
+from utils.plugin_transport import plugin_transport
 
 from utils.http_client import (
     safe_request_target,
@@ -19,10 +20,8 @@ from utils.http_client import (
     latest_wins_check,
 )
 from utils.executors import db_executor, postprocess_executor, run_blocking
-from utils import proactivity_flags
 from utils.async_tasks import gather_safe
 import utils.dev_cache as dev_cache
-import database.mentor_gate_state as mentor_gate_state
 
 import database.dev_api_key as dev_api_key_db
 from database import mem_db
@@ -40,11 +39,7 @@ from database.webhook_health import (
     disable_app_in_firestore,
 )
 from database.chat import add_app_message, get_app_messages
-from database.goals import get_user_goals
-from database.notifications import get_mentor_notification_frequency
-from database.users import get_user_language_preference  # used via module attribute by proactivity_producers
 from utils.subscription import is_trial_paywalled
-from utils.mentor_admission import mentor_plan_allows_evaluation
 from database.redis_db import (
     get_generic_cache,
     set_generic_cache,
@@ -65,20 +60,14 @@ from utils.notification_dispatch import (
     dispatch_notification,
     dispatch_notification_async,
 )
-from config.proactivity_v2 import ProactivityDenied
 from utils.llm.clients import generate_embedding, get_llm
-from utils.llm.proactive_notification import (
-    FREQUENCY_TO_BASE_THRESHOLD,
-    MAX_DAILY_NOTIFICATIONS,
-)
-from utils.llm.temporal import current_date_for_uid
+from utils.llm.proactive_notification import MAX_DAILY_NOTIFICATIONS
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
 from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration, serialize_datetimes
 from utils.log_sanitizer import sanitize
-from utils.mentor_notifications import process_mentor_notification
 from utils.episodes.live import on_realtime_segments
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind, resolve_client_kind
 from utils.observability.fallback import record_fallback
@@ -308,6 +297,12 @@ async def trigger_external_integrations(
         try:
             payload = serialize_datetimes(conversation_dict)
             headers = dict(pin_kwargs['headers'])
+            transport = plugin_transport(app.id)
+            if transport:
+                payload['_omi_backup_audio_token'] = transport.token(
+                    uid, 'audio', ttl=7 * 86400, conversation_id=conversation.id
+                )
+                headers.update(transport.delivery_headers(uid, url, payload))
             if idempotency_key:
                 headers['X-Omi-Idempotency-Key'] = idempotency_key
             async with get_webhook_semaphore():
@@ -437,20 +432,30 @@ async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearr
 
 # proactive notification
 def _retrieve_contextual_memories(uid: str, user_context):
+    # The developer webhook supplies this context: a null or wrong-typed value must not crash the
+    # reader (the dispatch boundary swallows the exception and drops the notification).
+    user_context = user_context if isinstance(user_context, Mapping) else {}
+    question = user_context.get('question')
     with generated_compute_scope(uid):
-        vector = generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072
+        vector = generate_embedding(question) if isinstance(question, str) and question else [0] * 3072
     logger.info(f"query_vectors vector: {vector[:5]}")
 
     date_filters = {}  # not support yet
-    filters = user_context.get('filters', {})
+    filters = user_context.get('filters')
+    filters = filters if isinstance(filters, Mapping) else {}
+
+    def filter_list(key: str) -> list:
+        value = filters.get(key)
+        return value if isinstance(value, list) else []
+
     memories_id = query_vectors_by_metadata(
         uid,
         vector,
         dates_filter=[date_filters.get("start"), date_filters.get("end")],
-        people=filters.get("people", []),
-        topics=filters.get("topics", []),
-        entities=filters.get("entities", []),
-        dates=filters.get("dates", []),
+        people=filter_list('people'),
+        topics=filter_list('topics'),
+        entities=filter_list('entities'),
+        dates=filter_list('dates'),
     )
     convos = conversations_db.get_conversations_by_id(uid, memories_id)
     return [c for c in convos if not c.get('is_locked')]
@@ -516,246 +521,6 @@ def _proactive_daily_cap_reached(uid: str) -> bool:
     return (get_daily_notification_count(uid, _user_day_zone(uid)) or 0) >= MAX_DAILY_NOTIFICATIONS
 
 
-MENTOR_RATE_LIMIT_SECONDS = 300  # 5 minutes between mentor notifications
-
-# ---------------------------------------------------------------------------
-# Mentor gate debounce (always enabled; tuning knobs remain configurable)
-# ---------------------------------------------------------------------------
-#
-# MENTOR_RATE_LIMIT_SECONDS above throttles what the user SEES; it starts only
-# after a notification is actually sent, so it does not bound the gate LLM call
-# that decides whether to send one. Nothing did. The gate ran on every buffered
-# segment batch, which for a user in a long meeting is a ~22k-token evaluation
-# every time ten new segments land, and in the gateway ledger for
-# 2026-09-01..09-06 that was 34,806 calls/day — the largest paid-tier OpenAI
-# line in the product.
-#
-# This adds the missing throttle on the evaluation itself: a minimum amount of
-# genuinely new speech AND a minimum wall-clock gap since the last evaluation
-# for this user, plus a per-user daily ceiling for the heavy tail (the top 10%
-# of mentor-active paid users produce 44% of all gate calls). Developers are
-# exempt from the daily ceiling for the same reason they are exempt from the
-# notification cap (#3346): building an app must not be throttled.
-MENTOR_GATE_MIN_NEW_WORDS_ENV = 'MENTOR_GATE_MIN_NEW_WORDS'
-MENTOR_GATE_MIN_SECONDS_ENV = 'MENTOR_GATE_MIN_SECONDS'
-MENTOR_GATE_DAILY_CAP_ENV = 'MENTOR_GATE_DAILY_CAP'
-
-MENTOR_GATE_MIN_NEW_WORDS_DEFAULT = 120
-MENTOR_GATE_MIN_SECONDS_DEFAULT = 90
-MENTOR_GATE_DAILY_CAP_DEFAULT = 60
-
-
-def _mentor_gate_int_env(name: str, default: int, *, minimum: int, maximum: int) -> int:
-    """Read a tuning knob, clamped. A typo must not disable the mentor entirely."""
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    try:
-        return max(minimum, min(int(raw), maximum))
-    except (TypeError, ValueError):
-        return default
-
-
-def _mentor_conversation_word_count(conversation_messages: list[dict]) -> int:
-    # User speech only. The gate evaluates what THE USER said, and the buffer
-    # carries the other speaker too: a long other-speaker exchange must not
-    # satisfy MIN_NEW_WORDS on its own.
-    return sum(
-        len(str(message.get('text') or '').split()) for message in conversation_messages if message.get('is_user')
-    )
-
-
-def _mentor_gate_tail_anchor(conversation_messages: list[dict]) -> list | None:
-    """[timestamp, word_count] of the buffer's last user message, or None."""
-    for message in reversed(conversation_messages):
-        if message.get('is_user'):
-            return [float(message.get('timestamp') or 0), len(str(message.get('text') or '').split())]
-    return None
-
-
-def _mentor_gate_new_words(conversation_messages: list[dict], state: dict, word_count: int) -> int:
-    """User words that arrived after the last evaluation.
-
-    The buffer's tail user message at record time is the anchor. If it is still
-    present, everything after it — plus whatever 2-second coalescing appended to
-    it — is the new speech, and nothing else is. If it is gone, the buffer either
-    restarted (silence clears it) or evicted it from the 50-message cap — and an
-    evicted tail anchor means every retained message is newer than it, so the
-    whole buffer is post-evaluation speech either way. Both read as all-new. A
-    bare word-count delta cannot tell these apart from retained history, which
-    is exactly how a shrinking buffer used to replay old speech as new.
-    """
-    anchor = state.get('anchor')
-    if isinstance(anchor, (list, tuple)) and len(anchor) == 2:
-        anchor_ts, anchor_words = float(anchor[0]), int(anchor[1])
-        for index in range(len(conversation_messages) - 1, -1, -1):
-            message = conversation_messages[index]
-            if not message.get('is_user'):
-                continue
-            if float(message.get('timestamp') or 0) != anchor_ts:
-                continue
-            current_words = len(str(message.get('text') or '').split())
-            if current_words < anchor_words:
-                # Same recording offset but less speech: a restarted
-                # conversation that happens to reuse the offset, not the anchor.
-                continue
-            appended = current_words - anchor_words
-            after = sum(
-                len(str(m.get('text') or '').split()) for m in conversation_messages[index + 1 :] if m.get('is_user')
-            )
-            return appended + after
-        return word_count
-    # Pre-anchor record (or malformed state): keep the old delta heuristic.
-    previous_words = int(state.get('words') or 0)
-    return word_count - previous_words if word_count >= previous_words else word_count
-
-
-def _record_mentor_gate_evaluation(
-    uid: str, *, now: float, word_count: int, previous: dict | None, conversation_messages: list[dict]
-) -> None:
-    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-    count = 1
-    if previous and previous.get('day') == today:
-        count = int(previous.get('count') or 0) + 1
-    mentor_gate_state.record(
-        uid,
-        {
-            'ts': int(now),
-            'words': word_count,
-            'day': today,
-            'count': count,
-            'anchor': _mentor_gate_tail_anchor(conversation_messages),
-        },
-    )
-
-
-def _mentor_gate_debounce_skip_reason(
-    uid: str, state: dict | None, *, now: float, word_count: int, conversation_messages: list[dict]
-) -> str | None:
-    """Why this evaluation should be skipped, or None to evaluate.
-
-    Returns a reason string rather than a bool so the caller can emit it: the
-    whole point of the change is that its effect is measurable from the logs
-    before anyone trusts the ledger delta.
-    """
-    min_new_words = _mentor_gate_int_env(
-        MENTOR_GATE_MIN_NEW_WORDS_ENV, MENTOR_GATE_MIN_NEW_WORDS_DEFAULT, minimum=0, maximum=10000
-    )
-
-    if state is None:
-        # First evaluation for this user: there is no prior evaluation time to
-        # wait out, but a handful of words is still not "genuinely new speech"
-        # worth a ~22k-token evaluation — apply the word floor to this batch too.
-        if word_count < min_new_words:
-            return 'min_new_words'
-        return None
-
-    elapsed = now - float(state.get('ts') or 0)
-    if elapsed < _mentor_gate_int_env(
-        MENTOR_GATE_MIN_SECONDS_ENV, MENTOR_GATE_MIN_SECONDS_DEFAULT, minimum=0, maximum=3600
-    ):
-        return 'min_seconds'
-
-    new_words = _mentor_gate_new_words(conversation_messages, state, word_count)
-    if new_words < min_new_words:
-        return 'min_new_words'
-
-    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-    if state.get('day') == today:
-        cap = _mentor_gate_int_env(MENTOR_GATE_DAILY_CAP_ENV, MENTOR_GATE_DAILY_CAP_DEFAULT, minimum=1, maximum=100000)
-        if int(state.get('count') or 0) >= cap and not _is_developer(uid):
-            return 'daily_eval_cap'
-
-    return None
-
-
-def admit_mentor_evaluation(uid: str, conversation_messages: list[dict]) -> tuple[int, float] | None:
-    # 1. Get frequency setting
-    if not generated_compute_allowed(uid, 'proactive_notification', allow_byok=False):
-        return None
-    frequency = get_mentor_notification_frequency(uid)
-    if frequency == 0:
-        return None
-
-    base_threshold = FREQUENCY_TO_BASE_THRESHOLD.get(frequency)
-    if base_threshold is None:
-        return None
-
-    # 2. Rate limit check (5 min gap)
-    mentor_sent_at = mem_db.get_proactive_noti_sent_at(uid, 'mentor')
-    if mentor_sent_at and time.time() - mentor_sent_at < MENTOR_RATE_LIMIT_SECONDS:
-        logger.info(f"mentor_proactive rate_limited uid={uid}")
-        return None
-    # Check remote rate limit
-    remote_sent_at = redis_db.get_proactive_noti_sent_at(uid, 'mentor')
-    if remote_sent_at and time.time() - remote_sent_at < MENTOR_RATE_LIMIT_SECONDS:
-        logger.info(f"mentor_proactive rate_limited_remote uid={uid}")
-        return None
-
-    # 3. Daily cap check (shared budget across all proactive sources; devs exempt)
-    if _proactive_daily_cap_reached(uid):
-        logger.info(f"mentor_proactive daily_cap_reached uid={uid}")
-        return None
-
-    # 3b. Debounce the LLM evaluation itself (on by default). The checks above
-    # only bound what is SENT; without this the gate is evaluated on every buffered
-    # segment batch even when nothing new was said.
-    gate_state = None
-    gate_now = time.time()
-    gate_word_count = _mentor_conversation_word_count(conversation_messages)
-    gate_state = mentor_gate_state.read(uid)
-    skip_reason = _mentor_gate_debounce_skip_reason(
-        uid, gate_state, now=gate_now, word_count=gate_word_count, conversation_messages=conversation_messages
-    )
-    if skip_reason:
-        # Structured so the saved evaluations are countable in Cloud Logging
-        # without waiting for the billing ledger.
-        logger.info(f"mentor_gate_debounce skipped uid={uid} reason={skip_reason} words={gate_word_count}")
-        return None
-    # Serialize eligibility + recording across concurrent same-user workers
-    # (two hosts, or two threads of one). The mirror-read above answers only
-    # "evaluated recently?"; the authoritative decision below runs under a
-    # short-lived claim so two workers cannot both pass and double-bill the
-    # gate LLM call. Contention (claim held) skips this batch — the buffer
-    # keeps accumulating, so the words are only delayed, not lost — while a
-    # claim *error* falls open: a Redis hiccup must not silence the mentor,
-    # and the TTL bounds a holder that crashes.
-    if not mentor_gate_state.claim(uid):
-        logger.info(f"mentor_gate_debounce skipped uid={uid} reason=claim_busy words={gate_word_count}")
-        return None
-    try:
-        # Always re-read the authority under the claim — the mirror answer
-        # (including "no record") can be stale the moment another host
-        # records, and this re-check is what makes the decision genuinely
-        # single-writer.
-        gate_state = mentor_gate_state.read_authoritative(uid)
-        skip_reason = _mentor_gate_debounce_skip_reason(
-            uid,
-            gate_state,
-            now=gate_now,
-            word_count=gate_word_count,
-            conversation_messages=conversation_messages,
-        )
-        if skip_reason:
-            logger.info(f"mentor_gate_debounce skipped uid={uid} reason={skip_reason} words={gate_word_count}")
-            return None
-        # Resolve entitlement only after every cheap rejection. Free users
-        # consume neither a gate evaluation nor any context/model work.
-        if not mentor_plan_allows_evaluation(uid):
-            return None
-        _record_mentor_gate_evaluation(
-            uid,
-            now=gate_now,
-            word_count=gate_word_count,
-            previous=gate_state,
-            conversation_messages=conversation_messages,
-        )
-    finally:
-        mentor_gate_state.release(uid)
-
-    return frequency, base_threshold
-
-
 def _process_proactive_notification(uid: str, app: App, data):
     """Process proactive notifications for external/third-party apps.
 
@@ -806,10 +571,11 @@ def _process_proactive_notification(uid: str, app: App, data):
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
 
-    # `data.get(k, default)` returns the stored value even when it's an
-    # explicit JSON null — a default only fires on a MISSING key. `or` coerces
-    # {"prompt": null} to the default so len()/iteration/.get can't TypeError.
-    prompt = data.get('prompt') or ''
+    prompt = data.get('prompt')
+    if not isinstance(prompt, str):
+        # An explicit null (or any non-string) prompt is a present-but-invalid payload: treat it as
+        # absent so the len()/replace() below cannot raise into the dispatch boundary's `except: pass`.
+        prompt = ''
     if len(prompt) > max_prompt_char_limit:
         send_app_notification(
             uid,
@@ -820,9 +586,9 @@ def _process_proactive_notification(uid: str, app: App, data):
         logger.info(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit} {uid}")
         return None
 
-    # params/context can also be explicit JSON nulls — coerce to the default so
-    # iteration/lookup can't TypeError/AttributeError on None.
-    filter_scopes = app.filter_proactive_notification_scopes(data.get('params') or [])
+    params = data.get('params')
+    params = [param for param in params if isinstance(param, str)] if isinstance(params, list) else []
+    filter_scopes = app.filter_proactive_notification_scopes(params)
 
     user_name, user_facts = get_prompt_memories(uid)
 
@@ -957,7 +723,7 @@ async def _async_trigger_realtime_integrations(
     *,
     client_kind: ClientKind = 'unknown',
 ) -> dict:
-    # Paywall: skip mentor + third-party proactive notifications when this
+    # Paywall: skip third-party proactive notifications when this
     # transcription session belongs to a paywalled desktop user.
     # Reactivates automatically when the user upgrades or activates BYOK.
     if await run_blocking(db_executor, is_trial_paywalled, uid, source):
@@ -966,25 +732,6 @@ async def _async_trigger_realtime_integrations(
     # Live episode moments (utils/episodes/live.py): buffers in process and
     # schedules its own fail-open background update; never blocks this fan-out.
     await on_realtime_segments(uid, segments, conversation_id, source)
-
-    # The mentor lane is v2-only: the legacy mentor pipeline was deleted once
-    # v2 reached 100%. Shared buffering/admission still gates it, and any
-    # non-cohort env value (unset, stale legacy/v2, typo) invokes nothing.
-    if os.getenv('MENTOR_PIPELINE') == 'cohort':
-        conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
-        if conversation_messages and conversation_id:
-            # Cohort selection can call PostHog: only resolve it after the shared
-            # paid/opt-in/buffering/debounce gate has admitted actual messages.
-            # A flag error denies the mentor lane (fail closed, rate-limited
-            # diagnostic in proactivity_flags) without touching app fanout.
-            try:
-                lane = await run_blocking(db_executor, proactivity_flags.mentor_pipeline, uid)
-            except ProactivityDenied:
-                lane = None
-            if lane == 'v2':
-                from utils.proactivity_producers import evaluate_mentor_event
-
-                await evaluate_mentor_event(uid, conversation_id, conversation_messages)
 
     apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_realtime() and app.enabled]

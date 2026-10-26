@@ -1,0 +1,7 @@
+{
+  "version": "0.12.530",
+  "date": "2026-10-24",
+  "changes": [
+    "Fixed calls splitting into multiple conversations after brief audio interruptions or an app relaunch during a scheduled meeting, while bounding recording in idle messaging voice channels"
+  ]
+}

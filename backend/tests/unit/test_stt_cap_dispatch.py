@@ -151,6 +151,34 @@ def test_queued_sync_always_resolves_omi_funding(managed, monkeypatch):
     resolver.assert_called_once_with('synthetic', source=None, byok_active=False, omi_funded=True)
 
 
+@pytest.mark.parametrize(
+    'allowance_reason, expected',
+    [
+        ('plan_allowance_exhausted', 'allowance_exhausted'),
+        ('usage_budget_exhausted', 'budget_exhausted'),
+        ('allowance_unavailable', 'allowance_unavailable'),
+        ('usage_invalid', 'allowance_unavailable'),
+        ('something_new', 'access_denied'),
+    ],
+)
+def test_sync_admission_surfaces_the_bounded_hold_reason(allowance_reason, expected, monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    resolver = Mock(return_value=SimpleNamespace(managed=False, reason=allowance_reason))
+    monkeypatch.setattr('utils.subscription.resolve_transcription_allowance', resolver)
+    allowed, reason = cap.sync_admission('synthetic', 60, 'parakeet', lane='batch', path=cap.DispatchPath.BATCH_GPU)
+    assert (allowed, reason) == (False, expected)
+
+
+def test_sync_admission_reports_entitled_allows_for_managed_owners(monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    resolver = Mock(return_value=SimpleNamespace(managed=True, reason='plan_allowance_available'))
+    monkeypatch.setattr('utils.subscription.resolve_transcription_allowance', resolver)
+    assert cap.sync_admission('synthetic', 60, 'parakeet', lane='batch', path=cap.DispatchPath.BATCH_GPU) == (
+        True,
+        'entitled',
+    )
+
+
 @pytest.mark.parametrize('kind', ['recording', 'gated', 'managed', 'replay', 'idle-replay'])
 @pytest.mark.parametrize('ladder_packet', [False, True])
 def test_suppression_never_fabricates_provider_timeline_spans(kind, ladder_packet):

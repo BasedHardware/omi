@@ -106,6 +106,12 @@ generated_route_overrides:
   - feature: notifications
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: low}
+  - feature: open_loop_card
+    primary: {provider: openai, model: gpt-5-nano}
+    provider_options: {reasoning_effort: minimal}
+  - feature: open_loop_daily
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: low}
   - feature: openglass
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: low}

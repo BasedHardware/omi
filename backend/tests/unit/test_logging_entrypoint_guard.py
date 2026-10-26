@@ -317,3 +317,57 @@ def test_build_only_targets_have_no_launch_surface_until_deployed(tmp_path, monk
 def test_build_only_flag_cannot_hide_a_dockerfile_a_workflow_ships(tmp_path, monkeypatch):
     monkeypatch.setattr(guard, 'dockerfile_shipped_by_github', lambda _: ['.github/workflows/ships.yml'])
     assert len(_multi_target_service(tmp_path, monkeypatch, build_only=True)) == 2
+
+
+@pytest.mark.parametrize('mutation', ['none', 'shared', 'mount', 'source', 'volume', 'setup', 'entrypoint'])
+def test_configmap_entrypoint_provenance_and_shared_logging(tmp_path, mutation):
+    root = tmp_path
+    chart = root / 'backend/charts/safety'
+    (chart / 'files').mkdir(parents=True)
+    (root / 'backend/omi_logging.py').write_text('# canonical stdlib module\n')
+    (chart / 'files/omi_logging.py').write_text('# canonical stdlib module\n')
+    (chart / 'files/job.py').write_text("from omi_logging import configure_logging\nconfigure_logging('job')\n")
+    binding = {
+        'template': 'guard.yaml',
+        'entrypoint': '/guard/job.py',
+        'source': 'files/job.py',
+        'logging': 'files/omi_logging.py',
+        'volume': 'script',
+    }
+    template = '''kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-script
+data:
+  job.py: |
+{{ .Files.Get "files/job.py" | indent 4 }}
+  omi_logging.py: |
+{{ .Files.Get "files/omi_logging.py" | indent 4 }}
+---
+volumeMounts:
+  - name: script
+    mountPath: /guard
+    readOnly: true
+volumes:
+  - name: script
+    configMap:
+      name: {{ .Release.Name }}-script
+'''
+    if mutation == 'shared':
+        (chart / 'files/omi_logging.py').write_text('# shadowed\n')
+    if mutation == 'mount':
+        template = template.replace('mountPath: /guard', 'mountPath: /other')
+    if mutation == 'source':
+        template = template.replace('files/job.py', 'files/other.py')
+    if mutation == 'volume':
+        template = template.replace('configMap:', 'secret:')
+    if mutation == 'setup':
+        (chart / 'files/job.py').write_text('print("unstructured")\n')
+    (chart / 'guard.yaml').write_text(template)
+    if mutation in {'shared', 'mount', 'source', 'volume', 'entrypoint'}:
+        with pytest.raises(ValueError):
+            guard.inspect_configmap_chart(
+                root, chart, binding, '/guard/other.py' if mutation == 'entrypoint' else '/guard/job.py'
+            )
+    else:
+        findings = guard.inspect_configmap_chart(root, chart, binding, '/guard/job.py')
+        assert findings == ({'print': 1, 'missing_setup': 1} if mutation == 'setup' else {})

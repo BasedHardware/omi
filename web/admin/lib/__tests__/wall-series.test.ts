@@ -26,7 +26,14 @@ import {
   SeriesStore,
 } from "../wall-series-store";
 import { isoDay, shiftDay, utcDay } from "../qualified-activity";
-import { INFRA_AS_OF, INFRA_MONTHLY_USD } from "../wall-cost";
+import {
+  INFRA_AS_OF,
+  INFRA_MONTHLY_USD,
+  MARGIN_DAYS_PER_MONTH,
+  STRIPE_FEES_MONTHLY_USD,
+  STT_MONTHLY_USD,
+  VARIABLE_MARGIN_TARGET,
+} from "../wall-cost";
 import { HEALTH_COST_DAYS } from "../wall-finops";
 
 const now = new Date("2026-10-15T12:00Z");
@@ -1482,5 +1489,79 @@ describe("the snapshot is shared and never served cold as settled", () => {
       expect(value(before, id).value).not.toBeNull();
     }
     expect(value(after, "growth.wau").stale).toBe(false);
+  });
+});
+
+describe("variable margin frames (David 2026-10-23)", () => {
+  it("trails the settled 7-day run rate against that day's book, disclosed", async () => {
+    const s = sources();
+    const f = await all(null, s);
+    const rows = f.health.variableMargin;
+    // 60 rendered days, ending at the D−2 cutoff like every cost frame.
+    expect(rows).toHaveLength(60);
+    const cutoff = isoDay(shiftDay(end, -2));
+    const last = rows.at(-1)!;
+    expect(last.date).toBe(`${cutoff}T00:00:00Z`);
+    // The fixture book at the cutoff day: unlimited 500+38 plus plus 400.
+    const mrr = 500 + 38 + 400;
+    expect(last.mrr).toBe(mrr);
+    // Cost scope/day: GCP (60 + vertexLlm avg 106) + OpenAI 10, Soniox on the
+    // console constant, Modulate dark (named), fees on the dated baseline.
+    // The monthly constants convert at the calendar month; the run rate then
+    // scales by the contract's exact 30.44 (Luna r3 P3).
+    const perDay =
+      60 +
+      106 +
+      10 +
+      STT_MONTHLY_USD / (365.25 / 12) +
+      STRIPE_FEES_MONTHLY_USD / (365.25 / 12);
+    const cost = perDay * MARGIN_DAYS_PER_MONTH;
+    expect(last.costPerMonth).toBe(Math.round(cost));
+    expect(last.marginPct).toBe(
+      Math.round(((100 * (mrr - cost)) / mrr) * 10) / 10
+    );
+    expect(last.goalCost).toBe(Math.round(mrr * (1 - VARIABLE_MARGIN_TARGET)));
+    expect(last.missing).toBe("Modulate");
+    // The disclosure names every line's source, including the dark ones.
+    const text = f.health.variableMarginStatus[0].text as string;
+    expect(text).toContain(`through ${cutoff}`);
+    expect(text).toContain("MRR: FinOps plan book $938/mo");
+    expect(text).toContain("0 non-USD paying subs excluded");
+    expect(text).toContain("Modulate: n/a");
+    expect(text).toContain("Soniox: console est.");
+    expect(text).toContain("Stripe fees: est.");
+    expect(text).toContain("OpenAI: invoice");
+  });
+
+  it("discloses that day's non-USD exclusion count from the FinOps book", async () => {
+    const s = sources();
+    s.finops = vi.fn(async () => ({
+      ...finopsHistory,
+      nonUsdPaying: Object.fromEntries(
+        Object.keys(finopsMrr).map((day) => [day, 33])
+      ),
+    }));
+    const f = await all(null, s);
+    expect(String(f.health.variableMarginStatus[0].text)).toContain(
+      "MRR: FinOps plan book $938/mo — 33 non-USD paying subs excluded"
+    );
+  });
+
+  it("says the MRR is missing instead of borrowing the neighbour day's book", async () => {
+    const s = sources();
+    const cutoff = isoDay(shiftDay(end, -2));
+    const mrr = { ...finopsHistory.mrr };
+    delete mrr[cutoff];
+    s.finops = vi.fn(async () => ({ ...finopsHistory, mrr }));
+    const f = await all(null, s);
+    const rows = f.health.variableMargin;
+    const last = rows.at(-1)!;
+    expect(last.date).toBe(`${cutoff}T00:00:00Z`);
+    expect(last.mrr).toBeNull();
+    expect(last.marginPct).toBeNull(); // the headline then shows no value
+    expect(rows.at(-2)!.marginPct).not.toBeNull(); // yesterday's stands
+    expect(String(f.health.variableMarginStatus[0].text)).toContain(
+      "MRR: n/a (no book snapshot that day)"
+    );
   });
 });

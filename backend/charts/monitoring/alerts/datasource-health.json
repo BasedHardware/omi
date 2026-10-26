@@ -115,7 +115,10 @@
       "alert_identity": "omi-datasource-prometheus",
       "component": "monitoring",
       "impact": "infrastructure",
-      "datasource_uid": "prometheus"
+      "datasource_uid": "prometheus",
+      "tier": "page",
+      "audience": "human",
+      "owner": "observability"
     }
   },
   {
@@ -255,7 +258,10 @@
       "alert_identity": "omi-datasource-cloud-monitoring",
       "component": "monitoring",
       "impact": "infrastructure",
-      "datasource_uid": "beuxmaq8oxhq8e"
+      "datasource_uid": "beuxmaq8oxhq8e",
+      "tier": "page",
+      "audience": "human",
+      "owner": "observability"
     }
   },
   {
@@ -374,7 +380,10 @@
       "alert_identity": "omi-datasource-gmp",
       "component": "monitoring",
       "impact": "infrastructure",
-      "datasource_uid": "gmp-cloud-run"
+      "datasource_uid": "gmp-cloud-run",
+      "tier": "page",
+      "audience": "human",
+      "owner": "observability"
     }
   }
 ]

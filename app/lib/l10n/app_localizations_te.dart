@@ -4446,6 +4446,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get continueText => 'కొనసాగండి';
 
   @override
+  String get checkoutExistingSubscription =>
+      'మీకు ఇప్పటికే సభ్యత్వం ఉంది. కొత్తది ప్రారంభించే బదులు ప్రస్తుత సభ్యత్వాన్ని నిర్వహించండి.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'ప్లాన్ మార్చడానికి ముందు మళ్లీ సబ్‌స్క్రైబ్ చేయండి.';
 
   @override
@@ -8644,6 +8648,9 @@ class AppLocalizationsTe extends AppLocalizations {
       'ట్రాన్స్‌క్రిప్షన్ అందుబాటులో లేదు — రికార్డింగ్ కొనసాగుతుంది, మీ ఆడియో సేవ్ అవుతోంది.';
 
   @override
+  String get captureNoAudioFromPendant => 'పెండెంట్ నుండి ఆడియో లేదు';
+
+  @override
   String get capturing => 'క్యాప్చర్ అవుతోంది';
 
   @override
@@ -11135,6 +11142,12 @@ class AppLocalizationsTe extends AppLocalizations {
       'మీ Omiకి బ్లూటూత్ లింక్ ఆగిపోయింది, కాబట్టి ఆడియో యాప్‌ను చేరడం లేదు. Omi పరికరంలో రికార్డ్ చేయడం కొనసాగిస్తుంది మరియు లింక్ పునరుద్ధరించబడినప్పుడు సింక్ అవుతుంది. మళ్లీ ప్రయత్నించడం వల్ల లింక్ తిరిగి కనెక్ట్ అవుతుంది; అది నిరంతరం విఫలమైతే, సెట్టింగ్‌లు > పరికరంలో మీ పరికరాన్ని తనిఖీ చేయండి.';
 
   @override
+  String get captureConnecting => 'కనెక్ట్ అవుతోంది…';
+
+  @override
+  String get captureNoAudioDetail => 'పెండెంట్ కనెక్ట్ అయింది, కానీ ఎలాంటి ఆడియో మీ ఫోన్‌కు చేరడం లేదు';
+
+  @override
   String get captureIngressNeedsReconnect => 'ఆడియో యాప్‌ను చేరడం లేదు — మీ Omiని మళ్లీ కనెక్ట్ చేయండి';
 
   @override
@@ -11163,13 +11176,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'స్టోరేజ్ దాదాపు నిండింది';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12299,12 +12305,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'కనెక్షన్‌ను తనిఖీ చేయండి';
-
-  @override
-  String get forYou => 'మీ కోసం';
-
-  @override
-  String get stopThese => 'వీటిని ఆపండి';
 
   @override
   String get dismiss => 'దాచు';
@@ -14475,6 +14475,25 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'ప్రస్తుత గమనికలు నవీకరించబడటం లేదు. ప్రస్తుతానికి లిప్యంతరీకరణను చూడండి.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'రికార్డింగ్ · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'మునుపటి ఎపిసోడ్';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'పెండింగ్‌లో ఉన్న భాగాలు: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'మునుపటి ఎపిసోడ్‌ను తెరవండి';
+
+  @override
   String get episodeNotesSoon => 'మాటల మొదటి కొన్ని నిమిషాల తర్వాత నోట్స్ కనిపిస్తాయి.';
 
   @override
@@ -14612,4 +14631,34 @@ class AppLocalizationsTe extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'పూర్తైంది. $percent% తగ్గింపు, తదుపరి $months నెలలు.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'ఇతరులు';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'పూర్తయింది';
+
+  @override
+  String get openLoopAnswerRemind => 'తర్వాత గుర్తు చేయి';
+
+  @override
+  String get openLoopAnswerDrop => 'వదిలేయి';
 }

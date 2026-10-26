@@ -124,6 +124,8 @@ DEFAULT_FLAGS = {
     'BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED': 'true',
     'BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED': 'false',
     'STT_CAP_DISPATCH_ENFORCEMENT': 'false',
+    # Synthetic owners have no subscription ledger; never consult real funding.
+    'STT_CAP_OFFLINE_ENFORCEMENT': 'false',
 }
 
 BACKFILL_SPEECH_SECONDS_PER_UID_DAY = 4 * 3600  # backend/AGENTS.md: four processed speech hours per UID/day

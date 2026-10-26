@@ -973,3 +973,10 @@ def test_fast_recovery_pages_past_a_refused_lease_prefix():
     assert second['enqueued'] == 1
     assert [call['conversation_id'] for call in state['finalization_calls']] == ['expired']
     assert state['cursor']['resume_after_path'] is None
+
+
+def test_scan_uses_the_same_cutoff_as_recovery_admission():
+    state, kwargs = _harness([_row('u1', 'c1', _eligible_data())], mode='heal')
+    sweep.run_selfheal_tick(**kwargs)
+    assert state['scan_calls'][0]['finished_before'] == NOW - sweep.STALE_AFTER
+    assert state['finalization_calls'][0]['recovery_cutoff'] == state['scan_calls'][0]['finished_before']

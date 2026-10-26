@@ -48,7 +48,7 @@ def screens(seconds=120, **fields):
             timestamp=(START + timedelta(seconds=n)).isoformat(),
             appName='Chrome',
             windowTitle='Synthetic tutorial - YouTube',
-            **fields
+            **fields,
         )
         for n in range(0, seconds, 30)
     ]
@@ -63,7 +63,7 @@ def classify(segments=None, *, seconds=120, owner=0, screen_rows=(), **kwargs):
         finished_at=START + timedelta(seconds=seconds),
         evidence=ev,
         screen_rows=screen_rows,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -171,9 +171,138 @@ def test_expired_call_does_not_protect_bystander():
 )
 def test_owner_candidates_use_producer_bands_not_probabilities(band, source, expected):
     segments = [segment()]
+    segments[0]['end'] = 10
     ev = evidence(segments, owner=10, band=band, source=source)
+    if source == 'manual':
+        ev.clusters[0].candidates[0].segment_ids = [segments[0]['id']]
     ev.clusters[0].candidates[0].probability = 0.01
     assert owner_speech_seconds(ev, segments) == expected
+
+
+@pytest.mark.parametrize('excerpt_seconds,kind', [(1, 'noise'), (6, 'conversation')])
+def test_manual_excerpt_counts_only_its_own_duration_in_real_evidence(excerpt_seconds, kind):
+    from utils.speakers.evidence import build_evidence
+    from utils.stt.conversation_speakers import resolve_conversation_speakers
+
+    segments = [
+        dict(segment(id='excerpt'), speaker_id=0, speaker_id_scope='live:1', start=0, end=excerpt_seconds),
+        dict(segment(id='bystander-a'), speaker_id=0, speaker_id_scope='live:1', start=excerpt_seconds, end=600),
+        dict(segment(id='bystander-b'), speaker_id=1, speaker_id_scope='live:1', start=600, end=1200),
+    ]
+    for row in segments:
+        row['text'] = ' '.join(['synthetic'] * 12)
+    resolution = resolve_conversation_speakers(
+        segments,
+        {'excerpt': [1, 0], 'bystander-a': [1, 0], 'bystander-b': [0, 1]},
+        voiceprints={'user': [-1, -1]},
+    )
+    receipt = {'segments': {'excerpt': {'generation': 1, 'is_user': True, 'segment_only': True}}}
+    ev = build_evidence(segments, resolution, receipt=receipt)
+    assert ev.status == 'resolved'
+    assert owner_speech_seconds(ev, segments) == excerpt_seconds
+    assert classify(segments, seconds=1200, evidence=ev).content_kind == kind
+
+
+def test_older_unscoped_manual_evidence_abstains_instead_of_expanding_to_a_voice():
+    rows = [segment()]
+    ev = evidence(rows, owner=10, source='manual')
+    assert owner_speech_seconds(ev, rows) is None
+
+
+@pytest.mark.parametrize('first_excerpt_seconds', [1, 6])
+def test_surplus_merge_retains_every_manual_owner_excerpt(first_excerpt_seconds):
+    from utils.speakers.evidence import build_evidence
+
+    durations = [first_excerpt_seconds, 7 - first_excerpt_seconds, 400, 400, 393]
+    rows, offset = [], 0
+    for index, duration in enumerate(durations):
+        rows.append(
+            dict(
+                segment(' '.join(['synthetic'] * 12), id=f's{index}'),
+                speaker_id=index,
+                speaker_id_scope='live:1',
+                start=offset,
+                end=offset + duration,
+            )
+        )
+        offset += duration
+    result = SimpleNamespace(
+        speaker_ids={row['id']: row['speaker_id'] for row in rows},
+        voice_centroids={index: [1, 0] if index < 2 else [0, 1] for index in range(5)},
+        voice_distances={},
+        voice_identities={},
+        voice_identity_statuses={},
+        coverage=1,
+    )
+    receipt = {
+        'segments': {f's{index}': {'generation': 1, 'is_user': True, 'segment_only': True} for index in range(2)}
+    }
+    ev = build_evidence(rows, result, receipt=receipt, roster=[{'name': 'Synthetic attendee'}])
+    assert len(ev.clusters) == 2
+    assert owner_speech_seconds(ev, rows) == 7
+    assert classify(rows, seconds=1200, evidence=ev).content_kind == 'conversation'
+
+
+@pytest.mark.parametrize('manual_excerpt', [False, True])
+def test_likely_acoustic_owner_protects_capture_independently_of_manual_excerpt(manual_excerpt):
+    from math import sqrt
+    from utils.speakers.evidence import build_evidence, project_labels
+    from utils.stt.conversation_speakers import resolve_conversation_speakers
+
+    rows = [
+        dict(segment(id='excerpt'), speaker_id=0, speaker_id_scope='live:1', start=0, end=1),
+        dict(segment(id='voice-rest'), speaker_id=0, speaker_id_scope='live:1', start=1, end=600),
+        dict(segment(id='other'), speaker_id=1, speaker_id_scope='live:1', start=600, end=1200),
+    ]
+    result = resolve_conversation_speakers(
+        rows,
+        {'excerpt': [1, 0], 'voice-rest': [1, 0], 'other': [-1, 0]},
+        voiceprints={'user': [0.45, sqrt(1 - 0.45**2)]},
+    )
+    receipt = (
+        {'segments': {'excerpt': {'generation': 1, 'is_user': True, 'segment_only': True}}} if manual_excerpt else {}
+    )
+    ev = build_evidence(rows, result, receipt=receipt)
+    plausible = [candidate for cluster in ev.clusters for candidate in cluster.candidates if candidate.band == 'likely']
+    assert len(plausible) == 1
+    assert plausible[0].source == 'voice' and not plausible[0].label_eligible
+    assert project_labels(ev, receipt) == ({'excerpt': (True, None)} if manual_excerpt else {})
+    # A plausible acoustic owner protects against false exclusion without
+    # granting owner attribution; the manual excerpt does not cause this.
+    assert owner_speech_seconds(ev, rows) == 600
+    assert classify(rows, seconds=1200, evidence=ev).content_kind == 'conversation'
+
+
+@pytest.mark.parametrize('unscoped_cluster', [0, 1])
+def test_surplus_merge_preserves_unknown_manual_scope_from_either_side(unscoped_cluster):
+    from utils.speakers.refinement import merge_surplus
+
+    rows = [dict(segment(id=f's{i}'), start=i * 6, end=(i + 1) * 6) for i in range(5)]
+    clusters = [
+        VoiceCluster(
+            id=f'v{i}',
+            segment_ids=[row['id']],
+            speech_seconds=6,
+            candidates=(
+                [
+                    SpeakerCandidate(
+                        person_id='owner',
+                        probability=1,
+                        band='confident',
+                        source='manual',
+                        segment_ids=None if i == unscoped_cluster else [row['id']],
+                    )
+                ]
+                if i < 2
+                else []
+            ),
+        )
+        for i, row in enumerate(rows)
+    ]
+    merged, _, _ = merge_surplus(clusters, {f'v{i}': [1, 0] if i < 2 else [0, 1] for i in range(5)}, 2)
+    ev = SpeakerEvidence(status='resolved', policy_version='synthetic', clusters=merged)
+    assert len(merged) == 2
+    assert owner_speech_seconds(ev, rows) is None
 
 
 def test_nonfinite_or_uncovered_evidence_abstains():
@@ -262,7 +391,7 @@ def test_serving_minimum_has_no_paid_notes_or_action_items(monkeypatch):
     assert conversation.content_kind == 'media' and not conversation.discarded
     assert minimum.title == 'Watched: Synthetic tutorial'
     assert minimum.title_provenance == 'server_minimum'
-    assert minimum.overview == '' and minimum.emoji == '' and minimum.action_items == []
+    assert minimum.overview == '' and minimum.emoji == '💬' and minimum.action_items == []
     assert recorded and recorded[0].kind == 'media_playback'
 
 
@@ -286,16 +415,17 @@ def test_failed_inputs_abstain_without_logging_payload(monkeypatch, caplog):
     assert 'sensitive synthetic payload' not in caplog.text
 
 
-def test_home_hiding_requires_serve_and_existing_client_capability(monkeypatch):
+@pytest.mark.parametrize('kind', ['noise', 'media'])
+def test_home_hiding_requires_serve_and_existing_client_capability(monkeypatch, kind):
     from utils.conversations.relevance_content import noise_hidden_from_home
 
-    row = {'content_kind': 'noise'}
+    row = {'content_kind': kind}
     assert not noise_hidden_from_home('', row, client_supports_discarded=True)
     monkeypatch.setenv(FLAG, 'serve')
     assert not noise_hidden_from_home('', row)
     assert noise_hidden_from_home('', row, client_supports_discarded=True)
     assert not noise_hidden_from_home('', row, client_supports_discarded=True, user_kept=True)
-    assert not noise_hidden_from_home('', {'content_kind': 'media'}, client_supports_discarded=True)
+    assert not noise_hidden_from_home('', {'content_kind': 'conversation'}, client_supports_discarded=True)
     monkeypatch.setenv(FLAG, 'off')
     assert not noise_hidden_from_home('', row, client_supports_discarded=True)
 

@@ -41,7 +41,9 @@ def test_workflow_owns_dev_auto_deploy_and_manual_production() -> None:
         'backend/charts/monitoring/alerts/live-stt.json',
         'backend/charts/monitoring/alerts/resilience.json',
         'backend/charts/monitoring/live-alert-gate.json',
+        'backend/charts/monitoring/mute-timings.json',
         'backend/charts/monitoring/gmp/frontend-values.prod.yaml',
+        'backend/scripts/verify_pusher_live_alert_route.py',
         '.github/workflows/gcp_cloud_run_metrics_egress.yml',
     }
     environment = triggers['workflow_dispatch']['inputs']['environment']

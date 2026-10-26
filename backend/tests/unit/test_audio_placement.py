@@ -54,6 +54,22 @@ def _v2_conv(spans, *, started_at=T, timestamps=None, segments=()):
     return _conv(segments, started_at=started_at, audio_files=files, audio_timeline={'version': 2})
 
 
+@pytest.mark.parametrize('scope', ['sync:upload', 'final:batch:upload'])
+def test_upload_file_scopes_have_the_same_proven_clock(scope):
+    segment = _seg('s', 2, 6, scope=scope)
+    conv = _conv([segment])
+    assert locate(conv, 2, 6) == AudioPlacement((T + 2, T + 6), 'sync')
+    segment['audio_alignment'] = 'unplaced'
+    assert locate(conv, 2, 6).window is None
+
+
+@pytest.mark.parametrize(
+    'scope', ['final:batch:', 'sync:', 'final:pyannote:upload', 'live:upload', 'final:batch:conversation:c1']
+)
+def test_other_or_empty_scopes_do_not_prove_upload_clock(scope):
+    assert locate(_conv([_seg('s', 2, 6, scope=scope)]), 2, 6).window is None
+
+
 def test_provisional_window_accepts_datetime_iso_and_numeric_origins():
     aware = datetime.fromtimestamp(T, tz=timezone.utc)
     assert provisional_window(_conv(started_at=aware), 1.0, 3.0) == (T + 1.0, T + 3.0)

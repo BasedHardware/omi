@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -41,6 +44,47 @@ class _People extends PeopleProvider {
   @override
   Future<void> deletePersonSample(int personIdx, int sampleIdx) async => deletedSamples.add((personIdx, sampleIdx));
 }
+
+/// Starts "playback" without a real player; the end of a sample comes from [samplePlayerStates].
+class _PlayingPeople extends PeopleProvider {
+  _PlayingPeople(List<Person> seeded, Stream<PlayerState> states)
+      : super(loadPeople: () async => PeopleListResponse(people: seeded), samplePlayerStates: states);
+
+  @override
+  Future<void> playPause(int personIdx, int sampleIdx, String fileUrl) async {
+    currentPlayingPersonIndex = personIdx;
+    currentPlayingIndex = sampleIdx;
+    isPlaying = true;
+    notifyListeners();
+  }
+}
+
+Person _alex() => Person(
+      id: 'p1',
+      name: 'Alex',
+      createdAt: DateTime.utc(2026, 9, 1),
+      updatedAt: DateTime.utc(2026, 9, 1),
+      speechSamples: const ['https://example.invalid/sample-0.wav'],
+      speechSampleTranscripts: const ['Hello there'],
+    );
+
+Widget _page(PeopleProvider people) => MultiProvider(
+      providers: [
+        ChangeNotifierProvider<PeopleProvider>.value(value: people),
+        ChangeNotifierProvider<ConnectivityProvider>(create: (_) => ConnectivityProvider()),
+        ChangeNotifierProvider<SpeakerTagPromptsProvider>(
+          create: (_) => SpeakerTagPromptsProvider(
+            fetchSettings: () async =>
+                const ApiFailure<GeneratedVoiceProfileSettings>(ApiProblem(ApiProblemKind.transport)),
+          ),
+        ),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: [Locale('en')],
+        home: PersonDetailPage(personId: 'p1'),
+      ),
+    );
 
 /// Tapping a voice sample plays it; deleting is the labelled trailing control behind a confirm
 /// (hub #6 — a tap used to open the delete dialog).
@@ -107,5 +151,25 @@ void main() {
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
     expect(people.deletedSamples, [(0, 0)]);
+  });
+
+  testWidgets('a voice sample that plays to the end shows Play again', (tester) async {
+    final states = StreamController<PlayerState>();
+    addTearDown(states.close);
+    final people = _PlayingPeople([_alex()], states.stream);
+    addTearDown(people.dispose);
+    await people.initialize();
+
+    await tester.pumpWidget(_page(people));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sample 1'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Pause'), findsOneWidget);
+
+    states.add(PlayerState(false, ProcessingState.completed));
+    await tester.pumpAndSettle();
+    expect(people.isPlaying, isFalse);
+    expect(find.byTooltip('Pause'), findsNothing, reason: 'the row must not keep a pause icon for a finished sample');
+    expect(find.byTooltip('Play'), findsOneWidget);
   });
 }

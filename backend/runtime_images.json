@@ -407,32 +407,6 @@
       }
     },
     {
-      "name": "memory-maintenance-job",
-      "dockerfile": "backend/modal/Dockerfile.memory_maintenance_job",
-      "deployment_workflows": [
-        ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
-        ".github/workflows/gcp_memory_maintenance_job.yml"
-      ],
-      "build_context": ".",
-      "source_root": "backend",
-      "entrypoint_source_root": "backend/modal",
-      "workdir": "/app",
-      "entrypoints": [
-        "memory_maintenance_job"
-      ],
-      "image_import_smoke": true,
-      "smoke_environment": {
-        "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef",
-        "OPENAI_API_KEY": "fake-memory-maintenance-image-smoke-only"
-      },
-      "dependency_probe_smoke": true,
-      "pull_request_smoke": true,
-      "dependency_probe_exclusions": {
-        "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
-      },
-      "outside_role_split": "Scheduled Cloud Run job with its own image; joins the workers role only if it moves onto the workers queue consumer."
-    },
-    {
       "name": "x-connector-sync-job",
       "dockerfile": "backend/modal/Dockerfile.x_connector_sync_job",
       "deployment_workflows": [
@@ -635,5 +609,14 @@
       "pull_request_smoke": true,
       "outside_role_split": "Plugins service outside backend/; not part of the backend role split."
     }
-  ]
+  ],
+  "logging_configmap_charts": {
+    "incluster-guards": {
+      "template": "templates/guard.yaml",
+      "entrypoint": "/guard/guard.py",
+      "source": "files/guard.py",
+      "logging": "files/omi_logging.py",
+      "volume": "script"
+    }
+  }
 }

@@ -137,3 +137,57 @@ def test_completion_and_phase_checkpoint_do_not_accept_stale_workers_or_deleted_
     assert not jobs.finish(job['job_id'], 2, firestore_client=store[0])
     assert jobs.finish(job['job_id'], 1, firestore_client=store[0])
     assert jobrow(store, job)['status'] == 'completed'
+
+
+def test_merge_admission_retires_legacy_quiet_debt(store):
+    from database.quiet_check_retirement import quiet_check_id
+    from google.cloud import firestore
+
+    client, uid = store
+    paths = [(jobs.COLLECTION, quiet_check_id(uid, cid)) for cid in ('a', 'b')]
+    for path in paths:
+        client.rows[path] = {
+            'kind': 'listen_quiet_check',
+            'status': 'waiting_quiet',
+            'dispatch_generation': 3,
+            'reconcile_after_at': NOW,
+        }
+    assert admit(store)
+    for path in paths:
+        assert client.rows[path]['status'] == 'quiet_done'
+        assert client.rows[path]['reconcile_after_at'] is firestore.DELETE_FIELD
+
+
+def test_merge_rollback_retires_old_debt_and_preserves_reopened_owner(store, monkeypatch):
+    from database.quiet_check_retirement import quiet_check_id
+
+    client, uid = store
+    job = admit(store)
+    paths = [(jobs.COLLECTION, quiet_check_id(uid, cid)) for cid in ('a', 'b')]
+    for path in paths:
+        client.rows[path] = {
+            'kind': 'listen_quiet_check',
+            'status': 'waiting_quiet',
+            'dispatch_generation': 3,
+            'reconcile_after_at': NOW,
+        }
+    row(store, 'b').update(status='in_progress', merge_job_id='new-owner')
+    monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
+    recovery = jobs.begin_recovery(job['job_id'], firestore_client=client)
+    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=client)
+    assert client.rows[paths[0]]['status'] == 'quiet_done'
+    assert client.rows[paths[1]]['status'] == 'waiting_quiet'
+
+
+def test_old_partial_merge_source_cannot_be_admitted_as_fresh_input(store):
+    row(store, 'a')['transcript_corrections_moved_to'] = 'retained-previous-target'
+    assert admit(store) is None
+    assert all(row(store, cid)['status'] == 'completed' for cid in ('a', 'b'))
+    assert not any(tx.creates or tx.updates for tx in store[0].transactions)
+
+
+def test_semantic_duplicate_hint_without_transfer_receipt_remains_mergeable(store):
+    row(store, 'a').update(dream_duplicate=True, dream_duplicate_of='similar-conversation')
+    job = admit(store)
+    assert job is not None
+    assert all(row(store, cid)['merge_job_id'] == job['job_id'] for cid in ('a', 'b'))

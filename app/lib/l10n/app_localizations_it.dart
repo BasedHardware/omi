@@ -4450,6 +4450,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String get continueText => 'Continua';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Hai già un abbonamento. Gestisci quello attuale invece di attivarne uno nuovo.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Riabbonati prima per cambiare piano.';
 
   @override
@@ -8644,6 +8648,9 @@ class AppLocalizationsIt extends AppLocalizations {
       'Trascrizione non disponibile — la registrazione continua e l\'audio viene salvato.';
 
   @override
+  String get captureNoAudioFromPendant => 'Nessun audio dal ciondolo';
+
+  @override
   String get capturing => 'Acquisizione in corso';
 
   @override
@@ -11146,6 +11153,12 @@ class AppLocalizationsIt extends AppLocalizations {
       'Il collegamento Bluetooth con il tuo Omi si è interrotto, quindi l\'audio non arriva all\'app. Omi continua a registrare sul dispositivo e si sincronizzerà non appena il collegamento si ripristina. Riprova riconnette il collegamento; se continua a non funzionare, controlla il dispositivo in Impostazioni > Dispositivo.';
 
   @override
+  String get captureConnecting => 'Connessione…';
+
+  @override
+  String get captureNoAudioDetail => 'Il pendente è collegato, ma nessun audio raggiunge il tuo telefono';
+
+  @override
   String get captureIngressNeedsReconnect => 'L\'audio non raggiunge l\'app — riconnetti il tuo Omi';
 
   @override
@@ -11174,13 +11187,6 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Memoria quasi piena';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Il ciondolo ha perso la connessione con questo telefono. Omi si riconnetterà da solo quando il ciondolo sarà acceso e vicino. Tutto ciò che è stato registrato prima è al sicuro.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi si riconnetterà da solo';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12314,12 +12320,6 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Controlla la connessione';
-
-  @override
-  String get forYou => 'Per te';
-
-  @override
-  String get stopThese => 'Interrompi questi';
 
   @override
   String get dismiss => 'Ignora';
@@ -14492,6 +14492,25 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Le note in tempo reale non si aggiornano. Per ora consulta la trascrizione.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Registrazione · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episodio precedente';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Frammenti in attesa: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Apri episodio precedente';
+
+  @override
   String get episodeNotesSoon => 'Le note compaiono dopo i primi minuti di conversazione.';
 
   @override
@@ -14629,4 +14648,34 @@ class AppLocalizationsIt extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Fatto. $percent% di sconto per i prossimi $months mesi.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Altri';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Fatto';
+
+  @override
+  String get openLoopAnswerRemind => 'Ricordamelo più tardi';
+
+  @override
+  String get openLoopAnswerDrop => 'Ignora';
 }
