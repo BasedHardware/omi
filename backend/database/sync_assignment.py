@@ -8,6 +8,42 @@ from google.cloud import firestore
 import config.speaker_match_scores as match_scores
 
 
+class SyncAssignmentDiscovery:
+    """One bounded discovery per call, reused across read-only stamp-gap replanning."""
+
+    def __init__(self, lineage_eligible: bool):
+        self.lineage_eligible = lineage_eligible
+        self.candidate_ids: tuple[str, ...] = ()
+        self.lookup: dict = {'lookup_complete': False, 'incomplete_reason': 'discovery_skipped'}
+        self.attempted = False
+
+    def plan_kwargs(self) -> dict:
+        if not self.lineage_eligible:
+            return {}
+        return {
+            'live_lookup_complete': self.lookup.get('lookup_complete', False),
+            'live_lookup_incomplete_reason': self.lookup.get('incomplete_reason'),
+            'discover_on_stamp_gap': not self.attempted,
+        }
+
+    def discover(self, user_ref, incoming, find_candidates):
+        self.attempted = True
+        # A lookup that omits diagnostics differs from one that never ran.
+        self.lookup.clear()
+        self.candidate_ids = find_candidates(
+            user_ref, incoming, **({'diagnostics': self.lookup} if self.lineage_eligible else {})
+        )
+
+    def run(self, assign, attempted_canonical, discover):
+        from utils.sync.assignment import SyncAssignmentDiscoveryRequired, run_with_size_limit_backstop
+
+        try:
+            return run_with_size_limit_backstop(assign, attempted_canonical)
+        except SyncAssignmentDiscoveryRequired:
+            discover()
+            return run_with_size_limit_backstop(assign, attempted_canonical)
+
+
 def encode_sync_assignment_plan(uid: str, client: Any, transaction: Any, payload: dict, current: dict | None) -> dict:
     from database import conversations
 
