@@ -45,13 +45,24 @@ def test_running_epoch3_registers_result_under_its_current_privacy_token(
 
 @pytest.mark.parametrize(
     'change',
-    ['provider', 'future_epoch', 'privacy', 'token', 'not_running', 'not_language_guarded', 'recovery_disabled'],
+    [
+        'provider',
+        'prior_provider',
+        'future_epoch',
+        'privacy',
+        'token',
+        'not_running',
+        'not_language_guarded',
+        'recovery_disabled',
+    ],
 )
 def test_epoch3_registration_rejects_foreign_or_unsupported_intent(setup, monkeypatch, legacy_dependencies, change):
     client, store, binding, token, _ = running_independent(setup, monkeypatch, legacy_dependencies)
     job = row(client)
     if change == 'provider':
         job['speech_redrive']['provider'] = 'modulate'
+    elif change == 'prior_provider':
+        job['recovery']['provider'] = 'soniox'
     elif change == 'future_epoch':
         job['speech_redrive']['paid_epoch'] = 4
     elif change == 'privacy':

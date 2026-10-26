@@ -16,11 +16,11 @@ from urllib.parse import urlsplit
 from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 
+from config.batch_language_recovery import language_guarded
 from config.policy import RecoveryPolicy
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
 from database.batch_pipeline_shadow_hook import mirror_refresh
-from database.batch_pipeline_speech_redrive import independent_redrive
 
 from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
 from utils.batch_pipeline.voice_centroids import deadline as voice_deadline, FINALIZED_TTL
@@ -184,7 +184,8 @@ def register_batch_artifact(
                 (policy.speech_empty_multilingual and redrive.get('paid_epoch') == 2)
                 or (
                     policy.recovery_enabled
-                    and independent_redrive(job)
+                    and language_guarded(job)
+                    and recovery.get('provider') == 'modulate'
                     and redrive.get('paid_epoch') == 3
                     and redrive.get('provider') == 'soniox'
                 )
