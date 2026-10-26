@@ -79,6 +79,15 @@ transcript, lifecycle, privacy or hold policy. Conditional list reads require a
 completed writer-fleet rollout; see [list serving projections](list-serving-projection.md)
 for the kill switch, rollout epoch, migration coverage and read/write cost contract.
 
+## Incident recovery of failed legacy sync jobs
+
+The [open-loop codec redrive runbook](runbooks/openloop-codec-redrive.md) uses
+original durable requests and the content ledger before considering retained
+staging objects. Its operator keeps the original job/content identity and
+successful segment/usage checkpoints, then dispatches through normal Cloud
+Tasks intake. Missing original context blocks recovery. Bridge-receipt finalize
+failures require receipt-only evidence rather than another transcription.
+
 ## Legacy sync staging and batch cleanup custody
 
 Legacy sync no longer schedules staging deletion when it creates a signed URL.

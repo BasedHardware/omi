@@ -383,6 +383,21 @@ def _enqueue_sync_job_routed(payload: Dict[str, Any], task_id: str, schedule_at:
     enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), task_id, payload, **schedule_options)
 
 
+def enqueue_sync_job_redrive(payload: Dict[str, Any], operation_key: str) -> None:
+    """Operator outbox retry: one task name per incident key + original content.
+
+    Uses the ordinary routing/OIDC/intake path. Never selects a fresh task name
+    after an uncertain create. Sequencer-owned jobs need their sequencer owner.
+    """
+    if (
+        not sync_job_payload_keys_valid(payload, allow_sequenced=False)
+        or len(operation_key) != 64
+        or any(c not in '0123456789abcdef' for c in operation_key)
+    ):
+        raise ValueError('invalid redrive dispatch')
+    _enqueue_sync_job_routed(payload, f"{payload['job_id']}-or-{operation_key}", None)
+
+
 def enqueue_sync_job_budget_replacement(payload: Dict[str, Any], schedule_at: int) -> None:
     """Schedule the delayed replacement for a handler-budget expiry.
 

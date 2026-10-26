@@ -3061,6 +3061,55 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
+    async def test_operator_partial_redrive_only_processes_uncheckpointed_segment(self, fenced_worker_module):
+        """Incident redrive keeps content identity and the ordinary durable skip path."""
+        module, stubs = fenced_worker_module
+        try:
+            landed = '/tmp/seg_1700000001.wav'
+            pending = '/tmp/seg_1700000002.wav'
+            pipeline = stubs['pipeline']
+            pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            pipeline._cleanup_files = MagicMock()
+            pipeline.retrieve_vad_segments = lambda _path, paths, _errors: paths.update([landed, pending])
+            pipeline.get_timestamp_from_path = lambda p: 1700000001 if p == landed else 1700000002
+            pipeline.get_wav_duration = MagicMock(return_value=5.0)
+            pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            pipeline.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
+            pipeline.users_db.get_data_protection_level = MagicMock(return_value=None)
+            pipeline.build_person_embeddings_cache = MagicMock(return_value={})
+            partial = {'new_memories': ['row-a'], 'updated_memories': []}
+            pipeline.get_sync_job = MagicMock(return_value={'partial_result': partial})
+            pipeline.get_sync_content_partial_result = MagicMock(return_value=partial)
+            pipeline.get_processed_sync_segment_ids = MagicMock(return_value={'landed'})
+            pipeline.compute_sync_segment_id = MagicMock(
+                side_effect=lambda _uid, p: 'landed' if p == landed else 'pending'
+            )
+            pipeline.process_segment = MagicMock(return_value=True)
+            stubs['sync_jobs'].get_processed_segments.return_value = set()
+
+            await module._run_full_pipeline_background_async(
+                'job-redrive',
+                'uid',
+                ['/tmp/f.opus'],
+                'omi',
+                False,
+                '/tmp/job-redrive',
+                task_mode=True,
+                content_id='original-content',
+                content_run_bound=True,
+                ledger_fence_active=False,
+            )
+
+            pipeline.process_segment.assert_called_once()
+            assert pipeline.process_segment.call_args.args[0] == pending
+            pipeline.get_processed_sync_segment_ids.assert_called_once_with('uid', 'original-content')
+            result = stubs['sync_jobs'].finalize_sync_job.call_args.args[1]
+            assert result['new_memories'] == ['row-a']
+            assert result['failed_segments'] == 0
+        finally:
+            self._cleanup(stubs['saved_modules'])
+
+    @pytest.mark.asyncio
     async def test_retry_hydration_excludes_durably_fenced_conversation_from_audio_finalization(
         self, fenced_worker_module
     ):
