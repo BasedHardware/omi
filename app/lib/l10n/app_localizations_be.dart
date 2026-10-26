@@ -14618,4 +14618,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Гатова';
+
+  @override
+  String get openLoopAnswerRemind => 'Нагадаць пазней';
+
+  @override
+  String get openLoopAnswerDrop => 'Адкінуць';
 }

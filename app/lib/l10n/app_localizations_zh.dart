@@ -14359,4 +14359,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => '完成';
+
+  @override
+  String get openLoopAnswerRemind => '稍后提醒';
+
+  @override
+  String get openLoopAnswerDrop => '放弃';
 }

@@ -14579,4 +14579,13 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'সম্পন্ন';
+
+  @override
+  String get openLoopAnswerRemind => 'পরে মনে করিয়ে দিন';
+
+  @override
+  String get openLoopAnswerDrop => 'বাদ দিন';
 }

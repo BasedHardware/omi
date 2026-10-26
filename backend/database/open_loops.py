@@ -31,7 +31,9 @@ import zlib
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from ._client import get_firestore_client
+from google.cloud import firestore
+
+from ._client import get_firestore_client, run_transactional
 from utils import encryption
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,9 @@ logger = logging.getLogger(__name__)
 OPEN_LOOPS_COLLECTION = 'open_loops'
 OPEN_LOOP_CARDS_COLLECTION = 'open_loop_cards'
 OPEN_LOOP_CLAIMS_COLLECTION = 'open_loop_claims'
+
+# The writer's initial card state; the answer transaction's pending check.
+CARD_STATE_PENDING = 'pending'
 
 DATA_FIELD = 'data'
 DATA_COMPRESSED_FIELD = 'data_compressed'
@@ -148,6 +153,87 @@ def set_cards(uid: str, date_str: str, cards: List[Dict[str, Any]], *, firestore
             DATA_FIELD: _protect(cards, uid),
             DATA_COMPRESSED_FIELD: True,
         }
+    )
+
+
+def cards_doc_ref(uid: str, date_str: str, *, firestore_client: Any = None):
+    return _collection(uid, OPEN_LOOP_CARDS_COLLECTION, firestore_client).document(date_str)
+
+
+@firestore.transactional
+def _transition_card(
+    transaction: Any,
+    uid: str,
+    ref: Any,
+    date_str: str,
+    card_id: str,
+    state: str,
+    answered_at: Optional[str],
+    from_state: str = CARD_STATE_PENDING,
+) -> Optional[Dict[str, Any]]:
+    """Read-check-update of one card's state, serialized against every other answer.
+
+    The whole cards document is one encrypted blob, so a field-level update of a
+    single card is not possible; the transaction is what keeps two in-flight
+    answers from each resurrecting the other's card as pending. Returns the
+    answered card, or None when the day has no document, the card is missing or
+    it is no longer pending (answered elsewhere — the caller's 409).
+    """
+    raw = ref.get(transaction=transaction).to_dict()
+    if not raw:
+        return None
+    try:
+        cards = _reveal(raw.get(DATA_FIELD), uid)
+    except (ValueError, TypeError, json.JSONDecodeError, zlib.error):
+        logger.error('open_loop_cards_undecodable uid=%s date=%s', uid, date_str)
+        return None
+    if not isinstance(cards, list):
+        return None
+    position = next((i for i, c in enumerate(cards) if isinstance(c, dict) and str(c.get('id')) == str(card_id)), None)
+    if position is None or cards[position].get('state') != from_state:
+        return None
+    card = {**cards[position], 'state': state, 'answered_at': answered_at}
+    cards[position] = card
+    transaction.set(
+        ref,
+        {
+            'date': date_str,
+            'generated_at': raw.get('generated_at'),
+            DATA_FIELD: _protect(cards, uid),
+            DATA_COMPRESSED_FIELD: True,
+        },
+    )
+    return card
+
+
+def transition_card_state(
+    uid: str,
+    date_str: str,
+    card_id: str,
+    state: str,
+    answered_at: Optional[str],
+    *,
+    from_state: str = CARD_STATE_PENDING,
+    firestore_client: Any = None,
+) -> Optional[Dict[str, Any]]:
+    """Move one card of the day's document from ``from_state`` (pending) to ``state`` atomically.
+
+    On contention (another answer committed since this transaction's read) the
+    Firestore wrapper re-runs the body against the committed state, so the
+    check-then-update can never overwrite a concurrent answer with a stale
+    snapshot of the document.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    return run_transactional(
+        client,
+        _transition_card,
+        uid,
+        cards_doc_ref(uid, date_str, firestore_client=client),
+        date_str,
+        card_id,
+        state,
+        answered_at,
+        from_state,
     )
 
 

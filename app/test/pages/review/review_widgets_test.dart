@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/open_loops.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/review/review_item_sheet.dart';
@@ -71,6 +72,7 @@ Future<ReviewProvider> _provider(List<ReviewItem> items, List<(String, Map<Strin
     isEligible: () => true,
     reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
     loadItems: () async => ApiSuccess(ReviewItemsResponse(items: items, remainingToday: items.length)),
+    loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [])),
     sendAnswer: (item, answer) async {
       sent.add((item.itemId, answer.toJson(item.kind)));
       return const ApiSuccess(0);
@@ -125,6 +127,7 @@ void main() {
         isEligible: () => true,
         reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
         loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [item], remainingToday: 3)),
+        loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [])),
         sendAnswer: (_, __) async => const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 409)),
       );
       await provider.load();
@@ -179,7 +182,8 @@ void main() {
     final off = ReviewProvider(
         isEligible: () => true,
         reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
-        loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
+        loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)),
+        loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [])));
     await off.load();
     await tester.pumpWidget(_host(off, const ReviewEntryCard()));
     expect(find.byKey(const Key('review_entry_card')), findsNothing);
@@ -200,7 +204,8 @@ void main() {
     final launching = ReviewProvider(
         isEligible: () => true,
         reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
-        loadItems: () => pending.future);
+        loadItems: () => pending.future,
+        loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [])));
     expect(launching.availability, ReviewAvailability.unknown);
     await tester.pumpWidget(_host(launching, const ReviewEntryCard()));
     await tester.pump();

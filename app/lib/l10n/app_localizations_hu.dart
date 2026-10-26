@@ -14641,4 +14641,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Kész';
+
+  @override
+  String get openLoopAnswerRemind => 'Emlékeztessen később';
+
+  @override
+  String get openLoopAnswerDrop => 'Eldobás';
 }
