@@ -136,7 +136,7 @@ async def retry_owner(uid, *, db_client=None, now=None):
     """Retry fresh stragglers; never let an old backlog consume the page."""
     if not policy.enabled():
         return 0
-    client = db_client if db_client is not None else get_firestore_client()
+    client = db_client if db_client is not None else await run_blocking(db_executor, get_firestore_client)
     current = now or datetime.now(timezone.utc)
     items = await run_blocking(
         db_executor,
@@ -184,11 +184,12 @@ async def retry_due_owners(owners, *, complete_owner=None):
             try:
                 await retry_owner(uid)
                 if complete_owner is not None and policy.enabled():
+                    client = await run_blocking(db_executor, get_firestore_client)
                     completion = await run_blocking(
                         db_executor,
                         complete_owner,
                         uid,
-                        db_client=get_firestore_client(),
+                        db_client=client,
                         now=datetime.now(timezone.utc),
                         run_id='dream-required-intake',
                         limit=5,

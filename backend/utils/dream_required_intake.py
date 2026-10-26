@@ -96,16 +96,21 @@ def read_candidate(uid, memory_id, context):
     }
 
 
+def read_preparation_context(uid):
+    client = review_store.client()
+    control = read_control(uid, client)
+    cursor_ref = client.document(f'{MemoryCollections(uid=uid).memory_runs}/dream_required_intake_cursor')
+    cursor = cursor_ref.get().to_dict() or None
+    return client, control, cursor
+
+
 async def prepare(uid, seed, records, limits, source):
     """Bounded, read-only candidates and neighbors in the existing pass budget."""
     if not policy.backlog_enabled(uid):
         return seed, records
-    client = review_store.client()
-    control = await run_blocking(db_executor, read_control, uid, client)
+    client, control, cursor = await run_blocking(db_executor, read_preparation_context, uid)
     if control is None or control.writer_mode.value != 'compatibility':
         return seed, records
-    cursor_ref = client.document(f'{MemoryCollections(uid=uid).memory_runs}/dream_required_intake_cursor')
-    cursor = cursor_ref.get().to_dict() or None
     if cursor and (
         set(cursor) != {'captured_at', 'memory_id'}
         or not isinstance(cursor['captured_at'], datetime)
