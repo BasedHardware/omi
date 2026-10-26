@@ -244,7 +244,6 @@ enum FloatingBarNotchOnlyCardPolicy {
 }
 
 enum FloatingBarNotificationAction: Equatable {
-  case openProactivityItem(ProactivityNotificationTarget)
   case openWhatMattersNow(recommendationID: String)
   /// Offer to connect an integration the user has open but has not set up.
   /// Carries the catalog's telemetry id (`import:email`, `export:notion`, …),

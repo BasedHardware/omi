@@ -103,18 +103,24 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
           // would hide the terminal state the block must show.
           ...SyncPendingWork.attention(p),
         ]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
+        // Rows with no trustworthy time: server work the phone did not start, and
+        // recordings whose device clock predates the plausibility floor.
+        final undated = <_PendingItem>[];
         for (final block in groupRecordingBlocks(pending, joinDeviceCopies: true)) {
+          _PendingItem item;
           if (SyncPendingWork.needsAttention(block.state)) {
             // Refused recordings stay on the day they were made, in the Offline Sync page's words.
-            items.add(_PendingItem.block(block, label: _attentionLabel(block.state, l), step: 0));
+            item = _PendingItem.block(block, label: _attentionLabel(block.state, l), step: 0);
           } else if (block.wals.every((w) => w.status == WalStatus.uploaded)) {
-            items.add(_PendingItem.block(block, label: l.transcribing, step: 2));
+            item = _PendingItem.block(block, label: l.transcribing, step: 2);
           } else {
-            items.add(_PendingItem.block(block, label: _syncingLabel(block, l), step: 1));
+            item = _PendingItem.block(block, label: _syncingLabel(block, l), step: 1);
           }
+          // A time before the plausibility floor is a device clock that was never set:
+          // the recording still counts, listed without a time rather than on a bogus day.
+          (item.start == null ? undated : items).add(item);
         }
 
-        final undated = <_PendingItem>[];
         // Server work the phone did not start (another device, or a relaunch mid-job) is what the device's
         // card stands for when nothing local is pending: list it by the same rule, so the row never
         // opens on "all synced". A conversation already listed as processing is not repeated, and a
@@ -265,8 +271,17 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
 class _PendingItem {
   const _PendingItem({required this.start, required this.seconds, required this.label, required this.step});
 
+  /// A recording block's start, or null when no device clock value in the block
+  /// is plausible: a never-set clock shows no time rather than a bogus one.
+  static DateTime? _blockStart(RecordingBlock block) {
+    final seconds = block.startSeconds;
+    if (walTimerStartPlausible(seconds)) return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+    logImplausibleRecordingStart('on_the_way', block.representative.id, seconds);
+    return null;
+  }
+
   _PendingItem.block(RecordingBlock block, {required this.label, required this.step})
-      : start = DateTime.fromMillisecondsSinceEpoch(block.startSeconds * 1000),
+      : start = _blockStart(block),
         seconds = block.seconds;
 
   /// A stage with no recording to name yet: only the label shows.
@@ -274,10 +289,18 @@ class _PendingItem {
       : start = null,
         seconds = 0;
 
-  /// Work the server reports: `summarizing` is step 3, `transcribing` step 2, and `queued` (synced,
-  /// waiting its turn) reads as processing like Home's row does.
+  /// Server-reported work's start, or null when unreported or before the
+  /// plausibility floor (a device clock that was never set).
+  static DateTime? _serverStart(PendingWorkItem work) {
+    final startedAt = work.startedAt;
+    if (startedAt == null) return null;
+    if (recordingStartPlausible(startedAt)) return startedAt.toLocal();
+    logImplausibleRecordingStart('on_the_way', work.id, startedAt.millisecondsSinceEpoch ~/ 1000);
+    return null;
+  }
+
   _PendingItem.server(PendingWorkItem work, AppLocalizations l)
-      : start = work.startedAt?.toLocal(),
+      : start = _serverStart(work),
         seconds = work.durationSeconds ?? 0,
         label = work.state == 'transcribing' ? l.transcribing : l.processing,
         step = work.state == 'summarizing' ? 3 : 2;

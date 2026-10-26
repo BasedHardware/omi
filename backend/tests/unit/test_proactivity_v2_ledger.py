@@ -5,6 +5,7 @@ import pytest
 from config.proactivity_v2 import ProactivityDenied
 from database import proactivity as ledger
 from tests.unit.test_proactivity_v2_budget import NOW, claim, store
+from tests.support.synthetic_proactivity_producers import synthetic_producers  # noqa: F401
 
 
 def ready(store, producer='commitment_followup'):

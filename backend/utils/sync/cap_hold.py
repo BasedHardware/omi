@@ -16,14 +16,14 @@ from uuid import uuid4
 from typing import Any
 from models.conversation_enums import ConversationSource
 from utils.observability.held_content import record_capture
-from utils.observability.stt_cap_dispatch import record_audio
+from utils.observability.stt_cap_dispatch import record_audio, record_allowance_decision, DispatchPath
 from utils.stt_cap_dispatch import funded_allowance
 
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, PreconditionFailed
 from database import redis_db
 from database.fsr_read_cache import forget_request_reads, memo
-from config.stt_cap_dispatch import execution_admission_enabled as enabled
+from config.stt_cap_dispatch import offline_admission_enabled as enabled
 from utils.sync.files import get_timestamp_from_path
 from utils.executors import db_executor, storage_executor, run_blocking
 from database._client import get_data_plane_firestore_client as get_firestore_client
@@ -386,7 +386,9 @@ def hold_segment(uid: str, path: str, metadata: dict[str, Any], *, receipt: dict
         created = _publish(uid, identity, seconds, fields, hold_started_at(metadata))
         if not created and not _exists(uid, identity):
             record_capture('ack_without_authority')
-    return _finish(identity, seconds, funded_allowance(uid).reason, receipt, created)
+    return _finish(
+        identity, seconds, funded_allowance(uid, lane=metadata.get('origin', 'sync')).reason, receipt, created
+    )
 
 
 async def _hold_capture(uid: str, path: str, metadata: dict, reason: str, receipt: dict) -> None:
@@ -567,13 +569,14 @@ async def hold_capture_if_exhausted(
     receipts: dict | None = None,
     source_frame_maps: dict | None = None,
     admission: dict | None = None,
+    dispatch_path: DispatchPath = DispatchPath.SYNC_V1,
     **context: Any,
 ) -> bool:
     # Shared by v1 intake and v2 execution, before VAD can discard silence.
     if not paths or not enabled(uid, 'sync'):
         return False
-    allowance = await run_blocking(db_executor, funded_allowance, uid)
-    if allowance.managed:
+    allowance = await run_blocking(db_executor, funded_allowance, uid, lane='sync')
+    if record_allowance_decision(dispatch_path, allowance):
         return False
     if admission is not None:
         admission['reason'] = allowance.reason

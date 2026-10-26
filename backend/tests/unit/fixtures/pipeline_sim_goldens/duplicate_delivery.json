@@ -8,12 +8,12 @@
    "duration_seconds": 4.86,
    "final_job": {
     "attempt": 1,
-    "client_status": "completed",
     "conversation_id": "conv-1",
     "duration_seconds": 4.86,
     "failure": "worker_failed",
     "fresh_capture": false,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 1.0,
     "merge_pending": false,
     "owner_id": "owner-1",
     "priority": 1,
@@ -22,19 +22,20 @@
     "quarantine_reason": "worker_failed",
     "recovery": {
      "epoch": 1,
+     "failure": {
+      "reason": "empty_asr",
+      "stage": "response_validation"
+     },
      "privacy_generation": 0,
      "provider": "modulate"
     },
-    "recovery_state": "recovered",
+    "recovery_state": "failed_held",
     "recovery_wake": {
      "queue": "pipeline-sim-sync-jobs",
      "seq": 1
     },
     "requires_compute_admission": true,
-    "result": {
-     "outcome": "no_recoverable_speech"
-    },
-    "state": "committed",
+    "state": "quarantined",
     "unit_kind": "capture_span",
     "worker_empty_evidence": {
      "padded_retry": "empty",
@@ -43,65 +44,38 @@
     "worker_failure": {
      "reason": "empty_asr",
      "stage": "assemble_words"
-    }
-   },
-   "final_result": {
-    "conversation_id": "conv-1",
-    "late_capture": true,
-    "log_sequence": 2,
-    "owner_id": "owner-1",
-    "previous_segment_id": "seg-2",
-    "privacy_generation": 0,
-    "projection": {
-     "speech_seconds": 0.0,
-     "state": "completed"
     },
-    "projection_state": "completed",
-    "protocol_version": 1,
-    "recovery_version": 1,
-    "result": {
-     "outcome": "no_recoverable_speech"
+    "worker_vad_receipt": {
+     "captured_samples": 77760,
+     "sample_rate_hz": 16000,
+     "speech_samples": 16000,
+     "state": "measured",
+     "version": 1
     }
    },
+   "final_result": null,
    "job_transitions": [
     "<1s ready",
     "<1s leased",
     "<5s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<30s quarantined recovery:running",
-    "<30s result_ready recovery:recovered",
-    "<30s committed recovery:recovered",
-    "<30s committed recovery:recovered client:completed"
+    "<30s quarantined recovery:failed_held"
    ],
    "owner": "owner-1",
    "paid_calls": 1,
    "recover_task_responses": [
-    "recovered",
+    "failed_held",
     "held"
    ],
-   "result_artifact": {
-    "audio_seconds": 4.86,
-    "outcome": "no_recoverable_speech",
-    "recognition_evidence": {
-     "gpu_padded_retry": "empty",
-     "multilingual_recovery": "empty"
-    },
-    "speech_seconds": 1.0,
-    "words": 0,
-    "words_digest": 87221350796331,
-    "words_provider": "exhausted_recognizers"
-   },
-   "result_transitions": [
-    "<30s pending outcome:no_recoverable_speech",
-    "<30s completed outcome:no_recoverable_speech"
-   ]
+   "result_artifact": null,
+   "result_transitions": []
   },
   "seg-2": {
    "content_kind": "speech",
    "duration_seconds": 217.61,
    "final_job": {
     "attempt": 1,
-    "client_status": "completed",
     "conversation_id": "conv-2",
     "duration_seconds": 217.61,
     "fresh_capture": true,
@@ -125,11 +99,7 @@
     "owner_id": "owner-1",
     "previous_segment_id": null,
     "privacy_generation": 0,
-    "projection": {
-     "speech_seconds": 217.61,
-     "state": "completed"
-    },
-    "projection_state": "completed",
+    "projection_state": "pending",
     "protocol_version": 1,
     "result": {
      "outcome": "success"
@@ -139,8 +109,7 @@
     "<1s ready",
     "<1s leased",
     "<5s result_ready",
-    "<5s committed",
-    "<30s committed client:completed"
+    "<5s committed"
    ],
    "owner": "owner-1",
    "paid_calls": 0,
@@ -153,8 +122,7 @@
     "words_provider": "parakeet"
    },
    "result_transitions": [
-    "<5s pending outcome:success",
-    "<30s completed outcome:success"
+    "<5s pending outcome:success"
    ]
   },
   "seg-3": {
@@ -162,7 +130,6 @@
    "duration_seconds": 329.81,
    "final_job": {
     "attempt": 1,
-    "client_status": "completed",
     "conversation_id": "conv-3",
     "duration_seconds": 329.81,
     "fresh_capture": true,
@@ -182,15 +149,11 @@
    "final_result": {
     "conversation_id": "conv-3",
     "late_capture": false,
-    "log_sequence": 3,
+    "log_sequence": 2,
     "owner_id": "owner-1",
-    "previous_segment_id": "seg-1",
+    "previous_segment_id": "seg-2",
     "privacy_generation": 0,
-    "projection": {
-     "speech_seconds": 329.81,
-     "state": "completed"
-    },
-    "projection_state": "completed",
+    "projection_state": "pending",
     "protocol_version": 1,
     "result": {
      "outcome": "success"
@@ -200,8 +163,7 @@
     "<1s ready",
     "<1s leased",
     "<30s result_ready",
-    "<30s committed",
-    "<30s committed client:completed"
+    "<30s committed"
    ],
    "owner": "owner-1",
    "paid_calls": 0,
@@ -214,8 +176,7 @@
     "words_provider": "parakeet"
    },
    "result_transitions": [
-    "<30s pending outcome:success",
-    "<30s completed outcome:success"
+    "<30s pending outcome:success"
    ]
   },
   "seg-4": {
@@ -223,7 +184,6 @@
    "duration_seconds": 559.77,
    "final_job": {
     "attempt": 1,
-    "client_status": "completed",
     "conversation_id": "conv-4",
     "duration_seconds": 559.77,
     "fresh_capture": true,
@@ -243,15 +203,11 @@
    "final_result": {
     "conversation_id": "conv-4",
     "late_capture": false,
-    "log_sequence": 4,
+    "log_sequence": 3,
     "owner_id": "owner-1",
     "previous_segment_id": "seg-3",
     "privacy_generation": 0,
-    "projection": {
-     "speech_seconds": 559.77,
-     "state": "completed"
-    },
-    "projection_state": "completed",
+    "projection_state": "pending",
     "protocol_version": 1,
     "result": {
      "outcome": "success"
@@ -261,8 +217,7 @@
     "<1s ready",
     "<1s leased",
     "<30s result_ready",
-    "<30s committed",
-    "<30s committed client:completed"
+    "<30s committed"
    ],
    "owner": "owner-1",
    "paid_calls": 0,
@@ -275,8 +230,7 @@
     "words_provider": "parakeet"
    },
    "result_transitions": [
-    "<30s pending outcome:success",
-    "<30s completed outcome:success"
+    "<30s pending outcome:success"
    ]
   },
   "seg-5": {
@@ -351,6 +305,7 @@
     "failure": "worker_failed",
     "fresh_capture": true,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 1.0,
     "merge_pending": false,
     "owner_id": "owner-2",
     "priority": 1,
@@ -380,6 +335,13 @@
     "worker_failure": {
      "reason": "empty_asr",
      "stage": "assemble_words"
+    },
+    "worker_vad_receipt": {
+     "captured_samples": 155840,
+     "sample_rate_hz": 16000,
+     "speech_samples": 16000,
+     "state": "measured",
+     "version": 1
     }
    },
    "final_result": {
@@ -499,12 +461,14 @@
    "duplicate_fail_returned_false": 2,
    "duplicate_uploads_deduplicated": 1,
    "recovery_duplicate_deliveries": 2,
+   "recovery_failed_held": 1,
    "recovery_held": 2,
-   "recovery_recovered": 2,
+   "recovery_recovered": 1,
    "recovery_tasks_enqueued": 2
   },
   "job_states": {
-   "committed": 7
+   "committed": 6,
+   "quarantined": 1
   },
   "paid_calls": 2,
   "paid_outcomes": {
@@ -512,23 +476,24 @@
    "recovered": 1
   },
   "recovery_states": {
-   "recovered": 2
+   "failed_held": 1,
+   "recovered": 1
   },
   "revision_drain": {
-   "fire_and_forget:completed": 3,
+   "fire_and_forget:completed": 1,
    "fire_and_forget:stopped_at_horizon": 1,
    "request_scoped:completed": 4
   }
  },
  "uploads": [
   {
-   "content_status": "completed",
+   "content_status": "processing",
    "conversation": {
     "excluded": null,
-    "first_summary": "completed",
-    "projected": true,
-    "speech_seconds": 217.61,
-    "summary_dispatches": 1,
+    "first_summary": "none",
+    "projected": false,
+    "speech_seconds": 0.0,
+    "summary_dispatches": 0,
     "words": 1,
     "words_digest": 11844727155393
    },
@@ -555,13 +520,13 @@
    "upload": "upload-2"
   },
   {
-   "content_status": "completed",
+   "content_status": "processing",
    "conversation": {
     "excluded": null,
-    "first_summary": "completed",
-    "projected": true,
-    "speech_seconds": 889.58,
-    "summary_dispatches": 1,
+    "first_summary": "none",
+    "projected": false,
+    "speech_seconds": 0.0,
+    "summary_dispatches": 0,
     "words": 2,
     "words_digest": 258338192607763
    },

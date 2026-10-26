@@ -178,6 +178,7 @@ def notification_harness() -> Iterator[SimpleNamespace]:
         'utils.executors',
         db_executor=MagicMock(),
         postprocess_executor=MagicMock(),
+        open_loops_executor=MagicMock(),
         run_blocking=MagicMock(),
     )
 

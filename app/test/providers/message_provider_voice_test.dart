@@ -72,7 +72,7 @@ void main() {
     var failureHaptics = 0;
     final provider = MessageProvider(
       voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
-      voiceReplyStreamer: (_, {language}) async* {
+      voiceReplyStreamer: (_, {language, abort}) async* {
         yield ServerMessageChunk(
           'voice-message-id',
           'No speech was detected.',
@@ -100,7 +100,7 @@ void main() {
   test('pendant reply cannot append to an explicitly selected past thread', () async {
     final provider = MessageProvider(
       voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
-      voiceReplyStreamer: (_, {language}) async* {
+      voiceReplyStreamer: (_, {language, abort}) async* {
         yield ServerMessageChunk('voice', 'Pendant answer', MessageChunkType.data);
       },
     );
@@ -124,7 +124,7 @@ void main() {
     appProvider.setSelectedChatAppId('mentor');
     final provider = MessageProvider(
       voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
-      voiceReplyStreamer: (_, {language}) => _answeredVoiceQuestion(),
+      voiceReplyStreamer: (_, {language, abort}) => _answeredVoiceQuestion(),
     );
     addTearDown(provider.dispose);
     provider.updateAppProvider(appProvider);
@@ -147,7 +147,7 @@ void main() {
     appProvider.setSelectedChatAppId('no_selected');
     final provider = MessageProvider(
       voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
-      voiceReplyStreamer: (_, {language}) => _answeredVoiceQuestion(),
+      voiceReplyStreamer: (_, {language, abort}) => _answeredVoiceQuestion(),
     );
     addTearDown(provider.dispose);
     provider.updateAppProvider(appProvider);
@@ -170,7 +170,7 @@ void main() {
     final provider = MessageProvider(
       voiceReplyTimeout: const Duration(milliseconds: 10),
       voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
-      voiceReplyStreamer: (_, {language}) {
+      voiceReplyStreamer: (_, {language, abort}) {
         streamCalls++;
         if (streamCalls == 1) return stalled.stream;
         return Stream.value(ServerMessageChunk('reply', 'Done.', MessageChunkType.data));

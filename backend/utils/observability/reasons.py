@@ -253,6 +253,33 @@ class LiveSttReason(StrEnum):
     NO_TEXT = 'no_text'
 
 
+class LocalPreviewOutcome(StrEnum):
+    """Mobile local-preview lane admission at listen session start (routers/listen/local_preview.py)."""
+
+    UNKNOWN = 'unknown'
+    ADMITTED = 'admitted'
+    NOT_REQUESTED = 'not_requested'
+    KILL_SWITCH = 'kill_switch'
+    CUSTOM_STT = 'custom_stt'
+    MULTI_CHANNEL = 'multi_channel'
+    ONBOARDING = 'onboarding'
+    PHONE_CALL = 'phone_call'
+    PRIVATE_SYNC_OFF = 'private_sync_off'
+    NOT_BATCH_LANE = 'not_batch_lane'
+    POLICY_ERROR = 'policy_error'
+
+
+class ServiceWindowOutcome(StrEnum):
+    """Disposition of one admitted service-VIP window POST (`utils/stt/window_replicas.py`)."""
+
+    UNKNOWN = 'unknown'
+    ERROR = 'service_error'
+    QUEUE_TIMEOUT = 'service_queue_timeout'
+    TEXT = 'service_text'
+    EMPTY = 'service_empty'
+    CANCELLED = 'service_cancelled'
+
+
 class WorkerValidationStage(StrEnum):
     """Worker validation stage tokens."""
 

@@ -28,6 +28,9 @@ abstract final class EpisodePresentation {
     final start = (anchor ?? LiveStartAnchor()).resolve(
       episode: episode,
       captureStart: capture.liveCaptureStartedAt,
+      // Phone recordings have a stable per-recording identity through pause/reconnect.
+      // Pendant session rolls remain part of the continuous wear timer.
+      captureId: capture.liveCaptureSource == 'phone' ? capture.activeRecordingId : null,
       streaming: streamingSource(capture) != null,
       now: now,
     );
@@ -50,22 +53,26 @@ abstract final class EpisodePresentation {
   /// Who is in the conversation, named exactly as the transcript names them: the owner, then each
   /// speaker resolved to one of the user's people, in order of first appearance. An unresolved
   /// speaker ("Speaker 1") is not named here, so the header never knows more than the transcript.
-  static List<String> participants(List<TranscriptSegment> segments, List<Person> people, AppLocalizations l10n) {
+  static List<String> participants(List<TranscriptSegment> segments, List<Person> people, AppLocalizations l10n,
+      {String? ownerLabel, String? Function(String personId)? personName}) {
     final names = SpeakerNames.forSegments(segments, people: people, l10n: l10n);
     final owner = <String>{};
-    final others = <String>{};
+    // Display names are not identities: two People records can share a name.
+    final others = <String, String>{};
     for (final segment in segments) {
       if (segment.isUser) {
-        final name = names.forSegment(segment);
+        final name = ownerLabel ?? names.forSegment(segment);
         if (name.isNotEmpty) owner.add(name);
         continue;
       }
       final person = personById(people, segment.personId);
-      if (person == null) continue;
-      final name = names.forSegment(segment, person: person);
-      if (name.isNotEmpty) others.add(name);
+      final name = (segment.personId == null ? null : personName?.call(segment.personId!)) ??
+          (person == null ? null : names.forSegment(segment, person: person));
+      if (segment.personId != null && name != null && name.trim().isNotEmpty) {
+        others.putIfAbsent(segment.personId!, () => name.trim());
+      }
     }
-    return [...owner, ...others];
+    return [...owner, ...others.values];
   }
 
   /// The source capturing right now, or null when nothing is streaming live (Transcribe Later,

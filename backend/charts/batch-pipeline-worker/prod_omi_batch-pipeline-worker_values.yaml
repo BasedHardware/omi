@@ -16,8 +16,11 @@ secretName: prod-omi-backend-secrets
 replicaCount: 2
 autoscaling:
   enabled: false
+# The null drops the base chart's pool pin: batch-pipeline-pool and its Spot
+# sibling share the service/env labels and omi.ai taints, so the autoscaler
+# can place replicas on Spot first while the on-demand pool stays the fallback.
 nodeSelector:
-  cloud.google.com/gke-nodepool: batch-pipeline-pool
+  cloud.google.com/gke-nodepool: null
   service: batch-pipeline
   env: prod
 tolerations:

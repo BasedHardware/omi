@@ -49,8 +49,3 @@ extension OmiAPI.TaskIntelligenceFeedbackReason: @unchecked Sendable {}
 // Generated immutable value types: only strings, booleans, integers and arrays
 // of the same value types. Keep conformances outside regenerated source.
 extension OmiAPI.OmiApiClient: @unchecked Sendable {}
-extension OmiAPI.ProactivityTarget: @unchecked Sendable {}
-extension OmiAPI.ProactivityFeedItem: @unchecked Sendable {}
-extension OmiAPI.ProactivityFeedResponse: @unchecked Sendable {}
-extension OmiAPI.ProactivityOutcomeRequest: @unchecked Sendable {}
-extension OmiAPI.ProactivityOutcomeResponse: @unchecked Sendable {}

@@ -3,7 +3,6 @@
 from dataclasses import replace
 import hashlib
 import logging
-import os
 import time
 
 from fastapi import HTTPException
@@ -23,8 +22,7 @@ from database.sync_ledger import (
     is_valid_completed_sync_content_result,
     is_valid_partial_sync_content_result,
 )
-from utils.batch_pipeline.artifacts import ArtifactStore
-from utils.batch_pipeline.artifact_policy import create_artifact_store
+from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.capture.batch_coverage import decode_for_intake, covered_response
@@ -38,7 +36,6 @@ from utils.batch_pipeline.language_metrics import record_route
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
-from utils.other.local_storage import create_storage_client
 from utils.observability.fallback import record_fallback
 from utils.sync.admission_responses import sync_content_in_progress_response
 from utils.sync.stage import current_stage
@@ -55,13 +52,6 @@ JOB_PREFIX = 'bp_'
 # Every failed unit settled its one paid recovery without words and waits for a
 # reviewed operator decision server-side. Released apps ACK `completed`.
 HELD_REASON_CODE = 'batch_unit_held'
-
-
-def artifacts_for(store: FirestoreStore) -> ArtifactStore:
-    bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
-    if not bucket:
-        raise RuntimeError('durable batch staging bucket is not configured')
-    return create_artifact_store(store, create_storage_client(), bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
 
 
 def _next_unit(iterator):

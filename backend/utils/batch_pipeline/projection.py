@@ -26,11 +26,13 @@ from config.batch_pipeline import (
     sweep_owner_chain_enabled,
 )
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
+from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+from utils.batch_pipeline.projection_disposition import persist_disposition, mirror_assignment
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
@@ -38,6 +40,7 @@ from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
+from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidence
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.sync.intake_completion import log_sync_lineage_stamp_gap_refused
 
@@ -364,10 +367,12 @@ class Projector:
         playback: Callable | None = None,
         fetch_audio: Callable[[WorkItem], bytes] | None = None,
         clock: Callable[[], float] = time.time,
+        require_lineage_fence: bool = False,
     ):
         self.store = ProjectionStore(store)
         self.load_result, self.publish, self.playback, self.clock = load_result, publish, playback, clock
         self.fetch_audio = fetch_audio
+        self.require_lineage_fence = require_lineage_fence
         self.followups = None
         self.has_async_followups = False
         # Async rows a sweep walk persisted. Handed to the follow-up queue
@@ -390,6 +395,9 @@ class Projector:
         self.handoff = threading.Lock()
         # Resume point of the held-partial scan; a short page wraps it.
         self.held_after: str | None = None
+        # Upload dedupe of the held-partial pass in flight; spans budget stops
+        # and wraps only when the scan's cursor does.
+        self.held_pass_seen: set[tuple[str, str]] = set()
 
     def request_drain(self, owner_id: str) -> None:
         with self.handoff:
@@ -642,23 +650,68 @@ class Projector:
             record_speech_steps(binding, accounting['source'], steps, times, self.clock())
         return result
 
-    def sweep_held(self, limit: int = HELD_PARTIAL_PAGE) -> dict[str, int]:
-        """Bounded page of held units; one partial attempt per upload."""
-        counts = {'partial': 0, 'waiting': 0, 'error': 0}
-        page = held_candidates(self.store.client, self.store.store.namespace, limit, after_id=self.held_after)
-        self.held_after = page[-1][0] if len(page) >= limit else None
-        seen = set()
-        for _, job in page:
+    def sweep_held(
+        self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None
+    ) -> dict[str, int]:
+        """Pages of held units chained into one bounded pass; one partial attempt per upload.
+
+        A ``deadline`` (a ``time.monotonic`` instant) or ``max_pages`` chains
+        full pages back to back — checked only between pages, so a pass
+        overruns its deadline by at most one page — while neither bound keeps
+        the legacy single-page contract. ``units`` counts held documents
+        examined; ``reads`` is what the caller should charge its read budget:
+        one read per examined document plus, per attempted upload, 5 reads per
+        sibling and 7 (the code-derived worst case of prepare_accounting plus
+        the complete_partial transaction, which walk every sibling), floored
+        at the benchmark's measured per-attempt worst case.
+        ``more`` marks a pass stopped on a full page or a failed fetch with the
+        cursor kept, so the caller can resume it without waiting out its
+        interval. The upload dedupe spans the whole pass — across budget stops
+        too — and resets only when a short page wraps the cursor.
+        """
+        counts = {'partial': 0, 'waiting': 0, 'error': 0, 'units': 0, 'reads': 0, 'more': 0}
+        pages = 0
+        while True:
             try:
-                binding = normalized_binding(job['projection_binding'])
-                if (binding.owner_id, binding.content_id) in seen:
-                    continue
-                seen.add((binding.owner_id, binding.content_id))
-                counts['partial' if self.complete_held(binding) is not None else 'waiting'] += 1
+                page = held_candidates(self.store.client, self.store.store.namespace, limit, after_id=self.held_after)
             except Exception as error:
-                counts['error'] += 1
-                logger.warning('event=batch_held_partial outcome=retry exception_type=%s', error_type(error))
-        return counts
+                # A failed fetch bills nothing but must not lose the pages the
+                # pass already served: end the segment resumable, not by raise.
+                counts['more'] = 1
+                logger.warning(
+                    'event=batch_held_partial action=fetch outcome=retry exception_type=%s', error_type(error)
+                )
+                return counts
+            full = len(page) >= limit
+            self.held_after = page[-1][0] if full else None
+            counts['units'] += len(page)
+            counts['reads'] += len(page)
+            counts['more'] = 1 if full else 0
+            pages += 1
+            for _, job in page:
+                try:
+                    binding = normalized_binding(job['projection_binding'])
+                    if (binding.owner_id, binding.content_id) in self.held_pass_seen:
+                        continue
+                    self.held_pass_seen.add((binding.owner_id, binding.content_id))
+                    # 5 reads per sibling and 7 more per attempt bound both
+                    # accounting passes; the floor keeps a one-segment upload
+                    # at the benchmark's measured per-attempt worst case.
+                    counts['reads'] += max(16, 5 * len(binding.segment_ids) + 7)
+                    counts['partial' if self.complete_held(binding) is not None else 'waiting'] += 1
+                except Exception as error:
+                    counts['error'] += 1
+                    logger.warning('event=batch_held_partial outcome=retry exception_type=%s', error_type(error))
+            if not full:
+                # The scan wrapped: the pass is complete and the next one starts fresh.
+                self.held_pass_seen = set()
+                return counts
+            if deadline is None and max_pages is None:
+                return counts
+            if deadline is not None and time.monotonic() >= deadline:
+                return counts
+            if max_pages is not None and pages >= max_pages:
+                return counts
 
     def assign_record_silence(self, item, binding, session, *, hint=None):
         incoming = {
@@ -687,19 +740,12 @@ class Projector:
             self._mirror_assignment(session)
 
     def _mirror_assignment(self, session) -> None:
-        # A2 shadow: the assignment transaction writes the owner watermark and predecessor results outside
-        # Store.run. A strict no-op unless shadow mode; idempotent (re-copies current state); never raises.
-        try:
-            mirror = getattr(self.store, 'mirror_assignment', None)
-            if mirror is not None:
-                mirror(session)
-        except Exception:
-            logger.warning('event=jobstore_shadow op=refresh outcome=hook_error site=projection_assignment')
+        mirror_assignment(self.store, session)
 
     def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None):
         policy = policy or self.store.policy(item.segment_id)
         from database.conversations import get_closest_conversation_to_timestamps
-        from utils.batch_pipeline.context import ResolvedContext, resolve_context
+        from utils.batch_pipeline.context import ResolvedContext, resolve_context, require_repair_manifest
         from utils.batch_pipeline.projection_parts import split_result
 
         with projection_phase('load_result', policy):
@@ -731,6 +777,7 @@ class Projector:
                     manifest = prefetched.manifest
                 else:
                     manifest = read_context(self.fetch_audio(item))
+        require_repair_manifest(item, binding, manifest, self.require_lineage_fence)
         receipts = entry.get('projection_parts') or {}
         for index, (part, part_payload) in enumerate(parts):
             if index and hint is not None and hint.deadline is not None and time.monotonic() >= hint.deadline:
@@ -758,7 +805,14 @@ class Projector:
                 context = ResolvedContext(binding.target_conversation_id)
                 if manifest is not None and item.requires_compute_admission:
                     with projection_phase('context', policy):
-                        context = resolve_context(item, binding, manifest, self.store.client, projection_item=part)
+                        context = resolve_context(
+                            item,
+                            binding,
+                            manifest,
+                            self.store.client,
+                            projection_item=part,
+                            require_lineage_fence=self.require_lineage_fence,
+                        )
                 if not part_payload['words']:
                     receipt = session.persist_empty()
                 else:
@@ -781,6 +835,8 @@ class Projector:
                         incoming['_batch_require_live_target'] = True
                     if context.binding_reason is not None and context.target_id:
                         incoming['_sync_lineage_binding'] = context.binding_reason
+                    if context.lineage_eligible:
+                        incoming['_sync_lineage_eligible'] = True
                     from utils.capture.batch_coverage import admit_projection, record_projection
 
                     admit_projection(binding.owner_id, incoming, manifest, capture_at=item.capture_at)
@@ -817,6 +873,7 @@ class Projector:
                             )
                         finally:
                             self._mirror_assignment(session)
+                        incoming.pop('_sync_lineage_eligible', None)
                         record_projection(
                             binding.owner_id,
                             incoming,
@@ -831,6 +888,8 @@ class Projector:
                             log_sync_lineage_stamp_gap_refused()
             except ProjectionReplay as replay:
                 receipt = replay.receipt
+            except ProjectionGenerationAmbiguous:
+                receipt = persist_disposition(session, quarantined=True)
             except SyncAssignmentSuperseded:
                 receipt = self.supersede(session)
             except Exception as error:
@@ -845,19 +904,11 @@ class Projector:
                 self.finish_part(item, binding, receipt, index, policy=policy)
 
     def supersede(self, session):
-        # Assignment wrote no content. Recheck binding, ledger ownership, ordering
-        # and privacy in a fresh transaction before acknowledging this part. A
-        # competing assignment receipt wins; never replace it with a no-op.
-        try:
-            receipt = session.persist_empty(superseded=True)
-        except ProjectionReplay as replay:
-            return replay.receipt
-        logger.info('event=batch_projection action=assignment outcome=superseded')
-        return receipt
+        return persist_disposition(session)
 
     def finish_part(self, item, binding, receipt, index, *, policy=None):
         policy = policy or self.store.policy(item.segment_id)
-        if receipt['state'] == 'ready':
+        if receipt['state'] in {'ready', 'quarantined'}:
             return
         if receipt.get('conversation_id'):
             from utils.sync.bridge import finish_sync_bridges
@@ -879,6 +930,8 @@ class Projector:
                     else:
                         self.persist_playback(item, binding, canonical, receipt)
             if receipt['enrichment_required']:
+                if (receipt.get('speaker_scope') or '').startswith('final:batch:'):
+                    prepare_voice_evidence(self, item, binding, canonical)
                 with projection_phase('enrichment', policy):
                     self.store.mark_enrichment(
                         item.segment_id,

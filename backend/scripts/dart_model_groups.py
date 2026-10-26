@@ -122,16 +122,6 @@ SCHEMA_GROUPS = {
             'EntitiesResponse',
         ),
     },
-    'proactivity': {
-        'output': DEFAULT_OUTPUT_DIR / 'proactivity_wire.g.dart',
-        'schemas': (
-            'ProactivityTarget',
-            'ProactivityFeedItem',
-            'ProactivityFeedResponse',
-            'ProactivityOutcomeRequest',
-            'ProactivityOutcomeResponse',
-        ),
-    },
     'frame_requests': {
         'output': DEFAULT_OUTPUT_DIR / 'frame_requests_wire.g.dart',
         'schemas': (
@@ -447,6 +437,7 @@ SCHEMA_GROUPS = {
             'AppCreateResponse',
             'AppMigrationResponse',
             'McpAddServerResponse',
+            'McpAuthorizeResponse',
             'AppDescriptionGenerationResponse',
             'AppDescriptionEmojiGenerationResponse',
             'AppPromptsGenerationResponse',

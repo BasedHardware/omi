@@ -221,6 +221,7 @@ def test_batch_intake_enforces_the_existing_percent_cohort(monkeypatch):
 
 
 def test_batch_intake_keeps_zero_percent_as_shadow_only(monkeypatch):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '0')
     wire = Wire(monkeypatch, vendor=('en', 0.99), self_gate=gate_body('ar', 0.0))
     decision = lid.resolve_language('multi', wav(), surface='batch')
     assert decision.evidence == 'audio_lid'

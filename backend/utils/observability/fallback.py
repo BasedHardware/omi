@@ -191,6 +191,7 @@ ALLOWED_COMPONENTS = frozenset(
         'sync_dispatch',
         'pusher',
         'stt_selection',
+        'speaker_learning',
         'stt_live_session',
         'vad',
         'audio_merge',

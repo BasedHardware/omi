@@ -105,6 +105,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   bool speechProfileRedo;
   Geolocation? geolocation;
 
+  /// This socket declared `local_preview=enabled`: the phone renders an
+  /// on-device preview and the server may defer the cloud stream.
+  bool localPreview;
+
   /// Reports foreground / live-transcript visibility to the server while connected.
   VoidCallback? _clientStateListener;
   Timer? _clientStateHeartbeat;
@@ -121,6 +125,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.speechProfileRedo = false,
     this.geolocation,
     this.clientConversationId,
+    this.localPreview = false,
   }) {
     var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
@@ -144,6 +149,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     if (speechProfileRedo) {
       params += '&speech_profile_redo=enabled';
+    }
+
+    if (localPreview) {
+      params += '&local_preview=enabled';
     }
 
     // Enable server-side speaker auto-assignment (backward compatibility flag)
@@ -179,6 +188,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.speechProfileRedo = false,
     this.geolocation,
     this.clientConversationId,
+    this.localPreview = false,
   }) {
     _socket = socket;
     _socket.setListener(this);
@@ -430,6 +440,7 @@ class TranscriptSocketServiceFactory {
     String? sttConfigId,
     Geolocation? geolocation,
     String? clientConversationId,
+    bool localPreview = false,
   }) {
     return TranscriptSegmentSocketService.create(
       sampleRate,
@@ -440,6 +451,7 @@ class TranscriptSocketServiceFactory {
       sttConfigId: sttConfigId ?? 'omi:default',
       geolocation: geolocation,
       clientConversationId: clientConversationId,
+      localPreview: localPreview,
     );
   }
 

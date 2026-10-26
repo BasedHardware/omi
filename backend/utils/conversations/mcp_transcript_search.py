@@ -25,6 +25,7 @@ from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.model_text import DisplayClock, truncation_note
 from utils.observability.fallback import record_fallback
+from utils.speakers.display import display_participants
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +240,7 @@ def build_transcript_match_snippets(
 
     snippets: List[Dict[str, Any]] = []
     used_centers: set[int] = set()
+    display = display_participants(segs, owner_name='You')
     for center in match_idxs:
         if len(snippets) >= max_snippets:
             break
@@ -254,10 +256,7 @@ def build_transcript_match_snippets(
             text = (seg.get("text") or "").strip()
             if not text:
                 continue
-            speaker = seg.get("speaker_id")
-            prefix = f"Speaker {speaker}: " if speaker is not None else ""
-            if seg.get("is_user"):
-                prefix = "User: "
+            prefix = f"{display.label(seg)}: "
             lines.append(f"{prefix}{text}")
         if not lines:
             continue
@@ -289,7 +288,9 @@ def build_transcript_match_snippets(
                 "end": end_f,
                 "start_ms": _seconds_to_ms(start_f),
                 "end_ms": _seconds_to_ms(end_f),
-                "speaker_id": hit.get("speaker_id"),
+                "speaker_id": None,
+                "speaker_key": display.for_segment(hit).key,
+                "speaker_label": display.label(hit),
             }
         )
     return snippets

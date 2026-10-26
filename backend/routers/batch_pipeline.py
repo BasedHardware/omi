@@ -187,7 +187,7 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     job = await run_blocking(db_executor, service.store.run, lambda tx: tx.get('jobs', body.segment_id))
     if not job:
         return {'status': 'held'}
-    outcome = await run_blocking(sync_executor, service.recovery.recover, body.segment_id, job['owner_id'])
+    outcome = await service.recovery.recover_async(body.segment_id, job['owner_id'])
     if outcome == 'held':
         try:
             await run_blocking(
@@ -218,12 +218,13 @@ async def redrive_dead(body: RedriveRequest):
 @router.post('/shadow-recover', include_in_schema=False)
 async def shadow_recover(body: RedriveRequest):
     from database.batch_pipeline_shadow import ShadowStore
-    from utils.batch_pipeline.intake import artifacts_for
-    from utils.batch_pipeline.shadow_recovery import recover
+    from utils.batch_pipeline.artifact_policy import artifacts_for
+    from utils.batch_pipeline.shadow_recovery import recover_async
 
     store = body.service().store
+    repository = await run_blocking(db_executor, ShadowStore, store)
     artifacts = await run_blocking(sync_executor, artifacts_for, store)
-    outcome = await run_blocking(sync_executor, recover, ShadowStore(store), artifacts, body.segment_id)
+    outcome = await recover_async(repository, artifacts, body.segment_id)
     return {'status': outcome}
 
 

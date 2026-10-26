@@ -11121,13 +11121,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get captureStorageAlmostFull => 'Lagringen er nesten full';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Anhenget mistet forbindelsen til denne telefonen. Omi kobler til igjen av seg selv når anhenget er på og i nærheten. Alt som ble tatt opp før dette, er trygt.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi kobler til igjen av seg selv';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name og andre';
   }
@@ -12255,12 +12248,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => 'Sjekk tilkoblingen';
-
-  @override
-  String get forYou => 'For deg';
-
-  @override
-  String get stopThese => 'Stopp disse';
 
   @override
   String get dismiss => 'Avvis';
@@ -14424,6 +14411,25 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Løpende notater oppdateres ikke. Se transkripsjonen foreløpig.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Tar opp · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Forrige episode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Ventende deler: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Åpne forrige episode';
+
+  @override
   String get episodeNotesSoon => 'Notatene vises etter de første minuttene av samtalen.';
 
   @override
@@ -14560,4 +14566,25 @@ class AppLocalizationsNo extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Ferdig. $percent % rabatt de neste $months månedene.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Andre';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 }

@@ -10933,12 +10933,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get captureStorageAlmostFull => '存储空间即将用完';
 
   @override
-  String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi 会自动重新连接';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name等人';
   }
@@ -12055,12 +12049,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get playbackAudioNetworkFailed => '请检查网络连接';
-
-  @override
-  String get forYou => '为你推荐';
-
-  @override
-  String get stopThese => '停止此类推荐';
 
   @override
   String get dismiss => '忽略';
@@ -14195,6 +14183,25 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => '实时笔记未在更新。请暂时查看转录文本。';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return '录音中 · $duration';
+  }
+
+  @override
+  String get episodePrevious => '上一段记录';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '待处理音频块: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => '打开上一段记录';
+
+  @override
   String get episodeNotesSoon => '交谈几分钟后会显示笔记。';
 
   @override
@@ -14331,4 +14338,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return '完成。$percent% 折扣，持续 $months 个月。';
   }
+
+  @override
+  String get othersSpeakerLabel => '其他人';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 }

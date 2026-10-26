@@ -134,4 +134,4 @@ PRECEDING_QUERY_LIMIT = 6
 # A survivor refresh lease outlives one slow reprocess, never a crashed worker for long.
 REFRESH_LEASE_SECONDS = 10 * 60
 
-QUESTION_VERSION = 'adjacent_merge_a_iv1'
+QUESTION_VERSION = 'adjacent_merge_a_iv2'

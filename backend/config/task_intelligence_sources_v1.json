@@ -13,7 +13,8 @@
         "app/lib/pages/action_items/widgets/action_item_form_sheet.dart",
         "app/lib/pages/conversation_detail/widgets.dart",
         "app/lib/pages/conversations/widgets/goals_widget.dart",
-        "backend/routers/action_items.py"
+        "backend/routers/action_items.py",
+        "backend/utils/open_loops/service.py"
       ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
@@ -50,6 +51,11 @@
         {
           "path": "backend/routers/action_items.py",
           "symbol": "action_items_db.update_action_item",
+          "discover": true
+        },
+        {
+          "path": "backend/utils/open_loops/service.py",
+          "symbol": "action_items_db.mark_action_item_completed",
           "discover": true
         }
       ]

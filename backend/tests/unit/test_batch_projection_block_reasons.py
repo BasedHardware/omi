@@ -6,6 +6,7 @@ import pytest
 
 from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionBlocked
+from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from utils.batch_pipeline import projection
 from utils.batch_pipeline.context import resolve_context
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
@@ -80,10 +81,11 @@ def test_context_projection_blocks_log_closed_reason_and_preserve_exception(
             with projection.projection_phase('context', policy):
                 resolve_context(item, binding, context, None)
 
-    assert type(raised.value) is ProjectionBlocked
+    expected_type = ProjectionGenerationAmbiguous if case == 'lineage_ambiguous' else ProjectionBlocked
+    assert type(raised.value) is expected_type
     assert raised.value.args == (message,)
     assert raised.value.block_reason == block_reason
-    assert f'exception_type=ProjectionBlocked' in caplog.text
+    assert f'exception_type={expected_type.__name__}' in caplog.text
     assert f'block_reason={block_reason}' in caplog.text
     assert message not in caplog.text
     assert 'private-binding-secret' not in caplog.text

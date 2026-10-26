@@ -186,6 +186,10 @@
 		DE48ED224FF11175DA9FFC6A /* OmiHomeWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BFFBC8C660B65EEFE79C220 /* OmiHomeWidgets.swift */; };
 		DECE0A4513CE66136ABC42D2 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
 		DF385A18EA9CC7E3C915F581 /* OmiDirectCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */; };
+		E5ECD5F893BE640A2A446738 /* LivePreviewPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9FCBF3791B725CA1BEA76C /* LivePreviewPlugin.swift */; };
+		B9C64E7F6FA52D7B7B3F1403 /* LivePreviewPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9FCBF3791B725CA1BEA76C /* LivePreviewPlugin.swift */; };
+		908FD40D876E8C8344452BC0 /* LivePreviewSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0E325766888761A213589D3 /* LivePreviewSelection.swift */; };
+		E2656CA5F9118C50722F0764 /* LivePreviewSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0E325766888761A213589D3 /* LivePreviewSelection.swift */; };
 		E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
 		E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
 		E3EBE5F3951B8B2945870160 /* OnDeviceOverflowPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F972B4450EC1589187A56A5 /* OnDeviceOverflowPlugin.swift */; };
@@ -411,6 +415,8 @@
 		C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatVideoSampler.swift; sourceTree = "<group>"; };
 		D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DeviceToolsService.swift; sourceTree = "<group>"; };
 		DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleConnectionPolicy.swift; sourceTree = "<group>"; };
+		9E9FCBF3791B725CA1BEA76C /* LivePreviewPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LivePreviewPlugin.swift; sourceTree = "<group>"; };
+		F0E325766888761A213589D3 /* LivePreviewSelection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LivePreviewSelection.swift; sourceTree = "<group>"; };
 		E1293503E1293503E1293503 /* SpeechDeadline.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpeechDeadline.swift; sourceTree = "<group>"; };
 		E2100BFB54B13863400AB3AB /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		E222EF675661E5A68C84D45B /* SiriIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriIntents.swift; sourceTree = "<group>"; };
@@ -687,6 +693,8 @@
 				7AA100000000000000000005 /* minimp3.h */,
 				7AA100000000000000000008 /* TtsPcmPlayer.swift */,
 				E1293503E1293503E1293503 /* SpeechDeadline.swift */,
+				F0E325766888761A213589D3 /* LivePreviewSelection.swift */,
+				9E9FCBF3791B725CA1BEA76C /* LivePreviewPlugin.swift */,
 				A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */,
 				A2047910A2047910A2047910 /* WatchRecordingStore.swift */,
 				D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */,
@@ -1215,6 +1223,8 @@
 				7AA100000000000000000001 /* TtsMp3Decoder.c in Sources */,
 				7AA100000000000000000006 /* TtsPcmPlayer.swift in Sources */,
 				E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */,
+				908FD40D876E8C8344452BC0 /* LivePreviewSelection.swift in Sources */,
+				E5ECD5F893BE640A2A446738 /* LivePreviewPlugin.swift in Sources */,
 				A2047901A2047901A2047901 /* WatchAudioChunkRelay.swift in Sources */,
 				E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */,
 				387657874D0C4CD5BAE2E8F1 /* OmiDeviceHealthStore.swift in Sources */,
@@ -1289,6 +1299,8 @@
 				7AA100000000000000000002 /* TtsMp3Decoder.c in Sources */,
 				7AA100000000000000000007 /* TtsPcmPlayer.swift in Sources */,
 				E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */,
+				E2656CA5F9118C50722F0764 /* LivePreviewSelection.swift in Sources */,
+				B9C64E7F6FA52D7B7B3F1403 /* LivePreviewPlugin.swift in Sources */,
 				A2047902A2047902A2047902 /* WatchAudioChunkRelay.swift in Sources */,
 				E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */,
 				9C1738D70A50495EA3AFADF5 /* OmiDeviceHealthStore.swift in Sources */,

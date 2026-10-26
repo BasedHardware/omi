@@ -67,6 +67,7 @@ class SequencedWebSocket:
 
 @pytest.fixture
 def private_cloud_session(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     """Drive a private-cloud sync session where each audio frame flushes immediately."""
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
@@ -85,7 +86,9 @@ def private_cloud_session(monkeypatch):
     uploaded: list[str] = []
     fallbacks: list[dict] = []
 
-    def upload(chunks, uid, conversation_id, protection_level, *, sample_rate):
+    def upload(chunks, uid, conversation_id, protection_level, *, sample_rate, **_kwargs):
+        # The pusher upload path passes flush-policy keywords (reconcile_prefix);
+        # this mock records the upload without binding the call signature.
         assert sample_rate == SAMPLE_RATE
         uploaded.append(conversation_id)
 

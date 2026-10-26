@@ -361,6 +361,7 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     final priceId = selectedPlanData['id'] as String;
+    final targetTierId = selectedPlanData['plan_id'] as String? ?? tierId ?? 'unknown';
     // A presentation payload cannot silently redirect checkout to a different price.
     if (storefrontPrice != null &&
         (storefrontPrice.id != priceId ||
@@ -386,7 +387,7 @@ class _PlansSheetState extends State<PlansSheet> {
     // Only show "no charge until renewal" dialog for same-tier monthly→annual switch.
     // Cross-tier changes are immediate+prorated on the backend, not deferred.
     final currentTierName = currentSub?.plan.wireName; // backend plan_id, e.g. 'plus', 'unlimited_v2'
-    final isSameTier = currentTierName == tierId;
+    final isSameTier = currentTierName == targetTierId;
     final isUpgradingFromMonthlyToAnnual =
         isSameTier && (currentSub?.plan.isPaid ?? false) && currentSub?.status == SubscriptionStatus.active && isYearly;
 
@@ -446,14 +447,14 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     PlatformManager.instance.analytics.upgradePlanSelected(
-      plan: tierId ?? 'unknown',
+      plan: targetTierId,
       billingInterval: isYearly ? 'year' : 'month',
       source: widget.analyticsSource,
     );
 
     await _handleUpgrade(
       priceId,
-      targetPlan: tierId ?? 'unknown',
+      targetPlan: targetTierId,
       billingInterval: isYearly ? 'year' : 'month',
       releaseUpgradingLock: releaseUpgradingLock,
       storefrontDecision: storefrontDecision,
@@ -472,17 +473,21 @@ class _PlansSheetState extends State<PlansSheet> {
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
 
-    // Find the selected pricing option to show in the dialog.
+    // Confirm the exact offer rendered by this sheet. The subscription usage
+    // response is a separate catalog and older servers may still put USD IDs
+    // there for a JPY subscriber.
     PricingOption? selectedPrice;
+    Map<String, dynamic>? selectedOffer;
     final plans = provider.subscription?.availablePlans ?? [];
-    for (final plan in plans) {
-      for (final price in plan.prices) {
-        if (price.id == priceId) {
-          selectedPrice = price;
-          break;
-        }
+    for (final offer in provider.availablePlans?['plans'] as List? ?? const []) {
+      if (offer is Map<String, dynamic> &&
+          offer['id'] == priceId &&
+          offer['plan_id'] == targetPlan &&
+          offer['interval'] == billingInterval) {
+        selectedOffer = offer;
+        selectedPrice = PricingOption.fromJson(offer);
+        break;
       }
-      if (selectedPrice != null) break;
     }
 
     final currentSub = provider.subscription!.subscription;
@@ -503,7 +508,7 @@ class _PlansSheetState extends State<PlansSheet> {
         context,
         title: l10n.confirmPlanChange,
         message:
-            '${currentPlanDisplayName(context, provider.subscription)} → ${planDisplayName(PlanType.fromWire(targetPlan), plans, l10n)} (${selectedPrice!.title})',
+            '${currentPlanDisplayName(context, provider.subscription)} → ${planDisplayName(PlanType.fromWire(targetPlan), plans, l10n)} (${selectedPrice!.title}: ${planBillingTotal(selectedOffer!)})',
         confirmLabel: l10n.changePlan,
       );
       if (!confirmed) {
@@ -530,10 +535,11 @@ class _PlansSheetState extends State<PlansSheet> {
           promotionCode: promoCode.isNotEmpty ? promoCode : null,
         );
         if (result != null && result['error'] == true) {
-          final detail = isUpgradePendingCancelConflict(result['status_code'])
+          final detail = isUpgradePendingCancelConflict(result['status_code'], detail: result['detail'] as String?)
               ? l10n.resubscribeFirstToChangePlans
               : result['detail'] as String? ?? l10n.invalidPromotionCode;
-          if (promoCode.isNotEmpty && !isUpgradePendingCancelConflict(result['status_code'])) {
+          if (promoCode.isNotEmpty &&
+              !isUpgradePendingCancelConflict(result['status_code'], detail: result['detail'] as String?)) {
             setState(() => _promoCodeError = detail);
           } else {
             _surfacePurchaseError(detail);
@@ -1256,7 +1262,6 @@ class _PlansSheetState extends State<PlansSheet> {
     required VoidCallback onTap,
   }) {
     final interval = planData['interval'] as String;
-    final unitAmount = planData['unit_amount'] as int;
     final isActive = planData['is_active'] as bool? ?? false;
 
     // An "Ends on [date]" badge only on the cancelled subscription's own price.
@@ -1272,7 +1277,7 @@ class _PlansSheetState extends State<PlansSheet> {
       saveTag: saveTag,
       isPopular: isPopular,
       title: planData['title'] as String,
-      subtitle: interval == 'year' ? l10n.annualBillingSummary(12, '\$${unitAmount / 100}') : null,
+      subtitle: interval == 'year' ? l10n.annualBillingSummary(12, planBillingTotal(planData)) : null,
       price: planData['price_string'] as String,
       onTap: onTap,
       isActive: isActive && !isCancelled,

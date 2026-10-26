@@ -4,6 +4,21 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: pcloud-backup-contract-tests
+    command: ["bash", "scripts/run-plugin-pcloud-tests.sh"]
+    triggers: ["plugins/omi-pcloud-app/**", "plugins/omi-plugin-sdk/**", "backend/utils/plugin_transport.py", "backend/utils/plugin_backup_audio.py", "scripts/run-plugin-pcloud-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#20498 passed unrelated checks while UID-only relinking, default-on private export and destructive upload retries escaped its direct-coroutine tests; exercise real installed HTTP routing, encrypted durable state, backend-issued grants and failure recovery"
+  - id: speaker-identity-interpolation-ratchet
+    command: ["python3", ".github/scripts/check_speaker_label_interpolation.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["backend/**/*.py", "app/lib/**/*.dart", ".github/scripts/*speaker_label_interpolation.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#23379 and Speaker 379 live notes: raw diarization interpolation must not re-enter display or prompts"
+  - id: speaker-label-interpolation-tests
+    command: ["python3", ".github/scripts/test_check_speaker_label_interpolation.py"]
+    triggers: [".github/scripts/*speaker_label_interpolation.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Fingerprint ratchet rejects f-strings, format, percent and Dart raw speaker interpolation without trading away old leaks"
   - id: nightly-main-contract-tests
     command: ["python3", "scripts/ci/test_nightly_main.py"]
     triggers: [".github/workflows/**", "scripts/ci/nightly_main_report.py", "scripts/ci/test_nightly_main*.py", ".github/checks-manifest.yaml"]
@@ -688,16 +703,36 @@ checks:
     triggers: ["app/lib/**/*.dart"]
     lanes: ["local", "ci"]
     reason: "INV-UI-3: changed app/lib files may not add hand-rolled back glyphs, dialogs, sheets, toasts, clipboard writes, date patterns, UI literals or hardcoded copy (app/docs/ux-contract.md)"
+  - id: mobile-perf-budget-ratchet
+    command: ["python3", ".github/scripts/check_mobile_perf_budgets.py", "--base", "{base}"]
+    triggers: ["app/integration_test/perf/budgets.json", ".github/scripts/check_mobile_perf_budgets.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "INV-PERF-1 / #23400: preserve measured admission floors instead of raising host performance budgets to conceal a regression"
+  - id: mobile-perf-budget-tests
+    command: ["python3", ".github/scripts/test_check_mobile_perf_budgets.py"]
+    triggers: [".github/scripts/check_mobile_perf_budgets.py", ".github/scripts/test_check_mobile_perf_budgets.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "INV-PERF-1 / #23400: missing, raised and non-finite work-count caps cannot weaken admission"
+  - id: mobile-perf-shell-fidelity
+    command: ["python3", "app/tool/perf_shell.py", "--check"]
+    triggers: ["app/lib/**/*.dart", "app/integration_test/perf/**", "app/tool/perf_shell.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "INV-PERF-1 / #23400: host harness omitted main.dart analytics wrappers; source drift must fail before mobile release admission"
+  - id: mobile-perf-gate-tool-tests
+    command: ["python3", "app/tool/test_perf_gate.py"]
+    triggers: ["app/tool/perf_*.py", "app/tool/test_perf_gate.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "INV-PERF-1 / #23400: shell extraction and incomplete repeated-run evidence must fail closed"
   - id: mobile-ui-isolate-tests
     command: ["python3", ".github/scripts/test_check_mobile_ui_isolate.py"]
     triggers: [".github/scripts/check_mobile_ui_isolate.py", ".github/scripts/test_check_mobile_ui_isolate.py", ".github/scripts/check_mobile_ux_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "INV-PERF-1 is a no-increase ratchet plus a provider-graph check; every rule must keep a case proving it fails on the defect it targets"
+    reason: "INV-PERF-1: mutation/negative fixtures cover every no-increase rule, scoped build/list/listener detection, absolute semantics ownership (#23400), masking, baseline debt and provider-hook guards"
   - id: mobile-ui-isolate
     command: ["python3", ".github/scripts/check_mobile_ui_isolate.py", "--changed-files", "{changed_files}", "--base", "{base}"]
-    triggers: ["app/lib/**/*.dart"]
+    triggers: ["app/lib/**/*.dart", ".github/scripts/check_mobile_ui_isolate.py", ".github/scripts/test_check_mobile_ui_isolate.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "INV-PERF-1: the mobile app stuttered while syncing/recording because history-sized work ran on the UI isolate and proxy update hooks re-notified on every upstream change (app/docs/performance.md); changed app/lib files may not add sync file I/O, provider JSON, frame-rate timers, blur, unsized network images or shrinkWrap lists, and no proxy hook may notify without an early return"
+    reason: "INV-PERF-1: extend #21517's shared ratchet with scoped input/provider listeners, build-time JSON/sorts and list-item layers; #23400's forced semantics must fail even in an existing file. #21323/#23018/#23278 supply harness and rebuild/paint context (app/docs/performance.md), not proof that every lexical pattern caused their regressions"
   - id: mobile-l10n-arb-contract
     command: ["python3", "app/scripts/l10n.py", "check"]
     triggers: ["app/lib/l10n/*.arb", "app/scripts/l10n.py", ".github/checks-manifest.yaml"]
@@ -738,6 +773,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "PR 12935: speech availability must return on deadline without awaiting shared downloads, and recognition cleanup must precede retry"
+  - id: ios-live-preview-plugin
+    command: ["ruby", "app/ios/test/live_preview_plugin_test.rb"]
+    triggers: ["app/ios/Runner/LivePreviewPlugin.swift", "app/ios/Runner/LivePreviewSelection.swift", "app/ios/Runner/AppDelegate.swift", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/live_preview_plugin_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Mobile local preview: on-device engine order and closed reasons, no asset download or permission prompt from capture, and the plugin type-checks against the iOS Speech SDK"
   - id: ios-watch-audio-chunk-relay
     command: ["ruby", "app/ios/test/watch_audio_chunk_relay_test.rb"]
     triggers: ["app/ios/Runner/WatchAudioChunkRelay.swift", "app/ios/Runner/AppDelegate.swift", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/watch_audio_chunk_relay_test.rb", ".github/checks-manifest.yaml"]
@@ -1844,6 +1885,16 @@ checks:
     triggers: ["plugins/omi-pubmed-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "PubMed chat tools must sanitize network errors and unhandled exceptions to prevent internal host/token leakage into tool responses"
+  - id: speaker-label-interpolation
+    command: ["python3", ".github/scripts/check_speaker_label_interpolation.py"]
+    triggers: ["backend/**/*.py", ".github/scripts/check_speaker_label_interpolation.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#23381: an interpolated 'Speaker {speaker_id}' prompt label is a raw per-conversation diarization counter that summarizers copy verbatim into user-visible notes; unnamed voices must use the identity-aware utils.speakers.display authority"
+  - id: speaker-label-interpolation-selftest
+    command: ["python3", ".github/scripts/check_speaker_label_interpolation.py", "--self-test"]
+    triggers: [".github/scripts/check_speaker_label_interpolation.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hermetic fixtures cover f-string, format, % and concatenation detection plus the legal log-message and static-label neighbors"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

@@ -13234,14 +13234,6 @@
     "@captureStorageAlmostFull": {
         "description": "Transcribe Later card for a pendant, line 2: the pendant's own storage is almost full."
     },
-    "capturePendantDisconnectedDetail": "Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.",
-    "@capturePendantDisconnectedDetail": {
-        "description": "Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture."
-    },
-    "capturePendantDisconnectedShort": "Omi reconnects on its own",
-    "@capturePendantDisconnectedShort": {
-        "description": "Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation."
-    },
     "participantsSummaryUncounted": "{name} + others",
     "@participantsSummaryUncounted": {
         "description": "Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'",
@@ -14654,14 +14646,6 @@
     "playbackAudioNetworkFailed": "Check Connection",
     "@playbackAudioNetworkFailed": {
         "description": "Inline label when fetching the audio URLs fails on transport"
-    },
-    "forYou": "For You",
-    "@forYou": {
-        "description": "Home proactivity feed section title"
-    },
-    "stopThese": "Stop These",
-    "@stopThese": {
-        "description": "Disable the producer of a For You card"
     },
     "dismiss": "Dismiss",
     "@dismiss": {
@@ -17557,6 +17541,25 @@
             }
         }
     },
+    "episodeNotesUnavailable": "Running notes aren’t updating. View the transcript for now.",
+    "episodeCaptureFor": "Capturing · {duration}",
+    "@episodeCaptureFor": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "episodePrevious": "Previous episode",
+    "captureChunksPending": "Chunks pending: {pending}",
+    "@captureChunksPending": {
+        "placeholders": {
+            "pending": {
+                "type": "int"
+            }
+        }
+    },
+    "episodeOpenPrevious": "Open Previous Episode",
     "episodeNotesSoon": "Running notes appear after the first few minutes of talk.",
     "@episodeNotesSoon": {
         "description": "Shown in the running notes card before the first notes exist."
@@ -17790,5 +17793,33 @@
                 "type": "int"
             }
         }
+    },
+    "othersSpeakerLabel": "Others",
+    "@othersSpeakerLabel": {
+        "description": "Collective label for unidentified voices with too little evidence in an over-split transcript; not a participant count."
+    },
+    "livePreviewLabel": "Live preview",
+    "@livePreviewLabel": {
+        "description": "Small caption above the on-device live transcript preview while recording"
+    },
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "@livePreviewExplanation": {
+        "description": "One-line explanation under the Live preview caption: the provisional text is made on the phone and replaced by the final transcript"
+    },
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "@livePreviewListening": {
+        "description": "Live preview is running on the phone but no words have been recognized yet"
+    },
+    "livePreviewStarting": "Starting live preview…",
+    "@livePreviewStarting": {
+        "description": "The on-device live preview engine is starting"
+    },
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "@livePreviewTranscribingTitle": {
+        "description": "Calm state when this phone has no on-device preview: the recording is being transcribed after capture"
+    },
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "@livePreviewTranscribingMessage": {
+        "description": "Explains, under Transcribing…, where and when the transcript appears; not an error"
     }
 }

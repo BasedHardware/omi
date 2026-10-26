@@ -1465,6 +1465,14 @@ def _load_sync_router_for_fast_path():
             'utils.observability.journeys': journeys_mod,
         },
     )
+    # The pipeline schedules the episodes finalize hook at module scope; the
+    # fire-and-forget hook is no sync-coordinator concern, so the whole package
+    # stubs like observability above (MagicMock('utils') is not a package).
+    saved_modules.setdefault('utils.episodes', sys.modules.get('utils.episodes'))
+    episodes_pkg = types.ModuleType('utils.episodes')
+    episodes_pkg.__path__ = []  # type: ignore[attr-defined]
+    sys.modules['utils.episodes'] = episodes_pkg
+    install_package_submodule_stubs('utils.episodes', saved_modules)
     sys.modules['utils.conversation_shape'] = shape_mod
     sys.modules['utils.stt.outcomes'] = actual_outcomes
     # Keep the empty-success guard's vendor-state reads real (stdlib+prometheus
@@ -2453,7 +2461,9 @@ async def test_sync_task_final_attempt_converges_a_ledger_completed_by_the_faili
         module._run_full_pipeline_background_async.assert_awaited_once()
         module._finalize_sync_job_failure.assert_not_awaited()
         module.fenced_mark_job_queued_for_retry.assert_not_called()
-        module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
+        module._delete_staged_blobs_async.assert_awaited_once_with(
+            ['staged/audio.opus'], uid='test-uid', content_id='content-1', job_id='job-1'
+        )
         module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
     finally:
         sys.modules.pop('routers.sync', None)
@@ -5204,9 +5214,12 @@ async def test_sequenced_attempt_heartbeat_drain_is_bounded():
     module.sync_backfill_sequencer.renew_job = MagicMock(return_value=True)
     module.get_sync_job = MagicMock(return_value={'status': 'processing', 'attempt': 1})
 
+    renewal_started = asyncio.Event()
+
     async def _body_returns_after_renewal_started(_request, _task_retry_count, *_args, **_kwargs):
-        # Let the heartbeat reach its first renewal before the response exists.
-        await asyncio.sleep(0.05)
+        # Synchronize with the blocked renewal instead of assuming a sleep
+        # gives the heartbeat enough scheduler time on a loaded runner.
+        await asyncio.wait_for(renewal_started.wait(), timeout=2)
         return module.JSONResponse(status_code=200, content={'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS})
 
     passthrough_run_blocking = module.run_blocking
@@ -5216,6 +5229,7 @@ async def test_sequenced_attempt_heartbeat_drain_is_bounded():
         nonlocal renewal_reached
         if fn is module.sync_backfill_sequencer.renew_job:
             renewal_reached = True
+            renewal_started.set()
             await asyncio.sleep(10)
         return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
 

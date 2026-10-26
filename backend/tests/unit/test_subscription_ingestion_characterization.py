@@ -431,7 +431,9 @@ def _arm_cross_plan_upgrade(lane, monkeypatch, current_price='price_plus'):
     monkeypatch.setattr(payment.stripe.Subscription, 'retrieve', retrieve)
     monkeypatch.setattr(payment.stripe.Subscription, 'modify', modify)
     monkeypatch.setattr(
-        payment.stripe.Price, 'retrieve', lambda price_id: SimpleNamespace(recurring=SimpleNamespace(interval='month'))
+        payment.stripe.Price,
+        'retrieve',
+        lambda price_id: SimpleNamespace(currency='usd', recurring=SimpleNamespace(interval='month')),
     )
     monkeypatch.setattr(payment, '_release_attached_schedules', lambda stripe_sub: None)
 

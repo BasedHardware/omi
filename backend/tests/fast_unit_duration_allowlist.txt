@@ -231,7 +231,7 @@ tests/unit/test_parakeet_nim.py::TestNimTranscribe::test_nim_text_only_fallback
 tests/unit/test_parakeet_prerecorded.py::TestProviderClass::test_provider_transcribe_url_delegates
 tests/unit/test_parakeet_stream_session.py::TestStreamSessionFeed::test_silence_produces_no_segments
 tests/unit/test_parakeet_stream_session.py::TestStreamSessionRNNTStreaming::test_streaming_utterance_does_not_call_batch_transcribe_when_text_not_ready
-tests/unit/test_payment_promotion_codes.py::test_checkout_invalid_promo_returns_400
+ tests/unit/test_payment_promotion_codes.py::test_checkout_invalid_promo_returns_400
 tests/unit/test_payment_promotion_codes.py::test_release_attached_schedules_releases_only_matching_active
 tests/unit/test_payment_promotion_codes.py::test_release_attached_schedules_noop_without_customer
 tests/unit/test_people_conversations_500s.py::TestGetPeopleDocIdInjection::test_get_people_injects_doc_id
@@ -523,3 +523,24 @@ tests/unit/test_live_speaker_renumber_dedup.py::test_production_callback_dedupli
 # runner. Same boundary shape as the other PR-shard overruns above.
 tests/unit/test_task_sync_cloud_export_dedup.py::test_retried_cloud_sync_does_not_create_a_second_external_task
 tests/unit/test_task_sync_cloud_export_dedup.py::test_batch_cloud_sync_isolates_a_failing_item_from_the_rest
+# Main run 40063148564 shard 5 (10-24, 4b4e35fdc9d6): 1.04s CPU vs the 1.00s fail limit.
+# First test of its file; pays the file-isolation import amortization plus importlib
+# drop/install machinery in the call phase. Assertions passed; same boundary shape as
+# the entries above.
+tests/unit/test_memory_import_isolation_order_independence.py::test_drop_then_install_stubs_a_module_that_was_imported_first
+# Feeds 50k unplaced segments through the real record_moment/receipts path (25 moments
+# plus a whole-transcript finalization tail): the volume is the contract under test
+# (receipt documents must shard; no document may approach the 1 MiB Firestore limit).
+# Hermetic; the CPU sits in the id volume itself (~0.6-0.7s), close enough to the 1.00s
+# fail limit that a saturated runner would flake without this entry.
+tests/unit/test_episodes_service.py::test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_reprocess
+# PR #23504 shard 6 (run 40118527240, 10-24, f4165e1b): 1.64/1.44/1.29s CPU and
+# the prior run's shard 6 (40115474313, 444a17bc): 1.95/1.77/1.62s CPU vs the
+# 1.00s fail limit. The file landed on main by direct train push (612b01861b,
+# #23416) without the fast-unit CPU guard ever measuring it; the first test of
+# the file amortizes the payment router/app import graph under file isolation
+# and the 402-snapshot cases build full subscription/stripe objects. Assertions
+# pass; same boundary shape as the entries above.
+tests/unit/test_payment_declined_proration.py::test_declined_proration_card_error_returns_402_and_preserves_paid_plan
+tests/unit/test_payment_declined_proration.py::test_declined_proration_past_due_snapshot_returns_402_and_never_projects_basic
+tests/unit/test_payment_declined_proration.py::test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify

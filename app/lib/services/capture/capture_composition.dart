@@ -5,6 +5,7 @@ import 'package:disk_space_2/disk_space_2.dart';
 import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/services/wals/mobile_batch_vad.dart';
 import 'package:omi/services/wals/mobile_standard_batch.dart';
+import 'package:omi/services/live_preview/live_preview_composition.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:flutter/widgets.dart';
 
@@ -165,6 +166,8 @@ CaptureProvider composeProductionCaptureProvider({
     omiCallState: PhoneCallProvider.callStateListenable,
   );
   unawaited(_installMobileStandardBatch(provider));
+  final livePreview = composeLivePreview();
+  if (livePreview != null) provider.installLivePreview(livePreview);
   final lifecycle = AppLifecycleListener(onStateChange: provider.onAppLifecycleChanged);
   provider.lifetime.own(lifecycle.dispose);
   final initialLifecycle = WidgetsBinding.instance.lifecycleState;

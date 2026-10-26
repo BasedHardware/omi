@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from utils.conversations.silent_redrive import is_silent_redrive
 from utils.observability.sync_phases import sync_phase, sync_attempt
+from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
 from utils.sync.vad_segments import MAX_VAD_SEGMENT_SECONDS
 
 import asyncio
@@ -41,6 +42,7 @@ from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
 from utils.sync import cap_recovery_provider
+from utils.sync.staging_custody import add_staging_derivatives, cleanup_sync_staging, make_staging_custody_receipt
 from utils.sync import conversation_turn as conversation_turn_lease
 
 from database import conversations as conversations_db
@@ -105,6 +107,7 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.relevance import sync_intake_decision
+from utils.episodes.finalize import schedule_after_finalization, schedule_synced_intake_attach
 from utils.executors import (
     db_executor,
     postprocess_executor,
@@ -135,7 +138,6 @@ from utils.other.storage import (
     get_syncing_file_temporal_signed_url,
     link_archive_captures,
     precache_conversation_audio,
-    schedule_syncing_temporal_file_deletion,
     upload_audio_chunk,
     upload_syncing_temporal_file,
 )
@@ -146,8 +148,9 @@ from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.stt.voiceprints import usable_person_voiceprint
-from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled, recovery_admission_enabled, LANES
-from utils.stt_cap_dispatch import sync_allowed, funded_allowance
+from config.stt_cap_dispatch import offline_admission_enabled as cap_enabled, recovery_admission_enabled, LANES
+from utils.stt_cap_dispatch import sync_allowed, funded_allowance, CapAllowanceDenied
+from utils.observability.stt_cap_dispatch import DispatchPath
 from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.stt.pre_recorded import (
     get_prerecorded_service,
@@ -1159,6 +1162,11 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     ):
         submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
 
+    # Episodes: the WAL row joins the live episode covering it, so Home folds it under the
+    # live row instead of a second capture's fragment. Off this lane, fail-open; a later
+    # WAL append re-runs it and is a no-op once joined.
+    schedule_after_finalization(uid, conversation_id, ProcessingTrigger.SYNC_UPDATE)
+
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
     return processed_conversation
 
@@ -1283,8 +1291,10 @@ def _recover_empty_segment(
             # Positive VAD after multilingual double-empty is unresolved;
             # buying the same call again is not independent recovery.
             raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
-        if cap_enabled(uid, cap_dispatch_lane) and not sync_allowed(uid, lane=cap_dispatch_lane):
-            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate')
+        if cap_enabled(uid, cap_dispatch_lane) and not sync_allowed(
+            uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.MULTILINGUAL
+        ):
+            raise CapAllowanceDenied()
 
     def multilingual_once(audio: bytes, **kwargs: Any):
         def dispatch():
@@ -1428,6 +1438,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
     attempt_ref: str | None = None,
     source_position_map: tuple[dict, int] | None = None,
     lineage_binding: Optional[str] = None,
+    lineage_eligible: bool = False,
     cap_recovery: bool = False,
     cap_content_id: str | None = None,
     cap_recovery_service: tuple[str, str | None, str] | None = None,
@@ -1487,7 +1498,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             # Queue-time locks do not survive execution-time authorization.
             is_locked = False
         url = get_syncing_file_temporal_signed_url(path)
-        schedule_syncing_temporal_file_deletion(path)
+        # A signed URL is not a success receipt. Staging survives provider
+        # failure/retry; the coordinator cleans only after durable completion.
 
         # Apply user transcription preferences (vocabulary, language, model)
         prefs = transcription_prefs or {}
@@ -1515,7 +1527,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                     language,
                     path,
                     selector=get_prerecorded_service,
-                    before_probe=lambda: not cap_enforced() or sync_allowed(uid, lane=cap_dispatch_lane),
+                    before_probe=lambda: not cap_enforced()
+                    or sync_allowed(uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.LANGUAGE_PROBE),
                     cohort_key=uid,
                 ),
             )
@@ -1559,7 +1572,17 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         speech_offset = 0.0
         while True:
             phase = 'provider_call'
-            if cap_recovery and not cap_enforced() or cap_enforced() and not sync_allowed(uid, lane=cap_dispatch_lane):
+            if (
+                cap_recovery
+                and not cap_enforced()
+                or cap_enforced()
+                and not sync_allowed(
+                    uid,
+                    provider=provider,
+                    lane=cap_dispatch_lane,
+                    path=DispatchPath.EMPTY_RETRY if empty_retried else DispatchPath.SYNC_SEGMENT,
+                )
+            ):
                 return hold_for_cap()
             if cap_enforced() and cap_recovery and deferred_outcome is not None:
                 # Explicit request-boundary signal survives later cap denial,
@@ -1757,6 +1780,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         annotate_identity(incoming, client_device_id, recording_session_id)
         if lineage_binding is not None and target_conversation_id:
             incoming['_sync_lineage_binding'] = lineage_binding
+        if lineage_eligible:
+            incoming['_sync_lineage_eligible'] = True
         phase = 'persistence'
         conversation_turns.append(conversation_turn_lease.acquire(uid, candidate_id, sync_lane))
         from utils.conversations.lifecycle import ingest_sync_conversation
@@ -1772,6 +1797,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 else {}
             ),
         )
+        incoming.pop('_sync_lineage_eligible', None)
         if assigned['id'] != candidate_id:
             # Assignment redirected; hold the conversation the bridge will finalize into too.
             conversation_turns.append(conversation_turn_lease.acquire(uid, assigned['id'], sync_lane))
@@ -1835,6 +1861,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             ),
             finish=finish_sync_segment,
             mark_finalize=mark_finalize,
+            attach_episode=schedule_synced_intake_attach,
             acknowledge=partial(
                 acknowledge_processed_segment,
                 deferred_outcome,
@@ -1849,6 +1876,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             ),
         )
         return True
+    except CapAllowanceDenied:
+        return hold_for_cap()
     except SyncAssignmentSuperseded:
         # Acknowledge user authority without failing the WAL or dropping siblings.
         # False excludes this segment from content usage; the zero-error job still
@@ -2369,6 +2398,7 @@ async def _resolve_safety_wal_target(
 
 
 @sync_attempt
+@sync_snapshot_resolve_job
 async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
@@ -2533,6 +2563,17 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             await run_blocking(db_executor, _mark_job_processing_for_run, job_id, active_run_lock_token)
 
             # --- Phase 1: Decode ---
+            raw_staging_custody = None
+            if content_id and raw_capture_paths:
+                try:
+                    raw_staging_custody = await run_blocking(
+                        storage_executor, make_staging_custody_receipt, uid, raw_paths, raw_capture_paths
+                    )
+                except Exception as error:
+                    logger.warning(
+                        'event=sync_staging_cleanup outcome=retained exception_type=%s',
+                        _bounded_exception_type(error),
+                    )
             job_phase = 'decode'
             await run_blocking(
                 db_executor, _update_sync_job_for_run, job_id, active_run_lock_token, {'stage': 'decoding'}
@@ -2693,6 +2734,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     wav_paths,
                     source,
                     receipts=cap_hold_receipts,
+                    dispatch_path=DispatchPath.SYNC_V2,
                     source_frame_maps=source_frame_maps,
                     target_conversation_id=target_conversation_id,
                     client_device_id=client_device_id,
@@ -3116,7 +3158,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     attempt_ref=attempt_ref,
                     source_position_map=segment_source_maps.get(path),
                     recording_session_id=recording_session_id,
-                    **({'lineage_binding': segment_binding_reasons.get(path)} if use_lineage else {}),
+                    **(
+                        {'lineage_binding': segment_binding_reasons.get(path), 'lineage_eligible': True}
+                        if use_lineage
+                        else {}
+                    ),
                     **({'cap_content_id': content_id} if cap_enabled(uid, 'sync') else {}),
                     **({'redrive_mode': redrive_mode} if redrive_mode else {}),
                 )
@@ -3420,11 +3466,29 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 final_result['repeat_failure_fingerprint'] = repeat_failure_fingerprint
             if failed_segments == total_segments == provider_invalid_failures[0] and failed_segments > 0:
                 final_result['reason_code'] = 'stt_invalid_input'
+            custody = None
             if content_id and failed_segments == 0:
+                if not cap_holds:
+                    try:
+                        custody = await run_blocking(
+                            storage_executor,
+                            add_staging_derivatives,
+                            uid,
+                            raw_staging_custody,
+                            segmented_paths,
+                        )
+                    except Exception as error:
+                        # Cleanup is optional; failing its proof retains bytes.
+                        logger.warning(
+                            'event=sync_staging_cleanup outcome=retained exception_type=%s',
+                            _bounded_exception_type(error),
+                        )
                 # The durable content ledger proves every successful segment
                 # before the WAL-visible completed status is published.
                 ledger_writer = mark_sync_content_completed
                 ledger_extra = {}
+                if custody:
+                    ledger_extra['staging_custody'] = custody
                 if cap_holds:
                     from database.sync_cap_holds import mark_content_held
 
@@ -3457,6 +3521,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 failure_class=failure_class,
                 failure_subtype=failure_subtype,
             )
+            if content_id and failed_segments == 0 and custody:
+                await _delete_staged_blobs_async(list(segmented_paths), uid=uid, content_id=content_id, job_id=job_id)
             if content_id and failed_segments > 0:
                 failure_kwargs = (
                     {'failure_key': repeat_failure_key, 'failure_fingerprint': repeat_failure_fingerprint}
@@ -3643,16 +3709,16 @@ def _stage_files_to_gcs(paths: list):
         upload_syncing_temporal_file(p)
 
 
-def _delete_staged_blobs(blob_paths: list):
-    for p in blob_paths:
-        try:
-            delete_syncing_temporal_file(p)
-        except Exception as e:
-            logger.warning('event=sync_unstage outcome=failed exception_type=%s', type(e).__name__)
+def _delete_staged_blobs(blob_paths: list[str], **custody: Any) -> int:
+    try:
+        return cleanup_sync_staging(blob_paths, **custody)
+    except Exception as e:
+        logger.warning('event=sync_unstage outcome=retained exception_type=%s', type(e).__name__)
+        return 0
 
 
-async def _delete_staged_blobs_async(blob_paths: list):
-    await run_blocking(storage_executor, _delete_staged_blobs, blob_paths)
+async def _delete_staged_blobs_async(blob_paths: list[str], **custody: Any) -> int:
+    return await run_blocking(storage_executor, _delete_staged_blobs, blob_paths, **custody)
 
 
 def _download_staged_files(blob_paths: list, *, bounded_backfill: bool = False) -> bool:

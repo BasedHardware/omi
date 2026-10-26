@@ -28,6 +28,8 @@ model_config_features:
     - conv_app_result
     - conv_discard
     - conv_folder
+    - open_loop_card
+    - open_loop_daily
     - conv_structure
     - daily_summary
     - daily_summary_simple
@@ -130,6 +132,8 @@ surfaces:
   - utils/llm/chat.py::feature:chat_responses
   - utils/llm/chat.py::feature:chat_extraction
   - utils/llm/conversation_folder.py::feature:conv_folder
+  - utils/open_loops/card.py::feature:open_loop_card
+  - utils/open_loops/daily.py::feature:open_loop_daily
   - utils/llm/conversation_processing.py::feature:conv_discard
   - utils/sync/minimal_redrive.py::feature:sync_redrive_title
   - utils/episodes/incremental.py::feature:episode_incremental

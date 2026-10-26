@@ -153,6 +153,7 @@ class TestUploadOpusEncoding:
     def _setup_mock_bucket(self):
         mock_bucket = MagicMock()
         mock_blob = MagicMock()
+        mock_blob.generation = 17
         mock_bucket.blob.return_value = mock_blob
         storage_mod.storage_client.bucket.return_value = mock_bucket
         return mock_bucket, mock_blob
@@ -209,6 +210,112 @@ class TestUploadOpusEncoding:
         # The data passed to encrypt should be Opus-encoded (much smaller than 160000)
         call_args = mock_encryption.encrypt_audio_chunk.call_args[0]
         assert len(call_args[0]) < len(pcm_data)
+
+    @patch.object(storage_mod, 'users_db')
+    def test_upload_is_create_only(self, mock_users_db):
+        """Fresh chunk uploads carry the create-only generation precondition."""
+        _, mock_blob = self._setup_mock_bucket()
+
+        storage_mod.upload_audio_chunk(
+            chunk_data=b'\x00' * 640,
+            uid='test-uid',
+            conversation_id='conv-1',
+            timestamp=1234567890.123,
+            data_protection_level='standard',
+        )
+
+        assert mock_blob.upload_from_string.call_args.kwargs.get('if_generation_match') == 0
+
+    @patch.object(storage_mod, 'users_db')
+    def test_identical_retry_does_not_overwrite(self, mock_users_db):
+        """A precondition collision with identical plaintext is a no-op, not a new generation."""
+        _, mock_blob = self._setup_mock_bucket()
+        recorded = {}
+
+        def upload(data, **kwargs):
+            if 'payload' not in recorded:
+                recorded['payload'] = data
+                raise storage_mod.PreconditionFailed('generation precondition failed')
+            recorded['overwrite'] = True
+
+        mock_blob.upload_from_string.side_effect = upload
+        # The stored generation is exactly what the first attempt wrote, so the
+        # identity check compares real bytes rather than an assumed fixture.
+        mock_blob.download_as_bytes.side_effect = lambda **kwargs: recorded['payload']
+
+        path = storage_mod.upload_audio_chunk(
+            chunk_data=b'\x00' * 640,
+            uid='test-uid',
+            conversation_id='conv-1',
+            timestamp=1234567890.123,
+            data_protection_level='standard',
+        )
+
+        assert path.endswith('.opus')
+        assert 'overwrite' not in recorded, 'identical retry must not overwrite the committed generation'
+
+    @patch.object(storage_mod, 'users_db')
+    def test_divergent_retry_overwrites_like_before(self, mock_users_db):
+        """A collision with genuinely different bytes keeps the historical update-in-place semantics."""
+        _, mock_blob = self._setup_mock_bucket()
+        attempts = []
+
+        def upload(data, **kwargs):
+            attempts.append(kwargs.get('if_generation_match'))
+            if len(attempts) == 1:
+                raise storage_mod.PreconditionFailed('generation precondition failed')
+
+        mock_blob.upload_from_string.side_effect = upload
+        mock_blob.download_as_bytes.return_value = b'different rendition bytes'
+
+        path = storage_mod.upload_audio_chunk(
+            chunk_data=b'\x00' * 640,
+            uid='test-uid',
+            conversation_id='conv-1',
+            timestamp=1234567890.123,
+            data_protection_level='standard',
+        )
+
+        assert path.endswith('.opus')
+        assert attempts == [0, None], 'divergent bytes fall back to an unpinned overwrite'
+
+    @patch.object(storage_mod.audio_archive, 'admitted', lambda uid, phase: True)
+    @patch.object(storage_mod, 'users_db')
+    def test_identical_retry_backfills_span_metadata_on_legacy_object(self, mock_users_db):
+        """An identical retry against a pre-admission object repairs its span metadata in place."""
+        _, mock_blob = self._setup_mock_bucket()
+        recorded = {}
+
+        def upload(data, **kwargs):
+            if 'payload' not in recorded:
+                recorded['payload'] = data
+                raise storage_mod.PreconditionFailed('generation precondition failed')
+            recorded['overwrite'] = True
+
+        mock_blob.upload_from_string.side_effect = upload
+        mock_blob.download_as_bytes.side_effect = lambda **kwargs: recorded['payload']
+
+        # The stored generation predates SYNC admission: reload surfaces its
+        # metadata, which carries no span keys.
+        def reload(**kwargs):
+            mock_blob.metadata = {'legacy': '1'}
+
+        mock_blob.reload.side_effect = reload
+        # The stored generation predates SYNC admission and carries no span keys.
+
+        path = storage_mod.upload_audio_chunk(
+            chunk_data=b'\x00' * 640,
+            uid='test-uid',
+            conversation_id='conv-1',
+            timestamp=1234567890.123,
+            data_protection_level='standard',
+        )
+
+        assert path.endswith('.opus')
+        assert 'overwrite' not in recorded
+        mock_blob.patch.assert_called_once()
+        patched = mock_blob.patch.call_args_list[0]
+        assert mock_blob.metadata.get('v2_start') is not None or 'start' in str(mock_blob.metadata)
 
 
 class TestListAudioChunksExtensions:

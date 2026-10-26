@@ -22,6 +22,8 @@ import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
 
+part 'sync_job_fetch.dart';
+
 /// Whether a non-200 response from POST /v1/conversations (process in-progress
 /// conversation) is a benign race rather than a failure worth crash-reporting.
 ///
@@ -472,34 +474,70 @@ class ConversationApi {
     );
     return switch (sent) {
       ApiFailure(:final problem) => ApiFailure(problem),
-      ApiSuccess(:final data, :final truncated) => switch (decodeApiRows<ServerConversation>(
-          data,
-          ServerConversation.fromJson,
-          fallback: recordFallback,
-        )) {
-          ApiSuccess(:final data, :final rejectedRows) => ApiSuccess(
-              data,
-              rejectedRows: rejectedRows,
-              truncated: truncated,
-            ),
+      ApiSuccess(:final data, :final truncated) => switch (await _decodeOffUi(data, conversationRowsDecoder)) {
+          ApiSuccess(:final data, :final rejectedRows) => _rows(data, rejectedRows, truncated),
           ApiFailure(:final problem) => ApiFailure(problem),
         },
     };
   }
 
-  Future<ApiResult<ServerConversation>> byId(String id) {
-    return executeApi<ServerConversation>(
+  static ApiResult<List<ServerConversation>> _rows(List<ServerConversation> rows, int rejectedRows, bool truncated) {
+    // decodeApiRows' partial-decode report, raised here because the decode may run on another isolate.
+    if (rejectedRows > 0) {
+      recordFallback(
+        const ApiFallbackEvent(reason: ApiFallbackReason.partialDecode, outcome: ApiFallbackOutcome.degraded),
+      );
+    }
+    return ApiSuccess(rows, rejectedRows: rejectedRows, truncated: truncated);
+  }
+
+  /// Unlocked conversations carry full transcripts, so a list page or one
+  /// detail body can be megabytes. Parse large bodies off the UI isolate: this
+  /// runs on Home's load-more while the user scrolls, and on the detail open
+  /// right after a tap. [decode] is read before the hop because the other
+  /// isolate has its own copy of every global.
+  static Future<R> _decodeOffUi<R>(String body, R Function(String) decode) => offUiIsolate(
+        () => decode(body),
+        size: body.length,
+        threshold: conversationListBackgroundParseBytes,
+        debugName: 'conversation_parse',
+      );
+
+  Future<ApiResult<ServerConversation>> byId(String id) async {
+    final sent = await executeApi<String>(
       request: ApiRequest(url: '${_baseUrl}v1/conversations/$id', method: 'GET'),
       send: _send,
-      decode: (body) {
-        final decoded = jsonDecode(body);
-        if (decoded is! Map<String, dynamic>) {
-          throw const FormatException('conversation detail is not an object');
-        }
-        return ServerConversation.fromJson(decoded);
-      },
+      decode: (body) => body,
     );
+    switch (sent) {
+      case ApiFailure(:final problem):
+        return ApiFailure(problem);
+      case ApiSuccess(:final data, :final truncated):
+        try {
+          return ApiSuccess(await _decodeOffUi(data, conversationDetailDecoder), truncated: truncated);
+        } on FormatException {
+          return const ApiFailure(ApiProblem(ApiProblemKind.decode));
+        }
+    }
   }
+}
+
+/// The list-page and detail decoders [ConversationApi] runs off the UI isolate.
+/// Tests swap them to prove where they run; production never reassigns them.
+@visibleForTesting
+ApiResult<List<ServerConversation>> Function(String body) conversationRowsDecoder = decodeConversationRows;
+@visibleForTesting
+ServerConversation Function(String body) conversationDetailDecoder = decodeConversationDetail;
+
+ApiResult<List<ServerConversation>> decodeConversationRows(String body) =>
+    decodeApiRows<ServerConversation>(body, ServerConversation.fromJson);
+
+ServerConversation decodeConversationDetail(String body) {
+  final decoded = jsonDecode(body);
+  if (decoded is! Map<String, dynamic>) {
+    throw const FormatException('conversation detail is not an object');
+  }
+  return ServerConversation.fromJson(decoded);
 }
 
 /// Fetches conversation-lifetime photo bytes for storage-backed photos. Legacy
@@ -1046,16 +1084,6 @@ SyncJobFetchOutcome syncJobFetchOutcomeForStatusCode(int statusCode) {
   if (statusCode == 404 || statusCode == 403) return SyncJobFetchOutcome.notFound;
   if (statusCode != 200) return SyncJobFetchOutcome.transient;
   return SyncJobFetchOutcome.ok;
-}
-
-class SyncJobFetch {
-  final SyncJobFetchOutcome outcome;
-  final SyncJobStatusResponse? status;
-  final SyncRateLimitedException? rateLimit;
-  const SyncJobFetch(this.outcome, [this.status]) : rateLimit = null;
-  const SyncJobFetch.throttled(this.rateLimit)
-      : outcome = SyncJobFetchOutcome.throttled,
-        status = null;
 }
 
 /// Single GET of a sync job's status — no polling loop. The reconciler owns

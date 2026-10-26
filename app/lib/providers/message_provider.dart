@@ -1,3 +1,4 @@
+import 'package:omi/models/voice_question_result.dart';
 import 'package:omi/models/plan_storefront.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -48,7 +49,8 @@ typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(
   ChatPageContext? context,
   String? chatSessionId,
 });
-typedef VoiceReplyStreamer = Stream<ServerMessageChunk> Function(List<File> files, {String? language});
+typedef VoiceReplyStreamer = Stream<ServerMessageChunk> Function(List<File> files,
+    {String? language, Future<void>? abort});
 typedef VoiceAudioFileSaver = Future<File> Function(List<List<int>> bytes, int startTime, int frameSize);
 
 class _ChatTelemetryAttempt {
@@ -662,23 +664,46 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     const TypedEvents().emit(PendantVoiceQuestionDropped(reason: reason));
   }
 
-  Future sendVoiceMessageStreamToServer(
+  // A total response deadline: think/data heartbeats cannot keep a tutorial
+  // question pending forever. The deadline aborts the HTTP request and settles at
+  // once: it never waits for upstream cleanup, which can be stalled on body I/O,
+  // and nothing the request produces afterwards is read.
+  Stream<ServerMessageChunk> _voiceReplyWithDeadline(File file) async* {
+    final abort = Completer<void>();
+    final iterator = StreamIterator(_voiceReplyStreamer([file], abort: abort.future));
+    final deadline = Completer<bool>();
+    final timer = Timer(_voiceReplyTimeout, () {
+      if (!abort.isCompleted) abort.complete();
+      deadline.completeError(TimeoutException('Voice reply deadline'));
+    });
+    try {
+      while (await Future.any([iterator.moveNext(), deadline.future])) {
+        yield iterator.current;
+      }
+    } finally {
+      timer.cancel();
+      if (!abort.isCompleted) abort.complete();
+      unawaited(iterator.cancel().catchError((Object _) {}));
+    }
+  }
+
+  Future<VoiceQuestionResult> sendVoiceMessageStreamToServer(
     List<List<int>> audioBytes, {
     Function? onFirstChunkRecived,
     Future<void> Function()? onNoSpeech,
     BleAudioCodec? codec,
     bool playResponseAudio = false,
   }) async {
-    if (chatAtCap != null) return;
+    if (chatAtCap != null) return const VoiceQuestionResult.failed(VoiceQuestionFailure.quota);
     // Re-entry guard so a duplicated end-of-session signal from the device
     // button can't kick off two parallel voice replies.
     if (_voiceSendInFlight || sendingMessage || showTypingIndicator) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.sendInFlight);
-      return;
+      return const VoiceQuestionResult.failed(VoiceQuestionFailure.busy);
     }
     if (audioBytes.isEmpty) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.emptyFrames);
-      return;
+      return const VoiceQuestionResult.failed(VoiceQuestionFailure.noSpeech);
     }
     _voiceSendInFlight = true;
     _readAloud.newQuery();
@@ -711,12 +736,12 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
         audioBytes,
         DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
         codec?.getFrameSize() ?? 160,
-      );
+      ).timeout(_voiceReplyTimeout);
     } catch (_) {
       _voiceSendInFlight = false;
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.audioSaveFailed);
       chatAttempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
-      return;
+      return const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable);
     }
 
     String chatTargetId = currentAppId ?? 'omi';
@@ -740,12 +765,13 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     // path (capture_provider). The chat-screen mic input does not pass
     // playResponseAudio=true.
     final String playbackMessageId = message.id;
+    String? question;
     try {
       if (playResponseAudio) {
         await OmiVoicePlaybackService.instance.beginResponse(messageId: playbackMessageId);
       }
       bool firstChunkRecieved = false;
-      await for (var chunk in _voiceReplyStreamer([file]).timeout(_voiceReplyTimeout)) {
+      await for (var chunk in _voiceReplyWithDeadline(file)) {
         if (!firstChunkRecieved &&
             [
               MessageChunkType.message,
@@ -802,10 +828,13 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             unawaited(_readAloud.readFinalReply(message.text, generation: readAloudGeneration));
           }
           notifyListeners();
-          return;
+          return message.text.trim().isEmpty
+              ? const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable)
+              : VoiceQuestionResult.answered(message.text, question: question);
         }
 
         if (chunk.type == MessageChunkType.message) {
+          if (chunk.message?.sender == MessageSender.human) question = chunk.message!.text;
           voiceMessages.insert(aiIndex, chunk.message!);
           aiIndex++;
           notifyListeners();
@@ -822,7 +851,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             if (onNoSpeech != null) await onNoSpeech();
             completeChat(ProductOutcome.empty);
             notifyListeners();
-            return;
+            return const VoiceQuestionResult.failed(VoiceQuestionFailure.noSpeech);
           }
           if (_tryParseQuotaError(chunk.text) || chunk.errorCode == 'quota_exceeded') {
             _chatQuotaExceeded = true;
@@ -837,7 +866,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             setShowTypingIndicator(false);
             _logChatFailure(ChatStreamFailureClass.quota, stage: 'voice_stream');
             completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
-            return;
+            return const VoiceQuestionResult.failed(VoiceQuestionFailure.quota);
           }
           final failure = _chunkFailureClass(chunk);
           _logChatFailure(failure, stage: 'voice_stream');
@@ -847,7 +876,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           }
           completeChat(ProductOutcome.failure, failure: _productFailureFor(failure));
           notifyListeners();
-          return;
+          return const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable);
         }
       }
     } catch (e) {
@@ -870,6 +899,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       }
       completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
     }
+    return const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable);
   }
 
   Future sendMessageStreamToServer(String text, {ChatPageContext? context}) => _streamReply(text, context: context);

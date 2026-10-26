@@ -290,6 +290,11 @@ def perform_merge_async(
         # 3. Generate new conversation ID and copy audio chunks
         checkpoint('target_started')
         new_conversation_id = merge_target_id or str(uuid.uuid4())
+        # skip_existing: merge retries and re-processing campaigns re-copy
+        # every chunk unconditionally otherwise, creating a superseded
+        # generation per object per run (the 10-16..19 CloneObject burst).
+        # The bridge copy skips a destination already holding the same bytes
+        # and preconditions concurrent writers on the destination generation.
         merged_audio_files = _copy_audio_chunks_for_merge(uid, sorted_convs, new_conversation_id, skip_existing=True)
 
         # 4. Determine basic fields from source conversations

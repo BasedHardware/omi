@@ -689,6 +689,52 @@ void main() {
       expect(sync.retentionRisk?.reason, 'count_cap');
     });
 
+    Wal diskCopy({required int timerStart, WalStatus status = WalStatus.miss, int syncedAt = 0}) => Wal(
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          storage: WalStorage.disk,
+          status: status,
+          syncedAt: syncedAt,
+        );
+
+    test('synced copies of unknown sync age are acknowledged, not pending pressure', () async {
+      // Streamed copies are born synced with syncedAt == 0 (transport-only
+      // delivery) and legacy records carry 0 because the field postdates them;
+      // thousands accumulate on a heavy streaming device. None of them waits
+      // on the backend, so none may engage the count cap.
+      sync.testWals = [
+        for (var i = 0; i < maxRetainedCaptureWalCount + 40; i++) diskCopy(timerStart: i, status: WalStatus.synced),
+        for (var i = 0; i < 10; i++) diskCopy(timerStart: 1000 + i, status: WalStatus.synced, syncedAt: 2000000000),
+      ];
+
+      final excess = await sync.enforceRetentionPolicyForTesting();
+
+      expect(excess, 0);
+      expect(sync.retentionRisk, isNull);
+      expect(sync.testWals, hasLength(maxRetainedCaptureWalCount + 50));
+    });
+
+    test('a mixed index counts only not-yet-acknowledged copies toward the cap', () async {
+      final acknowledged = [
+        for (var i = 0; i < maxRetainedCaptureWalCount + 40; i++) diskCopy(timerStart: i, status: WalStatus.synced),
+        for (var i = 0; i < 10; i++) diskCopy(timerStart: 1000 + i, status: WalStatus.synced, syncedAt: 2000000000),
+      ];
+      final pending = [
+        for (var i = 0; i < maxRetainedCaptureWalCount; i++) diskCopy(timerStart: 2000 + i),
+        for (var i = 0; i < 2; i++) diskCopy(timerStart: 4000 + i, status: WalStatus.uploaded),
+      ];
+
+      sync.testWals = [...acknowledged, ...pending];
+
+      final excess = await sync.enforceRetentionPolicyForTesting();
+
+      expect(excess, 2);
+      expect(sync.retentionRisk?.reason, 'count_cap');
+      expect(sync.retentionRisk?.retainedCount, maxRetainedCaptureWalCount + 2);
+      expect(sync.testWals, hasLength(2 * maxRetainedCaptureWalCount + 52));
+    });
+
     test('admission refuses when free space would breach the 512MiB reserve', () async {
       const reserve = minFreeDiskReserveBytes;
       final low = LocalWalSyncImpl(listener, freeDiskBytes: () async => reserve + 512);

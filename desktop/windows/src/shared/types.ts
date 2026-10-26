@@ -1037,12 +1037,6 @@ export type OmiBridgeApi = {
   relaunchApp: () => void
   insightGetSettings: () => Promise<InsightSettings>
   insightSetSettings: (patch: Partial<InsightSettings>) => Promise<InsightSettings>
-  proactivityNotificationRendered: (itemID: string) => void
-  proactivityNotificationFeedback: (itemID: string, action: 'thumbs_up' | 'thumbs_down') => void
-  proactivityNotificationPending: () => Promise<InsightPayload | null>
-  onProactivityNavigate: (callback: (target: { kind: string; id: string }) => void) => () => void
-  proactivityTargetRendered: (target: { kind: string; id: string }) => void
-  proactivityNotificationOpen: (itemID: string) => void
   insightDismiss: () => void
   /** Toast renderer → main: pause/resume the auto-dismiss while hovered. */
   insightHoverStart: () => void
@@ -2194,8 +2188,6 @@ export type AssistantSettingsView = {
 }
 
 export type InsightPayload = {
-  /** Main-owned v2 identity; renderer sends only this ID back, never a destination. */
-  proactivityItemID?: string
   headline: string // <= 5 words
   advice: string // 1-2 sentences, <= ~100 chars
   reasoning: string

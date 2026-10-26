@@ -17,6 +17,7 @@ from typing import Any, Callable, Literal
 
 from google.cloud import firestore
 
+from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client
 from database.conversation_terminal_title import (
     TERMINAL_SIZE_HEADROOM_BYTES,
@@ -74,10 +75,13 @@ def complete_oversized_in_progress_conversation(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     conversation_ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
     transactional = firestore.transactional(_complete_oversized_in_progress_conversation_txn)
-    return transactional(
+    outcome = transactional(
         client.transaction(),
         conversation_ref,
         datetime.now(timezone.utc) - quiet_for,
         uid,
         lambda zone_uid: user_time_zone(client, zone_uid),
     )
+    if outcome == 'closed':
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
+    return outcome
