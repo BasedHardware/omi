@@ -321,6 +321,9 @@ class TestUploadOpusEncoding:
 @requires_native_opus
 @pytest.mark.parametrize('protection', ['standard', 'enhanced'])
 def test_sync_upload_stamps_exact_pcm_extent_when_archive_routing_off(monkeypatch, protection):
+    from database import conversations as conversations_db
+    from utils.conversations.audio_placement import prepare_audio_coverage
+
     bucket, blob = MagicMock(), MagicMock()
     bucket.blob.return_value = blob
     storage_mod.storage_client.bucket.return_value = bucket
@@ -337,6 +340,26 @@ def test_sync_upload_stamps_exact_pcm_extent_when_archive_routing_off(monkeypatc
     decoded = storage_mod.decode_opus_to_pcm(blob.upload_from_string.call_args.args[0])
     assert len(decoded) == samples * 2
     assert f'{timestamp:.3f}' in path
+    # Exercise the actual listing -> manifest writer -> resolver validator seam,
+    # not merely the uploader's metadata dictionary. Missing spans on any file
+    # are the fleet's dominant first-pass manifest refusal.
+    blob.name = path
+    blob.size = len(blob.upload_from_string.call_args.args[0])
+    blob.generation = 7
+    blob.md5_hash = blob.crc32c = None
+    blob.bucket.name = storage_mod.private_cloud_sync_bucket
+    bucket.list_blobs.return_value = [blob]
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    files = conversations_db.create_audio_files_from_chunks('synthetic-owner', 'synthetic-conversation')
+    manifest = [file.model_dump() for file in files]
+    coverage = prepare_audio_coverage(manifest)
+    assert coverage.validated
+    assert coverage.covers(timestamp, timestamp + samples / 16000)
+    # Legacy metadata produces a real but unproven manifest; never guess spans
+    # from compressed byte size to make that historical record look resolved.
+    blob.metadata = {}
+    legacy = conversations_db.create_audio_files_from_chunks('synthetic-owner', 'synthetic-conversation')
+    assert not prepare_audio_coverage([file.model_dump() for file in legacy]).validated
 
 
 class TestListAudioChunksExtensions:

@@ -41,7 +41,7 @@ from utils.batch_pipeline.recovery_disposition import result_outcome
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidence
-from utils.batch_pipeline.projection_parts import bounded_projection_words
+from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.sync.intake_completion import log_sync_lineage_stamp_gap_refused
 
@@ -171,7 +171,6 @@ def build_incoming(
     from models.conversation import Conversation, CreateConversation
     from models.conversation_enums import ConversationSource
     from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
-    from utils.conversations.final_pass_assignment import assign_words
     from utils.stt.pre_recorded import postprocess_words
     from utils.sync.capture import chunk_identity
 
@@ -184,7 +183,7 @@ def build_incoming(
     words = bounded_projection_words(payload['words'], duration)
     # The existing final-pass aligner abstains in diarization gaps; the existing
     # prerecorded grouper supplies the same sentence/segment shapes as sync.
-    aligned = words if payload.get('recovery_version') == 1 else assign_words(words, payload['diarization']['turns'])
+    aligned = align_projection_words(words, payload, item.segment_id)
     authoritative = (binding.record_origin or (policy or ProjectionPolicy()).authoritative_labels) and payload.get(
         'recovery_version'
     ) != 1

@@ -3774,6 +3774,9 @@ Existing embedding/cache formats, keys and download/time/embedding caps stay int
 
 Batch projection retains provider timestamp precision through word grouping and
 clips the validator's permitted EOF overrun to the actual admitted PCM duration.
+Every validated word is retained. Zero-duration words, including words wholly
+inside the permitted EOF overrun, remain isolated anonymous point segments;
+grouping cannot lend them a neighbouring voice or fabricate positive duration.
 It does not round these sample-backed clocks to legacy centiseconds: that rounding
 can put a segment 5 ms beyond EOF while coverage tolerates only 1 ms. The sync
 playback uploader stamps exact input sample count/rate/start on every new Opus

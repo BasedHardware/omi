@@ -621,6 +621,9 @@ def _verified_read_session(
             if extent is None:
                 pcm = session.fetch(chunk['path'])
                 if pcm is None or len(pcm) % 2 or session.limit_hit:
+                    # fetch caches before the decoded-proof checks. Rejected
+                    # bytes must not reach a later boundary-assembled clip.
+                    session.cache[chunk['path']] = (None, 'decode_failed')
                     refusal = (
                         'read_budget'
                         if session.limit_hit
@@ -634,6 +637,7 @@ def _verified_read_session(
                 duration = len(pcm) / (SAMPLE_RATE * 2)
                 if isinstance(chunk.get('span'), Mapping):
                     if upper_end is None or abs(duration - (upper_end - start)) > 0.002:
+                        session.cache[chunk['path']] = (None, 'decode_failed')
                         refusal = 'decoded_duration_mismatch'
                         break
                 # Actual decoded samples, rather than a declared rounded end,

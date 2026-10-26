@@ -13,14 +13,27 @@ def bounded_projection_words(words, duration):
     words = validate_words(words, duration)
     if not words:
         raise ValueError('successful batch result must contain words')
-    words = [
-        {**word, 'timestamp': [word['timestamp'][0], min(word['timestamp'][1], duration)]}
-        for word in words
-        if word['timestamp'][0] < min(word['timestamp'][1], duration)
+    # Keep every validated token, including zero-duration model words. A word
+    # wholly in the allowed EOF tolerance becomes a point at EOF, not silence
+    # silently removed from the transcript or an invented positive audio span.
+    return [{**word, 'timestamp': [min(value, duration) for value in word['timestamp']]} for word in words]
+
+
+def align_projection_words(words, payload, segment_id):
+    """Preserve provider grouping while keeping point words out of voice evidence."""
+    from utils.conversations.final_pass_assignment import assign_words
+
+    aligned = words if payload.get('recovery_version') == 1 else assign_words(words, payload['diarization']['turns'])
+    # Point words have text but no captured voice evidence. The legacy grouper
+    # must not merge them with positive-duration neighbours in either producer.
+    return [
+        (
+            {**word, 'speaker': f'BATCH_UNASSIGNED_{segment_id}_point_{index}'}
+            if word['timestamp'][0] == word['timestamp'][1]
+            else word
+        )
+        for index, word in enumerate(aligned)
     ]
-    if not words:
-        raise ValueError('successful batch result has no in-buffer words')
-    return words
 
 
 def split_result(item, payload):

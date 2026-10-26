@@ -44,8 +44,44 @@ def test_model_eof_tolerance_cannot_extend_projected_part_or_word():
 
 @pytest.mark.parametrize('timestamps', [[2.35, 2.354], [2.345, 2.35], [0, 0]])
 def test_words_without_captured_samples_cannot_invent_a_window(timestamps):
-    with pytest.raises(ValueError, match='no in-buffer words'):
-        bounded_projection_words([{'word': 'Synthetic.', 'timestamp': timestamps}], 2.345)
+    result = bounded_projection_words([{'word': 'Synthetic.', 'timestamp': timestamps}], 2.345)
+    assert result[0]['word'] == 'Synthetic.'
+    assert result[0]['timestamp'] == [min(timestamps[0], 2.345), min(timestamps[1], 2.345)]
+    assert result[0]['timestamp'][0] == result[0]['timestamp'][1]
+
+
+@pytest.mark.parametrize('recovery', [False, True])
+@pytest.mark.parametrize('point', [[1, 1], [2.35, 2.354]])
+@pytest.mark.parametrize('with_positive_word', [False, True])
+def test_projection_preserves_point_word_text_without_borrowing_voice(monkeypatch, recovery, point, with_positive_word):
+    from utils.conversations import deterministic_minimum
+    from utils.sync import intake_completion
+
+    monkeypatch.setattr(deterministic_minimum, 'build_deterministic_minimum_structured', lambda *a, **k: Structured())
+    monkeypatch.setattr(intake_completion, 'apply_capture_evidence_dark_write', lambda *a: None)
+    monkeypatch.setattr(projection, 'cap_dispatch_enabled', lambda *a: False)
+    duration = 2.345
+    item = WorkItem('unit', 'synthetic-owner', 1700000000.0, 'gs://synthetic/pcm', duration, Priority.FRESH)
+    binding = ProjectionBinding(item.owner_id, 'job', 'content', (item.segment_id,))
+    payload = {
+        'audio_seconds': duration,
+        'words': ([{'word': 'Heard.', 'timestamp': [0, 1], 'speaker': 'SPEAKER_00'}] if with_positive_word else [])
+        + [{'word': 'Unplaced.', 'timestamp': point, 'speaker': 'SPEAKER_00'}],
+        'speech_spans': [{'start': 0, 'end': duration}],
+        'speech_seconds': duration,
+        'diarization': {'turns': [{'start': 0, 'end': duration, 'speaker': 'SPEAKER_00'}]},
+        **({'recovery_version': 1} if recovery else {}),
+    }
+    part, partition = split_result(item, payload)[0]
+    incoming = projection.build_incoming(part, binding, partition)
+    segments = incoming['transcript_segments']
+    assert [s['text'] for s in segments] == (['Heard.'] if with_positive_word else []) + ['Unplaced.']
+    unplaced = segments[-1]
+    assert unplaced['start'] == unplaced['end'] == min(point[0], duration)
+    assert unplaced['speaker'].startswith('BATCH_UNASSIGNED_')
+    assert not unplaced['is_user'] and unplaced['person_id'] is None
+    if with_positive_word:
+        assert segments[0]['speaker'] != unplaced['speaker']
 
 
 @pytest.mark.parametrize('end', [2.345, 2.349, 2.354, 2.359])
@@ -94,9 +130,11 @@ def inventory(monkeypatch):
         storage, 'download_and_decode_chunk_blob', lambda bucket, path, *a, **k: bucket.blob(path).download_as_bytes()
     )
 
-    def add(start, duration=4.0, *, span=True):
+    def add(start, duration=4.0, *, span=True, decoded_duration=None, value=1000):
         path = f'synthetic-{len(chunks)}'
-        pcm[path] = b'\xe8\x03' * round(duration * stage.SAMPLE_RATE)
+        pcm[path] = value.to_bytes(2, 'little') * round(
+            (duration if decoded_duration is None else decoded_duration) * stage.SAMPLE_RATE
+        )
         chunks.append(
             {
                 'path': path,
@@ -104,7 +142,13 @@ def inventory(monkeypatch):
                 'generation': 7,
                 'size': len(pcm[path]),
                 **(
-                    {'span': {'start': start, 'samples': len(pcm[path]) // 2, 'sample_rate': stage.SAMPLE_RATE}}
+                    {
+                        'span': {
+                            'start': start,
+                            'samples': round(duration * stage.SAMPLE_RATE),
+                            'sample_rate': stage.SAMPLE_RATE,
+                        }
+                    }
                     if span
                     else {}
                 ),
@@ -113,6 +157,23 @@ def inventory(monkeypatch):
         return path
 
     return add, reads
+
+
+def test_rejected_decoded_bytes_cannot_contaminate_a_proven_boundary_clip(env, inventory, monkeypatch):
+    _, diarizer = env
+    add, _ = inventory
+    conversation = _conversation([1, 0], seconds=6)
+    origin = conversation.started_at.timestamp()
+    # Invalid duration is detected for the first window. Its long PCM must not
+    # remain available to the later boundary assembler after that refusal.
+    add(origin, 1, decoded_duration=20, value=2000)
+    for index in range(8):
+        add(origin + 6 + index * 0.725, 0.725)
+    monkeypatch.setattr(stage.users_db, 'get_user_speaker_embedding', lambda uid: list(VOICES[0]))
+    stage._resolve('synthetic-owner', conversation, receipt={}, deadline=time.monotonic() + 45)
+    assert diarizer.calls == 1
+    assert not conversation.transcript_segments[0].is_user
+    assert conversation.transcript_segments[1].is_user
 
 
 def prove(conversation, windows):

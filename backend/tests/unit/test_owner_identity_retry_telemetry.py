@@ -429,6 +429,7 @@ def test_actual_inventory_proof_primary_reason_and_unchanged_io(env, monkeypatch
             self.chunks = chunks
             self.limit_hit = False
             self.reason = fetch_reason
+            self.cache = {}
 
         def in_budget(self):
             return failure != 'budget'
@@ -437,6 +438,7 @@ def test_actual_inventory_proof_primary_reason_and_unchanged_io(env, monkeypatch
             reads.append(path)
             if failure == 'download_cap':
                 self.limit_hit = True
+            self.cache[path] = (pcm, fetch_reason)
             return pcm
 
     monkeypatch.setattr(stage, 'AudioChunkReadSession', Session)
