@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from config.policy import kill_switch
 from config.policy.listen import current_listen_policy
+from config.parakeet_canary import ShapeRoute
 
 import asyncio
 import logging
@@ -24,6 +25,8 @@ from config.live_stt_resilience import window_replica_recovery_enabled
 from utils.stt.window_replicas import QueueTimeout, can_route_replicas, post_window, window_replicas
 from utils.stt import window_replicas as replica_http
 from utils.http_client import get_stt_client, get_stt_semaphore
+from utils.executors import run_blocking, db_executor
+from utils.stt.live_metrics import SHAPE_FIRST_TEXT, SHAPE_POST, SHAPE_OUTCOME, SHAPE_SESSIONS, SHAPE_INFLIGHT
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.reasons import LiveSttReason, ReasonFamily, reason_label
 from utils.stt import streaming as st
@@ -307,6 +310,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         # Pin intent-to-treat identity before any POST/background callback. A
         # fallback leg keeps the session arm even if task context later changes.
         self._routing_cohort = current_routing_cohort.get()
+        self._shape_route = (
+            self._routing_cohort.parakeet_shape_route if self._routing_cohort else ShapeRoute(initialized=True)
+        )
+        self._shape_url: str | None = None
         self.progress_deadline_enabled = False
         self.allow_no_text_rescue: Callable[[], bool] = lambda: True
         self._first_text_deadline = _positive_float_env(
@@ -895,6 +902,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     self._cancel_first_text_timer()
                     if self._first_speech_at is not None:
                         first_text_seconds = max(0.0, time.monotonic() - self._first_speech_at)
+                        # A leg that crossed a kill/identity boundary cannot
+                        # populate the next experiment's fresh lookback.
+                        if self._routing_cohort is not None and self._shape_route.measured:
+                            SHAPE_FIRST_TEXT.labels(arm=self._shape_route.arm).observe(first_text_seconds)
                         record_metric(
                             WINDOW_FIRST_TEXT,
                             {'demand_cohort': getattr(self, '_demand_cohort', 'ineligible')},
@@ -1224,7 +1235,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         wav = _pcm16_to_wav_bytes(self._normalize_posted_pcm(pcm), self._sample_rate)
         return await post_window(
             wav,
-            url=url or self._url,
+            url=url or (self._shape_url + '/v1/transcribe' if self._shape_url else self._url),
             budget=self._post_timeout if timeout_seconds is None else timeout_seconds,
             get_client=get_stt_client,
             get_semaphore=get_stt_semaphore,
@@ -1336,12 +1347,24 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         return []
 
     async def _post_and_parse(self, pcm: bytes, dur: float) -> list[RawSegment]:
+        self._shape_url = (
+            await run_blocking(db_executor, self._shape_route.resolve)
+            if os.getenv('PARAKEET_SHAPE_CANARY_FILE')
+            else None
+        )
+        shape_arm = 'canary' if self._shape_url else 'control'
+        shape_measured = self._routing_cohort is not None and self._shape_route.measured
+        if shape_measured and not self._shape_route.counted:
+            SHAPE_SESSIONS.labels(arm=self._shape_route.arm).inc()
+            self._shape_route.counted = True
         started = time.monotonic()
         outcome = 'error'
         self._posts_since_anchor = min(1000000, self._posts_since_anchor + 1)
         self._post_in_flight = True
+        if shape_measured:
+            SHAPE_INFLIGHT.labels(arm=shape_arm).inc()
         try:
-            if self.replica_scoped:
+            if self.replica_scoped and self._shape_url is None:
                 try:
                     segments = await self._post_replicas(pcm, dur)
                 finally:
@@ -1359,7 +1382,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 outcome = 'queue_timeout'
                 self.fail('capacity_full', capacity_subtype='queue_timeout')
                 response.raise_for_status()
-            if response.status_code >= 500:
+            if response.status_code >= 500 and self._shape_url is None:
                 st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
                     error_class='provider_5xx'
                 )
@@ -1383,7 +1406,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self.fail('timeout')
             raise
         except (TimeoutError, httpx.TimeoutException):
-            if not self.replica_scoped:
+            if not self.replica_scoped and self._shape_url is None:
                 st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
                     error_class='timeout'
                 )
@@ -1394,6 +1417,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self.fail('provider_5xx')
             raise
         finally:
+            if shape_measured:
+                SHAPE_INFLIGHT.labels(arm=shape_arm).dec()
+                SHAPE_POST.labels(arm=shape_arm).observe(time.monotonic() - started)
+                SHAPE_OUTCOME.labels(arm=shape_arm, outcome=outcome).inc()
             WINDOW_POSTS.labels(outcome=outcome).inc()
             WINDOW_LATENCY.observe(time.monotonic() - started)
             WINDOW_CONTEXT.observe(dur)

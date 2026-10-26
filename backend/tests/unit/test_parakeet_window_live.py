@@ -1,6 +1,8 @@
 """Live TDT runs through real admission, socket, VAD and receiver seams; no network."""
 
 import asyncio
+import json
+import time
 from collections import deque
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -15,6 +17,7 @@ from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
 from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.recovery_state import LiveRecoveryController
+from config import parakeet_canary as shape_config
 
 from utils.stt import (
     connect_backoff as connect_backoff_module,
@@ -52,6 +55,53 @@ from routers.listen.receiver import ListenReceiver
 
 _REAL_SLEEP = asyncio.sleep
 _REAL_WAIT_FOR_EVENT = window.wait_for_event
+
+
+@pytest.mark.asyncio
+async def test_shape_canary_post_isolated_and_zero_drains_without_cancelling(monkeypatch, replica_pool, tmp_path):
+    route_file = tmp_path / 'route.json'
+    route = {'url': shape_config.CANDIDATE, 'identity': 'a' * 64, 'percent': 5, 'expires': time.time() + 250}
+    route_file.write_text(json.dumps(route))
+    monkeypatch.setenv('PARAKEET_SHAPE_CANARY_FILE', str(route_file))
+    monkeypatch.setattr(shape_config.secrets, 'randbelow', lambda _: 0)
+    entered, finish = asyncio.Event(), asyncio.Event()
+
+    class HeldClient(Client):
+        async def post(self, url, **kwargs):
+            if shape_config.CANDIDATE in url:
+                entered.set()
+                await finish.wait()
+            return await super().post(url, **kwargs)
+
+    client = HeldClient()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    token = current_routing_cohort.set(RoutingCohort('on'))
+    try:
+        sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    finally:
+        current_routing_cohort.reset(token)
+    pending = asyncio.create_task(sock._post_and_parse(b'\x01\x00' * 32000, 2))
+    await entered.wait()
+    route_file.write_text(json.dumps({**route, 'percent': 0}))
+    assert not pending.done()
+    finish.set()
+    assert await pending
+    assert client.requests[0][0] == shape_config.CANDIDATE + '/v1/transcribe'
+    assert not replica_pool._states  # candidate never uses/poisons baseline replica recovery
+    assert await sock._post_and_parse(b'\x01\x00' * 32000, 2)
+    assert client.requests[1][0].startswith('http://10.0.0.')
+    assert sock._shape_route.drained
+
+
+def test_shape_session_assignment_survives_window_replacement():
+    cohort = RoutingCohort('on')
+    token = current_routing_cohort.set(cohort)
+    try:
+        a = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+        b = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    finally:
+        current_routing_cohort.reset(token)
+    assert a._shape_route is b._shape_route
 
 
 def _mock_post_pacing(monkeypatch, sleep):

@@ -9,6 +9,7 @@ from contextvars import ContextVar
 import math
 
 from prometheus_client import Counter, Histogram
+from config.parakeet_canary import ShapeRoute
 
 COHORT_OUTCOMES = Counter(
     'omi_stt_routing_cohort_outcomes_total',
@@ -47,6 +48,7 @@ class RoutingCohort:
         if arm not in {'off', 'shadow', 'on'}:
             raise ValueError('invalid routing cohort')
         self.arm = arm
+        self.parakeet_shape_route = ShapeRoute()
         self.exhausted = False
         self._finished = False
         self._paid = {provider: 0.0 for provider in _PAID}
