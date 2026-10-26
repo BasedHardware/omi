@@ -142,6 +142,10 @@ def test_watcher_full_window_and_sample_floor():
         ('gpu_count', 2, 'ABORT'),
         ('gpu_nonzero', 0, 'HOLD'),
         ('gpu_samples', 50, 'HOLD'),
+        ('gpu_oom', 1, 'ABORT'),
+        ('gpu_fatal', 1, 'ABORT'),
+        ('gpu_error_stale', 61, 'HOLD'),
+        ('gpu_fatal', None, 'HOLD'),
     ],
 )
 def test_guard_bad_signal(key, value, state):
@@ -150,9 +154,19 @@ def test_guard_bad_signal(key, value, state):
     assert watcher.evaluate(values, 901)[0] == state
 
 
-def test_safety_failures_trip_even_in_warmup():
+@pytest.mark.parametrize(
+    'key', ['canary_bad', 'canary_first_p95', 'canary_post_p95', 'throttle', 'gpu_oom', 'gpu_fatal']
+)
+def test_previous_revision_history_cannot_trip_during_warmup(key):
     values = healthy()
-    values['canary_bad'] = 1
+    values[key] = 100
+    assert watcher.evaluate(values, 899)[0] == 'WARMUP'
+    assert watcher.evaluate(values, 900)[0] == 'ABORT'
+
+
+def test_current_queue_pressure_trips_even_in_warmup():
+    values = healthy()
+    values['queue'] = 0.75
     assert watcher.evaluate(values, 1)[0] == 'ABORT'
 
 
@@ -172,6 +186,57 @@ def test_operator_kill_cannot_be_overwritten(monkeypatch):
     stored['data'] = {'route.json': '{"percent":0}'}
     assert not cluster.route('a' * 64, 5)
     assert json.loads(stored['data']['route.json'])['percent'] == 0
+
+
+def test_listener_rollout_resets_identity_and_mixed_images_block(monkeypatch):
+    monkeypatch.setenv('KUBECONFIG', '/tmp/fresh-test-config')
+    cluster = watcher.Cluster('explicit-test-context')
+    container = {'resources': {'limits': {'memory': '12Gi'}}}
+    candidate = {
+        'metadata': {'uid': 'candidate'},
+        'spec': {'nodeName': 'candidate-node', 'containers': [container]},
+        'status': {'containerStatuses': [{'ready': True, 'restartCount': 0, 'imageID': 'parakeet-digest'}]},
+    }
+    control = {**candidate, 'metadata': {'uid': 'baseline'}}
+    listener = {
+        'spec': {
+            'containers': [
+                {'env': [{'name': 'PARAKEET_SHAPE_CANARY_FILE', 'value': '/var/run/parakeet-shape/route.json'}]}
+            ]
+        },
+        'status': {'containerStatuses': [{'ready': True, 'imageID': 'listen-image-1'}]},
+    }
+    listeners = [listener]
+    node = {
+        'metadata': {
+            'labels': {
+                'node.kubernetes.io/instance-type': 'g2-standard-4',
+                'cloud.google.com/gke-nodepool': 'parakeet-g24-canary',
+            }
+        },
+        'status': {'allocatable': {'nvidia.com/gpu': '1'}},
+        'spec': {'taints': [{'key': 'omi.ai/parakeet-shape-canary', 'value': 'g24', 'effect': 'NoSchedule'}]},
+    }
+
+    def call(*args, payload=None):
+        if args[1] == 'node':
+            return node
+        selector = args[3]
+        return {
+            'items': (
+                listeners
+                if selector.endswith('backend-listen')
+                else [candidate if selector.endswith('g24') else control]
+            )
+        }
+
+    monkeypatch.setattr(cluster, 'call', call)
+    before = cluster.identity('routing-revision')
+    listener['status']['containerStatuses'][0]['imageID'] = 'listen-image-2'
+    assert cluster.identity('routing-revision') != before
+    listeners.append({**listener, 'status': {'containerStatuses': [{'ready': True, 'imageID': 'listen-image-1'}]}})
+    with pytest.raises(ValueError, match='listener_rollout_incomplete'):
+        cluster.identity('routing-revision')
 
 
 def test_harness_rejects_stale_or_changed_watcher(tmp_path):

@@ -30,6 +30,7 @@ memory, retaining only hashes. Do not dump secrets or environment values.
 The watcher repeats image/config/readiness checks and hashes candidate pod,
 node labels, shape and routing revision into the experiment identity. A new
 pod, config, image, node or routing revision resets the full 900-second window.
+Listener image/config changes also reset it; mixed listener rollouts block it.
 The operator must also verify driver/CUDA equality, one physical L4, actual
 allocatable CPU/RAM and DaemonSet reservations; the watcher does not attest
 the driver from node labels. Preserve all baseline warm nodes.
@@ -70,6 +71,7 @@ gcloud container node-pools create parakeet-g24-canary \
   --workload-metadata GKE_METADATA --enable-private-nodes \
   --node-labels env=prod,omi.ai/parakeet-shape-canary=g24 \
   --node-taints omi.ai/parakeet-shape-canary=g24:NoSchedule \
+  --no-enable-autoupgrade \
   --max-surge-upgrade 0 --max-unavailable-upgrade 1
 
 helm upgrade --install prod-omi-parakeet-g24 backend/charts/parakeet \
@@ -134,11 +136,14 @@ The observer must complete the full window before the acceptance harness starts.
 First run without `--apply`: it performs aggregate reads only. It requires all
 listener scrape targets, fresh first-text/POST and candidate GPU/queue/readiness
 series. It deduplicates DCGM by physical UUID and requires nonzero loaded GPU
-samples and >=54 samples per 15-minute window. First-text decisions require
+samples and >=54 samples per 15-minute window, plus fresh candidate OOM/fatal
+counters with no increments. First-text decisions require
 >=100 samples in **each** arm. Missing/stale data is HOLD. Candidate restart,
 readiness loss, any non-success POST, queue age >=0.75s, throttle >10%, first
 text p95 >=30s / POST p95 >=3s, or >20% relative latency is an emergency stop.
-These are emergency limits, **not** acceptance margins.
+Historical counter/rate/latency trips arm only after the full 15-minute window;
+current readiness, identity and queue faults stop immediately. These are
+emergency limits, **not** acceptance margins.
 
 At 0%, a full-window HOLD solely for insufficient first-text samples may keep
 observing during direct synthetic qualification. It never enables live work.

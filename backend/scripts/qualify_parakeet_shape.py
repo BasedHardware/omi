@@ -239,7 +239,7 @@ async def run(args):
         'phases': phases,
         'identities': json.loads(Path(args.identities).read_text()),
     }
-    if not receipt['identities'].get('matched_image_config_driver') or not receipt['identities'].get(
+    if receipt['identities'].get('matched_image_config_driver') is not True or not receipt['identities'].get(
         'watcher_identity'
     ):
         raise ValueError('verified identity and watcher identity receipt required')

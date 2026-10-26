@@ -82,6 +82,23 @@ class Cluster:
                 raise ValueError('baseline_image_or_readiness_mismatch')
             if config(control['spec']['containers'][0]) != config(container):
                 raise ValueError('baseline_model_config_mismatch')
+        listeners = self.call('get', 'pods', '-l', 'app.kubernetes.io/name=backend-listen', '-o', 'json')['items']
+        listener_configs = set()
+        if not listeners:
+            raise ValueError('listeners_required')
+        for listener in listeners:
+            states = listener['status'].get('containerStatuses', [])
+            if not states or not all(s['ready'] for s in states):
+                raise ValueError('listener_not_ready')
+            serving = listener['spec']['containers'][0]
+            if not any(
+                e.get('name') == 'PARAKEET_SHAPE_CANARY_FILE' and e.get('value') == '/var/run/parakeet-shape/route.json'
+                for e in serving.get('env', [])
+            ):
+                raise ValueError('listener_route_mount_required')
+            listener_configs.add(digest({'image': states[0]['imageID'], 'config': config(serving)}))
+        if len(listener_configs) != 1:
+            raise ValueError('listener_rollout_incomplete')
         return digest(
             {
                 'pod': pod['metadata']['uid'],
@@ -89,6 +106,7 @@ class Cluster:
                 'spec': pod['spec'],
                 'node': labels,
                 'revision': revision,
+                'listeners': sorted(listener_configs),
             }
         )
 
@@ -131,6 +149,10 @@ def queries():
             'gpu_stale': f'max(time()-timestamp(DCGM_FI_DEV_GPU_UTIL{gpu}))',
             'gpu_nonzero': f'max(max_over_time(DCGM_FI_DEV_GPU_UTIL{gpu}[15m]))',
             'gpu_samples': f'min(count_over_time(DCGM_FI_DEV_GPU_UTIL{gpu}[15m]))',
+            'gpu_oom': f'sum(increase(parakeet_gpu_oom_total{pod}[15m]))',
+            'gpu_fatal': f'sum(increase(parakeet_gpu_fatal_errors_total{pod}[15m]))',
+            'gpu_error_stale': f'max(time()-timestamp(parakeet_gpu_oom_total{pod}))',
+            'gpu_fatal_stale': f'max(time()-timestamp(parakeet_gpu_fatal_errors_total{pod}))',
             'restarts': f'sum(increase(kube_pod_container_status_restarts_total{pod}[15m]))',
             'ready': f'min(kube_pod_container_status_ready{pod})',
             'ready_stale': f'max(time()-timestamp(kube_pod_container_status_ready{pod}))',
@@ -172,15 +194,19 @@ def evaluate(values, age):
         return 'HOLD', 'stale_metrics'
     if values['gpu_count'] != 1 or values['ready'] != 1 or values['restarts'] > 0:
         return 'ABORT', 'gpu_identity_readiness_or_restart'
-    if values['queue'] >= 0.75 or values['throttle'] > 0.10 or values['canary_bad'] > 0:
-        return 'ABORT', 'queue_throttling_or_bad_result'
+    if values['queue'] >= 0.75:
+        return 'ABORT', 'queue_pressure'
+    # Rolling counters and histograms may include the previous routing
+    # revision, even on the same pod. Only current-state checks precede arming.
+    if age < WINDOW:
+        return 'WARMUP', 'full_new_identity_window_required'
+    if values['throttle'] > 0.10 or values['canary_bad'] > 0 or values['gpu_oom'] > 0 or values['gpu_fatal'] > 0:
+        return 'ABORT', 'throttling_bad_result_or_gpu_error'
     for metric, limit in (('first', 30), ('post', 3)):
         candidate = values.get(f'canary_{metric}_p95')
         control = values.get(f'control_{metric}_p95')
         if candidate is not None and (candidate >= limit or (control is not None and candidate > 1.2 * control)):
             return 'ABORT', 'latency_emergency'
-    if age < WINDOW:
-        return 'WARMUP', 'full_new_identity_window_required'
     if values['gpu_nonzero'] <= 0 or values['gpu_samples'] < 54:
         return 'HOLD', 'unmeasured_or_unloaded'
     if min(values['canary_first_count'], values['control_first_count']) < 100:
