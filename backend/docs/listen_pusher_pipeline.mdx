@@ -4066,6 +4066,15 @@ seek alignment. Fresh live writes advance `sync_content_revision` for every
 adopted target, so an older processor cannot overwrite a delayed live final.
 Neither safeguard depends on the lineage rollout allowlist.
 
+MCP detail, batch-detail and search projections expose nonnegative transcript
+offsets. They clamp pre-origin `start`/`end` and search `start_ms`/`end_ms` at
+zero without changing the stored segments, pinned `started_at`, text, ordering
+or fetch budgets. A line wholly before the origin therefore has a zero-duration
+public interval: it remains unplaced text and supplies no valid playback window.
+The shared transcript-search builder retains its original clocks for in-app
+consumers; only MCP response projection applies this display contract. No data
+repair or reprocessing is scheduled by a read.
+
 This admission creates no hidden donor and no pending merge debt. Lookup failure
 uses ordinary retained sync publication immediately; live document capacity
 exhaustion uses the existing size-rollover fallback. Captured speech never waits
