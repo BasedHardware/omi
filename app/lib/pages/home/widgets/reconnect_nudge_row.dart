@@ -43,11 +43,31 @@ class ReconnectNudge {
     if (dismissedAt != null && now.difference(dismissedAt) < snoozeFor) return null;
     return now.difference(lastConnectedAt).inDays;
   }
+
+  /// The next moment [days] changes with time alone: the row appearing, a close running out, or
+  /// the count going up a day. Null when only a device event can change it.
+  static DateTime? nextChange({
+    required BtDevice? paired,
+    required bool connected,
+    required DateTime? lastConnectedAt,
+    required DateTime? dismissedAt,
+    required DateTime now,
+  }) {
+    if (paired == null || paired.id.isEmpty || paired.type != DeviceType.omi || connected) return null;
+    if (lastConnectedAt == null) return null;
+    final candidates = [
+      lastConnectedAt.add(quietFor),
+      if (dismissedAt != null) dismissedAt.add(snoozeFor),
+      lastConnectedAt.add(Duration(days: now.difference(lastConnectedAt).inDays + 1)),
+    ].where((at) => at.isAfter(now));
+    return candidates.isEmpty ? null : candidates.reduce((a, b) => a.isBefore(b) ? a : b);
+  }
 }
 
-/// A quiet row at the top of Home for an Omi that has not connected for days. Reconnect runs the
-/// paired-device connect; when the Omi does not come back it opens the connection guide (a
-/// Bluetooth problem shows its own prompt instead). Close hides the row for a day; a connection
+/// A quiet row at the top of Home for an Omi that has not connected for days. Reconnect first
+/// checks Bluetooth (off or not allowed: the app's Bluetooth prompt, nothing else), then runs the
+/// paired-device connect; when the Omi does not come back it opens the connection guide, if that
+/// attempt still stands and Home is still in front. Close hides the row for a day; a connection
 /// hides it at once.
 class ReconnectNudgeRow extends StatefulWidget {
   const ReconnectNudgeRow({super.key, this.now = DateTime.now, this.openGuide, this.readiness});
@@ -67,45 +87,93 @@ class ReconnectNudgeRow extends StatefulWidget {
   State<ReconnectNudgeRow> createState() => _ReconnectNudgeRowState();
 }
 
-class _ReconnectNudgeRowState extends State<ReconnectNudgeRow> {
+class _ReconnectNudgeRowState extends State<ReconnectNudgeRow> with WidgetsBindingObserver {
   /// Long enough for a nearby Omi to come back; after it the guide explains what to check.
   static const _connectBudget = Duration(seconds: 15);
 
   /// One "shown" per app run, not per rebuild.
   static bool _shownLogged = false;
 
-  bool _closed = false;
+  /// The Reconnect attempt that may still open the guide. A newer tap or a close invalidates it.
+  int _attempt = 0;
+
+  /// Re-evaluates when time alone changes the row (Home stays mounted for days).
+  Timer? _boundary;
+  DateTime? _boundaryAt;
+
+  BluetoothReadiness get _readiness => widget.readiness ?? BluetoothReadiness.instance;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Installs from before this row have no stamp: start their clock now rather than guess.
     if (DeviceLastConnected.read() == null && SharedPreferencesUtil().btDevice.id.isNotEmpty) {
       DeviceLastConnected.mark(widget.now());
     }
   }
 
+  @override
+  void dispose() {
+    _boundary?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Timers do not run while the app is suspended: look again on the way back.
+    if (state == AppLifecycleState.resumed && mounted) {
+      _boundaryAt = null;
+      setState(() {});
+    }
+  }
+
+  void _scheduleBoundary(DateTime? at) {
+    if (at == _boundaryAt) return;
+    _boundary?.cancel();
+    _boundaryAt = at;
+    if (at == null) return;
+    final wait = at.difference(widget.now());
+    _boundary = Timer(wait.isNegative ? Duration.zero : wait, () {
+      _boundaryAt = null;
+      if (mounted) setState(() {});
+    });
+  }
+
+  /// Home's tab is showing, nothing is pushed over it, and the app is in the foreground.
+  bool get _homeInFront {
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    return (lifecycle == null || lifecycle == AppLifecycleState.resumed) &&
+        (ModalRoute.of(context)?.isCurrent ?? true) &&
+        TickerMode.valuesOf(context).enabled;
+  }
+
   Future<void> _reconnect(int days) async {
     const TypedEvents().emit(ReconnectNudgeTapped(daysSinceConnected: days));
     OmiHaptics.selection();
+    final attempt = ++_attempt;
+    // Bluetooth off or not allowed: the app's Bluetooth prompt is the fix, even if it was dismissed
+    // before. No connect and no device guide.
+    if (!await _readiness.ensureReadyForUser(BluetoothUse.connection)) return;
+    if (!mounted || attempt != _attempt) return;
     final provider = context.read<DeviceProvider>();
     try {
       await provider.scanAndConnectToDevice().timeout(_connectBudget);
     } on TimeoutException {
       // The connect keeps going natively; the row goes away if it lands.
     }
-    if (!mounted || provider.connectedDevice != null) return;
-    // Bluetooth off or not allowed: its own prompt already says what to do.
-    if ((widget.readiness ?? BluetoothReadiness.instance).guidance != null) return;
+    if (!mounted || attempt != _attempt || provider.connectedDevice != null || !_homeInFront) return;
     PlatformManager.instance.analytics.connectionGuideOpened();
-    await (widget.openGuide ?? ConnectionGuideSheet.show)(context);
+    unawaited((widget.openGuide ?? ConnectionGuideSheet.show)(context));
   }
 
   void _close(int days) {
     const TypedEvents().emit(ReconnectNudgeDismissed(daysSinceConnected: days));
     OmiHaptics.light();
+    _attempt++;
     ReconnectNudge.markClosed(widget.now());
-    setState(() => _closed = true);
+    setState(() {});
   }
 
   @override
@@ -114,15 +182,13 @@ class _ReconnectNudgeRowState extends State<ReconnectNudgeRow> {
         context.select<DeviceProvider, (BtDevice?, bool)>((p) => (p.pairedDevice, p.connectedDevice != null));
     // Before a connection hydrates the provider, the stored pairing is the paired device.
     final paired = (pairedDevice?.id.isNotEmpty ?? false) ? pairedDevice! : SharedPreferencesUtil().btDevice;
-    final days = _closed
-        ? null
-        : ReconnectNudge.days(
-            paired: paired,
-            connected: connected,
-            lastConnectedAt: DeviceLastConnected.read(),
-            dismissedAt: ReconnectNudge.closedAt(),
-            now: widget.now(),
-          );
+    final lastConnectedAt = DeviceLastConnected.read();
+    final closedAt = ReconnectNudge.closedAt();
+    final now = widget.now();
+    _scheduleBoundary(ReconnectNudge.nextChange(
+        paired: paired, connected: connected, lastConnectedAt: lastConnectedAt, dismissedAt: closedAt, now: now));
+    final days = ReconnectNudge.days(
+        paired: paired, connected: connected, lastConnectedAt: lastConnectedAt, dismissedAt: closedAt, now: now);
     if (days == null) return const SizedBox.shrink();
     if (!_shownLogged) {
       _shownLogged = true;

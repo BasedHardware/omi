@@ -96,6 +96,14 @@ class BluetoothReadiness extends ChangeNotifier {
     }
   }
 
+  /// [ensureReady] for an explicit tap (Home's Reconnect): a blocked state the reader dismissed
+  /// earlier is offered again, because they are asking now. Automatic attempts keep the
+  /// suppression, so a dismissed prompt never reopens on its own.
+  Future<bool> ensureReadyForUser(BluetoothUse use) {
+    _dismissedBlockedState = null;
+    return ensureReady(use);
+  }
+
   Future<BluetoothAdapterState?> _currentPermissionState(BluetoothUse use) async {
     if (Platform.isIOS) {
       return await Permission.bluetooth.isGranted ? null : BluetoothAdapterState.unauthorized;

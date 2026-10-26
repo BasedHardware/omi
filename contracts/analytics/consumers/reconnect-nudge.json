@@ -2,7 +2,7 @@
   "id": "reconnect-nudge",
   "kind": "question",
   "owner": "Mobile growth",
-  "question": "Does Home's reconnect row bring idle Omis back? Per build: people shown the row, people who tapped Reconnect or closed it, and how many days their Omi had been away. Recovery is a keep-listed Device Session Ended for the same person after a tap.",
+  "question": "Does Home's reconnect row bring idle Omis back? Per build: people shown the row, people who tapped Reconnect or closed it, and how many days their Omi had been away. This query proves the three events arrive; recovery needs a separate per-person join of a tap to that person's next device session.",
   "query": "contracts/analytics/consumers/reconnect-nudge.sql",
   "events": [
     "reconnectNudgeShown",
