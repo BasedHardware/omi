@@ -48,10 +48,19 @@ if "fastapi" not in sys.modules:
                 self.status_code = status_code
                 self.detail = detail
 
+        class Request:
+            pass
+
+        class Depends:
+            def __init__(self, *args, **kwargs):
+                pass
+
         fastapi.APIRouter = APIRouter
         fastapi.FastAPI = FastAPI
         fastapi.Query = Query
         fastapi.HTTPException = HTTPException
+        fastapi.Request = Request
+        fastapi.Depends = Depends
         sys.modules["fastapi"] = fastapi
 
         responses = types.ModuleType("fastapi.responses")
