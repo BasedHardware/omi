@@ -12,8 +12,15 @@ continues to control raw playback reads independently.
 
 For consented capture, listen retains original packs through capacity pressure,
 upload errors and cancellation. Four commits can run at once; the fifth waits
-before removing its active pack. Transcript persistence and pusher audio flush
-both wait for the raw archive barrier. A transport send or transcript receipt
+before removing its active pack. LISTEN commits at the pack's own 60-second,
+conversation/hour/size boundary, 4096-frame cap, or disconnect tail. The relay
+gate awaits scheduled commits without flushing an active window. Transcript
+persistence and live STT delivery continue immediately; coverage ledger writes
+and `capture_committed` events wait for the accepted original-audio checkpoint.
+Snapshots coalesce per conversation (at most 32 queued conversations); overflow
+withholds the optional coverage ACK and leaves the client's WAL retained.
+A later window cannot release coverage across an earlier failed commit.
+A transport send or transcript receipt
 alone is never an audio archive receipt. Cloud-storage consent still applies;
 users with storage disabled do not acquire a new archive obligation.
 
@@ -48,6 +55,12 @@ opcode 203 with the same receipt when the caller opts in with
 `capture_committed` remains a transcript receipt. Client adoption of audio-only
 WAL release is a separate compatibility/deployment requirement; this server
 change cannot certify the retention behavior of already installed legacy apps.
+Windowed custody increases time-to-ACK and client WAL retention from roughly
+one relay cycle to up to one active 60-second pack plus storage latency (or an
+earlier boundary). A partial idle window stays unacknowledged until more audio
+closes its window or disconnect flushes it. During outages, WAL retention lasts
+through successful retry; there is no timed early release. A mid-window pod
+loss has issued no audio or coverage custody ACK for that uncommitted window.
 
 ## Recovery and acceptance
 
@@ -76,8 +89,10 @@ The source Grafana rule `omi-audio-custody-pressure` alerts immediately on any
 would-be drop or failure in five minutes. Provision split/combined alert JSON
 through the existing approved monitoring path and verify Telegram delivery.
 
-Small durable writes add storage operations before existing
-60-second projections. Measure GCS operation spend and listen latency during
+Windowed durable writes share the original pack boundaries, so Firestore
+fence, tombstone and protection reads occur per committed window rather than
+per relay cycle; no safety authority is cached across windows.
+Measure GCS operation spend and listen latency during
 the staging canary; tune batching only while preserving the custody barrier.
 PCM custody writes preserve the original bytes without invoking an encoder;
 encoding/decoding failure cannot prevent custody of even a one-sample frame.

@@ -3,6 +3,8 @@ import json
 import logging
 import struct
 import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from websockets.exceptions import ConnectionClosedError
@@ -19,6 +21,7 @@ from utils.listen_pusher_session import (
     ListenPusherSessionDeps,
 )
 from utils.pusher_protocol import audio_timeline_ack_frame
+from utils.other.live_audio_archive import LiveAudioArchive
 
 
 class FakePusherWebSocket:
@@ -313,6 +316,32 @@ async def test_audio_socket_send_cannot_clear_pcm_before_archive_barrier(monkeyp
         await session._audio_bytes_flush()
     assert not ws.sent
     assert [run.data for run in session.audio_runs] == [b'abcd']
+
+
+@pytest.mark.anyio
+async def test_live_relay_keeps_its_cadence_while_original_window_is_unacknowledged(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    h = SimpleNamespace(
+        request=SimpleNamespace(uid='synthetic', codec='pcm16', sample_rate=16000),
+        private_cloud_sync_enabled=True,
+        spawn=lambda coro, **kwargs: asyncio.create_task(coro),
+    )
+    archive = LiveAudioArchive(h)
+    write = AsyncMock()
+    monkeypatch.setattr(archive, '_write', write)
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, deps_overrides={'ensure_audio_durable': archive.ensure_durable})
+    await session.connect()
+    for second in range(10):
+        await archive.append(b'abcd', 'conv-1', 1000 + second, 2)
+        session.audio_bytes_send(b'abcd', received_at=1000 + second)
+        await session._audio_bytes_flush()
+        assert len([frame for frame in ws.sent if frame_type(frame) == 101]) == second + 1
+    write.assert_not_awaited()
+    assert archive.packs[0].data == b'abcd' * 10
+    assert session.audio_total_size == 0
+    await archive.close()
+    write.assert_awaited_once()
 
 
 @pytest.mark.anyio

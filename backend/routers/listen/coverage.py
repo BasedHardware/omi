@@ -81,9 +81,21 @@ def record_committed(
 
 
 async def publish_committed(host: Any, conversation_id: str, snapshot: dict[str, Any] | None) -> None:
-    """Offload the ledger and emit only after the caller's durable segment write."""
+    """Queue coverage after the segment write; release it at the audio window."""
     if not snapshot or snapshot.get('proof') != PROOF_KIND or not shadow_or_serve('CAPTURE_COVERAGE_MODE'):
         return
+    receiver = getattr(host, 'receiver', None)
+    archive = getattr(receiver, 'raw_archive', None)
+    if archive is not None and archive.durable:
+        try:
+            await archive.defer_ack(conversation_id, lambda: _publish_committed(host, conversation_id, snapshot))
+        except Exception:
+            observe('live_coverage', None)
+        return
+    await _publish_committed(host, conversation_id, snapshot)
+
+
+async def _publish_committed(host: Any, conversation_id: str, snapshot: dict[str, Any]) -> None:
     try:
         events = await host.persistence.call(
             record_committed,

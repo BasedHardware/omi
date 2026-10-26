@@ -384,9 +384,9 @@ class ListenPusherSession:
     async def _audio_bytes_flush(self):
         async with self.audio_flush_lock:
             if audio_outbox_enabled() and self.deps.ensure_audio_durable is not None:
-                # A successful socket send alone never retires the last copy.
-                # This barrier also runs while pusher is disconnected, so its
-                # restart cannot erase the original listen capture.
+                # Await scheduled window commits, without flushing the active
+                # raw pack on this ~1s relay cycle. The archive retains the
+                # original through the window; only its receipt releases WAL.
                 await self.deps.ensure_audio_durable()
             current_conversation_id = self.deps.get_current_conversation_id()
             pusher_ws = self.pusher_ws
