@@ -101,7 +101,7 @@ async def test_task_attempt_two_scans_read_once_only_in_enabled_scope(monkeypatc
     uid = attempt.off_uid if mode == 'outside_cohort' else attempt.uid
     attempt.request.json.return_value.update(uid=uid, lane=lane)
     if mode == 'no_opener':
-        monkeypatch.setattr(sync.memories, 'historical_scan_memo_scope', lambda uid: nullcontext())
+        monkeypatch.setattr(sync, 'historical_scan_memo_scope', lambda uid: nullcontext())
     pages = []
 
     async def pipeline(*args, **kwargs):
@@ -207,7 +207,7 @@ async def test_cancellation_closes_scope_and_preserves_run_lock(monkeypatch, att
 @pytest.mark.parametrize('early_exit', ['locked', 'terminal', 'expired_audio'])
 async def test_scope_excludes_admission_and_early_exits(monkeypatch, attempt, early_exit):
     opener = MagicMock(side_effect=AssertionError('no pipeline, no scope'))
-    monkeypatch.setattr(sync.memories, 'historical_scan_memo_scope', opener)
+    monkeypatch.setattr(sync, 'historical_scan_memo_scope', opener)
     if early_exit == 'locked':
         attempt.effects['try_acquire_job_run_lock'].return_value = None
     elif early_exit == 'terminal':
@@ -302,7 +302,7 @@ async def test_people_hint_scan_read_once_per_enabled_attempt(monkeypatch, peopl
     uid = people_attempt.off_uid if mode == 'outside_cohort' else people_attempt.uid
     people_attempt.request.json.return_value.update(uid=uid)
     if mode == 'no_opener':
-        monkeypatch.setattr(sync.person_aliases, 'people_scan_attempt', lambda: nullcontext())
+        monkeypatch.setattr(sync, 'people_scan_attempt', lambda: nullcontext())
     results = []
 
     async def pipeline(*args, **kwargs):
