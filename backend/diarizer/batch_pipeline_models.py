@@ -279,6 +279,7 @@ def stt_language(
             or value != value.lower()
             or not value.replace('-', '').isalpha()
             or any(not part for part in value.split('-'))
+            or not _finite_number(duration_seconds)
             or not _valid_self_lid_context(
                 context,
                 duration_seconds=duration_seconds,
