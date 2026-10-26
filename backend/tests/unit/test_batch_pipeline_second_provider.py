@@ -10,7 +10,7 @@ import pytest
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup, legacy_dependencies, row
 from tests.unit.test_batch_pipeline_terminal_empty import terminal_setup
 from utils.batch_pipeline import quarantine_recovery as module
-from utils.batch_pipeline.quarantine_recovery import transcribe
+from utils.batch_pipeline.recovery_recognizers import transcribe
 from utils.batch_pipeline.recovery_disposition import (
     RecoveryFailure,
     TWO_PROVIDER_EMPTY_EVIDENCE,

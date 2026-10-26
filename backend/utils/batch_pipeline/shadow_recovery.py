@@ -14,11 +14,11 @@ from utils.batch_pipeline.recovery_disposition import inspect_audio, Multilingua
 def recover(repository, artifacts, segment, *, stt=None, second_stt=None, inspect=inspect_audio):
     # These import the provider clients only at invocation, on the CPU backend.
     from utils.batch_pipeline.quarantine_recovery import (
-        transcribe,
-        second_transcribe,
         second_provider_eligible,
         SECOND_PROVIDER,
     )
+
+    from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe
 
     stt, second_stt = stt or transcribe, second_stt or second_transcribe
     job = repository.start_recovery(segment)

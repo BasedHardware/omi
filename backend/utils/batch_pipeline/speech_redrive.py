@@ -15,7 +15,8 @@ from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independe
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from config.batch_language_recovery import allowed as independent_allowed, below_silence_threshold, prior_modulate_empty
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.quarantine_recovery import transcribe, second_transcribe, log_failure, log_terminal_empty
+from utils.batch_pipeline.quarantine_recovery import log_failure, log_terminal_empty
+from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,

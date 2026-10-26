@@ -11,7 +11,7 @@ from database.batch_pipeline_speech_redrive import SpeechRedriveStore
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup, legacy_dependencies, row
 from tests.unit.test_batch_pipeline_speech_redrive import enabled
 from tests.unit.test_batch_pipeline_empty_disposition import SERVING_ENV
-from utils.batch_pipeline.quarantine_recovery import transcribe
+from utils.batch_pipeline.recovery_recognizers import transcribe
 from utils.batch_pipeline.recovery_disposition import RecoveryFailure, independent_silence_payload, result_outcome
 from utils.batch_pipeline.speech_redrive import redrive_one
 
