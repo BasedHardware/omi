@@ -4544,6 +4544,7 @@
           },
           "duration": {
             "description": "Duration in seconds",
+            "minimum": 0.0,
             "title": "Duration",
             "type": "number"
           },
@@ -4555,6 +4556,7 @@
           "provider": {
             "default": "gcp",
             "description": "Storage provider (e.g., 'gcp')",
+            "minLength": 1,
             "title": "Provider",
             "type": "string"
           },
@@ -8496,10 +8498,12 @@
         "description": "One contiguous stretch of stored PCM, in wall-epoch seconds.",
         "properties": {
           "end": {
+            "minimum": 0.0,
             "title": "End",
             "type": "number"
           },
           "start": {
+            "minimum": 0.0,
             "title": "Start",
             "type": "number"
           }
