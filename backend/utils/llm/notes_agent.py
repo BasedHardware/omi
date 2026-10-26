@@ -45,6 +45,7 @@ from utils.llm.shaped_agent import (
     validate_output,
 )
 from utils.model_text import ContextWindow
+from utils.observability.reasons import NotesAgentForceReason, ReasonFamily, reason_label
 
 logger = logging.getLogger(__name__)
 
@@ -447,7 +448,9 @@ def record_decision(reason: str) -> None:
 def record_run(result: NotesAgentResult) -> None:
     RUNS.labels(stop=result.stop).inc()
     if result.forced:
-        FORCED_RUNS.labels(reason=result.force_reason or 'unknown').inc()
+        FORCED_RUNS.labels(
+            reason=reason_label(ReasonFamily.NOTES_AGENT_FORCE, result.force_reason or 'unknown', NotesAgentForceReason)
+        ).inc()
     TOOL_CALLS.observe(result.tool_calls)
     TURNS.observe(max(1, result.turns))
     COST.observe(result.cost_usd)

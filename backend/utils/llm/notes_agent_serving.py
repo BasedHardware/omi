@@ -37,6 +37,7 @@ from utils.llm.prompt_cache import (
 from utils.llm.gateway_client import GatewayContextChatOpenAI
 from utils.llm.shaped_notes_transport import isolated_notes_model
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import NotesAgentTransportReason, ReasonFamily, reason_label
 
 logger = logging.getLogger(__name__)
 TRANSPORT_SKIPS = PromCounter(
@@ -110,7 +111,11 @@ def agentic_notes_payload(
     )
     record_decision(decision.reason)
     if decision.reason == 'transport':
-        TRANSPORT_SKIPS.labels(reason=transport_skip or 'unsupported_model').inc()
+        TRANSPORT_SKIPS.labels(
+            reason=reason_label(
+                ReasonFamily.NOTES_AGENT_TRANSPORT, transport_skip or 'unsupported_model', NotesAgentTransportReason
+            )
+        ).inc()
     if not decision.run or decision.budget is None or not uid:
         return None
     budget = decision.budget
