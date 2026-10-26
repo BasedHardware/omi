@@ -261,6 +261,9 @@ def _claim_retry_state_transaction(
     now: datetime,
     lease_seconds: int,
 ) -> RequiredProcessingClaim:
+    from database.required_intake_fence import assert_account_active
+
+    assert_account_active(uid, transaction, db_client)
     item_ref = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{expected_item.memory_id}")
     item_payload = _snapshot_payload(item_ref.get(transaction=transaction))
     if not item_payload:
@@ -494,6 +497,8 @@ def is_pending_required_processing(item: MemoryItem) -> bool:
         and item.processing_state == ProcessingState.pending
         and bool(promotion.get("required"))
         and promotion.get("user_review") is not False
+        and not promotion.get('is_locked')
+        and not promotion.get('is_dismissed')
         and promotion.get("processing_status")
         in {
             REQUIRED_PROCESSING_STATUS_PENDING,
@@ -561,7 +566,7 @@ def _response_content(response: Any) -> str:
     return str(content or "")
 
 
-def list_receipted_required_processing_items(uid, *, db_client, limit=100):
+def list_receipted_required_processing_items(uid, *, db_client, limit=100, cursor=None):
     """Use the same required-intake index; ordinary observations never fill this page."""
     query = REQUIRED_MEMORY_PROCESSING_QUERY.build(
         db_client.collection(MemoryCollections(uid=uid).memory_items),
@@ -574,7 +579,10 @@ def list_receipted_required_processing_items(uid, *, db_client, limit=100):
         },
         field_filter_factory=FieldFilter,
     )
-    snapshots = query.order_by('captured_at').order_by('memory_id').limit(max(1, min(limit, 100))).stream()
+    query = query.order_by('captured_at').order_by('memory_id')
+    if cursor:
+        query = query.start_after(cursor)
+    snapshots = query.limit(max(1, min(limit, 100))).stream()
     return [MemoryItem(**_snapshot_payload(snapshot)) for snapshot in snapshots]
 
 

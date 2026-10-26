@@ -5,8 +5,11 @@ from contextvars import ContextVar
 from datetime import datetime
 
 from database.conversation_revisions import firestore_revision_datetime
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from database.legal_holds import assert_no_destructive_operation_transaction
+from database.memory_collections import MemoryCollections
 
-_sources = ContextVar[tuple[str, dict[str, datetime]] | None]('required_intake_sources', default=None)
+_sources = ContextVar[tuple[str, dict[str, datetime], str | None] | None]('required_intake_sources', default=None)
 
 
 class RequiredIntakeSourceChanged(RuntimeError):
@@ -14,12 +17,22 @@ class RequiredIntakeSourceChanged(RuntimeError):
 
 
 @contextmanager
-def source_scope(uid, revisions):
-    token = _sources.set((uid, revisions))
+def source_scope(uid, revisions, *, completion_id=None):
+    token = _sources.set((uid, revisions, completion_id))
     try:
         yield
     finally:
         _sources.reset(token)
+
+
+def assert_account_active(uid, transaction, client):
+    """Pre-provider fence as well as a transaction read for metadata writes."""
+    assert_no_destructive_operation_transaction(transaction, client, uid=uid)
+    snapshot = client.document(f'account_deletions/{uid}').get(transaction=transaction)
+    raw = snapshot.to_dict() or {}
+    status = normalize_account_deletion_status(marker_exists=bool(snapshot.exists), raw_status=raw.get('wipe_status'))
+    if account_deletion_blocks_access(status):
+        raise RequiredIntakeSourceChanged('required_intake_account_deleting')
 
 
 def assert_current(uid, transaction, client):
@@ -33,3 +46,13 @@ def assert_current(uid, transaction, client):
         revision = firestore_revision_datetime(getattr(snapshot, 'update_time', None))
         if not snapshot.exists or revision is None or revision != expected:
             raise RequiredIntakeSourceChanged('required_intake_source_changed')
+    if scope[2] is not None:
+        raw = (
+            client.document(f'{MemoryCollections(uid=uid).memory_items}/{scope[2]}')
+            .get(transaction=transaction)
+            .to_dict()
+            or {}
+        )
+        audit = raw.get('promotion') or {}
+        if not raw or audit.get('user_review') is False or audit.get('is_locked') or audit.get('is_dismissed'):
+            raise RequiredIntakeSourceChanged('required_intake_completion_owner_changed')

@@ -300,6 +300,7 @@ _driver(
 _driver(
     'utils.memory.canonical_required_processing.list_receipted_required_processing_items',
     base={'uid': UID},
+    domains={'cursor': [None, {'captured_at': T0, 'memory_id': 'memory-1'}]},
     neutrals={'limit': LIMIT},
     profile='maintenance-required-intake-completion',
     serving=False,

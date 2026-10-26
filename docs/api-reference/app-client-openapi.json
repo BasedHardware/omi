@@ -19267,7 +19267,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 10,
+            "maxItems": 101,
             "minItems": 1,
             "title": "Evidence",
             "type": "array"
@@ -19279,6 +19279,7 @@
               "title",
               "overview",
               "memory",
+              "resolve_required_memory",
               "merge_memories",
               "retire_memory",
               "supersede_memory",

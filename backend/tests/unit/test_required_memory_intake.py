@@ -25,9 +25,268 @@ from utils.memory import canonical_memory_adapter as adapter
 from utils.memory import canonical_consolidation as consolidation
 from utils.memory.required_promotion import required_processing_payload
 from database.document_ids import document_id_from_seed
+from database import required_intake_cursors
+from database.required_intake_fence import RequiredIntakeSourceChanged
+from utils import executors
+from utils.memory.memory_system import CanonicalApplyStateUnavailable
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
+from concurrent.futures import ThreadPoolExecutor
 
 UID = 'synthetic-required-intake-owner'
 NOW = datetime.now(timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_inline_wait_releases_the_database_worker(db, monkeypatch):
+    started = asyncio.Event()
+    release = Event()
+    loop = asyncio.get_running_loop()
+
+    def slow_normalize(row):
+        loop.call_soon_threadsafe(started.set)
+        assert release.wait(15)
+        return normalized(row)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(executors, 'db_executor', pool)
+        monkeypatch.setattr(intake, 'db_executor', pool)
+        monkeypatch.setattr(processing, 'db_executor', pool)
+        monkeypatch.setattr(intake, 'normalize', slow_normalize)
+        capture = asyncio.create_task(executors.run_blocking(pool, intake.after_capture, UID, stored(db), db_client=db))
+        try:
+            await asyncio.wait_for(started.wait(), 10)
+            assert await asyncio.wait_for(executors.run_blocking(pool, lambda: 'responsive'), 2) == 'responsive'
+        finally:
+            release.set()
+            await capture
+    assert stored(db).processing_state.value == 'processed'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('batch', [False, True])
+async def test_async_create_response_and_prompt_cache_observe_normalized_content(db, monkeypatch, batch):
+    service = MemoryService(db_client=db)
+    monkeypatch.setattr(service, 'ensure_canonical_mutation_ready', lambda *a: None)
+    monkeypatch.setattr(service, '_write_historical_overrides', lambda *a: None)
+    cache_states = []
+    monkeypatch.setattr(service, '_invalidate_prompt_cache', lambda uid: cache_states.append(stored(db).content))
+    monkeypatch.setattr(
+        intake,
+        'normalize',
+        lambda row: processing.ProcessedRequiredMemory(content='The owner prefers tea.', predicate='prefers'),
+    )
+
+    def committed_write(uid, payload):
+        intake.after_capture(uid, stored(db), db_client=db)
+        return 'new'
+
+    monkeypatch.setattr(
+        service,
+        '_canonical',
+        SimpleNamespace(
+            write=committed_write, write_batch=lambda uid, rows: [committed_write(uid, row) for row in rows]
+        ),
+    )
+    memory = adapter.memory_item_to_memorydb(stored(db))
+    if batch:
+        result = await executors.run_blocking(
+            executors.db_executor,
+            service.create_external_memory_batch,
+            UID,
+            [memory],
+            memory_system=MemorySystem.CANONICAL,
+            consumer='mcp',
+            operation='synthetic',
+        )
+        result = result[0]
+    else:
+        result = await executors.run_blocking(
+            executors.db_executor,
+            service.create_external_memory,
+            UID,
+            memory,
+            memory_system=MemorySystem.CANONICAL,
+            consumer='mcp',
+            operation='synthetic',
+        )
+    assert result.content == stored(db).content == 'The owner prefers tea.'
+    assert cache_states[-1] == 'The owner prefers tea.'
+
+
+def test_account_deletion_blocks_explicit_text_before_provider(db, monkeypatch):
+    calls = []
+    monkeypatch.setattr(intake, 'normalize', lambda row: calls.append(row.memory_id) or normalized(row))
+    db.rows[('account_deletions', UID)] = {'wipe_status': 'pending'}
+    assert intake.after_capture(UID, stored(db), db_client=db) is None
+    with pytest.raises(CanonicalApplyStateUnavailable, match='account deletion'):
+        processing.process_required_memory_item(UID, 'new', db_client=db, processor=intake.normalize)
+    assert not calls and stored(db).processing_state.value == 'pending'
+
+
+@pytest.mark.asyncio
+async def test_account_deletion_blocks_backlog_before_embedding(db):
+    historical_candidate(db)
+    db.rows[('account_deletions', UID)] = {'wipe_status': 'pending'}
+    source = SimpleNamespace(search=AsyncMock())
+    with pytest.raises(RequiredIntakeSourceChanged, match='account_deleting'):
+        await backlog.prepare(UID, {'targets': []}, EvidenceRecords(), SessionLimits(), source)
+    source.search.assert_not_awaited()
+
+
+@pytest.mark.parametrize('flag,value', [('user_review', False), ('is_locked', True), ('is_dismissed', True)])
+def test_completion_respects_owner_disposition_after_normalization(db, monkeypatch, flag, value):
+    monkeypatch.setattr(intake, 'normalize', normalized)
+    assert intake.after_capture(UID, stored(db), db_client=db).processed
+    db.rows[('users', UID, 'memory_items', 'new')]['promotion'][flag] = value
+    monkeypatch.setattr(consolidation, 'list_receipted_required_processing_items', lambda *a, **kw: [stored(db)])
+    result = consolidation.complete_receipted_required_intake(db_client=db, uid=UID, now=NOW, run_id='owner-choice')
+    assert not result.promoted_memory_ids
+    assert stored(db).tier.value == 'short_term'
+
+
+def test_unmanaged_db_submission_defers_instead_of_waiting_on_provider(db, monkeypatch):
+    monkeypatch.setattr(intake, 'normalize', lambda *a: pytest.fail('DB worker must not wait on a provider'))
+    with executors.MonitoredThreadPoolExecutor(name='synthetic-db', max_workers=1) as pool:
+        monkeypatch.setattr(executors, 'db_executor', pool)
+        monkeypatch.setattr(intake, 'db_executor', pool)
+        assert pool.submit(intake.after_capture, UID, stored(db), db_client=db).result(timeout=2) is None
+    assert stored(db).processing_state.value == 'pending'
+
+
+def test_completion_rechecks_owner_disposition_inside_transaction(db, monkeypatch):
+    monkeypatch.setattr(intake, 'normalize', normalized)
+    assert intake.after_capture(UID, stored(db), db_client=db).processed
+    actual = consolidation.apply_long_term_patch_firestore
+
+    def reject_before_commit(**kwargs):
+        db.rows[('users', UID, 'memory_items', 'new')]['promotion']['user_review'] = False
+        return actual(**kwargs)
+
+    monkeypatch.setattr(consolidation, 'apply_long_term_patch_firestore', reject_before_commit)
+    with pytest.raises(RequiredIntakeSourceChanged, match='completion_owner_changed'):
+        consolidation.complete_required_memory_item(UID, stored(db), db_client=db, now=NOW, run_id='owner-race')
+    assert stored(db).tier.value == 'short_term'
+
+
+@pytest.mark.asyncio
+async def test_retry_rotates_past_a_full_withheld_page(db, monkeypatch):
+    rows = []
+    for index in range(101):
+        row = item(f'page-{index:03d}', captured_at=NOW - timedelta(minutes=20) + timedelta(microseconds=index))
+        db.rows[('users', UID, 'memory_items', row.memory_id)] = row.model_dump(mode='python')
+        db.rows[('users', UID, 'memory_evidence', row.evidence[0].evidence_id)] = row.evidence[0].model_dump(
+            mode='python'
+        )
+        rows.append(row)
+    positions = []
+
+    def page(uid, **kwargs):
+        positions.append(kwargs.get('cursor'))
+        return rows[:100] if kwargs.get('cursor') is None else rows[100:]
+
+    monkeypatch.setattr(processing, 'list_pending_required_processing_items', page)
+    monkeypatch.setattr(intake, 'source_revisions', lambda uid, row, **kw: {} if row.memory_id == 'page-100' else None)
+    monkeypatch.setattr(intake, 'normalize', normalized)
+    assert await intake.retry_owner(UID, db_client=db, now=NOW) == 0
+    assert await intake.retry_owner(UID, db_client=db, now=NOW) == 1
+    assert stored(db, 'page-100').processing_state.value == 'processed'
+    assert stored(db, 'page-000').processing_state.value == 'pending'
+    assert positions == [None, {'captured_at': rows[99].captured_at, 'memory_id': rows[99].memory_id}]
+
+
+def test_completion_rotates_past_a_full_uncompletable_page(db, monkeypatch):
+    rows = []
+    for index in range(101):
+        row = item(
+            f'page-{index:03d}',
+            captured_at=NOW - timedelta(minutes=20) + timedelta(microseconds=index),
+            processed=index < 100,
+        )
+        db.rows[('users', UID, 'memory_items', row.memory_id)] = row.model_dump(mode='python')
+        db.rows[('users', UID, 'memory_evidence', row.evidence[0].evidence_id)] = row.evidence[0].model_dump(
+            mode='python'
+        )
+        rows.append(row)
+    assert processing.process_required_memory_item(UID, 'page-100', db_client=db, processor=normalized).processed
+
+    def page(uid, **kwargs):
+        return rows[:100] if kwargs.get('cursor') is None else [stored(db, 'page-100')]
+
+    monkeypatch.setattr(consolidation, 'list_receipted_required_processing_items', page)
+    first = consolidation.complete_receipted_required_intake(UID, db_client=db, now=NOW, run_id='scan-one')
+    second = consolidation.complete_receipted_required_intake(UID, db_client=db, now=NOW, run_id='scan-two')
+    assert not first.promoted_memory_ids and second.promoted_memory_ids == ['page-100']
+    assert stored(db, 'page-100').tier.value == 'long_term'
+
+
+def test_cursor_advance_fences_generation_and_account_deletion(db):
+    before, cursor, generation = required_intake_cursors.load(UID, 'retry', db_client=db)
+    assert cursor is None
+    db.rows[('users', UID, 'memory_state', 'apply_control')]['account_generation'] += 1
+    required_intake_cursors.finish(
+        UID, 'retry', before, {'captured_at': NOW, 'memory_id': 'new'}, generation, db_client=db
+    )
+    assert not any(path[-1] == 'required_intake_retry_scan' for path in db.rows)
+    db.rows[('account_deletions', UID)] = {'wipe_status': 'pending'}
+    with pytest.raises(RequiredIntakeSourceChanged, match='account_deleting'):
+        required_intake_cursors.finish(UID, 'retry', before, cursor, generation, db_client=db)
+
+
+def test_partial_neighbor_search_cannot_establish_uniqueness(db):
+    row = historical_candidate(db)
+    row[backlog.MARKER]['dedupe_complete'] = False
+    with pytest.raises(ValueError, match='dedupe_incomplete'):
+        backlog.validate(resolution(row, other=''), {'memory_items/new': row})
+
+
+def test_existing_inventory_has_explicit_coverage_cap_and_skips_pending(db):
+    rows, complete = backlog.read_existing_inventory(UID, 1, db_client=db)
+    assert complete and not rows
+    for index in range(101):
+        row = item(f'cap-{index:03d}')
+        db.rows[('users', UID, 'memory_items', row.memory_id)] = row.model_dump(mode='python')
+    assert backlog.read_existing_inventory(UID, 1, db_client=db) == ({}, False)
+
+
+@pytest.mark.asyncio
+async def test_paginated_neighbors_are_not_unique_coverage(db, monkeypatch):
+    historical_candidate(db)
+    monkeypatch.setattr(backlog, 'read_existing_inventory', lambda *a, **kw: ({}, False))
+    survivor = {
+        'id': 'survivor',
+        'content': 'Synthetic existing fact.',
+        'visibility': 'private',
+        'subject_entity_id': 'user',
+        'memory_tier': 'long_term',
+    }
+    source = SimpleNamespace(
+        search=AsyncMock(
+            return_value={
+                'complete': True,
+                'results': [{'ref': 'memory_items/survivor'}],
+                'cursors': {'memory_items': 'next-page'},
+            }
+        ),
+        read=AsyncMock(return_value=survivor),
+    )
+    seed, records = await backlog.prepare(UID, {'targets': []}, EvidenceRecords(), SessionLimits(), source)
+    assert seed['required_intake_candidates'] == ['memory_items/new']
+    assert records['memory_items/new'][backlog.MARKER]['dedupe_complete'] is False
+    with pytest.raises(ValueError, match='dedupe_incomplete'):
+        backlog.validate(resolution(records['memory_items/new'], other=''), records)
+
+
+def test_only_backlog_kind_may_cite_a_bounded_full_inventory(db):
+    row = historical_candidate(db)
+    raw = resolution(row).model_dump()
+    raw['evidence'] = ['memory_items/new', *[f'memory_items/e{i}' for i in range(20)]]
+    assert len(HarnessEdit.model_validate(raw).evidence) == 21
+    raw['kind'] = 'title'
+    with pytest.raises(ValueError, match='Only bounded required-intake'):
+        HarnessEdit.model_validate(raw)
+    with pytest.raises(ValueError, match='candidate_required'):
+        backlog.validate(resolution(row), {'memory_items/new': row}, authority='user')
 
 
 def item(key='new', *, captured_at=NOW, processed=False):
@@ -217,6 +476,7 @@ def candidate_context(db):
         'source_generation': 1,
         'dedupe_refs': ['memory_items/survivor'],
         'search_complete': True,
+        'dedupe_complete': True,
     }
 
 
@@ -297,6 +557,7 @@ def test_backlog_changed_head_or_incomplete_neighbors_cannot_admit(db):
 @pytest.mark.asyncio
 async def test_incomplete_backlog_search_never_seeds_hidden_items(db, monkeypatch):
     historical_candidate(db)
+    monkeypatch.setattr(backlog, 'read_existing_inventory', lambda *a, **k: ({}, False))
     monkeypatch.setattr(processing, 'list_pending_required_processing_items', lambda *a, **k: [stored(db)])
     source = SimpleNamespace(search=AsyncMock(return_value={'complete': False, 'results': []}))
     seed, rows = await backlog.prepare(UID, {'targets': []}, EvidenceRecords(), SessionLimits(), source)
@@ -333,6 +594,7 @@ async def test_retry_inventory_cursor_only_advances_completed_prefix(monkeypatch
 
 
 def test_source_quote_admission_requires_owner_anchor_and_revision(monkeypatch):
+    monkeypatch.setattr(admission, 'assert_account_active', lambda *args: None)
     owner = {
         'id': 'owner',
         'text': 'I prefer tea',
@@ -380,6 +642,7 @@ def test_source_quote_admission_requires_owner_anchor_and_revision(monkeypatch):
 
 @pytest.mark.parametrize('serving', [False, True])
 def test_explicit_text_and_nonserving_audio_keep_their_existing_authority(monkeypatch, serving):
+    monkeypatch.setattr(admission, 'assert_account_active', lambda *args: None)
     monkeypatch.setattr(admission, 'serving_for', lambda *a: serving)
     client = SimpleNamespace(document=lambda path: pytest.fail('explicit text must not read audio'))
     assert admission.source_revisions(UID, item(), db_client=client) == {}

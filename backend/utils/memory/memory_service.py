@@ -3958,7 +3958,11 @@ class MemoryService:
         item = read_canonical_memory_item(uid, committed_id or str(data.get("id") or ""), db_client=self.db_client)
         if item is None:
             raise HTTPException(status_code=503, detail="Canonical memory write readback unavailable")
-        return memory_item_to_memorydb(item)
+        result = memory_item_to_memorydb(item)
+        from utils.memory.required_intake import register_capture_view
+
+        register_capture_view(uid, item, result, self._invalidate_prompt_cache)
+        return result
 
     def write(self, uid: str, data: Dict[str, Any]) -> str:
         self.ensure_canonical_mutation_ready(uid)
@@ -4618,7 +4622,11 @@ class MemoryService:
                     status_code=503,
                     detail="Canonical memory write readback unavailable",
                 )
-            results.append(memory_item_to_memorydb(item))
+            result = memory_item_to_memorydb(item)
+            from utils.memory.required_intake import register_capture_view
+
+            register_capture_view(uid, item, result, self._invalidate_prompt_cache)
+            results.append(result)
         self._write_historical_overrides(uid, ids, MemoryItemStatus.active)
         self._invalidate_prompt_cache(uid)
         return results

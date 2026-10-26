@@ -11,13 +11,14 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from functools import partial
+from typing import Any, Callable
 
 from config import required_memory_intake as policy
 from database._client import get_firestore_client
-from database import dream_scheduler
+from database import dream_scheduler, required_intake_cursors
 from database.required_intake_fence import source_scope
 from models.product_memory import MemoryItem
-from utils.executors import db_executor, llm_executor, run_blocking, ExecutorSaturatedError
+from utils.executors import db_executor, llm_executor, run_blocking, ExecutorSaturatedError, after_db_call, in_db_worker
 from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_llm
 from utils.llm.usage_tracker import track_usage
 from utils.memory import canonical_required_processing as required
@@ -26,6 +27,9 @@ from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 _capture_deadline = ContextVar[float | None]('required_intake_capture_deadline', default=None)
+_capture_views = ContextVar[dict[tuple[str, str], list[tuple[Any, Callable[[str], None]]]] | None](
+    'required_intake_views', default=None
+)
 
 
 @contextmanager
@@ -107,6 +111,19 @@ def after_capture(uid, item: MemoryItem, *, db_client):
     ):
         return None
     deadline = _capture_deadline.get() or time.monotonic() + policy.INLINE_TIMEOUT_SECONDS
+    views = (_capture_views.get() or {}).get((uid, item.memory_id), [])
+    if after_db_call(partial(after_capture_async, uid, item, db_client=db_client, deadline=deadline, views=views)):
+        pending_views = _capture_views.get()
+        if pending_views is None:
+            pending_views = {}
+            _capture_views.set(pending_views)
+        pending_views[(uid, item.memory_id)] = views
+        return None
+    if in_db_worker():
+        # A raw synchronous submission has no async caller to await model IO.
+        # Preserve the capture for Dream rather than occupying a shared DB worker.
+        record_deferred(required.RequiredProcessingDeferred('required_intake_async_boundary_unavailable'))
+        return None
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         return None
@@ -131,12 +148,63 @@ def after_capture(uid, item: MemoryItem, *, db_client):
         return None
 
 
+def register_capture_view(uid, item, view, invalidate):
+    """Keep the returned single/batch API view current after deferred DB IO."""
+    views = (_capture_views.get() or {}).get((uid, item.memory_id))
+    if views is not None:
+        views.append((view, invalidate))
+
+
+def _refresh_views(uid, memory_id, views, client):
+    from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
+
+    item = read_canonical_memory_item(uid, memory_id, db_client=client)
+    if item is None:
+        return
+    current = memory_item_to_memorydb(item)
+    for view, invalidate in views:
+        for name in type(current).model_fields:
+            setattr(view, name, getattr(current, name))
+        invalidate(uid)
+
+
+async def after_capture_async(uid, item, *, db_client, deadline, views=None):
+    """DB claim, pure model wait and DB settlement use distinct executor leaves."""
+    if not policy.enabled() or deadline <= time.monotonic():
+        return None
+    try:
+        revisions = await run_blocking(db_executor, source_revisions, uid, item, db_client=db_client)
+        if revisions is None or deadline <= time.monotonic():
+            return None
+        with source_scope(uid, revisions):
+            result = await required.process_required_memory_item_async(
+                uid,
+                item.memory_id,
+                db_client=db_client,
+                processor=normalize,
+                timeout_seconds=max(0, deadline - time.monotonic()),
+                result_guard=partial(result_guard, deadline),
+            )
+        logger.info('required_intake_inline processed=%s attempted=%s', result.processed, result.attempted)
+        if views and (result.processed or result.skipped_reason == 'not_pending_required_processing'):
+            await run_blocking(db_executor, _refresh_views, uid, item.memory_id, views, db_client)
+        if result.error_code:
+            record_deferred()
+        return result
+    except Exception as error:
+        record_deferred(error)
+        return None
+
+
 async def retry_owner(uid, *, db_client=None, now=None):
     """Retry fresh stragglers; never let an old backlog consume the page."""
     if not policy.enabled():
         return 0
     client = db_client if db_client is not None else await run_blocking(db_executor, get_firestore_client)
     current = now or datetime.now(timezone.utc)
+    before, cursor, generation = await run_blocking(
+        db_executor, required_intake_cursors.load, uid, 'retry', db_client=client
+    )
     items = await run_blocking(
         db_executor,
         required.list_pending_required_processing_items,
@@ -145,12 +213,25 @@ async def retry_owner(uid, *, db_client=None, now=None):
         limit=required.MAX_REQUIRED_PROCESSING_QUERY_SCAN,
         captured_after=policy.BACKLOG_CUTOFF,
         captured_before=current - timedelta(minutes=policy.RETRY_MIN_AGE_MINUTES),
+        cursor=cursor,
     )
+    if not items and cursor:
+        items = await run_blocking(
+            db_executor,
+            required.list_pending_required_processing_items,
+            uid,
+            db_client=client,
+            limit=required.MAX_REQUIRED_PROCESSING_QUERY_SCAN,
+            captured_after=policy.BACKLOG_CUTOFF,
+            captured_before=current - timedelta(minutes=policy.RETRY_MIN_AGE_MINUTES),
+        )
     processed = 0
     attempted = 0
+    visited = None
     for item in items:
         if not policy.enabled() or attempted >= policy.RETRY_ITEMS_PER_OWNER:
             break
+        visited = {'captured_at': item.captured_at, 'memory_id': item.memory_id}
         revisions = await run_blocking(db_executor, source_revisions, uid, item, db_client=client)
         if revisions is None:
             continue
@@ -165,6 +246,10 @@ async def retry_owner(uid, *, db_client=None, now=None):
             )
         attempted += int(result.attempted)
         processed += int(result.processed)
+    if policy.enabled() and (visited is not None or cursor):
+        await run_blocking(
+            db_executor, required_intake_cursors.finish, uid, 'retry', before, visited, generation, db_client=client
+        )
     logger.info('required_intake_retry scanned=%d processed=%d', len(items), processed)
     return processed
 

@@ -42,7 +42,7 @@ class HarnessEdit(Strict):
     reason: str = Field(min_length=1, max_length=1000, description='Explain the defect and cited evidence.')
     evidence: list[str] = Field(
         min_length=1,
-        max_length=10,
+        max_length=101,
         description=(
             'Fully read owner refs, with segment ids for speech when available. Cited evidence must '
             'support this change; do not invent refs or use the old memory itself as retirement support.'
@@ -58,6 +58,8 @@ class HarnessEdit(Strict):
         from utils.agent_capabilities.registry import get_kind
 
         spec = get_kind(self.kind)
+        if self.kind != 'resolve_required_memory' and len(self.evidence) > 10:
+            raise ValueError('Only bounded required-intake inventory may cite more than ten refs')
         if self.effective_from and spec.schema_rule != 'hygiene':
             raise ValueError('Only memory supersession may carry effective_from')
         spec.schema(self)

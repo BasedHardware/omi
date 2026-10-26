@@ -14,12 +14,12 @@ from typing import Any, Literal, cast
 from google.cloud import firestore
 
 from config import required_memory_intake as policy
-from database import review_store
+from database import review_store, dream_history
 from database.memory_apply_store import apply_long_term_patch_firestore
 from database.memory_collections import MemoryCollections
 from database.dream_effect_fence import assert_active
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
-from database.required_intake_fence import source_scope, RequiredIntakeSourceChanged
+from database.required_intake_fence import source_scope, RequiredIntakeSourceChanged, assert_account_active
 from models.agent_refs import base_ref
 from models.agent_tools import Search
 from models.memory_apply import ApplyStatus, MemoryControlState, build_patch_mutation_identity
@@ -31,6 +31,7 @@ from utils.memory import canonical_required_processing as required
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.required_intake import bounded_normalize, result_guard
 from utils.memory.required_source_admission import source_revisions
+from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 
 MARKER = 'required_intake_candidate'
 
@@ -98,10 +99,59 @@ def read_candidate(uid, memory_id, context):
 
 def read_preparation_context(uid):
     client = review_store.client()
+    assert_account_active(uid, None, client)
     control = read_control(uid, client)
     cursor_ref = client.document(f'{MemoryCollections(uid=uid).memory_runs}/dream_required_intake_cursor')
     cursor = cursor_ref.get().to_dict() or None
     return client, control, cursor
+
+
+def assert_owner_active(uid):
+    assert_account_active(uid, None, review_store.client())
+
+
+def read_existing_inventory(uid, generation, *, db_client=None):
+    """Prove bounded canonical coverage; a top-k search cannot prove uniqueness.
+
+    Hidden unprocessed rows are not memories the owner already has. Any
+    inaccessible processed row or an over-cap inventory withholds uniqueness.
+    Positive duplicate decisions can still use fully read semantic neighbors.
+    """
+    client = db_client if db_client is not None else review_store.client()
+    assert_account_active(uid, None, client)
+    keys = []
+    after = None
+    while len(keys) < 101:
+        size = min(40, 101 - len(keys))
+        page = dream_history.history_page(uid, 'memory_items', after=after, limit=size, firestore_client=client)
+        keys.extend(page)
+        if len(page) < size:
+            break
+        after = page[-1]
+    if len(keys) > 100:
+        return {}, False
+    rows = {}
+    complete = True
+    for key in keys:
+        item = read_canonical_memory_item(uid, key, db_client=client, include_inactive=True)
+        if item is None:
+            complete = False
+            continue
+        if (
+            item.account_generation != generation
+            or item.status.value != 'active'
+            or item.processing_state.value != 'processed'
+            or item.source_state.value != 'active'
+        ):
+            continue
+        visible = filter_canonical_default_visible_items(
+            [item], policy=MemoryAccessPolicy.for_omi_chat(archive_capability=False), now=datetime.now(timezone.utc)
+        )
+        if not visible or not candidate_allowed(item) or (item.promotion or {}).get('user_review') is False:
+            complete = False
+            continue
+        rows['memory_items/' + key] = memory_item_to_memorydb(item).model_dump(mode='python')
+    return rows, complete
 
 
 async def prepare(uid, seed, records, limits, source):
@@ -141,6 +191,7 @@ async def prepare(uid, seed, records, limits, source):
     embedding_tokens = 0
     visited = None
     attempted = 0
+    inventory = None
     for item in items:
         if attempted >= policy.BACKLOG_ITEMS_PER_PASS:
             break
@@ -154,10 +205,20 @@ async def prepare(uid, seed, records, limits, source):
         if not text or len(text) > 2000:
             continue
         attempted += 1
-        neighbors = {}
+        if inventory is None:
+            inventory = await run_blocking(
+                db_executor, read_existing_inventory, uid, control.account_generation, db_client=client
+            )
+        all_rows, exhaustive = inventory
+        exhaustive = exhaustive and _bytes({**records, **additions, **all_rows}) <= min(
+            22000, limits.read_bytes // 2 - 2000
+        )
+        neighbors = dict(all_rows) if exhaustive else {}
         complete = True
         chunks = [text[offset : offset + 500] for offset in range(0, len(text), 500)]
-        for mode, query in ((mode, chunk) for chunk in chunks for mode in ('semantic', 'lexical')):
+        searches = [] if exhaustive else [(mode, chunk) for chunk in chunks for mode in ('semantic', 'lexical')]
+        for mode, query in searches:
+            await run_blocking(db_executor, assert_owner_active, uid)
             if mode == 'semantic':
                 embedding_tokens += len(query.encode()) * 6
             page = await source.search(
@@ -177,7 +238,7 @@ async def prepare(uid, seed, records, limits, source):
                     complete = False
                     break
                 neighbors[hit['ref']] = row
-        if not complete or len(neighbors) > 8:
+        if not complete or len(neighbors) > (100 if exhaustive else 8):
             continue
         context = {
             'head_commit_id': control.head_commit_id,
@@ -185,6 +246,7 @@ async def prepare(uid, seed, records, limits, source):
             'source_generation': control.source_generation,
             'dedupe_refs': sorted(neighbors),
             'search_complete': True,
+            'dedupe_complete': exhaustive,
         }
         row = await run_blocking(db_executor, read_candidate, uid, item.memory_id, context)
         if row is None:
@@ -227,6 +289,8 @@ def validate(edit, records, *, authority='dream'):
         raise ValueError('required_intake_cite_all_neighbors')
     if edit.target not in edit.evidence:
         raise ValueError('required_intake_cite_submission')
+    if not edit.other and not candidate.get('dedupe_complete'):
+        raise ValueError('required_intake_dedupe_incomplete')
     if edit.other:
         other = records.get(base_ref(edit.other))
         if edit.other not in candidate['dedupe_refs'] or not other or MARKER in other:

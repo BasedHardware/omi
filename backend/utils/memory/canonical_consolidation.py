@@ -13,6 +13,7 @@ from database.memory_collections import MemoryCollections
 from database.read_boundary import parse_snapshot_strict
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.required_intake_fence import source_scope
+from database import required_intake_cursors
 from models.memory_admission import valid_required_processing_receipt
 from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
@@ -492,6 +493,9 @@ def complete_required_memory_item(uid, item, *, db_client, now, run_id):
         or item.source_state != SourceState.active
         or not audit.get('required')
         or audit.get('processing_status') != 'processed'
+        or audit.get('user_review') is False
+        or audit.get('is_locked')
+        or audit.get('is_dismissed')
         or not valid_required_processing_receipt(
             content=item.content or '', item_revision=item.item_revision, promotion=audit
         )
@@ -512,7 +516,7 @@ def complete_required_memory_item(uid, item, *, db_client, now, run_id):
         confidence='high',
         rationale='Complete receipted durable-required intake',
     )
-    with source_scope(uid, revisions):
+    with source_scope(uid, revisions, completion_id=item.memory_id):
         apply_consolidation_decision(
             uid,
             decision=decision,
@@ -530,14 +534,22 @@ def complete_receipted_required_intake(uid, *, db_client, now, run_id, limit=5):
     report = RequiredIntakeCompletion(uid=uid)
     if limit <= 0:
         return report
-    for item in list_receipted_required_processing_items(uid, db_client=db_client):
+    before, cursor, generation = required_intake_cursors.load(uid, 'completion', db_client=db_client)
+    items = list_receipted_required_processing_items(uid, db_client=db_client, cursor=cursor)
+    if not items and cursor:
+        items = list_receipted_required_processing_items(uid, db_client=db_client)
+    visited = None
+    for item in items:
         if len(report.promoted_memory_ids) + len(report.failed_memory_ids) >= min(limit, 25):
             break
+        visited = {'captured_at': item.captured_at, 'memory_id': item.memory_id}
         try:
             if complete_required_memory_item(uid, item, db_client=db_client, now=now, run_id=run_id):
                 report.promoted_memory_ids.append(item.memory_id)
         except ConsolidationApplySkipped:
             report.failed_memory_ids.append(item.memory_id)
+    if visited is not None or cursor:
+        required_intake_cursors.finish(uid, 'completion', before, visited, generation, db_client=db_client)
     return report
 
 

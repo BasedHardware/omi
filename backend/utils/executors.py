@@ -45,6 +45,13 @@ from config.occasion_conversations import LIFECYCLE_V2_MODE_ENV
 from config.refactor_modes import serving_for
 
 logger = logging.getLogger(__name__)
+_worker_context = threading.local()
+
+
+def in_db_worker() -> bool:
+    """Identify the shared DB pool even for synchronous submissions."""
+    return getattr(_worker_context, 'executor', None) is db_executor
+
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -177,9 +184,12 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
         active.inc()
         with self._active_lock:
             self._active_count += 1
+        prior_executor = getattr(_worker_context, 'executor', None)
+        _worker_context.executor = self
         try:
             return fn(*args, **kwargs)
         finally:
+            _worker_context.executor = prior_executor
             active.dec()
             with self._active_lock:
                 self._active_count -= 1
@@ -297,22 +307,48 @@ def get_rollout_executor() -> MonitoredThreadPoolExecutor:
         return _rollout_executor
 
 
+_after_db = contextvars.ContextVar[list[Callable[[], Coroutine[Any, Any, Any]]] | None]('after_db', default=None)
+
+
+def after_db_call(callback: Callable[[], Coroutine[Any, Any, Any]]) -> bool:
+    """Await post-commit IO in the async caller after its DB worker is released.
+
+    No task is detached. Cancellation leaves durable work for its retry owner.
+    A synchronous caller without a DB offload scope keeps its ordinary path.
+    """
+    callbacks = _after_db.get()
+    if callbacks is None:
+        return False
+    callbacks.append(callback)
+    return True
+
+
 async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """Offload *fn* to *executor*, propagating ContextVars."""
     loop = asyncio.get_running_loop()
+    callbacks: list[Callable[[], Coroutine[Any, Any, Any]]] = []
+    token = _after_db.set(callbacks) if executor is db_executor else None
     ctx = contextvars.copy_context()
     call = functools.partial(ctx.run, functools.partial(fn, *args, **kwargs))
-    while True:
-        try:
-            future = loop.run_in_executor(executor, call)
-            break
-        except ExecutorSaturatedError:
-            if not getattr(executor, 'wait_on_saturation', False):
-                raise
-            # Backpressure stays in the async caller, without occupying another
-            # worker or discarding work. Cancellation before admission is safe.
-            await asyncio.sleep(0.05)
-    return await future
+    try:
+        while True:
+            try:
+                future = loop.run_in_executor(executor, call)
+                break
+            except ExecutorSaturatedError:
+                if not getattr(executor, 'wait_on_saturation', False):
+                    raise
+                # Backpressure stays in the async caller, without occupying another worker.
+                await asyncio.sleep(0.05)
+        result = await future
+    finally:
+        if token is not None:
+            _after_db.reset(token)
+    # The worker has returned before any provider wait. Each callback owns its
+    # deadline/error policy; never start it in a cancelled or failed DB call.
+    for callback in callbacks:
+        await callback()
+    return result
 
 
 def _byok_detail_code(error: BaseException) -> str | None:

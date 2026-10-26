@@ -20,4 +20,6 @@ INSTRUCTIONS = (
     'incomplete leave them pending for the next pass.'
     ' A duplicate survivor must already be Long-term. If only a Short-term neighbor covers the submission, '
     'leave it pending until that neighbor receives its normal canonical disposition.'
+    ' Only dedupe_complete candidates have exhaustive bounded canonical coverage and may be proposed as unique. '
+    'For other candidates only a fully verified existing duplicate may be resolved; leave possible unique items pending.'
 )

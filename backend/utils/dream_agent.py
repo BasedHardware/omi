@@ -218,6 +218,8 @@ async def run_session(
             raise ValueError('dream_disabled')
         if lease is not None:
             await run_blocking(db_executor, dream_store.assert_lease, uid, lease['run_id'])
+        if seed.get('required_intake_candidates'):
+            await run_blocking(db_executor, dream_required_intake.assert_owner_active, uid)
         stage = previous
 
     session.check_active = active
