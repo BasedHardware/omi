@@ -34,13 +34,14 @@ import numpy as np
 import database.speaker_resolution_updates as identity_updates_db
 import database.conversations as conversations_db
 import database.users as users_db
-from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS, chunk_span_bounds
+from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS
 from models.conversation import Conversation, ConversationSpeakers
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from utils.conversations.audio_placement import (
     AudioPlacement,
     PreparedAudioCoverage,
     locate,
+    manifest_inventory as _manifest_inventory,
     prepare_audio_coverage,
     text_window_refusal,
 )
@@ -481,46 +482,6 @@ def _embed_missing(
     if session is not None and time.monotonic() > deadline:
         return embedded, 'budget'
     return embedded, 'complete'
-
-
-def _manifest_inventory(audio_files: Any) -> Optional[List[Tuple[float, Optional[Tuple[float, float]]]]]:
-    """Expected ``(timestamp, span bounds)`` pairs from the manifest, or None when malformed.
-
-    A file without ``chunk_timestamps`` contributes nothing; a file whose
-    ``chunk_spans`` is present must pair one well-formed span per timestamp.
-    """
-    expected: List[Tuple[float, Optional[Tuple[float, float]]]] = []
-    if not isinstance(audio_files, Sequence) or isinstance(audio_files, (str, bytes)):
-        return expected
-    for audio_file in audio_files:
-        if not isinstance(audio_file, Mapping):
-            return None
-        timestamps: Any = audio_file.get('chunk_timestamps')
-        file_spans: Any = audio_file.get('chunk_spans')
-        if not isinstance(timestamps, Sequence) or isinstance(timestamps, (str, bytes)):
-            continue
-        if file_spans is None:
-            file_spans = []
-        elif (
-            not isinstance(file_spans, Sequence)
-            or isinstance(file_spans, (str, bytes))
-            or len(file_spans) != len(timestamps)
-        ):
-            return None
-        for index, timestamp in enumerate(timestamps):
-            try:
-                ts = float(timestamp)
-            except (TypeError, ValueError):
-                return None
-            if not math.isfinite(ts):
-                return None
-            bounds = None
-            if file_spans:
-                bounds = chunk_span_bounds(file_spans[index])
-                if bounds is None:
-                    return None
-            expected.append((ts, bounds))
-    return expected
 
 
 def _finite_number(value: Any) -> Optional[float]:
