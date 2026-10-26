@@ -14,6 +14,8 @@
 
 name: Deploy Backend to Cloud RUN
 
+run-name: Deploy Backend (${{ inputs.environment || github.event_name }} ${{ inputs.mode || github.event_name }}) by ${{ inputs.requested_by || github.actor }}
+
 on:
   workflow_dispatch:
     inputs:
@@ -25,6 +27,10 @@ on:
         options:
           - development
           - prod
+      requested_by:
+        description: 'lane label or session that requested this dispatch (e.g. op1, train:<name>)'
+        required: true
+        type: string
       release_sha:
         description: 'Exact main SHA with a successful Release Eligibility proof (deploy and build-only modes)'
         required: false
@@ -150,6 +156,7 @@ jobs:
           DEPLOY_TARGETS: ${{ github.event.inputs.deploy_targets }}
           WORKFLOW_MODE: ${{ github.event.inputs.mode }}
           SERVICE_IMAGES: ${{ github.event.inputs.service_images }}
+          REQUESTED_BY: ${{ github.event.inputs.requested_by }}
         run: |
           set -euo pipefail
           if [[ "$DEPLOY_ENVIRONMENT" != "development" && "$DEPLOY_ENVIRONMENT" != "prod" ]]; then
@@ -163,6 +170,13 @@ jobs:
           if [[ "$DEPLOY_ENVIRONMENT" == "prod" && "$DEPLOY_TARGETS" == "all" ]]; then
             echo "environment=prod, deploy_targets=all is unsupported; use cloud-run-only." >&2
             exit 1
+          fi
+          if [[ "$DEPLOY_ENVIRONMENT" == "prod" ]]; then
+            if [[ -z "${REQUESTED_BY//[[:space:]]/}" ]]; then
+              echo "::error::prod dispatches must name their requester: pass -f requested_by=<lane label or session> (e.g. op1, train:<name>)."
+              exit 1
+            fi
+            echo "requested_by=${REQUESTED_BY}"
           fi
           if [[ "${{ github.event.inputs.deploy_gateway }}" == "true" && "$DEPLOY_ENVIRONMENT" == "prod" ]]; then
             echo "environment=prod, deploy_gateway=true is unsupported; use the standalone manual LLM gateway workflow." >&2
