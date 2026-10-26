@@ -511,8 +511,9 @@ EMOTION_NOTIFICATION_CONFIG={"notification_enabled":true,"emotion_thresholds":{}
 The `/audio`, `/save-emotion-memory` and `/force-send-notification` routes act
 on a caller-supplied `uid` and write memories into a user's Omi account or push
 notifications to a user. They require a shared secret so only the trusted Omi
-backend can invoke them. Present `HUME_TOOLS_SECRET` either as an
-`Authorization: Bearer <secret>` header or a `hume_tools_token` query parameter.
+backend can invoke them. Present `HUME_TOOLS_SECRET` as either:
+- HTTP header: `Authorization: Bearer <secret>`
+- Query parameter: `hume_tools_token=<secret>`
 Requests without a valid secret are rejected with `401` (or `503` when the
 secret is not configured).
 
