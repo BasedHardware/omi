@@ -14,7 +14,7 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List
 
 
 DONE_WORDS = {"true", "yes", "1", "done", "completed"}
@@ -28,8 +28,6 @@ def strip_surrogates(value: str) -> str:
     the remaining text and lets the note export.
     """
     return value.encode("utf-8", "ignore").decode("utf-8")
-
-
 
 
 def is_completed(value: Any) -> bool:
