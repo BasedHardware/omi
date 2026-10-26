@@ -730,8 +730,11 @@ def assign_in_transaction(
         stamp_fallback_live = False
         excluded = frozenset({refused_id})
         live_id = temporal_live_target(excluded)
-        if live_id:
-            target_id, target, target_hint = live_id, load(live_id), live_id
+        live_target = load(live_id) if live_id else None
+        # The initial temporal path checks capture provenance after selection;
+        # this late selection must cross the same fence before becoming a target.
+        if live_target is not None and capture_mismatch(live_target, incoming, user_ref.id) == 'none':
+            target_id, target, target_hint = live_id, live_target, live_id
             temporal_live = True
         chosen = plan(excluded, chosen.kept)
         stamp_gap_refused = True

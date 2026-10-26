@@ -155,7 +155,18 @@ def test_stamp_gap_reroute_discovers_and_rechecks_live_candidates(monkeypatch, c
     assert all('_sync_lineage_created' not in value for value in client.rows.values())
 
 
-def test_stamp_gap_reroute_can_adopt_discovered_live_content(monkeypatch, caplog):
+@pytest.mark.parametrize('provenance_matches', [False, True])
+def test_stamp_gap_reroute_can_adopt_discovered_live_content(monkeypatch, caplog, provenance_matches):
+    from utils.sync import assignment
+
+    capture_mismatch = assignment.capture_mismatch
+
+    def mismatch(row, incoming, uid=None):
+        if row['id'] == 'live' and not provenance_matches:
+            return 'capture_key'
+        return capture_mismatch(row, incoming, uid)
+
+    monkeypatch.setattr(assignment, 'capture_mismatch', mismatch)
     client = StrictFirestore()
     stamp = dict(chunk('stamp', 0), data_protection_level='standard')
     client.rows[('users', 'u', 'conversations', 'stamp')] = deepcopy(stamp)
@@ -168,9 +179,11 @@ def test_stamp_gap_reroute_can_adopt_discovered_live_content(monkeypatch, caplog
             target_id='stamp',
             incoming=dict(chunk('wal', 1000), _sync_lineage_binding='stamp_fallback'),
         )
-    assert not created and row['id'] == 'live' and row['_sync_lineage_stamp_gap_refused'] is True
+    assert created is not provenance_matches
+    assert row['id'] == ('live' if provenance_matches else 'wal')
+    assert row['_sync_lineage_stamp_gap_refused'] is True
     assert client.rows[('users', 'u', 'conversations', 'stamp')] == stamp
-    assert not observations(caplog)
+    assert len(observations(caplog)) == (0 if provenance_matches else 1)
 
 
 @pytest.mark.parametrize('reason', ['lookup_failed', 'page_cap'])
