@@ -22,14 +22,20 @@ def _configured_secret() -> Optional[str]:
 
 
 def _presented_token(request: Request) -> Optional[str]:
-    auth = request.headers.get("Authorization")
-    if auth:
-        scheme, _, credentials = auth.partition(" ")
-        if scheme.lower() == "bearer" and credentials.strip():
-            return credentials.strip()
-    query_token = request.query_params.get(_QUERY_TOKEN_PARAM)
-    if query_token and query_token.strip():
-        return query_token.strip()
+    if request is None:
+        return None
+    headers = getattr(request, "headers", None)
+    if headers and hasattr(headers, "get"):
+        auth = headers.get("Authorization")
+        if auth:
+            scheme, _, credentials = auth.partition(" ")
+            if scheme.lower() == "bearer" and credentials.strip():
+                return credentials.strip()
+    query_params = getattr(request, "query_params", None)
+    if query_params and hasattr(query_params, "get"):
+        query_token = query_params.get(_QUERY_TOKEN_PARAM)
+        if query_token and query_token.strip():
+            return query_token.strip()
     return None
 
 
@@ -39,7 +45,15 @@ def _verify(request: Request) -> None:
         raise HTTPException(status_code=503, detail="iq rating auth is not configured")
 
     token = _presented_token(request)
-    if not token or not hmac.compare_digest(token, secret):
+    if not token:
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    try:
+        valid = hmac.compare_digest(token.encode("utf-8"), secret.encode("utf-8"))
+    except Exception:
+        valid = False
+
+    if not valid:
         raise HTTPException(status_code=401, detail="unauthorized")
 
 

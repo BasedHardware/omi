@@ -103,6 +103,10 @@ sys.modules["iq_rating_main"] = main
 spec.loader.exec_module(main)
 
 
+def load_app():
+    return main
+
+
 class TestIqRatingExceptionGuards(unittest.TestCase):
 
     @patch.object(main.requests, "post", create=True)
@@ -355,15 +359,17 @@ class IQRatingCalculateAITests(unittest.TestCase):
         )
 
 
-if __name__ == "__main__":
-    unittest.main()
+class _DummyRequest:
+    def __init__(self, query_params=None, headers=None):
+        self.query_params = query_params or {}
+        self.headers = headers or {}
 
 
 class TestIqRatingHtmlAndApiExceptionMasking(unittest.TestCase):
     def test_iq_rating_page_masks_exception_in_html(self):
         import asyncio
         with patch.object(main, "get_people_for_user", side_effect=RuntimeError("sensitive database leak: /var/data/sqlite.db")):
-            response = asyncio.run(main.iq_rating_page(uid="test_user"))
+            response = asyncio.run(main.iq_rating_page(request=_DummyRequest(), uid="test_user"))
             html_content = getattr(response, "body", None)
             if html_content is None:
                 html_content = getattr(response, "content", "")
@@ -376,7 +382,11 @@ class TestIqRatingHtmlAndApiExceptionMasking(unittest.TestCase):
         import asyncio
         with patch.object(main, "get_people_for_user", side_effect=RuntimeError("sensitive sql error")):
             with self.assertRaises(main.HTTPException) as ctx:
-                asyncio.run(main.iq_rating_api(uid="test_user"))
+                asyncio.run(main.iq_rating_api(request=_DummyRequest(), uid="test_user"))
             self.assertEqual(ctx.exception.status_code, 500)
             self.assertEqual(ctx.exception.detail, "Internal server error processing IQ ratings")
             self.assertNotIn("sensitive sql error", ctx.exception.detail)
+
+
+if __name__ == "__main__":
+    unittest.main()

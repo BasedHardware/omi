@@ -99,6 +99,18 @@ class AuthHelperTest(unittest.TestCase):
         req = FakeRequest(query_params={"iq_rating_token": "test-secret"})
         self.assertEqual(iq_auth.require_iq_auth_if_uid(req, uid="victim"), "victim")
 
+    def test_non_ascii_bearer_token_returns_401(self):
+        req = FakeRequest(authorization="Bearer café", query_params={"uid": "u1"})
+        with self.assertRaises(HTTPException) as ctx:
+            iq_auth.require_iq_auth(req, uid="u1")
+        self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_non_ascii_query_token_returns_401(self):
+        req = FakeRequest(query_params={"uid": "u1", "iq_rating_token": "café"})
+        with self.assertRaises(HTTPException) as ctx:
+            iq_auth.require_iq_auth(req, uid="u1")
+        self.assertEqual(ctx.exception.status_code, 401)
+
 
 class RouteWiringTest(unittest.TestCase):
     """Static check: every uid-keyed iq-rating data route declares the auth dep."""
@@ -203,6 +215,8 @@ class RenderPathTest(unittest.TestCase):
         # 2. Assert no entity corruption (&quot;) and JSON parses directly to a list
         raw_people_content = people_match.group(1)
         self.assertNotIn("&quot;", raw_people_content)
+        self.assertNotIn("<", raw_people_content)
+        self.assertIn(r"\u003c", raw_people_content)
 
         parsed_people = json.loads(raw_people_content)
         self.assertIsInstance(
@@ -214,6 +228,18 @@ class RenderPathTest(unittest.TestCase):
 
         # 3. Assert shareResults removes token
         self.assertIn("searchParams.delete('iq_rating_token')", html)
+
+    def test_json_data_island_escapes_less_than_completely(self):
+        dangerous = {"payload": "</script><script>alert('xss')</script><!--comment-->"}
+        island = main._json_data_island("test-island", dangerous)
+        # Inside the island content (between opening and closing tag), no '<' should exist
+        inner = island[island.find(">") + 1 : island.rfind("<")]
+        self.assertNotIn("<", inner)
+        self.assertNotIn("</script>", inner)
+        self.assertNotIn("<!--", inner)
+        self.assertIn(r"\u003c", inner)
+        # json.loads / JSON.parse recovers the identical object
+        self.assertEqual(json.loads(inner), dangerous)
 
 
 if __name__ == "__main__":

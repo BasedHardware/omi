@@ -43,10 +43,10 @@ def _json_data_island(field: str, value) -> str:
     Inside a <script type="application/json"> element (HTML raw-text element),
     browsers do not decode HTML entities like &quot;. To prevent script breakout
     or premature element closing while preserving valid JSON for JSON.parse,
-    we serialize with json.dumps and escape only '</' sequences to prevent '</script>'.
+    we serialize with json.dumps and replace '<' with '\\u003c'.
     """
     payload = json.dumps(value)
-    safe_payload = payload.replace("</", r"<\/")
+    safe_payload = payload.replace("<", r"\u003c")
     return f'<script type="application/json" id="{field}">{safe_payload}</script>'
 
 # Setup logging
@@ -1758,7 +1758,7 @@ async def root():
 
 @router.get("/iq", response_class=HTMLResponse)
 async def iq_rating_page(
-    request: Request,
+    request: Request = None,
     uid: Optional[str] = Depends(require_iq_auth_if_uid),
 ):
     """IQ Rating page."""
@@ -1792,7 +1792,7 @@ async def iq_rating_page(
             return HTMLResponse(content=html)
         
         # Generate page with people data
-        token = request.query_params.get("iq_rating_token")
+        token = request.query_params.get("iq_rating_token") if (request and hasattr(request, "query_params")) else None
         token_param = f"iq_rating_token={token}&" if token else ""
 
         uid_island = _json_data_island("iq-data-uid", uid)
@@ -1817,7 +1817,7 @@ async def iq_rating_page(
 
 @router.get("/iq/api")
 async def iq_rating_api(
-    request: Request,
+    request: Request = None,
     uid: str = Depends(require_iq_auth),
 ):
     """API endpoint to get IQ ratings as JSON."""
