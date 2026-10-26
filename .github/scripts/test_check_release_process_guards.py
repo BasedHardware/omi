@@ -333,11 +333,15 @@ def test_android_internal_alpha_promotion_uses_exact_build_and_held_api_commit()
 
     assert publisher["google_play"]["track"] == "internal"
     assert publisher["google_play"]["changes_not_sent_for_review"] is True
+    assert publisher["google_play"]["release_name"] == "$BUILD_NAME [$CM_BUILD_ID]"
     assert "release_promotion" not in publisher["google_play"]
 
     build_script = workflow["scripts"][-1]["script"]
     assert build_script.index("flutter build appbundle") < build_script.index(".omi-android-prod-internal-build-identity")
-    assert "printf '%s\\n%s\\n' \"$BUILD_NAME\" \"$BUILD_NUMBER\"" in build_script
+    assert 'echo "BUILD_NAME=$BUILD_NAME" >> "$CM_ENV"' in build_script
+    assert 'echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$CM_ENV"' in build_script
+    assert "printf '%s\\n%s\\n%s\\n' \"$BUILD_NAME\" \"$BUILD_NUMBER\"" in build_script
+    assert '"${CM_BUILD_ID:?CM_BUILD_ID is required}"' in build_script
     assert ".omi-android-prod-internal-build-identity\"\n" in workflow["scripts"][0]["script"]
 
     post_publish = publisher["scripts"]
@@ -348,6 +352,7 @@ def test_android_internal_alpha_promotion_uses_exact_build_and_held_api_commit()
     assert "--platform android" in promotion_script
     assert "--version \"${PROMOTE_BUILD_NAME:?missing Android build name}\"" in promotion_script
     assert "--android-build \"${PROMOTE_BUILD_NUMBER:?missing Android build number}\"" in promotion_script
+    assert "--build-id \"${PROMOTE_BUILD_ID:?missing Codemagic build ID}\"" in promotion_script
 
 
 def _mobile_trigger_errors_after(tmp_path: Path, monkeypatch, old: str, new: str) -> list[str]:

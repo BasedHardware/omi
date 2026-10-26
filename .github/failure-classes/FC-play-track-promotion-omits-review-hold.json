@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "id": "FC-play-track-promotion-omits-review-hold",
-  "violated_contract": "Every automated Google Play track promotion must commit with changesNotSentForReview=true when automated review submission is disabled. Codemagic's internal-to-alpha promotion creates a separate edit commit, so the initial internal-publish hold does not cover it.",
-  "canonical_prevention": "Promote the exact completed internal build through the Google Play API, validate its version name and code, and commit the alpha edit with the shared changesNotSentForReview setting. Keep a workflow regression test and inspect every Play edit commit path.",
+  "violated_contract": "Every automated Google Play track promotion must commit with changesNotSentForReview=true when automated review submission is disabled. Codemagic's internal-to-alpha promotion creates a separate Play edit commit, so the initial internal-publish hold does not cover it; a post-publish script must also distinguish this build from a duplicate run with the same version and code.",
+  "canonical_prevention": "Name the internal release with its Codemagic build UUID, promote only that exact completed version/code/run through the Google Play API, preserve unrelated alpha releases, and commit with the shared changesNotSentForReview setting. Keep workflow and API regression tests, and inspect every Play edit commit path.",
   "canonical_prevention_artifact": [
     "codemagic.yaml",
     "app/scripts/mobile_store_promote.py",

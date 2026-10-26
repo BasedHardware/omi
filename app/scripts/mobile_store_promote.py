@@ -19,6 +19,7 @@ APP_ID = "6502156163"
 PACKAGE_NAME = "com.friend.ios"
 VERSION_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 BUILD_RE = re.compile(r"^[1-9][0-9]*$")
+BUILD_ID_RE = re.compile(r"^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$")
 # Play currently rejects this app's automated review submission ("Changes
 # cannot be sent for review automatically"), so every commit holds its
 # changes for the Play Console -> Publishing overview -> Send for review
@@ -63,6 +64,12 @@ def require_build(value: str | None, label: str) -> str:
     if value is None or not BUILD_RE.fullmatch(value):
         raise PromotionError(f"{label} must be a positive integer")
     return value
+
+
+def require_build_id(value: str | None, label: str = "CM_BUILD_ID") -> str:
+    if value is None or not BUILD_ID_RE.fullmatch(value):
+        raise PromotionError(f"{label} must be a UUID")
+    return value.lower()
 
 
 def require_notes(path: Path, version: str, platform: str) -> str:
@@ -345,7 +352,8 @@ def select_play_release(
 
 
 PRODUCTION_NAME_VERSION_RE = re.compile(
-    r"^\s*((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))(?:\s*\(.*\))?\s*$"
+    r"^\s*((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))"
+    r"(?:\s*\(.*\)|\s*\[[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\])?\s*$"
 )
 
 
@@ -353,8 +361,9 @@ def production_release_version(name: str) -> str | None:
     """Return the X.Y.Z a Play production release name carries, if any.
 
     Play Console labels a production release by its build name and may suffix the
-    version code ("1.0.552 (1246)"); older or hand-named releases may carry no
-    version at all. Only a recognised version participates in the ordering check.
+    version code ("1.0.552 (1246)"). Codemagic internal releases suffix their
+    build UUID in brackets. Older or hand-named releases may carry no version at
+    all; only a recognised version participates in the ordering check.
     """
     match = PRODUCTION_NAME_VERSION_RE.fullmatch(name)
     return match.group(1) if match else None
@@ -386,10 +395,14 @@ def play_track(client: object, edit_id: str, track: str) -> object:
         raise PromotionError(f"Google Play {track} track lookup failed") from exc
 
 
-def promote_internal_android_to_alpha(client: object, edit_id: str, version: str, build_number: str) -> None:
-    """Promote only the completed internal release for this exact build to alpha."""
+def promote_internal_android_to_alpha(
+    client: object, edit_id: str, version: str, build_number: str, build_id: str
+) -> None:
+    """Promote only this Codemagic run's completed internal release to alpha."""
     version_parts(version)
     build_number = require_build(build_number, "BUILD_NUMBER")
+    build_id = require_build_id(build_id)
+    expected_name = f"{version} [{build_id}]"
     try:
         internal = play_track(client, edit_id, "internal")
         alpha = play_track(client, edit_id, "alpha")
@@ -411,41 +424,52 @@ def promote_internal_android_to_alpha(client: object, edit_id: str, version: str
             name = release.get("name")
             if (
                 codes != [build_number]
-                or not isinstance(name, str)
-                or production_release_version(name) != version
+                or name != expected_name
                 or release.get("status") != "completed"
             ):
-                raise PromotionError("Play internal build does not match the exact completed version and code")
+                raise PromotionError("Play internal release does not match this exact completed build")
             matches.append(release)
         if len(matches) != 1:
-            raise PromotionError("Play internal track has no unique matching build")
+            raise PromotionError("Play internal track has no unique release for this Codemagic build")
+
+        alpha_releases = alpha.get("releases", [])
+        if not isinstance(alpha_releases, list):
+            raise PromotionError("Google Play alpha track releases are invalid")
+        expected_releases: list[dict[str, object]] = []
+        matching_alpha_releases = 0
+        for release in alpha_releases:
+            if not isinstance(release, dict):
+                raise PromotionError("Google Play alpha release is invalid")
+            codes = release_codes(release)
+            if build_number not in codes:
+                expected_releases.append(dict(release))
+                continue
+            if (
+                codes != [build_number]
+                or release.get("name") != expected_name
+                or release.get("status") != "completed"
+            ):
+                raise PromotionError("Play alpha already contains a conflicting release for this build")
+            matching_alpha_releases += 1
+            if matching_alpha_releases > 1:
+                raise PromotionError("Play alpha contains duplicate releases for this Codemagic build")
 
         promoted_release = dict(matches[0])
         promoted_release["status"] = "completed"
         promoted_release.pop("userFraction", None)
-        body = {"track": "alpha", "releases": [promoted_release]}
+        expected_releases.append(promoted_release)
         updated = client.edits().tracks().update(
             packageName=PACKAGE_NAME,
             editId=edit_id,
             track="alpha",
-            body=body,
+            body={"track": "alpha", "releases": expected_releases},
         ).execute()
-        updated_releases = updated.get("releases") if isinstance(updated, dict) else None
-        updated_release = (
-            updated_releases[0]
-            if isinstance(updated_releases, list) and len(updated_releases) == 1
-            else None
-        )
         if (
             not isinstance(updated, dict)
             or updated.get("track") != "alpha"
-            or not isinstance(updated_release, dict)
-            or release_codes(updated_release) != [build_number]
-            or updated_release.get("name") != matches[0].get("name")
-            or updated_release.get("status") != "completed"
-            or "userFraction" in updated_release
+            or updated.get("releases") != expected_releases
         ):
-            raise PromotionError("Play alpha update response did not match the exact promoted release")
+            raise PromotionError("Play alpha update response did not preserve releases and match this build")
         client.edits().commit(
             packageName=PACKAGE_NAME,
             editId=edit_id,
@@ -569,14 +593,16 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     parser.add_argument("--ios-build")
     parser.add_argument("--android-build")
+    parser.add_argument("--build-id")
     args = parser.parse_args()
     try:
         if args.confirm == "promote-internal-to-alpha":
             if args.platform != "android" or args.ios_build:
                 raise PromotionError("internal-to-alpha promotion requires Android only")
             build_number = require_build(args.android_build, "BUILD_NUMBER")
+            build_id = require_build_id(args.build_id)
             client, edit_id = play_edit()
-            promote_internal_android_to_alpha(client, edit_id, args.version, build_number)
+            promote_internal_android_to_alpha(client, edit_id, args.version, build_number, build_id)
             print(f"Promoted Android {args.version} ({build_number}) from internal to alpha; held for review submission")
             return 0
         if args.confirm != "submit-for-review":

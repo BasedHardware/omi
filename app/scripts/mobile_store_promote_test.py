@@ -18,6 +18,7 @@ _SPEC = importlib.util.spec_from_file_location(
 promote = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = promote
 _SPEC.loader.exec_module(promote)
+BUILD_ID = "00000000-0000-4000-8000-000000000001"
 
 
 class InputTests(unittest.TestCase):
@@ -65,12 +66,14 @@ class InputTests(unittest.TestCase):
             "1.2.3",
             "--android-build",
             "23",
+            "--build-id",
+            BUILD_ID,
         ]
         with patch.object(sys, "argv", args), patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
             promote, "promote_internal_android_to_alpha"
         ) as run_promotion:
             self.assertEqual(promote.main(), 0)
-        run_promotion.assert_called_once_with(client, "edit", "1.2.3", "23")
+        run_promotion.assert_called_once_with(client, "edit", "1.2.3", "23", BUILD_ID)
 
 
 class IOSChecks(unittest.TestCase):
@@ -273,35 +276,43 @@ class AndroidChecks(unittest.TestCase):
     def test_production_release_version_parses_play_console_names(self) -> None:
         self.assertEqual(promote.production_release_version("1.0.552"), "1.0.552")
         self.assertEqual(promote.production_release_version("1.0.552 (1246)"), "1.0.552")
+        self.assertEqual(promote.production_release_version(f"1.0.552 [{BUILD_ID}]"), "1.0.552")
         self.assertIsNone(promote.production_release_version("not-a-version"))
         self.assertIsNone(promote.production_release_version("1.0"))
 
     def test_internal_to_alpha_promotes_only_exact_completed_build_and_holds_commit(self):
         client = Mock()
         internal_release = {
-            "name": "1.2.3 (23)",
+            "name": f"1.2.3 [{BUILD_ID}]",
             "versionCodes": ["23"],
             "status": "completed",
             "releaseNotes": [{"language": "en-US", "text": "Release"}],
             "inAppUpdatePriority": 3,
         }
+        existing_alpha = [
+            {"name": "1.2.2", "versionCodes": ["22"], "status": "completed"},
+            {"name": "1.2.1", "versionCodes": ["21"], "status": "inProgress", "userFraction": 0.1},
+        ]
         client.edits().tracks().update.return_value.execute.return_value = {
             "track": "alpha",
-            "releases": [internal_release],
+            "releases": [*existing_alpha, internal_release],
         }
         with patch.object(
             promote,
             "play_track",
-            side_effect=[{"track": "internal", "releases": [internal_release]}, {"track": "alpha", "releases": []}],
+            side_effect=[
+                {"track": "internal", "releases": [internal_release]},
+                {"track": "alpha", "releases": existing_alpha},
+            ],
         ) as lookup:
-            promote.promote_internal_android_to_alpha(client, "edit-id", "1.2.3", "23")
+            promote.promote_internal_android_to_alpha(client, "edit-id", "1.2.3", "23", BUILD_ID)
 
         lookup.assert_has_calls([call(client, "edit-id", "internal"), call(client, "edit-id", "alpha")])
         client.edits().tracks().update.assert_called_once_with(
             packageName="com.friend.ios",
             editId="edit-id",
             track="alpha",
-            body={"track": "alpha", "releases": [internal_release]},
+            body={"track": "alpha", "releases": [*existing_alpha, internal_release]},
         )
         client.edits().commit.assert_called_once_with(
             packageName="com.friend.ios", editId="edit-id", changesNotSentForReview=True
@@ -314,15 +325,53 @@ class AndroidChecks(unittest.TestCase):
             promote,
             "play_track",
             side_effect=[
-                {"track": "internal", "releases": [{"name": "1.2.4 (23)", "versionCodes": ["23"], "status": "completed"}]},
+                {
+                    "track": "internal",
+                    "releases": [{"name": f"1.2.4 [{BUILD_ID}]", "versionCodes": ["23"], "status": "completed"}],
+                },
                 {"track": "alpha", "releases": []},
             ],
         ):
-            with self.assertRaisesRegex(promote.PromotionError, "exact completed version and code"):
-                promote.promote_internal_android_to_alpha(client, "edit-id", "1.2.3", "23")
+            with self.assertRaisesRegex(promote.PromotionError, "this exact completed build"):
+                promote.promote_internal_android_to_alpha(client, "edit-id", "1.2.3", "23", BUILD_ID)
         client.edits().tracks().update.assert_not_called()
         client.edits().commit.assert_not_called()
         client.edits().delete.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
+
+    def test_internal_to_alpha_refuses_another_run_with_same_version_and_code(self):
+        client = Mock()
+        other_build_id = "00000000-0000-4000-8000-000000000002"
+        with patch.object(
+            promote,
+            "play_track",
+            side_effect=[
+                {
+                    "track": "internal",
+                    "releases": [{"name": f"1.2.3 [{other_build_id}]", "versionCodes": ["23"], "status": "completed"}],
+                },
+                {"track": "alpha", "releases": []},
+            ],
+        ):
+            with self.assertRaisesRegex(promote.PromotionError, "this exact completed build"):
+                promote.promote_internal_android_to_alpha(client, "edit-id", "1.2.3", "23", BUILD_ID)
+        client.edits().tracks().update.assert_not_called()
+        client.edits().commit.assert_not_called()
+
+    def test_internal_to_alpha_rejects_duplicate_existing_target_releases(self):
+        client = Mock()
+        target = {"name": f"1.2.3 [{BUILD_ID}]", "versionCodes": ["23"], "status": "completed"}
+        with patch.object(
+            promote,
+            "play_track",
+            side_effect=[
+                {"track": "internal", "releases": [target]},
+                {"track": "alpha", "releases": [target, target]},
+            ],
+        ):
+            with self.assertRaisesRegex(promote.PromotionError, "duplicate releases"):
+                promote.promote_internal_android_to_alpha(client, "edit-id", "1.2.3", "23", BUILD_ID)
+        client.edits().tracks().update.assert_not_called()
+        client.edits().commit.assert_not_called()
 
     def test_internal_to_alpha_rejects_malformed_update_response_without_commit(self):
         client = Mock()
@@ -331,12 +380,15 @@ class AndroidChecks(unittest.TestCase):
             promote,
             "play_track",
             side_effect=[
-                {"track": "internal", "releases": [{"name": "1.2.3 (23)", "versionCodes": ["23"], "status": "completed"}]},
+                {
+                    "track": "internal",
+                    "releases": [{"name": f"1.2.3 [{BUILD_ID}]", "versionCodes": ["23"], "status": "completed"}],
+                },
                 {"track": "alpha", "releases": []},
             ],
         ):
-            with self.assertRaisesRegex(promote.PromotionError, "update response"):
-                promote.promote_internal_android_to_alpha(client, "edit-id", "1.2.3", "23")
+            with self.assertRaisesRegex(promote.PromotionError, "preserve releases"):
+                promote.promote_internal_android_to_alpha(client, "edit-id", "1.2.3", "23", BUILD_ID)
         client.edits().commit.assert_not_called()
 
     def test_promotion_updates_only_production_using_existing_code_and_derived_notes(self):
