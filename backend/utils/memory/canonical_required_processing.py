@@ -19,7 +19,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Literal, Optional, cast
 
 from google.cloud.firestore_v1 import FieldFilter, transactional
-from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from database._client import db as default_db_client
@@ -587,6 +586,8 @@ def list_receipted_required_processing_items(uid, *, db_client, limit=100, curso
 
 
 def invoke_required_memory_processor(item: MemoryItem, llm: Any) -> ProcessedRequiredMemory:
+    from langchain_core.output_parsers import PydanticOutputParser
+
     parser = PydanticOutputParser(pydantic_object=ProcessedRequiredMemory)
     provenance = dict((item.promotion or {}).get("submission") or {})
     source_attribution = dict((item.promotion or {}).get("source_attribution") or {})

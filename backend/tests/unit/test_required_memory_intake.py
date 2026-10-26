@@ -833,11 +833,14 @@ def test_source_quote_admission_requires_owner_anchor_and_revision(monkeypatch):
     guest = {'id': 'guest', 'text': 'I prefer coffee', 'start': 3, 'end': 5, 'speaker_id': 1, 'is_user': False}
     source = {'transcript_segments': [owner, guest]}
     monkeypatch.setattr(admission, 'serving_for', lambda *a: True)
-    monkeypatch.setattr(admission.conversations, 'prepare_conversation_for_read', lambda *a, **k: source)
-    monkeypatch.setattr(admission, 'exclude_from_derived', lambda *a, **k: False)
+    from database import conversations
+    from utils.conversations import relevance_content, relevance_media_metrics
+
+    monkeypatch.setattr(conversations, 'prepare_conversation_for_read', lambda *a, **k: source)
+    monkeypatch.setattr(relevance_content, 'exclude_from_derived', lambda *a, **k: False)
     counts = []
     monkeypatch.setattr(
-        admission.relevance_media_metrics, 'observe_owner_memory_admission', lambda *a: counts.append(a), raising=False
+        relevance_media_metrics, 'observe_owner_memory_admission', lambda *a: counts.append(a), raising=False
     )
     snapshot = SimpleNamespace(update_time=NOW, to_dict=lambda: source)
     client = SimpleNamespace(document=lambda path: SimpleNamespace(get=lambda: snapshot))

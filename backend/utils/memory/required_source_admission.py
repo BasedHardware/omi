@@ -8,12 +8,7 @@ and original canonical item are retained when attribution is unavailable.
 import re
 
 from config.refactor_modes import serving_for
-from database import conversations
-from database.conversation_revisions import firestore_revision_datetime
 from database.required_intake_fence import assert_account_active
-from models.transcript_segment import TranscriptSegment
-from utils.conversations import owner_attribution, relevance_media_metrics
-from utils.conversations.relevance_content import exclude_from_derived
 
 
 def _normalized(text):
@@ -30,6 +25,12 @@ def source_revisions(uid, item, *, db_client):
         return {}
     if len(audio) > 4:
         return None
+    from database import conversations
+    from database.conversation_revisions import firestore_revision_datetime
+    from models.transcript_segment import TranscriptSegment
+    from utils.conversations import owner_attribution, relevance_media_metrics
+    from utils.conversations.relevance_content import exclude_from_derived
+
     revisions = {}
     for evidence in audio:
         source_id = evidence.conversation_id or evidence.source_id

@@ -21,10 +21,7 @@ from database.required_intake_fence import source_scope, assert_account_active, 
 from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItem
 from utils.executors import db_executor, llm_executor, run_blocking, ExecutorSaturatedError, after_db_call, in_db_worker
-from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_llm
-from utils.llm.usage_tracker import track_usage
 from utils.memory import canonical_required_processing as required
-from utils.memory.required_source_admission import source_revisions
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -32,6 +29,13 @@ _capture_deadline = ContextVar[float | None]('required_intake_capture_deadline',
 _capture_views = ContextVar[dict[tuple[str, str], list[tuple[Any, Callable[[str], None]]]] | None](
     'required_intake_views', default=None
 )
+
+
+def source_revisions(uid, item, *, db_client):
+    # Canonical readers import this hook too; source/model work is write-only.
+    from utils.memory.required_source_admission import source_revisions as admit
+
+    return admit(uid, item, db_client=db_client)
 
 
 @contextmanager
@@ -46,6 +50,9 @@ def capture_budget():
 
 
 def normalize(item, *, request_timeout=policy.INLINE_TIMEOUT_SECONDS):
+    from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_llm
+    from utils.llm.usage_tracker import track_usage
+
     # Explicit Flex route: one attempt, no Standard/on-demand fallback.
     try:
         llm = get_or_create_omi_gateway_llm(
