@@ -151,7 +151,14 @@ def classify(row: dict, evidence: Evidence) -> str:
     if not set(PAYLOAD_FIELDS).issubset(payload) or set(payload) - set(PAYLOAD_FIELDS + OPTIONAL_FIELDS):
         return 'payload_invalid'
     uid, content = payload.get('uid'), payload.get('content_id')
-    if not all(isinstance(v, str) and v and '/' not in v for v in (uid, content)):
+    if (
+        not isinstance(uid, str)
+        or not uid
+        or '/' in uid
+        or not isinstance(content, str)
+        or not content
+        or '/' in content
+    ):
         return 'payload_invalid'
     if payload['job_id'] != row['job_id'] or any(key.get(k) and key[k] != payload[k] for k in ('uid', 'content_id')):
         return 'identity_conflict'
@@ -175,6 +182,8 @@ def classify(row: dict, evidence: Evidence) -> str:
         return 'ledger_completed'
     marker = ledger.get('openloop_redrive') or {}
     if marker:
+        if marker.get('state') not in ('prepared', 'dispatched'):
+            return 'operation_conflict'
         if marker.get('key') != operation_key(row, content):
             return 'operation_conflict'
         if marker.get('state') == 'dispatched':
@@ -241,7 +250,7 @@ def select_population(rows: list[dict], population: str, limit: int) -> list[dic
     return [row for row in rows if row.get('population') == population][:limit]
 
 
-def serving_commits_valid(commits: dict[str, list[str]], contains_fix: Any) -> bool:
+def serving_commits_valid(commits: dict[str, list[Any]], contains_fix: Any) -> bool:
     return set(commits) == set(SERVICES) and all(
         revisions and all(isinstance(sha, str) and len(sha) == 40 and contains_fix(sha) for sha in revisions)
         for revisions in commits.values()

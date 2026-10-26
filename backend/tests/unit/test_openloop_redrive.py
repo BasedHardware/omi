@@ -125,6 +125,8 @@ def test_existing_completion_or_operator_dispatch_is_noop(candidate):
     evidence.ledger['status'] = 'retryable'
     evidence.ledger['openloop_redrive'] = {'key': operation_key(row, 'content'), 'state': 'dispatched'}
     assert classify(row, evidence) == 'already_dispatched'
+    evidence.ledger['openloop_redrive']['state'] = 'unknown'
+    assert classify(row, evidence) == 'operation_conflict'
 
 
 def test_population_limit_is_explicit_and_deterministic():
@@ -249,6 +251,7 @@ def test_dry_run_never_obtains_mutation_authority(candidate, monkeypatch, tmp_pa
     reader = Mock()
     reader.run_metadata.return_value = {service: ['a' * 40] for service in SERVICES}
     reader.inspect.return_value = evidence
+    monkeypatch.setattr(operator, 'contains_fix', lambda sha: True)
     monkeypatch.setattr(operator, 'ReadInventory', Mock(return_value=reader))
     mutate = Mock(side_effect=AssertionError('dry run obtained writer'))
     monkeypatch.setattr(operator, 'apply_one', mutate)
@@ -396,3 +399,18 @@ def test_missing_payload_outputs_explicit_per_field_unavailability(candidate):
     assert record['status'] == 'blocked'
     for field in ('content_id', 'partial_result', 'processed_segment_ids', 'filenames', 'source', 'lane', 'language'):
         assert record['field_sources'][field] == 'unavailable'
+
+
+def test_apply_refusal_records_job_and_exits_nonzero_before_next_canary(candidate, monkeypatch, tmp_path):
+    row, evidence = candidate
+    reader = Mock()
+    reader.run_metadata.return_value = {service: ['a' * 40] for service in SERVICES}
+    reader.inspect.return_value = evidence
+    monkeypatch.setattr(operator, 'ReadInventory', Mock(return_value=reader))
+    monkeypatch.setattr(operator, 'contains_fix', lambda sha: True)
+    monkeypatch.setattr(operator, 'configure_dispatch', Mock())
+    monkeypatch.setattr(operator, 'apply_one', Mock(return_value='plan_changed'))
+    args = SimpleNamespace(apply=True, population=row['population'], limit=1, runtime_redis=True)
+    history = {'runs': [{'mode': 'dry_run', 'results': [operator.result_record(row, evidence, 'ready')]}]}
+    assert operator.run(args, [row], tmp_path / 'results.json', history) == 2
+    assert history['runs'][-1]['results'][0]['reason'] == 'plan_changed'

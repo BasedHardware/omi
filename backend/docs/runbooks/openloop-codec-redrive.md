@@ -144,8 +144,10 @@ change or apply was attempted. All 1,282 custody and pending records were
 absent; 132 dead-letter records contain metadata only. Ten candidates share a
 UID with a sequencer owner, but none has a matching original active payload.
 No ledger could be joined by the original job ID. The serving-commit guard did
-not verify the whole rollout at census time. These are blockers, not proof that
-the original payload or ledger no longer exists everywhere.
+not verify the whole rollout at census time; a subsequent ro-prod metadata
+check verified the fix on all three services. Payload/checkpoint readiness is
+still blocked. These findings do not prove that the original payload or ledger
+no longer exists everywhere.
 
 For the **four unknown-retention jobs**, the census supplies zero staging or
 archive object names and no matching durable identity was found. Live GCS

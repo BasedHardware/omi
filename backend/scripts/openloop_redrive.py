@@ -567,9 +567,10 @@ def run(args: Any, rows: list[dict], output: Path, history: dict) -> int:
     if args.apply:
         for row in rows:
             # Fresh metadata before each mutation; never reuse a dry-run owner.
-            inventory.preload([row])
-            evidence = inventory.inspect(row)
+            evidence = Evidence(read_failed=True)
             try:
+                inventory.preload([row])
+                evidence = inventory.inspect(row)
                 if not serving_commits_valid(inventory.run_metadata(), contains_fix):
                     raise Blocked('serving_commit_unverified')
                 reason = apply_one(row, evidence, approved[row['job_id']]['evidence_digest'], inventory)
@@ -588,7 +589,8 @@ def run(args: Any, rows: list[dict], output: Path, history: dict) -> int:
     run_result['counts'] = dict(Counter(r['reason'] for r in run_result['results']))
     atomic_private_write(output, history)
     print(json.dumps({'counts': run_result['counts']}))
-    return 0
+    success = {'dispatched', 'already_dispatched', 'ledger_completed'}
+    return 2 if args.apply and any(r['reason'] not in success for r in run_result['results']) else 0
 
 
 if __name__ == '__main__':
