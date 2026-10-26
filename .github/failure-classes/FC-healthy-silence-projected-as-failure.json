@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FC-healthy-silence-projected-as-failure",
+  "violated_contract": "A capture-health phase's presentation must follow its specified meaning. Native quiet (a confirmed audio subscription over silence — the pendant emits packets only when there is sound) is healthy listening; consuming health through a predicate that recognizes only flowing audio leases projects every silent stretch as unverified, freezing the capture clock, withdrawing the Listening claim, and raising a no-audio warning over a working link. Telemetry that maps such phases to unknown likewise hides the state the surfaces actually showed.",
+  "canonical_prevention": "Map every surface from the full native phase contract: a current audio lease or a confirmed-subscription quiet verifies, only waits and exhausted recoveries stop the clock or claim Connecting, and only actionRequired (or an unconfirmed subscription past the island's grace) warns. Pin the mapping with state-machine tests on both sides of the boundary — Dart verifiedAt/system-surface status and the Live Activity notice policy — and keep the telemetry phase vocabulary aligned with the native enum so drift stays observable.",
+  "canonical_prevention_artifact": [
+    "app/test/services/capture/capture_quiet_health_test.dart",
+    "app/test/services/capture/capture_socket_generation_test.dart",
+    "app/ios/test/omi_capture_presentation_test.rb"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/capture/",
+    "app/lib/pages/episodes/",
+    "app/lib/pages/settings/device/",
+    "app/ios/LiveActivity/",
+    "app/ios/BatteryWidget/",
+    "app/lib/services/telemetry/client_telemetry_schema.dart"
+  ],
+  "status": "open"
+}

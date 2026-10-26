@@ -843,6 +843,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "native pendant audio health must remain bounded across quiet, repair, reconnect, and relaunch transitions"
+  - id: ios-capture-presentation
+    command: ["ruby", "app/ios/test/omi_capture_presentation_test.rb"]
+    triggers: ["app/ios/LiveActivity/OmiCapturePresentationPolicy.swift", "app/ios/LiveActivity/OmiCaptureAttributes.swift", "app/ios/LiveActivity/OmiCaptureIntents.swift", "app/ios/BatteryWidget/OmiCaptureLiveActivity.swift", "app/ios/BatteryWidget/Localizable.xcstrings", "app/ios/Runner/LiveActivity/LiveActivityManager.swift", "app/ios/test/omi_capture_presentation_test.rb", "app/ios/Runner.xcodeproj/project.pbxproj", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "the capture Live Activity must warn only on real audio failures (noAudio or unheard past grace) and keep every notice string localized"
   - id: ios-dev-build-configuration
     command: ["ruby", "app/ios/test/omi_dev_build_configuration_test.rb"]
     triggers: ["app/ios/Flutter/devProfile.xcconfig", "app/ios/Flutter/devRelease.xcconfig", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/omi_dev_build_configuration_test.rb", ".github/checks-manifest.yaml"]

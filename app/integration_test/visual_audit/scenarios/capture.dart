@@ -56,6 +56,10 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
 
   @override
   bool get pendantCaptureVerified => true;
+  @override
+  bool get pendantCaptureActionRequired => false;
+  @override
+  bool get pendantReconnectInFlight => false;
 
   /// The outage variant: the pendant streams but the server said transcription cannot run.
   bool get _outage => live == AuditLive.pendantOutage;

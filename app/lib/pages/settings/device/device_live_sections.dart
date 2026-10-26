@@ -104,6 +104,9 @@ class DeviceRightNowGroup extends StatelessWidget {
     this.liveTitle,
     this.liveLength,
     this.liveLengthNow,
+    this.liveSubtitle,
+    this.liveProblem = false,
+    this.onFixProblem,
     this.onOpenLive,
     this.catchingUp,
     this.onOpenCatchingUp,
@@ -114,6 +117,15 @@ class DeviceRightNowGroup extends StatelessWidget {
 
   /// The running length read fresh each second; only the live row re-renders, not the page.
   final String Function(DateTime now)? liveLengthNow;
+
+  /// A fixed subtitle instead of a running length: "Connecting…" while the pendant's
+  /// audio is still being verified, or the failure sentence when [liveProblem] is set.
+  final String? liveSubtitle;
+
+  /// The live row is a failure the reader can act on ([onFixProblem]); no length, no clock.
+  final bool liveProblem;
+  final VoidCallback? onFixProblem;
+
   final VoidCallback? onOpenLive;
 
   final DeviceCatchUpSummary? catchingUp;
@@ -129,6 +141,15 @@ class DeviceRightNowGroup extends StatelessWidget {
         onTap: onOpenLive,
       );
 
+  /// The pendant owes audio: the row names the failure and its tap is the fix.
+  Widget _problemRow() => OmiSettingsRow(
+        key: const Key('device_right_now_no_audio'),
+        leading: Icon(Icons.warning_amber_rounded, color: OmiColors.warning),
+        title: liveTitle!,
+        subtitle: liveSubtitle,
+        onTap: onFixProblem,
+      );
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -137,12 +158,16 @@ class DeviceRightNowGroup extends StatelessWidget {
       header: l10n.deviceRightNow,
       children: [
         if (liveTitle != null)
-          liveLengthNow == null
-              ? _liveRow(l10n.deviceLiveEpisode(liveLength ?? ''))
-              : LiveEpisodeClock(
-                  clock: DateTime.now,
-                  builder: (context, now) => _liveRow(l10n.deviceLiveEpisode(liveLengthNow!(now))),
-                ),
+          liveProblem
+              ? _problemRow()
+              : liveSubtitle != null
+                  ? _liveRow(liveSubtitle!)
+                  : liveLengthNow == null
+                      ? _liveRow(l10n.deviceLiveEpisode(liveLength ?? ''))
+                      : LiveEpisodeClock(
+                          clock: DateTime.now,
+                          builder: (context, now) => _liveRow(l10n.deviceLiveEpisode(liveLengthNow!(now))),
+                        ),
         if (catchingUp != null)
           DeviceCatchingUpCard(
             key: const Key('device_right_now_catching_up'),

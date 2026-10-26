@@ -288,7 +288,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       if (_ingressEvents[deviceId] != event) {
         _ingressEvents[deviceId] = event;
         if (!ClientTelemetrySchema.ingressPhaseMapped(health.phase)) {
-          DebugLogManager.logEvent('capture_ingress_unmapped_phase', {'phase': 'unmapped'});
+          DebugLogManager.logEvent('capture_ingress_unmapped_phase', {'phase': health.phase});
         }
         try {
           ClientTelemetry.instance.observeIngress(
@@ -331,10 +331,12 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       // over, so a later actionable snapshot of a *new* incident may alert.
       state.dismissedIngressGeneration = null;
     }
-    // A new, valid native ingress lease proves recovery independently of STT.
-    // Replaying the same cached lease must not resolve a later BLE episode.
+    // A new, valid native audio lease proves recovery independently of STT.
+    // Replaying the same cached lease must not resolve a later BLE episode, and
+    // a confirmed-subscription quiet cannot resolve a zero-byte dispute: only
+    // audio that actually arrived shows the link delivers.
     if (health != null &&
-        health.verifiedAt(_now()) &&
+        health.audioLeaseValid(_now()) &&
         (previousHealth?.generation != health.generation ||
             health.validUntilMs > (previousHealth?.validUntilMs ?? 0))) {
       _resolveIfActive(deviceId, state, bleIngressOnly: true);

@@ -42,6 +42,7 @@ import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -727,18 +728,51 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       {required DeviceCatchUpLocal local, required bool serverProcessing, required String syncStatus}) {
     final conversations = context.watch<ConversationProvider?>();
     final capture = context.read<CaptureProvider?>();
-    // Only the visible source and running length depend on capture, not its
-    // transcript text, socket state, or BLE/network rate samples.
-    final (source, _) = context.select<CaptureProvider?, (String?, DateTime?)>(
-      (c) => (c?.liveCaptureSource, c?.liveCaptureStartedAt),
+    // Only the visible source, its running length and its audio health depend on
+    // capture, not its transcript text, socket state, or BLE/network rate samples.
+    final (source, _, pendantFailed, pendantVerified, reconnecting) =
+        context.select<CaptureProvider?, (String?, DateTime?, bool, bool, bool)>(
+      (c) => (
+        c?.liveCaptureSource,
+        c?.liveCaptureStartedAt,
+        c?.pendantCaptureActionRequired ?? false,
+        c?.pendantCaptureVerified ?? true,
+        c?.pendantReconnectInFlight ?? false,
+      ),
     );
     final deviceStreaming = source != null && source != 'phone';
     final episodes = _maybeProvider<EpisodeProvider>(context);
     final live = episodes != null && episodes.enabled && deviceStreaming ? episodes.live : null;
     final l10n = context.l10n;
+    // The pendant's own audio health names the row: a confirmed-subscription quiet
+    // is Listening with a running length, a wait shows no length, and an exhausted
+    // recovery is a failure with the one action that can fix it.
+    final noAudio = deviceStreaming && pendantFailed;
+    final connecting = deviceStreaming && !pendantFailed && !pendantVerified;
     return DeviceRightNowGroup(
-      liveTitle: live == null ? null : (live.title.isEmpty ? l10n.episodeListeningNow : live.title),
-      liveLengthNow: live == null || capture == null
+      liveTitle: noAudio
+          ? l10n.captureNoAudioFromPendant
+          : live == null
+              ? null
+              : (live.title.isEmpty ? l10n.episodeListeningNow : live.title),
+      liveSubtitle: noAudio
+          ? l10n.captureNoAudioDetail
+          : connecting
+              ? l10n.captureConnecting
+              : null,
+      liveProblem: noAudio,
+      // No tap while a reconnect runs: the controller ignores one anyway, and the
+      // row saying nothing is quieter than a second teardown racing the first.
+      onFixProblem: noAudio && capture != null && !reconnecting
+          ? () {
+              OmiHaptics.medium();
+              final message = l10n.somethingWentWrong;
+              capture.reconnectRecordingPendant().catchError((Object error) {
+                AppSnackbar.showSnackbar(message);
+              });
+            }
+          : null,
+      liveLengthNow: live == null || capture == null || connecting
           ? null
           : (_) => EpisodePresentation.runningLength(
               EpisodePresentation.elapsed(live, capture, episodes!.now(), anchor: episodes.liveAnchor), l10n),
