@@ -288,7 +288,11 @@ _driver(
 _driver(
     'utils.memory.canonical_required_processing.list_pending_required_processing_items',
     base={'uid': UID},
-    domains={'captured_after': [None, T0]},
+    domains={
+        'captured_after': [None, T0],
+        'captured_before': [None, T0],
+        'cursor': [None, {'captured_at': T0, 'memory_id': 'memory-1'}],
+    },
     neutrals={'limit': LIMIT},
     profile='maintenance-required-processing',
     serving=False,

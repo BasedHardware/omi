@@ -62,6 +62,7 @@ def test_authenticated_off_is_cheap_noop(client, monkeypatch):
         },
     )
     monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: pytest.fail('off read Firestore'))
+    monkeypatch.setattr(dream_agent, 'retry_sweep', AsyncMock())
     monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: pytest.fail('off attempted admission'))
     response = client.post('/v2/dream-agent/sweep', headers={'Authorization': 'Bearer valid'})
     assert response.status_code == 200

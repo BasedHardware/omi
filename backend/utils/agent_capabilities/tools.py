@@ -34,6 +34,7 @@ from utils.agent_capabilities import change_view as dream_change_view
 from utils.agent_capabilities import cleanup_edits as dream_cleanup_edits
 from utils.review_projection import sync_transcript_chunks
 from database.legal_holds import DestructiveOperationInProgress
+from utils import dream_required_intake
 
 logger = logging.getLogger(__name__)
 
@@ -245,6 +246,8 @@ def answer_spelling(uid, source, value):
 def proposal_record(uid, ref, snapshot):
     from utils.agent_capabilities import reads as dream_reads
 
+    if ref.startswith('memory_items/') and dream_required_intake.MARKER in snapshot:
+        return dream_required_intake.read_candidate(uid, ref.split('/', 1)[1], snapshot[dream_required_intake.MARKER])
     if ref.startswith('entity/'):
         entity_id = ref.removeprefix('entity/')
         return (
@@ -537,6 +540,16 @@ def validate_task(edit, records, *, authority='dream'):
 
 def validate_hygiene(edit, records, *, authority='dream'):
     validate_memory_hygiene(edit, records)
+
+
+def validate_required_intake(edit, records, *, authority='dream'):
+    dream_required_intake.validate(edit, records, authority=authority)
+
+
+def apply_required_intake(uid, edit, records, change, key, row, *, expected_records=None, authority='dream'):
+    return dream_required_intake.apply(
+        uid, edit, records, change, key, row, expected_records=expected_records, authority=authority
+    )
 
 
 def validate_memory(edit, records, *, authority='dream'):

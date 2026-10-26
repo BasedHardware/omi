@@ -401,6 +401,14 @@ GPT-5.6-family or Luna. Unrelated STT keys do not disable OpenAI cache opt-out.
 Backend-listen and pusher share the private Firestore `dream-agent` cohort in
 their deployment environment; no UID env binding is required. Existing
 conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
+Required memory submissions also normalize inline after their canonical capture
+commits (one Flex attempt, 12-second batch budget). The same existing scheduled
+Dream sweep retries pending stragglers independently of Dream cleanup capacity;
+historical required intake remains hidden until the separate retrospective
+dedupe ramp admits it. Conversation-derived candidates in the speaker-evidence
+serving cohort require owner-bound quote evidence before paid work, and source
+revisions are fenced at canonical apply. Original capture is retained. See the
+required-intake ownership, switches and cost/ramp in [the Dream runbook](runbooks/dream-agent.md#memory-intake-is-independent-of-dream-cleanup).
 Shadow writes only admission state and encrypted reports, preserving finalization, user records, questions and vocabulary. See [the dream runbook](runbooks/dream-agent.md).
 Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live and offline-sync keyterms;
 read failure uses existing terms with fallback telemetry.

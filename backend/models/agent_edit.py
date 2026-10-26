@@ -16,6 +16,9 @@ class HarnessEdit(Strict):
             'retire duplicates or someone else\'s task misfiled to the owner. Autonomous agents must not change manual or edited '
             'tasks. Merge conversations only for overlapping captures of the same speech, preserving both '
             'records and audio. Set language to the language actually spoken, never translate speech.'
+            ' resolve_required_memory admits a supplied hidden historical required_intake_candidate after '
+            'dedupe checks; other optionally names an existing memory covering every submitted detail. '
+            'Preserve before verbatim and leave after empty. Only Dream may resolve these candidates.'
         ),
     )
     target: str = Field(min_length=3, max_length=256, description=Edit.model_fields['target'].description)

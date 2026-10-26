@@ -135,6 +135,7 @@ from utils.memory.read_resilience import (
 )
 from utils.memory.rejected_memory_feedback import clear_rejected_memory_feedback_cache
 from utils.memory.required_promotion import required_processing_payload
+from utils.memory.required_intake import capture_budget as required_intake_capture_budget
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import memory_matches_device
@@ -744,7 +745,8 @@ class CanonicalMemoryBackend:
         return memory_item_to_memorydb(item)
 
     def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
-        return [self.write(uid, item) for item in items]
+        with required_intake_capture_budget():
+            return [self.write(uid, item) for item in items]
 
     def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
         item = update_canonical_memory_content(uid, memory_id, content, db_client=self._db_client)

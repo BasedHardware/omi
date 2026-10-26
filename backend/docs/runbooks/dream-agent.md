@@ -263,8 +263,9 @@ The maintenance-host Dream drain is removed. Consolidation tuning reads,
 `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` and
 `MEMORY_CANONICAL_MAINTENANCE_FLEX` bindings/registry entries are removed.
 
-The mixed maintenance host remains for TTL, explicit required intake and committed
-outboxes/recurrence delivery. DB claim/settlement and model normalization borrow
+Required intake belongs to capture and the existing Dream scheduled sweep, as
+described below. The mixed maintenance host's remaining duties are TTL and
+committed outboxes/recurrence delivery. DB claim/settlement and model normalization borrow
 separate executor steps; outbox ticks do not hold a worker across a whole drain.
 Ledger accounts retain daily-sweep lifecycle authority and still drain outboxes.
 The daily sweep retains new-fact formation, local-day/onboarding receipts, standing
@@ -320,6 +321,71 @@ Do not change `allowlist` to `all` as an outage workaround.
 
 
 ## Memory intake is independent of Dream cleanup
+
+Required manual/API/integration submissions commit as pending Short-term rows.
+`canonical_memory_adapter.write_canonical_extraction_memory` then calls
+`required_intake.after_capture`: one `memory_l2_flex` normalization attempt, no
+Standard fallback, with a 12-second inline model deadline shared across a batch.
+The original capture survives every failure. Success attaches the existing
+required-processing receipt and becomes immediately readable as Short-term;
+normalization itself does not bypass canonical Long-term/graph admission.
+The revision-scoped 600-second lease, quality retry/backoff/quarantine and
+source/account/privacy fences are unchanged. Late model results cannot commit.
+`MEMORY_REQUIRED_INTAKE_ENABLED` defaults on; false/0/off/no stops both new
+inline attempts and scheduled required retries, leaving capture pending.
+
+The **existing** `/v2/dream-agent/sweep` retries required items at least ten
+minutes old, before Dream reasoning capacity waits. This phase does not depend
+on Dream eligibility, paid plans, global Dream cleanup enablement or reserved
+model availability. It uses the same Flex lane and receipts. A separate cursor
+under `dream_scheduler/required_intake` rotates through at most 4,990 projected
+owner rows per sweep, advancing only over the completed prefix. Four workers
+share a 120-second retry-phase budget; each owner scans at most 100 pending rows
+and attempts at most five. No new job, scheduler or IAM is required. Do **not**
+deploy `memory-maintenance-job` or create its production scheduler for intake.
+The merged maintenance capture window is unused by this path.
+
+Historical rows captured before **2026-10-26 07:55Z** are excluded from forward
+retries and stay hidden until Dream's retrospective pass resolves them. Enable
+`DREAM_REQUIRED_INTAKE_BACKLOG_ENABLED=true` plus the independent
+`DREAM_REQUIRED_INTAKE_BACKLOG_COHORT` (`uid:<owner>`, `pct:5`, or `all`; empty or
+malformed denies). The default-off switch is intentional for the historical
+behavior change. Per admitted Dream pass, at most three candidates and their
+fully read canonical semantic/lexical neighbors enter the existing planner and
+independent verifier chain. An incomplete search or split vote leaves the
+candidate pending, without offering hidden backlog in owner Review. A verified
+unique submission uses the same required normalizer; a verified full duplicate
+retains the original source/content as a superseded canonical audit row and
+does not rewrite its survivor. Every material detail and subject must match.
+The canonical head captured for dedupe is fenced through commit; another write
+defers remaining candidates for a later pass rather than admitting against
+stale neighbors. Normal Dream pass/admission/token budgets still apply.
+
+For the speaker-evidence serving cohort, automatically conversation-derived
+required items must bind every quote to a confident owner segment before paid
+normalization or backlog neighbor search. Explicit text retains its separate
+authority. The shared positive provenance rule from #23669 applies; bare legacy
+`is_user`, carried labels and missing provenance do not qualify. Original audio,
+transcript and pending memory remain intact. Source document revisions are
+re-read inside the canonical apply transaction, so a concurrent identity,
+media/keep or source edit defers the result without spending a quality retry.
+Admission attempts reuse `owner_memory_source`/`owner_memory_segments` counters;
+they are attempt counts, not speaker accuracy measurements.
+
+The lead owns the ramp: David-only first, then 5%, 25%, 100% by **2026-10-28**,
+after each full scheduled lookback has zero known duplicate admissions, lost
+details, or source/privacy/owner fence violations, decreasing pending counts and
+oldest age, and observed Flex plus Dream spend within the forecast. An unexpanded
+flag past that date is a blocker for the lead. Normalize spend is approximately
+470 × $0.000245 = **$0.115/day** (~$3.45 per 30 days). The reported 20,681-item
+backlog is **$5.07** of normalization if every row is unique; existing Dream
+search/planning/verification and Firestore reads are additional metered costs,
+not included in that estimate. Measure vendor usage before declaring total cost.
+Rollback either switch to stop its new effects; preserve committed receipts and
+duplicate dispositions. Source merge is not deployed recovery: verify the
+serving release SHA and payload-free `required_intake_inline` /
+`required_intake_retry` log counts, then authorized metadata-only pending-age and
+duplicate/admission receipts after release.
 
 Ordinary compatibility-mode observations receive a bounded canonical intake
 route after extraction commits, for free and paid owners alike. The maintenance

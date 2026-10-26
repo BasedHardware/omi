@@ -7,6 +7,7 @@ normalized the assertion and attached an auditable receipt.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -24,6 +25,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from database._client import db as default_db_client
 from database.firestore_index_registry import REQUIRED_MEMORY_PROCESSING_QUERY
 from database.memory_apply_store import apply_long_term_patch_firestore
+from database.required_intake_fence import RequiredIntakeSourceChanged
 from database.memory_collections import MemoryCollections
 from models.memory_admission import (
     REQUIRED_PROCESSING_RECEIPT_VERSION,
@@ -503,6 +505,8 @@ def list_pending_required_processing_items(
     db_client: Any = None,
     limit: int = 25,
     captured_after: Optional[datetime] = None,
+    captured_before: Optional[datetime] = None,
+    cursor: Optional[Dict[str, Any]] = None,
 ) -> List[MemoryItem]:
     client = db_client if db_client is not None else default_db_client
     requested_limit = max(1, min(limit, MAX_REQUIRED_PROCESSING_QUERY_SCAN))
@@ -529,7 +533,12 @@ def list_pending_required_processing_items(
         # prefix plus one range on the first ordered field stays within the
         # declared index contract.
         query = query.where(filter=FieldFilter("captured_at", ">=", captured_after))
-    snapshots = query.order_by("captured_at").order_by("memory_id").limit(scan_limit).stream()
+    if captured_before is not None:
+        query = query.where(filter=FieldFilter("captured_at", "<", captured_before))
+    query = query.order_by("captured_at").order_by("memory_id")
+    if cursor:
+        query = query.start_after(cursor)
+    snapshots = query.limit(scan_limit).stream()
     pending: List[MemoryItem] = []
     for snapshot in snapshots:
         payload = _snapshot_payload(snapshot)
@@ -680,8 +689,11 @@ def _apply_processed_result(
     attempt_count: int,
     db_client: Any,
     now: datetime,
+    expected_head_commit_id: Optional[str] = None,
 ) -> ApplyStatus:
     control = _read_control_state(item.uid, db_client=db_client)
+    if expected_head_commit_id is not None and control.head_commit_id != expected_head_commit_id:
+        raise PromotionFlexDeferred('required_intake_dedupe_snapshot_changed')
     evidence_ids = [evidence.evidence_id for evidence in item.evidence]
     source_attribution = _conserved_processed_source_attribution(item, processed)
     logical_payload: Dict[str, Any] = {
@@ -753,6 +765,8 @@ def _apply_processed_result(
         )
         if result.status != ApplyStatus.retryable_head_mismatch:
             break
+        if expected_head_commit_id is not None:
+            raise PromotionFlexDeferred('required_intake_dedupe_snapshot_changed')
     assert result is not None
     return result.status
 
@@ -1019,7 +1033,9 @@ def _begin_required_processing(
     return RequiredProcessingAttempt(context=(item, state, lease_owner, current_time))
 
 
-def _settle_required_processing(uid, context, *, db_client, processed=None, error=None, result_guard=None):
+def _settle_required_processing(
+    uid, context, *, db_client, processed=None, error=None, result_guard=None, expected_head_commit_id=None
+):
     item, state, lease_owner, current_time = context
     memory_id = item.memory_id
     client = db_client
@@ -1029,14 +1045,16 @@ def _settle_required_processing(uid, context, *, db_client, processed=None, erro
         assert processed is not None
         if result_guard is not None:
             result_guard()
+        fence = {'expected_head_commit_id': expected_head_commit_id} if expected_head_commit_id is not None else {}
         status = _apply_processed_result(
             item,
             processed,
             attempt_count=state.attempt_count,
             db_client=client,
             now=current_time,
+            **fence,
         )
-    except PromotionFlexDeferred:
+    except (PromotionFlexDeferred, RequiredIntakeSourceChanged):
         try:
             _release_deferred_retry_state(
                 uid,
@@ -1111,6 +1129,7 @@ def process_required_memory_item(
     now=None,
     attempt_lease_seconds=REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
     result_guard=None,
+    expected_head_commit_id=None,
 ):
     if processor is None:
         return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="processor_not_configured")
@@ -1128,7 +1147,46 @@ def process_required_memory_item(
     except Exception as exc:
         error = exc
     return _settle_required_processing(
-        uid, context, db_client=client, processed=processed, error=error, result_guard=result_guard
+        uid,
+        context,
+        db_client=client,
+        processed=processed,
+        error=error,
+        result_guard=result_guard,
+        **({'expected_head_commit_id': expected_head_commit_id} if expected_head_commit_id is not None else {}),
+    )
+
+
+async def process_required_memory_item_async(
+    uid, memory_id, *, db_client, processor, timeout_seconds, result_guard=None, now=None
+):
+    """The same revision lease/receipt path without holding a DB worker on IO.
+
+    Cancellation cannot stop executor IO. A cancelled call never settles or
+    releases its lease; the next sweep reclaims it after the ordinary TTL.
+    """
+    begun = await run_blocking(db_executor, _begin_required_processing, uid, memory_id, db_client=db_client, now=now)
+    if begun.result is not None:
+        return begun.result
+    context = begun.context
+    assert context is not None
+    processed, error = None, None
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            processed = await run_blocking(llm_executor, processor, context[0])
+    except TimeoutError:
+        error = PromotionFlexDeferred('required_intake_timeout')
+    except Exception as exc:
+        error = exc
+    return await run_blocking(
+        db_executor,
+        _settle_required_processing,
+        uid,
+        context,
+        db_client=db_client,
+        processed=processed,
+        error=error,
+        result_guard=result_guard,
     )
 
 

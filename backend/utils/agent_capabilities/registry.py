@@ -65,6 +65,7 @@ KINDS = {
         collections=('conversations',),
     ),
     'memory': Kind('validate_memory', 'apply_memory', default_policy='suggest', key_rule='memory'),
+    'resolve_required_memory': Kind('validate_required_intake', 'apply_required_intake', schema_rule='required_intake'),
     'merge_memories': Kind(
         'validate_memory',
         'apply_memory_merge',
