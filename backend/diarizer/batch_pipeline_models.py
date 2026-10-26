@@ -8,6 +8,8 @@ from collections import OrderedDict
 import io
 from copy import deepcopy
 from contextlib import nullcontext
+from typing import TypeGuard
+import math
 import wave
 from typing import Any, Callable
 import numpy as np
@@ -35,7 +37,7 @@ from diarizer.batch_pipeline import (
 )
 from diarizer.batch_pipeline_context import capture_stream
 from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload
-from utils.batch_pipeline.audio import read_context
+from utils.batch_pipeline.audio import INTAKE_CONTEXT_VERSION, read_context
 from utils.batch_pipeline import leaf_timings
 
 
@@ -186,7 +188,12 @@ class StagedAudio:
         except Exception:
             context = None
         self._streams[item.segment_id] = capture_stream(item, context)
-        self._languages[item.segment_id] = stt_language(context, duration_seconds=item.duration_seconds)
+        self._languages[item.segment_id] = stt_language(
+            context,
+            duration_seconds=item.duration_seconds,
+            expected_owner_id=item.owner_id,
+            expected_segment_id=item.segment_id,
+        )
         for pending in (self._streams, self._languages):
             while len(pending) > self.MAX_PENDING:
                 pending.popitem(last=False)
@@ -201,10 +208,59 @@ class StagedAudio:
         return self._languages.pop(item.segment_id, None)
 
 
-def stt_language(context, *, duration_seconds=None):
+MAX_SELF_LID_PROBE_SECONDS = 30.0
+# Earlier intake persisted the language endpoint's millisecond-rounded duration.
+SELF_LID_DURATION_TOLERANCE_SECONDS = 0.0005 + 1 / 16000 + 1e-9
+
+
+def _finite_number(value: object) -> TypeGuard[int | float]:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def _valid_self_lid_context(context, *, duration_seconds, expected_owner_id, expected_segment_id) -> bool:
+    """Bind self-LID permission to the authenticated upload that produced the unit."""
+    if (
+        isinstance(context.get('version'), bool)
+        or not isinstance(context.get('version'), int)
+        or context.get('version') != INTAKE_CONTEXT_VERSION
+        or not isinstance(expected_owner_id, str)
+        or not expected_owner_id
+        or context.get('owner_id') != expected_owner_id
+        or not isinstance(expected_segment_id, str)
+        or not expected_segment_id
+        or context.get('segment_id') != expected_segment_id
+        or not isinstance(context.get('source'), str)
+        or not context['source'].strip()
+        or any(not isinstance(context.get(key), str) or not context[key].strip() for key in ('job_id', 'content_id'))
+        or not _finite_number(duration_seconds)
+        or duration_seconds <= 0
+    ):
+        return False
+
+    probe_seconds = context.get('stt_language_probe_seconds')
+    if not _finite_number(probe_seconds) or not 0 < probe_seconds <= MAX_SELF_LID_PROBE_SECONDS:
+        return False
+    expected_probe_seconds = min(float(duration_seconds), MAX_SELF_LID_PROBE_SECONDS)
+    return abs(probe_seconds - expected_probe_seconds) <= SELF_LID_DURATION_TOLERANCE_SECONDS
+
+
+def stt_language(
+    context,
+    *,
+    duration_seconds=None,
+    expected_owner_id=None,
+    expected_segment_id=None,
+):
     if not isinstance(context, dict) or 'stt_language' not in context:
         return None
     value = context['stt_language']
+    if not isinstance(value, str):
+        return None
     from config.prerecorded_language import (
         MIN_AUDIO_LID_CONFIDENCE,
         audio_lid_confidence_floor,
@@ -212,31 +268,47 @@ def stt_language(context, *, duration_seconds=None):
         self_lid_confidence_floor,
     )
 
-    if language_class(value) == 'supported':
+    evidence = context.get('stt_language_evidence')
+    confidence = context.get('stt_language_confidence')
+    classification = language_class(value)
+
+    if evidence == 'self_lid':
+        if (
+            not 2 <= len(value) <= 8
+            or not value.isascii()
+            or value != value.lower()
+            or not value.replace('-', '').isalpha()
+            or any(not part for part in value.split('-'))
+            or not _finite_number(duration_seconds)
+            or not _valid_self_lid_context(
+                context,
+                duration_seconds=duration_seconds,
+                expected_owner_id=expected_owner_id,
+                expected_segment_id=expected_segment_id,
+            )
+            or not _finite_number(confidence)
+            or not 0 <= confidence <= 1
+        ):
+            return None
+        if classification == 'supported':
+            minimum = self_lid_confidence_floor(min(float(duration_seconds), MAX_SELF_LID_PROBE_SECONDS))
+            if minimum is None or confidence < minimum:
+                return None
+        # An authenticated unsupported top language remains unavailable to the
+        # fixed Parakeet worker and is retained for its multilingual recovery.
+        return value
+
+    if classification == 'supported':
         # Older intake copied the app's primary language even in multilingual
         # mode. Such a hint is not proof that this audio is supported.
-        evidence, confidence = context.get('stt_language_evidence'), context.get('stt_language_confidence')
-        if evidence == 'self_lid':
-            # Confidence is P(supported) over the Parakeet-25 set, not a top-1
-            # score; its floor needs the recorded probe length, never the unit's.
-            floor = self_lid_confidence_floor(context.get('stt_language_probe_seconds'))
-            if (
-                floor is None
-                or isinstance(confidence, bool)
-                or not isinstance(confidence, (int, float))
-                or not floor <= confidence <= 1
-            ):
-                return None
-            return value if isinstance(value, str) else None
         minimum = audio_lid_confidence_floor(duration_seconds) if evidence == 'audio_lid' else MIN_AUDIO_LID_CONFIDENCE
         if (
             evidence not in ('declared', 'audio_lid')
-            or isinstance(confidence, bool)
-            or not isinstance(confidence, (int, float))
+            or not _finite_number(confidence)
             or not minimum <= confidence <= 1
         ):
             return None
-    return value if isinstance(value, str) else None
+    return value
 
 
 def decode_pcm16_wav(body):
@@ -261,7 +333,7 @@ def create_local_worker(
     pyannote_model,
     live_words=None,
     single_speaker=None,
-    on_failure=None
+    on_failure=None,
 ):
     """Compose once per GPU process after explicit model startup.
 

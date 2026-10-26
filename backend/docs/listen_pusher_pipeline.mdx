@@ -5855,6 +5855,14 @@ only after a fenced defer commits; no identities or dynamic reason labels.
 
 ## Durable live and desktop record admission (dark)
 
+Batch self-LID evidence is bound to the authenticated item's owner, segment and
+versioned intake context. The worker requires nonempty job, content and source
+provenance, a finite probability, and a probe duration matching the first 30
+seconds (or the whole shorter item). Older millisecond-rounded probe durations
+remain readable; confidence floors use the measured item duration so rounding
+cannot turn a short clip into permission. Unsupported language evidence remains
+available for multilingual recovery, never permission for fixed-language STT.
+
 `BATCH_PIPELINE_LIVE_ADMISSION_ENABLED=false` is the sole new producer control.
 When true, retained server-STT captures use the existing
 `BATCH_PIPELINE_ENABLED` master switch, `BATCH_PIPELINE_PERCENT` hash ramp and
