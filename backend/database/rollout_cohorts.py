@@ -34,6 +34,12 @@ def read_held_content_cohort(*, firestore_client: Any | None = None) -> dict | N
 
 def read_memberships(uid: str, *, firestore_client: Any | None = None) -> dict[str, dict[str, bool]]:
     client = firestore_client or get_data_plane_firestore_client()
+    from database.rollout_membership_cache import read_memberships_cached
+
+    return read_memberships_cached(uid, client, lambda: _read_memberships(uid, client))
+
+
+def _read_memberships(uid: str, client: Any) -> dict[str, dict[str, bool]]:
     doc = client.collection(COLLECTION).document(uid).get(timeout=1.0, retry=None)
     if not doc.exists:
         return {}

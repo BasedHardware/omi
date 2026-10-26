@@ -82,6 +82,7 @@ from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
     budgeted_get_all,
+    canonical_scan_window_size,
     indexed_list_reads_enabled,
 )
 from utils.other.portability_read import check_portability_read
@@ -614,10 +615,10 @@ class CanonicalMemoryBackend:
         with batch_canonical_expiry_observations():
             while len(collected) < needed and scanned < raw_cap:
                 scan_kwargs: Dict[str, Any] = {
-                    "limit": (
-                        min(500, needed - len(collected), raw_cap - scanned)
-                        if indexed_list_reads_enabled()
-                        else MEMORY_LIST_SCAN_CHUNK_SIZE
+                    "limit": canonical_scan_window_size(
+                        min(needed - len(collected), raw_cap - scanned),
+                        MEMORY_LIST_SCAN_CHUNK_SIZE,
+                        indexed=indexed_list_reads_enabled(),
                     ),
                     "start_after": start_after,
                     "db_client": self._db_client,
@@ -1821,10 +1822,10 @@ class _CanonicalCursorStream:
             start_after = self._service.stream_keyset_to_scan_cursor(self.scan_keyset)
         try:
             scan_kwargs: dict[str, Any] = {
-                "limit": (
-                    min(500, max(1, self._page_limit + 1 - self._consumed_count))
-                    if indexed_list_reads_enabled()
-                    else MEMORY_LIST_SCAN_CHUNK_SIZE
+                "limit": canonical_scan_window_size(
+                    max(1, self._page_limit + 1 - self._consumed_count),
+                    MEMORY_LIST_SCAN_CHUNK_SIZE,
+                    indexed=indexed_list_reads_enabled(),
                 ),
                 "start_after": start_after,
                 "db_client": self._service.db_client,
