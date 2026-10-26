@@ -86,6 +86,8 @@ final class APIClientConversationRestoreTests: XCTestCase {
     let client = APIClient(session: URLSession(configuration: configuration))
     await client.setTestAuthHeader("Bearer synthetic-token")
     _ = try await client.getConversation(id: "restore-fixture", includeDiscarded: true)
-    XCTAssertEqual(RestoreConversationURLStub.requests.first?.url?.query, "include_discarded=true")
+    let requestURL = RestoreConversationURLStub.requests.first?.url
+    XCTAssertEqual(requestURL?.path, "/v1/conversations/restore-fixture")
+    XCTAssertEqual(requestURL?.query, "include_discarded=true")
   }
 }

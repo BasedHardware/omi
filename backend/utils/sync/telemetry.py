@@ -47,6 +47,15 @@ def bounded_exception_type(error: BaseException) -> str:
     return name if name.replace('_', '').isalnum() and len(name) <= 64 else 'Exception'
 
 
+def value_error_reason(error: BaseException) -> str:
+    """Closed diagnostic tokens only; never copy exception text into telemetry."""
+    if not isinstance(error, ValueError):
+        return 'none'
+    if error.args == ('open_loop_extractions must be an object',):
+        return 'open_loop_extractions_not_object'
+    return 'other_value_error'
+
+
 def bounded_exception_reason(error: BaseException) -> str:
     """Log-safe exception text so a bare ``assert`` is visible as ``empty``."""
     text = ' '.join(str(error).split())

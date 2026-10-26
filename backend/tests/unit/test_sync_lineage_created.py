@@ -38,12 +38,25 @@ def encoded_plans(monkeypatch):
     return plans
 
 
-def persist(monkeypatch, *, live=None, complete=True, reason=None, eligible=True, client=None, incoming=None):
+def persist(
+    monkeypatch,
+    *,
+    live=None,
+    complete=True,
+    reason=None,
+    eligible=True,
+    client=None,
+    incoming=None,
+    discovery_calls=None,
+    **assignment_kwargs,
+):
     client = client or StrictFirestore()
     if live is not None:
         client.rows[('users', 'u', 'conversations', 'live')] = deepcopy(live)
 
     def discover(user, incoming, *, diagnostics=None):
+        if discovery_calls is not None:
+            discovery_calls.append(True)
         if diagnostics is not None:
             diagnostics['lookup_complete'] = complete
             if reason is not None:
@@ -56,7 +69,7 @@ def persist(monkeypatch, *, live=None, complete=True, reason=None, eligible=True
     # evaluation inside assignment (the real cohort resolver can perform IO).
     if eligible and sync_lineage.sync_lineage_resolve_active_for('u'):
         incoming['_sync_lineage_eligible'] = True
-    return client, db.assign_sync_conversation('u', incoming, firestore_client=client)
+    return client, db.assign_sync_conversation('u', incoming, firestore_client=client, **assignment_kwargs)
 
 
 def observations(caplog):
@@ -110,6 +123,144 @@ def test_incomplete_lookup_is_unknown_not_clear(monkeypatch, caplog):
         'event=sync_lineage_resolve outcome=created_unknown stage=assignment '
         'checked_live_candidates_bucket=0 lookup_complete=false incomplete_reason=not_recorded'
     ]
+
+
+@pytest.mark.parametrize('overlap', [False, True])
+def test_stamp_gap_reroute_discovers_and_rechecks_live_candidates(monkeypatch, caplog, overlap):
+    client = StrictFirestore()
+    stamp = dict(chunk('stamp', 0), data_protection_level='standard')
+    client.rows[('users', 'u', 'conversations', 'stamp')] = deepcopy(stamp)
+    # An empty overlapping stub cannot be adopted, but must prove overlap.
+    live = dict(chunk('live', 1002 if overlap else 2000), has_content=False, transcript_segments=[])
+    incoming = dict(chunk('wal', 1000), _sync_lineage_binding='stamp_fallback')
+    calls, fences = [], []
+    with caplog.at_level(logging.INFO):
+        _, (row, created, _) = persist(
+            monkeypatch,
+            client=client,
+            live=live,
+            incoming=incoming,
+            target_id='stamp',
+            discovery_calls=calls,
+            before_assign=lambda transaction: fences.append(transaction),
+        )
+    assert created and row['_sync_lineage_stamp_gap_refused'] is True
+    assert client.rows[('users', 'u', 'conversations', 'stamp')] == stamp
+    assert len(calls) == 1 and len(fences) == 2 and fences[0] is not fences[1]
+    outcome = 'created_overlap' if overlap else 'created_clear'
+    assert observations(caplog) == [
+        f'event=sync_lineage_resolve outcome={outcome} stage=assignment '
+        'checked_live_candidates_bucket=2_5 lookup_complete=true'
+    ]
+    assert all('_sync_lineage_created' not in value for value in client.rows.values())
+
+
+@pytest.mark.parametrize('overlap', [False, True])
+@pytest.mark.parametrize('duration', [9.5, 330])
+@pytest.mark.parametrize('dedupe_enabled', [False, True])
+def test_stamp_gap_reroute_never_adopts_live_content(monkeypatch, caplog, overlap, duration, dedupe_enabled):
+    from datetime import timedelta
+
+    from utils.sync.live_overlap import choose_live_overlap
+
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', str(dedupe_enabled).lower())
+    client = StrictFirestore()
+    stamp = dict(chunk('stamp', 0), data_protection_level='standard')
+    client.rows[('users', 'u', 'conversations', 'stamp')] = deepcopy(stamp)
+    live = dict(chunk('live', 1002 if overlap else 2000), has_content=True, capture_evidence={'origin': 'live'})
+    incoming = dict(chunk('wal', 1000), _sync_lineage_binding='stamp_fallback')
+    incoming['finished_at'] = incoming['started_at'] + timedelta(seconds=duration)
+    incoming['transcript_segments'][0]['end'] = duration
+    # This is adoptable content on ordinary untargeted intake. The long case
+    # would stretch it by more than 300 s if reroute selection regressed.
+    assert choose_live_overlap([live], incoming) == ('live' if overlap else None)
+    if overlap and duration > 300:
+        assert (incoming['finished_at'] - live['finished_at']).total_seconds() > 300
+    calls = []
+    with caplog.at_level(logging.INFO):
+        _, (row, created, _) = persist(
+            monkeypatch,
+            client=client,
+            live=live,
+            target_id='stamp',
+            incoming=incoming,
+            discovery_calls=calls,
+        )
+    assert created and row['id'] == 'wal'
+    assert row['_sync_lineage_stamp_gap_refused'] is True
+    assert client.rows[('users', 'u', 'conversations', 'stamp')] == stamp
+    assert client.rows[('users', 'u', 'conversations', 'live')] == live
+    assert ('users', 'u', 'conversations', 'wal') in client.rows
+    assert calls == [True]
+    outcome = 'created_overlap' if overlap else 'created_clear'
+    assert observations(caplog) == [
+        f'event=sync_lineage_resolve outcome={outcome} stage=assignment '
+        'checked_live_candidates_bucket=2_5 lookup_complete=true'
+    ]
+
+
+@pytest.mark.parametrize('reason', ['lookup_failed', 'page_cap'])
+def test_stamp_gap_incomplete_discovery_stays_unknown(monkeypatch, caplog, reason):
+    with caplog.at_level(logging.INFO):
+        _, (_, created, _) = persist(
+            monkeypatch,
+            live=chunk('live', 0),
+            target_id='live',
+            complete=False,
+            reason=reason,
+            incoming=dict(chunk('wal', 1000), _sync_lineage_binding='stamp_fallback'),
+        )
+    assert created
+    assert len(observations(caplog)) == 1
+    assert observations(caplog)[0].endswith(f'lookup_complete=false incomplete_reason={reason}')
+
+
+@pytest.mark.parametrize('stamp_binding', [False, True])
+def test_retained_target_does_not_discover(monkeypatch, stamp_binding):
+    calls = []
+    incoming = dict(chunk('wal', 1010), _sync_lineage_binding='stamp_fallback' if stamp_binding else 'bound')
+    _, (row, created, _) = persist(
+        monkeypatch,
+        live=chunk('live', 1000),
+        target_id='live',
+        incoming=incoming,
+        discovery_calls=calls,
+    )
+    assert not created and row['id'] == 'live' and not calls
+
+
+def test_reroute_rechecks_fence_before_any_write(monkeypatch, caplog):
+    from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
+    calls, fences = [], []
+    client = StrictFirestore()
+    live = chunk('live', 0)
+
+    def fence(transaction):
+        fences.append(transaction)
+        if len(fences) == 2:
+            raise SyncAssignmentSuperseded('synthetic fence changed during discovery')
+
+    with caplog.at_level(logging.INFO), pytest.raises(SyncAssignmentSuperseded):
+        persist(
+            monkeypatch,
+            client=client,
+            live=live,
+            target_id='live',
+            discovery_calls=calls,
+            incoming=dict(chunk('wal', 1000), _sync_lineage_binding='stamp_fallback'),
+            before_assign=fence,
+        )
+    assert len(calls) == 1 and len(fences) == 2 and not observations(caplog)
+    assert client.rows == {('users', 'u', 'conversations', 'live'): live}
+
+
+def test_create_without_discovery_is_labelled_skipped(monkeypatch, caplog):
+    calls = []
+    with caplog.at_level(logging.INFO):
+        _, (_, created, _) = persist(monkeypatch, target_id='missing', discovery_calls=calls)
+    assert created and not calls
+    assert observations(caplog)[0].endswith('lookup_complete=false incomplete_reason=discovery_skipped')
 
 
 @pytest.mark.parametrize('reason', ['lookup_failed', 'page_cap'])
@@ -180,6 +331,7 @@ def test_observation_error_is_attributed_and_never_raises():
         (None, True, True, True, 'extent_outside_incoming'),
         (None, True, False, True, 'candidate_unread'),
         (None, True, False, False, 'invalid_extent'),
+        ('discovery_skipped', True, False, False, 'invalid_extent'),
     ],
 )
 def test_unknown_reasons_use_first_matching_priority(discovery, device, outside, unread, expected):
