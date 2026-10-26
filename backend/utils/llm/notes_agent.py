@@ -298,11 +298,18 @@ async def run_notes_agent(
                     for kind in dict.fromkeys(problem.kind for problem in sent_back):
                         REPAIRS.labels(kind='rejected_' + kind).inc()
                     # A note sent back to investigate keeps its lookups; a format fix resubmits next turn.
-                    state['force'] = result.tool_calls >= budget.min_tool_calls and not any(
-                        problem.kind == EVIDENCE for problem in sent_back
+                    # With no lookups left there is nothing to investigate, so evidence rejections force too.
+                    at_cap = result.tool_calls >= budget.max_tool_calls
+                    state['force'] = (
+                        state.get('force', False)
+                        or at_cap
+                        or (
+                            result.tool_calls >= budget.min_tool_calls
+                            and not any(problem.kind == EVIDENCE for problem in sent_back)
+                        )
                     )
-                    if state['force']:
-                        state['force_reason'] = 'submission_rejected'
+                    if state['force'] and not state.get('force_reason'):
+                        state['force_reason'] = 'lookup_cap' if at_cap else 'submission_rejected'
                     responses.append(_tool_reply(call, {'status': 'rejected', 'fix': verdict}))
                     continue
                 accepted = payload

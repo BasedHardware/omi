@@ -884,3 +884,36 @@ def test_call_window_identity_requires_a_sighting_during_this_conversation():
     earlier = [{**CALL_ROWS[0], 'timestamp': (START - timedelta(minutes=2)).isoformat()}]
     before = screen_people_leads(earlier, started_at=START, finished_at=START + timedelta(minutes=30))
     assert not before[0].get('call_seen_during_conversation')
+
+
+def test_an_evidence_rejection_at_the_lookup_cap_forces_the_next_turn(monkeypatch):
+    """At the cap there is nothing left to investigate: an evidence send-back
+    must force the next turn, not spend it on a lookup that will be refused."""
+    reviews = []
+
+    def review(arguments, **kwargs):
+        reviews.append(kwargs)
+        if len(reviews) == 1:
+            return [agent.Problem(agent.EVIDENCE, 'Name the speaker from the calendar invite.')], None
+        return [], arguments
+
+    monkeypatch.setattr(agent, '_review_submission', review)
+
+    class SubmitAtCap:
+        def __init__(self):
+            self.choices = []
+
+        async def __call__(self, messages, tool_choice):
+            self.choices.append(tool_choice)
+            if len(self.choices) == 1:
+                calls = [call('search_people', {'query': 'Maya'}, index) for index in range(2)]
+                return agent.CompletionTurn(tool_calls=calls)
+            return agent.CompletionTurn(tool_calls=[call(prompt.SUBMIT, submission(), len(self.choices) + 2)])
+
+    model = SubmitAtCap()
+    result = run_agent(model, policy.NotesAgentBudget(max_turns=5, max_tool_calls=2))
+
+    assert model.choices[:2] == ['required', 'required']
+    assert model.choices[2] == {'type': 'function', 'function': {'name': prompt.SUBMIT}}
+    assert result.forced and result.force_reason == 'lookup_cap'
+    assert result.tool_calls == 2 and len(reviews) == 2
