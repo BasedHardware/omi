@@ -1,0 +1,1 @@
+{"change":"Fixed browser control failing with \"unsupported protocol version\" by updating the bundled Playwright MCP server"}
