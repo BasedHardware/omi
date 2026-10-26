@@ -1967,6 +1967,7 @@ class AnalyticsManager {
         ),
       );
 
+  /// The backend applied the stay offer (a tap that failed is not counted).
   void subscriptionRetentionOfferAccepted({String? reason, required int percentOff}) => const TypedEvents().emit(
         SubscriptionRetentionOfferAccepted(
           reason: _closedEnum(
@@ -1979,7 +1980,7 @@ class AnalyticsManager {
         ),
       );
 
-  /// The reader cancelled with the stay offer on screen.
+  /// A cancellation chosen with the stay offer on screen went through.
   void subscriptionRetentionOfferDeclined({String? reason, required int percentOff}) => const TypedEvents().emit(
         SubscriptionRetentionOfferDeclined(
           reason: _closedEnum(

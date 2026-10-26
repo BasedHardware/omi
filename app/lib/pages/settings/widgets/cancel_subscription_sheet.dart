@@ -18,6 +18,10 @@ import 'package:omi/utils/other/temp.dart';
 
 const _stepCount = 3;
 
+/// How long the stay offer lookup may take, counted from when the flow opens. A later answer is
+/// dropped, so the last step never trades an action the reader can already tap for another.
+const _offerLookupLimit = Duration(seconds: 3);
+
 /// Subscription cancellation: reason → feedback → consequences. A pushed page, not a sheet; each
 /// step is its own route, so the iOS edge swipe and system back step back one step. This widget
 /// is step 1 and owns the flow; [show] resolves `true` when the subscription was cancelled.
@@ -35,10 +39,10 @@ class CancelSubscriptionFlow extends StatefulWidget {
 /// What the reader has entered so far, shared by the three steps.
 class _CancelFlow {
   _CancelFlow() {
-    // Fetched when the flow opens, so the last step has the offer on arrival instead of swapping
-    // it in under the reader's thumb.
-    offerLoaded = payment_api.getRetentionOffer().then((offer) {
+    // Fetched when the flow opens, so the last step usually has the answer on arrival.
+    offerLoaded = payment_api.getRetentionOffer().timeout(_offerLookupLimit, onTimeout: () => null).then((offer) {
       if (offer != null && offer.eligible && offer.discountedAmount != null) this.offer = offer;
+      offerResolved = true;
     });
   }
 
@@ -46,8 +50,11 @@ class _CancelFlow {
   final details = TextEditingController();
   String? reason;
 
-  /// The stay offer, once loaded; null while loading or when the reader has none.
+  /// The stay offer; null while loading or when the reader has none.
   wire.GeneratedRetentionOfferResponse? offer;
+
+  /// The bounded lookup has answered: an offer, none, a failure or the time limit.
+  bool offerResolved = false;
   late final Future<void> offerLoaded;
 
   void dispose() => details.dispose();
@@ -194,6 +201,10 @@ class _CancelConfirmStep extends StatefulWidget {
 class _CancelConfirmStepState extends State<_CancelConfirmStep> {
   bool _isCancelling = false;
   bool _isAcceptingOffer = false;
+
+  /// The offer slot settles once per visit. Until then it holds a pending button nobody can tap,
+  /// so it never turns an action the reader could already take into a different one.
+  bool _offerSettled = false;
   wire.GeneratedRetentionOfferResponse? _offer;
 
   _CancelFlow get _flow => widget.flow;
@@ -203,18 +214,20 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
   @override
   void initState() {
     super.initState();
-    final offer = _flow.offer;
-    if (offer != null) {
-      _showOffer(offer);
+    if (_flow.offerResolved) {
+      _settleOffer();
     } else {
       _flow.offerLoaded.then((_) {
-        final offer = _flow.offer;
-        if (mounted && offer != null) setState(() => _showOffer(offer));
+        if (mounted) setState(_settleOffer);
       });
     }
   }
 
-  void _showOffer(wire.GeneratedRetentionOfferResponse offer) {
+  void _settleOffer() {
+    _offerSettled = true;
+    // A reader who chose to cancel while the offer was pending never saw it.
+    final offer = _isCancelling ? null : _flow.offer;
+    if (offer == null) return;
     _offer = offer;
     PlatformManager.instance.analytics
         .subscriptionRetentionOfferShown(reason: _flow.reason, percentOff: offer.percentOff);
@@ -231,11 +244,12 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
     final offer = _offer;
     if (offer == null || _busy) return;
     setState(() => _isAcceptingOffer = true);
-    PlatformManager.instance.analytics
-        .subscriptionRetentionOfferAccepted(reason: _flow.reason, percentOff: offer.percentOff);
     final ok = await payment_api.acceptRetentionOffer();
     if (!mounted) return;
     if (ok) {
+      // Counts the redemption the backend confirmed, not the tap.
+      PlatformManager.instance.analytics
+          .subscriptionRetentionOfferAccepted(reason: _flow.reason, percentOff: offer.percentOff);
       await context.read<UsageProvider>().fetchSubscription();
       if (!mounted) return;
       OmiFeedback.confirm(context, context.l10n.retentionOfferApplied(offer.percentOff, offer.durationMonths));
@@ -247,16 +261,13 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
   }
 
   Future<void> _confirmCancel() async {
+    // The offer on screen when the reader chose to cancel; a pending one was never shown.
+    final declined = _offer;
     setState(() => _isCancelling = true);
     final provider = context.read<UsageProvider>();
     final details = _flow.details.text.trim().isNotEmpty ? _flow.details.text.trim() : null;
     final attempt =
         ProductTelemetry.instance.start(ProductJourney.subscriptionCancel, surface: ProductSurface.settings);
-    final offer = _offer;
-    if (offer != null) {
-      PlatformManager.instance.analytics
-          .subscriptionRetentionOfferDeclined(reason: _flow.reason, percentOff: offer.percentOff);
-    }
     PlatformManager.instance.analytics.subscriptionCancelConfirmed(reason: _flow.reason!, details: details);
 
     try {
@@ -264,6 +275,10 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
       if (!mounted) return;
       if (success) {
         attempt.complete(ProductOutcome.success);
+        if (declined != null) {
+          PlatformManager.instance.analytics
+              .subscriptionRetentionOfferDeclined(reason: _flow.reason, percentOff: declined.percentOff);
+        }
         OmiFeedback.confirm(context, context.l10n.subscriptionSetToCancel);
         _flow.exit.close(context, true);
       } else {
@@ -341,7 +356,9 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
       actions: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (offer != null)
+          if (!_offerSettled)
+            OmiButton(label: context.l10n.loading, expand: true, isLoading: true, onPressed: null)
+          else if (offer != null)
             OmiButton(
               label: context.l10n.retentionOfferAccept(offer.percentOff),
               expand: true,
