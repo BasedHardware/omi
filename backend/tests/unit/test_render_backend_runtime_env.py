@@ -157,17 +157,20 @@ def test_network_flags_still_required(monkeypatch):
 def test_selected_job_renders_only_shared_network_and_named_job_outputs(monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-dev-subnet-1')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
     monkeypatch.setattr(
         'sys.argv',
-        ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'memory-maintenance-job'],
+        ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'x-connector-sync-job'],
     )
 
     assert _MODULE['main']() == 0
 
     output = _read_workflow_outputs()
     assert 'cloud_run_flags<<' in output
-    assert 'memory_maintenance_job_flags<<' in output
-    assert 'memory_maintenance_job_env_vars<<' in output
+    assert 'x_connector_sync_job_flags<<' in output
+    assert 'x_connector_sync_job_env_vars<<' in output
     assert 'backend_env_vars<<' not in output
     assert 'notifications_job_env_vars<<' not in output
 
@@ -179,37 +182,6 @@ def test_selected_job_rejects_unknown_name_without_emitting_partial_output(monke
         _MODULE['main']()
 
     assert _read_workflow_outputs() == ''
-
-
-def test_render_dev_emits_memory_maintenance_job_outputs():
-    jobs = _MANIFEST['environments']['dev']['cloud_run']['jobs']
-    memory_job = jobs['memory-maintenance-job']
-    memory_env = _MODULE['_render_env_vars'](memory_job['env'])
-    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in memory_env
-    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX' not in memory_env
-    assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED' not in memory_env
-    assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in memory_env
-    assert 'MEMORY_ENABLED_USERS' not in memory_env
-    assert 'MEMORY_ENABLED=on' in memory_env
-    assert 'MEMORY_MODE=' not in memory_env
-    assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED' not in memory_env
-    assert 'TYPESENSE_HOST_PORT=443' in memory_env
-
-    rendered_flags = _MODULE['_render_flags'](memory_job['flags'])
-    assert '--task-timeout=3600s' in rendered_flags
-    assert '--cpu=2' in rendered_flags
-    assert '--memory=2Gi' in rendered_flags
-    assert (
-        '--remove-env-vars=MEMORY_ENABLED_USERS,'
-        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,'
-        'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,'
-        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
-    ) in rendered_flags
-    memory_secrets = _MODULE['_render_secrets'](memory_job['secrets'])
-    assert 'OPENAI_API_KEY=OPENAI_API_KEY:latest' in memory_secrets
-    assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in memory_secrets
-    assert 'TYPESENSE_API_KEY=TYPESENSE_API_KEY:latest' in memory_secrets
-    assert 'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest' in memory_secrets
 
 
 def test_render_dev_emits_x_connector_sync_job_outputs(monkeypatch):
@@ -241,7 +213,7 @@ def test_x_connector_sync_job_pins_its_task_timeout(env):
     pipeline looked healthy throughout. X sync walks a registry at ~1.5s per user plus
     fetch and extraction, so it has the same shape of exposure.
 
-    Pinned equal to memory-maintenance-job, the job this one was cloned from.
+    Pinned at 3600s, matching the other long-running registry walkers.
     """
     jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
     assert jobs['x-connector-sync-job']['flags']['--task-timeout'] == '3600s'
@@ -262,7 +234,6 @@ def test_every_cloud_run_job_pins_a_task_timeout(env):
 @pytest.mark.parametrize('env', ['dev', 'prod'])
 def test_retired_daily_sweep_runtime_is_absent(env):
     jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
-    maintenance = jobs['memory-maintenance-job']
     retired_names = {
         'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
         'MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH',
@@ -278,16 +249,10 @@ def test_retired_daily_sweep_runtime_is_absent(env):
         'MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS',
         'POSTHOG_HOST',
     }
-    assert retired_names.isdisjoint(maintenance.get('env', {}))
+    for spec in jobs.values():
+        assert retired_names.isdisjoint(spec.get('env', {}))
     assert 'daily-memory-sweep-job' not in jobs
-
-
-def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
-    entrypoint = (_SCRIPT.parents[1] / 'modal' / 'memory_maintenance_job.py').read_text(encoding='utf-8')
-    dockerfile = (_SCRIPT.parents[1] / 'modal' / 'Dockerfile.memory_maintenance_job').read_text(encoding='utf-8')
-    assert 'daily_memory_sweep' not in entrypoint
-    assert 'daily_memory_sweep_job.py' not in dockerfile
-    assert 'memory_maintenance_job.py' in dockerfile
+    assert 'memory-maintenance-job' not in jobs
 
 
 def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
@@ -405,23 +370,12 @@ def test_render_prod_emits_memory_maintenance_job_cron_on(monkeypatch):
     rc = _MODULE['main']()
     assert rc == 0
     out = _read_workflow_outputs()
-    job_env = _job_env_block(out, 'memory_maintenance_job')
-    # Prod GO 2026-08-15: the maintenance job follows the request-path product
-    # flag. ST→LT cron is job-hosted on both env overlays with Flex.
-    assert 'MEMORY_ENABLED=on' in job_env
-    assert 'MEMORY_MODE=' not in job_env
-    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in job_env
-    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX' not in job_env
-    assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in job_env
-    assert 'MEMORY_ENABLED_USERS' not in job_env
-    prod_memory_job = _MANIFEST['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
-    assert '--task-timeout=3600s' in _MODULE['_render_flags'](prod_memory_job['flags'])
-
     assert 'DESKTOP_PREVIEW_PUBLISH_KEY=DESKTOP_PREVIEW_PUBLISH_KEY:latest' in _job_secret_lines(out, 'backend')
     assert 'GOOGLE_MAPS_API_KEY=GOOGLE_MAPS_API_KEY:latest' in _job_secret_lines(out, 'backend_sync')
 
     notifications_env = _job_env_block(out, 'notifications_job')
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED' not in notifications_env
+    assert 'memory_maintenance_job_env_vars<<' not in out
 
 
 def test_render_prod_gateway_callers_inject_verified_endpoint(monkeypatch):
@@ -462,8 +416,8 @@ def test_render_prod_gateway_callers_inject_verified_endpoint(monkeypatch):
 def test_render_prod_requires_vpc_env_vars_before_job_outputs(monkeypatch):
     """Prod network flags are env_var-backed; missing VPC vars abort render before job outputs.
 
-    gcp_memory_maintenance_job.yml must pass CLOUD_RUN_VPC_* like gcp_backend.yml, or prod
-    workflow_dispatch fails before memory-maintenance-job env/secrets are emitted.
+    gcp_backend.yml-style workflows must pass CLOUD_RUN_VPC_* like the render requires, or
+    prod workflow_dispatch fails before any job env/secrets are emitted.
     """
     monkeypatch.delenv('CLOUD_RUN_VPC_NETWORK', raising=False)
     monkeypatch.delenv('CLOUD_RUN_VPC_SUBNET', raising=False)
@@ -491,48 +445,6 @@ def test_notifications_job_workflow_passes_vpc_vars_and_checkout_sha():
         'MEMORY_TYPESENSE_COLLECTION,TYPESENSE_HOST,'
         'TYPESENSE_HOST_PORT,TYPESENSE_API_KEY'
     ) in text
-
-
-def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
-    workflow = Path(__file__).resolve().parents[3] / '.github/workflows/gcp_memory_maintenance_job.yml'
-    text = workflow.read_text(encoding='utf-8')
-    assert 'SERVICE: memory-maintenance-job' in text
-    assert 'Dockerfile.memory_maintenance_job' in text
-    assert 'memory_maintenance_job_env_vars' in text
-    assert 'memory_maintenance_job_secrets' in text
-    assert 'CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}' in text
-    assert 'CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}' in text
-    assert (
-        'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
-        '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
-    ) in text
-    # Prod deploys through GitHub WIF (credential-hygiene WS-C), which needs the
-    # OIDC token; development keeps its JSON lane.
-    assert "id-token: 'write'" in text
-    assert 'omi-gha-deploy-prod/providers/github' in text
-    assert "if: github.event.inputs.environment == 'prod'" in text
-    assert 'git rev-parse --short=7 HEAD' in text
-    assert 'short_sha=${GITHUB_SHA::7}' not in text
-    assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job memory-maintenance-job' in text
-    prod_memory_job = _MANIFEST['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
-    prod_job_flags = _MODULE['_render_flags'](prod_memory_job['flags'])
-    assert 'MEMORY_ENABLED_USERS' in prod_job_flags
-    assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED' in prod_job_flags
-    assert 'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS' in prod_job_flags
-    assert 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED' in prod_job_flags
-    assert 'Measure runner disk cleanup' in text
-    assert 'Duration: $((SECONDS - started_at))s' in text
-
-
-def test_auto_dev_memory_maintenance_workflow_selects_only_its_job():
-    workflow = Path(__file__).resolve().parents[3] / '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
-
-    assert 'render_backend_runtime_env.py --env dev --job memory-maintenance-job' in workflow.read_text(
-        encoding='utf-8'
-    )
-    text = workflow.read_text(encoding='utf-8')
-    assert 'Measure runner disk cleanup' in text
-    assert 'Duration: $((SECONDS - started_at))s' in text
 
 
 def test_backend_service_deploys_remove_retired_canonical_memory_env_vars():
@@ -563,16 +475,6 @@ def test_backend_service_deploys_remove_retired_canonical_memory_env_vars():
     action_text = action.read_text(encoding='utf-8')
     assert f'REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL,{retired}' in action_text
     assert f'--remove-env-vars=HOSTED_PUSHER_API_URL,{retired}' in action_text
-
-    # The memory-maintenance-job is also a Cloud Run deploy that merges env
-    # vars across revisions. Its rendered --remove-env-vars must strip the
-    # same retired set so the stale binding does not survive the universal-
-    # memory change (see #11447, #11472).
-    manifest = _MANIFEST['environments']
-    for env in ('dev', 'prod'):
-        job = manifest[env]['cloud_run']['jobs']['memory-maintenance-job']
-        job_flags = _MODULE['_render_flags'](job['flags'])
-        assert f'--remove-env-vars={retired}' in job_flags, f'memory-maintenance-job for {env} must strip {retired}'
 
 
 def _deploy_backend_stack_step_flags(step_id: str) -> str:

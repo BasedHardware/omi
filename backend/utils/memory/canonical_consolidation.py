@@ -43,7 +43,6 @@ from utils.memory.canonical_required_processing import (
     ProcessedRequiredMemory,
     commit_required_processing,
     is_pending_required_processing,
-    maintenance_captured_after,
     list_receipted_required_processing_items,
 )
 from utils.memory.required_source_admission import source_revisions
@@ -437,7 +436,7 @@ class RequiredIntakeCompletion:
     failed_memory_ids: list[str] = field(default_factory=list)
 
 
-def _required_intake_page(uid, *, db_client, cursor=None, captured_after=None):
+def _required_intake_page(uid, *, db_client, cursor=None):
     """Bounded processed-intake query with stable capture/id pagination."""
     cursor = cursor or {}
     query = (
@@ -454,10 +453,6 @@ def _required_intake_page(uid, *, db_client, cursor=None, captured_after=None):
         .order_by('captured_at')
         .order_by('memory_id')
     )
-    if captured_after is not None:
-        # The captured_at range rides the same composite index: the equality
-        # prefix plus one range on the first ordered field stays served.
-        query = query.where(filter=FieldFilter('captured_at', '>=', captured_after))
     active_query = query
     if cursor.get('captured_at') is not None:
         if not isinstance(cursor['captured_at'], datetime) or not isinstance(cursor.get('memory_id'), str):
@@ -843,12 +838,7 @@ def _pending_observation_ids(uid, *, db_client):
     """Rotate over the existing registered query, including rows past TTL."""
     ref = db_client.document(f'{MemoryCollections(uid=uid).memory_runs}/observation_intake_cursor')
     cursor = ref.get().to_dict() or {}
-    # The forward-only maintenance window applies to observations too: bound
-    # the page query itself so pre-window rows cannot consume the 100-row scan
-    # budget and delay fresh observations for heavy accounts. Pre-window rows
-    # stay untouched until a separate ruling; the cursor still advances.
-    window_start = maintenance_captured_after()
-    rows = _required_intake_page(uid, db_client=db_client, cursor=cursor, captured_after=window_start)
+    rows = _required_intake_page(uid, db_client=db_client, cursor=cursor)
     items = [parse_snapshot_strict(MemoryItem, row) for row in rows]
     ids = []
     for item in items:

@@ -753,8 +753,9 @@ async def run_x_sync_job(*, job_started_at: Optional[float] = None) -> Dict:
 def raise_if_x_sync_job_failed(summary: Dict) -> None:
     """Fail the Cloud Run Job when the scheduled sync contract could not complete.
 
-    Mirrors memory-maintenance-job: inspect the summary and raise so Scheduler /
-    Cloud Run show a failed execution instead of a silent healthy no-op.
+    Mirrors the retired memory-maintenance-job exit contract: inspect the
+    summary and raise so Scheduler / Cloud Run show a failed execution instead
+    of a silent healthy no-op.
     """
     errors = list(summary.get('errors') or [])
     if errors:

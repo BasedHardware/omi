@@ -1085,7 +1085,7 @@ def test_firestore_gate_policy_rejects_ungated_deploy_mutations():
     policy = _workflow_policy()
     repo = BACKEND_DIR.parent
     dockerfiles = policy._runtime_images(repo)
-    workflow = (repo / '.github/workflows/gcp_memory_maintenance_job.yml').read_text(encoding='utf-8')
+    workflow = (repo / '.github/workflows/gcp_frame_request_retention_job.yml').read_text(encoding='utf-8')
 
     gate_block = re.search(r'      - name: Verify serving Firestore indexes\n(?:        .*\n)+', workflow).group(0)
     removed = workflow.replace(gate_block, '')
@@ -1120,11 +1120,6 @@ def test_firestore_gate_policy_rejects_ungated_deploy_mutations():
         1,
     )
     assert policy.workflow_gate_violations(tolerated_control, name='tolerated-control.yml', dockerfiles=dockerfiles)
-
-    push_step = re.search(r'      - name: Push verified runtime image\n(?:        .*\n)+', workflow).group(0)
-    reordered = workflow.replace(gate_block, '')
-    reordered = reordered.replace(push_step, push_step + gate_block)
-    assert policy.workflow_gate_violations(reordered, name='reordered.yml', dockerfiles=dockerfiles)
 
 
 def _synthetic_deploy(steps: str, *, extra_jobs: str = '', job_prefix: str = '') -> str:
@@ -1524,8 +1519,6 @@ _LANE_SOURCE_BINDINGS = {
     'desktop_backend_prod.yml': '${{ steps.admitted-source.outputs.source_sha }}',
     'desktop_backend_auto_dev.yml': '${{ steps.candidate-identity.outputs.source_sha }}',
     'gcp_llm_gateway.yml': '${{ env.CHECKED_OUT_SHA }}',
-    'gcp_memory_maintenance_job.yml': '${{ env.CHECKED_OUT_SHA }}',
-    'gcp_memory_maintenance_job_auto_dev.yml': '${{ github.sha }}',
     'gcp_notifications_job.yml': '${{ env.CHECKED_OUT_SHA }}',
     'gcp_x_connector_sync_job.yml': '${{ env.CHECKED_OUT_SHA }}',
     'gcp_day3_reengagement_email_job.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
