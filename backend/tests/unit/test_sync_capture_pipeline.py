@@ -434,7 +434,7 @@ def test_job_finalized_event_shares_segment_correlation(pipeline, caplog, monkey
         },
     )
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         module._record_sync_segment_outcome(
             module.TranscriptionOutcome.SUCCESS,
             provider='deepgram',
