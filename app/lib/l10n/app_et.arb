@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Meenuta hiljem",
     "openLoopAnswerDrop": "Jäta ära",
     "syncRejectionInvalidDate": "Vigane salvestuse kuupäev",
+    "syncDeleteKeptUploading": "Mõned osad on endiselt üleslaadimisel ja need jäeti alles",
     "syncRejectionServer": "Server lükkas tagasi",
     "syncRejectionTooLarge": "Liiga suur",
     "deviceOnPhoneQueue": "{duration} telefonis",

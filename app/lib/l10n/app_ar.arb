@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "ذكّرني لاحقًا",
     "openLoopAnswerDrop": "استبعدها",
     "syncRejectionInvalidDate": "تاريخ تسجيل غير صالح",
+    "syncDeleteKeptUploading": "بعض الأجزاء لا تزال قيد الرفع وقد تم الاحتفاظ بها",
     "syncRejectionServer": "رفضه الخادم",
     "syncRejectionTooLarge": "كبير جدًا",
     "deviceOnPhoneQueue": "{duration} على الهاتف",

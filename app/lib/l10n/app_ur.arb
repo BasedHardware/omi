@@ -11867,6 +11867,7 @@
     "openLoopAnswerRemind": "بعد میں یاد دلائیں",
     "openLoopAnswerDrop": "چھوڑ دیں",
     "syncRejectionInvalidDate": "غلط ریکارڈنگ کی تاریخ",
+    "syncDeleteKeptUploading": "کچھ حصے اب بھی اپلوڈ ہو رہے ہیں اور محفوظ رکھے گئے ہیں",
     "syncRejectionServer": "سرور نے مسترد کیا",
     "syncRejectionTooLarge": "بہت بڑا",
     "deviceOnPhoneQueue": "فون پر {duration}",

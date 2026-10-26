@@ -14642,6 +14642,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Nevažeći datum snimanja';
 
   @override
+  String get syncDeleteKeptUploading => 'Neki su se dijelovi još uvijek prijenosu i zadržani su';
+
+  @override
   String get syncRejectionServer => 'Server je odbio';
 
   @override

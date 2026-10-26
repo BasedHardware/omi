@@ -14634,6 +14634,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Neveljaven datum snemanja';
 
   @override
+  String get syncDeleteKeptUploading => 'Nekateri deli se še nalagajo in so bili ohranjeni';
+
+  @override
   String get syncRejectionServer => 'Zavrnjeno s strani strežnika';
 
   @override

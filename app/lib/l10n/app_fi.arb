@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Muistuta myöhemmin",
     "openLoopAnswerDrop": "Ohita",
     "syncRejectionInvalidDate": "Virheellinen tallennuspäivä",
+    "syncDeleteKeptUploading": "Osatiedostoja lähetetään vielä ja ne säilytettiin",
     "syncRejectionServer": "Palvelin hylkäsi",
     "syncRejectionTooLarge": "Liian suuri",
     "deviceOnPhoneQueue": "{duration} puhelimessa",

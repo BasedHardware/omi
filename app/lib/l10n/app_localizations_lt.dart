@@ -14630,6 +14630,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Netinkamas įrašo data';
 
   @override
+  String get syncDeleteKeptUploading => 'Kai kurios dalys vis dar įkeliamos ir buvo paliktos';
+
+  @override
   String get syncRejectionServer => 'Serveris atmetė';
 
   @override

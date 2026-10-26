@@ -113,91 +113,6 @@ int? transcriptStartOnDevice(Iterable<(String, double)> segmentEnds, Map<String,
 
 const _kDefinitiveUploadRefusalStatusCodes = {400, 413};
 
-/// The longest pause that may separate two chunks of one source recording and
-/// still let the earlier chunk's end name when the later one began: the same
-/// conversation-pause tolerance the backend and [recordingBlockGapSeconds]
-/// use. A wider gap is a silence the recording does not prove continuity
-/// across, so no capture time may be derived from it.
-const int invalidCaptureTimeNeighbourGapSeconds = 120;
-
-/// Whether [wal] carries the source's own frame coordinates, the strongest
-/// proof two chunks recorded one continuous run of audio.
-bool _hasSourceFramePosition(Wal wal) =>
-    wal.captureRoot != null && wal.sourceClockEpoch != null && wal.sourceFrameStart != null;
-
-/// Whether [other] records the audio immediately before [wal] on the source's
-/// own clock: same capture root and frame-clock epoch, ending exactly where
-/// [wal] begins in frame positions. Frame adjacency survives any wall-clock
-/// error in the filenames — the very error being repaired.
-bool _isFrameAdjacentPredecessor(Wal wal, Wal other) =>
-    _hasSourceFramePosition(wal) &&
-    other.captureRoot == wal.captureRoot &&
-    other.sourceClockEpoch == wal.sourceClockEpoch &&
-    other.sourceFrameStart != null &&
-    wal.sourceFrameStart != null &&
-    other.sourceFrameStart! + other.totalFrames == wal.sourceFrameStart;
-
-/// A capture time proven by contiguous audio: the wall-clock end of the
-/// neighbour that recorded the audio immediately before [wal] in the same
-/// source run — proven by exact frame adjacency on the source's own clock, or
-/// by a shared clock run or recording session with the neighbour's end within
-/// [invalidCaptureTimeNeighbourGapSeconds] of this WAL's claimed start, i.e.
-/// of its position in the run's own clock. The neighbour is picked by that
-/// recording position, never by the latest plausible end anywhere on the
-/// device, and its end must itself be a time the server accepts.
-///
-/// Null when no such neighbour exists. Then no date may be invented — not
-/// from the file's timestamp (mtime is the copy time, not the capture time)
-/// and not from the plausibility floor — and the row stays on attention with
-/// the user's Delete and a Retry that resends unchanged.
-@visibleForTesting
-int? contiguousCaptureStartSeconds(
-  Wal wal,
-  Iterable<Wal> candidates,
-  int nowSeconds, {
-  int gapSeconds = invalidCaptureTimeNeighbourGapSeconds,
-}) {
-  Wal? framePredecessor;
-  Wal? runPredecessor;
-  for (final other in candidates) {
-    if (identical(other, wal) || other.device != wal.device) continue;
-    if (_isFrameAdjacentPredecessor(wal, other)) framePredecessor = other;
-    if (other.seconds <= 0 || !walTimerStartPlausible(other.timerStart)) continue;
-    final end = other.timerStart + other.seconds;
-    // The neighbour's end must be a time the server itself accepts — a
-    // neighbour on the same wrong clock cannot name this chunk's real time.
-    if (end < walMinPlausibleTimerStartSeconds || end > nowSeconds) continue;
-    if (_sharesSourceRun(wal, other)) {
-      // Within the run's own clock the predecessor ends where this chunk
-      // begins, at most a pause apart; anything wider proves nothing.
-      final gap = wal.timerStart - end;
-      if (gap >= 0 &&
-          gap <= gapSeconds &&
-          (runPredecessor == null || end > runPredecessor.timerStart + runPredecessor.seconds)) {
-        runPredecessor = other;
-      }
-    }
-  }
-  final byFrames = framePredecessor;
-  if (byFrames != null && byFrames.seconds > 0 && walTimerStartPlausible(byFrames.timerStart)) {
-    final end = (byFrames.timerStart + walAudioSeconds(byFrames)).round();
-    if (end >= walMinPlausibleTimerStartSeconds && end <= nowSeconds) return end;
-  }
-  final byRun = runPredecessor;
-  return byRun == null ? null : byRun.timerStart + byRun.seconds;
-}
-
-/// Whether [other] shares this WAL's source-run identity: its clock run
-/// (chunks of one estimated recording) or its recording session (chunks of
-/// one live capture). Same device alone proves nothing — every recording on
-/// the pendant shares that.
-bool _sharesSourceRun(Wal wal, Wal other) {
-  final run = wal.clockRun;
-  if (run != null && other.clockRun == run) return true;
-  final session = wal.recordingSessionId;
-  return session != null && other.recordingSessionId == session;
-}
-
 /// Pause before the next batch after [streak] consecutive unscoped 5xx
 /// refusals. Exponential from 2s, capped at 30s: long enough that a shedding
 /// or restarting backend gets breathing room within a drain, short enough that
@@ -218,16 +133,18 @@ typedef WalCoverageTelemetryEmitter = void Function(Map<String, Object?> fields)
 String uploadRejectionTokenForStatus(int statusCode) =>
     statusCode == 413 ? WalUploadRejection.tooLarge : WalUploadRejection.serverRefused;
 
-/// Repairs an `invalid_capture_time` refusal on a single recording, in the
-/// server's own terms: audio is never deleted for its claimed time, however
-/// short — a fragment that has no proven contiguous neighbour stays as an
-/// attention row with the user's Delete. When a neighbour proves when the
-/// recording began, the file is re-stamped with that time and requeued once;
-/// a second refusal of the same recording is terminal with the reason kept.
+/// An `invalid_capture_time` refusal on a recording, in the server's own
+/// terms: the audio is never deleted and never renamed for its claimed time —
+/// not even when a neighbour plausibly names another one, because a derived
+/// date can misfile the recording's day and the file's own name is the only
+/// honest witness left. A single-file refusal marks that WAL as needing
+/// attention with the reason kept ("Invalid recording date"), where the
+/// user's Delete decides and Retry resends the file unchanged — a server-side
+/// fix (the clock window server PR #23746 widened) can still accept it.
 extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
   /// A request-level refusal proves nothing about every member: isolate the
   /// batch so the next attempt names the actual file, exactly like a
-  /// definitive 400/413. A single-file refusal gets that file's repair.
+  /// definitive 400/413. A single-file refusal gets that file's verdict.
   Future<void> handleBatchInvalidCaptureTime(
     List<Wal> batchWals,
     int generation,
@@ -252,7 +169,7 @@ extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
     _notifyUpdated(generation);
   }
 
-  /// The single-recording retry path's share of the same repair.
+  /// The single-recording retry path's share of the same verdict.
   Future<void> handleSingleInvalidCaptureTime(
     Wal wal,
     int generation,
@@ -306,95 +223,12 @@ extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
       wal.isSyncing = false;
       wal.syncStartedAt = null;
       wal.syncEtaSeconds = null;
-      if (wal.captureTimeRestamped || !await _restampInvalidCaptureTimeWal(wal, generation)) {
-        wal.markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime);
-        DebugLogManager.logEvent('invalid_capture_time_terminal', {
-          'walId': wal.id,
-          'reason': e.serverReason ?? '',
-          'restamped': wal.captureTimeRestamped,
-        });
-      }
-    }
-  }
-
-  /// Rewrites [wal]'s capture time to the time proven by its contiguous
-  /// neighbour and moves its file to the matching name, leaving it `miss` so
-  /// the queue re-offers it once. Returns false (untouched) when no neighbour
-  /// proves a time or the file cannot be moved.
-  Future<bool> _restampInvalidCaptureTimeWal(Wal wal, int generation) async {
-    if (wal.filePath == null || wal.filePath!.isEmpty) return false;
-    final fullPath = await Wal.getFilePath(wal.filePath);
-    if (fullPath == null) return false;
-    final nowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
-    final estimate = contiguousCaptureStartSeconds(wal, _wals, nowSeconds);
-    if (estimate == null) return false;
-    try {
-      // An estimated time carries a clock run so the backend never merges the
-      // fragment with audio outside its run by invented adjacency.
-      final clockRun = wal.clockRun ?? Wal.newClockRun();
-      // Two fragments of one run can chain to the same neighbour-end estimate;
-      // rename would silently replace, so step the seconds apart instead.
-      var start = estimate;
-      final directory = File(fullPath).parent;
-      while (await File('${directory.path}/${wal.getFileNameByTimeStarts(start, clockRun: clockRun)}').exists()) {
-        start++;
-      }
-      final newName = wal.getFileNameByTimeStarts(start, clockRun: clockRun);
-      // Crash-safe move: copy to the new name first, durably save the index
-      // that points there, and only then remove the old file. A crash at any
-      // step leaves the audio reachable under a name the index can still name
-      // — the old one until the save lands, the copy after it.
-      final copied = await File(fullPath).copy('${directory.path}/$newName');
-      final oldFilePath = wal.filePath;
-      final oldTimerStart = wal.timerStart;
-      final oldClockRun = wal.clockRun;
-      wal
-        ..filePath = copied.path.split('/').last
-        ..timerStart = start
-        ..clockRun = clockRun
-        ..uploadRejectionReason = null
-        ..captureTimeRestamped = true;
-      try {
-        if (!await _saveWalsToFile(generation)) {
-          // A stale generation means this session never wrote: no durable index
-          // can point at the copy, so it is removed again.
-          _rollbackRestamp(wal, oldFilePath, oldTimerStart, oldClockRun);
-          await copied.delete().catchError((_) => copied);
-          return false;
-        }
-      } catch (err) {
-        // The index write failed or was interrupted: whether its bytes landed
-        // is unknown, so the copy is kept (deleting it could unlink the last
-        // name the durable index points at) and the in-memory row returns to
-        // the old name, which a later save re-persists.
-        _rollbackRestamp(wal, oldFilePath, oldTimerStart, oldClockRun);
-        Logger.debug('Invalid capture time restamp index save failed for ${wal.id}: $err');
-        return false;
-      }
-      try {
-        await File(fullPath).delete();
-      } catch (err) {
-        // The index points at the copy; the old name is only an orphan.
-        Logger.debug('Invalid capture time restamp left the old file for ${wal.id}: $err');
-      }
-      DebugLogManager.logEvent('invalid_capture_time_restamped', {
+      wal.markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime);
+      DebugLogManager.logEvent('invalid_capture_time_terminal', {
         'walId': wal.id,
-        'newTimerStart': start,
+        'reason': e.serverReason ?? '',
       });
-      return true;
-    } catch (err) {
-      Logger.debug('Invalid capture time restamp failed for ${wal.id}: $err');
-      return false;
     }
-  }
-
-  void _rollbackRestamp(Wal wal, String? oldFilePath, int oldTimerStart, String? oldClockRun) {
-    wal
-      ..filePath = oldFilePath
-      ..timerStart = oldTimerStart
-      ..clockRun = oldClockRun
-      ..uploadRejectionReason = null
-      ..captureTimeRestamped = false;
   }
 }
 

@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Ricordamelo più tardi",
     "openLoopAnswerDrop": "Ignora",
     "syncRejectionInvalidDate": "Data di registrazione non valida",
+    "syncDeleteKeptUploading": "Alcune parti sono ancora in caricamento e sono state conservate",
     "syncRejectionServer": "Rifiutata dal server",
     "syncRejectionTooLarge": "Troppo grande",
     "deviceOnPhoneQueue": "{duration} sul telefono",

@@ -14683,6 +14683,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Data di registrazione non valida';
 
   @override
+  String get syncDeleteKeptUploading => 'Alcune parti sono ancora in caricamento e sono state conservate';
+
+  @override
   String get syncRejectionServer => 'Rifiutata dal server';
 
   @override

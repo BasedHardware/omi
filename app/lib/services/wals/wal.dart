@@ -113,6 +113,24 @@ WalSyncDisplayState? worstSessionSyncState(Iterable<Wal> wals) {
 bool isRetryableSyncState(WalSyncDisplayState state) =>
     state == WalSyncDisplayState.failed || state == WalSyncDisplayState.uploadRejected;
 
+/// Whether the state is one the sync pages file under needs attention: the
+/// server refused it, retries are exhausted, or audio is unreadable/too old.
+/// Terminal for automatic uploads; SyncPendingWork.needsAttention and every
+/// row/bulk action read this one set so they cannot drift apart.
+bool isAttentionSyncState(WalSyncDisplayState state) =>
+    state == WalSyncDisplayState.failed ||
+    state == WalSyncDisplayState.corrupted ||
+    state == WalSyncDisplayState.outsideRecoveryWindow ||
+    state == WalSyncDisplayState.unsupportedAudio ||
+    state == WalSyncDisplayState.uploadRejected;
+
+/// Whether a recording may be deleted where a block action found it: only a
+/// member that is idle (not mid-upload) and already in a terminal,
+/// needs-attention state. A block can mix a refused member with one still
+/// uploading — the refusal label belongs to the former, so the latter's audio
+/// is never deleted under it.
+bool walDeletionAllowed(Wal wal) => !wal.isSyncing && isAttentionSyncState(wal.syncDisplayState);
+
 /// Whether a deliberate retry of this recording can change its outcome. A
 /// `too_large` refusal (413) is deterministic — the same bytes are the same
 /// size — so its row offers Delete only, never a Retry that is guaranteed to
@@ -311,11 +329,6 @@ class Wal {
   /// [WalUploadRejection] token; null when the row was never refused.
   String? uploadRejectionReason;
 
-  /// Latched after the capture time was re-stamped once following an
-  /// `invalid_capture_time` refusal: a second refusal can never be repaired
-  /// by estimating again, so it is terminal and must not loop.
-  bool captureTimeRestamped;
-
   String get id => '${device}_$timerStart';
 
   /// Single source of truth for how this recording's sync state is shown to the
@@ -451,7 +464,6 @@ class Wal {
     this.keptForTranscriptRecovery = false,
     this.clockRun,
     this.uploadRejectionReason,
-    this.captureTimeRestamped = false,
   }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
@@ -505,7 +517,6 @@ class Wal {
       keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
       clockRun: json['clock_run'] as String?,
       uploadRejectionReason: json['upload_rejection_reason'] as String?,
-      captureTimeRestamped: json['capture_time_restamped'] == true,
     )
       ..frameSize = json['frame_size'] ?? mapNameToCodec(json['codec']).getFrameSize()
       ..repairLegacyImportedCustody();
@@ -555,7 +566,6 @@ class Wal {
       if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
       if (clockRun != null) 'clock_run': clockRun,
       if (uploadRejectionReason != null) 'upload_rejection_reason': uploadRejectionReason,
-      if (captureTimeRestamped) 'capture_time_restamped': true,
     };
   }
 
@@ -612,7 +622,6 @@ class Wal {
     h = _mixFingerprint(h, keptForTranscriptRecovery ? 1 : 0);
     h = _mixFingerprint(h, clockRun?.hashCode ?? 0);
     h = _mixFingerprint(h, uploadRejectionReason?.hashCode ?? 0);
-    h = _mixFingerprint(h, captureTimeRestamped ? 1 : 0);
     return h;
   }
 

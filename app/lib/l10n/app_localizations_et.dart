@@ -14599,6 +14599,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Vigane salvestuse kuupäev';
 
   @override
+  String get syncDeleteKeptUploading => 'Mõned osad on endiselt üleslaadimisel ja need jäeti alles';
+
+  @override
   String get syncRejectionServer => 'Server lükkas tagasi';
 
   @override

@@ -14610,6 +14610,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Ugyldig opptaksdato';
 
   @override
+  String get syncDeleteKeptUploading => 'Noen deler lastes fortsatt opp og ble beholdt';
+
+  @override
   String get syncRejectionServer => 'Avvist av serveren';
 
   @override

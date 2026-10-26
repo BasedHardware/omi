@@ -11867,6 +11867,7 @@
     "openLoopAnswerRemind": "ನಂತರ ನೆನಪಿಸು",
     "openLoopAnswerDrop": "ಬಿಡು",
     "syncRejectionInvalidDate": "ಅಮಾನ್ಯ ರೆಕಾರ್ಡಿಂಗ್ ದಿನಾಂಕ",
+    "syncDeleteKeptUploading": "ಕೆಲವು ಭಾಗಗಳು ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿವೆ ಮತ್ತು ಅವನ್ನು ಇರಿಸಲಾಗಿದೆ",
     "syncRejectionServer": "ಸರ್ವರ್ ತಿರಸ್ಕರಿಸಿದೆ",
     "syncRejectionTooLarge": "ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ",
     "deviceOnPhoneQueue": "ಫೋನ್‌ನಲ್ಲಿ {duration}",

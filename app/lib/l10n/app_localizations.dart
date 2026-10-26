@@ -25833,6 +25833,12 @@ abstract class AppLocalizations {
   /// **'Invalid recording date'**
   String get syncRejectionInvalidDate;
 
+  /// Shown when a block Delete skipped members that are still uploading, so only the refused idle members were deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Some parts are still uploading and were kept'**
+  String get syncDeleteKeptUploading;
+
   /// The server refused this upload
   ///
   /// In en, this message translates to:

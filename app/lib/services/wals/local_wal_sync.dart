@@ -41,7 +41,6 @@ import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_evidence_runs.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/sync/offline_sync_amounts.dart' show walMinPlausibleTimerStartSeconds, walTimerStartPlausible;
 import 'package:omi/utils/wal_file_manager.dart';
 
 import 'capture_committed_journal.dart';
@@ -1561,6 +1560,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         )
         .singleOrNull;
     if (target == null) {
+      _notifyUpdated(generation);
+      return;
+    }
+    // Re-checked here, at the moment of deletion: a caller's row can be stale
+    // by the time its confirmation resolves, and audio that is mid-upload is
+    // never deleted under a refusal label that belongs to another member.
+    if (target.isSyncing) {
+      Logger.debug('deleteWal skipped ${target.id}: still uploading');
       _notifyUpdated(generation);
       return;
     }

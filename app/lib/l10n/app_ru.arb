@@ -4476,6 +4476,7 @@
     "openLoopAnswerRemind": "Напомнить позже",
     "openLoopAnswerDrop": "Отклонить",
     "syncRejectionInvalidDate": "Недопустимая дата записи",
+    "syncDeleteKeptUploading": "Некоторые части всё ещё выгружаются и были сохранены",
     "syncRejectionServer": "Отклонено сервером",
     "syncRejectionTooLarge": "Слишком большой",
     "deviceOnPhoneQueue": "{duration} на телефоне",

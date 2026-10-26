@@ -14602,6 +14602,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get syncRejectionInvalidDate => 'অবৈধ রেকর্ডিং তারিখ';
 
   @override
+  String get syncDeleteKeptUploading => 'কিছু অংশ এখনও আপলোড হচ্ছে এবং রাখা হয়েছে';
+
+  @override
   String get syncRejectionServer => 'সার্ভার প্রত্যাখ্যান করেছে';
 
   @override

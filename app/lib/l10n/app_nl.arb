@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Herinner me later",
     "openLoopAnswerDrop": "Negeren",
     "syncRejectionInvalidDate": "Ongeldige opnamedatum",
+    "syncDeleteKeptUploading": "Sommige delen worden nog geüpload en zijn bewaard",
     "syncRejectionServer": "Afgewezen door de server",
     "syncRejectionTooLarge": "Te groot",
     "deviceOnPhoneQueue": "{duration} op de telefoon",

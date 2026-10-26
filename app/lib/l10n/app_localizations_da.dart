@@ -14597,6 +14597,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Ugyldig optagedato';
 
   @override
+  String get syncDeleteKeptUploading => 'Nogle dele uploades stadig og blev beholdt';
+
+  @override
   String get syncRejectionServer => 'Afvist af serveren';
 
   @override

@@ -14605,6 +14605,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Neplatné datum nahrávky';
 
   @override
+  String get syncDeleteKeptUploading => 'Některé části se stále nahrávají a byly ponechány';
+
+  @override
   String get syncRejectionServer => 'Server odmítl';
 
   @override

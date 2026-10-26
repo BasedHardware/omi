@@ -14664,6 +14664,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Érvénytelen felvételi dátum';
 
   @override
+  String get syncDeleteKeptUploading => 'Néhány rész még feltöltés alatt van, és meg lett tartva';
+
+  @override
   String get syncRejectionServer => 'A kiszolgáló elutasította';
 
   @override

@@ -4476,6 +4476,7 @@
     "openLoopAnswerRemind": "Daha sonra hatırlat",
     "openLoopAnswerDrop": "Yoksay",
     "syncRejectionInvalidDate": "Geçersiz kayıt tarihi",
+    "syncDeleteKeptUploading": "Bazı parçalar hâlâ yükleniyor ve tutuldu",
     "syncRejectionServer": "Sunucu tarafından reddedildi",
     "syncRejectionTooLarge": "Çok büyük",
     "deviceOnPhoneQueue": "telefonda {duration}",

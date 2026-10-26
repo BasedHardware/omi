@@ -933,8 +933,9 @@ bool isInvalidCaptureTimeResponse(http.Response response) {
 /// Thrown when the server refuses an upload because its filename carries a
 /// capture time it will not accept (HTTP 400 `invalid_capture_time`): before
 /// 2024-01-01 or in the future. The audio is fine — only its claimed time is
-/// not — so this is a repairable refusal, not a terminal one: the caller can
-/// re-stamp the file with a plausible time and re-offer it once.
+/// not. The app never deletes or renames the file for this: the row parks on
+/// attention with the reason kept, and a retry resends it unchanged, which a
+/// later server-side widening of the clock window can still accept.
 class SyncInvalidCaptureTimeException implements Exception {
   final String? serverReason;
 

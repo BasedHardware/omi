@@ -14655,6 +14655,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Недопустимая дата записи';
 
   @override
+  String get syncDeleteKeptUploading => 'Некоторые части всё ещё выгружаются и были сохранены';
+
+  @override
   String get syncRejectionServer => 'Отклонено сервером';
 
   @override

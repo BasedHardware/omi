@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Нагадати пізніше",
     "openLoopAnswerDrop": "Відхилити",
     "syncRejectionInvalidDate": "Недійсна дата запису",
+    "syncDeleteKeptUploading": "Деякі частини все ще завантажуються і були збережені",
     "syncRejectionServer": "Відхилено сервером",
     "syncRejectionTooLarge": "Занадто великий",
     "deviceOnPhoneQueue": "{duration} на телефоні",

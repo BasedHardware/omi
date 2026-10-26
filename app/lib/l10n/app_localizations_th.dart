@@ -14534,6 +14534,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncRejectionInvalidDate => 'วันที่บันทึกเสียงไม่ถูกต้อง';
 
   @override
+  String get syncDeleteKeptUploading => 'บางส่วนยังคงอัปโหลดอยู่และถูกเก็บไว้';
+
+  @override
   String get syncRejectionServer => 'เซิร์ฟเวอร์ปฏิเสธ';
 
   @override

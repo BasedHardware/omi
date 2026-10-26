@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "稍后提醒",
     "openLoopAnswerDrop": "放弃",
     "syncRejectionInvalidDate": "录音日期无效",
+    "syncDeleteKeptUploading": "部分内容仍在上传中，已保留",
     "syncRejectionServer": "被服务器拒绝",
     "syncRejectionTooLarge": "过大",
     "deviceOnPhoneQueue": "手机上还有{duration}",

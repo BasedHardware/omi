@@ -97,12 +97,7 @@ abstract final class SyncPendingWork {
     return false;
   }
 
-  static bool needsAttention(WalSyncDisplayState s) =>
-      s == WalSyncDisplayState.failed ||
-      s == WalSyncDisplayState.corrupted ||
-      s == WalSyncDisplayState.outsideRecoveryWindow ||
-      s == WalSyncDisplayState.unsupportedAudio ||
-      s == WalSyncDisplayState.uploadRejected;
+  static bool needsAttention(WalSyncDisplayState s) => isAttentionSyncState(s);
 
   /// Recordings the server refused or that ran out of retries; the Offline Sync page owns them.
   static List<Wal> attention(SyncProvider p) =>

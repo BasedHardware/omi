@@ -184,4 +184,28 @@ void main() {
     await tester.pump();
     expect(sync.retried, [wal]);
   });
+
+  testWidgets('a block Delete never removes a member that is still uploading', (tester) async {
+    // One recording, two members: one refused for its claimed date, one
+    // mid-upload. The block reads as refused — its worst member — but the
+    // Delete must take only the idle refused member; audio on its way is
+    // never destroyed under a refusal label that belongs to another member.
+    final refused = _wal(DateTime(2026, 10, 18, 7, 58, 30), 75, WalStatus.uploadRejected,
+        rejectionReason: WalUploadRejection.invalidCaptureTime);
+    final uploading = _wal(DateTime(2026, 10, 18, 7, 57, 15), 75, WalStatus.miss)..isSyncing = true;
+    final sync = await _pump(tester, [refused, uploading]);
+
+    expect(find.text('Invalid recording date'), findsOneWidget, reason: 'the block reads as one refused recording');
+    expect(find.text('Delete'), findsOneWidget);
+
+    await tester.tap(find.text('Delete'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Delete').last); // one confirmation for the whole block
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(sync.deleted, [refused], reason: 'only the idle refused member is deleted');
+    expect(sync.deleted, isNot(contains(uploading)), reason: 'the uploading member is kept');
+    expect(find.text('Some parts are still uploading and were kept'), findsOneWidget,
+        reason: 'the row says what was skipped, in the app\'s toast style');
+  });
 }

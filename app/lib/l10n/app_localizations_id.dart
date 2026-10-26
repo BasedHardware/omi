@@ -14620,6 +14620,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Tanggal perekaman tidak valid';
 
   @override
+  String get syncDeleteKeptUploading => 'Beberapa bagian masih diunggah dan tetap disimpan';
+
+  @override
   String get syncRejectionServer => 'Ditolak oleh server';
 
   @override

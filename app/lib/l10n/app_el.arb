@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Υπενθύμιση αργότερα",
     "openLoopAnswerDrop": "Απόρριψη",
     "syncRejectionInvalidDate": "Μη έγκυρη ημερομηνία εγγραφής",
+    "syncDeleteKeptUploading": "Ορισμένα μέρη φορτώνονται ακόμα και διατηρήθηκαν",
     "syncRejectionServer": "Απορρίφθηκε από τον διακομιστή",
     "syncRejectionTooLarge": "Πολύ μεγάλο",
     "deviceOnPhoneQueue": "{duration} στο τηλέφωνο",

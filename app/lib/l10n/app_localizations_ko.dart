@@ -14407,6 +14407,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncRejectionInvalidDate => '잘못된 녹음 날짜';
 
   @override
+  String get syncDeleteKeptUploading => '일부 파트는 아직 업로드 중이며 유지되었습니다';
+
+  @override
   String get syncRejectionServer => '서버가 거절함';
 
   @override

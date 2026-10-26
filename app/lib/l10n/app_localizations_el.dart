@@ -14702,6 +14702,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Μη έγκυρη ημερομηνία εγγραφής';
 
   @override
+  String get syncDeleteKeptUploading => 'Ορισμένα μέρη φορτώνονται ακόμα και διατηρήθηκαν';
+
+  @override
   String get syncRejectionServer => 'Απορρίφθηκε από τον διακομιστή';
 
   @override

@@ -14619,6 +14619,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get syncRejectionInvalidDate => 'غلط ریکارڈنگ کی تاریخ';
 
   @override
+  String get syncDeleteKeptUploading => 'کچھ حصے اب بھی اپلوڈ ہو رہے ہیں اور محفوظ رکھے گئے ہیں';
+
+  @override
   String get syncRejectionServer => 'سرور نے مسترد کیا';
 
   @override

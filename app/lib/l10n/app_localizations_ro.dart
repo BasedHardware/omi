@@ -14668,6 +14668,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Dată de înregistrare nevalidă';
 
   @override
+  String get syncDeleteKeptUploading => 'Unele părți încă se încarcă și au fost păstrate';
+
+  @override
   String get syncRejectionServer => 'Respins de server';
 
   @override

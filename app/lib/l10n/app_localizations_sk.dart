@@ -14601,6 +14601,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Neplatný dátum nahrávky';
 
   @override
+  String get syncDeleteKeptUploading => 'Niektoré časti sa stále nahrávajú a boli ponechané';
+
+  @override
   String get syncRejectionServer => 'Server odmietol';
 
   @override

@@ -1086,7 +1086,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   Future<void> retrySync() async {
     final generation = _sessionGeneration;
     final failedWal = _syncState.failedWal;
-    if (failedWal != null && (failedWal.status == WalStatus.miss || failedWal.status == WalStatus.uploadRejected)) {
+    // A deterministic too_large refusal is the one failed upload a retry can
+    // never fix — the same bytes are the same size — so the error card's
+    // Retry falls through to work that can still move (the row's own Delete
+    // owns the too-large recording).
+    if (failedWal != null &&
+        (failedWal.status == WalStatus.miss || failedWal.status == WalStatus.uploadRejected) &&
+        failedWal.uploadRejectionReason != WalUploadRejection.tooLarge) {
       await syncWal(failedWal);
       return;
     }

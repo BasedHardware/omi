@@ -14641,6 +14641,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Несапраўдная дата запісу';
 
   @override
+  String get syncDeleteKeptUploading => 'Некаторыя часткі ўсё яшчэ выгружаюцца і былі захаваны';
+
+  @override
   String get syncRejectionServer => 'Адхілена серверам';
 
   @override

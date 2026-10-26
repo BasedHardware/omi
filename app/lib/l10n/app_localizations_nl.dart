@@ -14645,6 +14645,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Ongeldige opnamedatum';
 
   @override
+  String get syncDeleteKeptUploading => 'Sommige delen worden nog geüpload en zijn bewaard';
+
+  @override
   String get syncRejectionServer => 'Afgewezen door de server';
 
   @override

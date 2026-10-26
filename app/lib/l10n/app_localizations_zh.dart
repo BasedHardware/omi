@@ -14382,6 +14382,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncRejectionInvalidDate => '录音日期无效';
 
   @override
+  String get syncDeleteKeptUploading => '部分内容仍在上传中，已保留';
+
+  @override
   String get syncRejectionServer => '被服务器拒绝';
 
   @override

@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Nhắc tôi sau",
     "openLoopAnswerDrop": "Bỏ qua",
     "syncRejectionInvalidDate": "Ngày ghi âm không hợp lệ",
+    "syncDeleteKeptUploading": "Một số phần vẫn đang được tải lên và đã được giữ lại",
     "syncRejectionServer": "Bị máy chủ từ chối",
     "syncRejectionTooLarge": "Quá lớn",
     "deviceOnPhoneQueue": "{duration} trên điện thoại",

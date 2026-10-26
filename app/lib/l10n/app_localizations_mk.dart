@@ -14671,6 +14671,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Неважечки датум на снимање';
 
   @override
+  String get syncDeleteKeptUploading => 'Некои делови сè уште се прикачуваат и беа задржани';
+
+  @override
   String get syncRejectionServer => 'Одбиено од серверот';
 
   @override

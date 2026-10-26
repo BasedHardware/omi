@@ -4483,6 +4483,7 @@
     "openLoopAnswerRemind": "Mind mig senere",
     "openLoopAnswerDrop": "Drop det",
     "syncRejectionInvalidDate": "Ugyldig optagedato",
+    "syncDeleteKeptUploading": "Nogle dele uploades stadig og blev beholdt",
     "syncRejectionServer": "Afvist af serveren",
     "syncRejectionTooLarge": "For stor",
     "deviceOnPhoneQueue": "{duration} på telefonen",

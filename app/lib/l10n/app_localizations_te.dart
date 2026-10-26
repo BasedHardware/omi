@@ -14666,6 +14666,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get syncRejectionInvalidDate => 'చెల్లని రికార్డింగ్ తేదీ';
 
   @override
+  String get syncDeleteKeptUploading => 'కొన్ని భాగాలు ఇంకా అప్‌లోడ్ అవుతున్నాయి, అవి నిలిపివేయబడ్డాయి';
+
+  @override
   String get syncRejectionServer => 'సర్వర్ తిరస్కరించింది';
 
   @override

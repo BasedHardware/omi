@@ -4476,6 +4476,7 @@
     "openLoopAnswerRemind": "Me le rappeler plus tard",
     "openLoopAnswerDrop": "Abandonner",
     "syncRejectionInvalidDate": "Date d'enregistrement non valide",
+    "syncDeleteKeptUploading": "Certaines parties sont encore en cours d'envoi et ont été conservées",
     "syncRejectionServer": "Rejeté par le serveur",
     "syncRejectionTooLarge": "Trop volumineux",
     "deviceOnPhoneQueue": "{duration} sur le téléphone",

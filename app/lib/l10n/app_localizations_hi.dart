@@ -14590,6 +14590,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get syncRejectionInvalidDate => 'अमान्य रिकॉर्डिंग तिथि';
 
   @override
+  String get syncDeleteKeptUploading => 'कुछ हिस्से अभी भी अपलोड हो रहे हैं और रख लिए गए हैं';
+
+  @override
   String get syncRejectionServer => 'सर्वर ने अस्वीकार किया';
 
   @override

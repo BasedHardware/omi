@@ -14643,6 +14643,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Tarikh rakaman tidak sah';
 
   @override
+  String get syncDeleteKeptUploading => 'Beberapa bahagian masih dimuat naik dan disimpan';
+
+  @override
   String get syncRejectionServer => 'Ditolak oleh pelayan';
 
   @override

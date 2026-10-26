@@ -14401,6 +14401,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncRejectionInvalidDate => '無効な録音日';
 
   @override
+  String get syncDeleteKeptUploading => '一部のパーツはまだアップロード中のため、保持されました';
+
+  @override
   String get syncRejectionServer => 'サーバーに拒否されました';
 
   @override

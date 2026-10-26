@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Atgādināt vēlāk",
     "openLoopAnswerDrop": "Atmest",
     "syncRejectionInvalidDate": "Nederīgs ieraksta datums",
+    "syncDeleteKeptUploading": "Dažas daļas joprojām augšupielādē un tika paturētas",
     "syncRejectionServer": "Serveris noraidīja",
     "syncRejectionTooLarge": "Pārāk liels",
     "deviceOnPhoneQueue": "{duration} telefonā",

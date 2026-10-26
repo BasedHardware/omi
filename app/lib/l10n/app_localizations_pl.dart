@@ -14649,6 +14649,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Nieprawidłowa data nagrania';
 
   @override
+  String get syncDeleteKeptUploading => 'Niektóre części są nadal przesyłane i zostały zachowane';
+
+  @override
   String get syncRejectionServer => 'Odrzucone przez serwer';
 
   @override

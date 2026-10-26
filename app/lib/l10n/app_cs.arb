@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Připomenout později",
     "openLoopAnswerDrop": "Zahodit",
     "syncRejectionInvalidDate": "Neplatné datum nahrávky",
+    "syncDeleteKeptUploading": "Některé části se stále nahrávají a byly ponechány",
     "syncRejectionServer": "Server odmítl",
     "syncRejectionTooLarge": "Příliš velké",
     "deviceOnPhoneQueue": "{duration} v telefonu",

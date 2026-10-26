@@ -11867,6 +11867,7 @@
     "openLoopAnswerRemind": "Нагадаць пазней",
     "openLoopAnswerDrop": "Адкінуць",
     "syncRejectionInvalidDate": "Несапраўдная дата запісу",
+    "syncDeleteKeptUploading": "Некаторыя часткі ўсё яшчэ выгружаюцца і былі захаваны",
     "syncRejectionServer": "Адхілена серверам",
     "syncRejectionTooLarge": "Занадта вялікі",
     "deviceOnPhoneQueue": "{duration} на тэлефоне",

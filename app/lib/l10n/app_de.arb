@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Später erinnern",
     "openLoopAnswerDrop": "Verwerfen",
     "syncRejectionInvalidDate": "Ungültiges Aufnahmedatum",
+    "syncDeleteKeptUploading": "Einige Teile werden noch hochgeladen und wurden behalten",
     "syncRejectionServer": "Vom Server abgelehnt",
     "syncRejectionTooLarge": "Zu groß",
     "deviceOnPhoneQueue": "{duration} auf dem Telefon",

@@ -57,14 +57,20 @@ class DeviceStatsRow extends StatelessWidget {
             phoneQueueSeconds > 0 ? l10n.deviceOnPhoneQueue(OmiDuration.compact(phoneQueueSeconds, l10n)) : null,
       ),
     ];
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < tiles.length; i++) ...[
-          if (i > 0) const SizedBox(width: OmiSpacing.xs),
-          Expanded(child: tiles[i]),
+    // One row height for every tile: the tallest tile's captions (usually On
+    // Device's phone-queue line) raise the whole row, so a captioned tile never
+    // towers over its neighbours. IntrinsicHeight + stretch sizes the row to
+    // its own content only — never to whatever height the viewport has left.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < tiles.length; i++) ...[
+            if (i > 0) const SizedBox(width: OmiSpacing.xs),
+            Expanded(child: tiles[i]),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -90,10 +96,12 @@ class _StatTile extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 84),
         padding: const EdgeInsets.all(OmiSpacing.sm),
         decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-        // Min, not max: under loose parent constraints the tile sizes to its
-        // own lines (floored at 84), never to whatever height is left over.
+        // Min, not max: the tile floors at 84 and otherwise sizes to its own
+        // lines — the row's IntrinsicHeight shares the tallest tile's height,
+        // never whatever height the viewport has left over.
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),

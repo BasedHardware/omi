@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Amintește-mi mai târziu",
     "openLoopAnswerDrop": "Renunță",
     "syncRejectionInvalidDate": "Dată de înregistrare nevalidă",
+    "syncDeleteKeptUploading": "Unele părți încă se încarcă și au fost păstrate",
     "syncRejectionServer": "Respins de server",
     "syncRejectionTooLarge": "Prea mare",
     "deviceOnPhoneQueue": "{duration} pe telefon",

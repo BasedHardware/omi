@@ -14638,6 +14638,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Nederīgs ieraksta datums';
 
   @override
+  String get syncDeleteKeptUploading => 'Dažas daļas joprojām augšupielādē un tika paturētas';
+
+  @override
   String get syncRejectionServer => 'Serveris noraidīja';
 
   @override

@@ -14619,6 +14619,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Geçersiz kayıt tarihi';
 
   @override
+  String get syncDeleteKeptUploading => 'Bazı parçalar hâlâ yükleniyor ve tutuldu';
+
+  @override
   String get syncRejectionServer => 'Sunucu tarafından reddedildi';
 
   @override

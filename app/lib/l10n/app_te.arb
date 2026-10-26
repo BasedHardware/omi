@@ -11867,6 +11867,7 @@
     "openLoopAnswerRemind": "తర్వాత గుర్తు చేయి",
     "openLoopAnswerDrop": "వదిలేయి",
     "syncRejectionInvalidDate": "చెల్లని రికార్డింగ్ తేదీ",
+    "syncDeleteKeptUploading": "కొన్ని భాగాలు ఇంకా అప్‌లోడ్ అవుతున్నాయి, అవి నిలిపివేయబడ్డాయి",
     "syncRejectionServer": "సర్వర్ తిరస్కరించింది",
     "syncRejectionTooLarge": "చాలా పెద్దది",
     "deviceOnPhoneQueue": "ఫోన్‌లో {duration}",

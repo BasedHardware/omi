@@ -205,6 +205,15 @@ void main() {
         tester.renderObject<RenderBox>(find.byKey(const Key('sync_attention_device_stats'))).size.height;
     expect(statsHeight, lessThan(200), reason: 'the captured frame is the tiles, not the viewport');
 
+    // One row height: the On Device tile's two caption lines raise the whole
+    // row, not just their own tile — no tile stands shorter beside a taller one.
+    final heights = [
+      for (final key in ['device_stat_battery', 'device_stat_heard_today', 'device_stat_on_device'])
+        tester.renderObject<RenderBox>(find.byKey(Key(key))).size.height,
+    ];
+    expect(heights.toSet(), hasLength(1), reason: 'the three tiles share one height: $heights');
+    expect(heights.first, greaterThanOrEqualTo(84), reason: 'the 84pt minimum still holds');
+
     await writeFrame(tester, const Key('sync_attention_device_stats'), 'device-stats');
   });
 }

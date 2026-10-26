@@ -181,8 +181,17 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
               destructive: true,
             );
             if (!confirmed || !mounted) return;
-            for (final wal in wals) {
+            // Re-check every member at delete time, not at row-build time: a
+            // block that reads as refused can still have one member mid-upload,
+            // and only an idle attention member may be deleted — audio on its
+            // way is never destroyed under a refusal label that belongs to
+            // another member.
+            final deletable = wals.where(walDeletionAllowed).toList();
+            for (final wal in deletable) {
               await p.deleteWal(wal);
+            }
+            if (deletable.length < wals.length && context.mounted) {
+              OmiFeedback.info(context, l.syncDeleteKeptUploading);
             }
           }
 

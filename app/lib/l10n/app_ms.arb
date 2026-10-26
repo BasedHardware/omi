@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Ingatkan saya nanti",
     "openLoopAnswerDrop": "Buang",
     "syncRejectionInvalidDate": "Tarikh rakaman tidak sah",
+    "syncDeleteKeptUploading": "Beberapa bahagian masih dimuat naik dan disimpan",
     "syncRejectionServer": "Ditolak oleh pelayan",
     "syncRejectionTooLarge": "Terlalu besar",
     "deviceOnPhoneQueue": "{duration} pada telefon",

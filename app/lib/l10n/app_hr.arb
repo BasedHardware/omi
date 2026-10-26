@@ -11867,6 +11867,7 @@
     "openLoopAnswerRemind": "Podsjeti me kasnije",
     "openLoopAnswerDrop": "Odbaci",
     "syncRejectionInvalidDate": "Nevažeći datum snimanja",
+    "syncDeleteKeptUploading": "Neki su se dijelovi još uvijek prijenosu i zadržani su",
     "syncRejectionServer": "Server je odbio",
     "syncRejectionTooLarge": "Preveliko",
     "deviceOnPhoneQueue": "{duration} na telefonu",

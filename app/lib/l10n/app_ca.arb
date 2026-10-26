@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Recorda-m'ho més tard",
     "openLoopAnswerDrop": "Descarta-ho",
     "syncRejectionInvalidDate": "Data d'enregistrament no vàlida",
+    "syncDeleteKeptUploading": "Algunes parts encara s'estant pujant i s'han conservat",
     "syncRejectionServer": "Rebutjada pel servidor",
     "syncRejectionTooLarge": "Massa gran",
     "deviceOnPhoneQueue": "{duration} al telèfon",

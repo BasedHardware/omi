@@ -14607,6 +14607,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Ngày ghi âm không hợp lệ';
 
   @override
+  String get syncDeleteKeptUploading => 'Một số phần vẫn đang được tải lên và đã được giữ lại';
+
+  @override
   String get syncRejectionServer => 'Bị máy chủ từ chối';
 
   @override

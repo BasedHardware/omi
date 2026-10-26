@@ -14503,6 +14503,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncRejectionInvalidDate => 'תאריך הקלטה לא תקין';
 
   @override
+  String get syncDeleteKeptUploading => 'חלקים מסוימים עדיין בהעלאה ונשמרו';
+
+  @override
   String get syncRejectionServer => 'נדחה על ידי השרת';
 
   @override

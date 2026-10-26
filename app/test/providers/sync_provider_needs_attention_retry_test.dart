@@ -37,6 +37,9 @@ class _LocalSyncs {
 
   Future<dynamic> syncAll({IWalSyncProgressListener? progress}) => phone.syncAll(progress: progress);
 
+  Future<dynamic> syncWal({required Wal wal, IWalSyncProgressListener? progress}) =>
+      phone.syncWal(wal: wal, progress: progress);
+
   FlashSyncStallReason get flashStallReason => FlashSyncStallReason.none;
 }
 
@@ -228,6 +231,27 @@ void main() {
     ]);
     expect(wal.status, WalStatus.uploaded);
     expect(File('${tempDir.path}/audio_card_retry.bin').existsSync(), isTrue);
+  });
+
+  test('the error card retry never re-sends a too-large refusal', () async {
+    // The failed sync the banner reports is the 413 itself: the bytes cannot
+    // shrink, so the banner's Retry must skip it and leave the row's Delete
+    // as the only way out.
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final wal = await diskWal('audio_card_too_large.bin', timerStart: now - 600);
+    final syncProvider = await start([wal]);
+    uploadFailure = const SyncUploadHttpException(413, 'Audio file is too large to upload');
+    await syncProvider.syncWal(wal);
+    expect(wal.status, WalStatus.uploadRejected);
+    expect(wal.uploadRejectionReason, WalUploadRejection.tooLarge);
+    expect(syncProvider.syncState.hasError, isTrue, reason: 'fixture: this row is the reported failed sync');
+    expect(syncProvider.failedWal?.id, wal.id);
+
+    uploadFailure = null;
+    await syncProvider.retrySync();
+
+    expect(uploads, hasLength(1), reason: 'a retry cannot change the bytes');
+    expect(wal.status, WalStatus.uploadRejected);
   });
 
   test('a too-large refusal needs attention but is never re-offered by the retry-all', () async {

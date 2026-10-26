@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Påminn mig senare",
     "openLoopAnswerDrop": "Släpp det",
     "syncRejectionInvalidDate": "Ogiltigt inspelningsdatum",
+    "syncDeleteKeptUploading": "Vissa delar laddas fortfarande upp och behölls",
     "syncRejectionServer": "Avvisad av servern",
     "syncRejectionTooLarge": "För stor",
     "deviceOnPhoneQueue": "{duration} på telefonen",

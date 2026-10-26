@@ -14681,6 +14681,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Data d\'enregistrament no vàlida';
 
   @override
+  String get syncDeleteKeptUploading => 'Algunes parts encara s\'estant pujant i s\'han conservat';
+
+  @override
   String get syncRejectionServer => 'Rebutjada pel servidor';
 
   @override

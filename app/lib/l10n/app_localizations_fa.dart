@@ -14601,6 +14601,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncRejectionInvalidDate => 'تاریخ ضبط نامعتبر';
 
   @override
+  String get syncDeleteKeptUploading => 'برخی بخش‌ها هنوز در حال بارگذاری هستند و نگه داشته شدند';
+
+  @override
   String get syncRejectionServer => 'سرور رد کرد';
 
   @override

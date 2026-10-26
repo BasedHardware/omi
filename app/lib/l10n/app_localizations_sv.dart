@@ -14614,6 +14614,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Ogiltigt inspelningsdatum';
 
   @override
+  String get syncDeleteKeptUploading => 'Vissa delar laddas fortfarande upp och behölls';
+
+  @override
   String get syncRejectionServer => 'Avvisad av servern';
 
   @override

@@ -14611,6 +14611,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Virheellinen tallennuspäivä';
 
   @override
+  String get syncDeleteKeptUploading => 'Osatiedostoja lähetetään vielä ja ne säilytettiin';
+
+  @override
   String get syncRejectionServer => 'Palvelin hylkäsi';
 
   @override

@@ -11867,6 +11867,7 @@
     "openLoopAnswerRemind": "بعدً یادآوری کن",
     "openLoopAnswerDrop": "رهاش کن",
     "syncRejectionInvalidDate": "تاریخ ضبط نامعتبر",
+    "syncDeleteKeptUploading": "برخی بخش‌ها هنوز در حال بارگذاری هستند و نگه داشته شدند",
     "syncRejectionServer": "سرور رد کرد",
     "syncRejectionTooLarge": "بیش از حد بزرگ",
     "deviceOnPhoneQueue": "{duration} در گوشی",

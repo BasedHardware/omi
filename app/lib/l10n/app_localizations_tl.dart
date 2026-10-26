@@ -14721,6 +14721,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncRejectionInvalidDate => 'Di-wastong petsa ng pag-record';
 
   @override
+  String get syncDeleteKeptUploading => 'Ang ilang bahagi ay kasalukuyang ina-upload at pinanatili';
+
+  @override
   String get syncRejectionServer => 'Tinanggihan ng server';
 
   @override

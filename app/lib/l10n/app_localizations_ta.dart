@@ -14706,6 +14706,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncRejectionInvalidDate => 'தவறான பதிவு தேதி';
 
   @override
+  String get syncDeleteKeptUploading => 'சில பகுதிகள் இன்னும் பதிவேற்றப்பட்டு வருகின்றன, அவை வைக்கப்பட்டுள்ளன';
+
+  @override
   String get syncRejectionServer => 'சேவையகம் நிராகரித்தது';
 
   @override

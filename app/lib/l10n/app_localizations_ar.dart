@@ -14525,6 +14525,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get syncRejectionInvalidDate => 'تاريخ تسجيل غير صالح';
 
   @override
+  String get syncDeleteKeptUploading => 'بعض الأجزاء لا تزال قيد الرفع وقد تم الاحتفاظ بها';
+
+  @override
   String get syncRejectionServer => 'رفضه الخادم';
 
   @override

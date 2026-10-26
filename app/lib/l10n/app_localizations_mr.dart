@@ -14617,6 +14617,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get syncRejectionInvalidDate => 'अवैध रेकॉर्डिंग तारीख';
 
   @override
+  String get syncDeleteKeptUploading => 'काही भाग अजून अपलोड होत आहेत आणि ते ठेवले आहेत';
+
+  @override
   String get syncRejectionServer => 'सर्व्हरने नकार दिला';
 
   @override

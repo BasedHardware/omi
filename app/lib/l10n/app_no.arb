@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "Minn meg senere",
     "openLoopAnswerDrop": "Dropp det",
     "syncRejectionInvalidDate": "Ugyldig opptaksdato",
+    "syncDeleteKeptUploading": "Noen deler lastes fortsatt opp og ble beholdt",
     "syncRejectionServer": "Avvist av serveren",
     "syncRejectionTooLarge": "For stor",
     "deviceOnPhoneQueue": "{duration} på telefonen",

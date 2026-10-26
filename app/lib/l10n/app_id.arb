@@ -4476,6 +4476,7 @@
     "openLoopAnswerRemind": "Ingatkan saya nanti",
     "openLoopAnswerDrop": "Abaikan",
     "syncRejectionInvalidDate": "Tanggal perekaman tidak valid",
+    "syncDeleteKeptUploading": "Beberapa bagian masih diunggah dan tetap disimpan",
     "syncRejectionServer": "Ditolak oleh server",
     "syncRejectionTooLarge": "Terlalu besar",
     "deviceOnPhoneQueue": "{duration} di ponsel",

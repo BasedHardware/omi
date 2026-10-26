@@ -11867,6 +11867,7 @@
     "openLoopAnswerRemind": "পরে মনে করিয়ে দিন",
     "openLoopAnswerDrop": "বাদ দিন",
     "syncRejectionInvalidDate": "অবৈধ রেকর্ডিং তারিখ",
+    "syncDeleteKeptUploading": "কিছু অংশ এখনও আপলোড হচ্ছে এবং রাখা হয়েছে",
     "syncRejectionServer": "সার্ভার প্রত্যাখ্যান করেছে",
     "syncRejectionTooLarge": "খুব বড়",
     "deviceOnPhoneQueue": "ফোনে {duration}",

@@ -4441,6 +4441,7 @@
     "openLoopAnswerRemind": "後でリマインド",
     "openLoopAnswerDrop": "破棄",
     "syncRejectionInvalidDate": "無効な録音日",
+    "syncDeleteKeptUploading": "一部のパーツはまだアップロード中のため、保持されました",
     "syncRejectionServer": "サーバーに拒否されました",
     "syncRejectionTooLarge": "大きすぎます",
     "deviceOnPhoneQueue": "スマホに{duration}",

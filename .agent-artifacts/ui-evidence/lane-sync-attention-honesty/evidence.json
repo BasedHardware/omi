@@ -25,7 +25,7 @@
     {
       "file": "004-mobile-ios-device-stats-after.png",
       "platform": "mobile-ios",
-      "description": "Device stats after: Heard today 33m counts the running episode, On Device names the 7h 45m phone queue",
+      "description": "Device stats after: Heard today 33m counts the running episode, On Device names the 7h 45m phone queue, and the three tiles share one row height — the On Device captions raise the whole row",
       "captured_by": "agent",
       "source": "visual-audit"
     }
