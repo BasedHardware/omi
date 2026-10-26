@@ -43,13 +43,16 @@ if "fastapi" not in sys.modules:
                 pass
 
         class HTTPException(Exception):
-            def __init__(self, status_code=500, detail=""):
+            def __init__(self, status_code=500, detail="", headers=None, *args, **kwargs):
                 super().__init__(detail)
                 self.status_code = status_code
                 self.detail = detail
+                self.headers = headers or {}
 
         class Request:
-            pass
+            def __init__(self, *args, **kwargs):
+                self.headers = {}
+                self.query_params = {}
 
         class Depends:
             def __init__(self, *args, **kwargs):
@@ -66,10 +69,15 @@ if "fastapi" not in sys.modules:
         responses = types.ModuleType("fastapi.responses")
 
         class HTMLResponse:
-            pass
+            def __init__(self, content="", status_code=200, *args, **kwargs):
+                self.content = content
+                self.body = content.encode("utf-8") if isinstance(content, str) else content
+                self.status_code = status_code
 
         class JSONResponse:
-            pass
+            def __init__(self, content=None, status_code=200, *args, **kwargs):
+                self.content = content
+                self.status_code = status_code
 
         responses.HTMLResponse = HTMLResponse
         responses.JSONResponse = JSONResponse

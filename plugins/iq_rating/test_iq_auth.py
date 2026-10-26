@@ -2,9 +2,100 @@ import importlib
 import json
 import os
 import re
+import sys
+import types
 import unittest
 from typing import Any, Dict, Optional
 from unittest.mock import patch
+
+if "fastapi" not in sys.modules:
+    try:
+        import fastapi
+        import fastapi.responses
+    except ImportError:
+        fastapi = types.ModuleType("fastapi")
+
+        class APIRouter:
+            def __init__(self, *args, **kwargs):
+                pass
+            def get(self, *args, **kwargs):
+                return lambda f: f
+            def post(self, *args, **kwargs):
+                return lambda f: f
+            def on_event(self, *args, **kwargs):
+                return lambda f: f
+
+        class Query:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        class FastAPI:
+            def __init__(self, *args, **kwargs):
+                pass
+            def include_router(self, *args, **kwargs):
+                pass
+
+        class HTTPException(Exception):
+            def __init__(self, status_code=500, detail="", headers=None, *args, **kwargs):
+                super().__init__(detail)
+                self.status_code = status_code
+                self.detail = detail
+                self.headers = headers or {}
+
+        class Request:
+            def __init__(self, *args, **kwargs):
+                self.headers = {}
+                self.query_params = {}
+
+        class Depends:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        fastapi.APIRouter = APIRouter
+        fastapi.FastAPI = FastAPI
+        fastapi.Query = Query
+        fastapi.HTTPException = HTTPException
+        fastapi.Request = Request
+        fastapi.Depends = Depends
+        sys.modules["fastapi"] = fastapi
+
+        responses = types.ModuleType("fastapi.responses")
+
+        class HTMLResponse:
+            def __init__(self, content="", status_code=200, *args, **kwargs):
+                self.content = content
+                self.body = content.encode("utf-8") if isinstance(content, str) else content
+                self.status_code = status_code
+
+        class JSONResponse:
+            def __init__(self, content=None, status_code=200, *args, **kwargs):
+                self.content = content
+                self.status_code = status_code
+
+        responses.HTMLResponse = HTMLResponse
+        responses.JSONResponse = JSONResponse
+        sys.modules["fastapi.responses"] = responses
+        fastapi.responses = responses
+
+if "requests" not in sys.modules:
+    try:
+        import requests
+    except ImportError:
+        requests = types.ModuleType("requests")
+
+        def _dummy_post(*args, **kwargs):
+            return None
+
+        def _dummy_get(*args, **kwargs):
+            return None
+
+        class RequestException(Exception):
+            pass
+
+        requests.post = _dummy_post
+        requests.get = _dummy_get
+        requests.RequestException = RequestException
+        sys.modules["requests"] = requests
 
 from fastapi import HTTPException
 from fastapi.responses import HTMLResponse
