@@ -9,6 +9,7 @@ from google.cloud import firestore
 
 from config.rollout_cohorts import COLLECTION, COHORT_ENVS, valid_uid
 from database._client import get_data_plane_firestore_client, run_transactional
+from database.rollout_membership_cache import read_memberships_cached
 
 STT_CAP_DOCUMENT = 'stt-cap-dispatch'
 HELD_CONTENT_DOCUMENT = 'held-content'
@@ -34,8 +35,6 @@ def read_held_content_cohort(*, firestore_client: Any | None = None) -> dict | N
 
 def read_memberships(uid: str, *, firestore_client: Any | None = None) -> dict[str, dict[str, bool]]:
     client = firestore_client or get_data_plane_firestore_client()
-    from database.rollout_membership_cache import read_memberships_cached
-
     return read_memberships_cached(uid, client, lambda: _read_memberships(uid, client))
 
 

@@ -53,7 +53,8 @@ hit/miss/error outcomes.
 
 The original encrypted response cache remains authoritative for reuse eligibility,
 scope and freshness. An identical miss may join one of at most 32 process-local
-in-flight reads. Only sync route workers wait, for at most one second; async
+in-flight reads, with at most eight waiting followers globally. Excess followers
+immediately use their original source path. Only sync route workers wait, for at most one second; async
 callers and saturated/expired/timed-out followers use their own source read.
 The route adapter releases waiters in `finally`, including validation errors and
 exceptions. Only final successful, complete, size-bounded response bytes and the

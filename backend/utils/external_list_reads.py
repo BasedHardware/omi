@@ -32,7 +32,9 @@ VERSIONED_TTL_SECONDS = 900
 MAX_BODY_BYTES = 256 * 1024
 MAX_ENTRY_BYTES = MAX_BODY_BYTES + 8192
 MAX_CACHE_POPULATIONS = 32
+MAX_CACHE_WAITERS = 8
 _population_slots = BoundedSemaphore(MAX_CACHE_POPULATIONS)
+_waiter_slots = BoundedSemaphore(MAX_CACHE_WAITERS)
 _client: Any = None
 _flights: dict[str, tuple[float, Future]] = {}
 _flight_lock = Lock()
@@ -160,11 +162,17 @@ class _Entry:
                     _flights[self.key] = (self.started + min(self.ttl, TTL_SECONDS), self.flight)
                 return None
             pending = existing[1]
+        slots = _waiter_slots
+        if not slots.acquire(blocking=False):
+            self.event('coalesce_saturated')
+            return None
         try:
             result = pending.result(timeout=min(1.0, max(0.0, existing[0] - now)))
         except TimeoutError:
             self.event('coalesce_timeout')
             return None
+        finally:
+            slots.release()
         if result is None:
             return None
         body, headers, expires_at = result

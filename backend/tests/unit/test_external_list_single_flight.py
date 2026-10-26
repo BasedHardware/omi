@@ -17,6 +17,7 @@ from utils import external_list_reads as cache
 def storage(monkeypatch):
     monkeypatch.setattr(cache, '_client', FakeRedis())
     monkeypatch.setattr(cache, '_flights', {})
+    monkeypatch.setattr(cache, '_waiter_slots', threading.BoundedSemaphore(cache.MAX_CACHE_WAITERS))
     monkeypatch.delenv('OMI_EXTERNAL_LIST_CACHE_ENABLED', raising=False)
     monkeypatch.delenv('OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED', raising=False)
 
@@ -125,6 +126,41 @@ def test_owner_deadline_does_not_renew_and_completion_has_no_io(storage, monkeyp
 
 async def _complete_without_io(entry):
     entry.complete(Response(b'[]'))
+
+
+def test_waiters_are_bounded_globally_and_saturation_bypasses_immediately(storage, monkeypatch):
+    waiting = threading.Event()
+    counter_lock = threading.Lock()
+    waits = []
+
+    class WaitingFuture(Future):
+        def result(self, *args, **kwargs):
+            with counter_lock:
+                waits.append('waiting')
+                if len(waits) == 2:
+                    waiting.set()
+            return super().result(*args, **kwargs)
+
+    monkeypatch.setattr(cache, 'Future', WaitingFuture)
+    monkeypatch.setattr(cache, '_waiter_slots', threading.BoundedSemaphore(2))
+    first, _ = lookup(query={'limit': 25})
+    second, _ = lookup(query={'limit': 26})
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        one = pool.submit(lookup, query={'limit': 25})
+        two = pool.submit(lookup, query={'limit': 26})
+        try:
+            assert waiting.wait(3)
+            excess, hit = pool.submit(lookup, query={'limit': 25}).result(3)
+            assert hit is None and excess.state.external_list_cache_entry.flight is None
+            assert len(waits) == 2  # Excess never entered the blocking primitive.
+        finally:
+            first.state.external_list_cache_entry.complete(Response(b'[]'))
+            second.state.external_list_cache_entry.complete(Response(b'[]'))
+        assert one.result(3)[1].body == two.result(3)[1].body == b'[]'
+    # Completion, timeout and error paths must return the global admission slots.
+    assert cache._waiter_slots.acquire(blocking=False)
+    assert cache._waiter_slots.acquire(blocking=False)
+    assert not cache._waiter_slots.acquire(blocking=False)
 
 
 def test_real_route_finalization_coalesces_after_each_authorization(storage, monkeypatch):
