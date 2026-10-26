@@ -134,6 +134,7 @@ _LANG_STOPWORDS: dict[str, set[str]] = {
 
 # In-memory caches (used alongside Redis when available, and in hermetic unit tests).
 _VOICE_PROFILE_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_UID_CACHED_KEYS: dict[str, set[str]] = {}
 _OPT_IN_STATE: dict[str, bool] = {}
 _HANDLE_TO_PERSON_CACHE: dict[str, dict[str, str]] = {}
 redis_client: Any = None
@@ -201,14 +202,70 @@ def user_voice_cache_key(uid: str, person_key: str) -> str:
     return f'user_voice_profile:{uid}:{norm_key}'
 
 
+def user_voice_index_key(uid: str) -> str:
+    return f'user_voice_profile_index:{uid}'
+
+
 def user_voice_opt_in_key(uid: str, person_key: Optional[str] = None) -> str:
     if person_key:
         return f'user_voice_opt_in:{uid}:{normalize_person_key(person_key)}'
     return f'user_voice_opt_in:{uid}:*'
 
 
+def invalidate_user_voice_cache(uid: str, person_key: Optional[str] = None) -> int:
+    """Invalidate cached voice profile(s) for a user (or a specific person) across memory and Redis."""
+    if not uid:
+        return 0
+    removed = 0
+    if person_key is not None:
+        ckey = user_voice_cache_key(uid, person_key)
+        if _VOICE_PROFILE_CACHE.pop(ckey, None) is not None:
+            removed += 1
+        if uid in _UID_CACHED_KEYS:
+            _UID_CACHED_KEYS[uid].discard(ckey)
+        try:
+            r_client = _get_redis()
+            if r_client is not None:
+                if hasattr(r_client, 'delete'):
+                    r_client.delete(ckey)
+        except Exception:
+            pass
+        return removed
+
+    prefix_profile = f'user_voice_profile:{uid}:'
+    keys_to_delete: set[str] = set(_UID_CACHED_KEYS.pop(uid, set()))
+    for k in [k for k in _VOICE_PROFILE_CACHE if k.startswith(prefix_profile)]:
+        _VOICE_PROFILE_CACHE.pop(k, None)
+        keys_to_delete.add(k)
+        removed += 1
+    try:
+        r_client = _get_redis()
+        if r_client is not None:
+            idx_key = user_voice_index_key(uid)
+            raw_idx = r_client.get(idx_key)
+            if raw_idx:
+                text = raw_idx.decode() if isinstance(raw_idx, (bytes, bytearray)) else str(raw_idx)
+                parsed = json.loads(text)
+                if isinstance(parsed, list):
+                    for item in parsed:
+                        if isinstance(item, str):
+                            keys_to_delete.add(item)
+            if hasattr(r_client, 'delete'):
+                for k in keys_to_delete:
+                    r_client.delete(k)
+                r_client.delete(idx_key)
+    except Exception:
+        pass
+    return removed
+
+
+def on_conversation_deleted_user_voice(uid: str, person_key: Optional[str] = None) -> int:
+    """Hook to invalidate cached user voice profiles when conversations are deleted or locked."""
+    return invalidate_user_voice_cache(uid, person_key)
+
+
 def set_user_voice_opt_in(uid: str, enabled: bool, person_key: Optional[str] = None) -> None:
-    """Set account-wide or per-person opt-in for user voice drafting."""
+    """Set account-wide or per-person opt-in for user voice drafting and purge cache on opt-out."""
     key = user_voice_opt_in_key(uid, person_key)
     _OPT_IN_STATE[key] = bool(enabled)
     try:
@@ -217,6 +274,8 @@ def set_user_voice_opt_in(uid: str, enabled: bool, person_key: Optional[str] = N
             r_client.setex(key, USER_VOICE_CACHE_TTL_SECONDS, '1' if enabled else '0')
     except Exception:
         pass
+    if not enabled:
+        invalidate_user_voice_cache(uid, person_key)
 
 
 def is_user_voice_opted_in(
@@ -228,7 +287,7 @@ def is_user_voice_opted_in(
     if not uid:
         return False
 
-    if isinstance(user_settings, dict):
+    if user_settings is not None:
         if user_settings.get('propose_message_user_voice_opt_in') is not None:
             return bool(user_settings['propose_message_user_voice_opt_in'])
         if user_settings.get('user_voice_enabled') is not None:
@@ -266,7 +325,7 @@ def is_user_voice_opted_in(
     return False
 
 
-def remember_contact_resolution(uid: str, contacts: Iterable[dict[str, Any]]) -> None:
+def remember_contact_resolution(uid: str, contacts: Iterable[Any]) -> None:
     """Record phone/email handle -> contact display name from search_contacts results."""
     if not uid or not contacts:
         return
@@ -312,12 +371,11 @@ def clear_user_voice_cache(uid: Optional[str] = None) -> None:
     """Clear cached voice profiles and opt-in state (primarily for tests)."""
     if uid is None:
         _VOICE_PROFILE_CACHE.clear()
+        _UID_CACHED_KEYS.clear()
         _OPT_IN_STATE.clear()
         _HANDLE_TO_PERSON_CACHE.clear()
         return
-    prefix_profile = f'user_voice_profile:{uid}:'
-    for k in [k for k in _VOICE_PROFILE_CACHE if k.startswith(prefix_profile)]:
-        _VOICE_PROFILE_CACHE.pop(k, None)
+    invalidate_user_voice_cache(uid, None)
     prefix_opt = f'user_voice_opt_in:{uid}:'
     for k in [k for k in _OPT_IN_STATE if k.startswith(prefix_opt)]:
         _OPT_IN_STATE.pop(k, None)
@@ -719,11 +777,15 @@ def cache_user_voice_profile(profile: UserVoiceProfile) -> None:
     payload = profile.to_dict()
     expires_at = profile.expires_at or (time.time() + USER_VOICE_CACHE_TTL_SECONDS)
     _VOICE_PROFILE_CACHE[cache_key] = (expires_at, payload)
+    _UID_CACHED_KEYS.setdefault(profile.uid, set()).add(cache_key)
 
     try:
         r_client = _get_redis()
         if r_client is not None:
             r_client.setex(cache_key, USER_VOICE_CACHE_TTL_SECONDS, json.dumps(payload))
+            idx_key = user_voice_index_key(profile.uid)
+            known = sorted(_UID_CACHED_KEYS.get(profile.uid, {cache_key}))
+            r_client.setex(idx_key, USER_VOICE_CACHE_TTL_SECONDS, json.dumps(known))
     except Exception:
         pass
 
@@ -756,7 +818,9 @@ def get_or_build_user_voice_profile(
         try:
             import database.conversations as conversations_db
 
-            conversations = conversations_db.get_conversations(uid, limit=100, include_discarded=False)
+            conversations = conversations_db.get_conversations(
+                uid=uid, limit=100, statuses=['completed'], include_discarded=False
+            )
         except Exception:
             conversations = []
 
@@ -865,17 +929,17 @@ def polish_draft_in_user_voice(text: str, profile: Optional[UserVoiceProfile]) -
                 flags=re.IGNORECASE,
             )
 
-    # 2. Fix exclamation mark ("!") count
+    # 2. Fix exclamation mark ("!") count at word/clause boundaries (preserves URLs/tokens)
     if profile.exclamation_rate < 0.2 and profile.dominant_ending != 'exclamation':
         if profile.dominant_ending == 'nothing':
             polished = re.sub(r'!+\s*$', '', polished)
-            polished = re.sub(r'!+', '', polished)
+            polished = re.sub(r'!+(?=\s|$)', '', polished)
         else:
             polished = re.sub(r'!+\s*$', '.', polished)
-            polished = re.sub(r'!+', '.', polished)
+            polished = re.sub(r'!+(?=\s|$)', '.', polished)
     else:
         max_bangs = 2 if profile.avg_exclamations_per_line >= 1.5 else 1
-        polished = re.sub(r'!{2,}', '!' * max_bangs, polished)
+        polished = re.sub(r'!{2,}(?=\s|$)', '!' * max_bangs, polished)
 
     # 3. Fix emoji mismatches when the user never uses emojis with this person
     if profile.emoji_rate == 0.0:
@@ -910,3 +974,41 @@ def polish_draft_in_user_voice(text: str, profile: Optional[UserVoiceProfile]) -
                 stripped_end = stripped_end + '!'
 
     return stripped_end
+
+
+def apply_user_voice_to_propose_message(
+    uid: str,
+    text: str,
+    recipients: Optional[Iterable[str]] = None,
+) -> str:
+    """Synchronous helper to run opt-in check, profile lookup, and draft polish off the event loop."""
+    person_name = resolve_person_for_handles(uid, recipients)
+    if not is_user_voice_opted_in(uid, person_name):
+        return text
+    profile = get_or_build_user_voice_profile(
+        uid,
+        person_name,
+        recipient_handles=recipients,
+        opt_in=True,
+    )
+    return polish_draft_in_user_voice(text, profile)
+
+
+def enrich_search_contacts_with_user_voice(uid: str, contacts: Iterable[Any]) -> None:
+    """Synchronous helper to record contacts and attach user voice profiles off the event loop."""
+    remember_contact_resolution(uid, contacts)
+    for contact in contacts:
+        if not isinstance(contact, dict):
+            continue
+        contact_name = str(contact.get('name') or contact.get('display_name') or '').strip()
+        if contact_name and is_user_voice_opted_in(uid, contact_name):
+            handles = contact.get('phones') or contact.get('emails') or []
+            profile = get_or_build_user_voice_profile(
+                uid,
+                contact_name,
+                recipient_handles=handles if isinstance(handles, list) else [],
+                opt_in=True,
+            )
+            prompt_guidance = format_user_voice_prompt(profile)
+            if prompt_guidance:
+                contact['user_voice_profile'] = prompt_guidance

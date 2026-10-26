@@ -24,6 +24,7 @@ from utils.llm.user_voice import (
     get_cached_user_voice_profile,
     get_or_build_user_voice_profile,
     is_user_voice_opted_in,
+    on_conversation_deleted_user_voice,
     polish_draft_in_user_voice,
     remember_contact_resolution,
     set_user_voice_opt_in,
@@ -318,3 +319,30 @@ def test_blind_eval_real_lines_vs_drafts_prefers_user_voice():
     for case in report['cases']:
         assert case['voiced_distance_to_real'] < case['generic_distance_to_real']
         assert case['blind_preference'] == 'user_voice'
+
+
+def test_cache_invalidation_on_opt_out_and_conversation_deletion(two_person_conversations):
+    uid = 'user-invalidation'
+    set_user_voice_opt_in(uid, True)
+
+    alex_profile = get_or_build_user_voice_profile(uid, 'Alex', conversations=two_person_conversations)
+    patel_profile = get_or_build_user_voice_profile(uid, 'Dr. Patel', conversations=two_person_conversations)
+    assert alex_profile is not None
+    assert patel_profile is not None
+    assert get_cached_user_voice_profile(uid, 'alex') is not None
+    assert get_cached_user_voice_profile(uid, 'dr. patel') is not None
+
+    # URL containing '!' is preserved when terminal '!' is stripped
+    url_draft = 'Check https://example.com/#!/doc now!'
+    polished_url = polish_draft_in_user_voice(url_draft, alex_profile)
+    assert 'https://example.com/#!/doc' in polished_url
+    assert not polished_url.endswith('!')
+
+    # Per-person opt-out immediately purges that person's cached profile
+    set_user_voice_opt_in(uid, False, person_key='Alex')
+    assert get_cached_user_voice_profile(uid, 'alex') is None
+    assert get_cached_user_voice_profile(uid, 'dr. patel') is not None
+
+    # Conversation deletion hook purges remaining cached profiles for the user
+    on_conversation_deleted_user_voice(uid)
+    assert get_cached_user_voice_profile(uid, 'dr. patel') is None
