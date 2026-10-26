@@ -23,9 +23,11 @@ void main() {
       structured: Structured(id, 'synthetic summary'),
       status: ConversationStatus.completed);
 
-  for (final reopen in [false, true]) {
+  for (final scenario in [(reopen: false, slow: false), (reopen: true, slow: false), (reopen: false, slow: true)]) {
+    final reopen = scenario.reopen;
+    final slow = scenario.slow;
     testWidgets(
-        'no push: merge settles ${reopen ? 'after reopening' : 'in foreground'} and renders only its new target',
+        'no push: merge settles ${reopen ? 'after reopening' : slow ? 'after the fast polling window' : 'in foreground'} and renders only its new target',
         (tester) async {
       final evidence = JourneyEvidence.begin(journeyId: 'j7_conversation_merge_recovery', lane: journeyLane);
       evidence.note(reopen ? 'reopen while worker pending' : 'foreground without push');
@@ -35,8 +37,10 @@ void main() {
         addTearDown(server.stop);
         addTearDown(JourneyHermeticBoot.stop);
         server.conversations.addAll([row('source-a').toJson(), row('source-b').toJson()]);
-        ConversationProvider make() =>
-            ConversationProvider(isSignedIn: () => true)..mergeProbeInterval = const Duration(milliseconds: 10);
+        ConversationProvider make() => ConversationProvider(isSignedIn: () => true)
+          ..mergeProbeInterval = const Duration(milliseconds: 10)
+          ..mergeProbeLimit = slow ? const Duration(milliseconds: 150) : const Duration(minutes: 3)
+          ..mergeRecoveryInterval = const Duration(milliseconds: 10);
         provider = make();
         await provider.fetchConversations();
         final admitted = await provider.initiateConversationMerge(conversationIds: ['source-a', 'source-b']);
@@ -62,6 +66,18 @@ void main() {
         wait.cancel();
         expect([...provider.conversations, ...provider.processingConversations].map((c) => c.id),
             containsAll(['source-a', 'source-b']));
+        if (slow) {
+          final recovery = Completer<void>();
+          final untilRecovery = Timer.periodic(const Duration(milliseconds: 2), (timer) {
+            if (server.countOf('GET', '/v1/conversations') >= 2) {
+              timer.cancel();
+              recovery.complete();
+            }
+          });
+          await recovery.future.timeout(const Duration(seconds: 5));
+          untilRecovery.cancel();
+          expect(provider.mergingConversationIds, containsAll(['source-a', 'source-b']));
+        }
         final settled = Completer<void>();
         provider.addListener(() {
           if (!settled.isCompleted &&

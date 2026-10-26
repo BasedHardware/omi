@@ -7228,9 +7228,12 @@ before storing it. `worker_empty_evidence` retains its existing exact shape.
 ### Manual merge completion observation
 
 Manual merge admission now returns the preallocated, optional
-`merged_conversation_id` for both lifecycle modes. A mobile client can observe
+`merged_conversation_id` and uses the existing durable lifecycle merge job for
+every manual admission, including when the wider lifecycle mode is off/shadow. A mobile client can observe
 source 404s and the completed target without requiring a completion push;
 legacy clients ignore the additive field. Source cleanup, notification dispatch,
-audio custody and lifecycle rollout modes remain owned by the existing merge
-worker/job. See `app/docs/conversation-merge-recovery.md` for restart, cache and
+audio custody and cleanup retries remain owned by the existing merge worker/job.
+Capture/transcription canary behavior is unchanged; manual merge correctness no
+longer depends on its serve cohort. Previously consumed source receipts are
+refused rather than merged again. See `app/docs/conversation-merge-recovery.md` for restart, cache and
 release verification.

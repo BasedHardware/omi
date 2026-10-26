@@ -137,3 +137,16 @@ def test_merge_renews_processing_lease_during_live_processing(monkeypatch):
     merge.perform_merge_async('u1', ['c1', 'c2'], reprocess=True)
 
     assert lease_renewed.is_set()
+
+
+@pytest.mark.parametrize('receipt', ['transcript_corrections_moved_to', 'dream_duplicate_of'])
+def test_already_incorporated_source_is_rejected_at_admission_and_worker_recheck(monkeypatch, receipt):
+    sources = {
+        'c1': {'id': 'c1', 'status': 'completed', receipt: 'retained-target'},
+        'c2': {'id': 'c2', 'status': 'completed'},
+    }
+    assert merge.validate_merge_compatibility(list(sources.values()))[0] is False
+    fail, create = _install(monkeypatch, sources)
+    merge.perform_merge_async('u1', ['c1', 'c2'])
+    fail.assert_called_once()
+    create.assert_not_called()

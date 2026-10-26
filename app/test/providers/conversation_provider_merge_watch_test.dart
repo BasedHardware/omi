@@ -137,6 +137,48 @@ void main() {
     });
   });
 
+  test('a slow server cleanup remains observed after the fast polling window without push', () {
+    fakeAsync((clock) {
+      var done = false;
+      var completed = false;
+      var recoveryRefreshes = 0;
+      var reads = 0;
+      final watch = ConversationMergeWatch(
+          sourceIds: ['a', 'b'],
+          targetId: 'target',
+          fetch: (id) async {
+            reads++;
+            return id == 'target'
+                ? ApiSuccess(row('target'))
+                : done
+                    ? missing
+                    : ApiSuccess(row(id, status: ConversationStatus.merging));
+          },
+          isCurrent: () => true,
+          onCompleted: (_) async {
+            completed = true;
+          },
+          onRefresh: (_) async => fail('must keep observing the admitted operation'),
+          onRecoveryRefresh: () async {
+            recoveryRefreshes++;
+          },
+          interval: const Duration(seconds: 1),
+          limit: const Duration(seconds: 3),
+          recoveryInterval: const Duration(seconds: 10),
+          recoveryLimit: const Duration(minutes: 1));
+      clock.elapse(const Duration(seconds: 4));
+      expect(completed, false);
+      expect(recoveryRefreshes, 1);
+      final fastReads = reads;
+      clock.elapse(const Duration(seconds: 5));
+      expect(reads, fastReads, reason: 'recovery probes use the lower bounded rate');
+      done = true;
+      clock.elapse(const Duration(seconds: 10));
+      expect(completed, true);
+      watch.cancel();
+    });
+  });
+
   test('unreadable target never announces success but deadline retains proven source absence', () {
     fakeAsync((clock) {
       final refreshes = <bool>[];

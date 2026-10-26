@@ -1,7 +1,6 @@
 from utils.generated_compute import require_generated_compute, generated_compute_allowed, generated_compute_scope
 import asyncio
 import hashlib
-from uuid import uuid4
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
@@ -2381,10 +2380,10 @@ def merge_conversations(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:merge")),
 ):
     """Admit completed sources, merge into a new ID asynchronously, then notify the client."""
-    from utils.conversations.merge_conversations import validate_merge_compatibility, perform_merge_async
+    from utils.conversations.merge_conversations import validate_merge_compatibility
 
-    if len(request.conversation_ids) < 2:
-        raise HTTPException(status_code=400, detail="At least 2 conversations required to merge")
+    if not 2 <= len(request.conversation_ids) <= 100:
+        raise HTTPException(status_code=400, detail="Merge requires 2 to 100 conversations")
     if len(request.conversation_ids) != len(set(request.conversation_ids)):
         raise HTTPException(status_code=400, detail="Cannot merge duplicate conversations.")
 
@@ -2399,43 +2398,17 @@ def merge_conversations(
     if not is_valid:
         raise HTTPException(status_code=400, detail=error_message)
 
-    from config.refactor_modes import serving_for
-
-    if serving_for('LIFECYCLE_V2_MODE', uid):
-        job = lifecycle_service.merge_jobs.admit(uid, request.conversation_ids, request.reprocess)
-        if job is None:
-            raise HTTPException(status_code=409, detail='Conversation changed during merge admission')
-        background_tasks.add_task(lifecycle_service.merge_jobs.run, job['job_id'], job['dispatch_generation'])
-        return MergeConversationsResponse(
-            status='merging',
-            message='Merge started',
-            warning=warning_message,
-            conversation_ids=request.conversation_ids,
-            merged_conversation_id=job['merge_target_id'],
-        )
-
-    # refactor: superseded by lifecycle.merge_jobs when LIFECYCLE_V2_MODE=serve
-    admitted = []
-    for conv_id in request.conversation_ids:
-        if not lifecycle_service.begin_merge(uid, conv_id):
-            for prior_id in admitted:
-                lifecycle_service.complete(uid, prior_id)
-            raise HTTPException(status_code=409, detail='Conversation changed during merge admission')
-        admitted.append(conv_id)
-
-    target_id = str(uuid4())
-    background_tasks.add_task(
-        perform_merge_async,
-        uid=uid,
-        conversation_ids=request.conversation_ids,
-        reprocess=request.reprocess,
-        merge_target_id=target_id,
-    )
-
+    # Every manual merge needs durable admission/recovery. The broader lifecycle
+    # canary still controls capture/finalization; it cannot disable this safety
+    # contract or send a subset of users through non-recoverable source cleanup.
+    job = lifecycle_service.merge_jobs.admit(uid, request.conversation_ids, request.reprocess)
+    if job is None:
+        raise HTTPException(status_code=409, detail='Conversation changed during merge admission')
+    background_tasks.add_task(lifecycle_service.merge_jobs.run, job['job_id'], job['dispatch_generation'])
     return MergeConversationsResponse(
-        status="merging",
-        message="Merge started",
+        status='merging',
+        message='Merge started',
         warning=warning_message,
         conversation_ids=request.conversation_ids,
-        merged_conversation_id=target_id,
+        merged_conversation_id=job['merge_target_id'],
     )

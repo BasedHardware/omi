@@ -140,6 +140,9 @@ class ConversationProvider extends ChangeNotifier {
 
   @visibleForTesting
   Duration mergeProbeLimit = const Duration(minutes: 3);
+
+  @visibleForTesting
+  Duration mergeRecoveryInterval = const Duration(seconds: 30);
   bool isSelectionModeActive = false;
   Set<String> selectedConversationIds = {};
   StreamSubscription<MergeCompletedEvent>? _mergeCompletedSubscription;
@@ -2275,6 +2278,10 @@ class ConversationProvider extends ChangeNotifier {
       isCurrent: current,
       interval: mergeProbeInterval,
       limit: mergeProbeLimit,
+      recoveryInterval: mergeRecoveryInterval,
+      onRecoveryRefresh: () async {
+        if (current()) await _fetchNewConversations(restoreMergeWatches: false);
+      },
       onCompleted: (merged) async {
         if (!current()) return;
         await onMergeCompleted(merged.id, ids, merged: merged);

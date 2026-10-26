@@ -6,8 +6,9 @@ and background processing.
 ## Boundaries
 
 - Manual merge admission allocates a new target before dispatch and returns
-  `merged_conversation_id` to clients. Legacy work and durable jobs use that same
-  identity; the optional response remains decodable by released clients. Mobile
+  `merged_conversation_id` to clients. All manual admissions use durable jobs
+  regardless of the wider lifecycle canary; consumed-source receipts fence new
+  admission and worker rereads. The target keeps one identity; the optional response remains decodable by released clients. Mobile
   completion/restart/cache ownership is documented in
   `app/docs/conversation-merge-recovery.md`.
 

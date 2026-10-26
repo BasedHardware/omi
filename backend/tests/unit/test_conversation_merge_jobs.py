@@ -177,3 +177,11 @@ def test_merge_rollback_retires_old_debt_and_preserves_reopened_owner(store, mon
     assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=client)
     assert client.rows[paths[0]]['status'] == 'quiet_done'
     assert client.rows[paths[1]]['status'] == 'waiting_quiet'
+
+
+@pytest.mark.parametrize('receipt', ['transcript_corrections_moved_to', 'dream_duplicate_of'])
+def test_old_partial_merge_source_cannot_be_admitted_as_fresh_input(store, receipt):
+    row(store, 'a')[receipt] = 'retained-previous-target'
+    assert admit(store) is None
+    assert all(row(store, cid)['status'] == 'completed' for cid in ('a', 'b'))
+    assert not any(tx.creates or tx.updates for tx in store[0].transactions)
