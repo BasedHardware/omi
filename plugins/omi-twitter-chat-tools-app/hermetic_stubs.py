@@ -68,6 +68,8 @@ def ensure_fastapi() -> None:
         FastAPI=_App,
         Request=object,
         Query=lambda *a, **k: None,
+        Header=lambda *a, **k: None,
+        Depends=lambda d=None, **k: d,
         HTTPException=StubHTTPException,
     )
     sys.modules["fastapi.responses"] = _module(
@@ -134,6 +136,8 @@ def load_main(app_dir: str):
             FastAPI=_App,
             Request=object,
             Query=lambda *a, **k: None,
+            Header=lambda *a, **k: None,
+            Depends=lambda d=None, **k: d,
             HTTPException=http_exception(),
         ),
         "fastapi.responses": _module(

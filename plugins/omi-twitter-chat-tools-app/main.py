@@ -31,6 +31,13 @@ from db import (
 )
 from models import ChatToolResponse
 from twitter_link_auth import require_signed_link, sign_uid
+try:
+    from fastapi import Depends
+except ImportError:
+    def Depends(dependency=None, **kwargs):
+        return dependency
+
+from twitter_tools_auth import require_twitter_tools_auth
 
 REQUEST_TIMEOUT = (5, 30)
 
@@ -513,7 +520,7 @@ async def get_omi_tools_manifest():
 # ============================================
 
 @app.post("/tools/post_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_post_tweet(request: Request):
+async def tool_post_tweet(request: Request, _auth: None = Depends(require_twitter_tools_auth)):
     """Post a new tweet."""
     try:
         body = await request.json()
@@ -569,7 +576,7 @@ async def tool_post_tweet(request: Request):
 
 
 @app.post("/tools/get_timeline", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_timeline(request: Request):
+async def tool_get_timeline(request: Request, _auth: None = Depends(require_twitter_tools_auth)):
     """Get user's home timeline."""
     try:
         body = await request.json()
@@ -621,7 +628,7 @@ async def tool_get_timeline(request: Request):
 
 
 @app.post("/tools/get_my_tweets", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_my_tweets(request: Request):
+async def tool_get_my_tweets(request: Request, _auth: None = Depends(require_twitter_tools_auth)):
     """Get user's own tweets."""
     try:
         body = await request.json()
@@ -687,7 +694,7 @@ async def tool_get_my_tweets(request: Request):
 
 
 @app.post("/tools/get_mentions", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_mentions(request: Request):
+async def tool_get_mentions(request: Request, _auth: None = Depends(require_twitter_tools_auth)):
     """Get tweets mentioning the user."""
     try:
         body = await request.json()
@@ -737,7 +744,7 @@ async def tool_get_mentions(request: Request):
 
 
 @app.post("/tools/search_tweets", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_search_tweets(request: Request):
+async def tool_search_tweets(request: Request, _auth: None = Depends(require_twitter_tools_auth)):
     """Search for tweets."""
     try:
         body = await request.json()
@@ -788,7 +795,7 @@ async def tool_search_tweets(request: Request):
 
 
 @app.post("/tools/like_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_like_tweet(request: Request):
+async def tool_like_tweet(request: Request, _auth: None = Depends(require_twitter_tools_auth)):
     """Like a tweet."""
     try:
         body = await request.json()
@@ -824,7 +831,7 @@ async def tool_like_tweet(request: Request):
 
 
 @app.post("/tools/unlike_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_unlike_tweet(request: Request):
+async def tool_unlike_tweet(request: Request, _auth: None = Depends(require_twitter_tools_auth)):
     """Unlike a tweet."""
     try:
         body = await request.json()
@@ -858,7 +865,7 @@ async def tool_unlike_tweet(request: Request):
 
 
 @app.post("/tools/retweet", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_retweet(request: Request):
+async def tool_retweet(request: Request, _auth: None = Depends(require_twitter_tools_auth)):
     """Retweet a tweet."""
     try:
         body = await request.json()
@@ -894,7 +901,7 @@ async def tool_retweet(request: Request):
 
 
 @app.post("/tools/delete_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_delete_tweet(request: Request):
+async def tool_delete_tweet(request: Request, _auth: None = Depends(require_twitter_tools_auth)):
     """Delete a tweet."""
     try:
         body = await request.json()
@@ -924,7 +931,7 @@ async def tool_delete_tweet(request: Request):
 
 
 @app.post("/tools/get_user_profile", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_user_profile(request: Request):
+async def tool_get_user_profile(request: Request, _auth: None = Depends(require_twitter_tools_auth)):
     """Get a user's profile."""
     try:
         body = await request.json()

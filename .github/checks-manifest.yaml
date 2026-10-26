@@ -1730,6 +1730,11 @@ checks:
     triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "GET /disconnect deleted Twitter tokens for any uid in the query string; the suite rejects a missing or wrong HMAC and only then allows delete_twitter_tokens"
+  - id: twitter-chat-tools-auth-tests
+    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_tools_auth.py"]
+    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "every chat-tool route in omi-twitter-chat-tools-app trusted client-supplied body uid to act with the victim's Twitter OAuth token; the suite verifies shared-secret auth via Bearer header and query param, 503 fail-closed when unset, and wiring across all ten tool routes"
   - id: twitter-chat-tools-max-results-tests
     command: ["python3", "plugins/omi-twitter-chat-tools-app/test_max_results.py"]
     triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
