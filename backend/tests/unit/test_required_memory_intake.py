@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import asyncio
 import json
+import logging
 from threading import Event
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -636,6 +637,82 @@ def test_inline_receipts_success_and_repeated_capture_is_idempotent(db, monkeypa
     assert stored(db).promotion['processing_receipt']['output_item_revision'] == stored(db).item_revision
     intake.after_capture(UID, item(), db_client=db)
     assert calls == ['new']
+
+
+def test_inline_reason_token_is_a_closed_set():
+    matrix = [
+        (
+            processing.RequiredMemoryProcessingResult(memory_id='new', processed=True, attempted=True),
+            'processed',
+        ),
+        (
+            processing.RequiredMemoryProcessingResult(memory_id='new', skipped_reason='newer_revision_pending'),
+            'newer_revision_pending',
+        ),
+        (
+            processing.RequiredMemoryProcessingResult(memory_id='new', skipped_reason='memory_not_found'),
+            'memory_not_found',
+        ),
+        (
+            processing.RequiredMemoryProcessingResult(
+                memory_id='new', skipped_reason='not_pending_required_processing'
+            ),
+            'not_pending_required_processing',
+        ),
+        (
+            processing.RequiredMemoryProcessingResult(memory_id='new', skipped_reason='account_generation_changed'),
+            'account_generation_changed',
+        ),
+        (
+            processing.RequiredMemoryProcessingResult(memory_id='new', skipped_reason='writer_mode_owned'),
+            'writer_mode_owned',
+        ),
+        (
+            processing.RequiredMemoryProcessingResult(memory_id='new', skipped_reason='retry_backoff'),
+            'retry_backoff',
+        ),
+        (
+            processing.RequiredMemoryProcessingResult(memory_id='new', skipped_reason='attempt_leased'),
+            'attempt_leased',
+        ),
+        (
+            processing.RequiredMemoryProcessingResult(memory_id='new', skipped_reason='retry_exhausted'),
+            'retry_exhausted',
+        ),
+        (
+            processing.RequiredMemoryProcessingResult(memory_id='new', skipped_reason='processor_not_configured'),
+            'processor_not_configured',
+        ),
+        (
+            processing.RequiredMemoryProcessingResult(
+                memory_id='new', attempted=True, retryable=True, error_code='flex_deferred'
+            ),
+            'flex_deferred',
+        ),
+        (
+            processing.RequiredMemoryProcessingResult(memory_id='new', attempted=True, error_code='APITimeoutError'),
+            'failed',
+        ),
+        (processing.RequiredMemoryProcessingResult(memory_id='new', attempted=True), 'unclassified'),
+        (
+            processing.RequiredMemoryProcessingResult(memory_id='new', skipped_reason='synthetic_future_reason'),
+            'unclassified',
+        ),
+    ]
+    for result, expected in matrix:
+        token = intake.inline_reason(result)
+        assert token == expected
+        assert token in intake.INLINE_REASON_TOKENS
+
+
+def test_inline_log_line_carries_the_reason_token(db, monkeypatch, caplog):
+    result = processing.RequiredMemoryProcessingResult(
+        memory_id='new', attempted=True, skipped_reason='newer_revision_pending'
+    )
+    monkeypatch.setattr(processing, 'process_required_memory_item', lambda *a, **k: result)
+    with caplog.at_level(logging.INFO, logger='utils.memory.required_intake'):
+        intake.after_capture(UID, item(), db_client=db)
+    assert 'required_intake_inline processed=False attempted=True reason=newer_revision_pending' in caplog.text
 
 
 @pytest.mark.asyncio
