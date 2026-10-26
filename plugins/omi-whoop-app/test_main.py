@@ -54,6 +54,10 @@ def load_app():
     fastapi.Request = object
     fastapi.Query = Query
     fastapi.HTTPException = HTTPException
+    fastapi.Depends = lambda dependency=None, **kwargs: dependency
+
+    whoop_tools_auth = ModuleType("whoop_tools_auth")
+    whoop_tools_auth.require_whoop_tools_auth = lambda *args, **kwargs: None
 
     responses = ModuleType("fastapi.responses")
     responses.HTMLResponse = _Response
@@ -89,6 +93,7 @@ def load_app():
             "fastapi.responses": responses,
             "db": db,
             "models": models,
+            "whoop_tools_auth": whoop_tools_auth,
         },
     ):
         spec.loader.exec_module(module)

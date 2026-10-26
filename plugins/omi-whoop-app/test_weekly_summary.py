@@ -34,6 +34,8 @@ def _record(value_path, value):
 @unittest.skipIf(TestClient is None, "fastapi/httpx test dependencies are not installed")
 class WeeklySummaryPaginationTests(unittest.TestCase):
     def setUp(self):
+        from whoop_tools_auth import require_whoop_tools_auth
+        app.dependency_overrides[require_whoop_tools_auth] = lambda: None
         self.client = TestClient(app)
         patcher = patch("main.get_valid_access_token", return_value="test-token")
         self.addCleanup(patcher.stop)
