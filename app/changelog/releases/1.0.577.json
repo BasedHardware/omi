@@ -1,5 +1,5 @@
 {
-  "version": "1.0.576",
+  "version": "1.0.577",
   "date": "2026-10-26",
   "changes": [
     "Integration setup keeps checking after sign-in, offers retry when a check fails, and opens external settings in your browser. Delayed replies cannot change a page or account you have left.",
