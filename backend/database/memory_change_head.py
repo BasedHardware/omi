@@ -12,8 +12,19 @@ import uuid
 from typing import Any
 
 from google.cloud.firestore_v1.services.firestore import FirestoreClient, FirestoreAsyncClient
-from google.cloud.firestore_v1.types import CommitRequest, CommitResponse, Document, DocumentMask, Value, Write
-from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD as HEAD_DOCUMENT
+from google.cloud.firestore_v1.types import (
+    CommitRequest,
+    CommitResponse,
+    Document,
+    DocumentMask,
+    DocumentTransform,
+    Value,
+    Write,
+)
+from database.memory_collections import (
+    RELEASED_MEMORY_CHANGE_HEAD as HEAD_DOCUMENT,
+    RELEASED_MEMORY_CHANGE_SCHEMA as HEAD_SCHEMA,
+)
 
 SOURCE_COLLECTIONS = frozenset({'memory_items', 'memories', 'memory_historical_overrides'})
 
@@ -39,13 +50,19 @@ def owners(writes: Any) -> set[tuple[str, str]]:
 
 
 def head_write(root: str, uid: str, *, blocked: bool = False) -> Write:
-    fields = {'token': Value(string_value=uuid.uuid4().hex), 'schema': Value(integer_value=1)}
+    fields = {'token': Value(string_value=uuid.uuid4().hex), 'schema': Value(integer_value=HEAD_SCHEMA)}
     if blocked:
         fields['blocked'] = Value(boolean_value=True)
     # A normal source commit never clears a bulk writer's permanent block.
     return Write(
         update=Document(name=f'{root}/users/{uid}/memory_state/{HEAD_DOCUMENT}', fields=fields),
         update_mask=DocumentMask(field_paths=list(fields)),
+        # GAPIC retries replay this exact Write, including its request UUID.
+        # A server transform advances on EVERY successful application, even
+        # when an ambiguous acknowledgement replays otherwise identical data.
+        update_transforms=[
+            DocumentTransform.FieldTransform(field_path='commit_generation', increment=Value(integer_value=1))
+        ],
     )
 
 

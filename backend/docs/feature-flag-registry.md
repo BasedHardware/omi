@@ -564,7 +564,7 @@ and an explicit empty literal renders as `''`.
 | `MEETING_NOTES_EPISODE_EFFORT` | Episode writer thinking effort: default, high or xhigh; baseline unchanged | backend | env | closed | — | — | — | — | pending | keep | — | dazheng |
 | `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES` | Optional high/xhigh byte ceiling, default disabled (0); long transcript guard stays active | backend | env | closed | — | — | — | — | pending | keep | — | dazheng |
 | `MEMORY_IMPORT_BODY_STORAGE_MODE` | Select memory import body storage mode | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
-| `MEMORY_RELEASED_WRITERS_COVERED` | Initially absent; v1:<unique-epoch> attests every released-memory writer participates in atomic invalidation | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
+| `MEMORY_RELEASED_WRITERS_COVERED` | Initially absent; v2:<unique-epoch> attests every released-memory writer atomically advances a retry-safe server generation | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `MEMORY_TYPESENSE_READINESS_REQUIRED` | Require Typesense projection readiness for memory reads | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `MENTOR_PIPELINE` | Per-user cohort mentor dispatch; only cohort is valid — flag false/error or any other value dispatches nothing (legacy lane deleted) | backend | env | closed | — | — | cohort (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, llm-gateway (chart), pusher (chart)) | — | keep | keep | — | dazheng |
 | `OMI_BACKGROUND_FLEX_CAPABLE` | Allow background gateway Flex work | backend | env | closed | true | true | true | — | keep | keep | — | unowned |
@@ -852,7 +852,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_L1_OWNER_NEUTRAL_PREFIX_ENABLED` — Default off; L1 memory extraction serves its system instructions without the owner name or per-account language embedded, moving both to the volatile tail so the prefix is shareable and prefix-cacheable (fail: closed)
 - `MEMORY_OBSERVATION_INTAKE_ENABLED` — Default on; route ordinary captured observations inline and in maintenance independently of Dream (fail: open)
 - `MEMORY_RELEASED_PROJECTION` — Default on; reuse exact raw released-memory queries only under current atomic writer heads and proven fleet coverage (fail: open)
-- `MEMORY_RELEASED_WRITERS_COVERED` — Initially absent; v1:<unique-epoch> attests every released-memory writer participates in atomic invalidation (fail: closed)
+- `MEMORY_RELEASED_WRITERS_COVERED` — Initially absent; v2:<unique-epoch> attests every released-memory writer atomically advances a retry-safe server generation (fail: closed)
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
 - `MEMORY_UNDECIDED_VISIBLE` — Default on; keep undecided and review Short-term memories visible until an explicit disposition (fail: open)
 - `NEW_BUYER_SINGLE_PLAN_ENABLED` — Default on; a buyer with no current paid subscription on an explicit non-desktop platform (mobile or web) is offered only Omi Pro (unlimited_v2) in the v1 catalog, a single-tier Omi Pro v2 storefront sheet and checkout (fail: open)
