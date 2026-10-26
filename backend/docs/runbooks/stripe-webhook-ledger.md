@@ -28,6 +28,13 @@ checkout.session.completed, and subscription_schedule.completed/updated/canceled
 The named schedule-retry fix makes transient schedule reads/writes return 503 when
 this gate is on; otherwise HTTP 200 could suppress a permanently failed update.
 Missing/deleted user NotFound still acknowledges without resurrection.
+Unlocks fenced by an account deletion are classified in the subscription-event
+arm only: when the unlock trio fails on the account fence *and*
+`account_deletions/{uid}` shows a blocking wipe, the delivery is acknowledged
+without the unlock effects (terminal status still projected,
+`omi_fallback_total{component="webhook",to_mode="acknowledged_without_unlock"}`
+counts it) instead of crashing into an ASGI 500 Stripe would retry for days.
+Checkout and plan-change unlocks keep their pinned fence-to-500 retry contract.
 Creator-app metadata is excluded from suppression on every event type.
 Creator-app invoice handlers still swallow provider/storage errors and therefore
 remain **unprotected**, with best-effort legacy_unprotected observations. Creator

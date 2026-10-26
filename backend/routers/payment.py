@@ -1221,9 +1221,42 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                             customer_id = subscription_obj.get('customer')
                             if customer_id:
                                 await run_blocking(db_executor, users_db.set_stripe_customer_id, uid, customer_id)
-                        await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
-                        await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
-                        await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
+                        try:
+                            await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
+                            await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
+                            await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
+                        except Exception as unlock_error:
+                            # Imported at the failure boundary, not at module
+                            # load: the classifier's authority imports must not
+                            # widen this module's import-time surface.
+                            from utils.billing.account_fence import (
+                                subscription_event_unlock_refused_by_account_deletion,
+                            )
+
+                            if subscription_event_unlock_refused_by_account_deletion(uid, unlock_error):
+                                # The deletion wipe fencing this account is the
+                                # same cancellation this event announces: the
+                                # unlocks have nothing living to unlock and no
+                                # retry of this delivery can pass the fence.
+                                # Acknowledge without the unlock effects — the
+                                # terminal status below is still projected —
+                                # instead of an unhandled traceback that Stripe
+                                # would retry for days against an erased owner.
+                                record_fallback(
+                                    component='webhook',
+                                    from_mode='subscription_event_unlock',
+                                    to_mode='acknowledged_without_unlock',
+                                    reason='policy',
+                                    outcome='degraded',
+                                    log=logger,
+                                )
+                                logger.warning(
+                                    'Stripe webhook: unlocks fenced by account deletion uid=%s event=%s',
+                                    uid,
+                                    event.get('type'),
+                                )
+                            else:
+                                raise
                     await run_blocking(
                         db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                     )
