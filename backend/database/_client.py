@@ -14,7 +14,6 @@ from database.firestore_transaction_retry import (
     FirestoreAborted,
     FirestoreContentionExhausted,
     equal_jitter_delay,
-    is_expired_transaction_error,
 )
 from database.google_credentials import (
     customer_data_service_account,
@@ -328,6 +327,21 @@ def get_data_plane_firestore_client() -> Any:
             if _data_plane_firestore_client is None:
                 _data_plane_firestore_client = _build_data_plane_firestore_client()
     return _data_plane_firestore_client
+
+
+_EXPIRED_TRANSACTION_MARKER = "transaction has expired"
+
+
+def is_expired_transaction_error(error: BaseException) -> bool:
+    """True when Firestore has retired the transaction id mid-flight.
+
+    A commit reports that as ``InvalidArgument`` 400. A streaming read
+    (``BatchGetDocuments`` / ``RunQuery``) reports the same retirement as
+    ``Aborted`` 409, raised from ``google.api_core.grpc_helpers``. The SDK
+    retries ``Aborted`` only when ``_commit`` raises it, and that retry reuses
+    the dead id, so the read-path ``Aborted`` has to be recognized here.
+    """
+    return isinstance(error, (InvalidArgument, Aborted)) and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
 
 
 _DOCUMENT_SIZE_LIMIT_MARKER = "exceeds the maximum allowed size"
