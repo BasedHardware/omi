@@ -37,7 +37,9 @@ def require_mentor_webhook_auth(
         raise HTTPException(status_code=503, detail='mentor webhook auth is not configured')
 
     token = _presented_token(request)
-    if not token or not hmac.compare_digest(token, secret):
+    if not token or not hmac.compare_digest(
+        token.encode('utf-8'), secret.encode('utf-8')
+    ):
         raise HTTPException(status_code=401, detail='unauthorized')
 
     trimmed_uid = uid.strip()

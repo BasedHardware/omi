@@ -40,7 +40,9 @@ def require_zapier_webhook_auth(
         )
 
     token = _presented_token(request)
-    if not token or not hmac.compare_digest(token, secret):
+    if not token or not hmac.compare_digest(
+        token.encode("utf-8"), secret.encode("utf-8")
+    ):
         raise HTTPException(status_code=401, detail="unauthorized")
 
     trimmed_uid = uid.strip()

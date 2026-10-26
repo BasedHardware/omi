@@ -97,6 +97,12 @@ class TestRequireZapierWebhookAuth(unittest.TestCase):
             auth.require_zapier_webhook_auth(req, uid="u1")
         self.assertEqual(ctx.exception.status_code, 401)
 
+    def test_non_ascii_token_returns_401_without_500_type_error(self):
+        req = _FakeRequest(headers={"Authorization": "Bearer token-with-unicode-🚀"})
+        with self.assertRaises(auth.HTTPException) as ctx:
+            auth.require_zapier_webhook_auth(req, uid="u1")
+        self.assertEqual(ctx.exception.status_code, 401)
+
     def test_non_bearer_scheme_ignored(self):
         req = _FakeRequest(headers={"Authorization": "Basic " + SECRET})
         with self.assertRaises(auth.HTTPException) as ctx:
