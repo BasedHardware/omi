@@ -126,12 +126,8 @@ Cron jobs: notifications (`modal/job.py`), X sync (`modal/x_connector_sync_job.p
 
 Dream agent: `docs/runbooks/dream-agent.md`.
 
-Required memory intake: canonical writes normalize inline after capture commits;
-the existing Dream scheduled sweep retries fresh pending submissions separately
-from Dream cleanup eligibility/capacity. Historical required intake uses Dream's
-independently gated retrospective dedupe pass. Do not deploy a maintenance job
-or scheduler for this duty. See the Dream runbook for bounds, source admission,
-receipts, switches and the David-first backlog ramp.
+Required intake: canonical capture normalizes inline; Dream retries and dedupes
+the backlog. Ownership, bounds and ramp: `docs/runbooks/dream-agent.md`.
 
 Helm charts: `backend/charts/`.
 
