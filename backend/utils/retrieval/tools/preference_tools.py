@@ -83,22 +83,37 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return None
 
 
+_FALSE_USER_STATED = frozenset({"false", "0", "no", "off", "n", ""})
+_TRUE_USER_STATED = frozenset({"true", "1", "yes", "on", "y"})
+
+
+def _coerce_user_stated(value: Any) -> bool:
+    """Deterministically coerce user_stated from bool, numeric, or string inputs."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        norm = value.strip().lower()
+        if norm in _FALSE_USER_STATED:
+            return False
+        if norm in _TRUE_USER_STATED:
+            return True
+    return False
+
+
 def _get_uid(config: RunnableConfig) -> str:
     """Extract user ID from config or context variable."""
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg and 'configurable' in cfg:
-        raw_configurable = cfg.get('configurable')
-        if isinstance(raw_configurable, dict):
-            configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
-            uid = configurable.get('user_id')
-            if uid:
-                return uid
-    ctx = _agent_config()
-    if ctx and 'configurable' in ctx:
-        raw_configurable = ctx.get('configurable')
-        if isinstance(raw_configurable, dict):
-            configurable = cast(Dict[str, Any], raw_configurable)
-            return configurable.get('user_id', '')
+    for candidate in (config, _agent_config()):
+        if isinstance(candidate, dict):
+            raw_configurable = candidate.get('configurable')
+            if isinstance(raw_configurable, dict):
+                uid = raw_configurable.get('user_id')
+                if isinstance(uid, str) and uid.strip():
+                    return uid.strip()
+            top_uid = candidate.get('user_id')
+            if isinstance(top_uid, str) and top_uid.strip():
+                return top_uid.strip()
     return ''
 
 
@@ -205,6 +220,11 @@ def save_user_preference_tool(
         replace_memory_id: Existing memory ID to correct instead of appending.
         user_stated: Whether the user directly asserted this preference.
     """
+    if not isinstance(preference, str) or not preference.strip():
+        return "Error: Preference must be a non-empty string"
+    preference = " ".join(preference.split())
+    user_stated = _coerce_user_stated(user_stated)
+
     uid = _get_uid(config)
     if not uid:
         return "Error: Could not determine user ID"
@@ -215,7 +235,7 @@ def save_user_preference_tool(
         logger.error("Failed to resolve preference storage error_type=%s", type(e).__name__)
         return "Error saving preference"
 
-    replacement = replace_memory_id.strip()
+    replacement = replace_memory_id.strip() if isinstance(replace_memory_id, str) else (str(replace_memory_id).strip() if isinstance(replace_memory_id, int) and not isinstance(replace_memory_id, bool) else "")
     if replacement:
         try:
             prior = read_canonical_memory_item(uid, replacement, db_client=firestore_client)
