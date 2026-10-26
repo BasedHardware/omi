@@ -2,11 +2,21 @@
 
 import os
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 
-from database import candidates, review_changes, review_store
+from config.open_loops import open_loops_enabled
+from database import candidates, notifications as notification_db, review_changes, review_store
+from database.open_loops import get_cards as get_open_loop_cards
 from models.entity_pages import EntitiesResponse, EntityCorrection, EntityPage
+from models.open_loops import (
+    OPEN_LOOP_ANSWER_STATE,
+    OpenLoopAnswerRequest,
+    OpenLoopAnswerResponse,
+    OpenLoopCard,
+    OpenLoopCardsResponse,
+)
 from models.review import (
     ReviewAnswer,
     ReviewAnswerReceipt,
@@ -17,6 +27,7 @@ from models.review import (
     ReviewAnswerV2,
 )
 from utils import entity_pages, review
+from utils.open_loops import service as open_loops_service
 from utils.other import endpoints as auth
 from utils.speaker_tag_prompts.service import TagPromptInvalid
 from utils.task_intelligence.task_links import TaskLinkValidationError
@@ -68,6 +79,58 @@ def answer_review_item_v2(
     item_id: str, answer: ReviewAnswerV2, background_tasks: BackgroundTasks, uid: str = WriteUser
 ):
     return _call(review.answer_item, uid, item_id, answer, schedule=background_tasks.add_task)
+
+
+def _valid_zone(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        ZoneInfo(value)
+    except Exception:
+        return None
+    return value
+
+
+@router.get('/v1/review/open-loops', response_model=OpenLoopCardsResponse, tags=['review'])
+def get_review_open_loops(uid: str = ReadUser, time_zone: str | None = Query(default=None, max_length=64)):
+    """The day's pending open-loop cards, at most the three the daily pass wrote.
+
+    The recap-day window follows the same zone resolution as the user usage
+    endpoint: a valid request zone, else the stored profile zone, else UTC.
+    """
+    if not open_loops_enabled():
+        return OpenLoopCardsResponse()
+    tz = _valid_zone(time_zone) or _valid_zone(notification_db.get_user_time_zone(uid))
+    day = open_loops_service.recap_completed_day(tz)
+    cards = []
+    for card in open_loops_service.list_pending_cards(uid, date_str=day, tz=tz):
+        card_id = str(card.get('id') or '')
+        question = str(card.get('question') or '')
+        if not card_id or not question:
+            continue
+        cards.append(
+            OpenLoopCard(
+                card_id=card_id,
+                date=day,
+                question=question,
+                context_line=str(card.get('context_line') or ''),
+            )
+        )
+    return OpenLoopCardsResponse(cards=cards)
+
+
+@router.post('/v1/review/open-loops/{date}/{card_id}/answer', response_model=OpenLoopAnswerResponse, tags=['review'])
+def answer_review_open_loop(date: str, card_id: str, request: OpenLoopAnswerRequest, uid: str = WriteUser):
+    if not open_loops_enabled():
+        raise HTTPException(status_code=404, detail='open_loops_disabled')
+    card = open_loops_service.answer_card(uid, card_id, request.action, date_str=date)
+    if card is None:
+        day_cards = get_open_loop_cards(uid, date) or []
+        existing = next((c for c in day_cards if str(c.get('id')) == str(card_id)), None)
+        if existing is not None and existing.get('state') != open_loops_service.PENDING_STATE:
+            raise HTTPException(status_code=409, detail='open_loop_card_already_answered')
+        raise HTTPException(status_code=404, detail='open_loop_card_not_found')
+    return OpenLoopAnswerResponse(card_id=str(card.get('id')), date=date, state=OPEN_LOOP_ANSWER_STATE[request.action])
 
 
 @router.get('/v1/review/changes', response_model=ReviewChangesResponse, tags=['review'])

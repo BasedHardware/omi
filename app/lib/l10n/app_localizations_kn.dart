@@ -14631,4 +14631,13 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'ಮುಗಿದಿದೆ';
+
+  @override
+  String get openLoopAnswerRemind => 'ನಂತರ ನೆನಪಿಸು';
+
+  @override
+  String get openLoopAnswerDrop => 'ಬಿಡು';
 }

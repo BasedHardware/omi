@@ -14384,4 +14384,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => '완료';
+
+  @override
+  String get openLoopAnswerRemind => '나중에 알려 줘';
+
+  @override
+  String get openLoopAnswerDrop => '버리기';
 }

@@ -14569,4 +14569,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Done';
+
+  @override
+  String get openLoopAnswerRemind => 'Remind me later';
+
+  @override
+  String get openLoopAnswerDrop => 'Drop it';
 }

@@ -17821,5 +17821,17 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "@livePreviewTranscribingMessage": {
         "description": "Explains, under Transcribing…, where and when the transcript appears; not an error"
+    },
+    "openLoopAnswerDone": "Done",
+    "@openLoopAnswerDone": {
+        "description": "Answer button on an open-loop Review card: the follow-up happened."
+    },
+    "openLoopAnswerRemind": "Remind me later",
+    "@openLoopAnswerRemind": {
+        "description": "Answer button on an open-loop Review card: ask again in two days."
+    },
+    "openLoopAnswerDrop": "Drop it",
+    "@openLoopAnswerDrop": {
+        "description": "Answer button on an open-loop Review card: stop asking about this follow-up."
     }
 }

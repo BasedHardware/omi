@@ -14584,4 +14584,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Xong';
+
+  @override
+  String get openLoopAnswerRemind => 'Nhắc tôi sau';
+
+  @override
+  String get openLoopAnswerDrop => 'Bỏ qua';
 }

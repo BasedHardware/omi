@@ -7,8 +7,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/http/api/review.dart' as api;
+import 'package:omi/backend/http/api/open_loops.dart' as open_loops_api;
 import 'package:omi/backend/http/api/speaker_tag_prompts.dart' as speaker_api;
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/open_loops.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/flavors.dart';
@@ -16,6 +18,9 @@ import 'package:omi/utils/logger.dart';
 
 typedef ReviewItemsLoader = Future<ApiResult<ReviewItemsResponse>> Function();
 typedef ReviewAnswerSender = Future<ApiResult<int>> Function(ReviewItem item, ReviewAnswer answer);
+typedef OpenLoopCardsLoader = Future<ApiResult<OpenLoopCardsResponse>> Function();
+typedef OpenLoopAnswerSender = Future<ApiResult<OpenLoopAnswerResult>> Function(
+    OpenLoopCard card, OpenLoopAction action);
 typedef ReviewClipLoader = Future<ApiResult<Uint8List>> Function(SpeakerItem speaker);
 typedef ReleaseChannelReporter = Future<ApiResult<void>> Function(String channel, {int? appBuild});
 typedef ReviewProjectsLoader = Future<ApiResult<List<EntityRef>>> Function();
@@ -40,6 +45,8 @@ class ReviewProvider extends ChangeNotifier {
     ReviewClipPlayer? playClip,
     ReviewProjectsLoader? loadProjects,
     ConversationEntitiesLoader? loadConversationEntities,
+    OpenLoopCardsLoader? loadOpenLoopCards,
+    OpenLoopAnswerSender? sendOpenLoopAnswer,
     bool Function()? isEligible,
     ReleaseChannelReporter? reportChannel,
     String Function()? releaseChannel,
@@ -52,6 +59,8 @@ class ReviewProvider extends ChangeNotifier {
         _loadConversationEntities = loadConversationEntities ?? api.getConversationEntities,
         _loadProjects = loadProjects ?? api.getProjectEntities,
         _sendAnswer = sendAnswer ?? api.answerReviewItem,
+        _loadOpenLoopCards = loadOpenLoopCards ?? open_loops_api.getOpenLoopCards,
+        _sendOpenLoopAnswer = sendOpenLoopAnswer ?? open_loops_api.answerOpenLoopCard,
         _loadClip = loadClip ?? _defaultLoadClip,
         _playClipOverride = playClip;
 
@@ -62,6 +71,8 @@ class ReviewProvider extends ChangeNotifier {
   bool _channelReported = false;
   final ReviewItemsLoader _loadItems;
   final ReviewAnswerSender _sendAnswer;
+  final OpenLoopCardsLoader _loadOpenLoopCards;
+  final OpenLoopAnswerSender _sendOpenLoopAnswer;
   final ReviewClipLoader _loadClip;
   final ReviewClipPlayer? _playClipOverride;
   final ReviewProjectsLoader _loadProjects;
@@ -72,6 +83,10 @@ class ReviewProvider extends ChangeNotifier {
 
   ReviewAvailability availability = ReviewAvailability.unknown;
   List<ReviewItem> items = const [];
+
+  /// The day's open-loop cards ("Questions for you"), outside the attention
+  /// budget: at most the few the daily pass wrote, aging out with the day.
+  List<OpenLoopCard> openLoopCards = const [];
   int remainingToday = 0;
   bool loading = false;
   bool loadFailed = false;
@@ -134,12 +149,17 @@ class ReviewProvider extends ChangeNotifier {
     // Availability comes from the server, including Store builds and auto-only changes.
     if (!_isEligible()) {
       availability = ReviewAvailability.off;
+      openLoopCards = const [];
       _notify();
       return;
     }
     loading = true;
     _notify();
-    switch (await _loadItems()) {
+    final (itemsResult, cardsResult) = await (
+      _loadItems(),
+      _loadOpenLoopCards(),
+    ).wait;
+    switch (itemsResult) {
       case ApiSuccess(:final data):
         availability = ReviewAvailability.on;
         items = data.items;
@@ -149,11 +169,21 @@ class ReviewProvider extends ChangeNotifier {
         if (problem.kind == ApiProblemKind.notFound || problem.kind == ApiProblemKind.forbidden) {
           availability = ReviewAvailability.off;
           items = const [];
+          openLoopCards = const [];
           remainingToday = 0;
         } else {
           loadFailed = true;
         }
         Logger.debug('review items unavailable: $problem');
+    }
+    // Cards load independently: without them the page simply looks as before.
+    switch (cardsResult) {
+      case ApiSuccess(:final data):
+        // The cards share the Review surface — when it is off, none can exist.
+        if (availability != ReviewAvailability.off) openLoopCards = data.cards;
+      case ApiFailure(:final problem):
+        // Keep the previous cards on a failed refresh; a failed first load stays empty.
+        Logger.debug('open loop cards unavailable: $problem');
     }
     loading = false;
     _notify();
@@ -190,6 +220,37 @@ class ReviewProvider extends ChangeNotifier {
         if (!items.any((i) => i.itemId == item.itemId)) {
           items = before;
           remainingToday = beforeRemaining;
+        }
+        _notify();
+        return false;
+    }
+  }
+
+  /// True when the last failed open-loop answer was a 409: answered elsewhere, stays gone.
+  bool lastOpenLoopConflict = false;
+
+  /// Sends an open-loop card answer. The card leaves the list immediately and
+  /// comes back if the send fails, except a 409 (answered on another device),
+  /// which means it is answered and stays gone.
+  Future<bool> answerOpenLoop(OpenLoopCard card, OpenLoopAction action) async {
+    lastOpenLoopConflict = false;
+    final index = openLoopCards.indexWhere((c) => c.cardId == card.cardId);
+    if (index < 0) return false;
+    final before = openLoopCards;
+    openLoopCards = [...openLoopCards]..removeAt(index);
+    _notify();
+    switch (await _sendOpenLoopAnswer(card, action)) {
+      case ApiSuccess():
+        return true;
+      case ApiFailure(:final problem):
+        Logger.debug('open loop answer failed: $problem');
+        if (problem.statusCode == 409) {
+          lastOpenLoopConflict = true;
+          _notify();
+          return false;
+        }
+        if (!openLoopCards.any((c) => c.cardId == card.cardId)) {
+          openLoopCards = before;
         }
         _notify();
         return false;
