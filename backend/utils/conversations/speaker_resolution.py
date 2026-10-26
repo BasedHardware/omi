@@ -378,7 +378,7 @@ def _embed_missing(
                 # read only the already generation-verified invocation cache.
                 chunks = sorted(read_session.chunks, key=lambda c: c.get('span', {}).get('start', c['timestamp']))
                 for index, chunk in enumerate(chunks):
-                    if time.monotonic() > deadline or not read_session.in_budget():
+                    if time.monotonic() > deadline:
                         return
                     chunk_start = chunk.get('span', {}).get('start', chunk['timestamp'])
                     following = chunks[index + 1] if index + 1 < len(chunks) else None
@@ -422,7 +422,7 @@ def _embed_missing(
             for segment in pending:
                 if segment.id in base_ids:
                     continue
-                if time.monotonic() > deadline or not session.in_budget():
+                if time.monotonic() > deadline:
                     return
                 windows: List[Tuple[float, float]] = []
                 clip, reason = _verified_clip(session, *window_of(segment), windows=windows)
@@ -565,10 +565,11 @@ def _verified_read_session(
     placements: Mapping[str, AudioPlacement],
     deadline: float,
 ) -> Optional[AudioChunkReadSession]:
-    """Generation-pin, decode and verify the bounded blob inventory before embedding.
+    """Prove each window from generation-pinned PCM within one shared I/O budget.
 
-    Declared spans must match decoded extents covering each pending window;
-    malformed, raced or over-budget input refuses before any cache write.
+    Validate the inventory once, then decode only objects that could intersect
+    the requested windows. A failed window abstains; previously proven windows
+    remain usable when another window is missing, ambiguous or over budget.
     """
     session = AudioChunkReadSession(uid, conversation.id, SAMPLE_RATE)
     session.deadline = min(session.deadline, deadline)
@@ -631,65 +632,84 @@ def _verified_read_session(
             ):
                 resolver_reason('inventory_pair_mismatch')
                 return None
-    decoded: Dict[str, bytes] = {}
+    bounds_by_path = {}
     for chunk in chunks:
-        pcm = session.fetch(chunk['path'])
-        if pcm is None or len(pcm) % 2 or session.limit_hit:
-            resolver_reason(
-                'read_budget'
-                if session.limit_hit
-                else {
-                    'missing_blob': 'blob_missing',
-                    'decode_failed': 'blob_decode_failed',
-                    'download_failed': 'blob_read_failed',
-                }.get(session.reason, 'blob_decode_failed')
-            )
+        bounds = _chunk_actual_bounds(chunk)
+        if bounds is None:
+            resolver_reason('inventory_metadata_invalid')
             return None
-        decoded[chunk['path']] = pcm
-    extents: List[Tuple[float, float]] = []
-    for chunk in chunks:
-        pcm = decoded[chunk['path']]
-        span = chunk.get('span')
-        if isinstance(span, Mapping):
-            bounds = _chunk_actual_bounds(chunk)
-            if bounds is None or bounds[1] is None:
-                resolver_reason('inventory_metadata_invalid')
-                return None
-            declared = bounds[1] - bounds[0]
-            decoded_duration = len(pcm) / (SAMPLE_RATE * 2)
-            if declared <= 0 or abs(decoded_duration - declared) > 0.002:
-                resolver_reason('decoded_duration_mismatch')
-                return None
-            extents.append((bounds[0], bounds[1]))
-        else:
-            start = cast(float, _finite_number(chunk['timestamp']))
-            extents.append((start, start + len(pcm) / (SAMPLE_RATE * 2)))
-    for first in range(len(extents)):
-        for second in range(first + 1, len(extents)):
-            overlap = min(extents[first][1], extents[second][1]) - max(extents[first][0], extents[second][0])
-            if overlap > COVERAGE_TOLERANCE_SECONDS and (
-                not serving_for('SPEAKER_EVIDENCE_MODE', uid)
-                or any(
-                    window[0] < min(extents[first][1], extents[second][1])
-                    and window[1] > max(extents[first][0], extents[second][0])
-                    for s in pending
-                    if s.id is not None
-                    if (placement := placements.get(s.id)) is not None
-                    if (window := placement.window) is not None
-                )
-            ):
-                # refactor: superseded by per-window evidence when SPEAKER_EVIDENCE_MODE=serve
-                resolver_reason('decoded_overlap')
-                return None
+        bounds_by_path[chunk['path']] = bounds
+    verified: set[str] = set()
+    decoded: Dict[str, Tuple[float, float]] = {}
+    first_refusal = None
     for segment in pending:
         placement = placements.get(segment.id) if segment.id is not None else None
         window = placement.window if placement is not None else None
         if window is None:
-            resolver_reason('no_proven_window')
-            return None
-        if not _window_covered(extents, window[0], window[1]):
-            resolver_reason('decoded_coverage_hole')
-            return None
+            first_refusal = first_refusal or 'no_proven_window'
+            continue
+        extents = []
+        refusal = None
+        for chunk in chunks:
+            start, upper_end = bounds_by_path[chunk['path']]
+            # Unknown Opus durations are deliberately unbounded: never assume
+            # the next filename proves the previous object's end/non-overlap.
+            if start >= window[1] or (upper_end is not None and upper_end <= window[0]):
+                continue
+            extent = decoded.get(chunk['path'])
+            if extent is None:
+                pcm = session.fetch(chunk['path'])
+                if pcm is None or len(pcm) % 2 or session.limit_hit:
+                    refusal = (
+                        'read_budget'
+                        if session.limit_hit
+                        else {
+                            'missing_blob': 'blob_missing',
+                            'decode_failed': 'blob_decode_failed',
+                            'download_failed': 'blob_read_failed',
+                        }.get(session.reason, 'blob_decode_failed')
+                    )
+                    break
+                duration = len(pcm) / (SAMPLE_RATE * 2)
+                if isinstance(chunk.get('span'), Mapping):
+                    if upper_end is None or abs(duration - (upper_end - start)) > 0.002:
+                        refusal = 'decoded_duration_mismatch'
+                        break
+                # Actual decoded samples, rather than a declared rounded end,
+                # are the authority for coverage and overlap checks.
+                extent = (start, start + duration)
+                decoded[chunk['path']] = extent
+            extents.append(extent)
+        if refusal is None:
+            for index, first in enumerate(extents):
+                if any(
+                    min(first[1], second[1], window[1]) - max(first[0], second[0], window[0])
+                    > COVERAGE_TOLERANCE_SECONDS
+                    for second in extents[index + 1 :]
+                ):
+                    refusal = 'decoded_overlap'
+                    break
+        if refusal is None and not _window_covered(extents, *window):
+            refusal = 'decoded_coverage_hole'
+        if refusal is None and segment.id is not None:
+            verified.add(segment.id)
+        else:
+            first_refusal = first_refusal or refusal
+    logger.info(
+        'event=conversation_speaker_audio_evidence pending=%d verified=%d refused=%d '
+        'downloads=%d bytes=%d read_budget_hit=%s reason=%s',
+        len(pending),
+        len(verified),
+        len(pending) - len(verified),
+        getattr(session, 'downloads', 0),
+        getattr(session, 'bytes', 0),
+        session.limit_hit,
+        first_refusal or 'none',
+    )
+    if not verified:
+        resolver_reason(first_refusal or 'no_proven_window')
+        return None
+    session.verified_segment_ids = verified
     return session
 
 
@@ -1430,6 +1450,10 @@ def _resolve(
         if read_session is None:
             _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
             return
+        verified = getattr(read_session, 'verified_segment_ids', None)
+        if verified is not None:
+            abstained.update(s.id for s in pending if s.id is not None and s.id not in verified)
+            pending = [s for s in pending if s.id in verified]
     speaker_evidence.window_abstentions(placements, abstained)
     diagnostics = EmbeddingDiagnostics()
     measured_windows: Dict[str, Tuple[float, float]] = {}
@@ -1455,10 +1479,6 @@ def _resolve(
         pending=len(pending),
         stop=stop,
     )
-    if read_session is not None and read_session.limit_hit:
-        resolver_reason('read_budget')
-        _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
-        return
     if new_embeddings or stale:
         bindings = auto_enroll.evidence_bindings(segments, keys, placements, measured_windows, prior_enrollment)
         bindings = auto_enroll.accepted_bindings(bindings, cache, cache_snapshot, prior_enrollment)

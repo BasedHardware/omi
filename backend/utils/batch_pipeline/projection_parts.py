@@ -5,17 +5,29 @@ from uuid import NAMESPACE_URL, uuid5
 
 from utils.batch_pipeline.contracts import MAX_PROJECTION_PARTS, projection_speech_spans
 from utils.sync.vad_segments import merge_and_cap_vad_segments
+from diarizer.batch_pipeline import validate_words
+
+
+def bounded_projection_words(words, duration):
+    """Intersect validated model clocks with PCM before deriving part geometry."""
+    words = validate_words(words, duration)
+    if not words:
+        raise ValueError('successful batch result must contain words')
+    words = [
+        {**word, 'timestamp': [word['timestamp'][0], min(word['timestamp'][1], duration)]}
+        for word in words
+        if word['timestamp'][0] < min(word['timestamp'][1], duration)
+    ]
+    if not words:
+        raise ValueError('successful batch result has no in-buffer words')
+    return words
 
 
 def split_result(item, payload):
-    from diarizer.batch_pipeline import validate_words
-
     duration = float(payload['audio_seconds'])
     if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1:
         raise ValueError('result audio duration differs from admitted capture')
-    words = validate_words(payload['words'], duration)
-    if not words:
-        raise ValueError('successful batch result must contain words')
+    words = bounded_projection_words(payload['words'], duration)
     if 'speech_spans' in payload or item.requires_compute_admission:
         spans = projection_speech_spans(payload, duration)
     else:

@@ -450,6 +450,11 @@ def test_actual_inventory_proof_primary_reason_and_unchanged_io(env, monkeypatch
         result = stage._verified_read_session('u1', conv, files, conv.transcript_segments, placements, float('inf'))
         assert telemetry.resolver_trace().reason == reason
     assert result is None and baseline is None
+    if failure == 'window':
+        # A window with no trusted coordinates now refuses before downloading
+        # unrelated PCM; the closed primary reason remains unchanged.
+        assert reads == [] and baseline_reads == ['fixture']
+        return
     assert reads == baseline_reads
 
 
