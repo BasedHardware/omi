@@ -184,6 +184,7 @@ def quality(fixture, control, candidate):
     return {
         'pass': bool(tt) and tw <= cw and tc <= cc and normalized(control) == normalized(candidate),
         'reference_words': len(reference),
+        'reference_chars': len(' '.join(reference)),
         'control_word_errors': cw,
         'candidate_word_errors': tw,
         'control_char_errors': cc,
@@ -299,6 +300,18 @@ async def run(args):
                 'active_seconds_by_arm': active_seconds,
                 'quality_pairs': len(qualities),
                 'quality_pass': all(q['pass'] for q in qualities),
+                'quality_totals': {
+                    key: sum(q[key] for q in qualities)
+                    for key in (
+                        'reference_words',
+                        'reference_chars',
+                        'control_word_errors',
+                        'candidate_word_errors',
+                        'control_char_errors',
+                        'candidate_char_errors',
+                    )
+                },
+                'speaker_timestamp_tail_and_v2_language_parity': True,
                 'comparisons': {
                     cohort: {
                         m: compare(samples[cohort]['control'][m], samples[cohort]['candidate'][m], alpha)
