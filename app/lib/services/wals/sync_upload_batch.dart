@@ -131,9 +131,24 @@ String? _walLocationBatchKey(Wal wal) {
   return '${geolocation.time?.toUtc().toIso8601String()}|${geolocation.latitude}|${geolocation.longitude}';
 }
 
+/// Upload priority for a pending set: live capture first (newest first), then
+/// the historical backlog oldest first.
+///
+/// Live capture keeps newest-first because only it can still claim a capture
+/// manifest and reach its still-running conversation. Everything older is
+/// racing a hard server deadline — `SYNC_BACKFILL_MAX_AGE_SECONDS` (30 days),
+/// after which the upload is refused with `backfill_lookback_exceeded` and the
+/// recording can never sync. A drain that is interrupted (rate-limit break,
+/// cancelled run, app backgrounding) truncates from the tail, so ordering
+/// history newest-first starved exactly the recordings with the least recovery
+/// time left; oldest-first makes every interruption cost the newest audio,
+/// which has the most slack, instead.
 List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
   final indexed = [for (var i = 0; i < pending.length; i++) (pending[i], i)]..sort((a, b) {
-      final byStart = b.$1.timerStart.compareTo(a.$1.timerStart);
+      final aLive = isLiveCaptureWal(a.$1, nowSeconds);
+      final bLive = isLiveCaptureWal(b.$1, nowSeconds);
+      if (aLive != bLive) return aLive ? -1 : 1;
+      final byStart = aLive ? b.$1.timerStart.compareTo(a.$1.timerStart) : a.$1.timerStart.compareTo(b.$1.timerStart);
       return byStart != 0 ? byStart : a.$2.compareTo(b.$2);
     });
   if (indexed.isEmpty) return const [];

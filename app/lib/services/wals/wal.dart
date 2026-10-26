@@ -125,6 +125,12 @@ int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
 /// cannot drift apart. Only the per-recording manual Retry ignores it.
 const int walMaxAutoRetries = 3;
 
+/// A recording young enough to still attach to a live conversation (matches
+/// the backend's fresh-lane cutoff, `SYNC_FRESH_MAX_AGE_SECONDS`).
+const int liveCaptureMaxAgeSeconds = 6 * 60 * 60;
+
+bool isLiveCaptureWal(Wal wal, int nowSeconds) => nowSeconds - wal.timerStart <= liveCaptureMaxAgeSeconds;
+
 class WalStats {
   final int totalFiles;
   final int phoneFiles;
