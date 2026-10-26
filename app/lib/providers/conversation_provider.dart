@@ -1,9 +1,9 @@
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:omi/env/env.dart';
 import 'package:omi/services/conversation_merge_watch.dart';
+import 'package:omi/services/conversation_merge_journal.dart';
 
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 
@@ -129,7 +129,7 @@ class ConversationProvider extends ChangeNotifier {
   // or not at all (notifications off, a build without push), which left rows on "Merging…" until a
   // manual refresh, so the involved rows are also probed until the merge settles ([watchMerge]).
   final Map<String, ConversationMergeWatch> _mergeWatchers = {};
-  final Map<String, ({List<String> ids, String? target})> _pendingMerges = {};
+  final Map<String, PendingConversationMerge> _pendingMerges = {};
   final Set<String> _mergedAwayConversationIds = {};
   String? _mergeJournalOwner;
   String? _mergeJournalOrigin;
@@ -2217,31 +2217,21 @@ class ConversationProvider extends ChangeNotifier {
     final owner = _mergeJournalOwner;
     final origin = _mergeJournalOrigin;
     if (owner == null || owner.isEmpty || origin == null || SharedPreferencesUtil().uid != owner) return;
-    final key = 'pendingConversationMerges:$owner';
-    Map<String, dynamic> backends;
-    try {
-      backends =
-          Map<String, dynamic>.from(jsonDecode(SharedPreferencesUtil().getString(key, defaultValue: '{}')) as Map);
-    } catch (_) {
-      backends = {};
-    }
-    backends[origin] = [
-      for (final pending in _pendingMerges.values) {'ids': pending.ids, 'target': pending.target},
-    ];
-    unawaited(SharedPreferencesUtil().saveString(key, jsonEncode(backends)));
+    unawaited(ConversationMergeJournal(owner, origin).save(_pendingMerges.values).catchError((Object _) {
+      Logger.debug('Pending merge journal could not be saved');
+      return false;
+    }));
   }
 
   void _restoreMergeWatches() {
     final owner = SharedPreferencesUtil().uid;
-    if (owner.isEmpty) return;
-    final raw = SharedPreferencesUtil().getString('pendingConversationMerges:$owner');
-    if (raw.isEmpty) return;
+    if (!ConversationMergeJournal.hasEntries(owner)) return;
     try {
-      final rows = (jsonDecode(raw) as Map)[Env.apiBaseUrl] as List? ?? const [];
+      final rows = ConversationMergeJournal(owner, Env.apiBaseUrl!).load();
       for (final row in rows) {
-        final ids = (row['ids'] as List).cast<String>();
+        final ids = row.ids;
         final key = (ids.toList()..sort()).join(',');
-        if (!_mergeWatchers.containsKey(key)) watchMerge(ids, targetId: row['target'] as String?);
+        if (!_mergeWatchers.containsKey(key)) watchMerge(ids, targetId: row.target);
       }
     } catch (_) {
       Logger.debug('Ignoring invalid pending merge journal');

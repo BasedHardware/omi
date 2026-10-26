@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/logger.dart';
 
 typedef MergeConversationFetcher = Future<ApiResult<ServerConversation>> Function(String id);
 
@@ -23,7 +24,9 @@ class ConversationMergeWatch {
     _deadline = Timer(limit, () {
       if (!isCurrent()) return cancel();
       cancel();
-      unawaited(onRefresh(false));
+      unawaited(onRefresh(false).catchError((Object _) {
+        Logger.debug('Merge observation refresh failed; pending journal remains retryable');
+      }));
     });
   }
 

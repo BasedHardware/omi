@@ -137,6 +137,22 @@ void main() {
     });
   });
 
+  test('deadline refresh failure is contained and cannot escape as an unhandled timer error', () {
+    fakeAsync((clock) {
+      final watch = ConversationMergeWatch(
+          sourceIds: ['a', 'b'],
+          targetId: 'target',
+          fetch: (id) async => ApiSuccess(row(id)),
+          isCurrent: () => true,
+          onCompleted: (_) async => fail('unfinished'),
+          onRefresh: (_) async => throw StateError('synthetic cache unavailable'),
+          interval: const Duration(seconds: 1),
+          limit: const Duration(seconds: 3));
+      clock.elapse(const Duration(seconds: 5));
+      watch.cancel();
+    });
+  });
+
   test('an account/backend fence suppresses a late in-flight read', () {
     fakeAsync((clock) {
       final result = Completer<ApiResult<ServerConversation>>();
