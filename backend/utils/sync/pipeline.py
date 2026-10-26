@@ -376,10 +376,9 @@ def _record_sync_segment_outcome(
             # completing. A later retry may duplicate this metric, but not the
             # customer-visible transcription result.
             logger.warning('event=sync_transcription_metric outcome=dedupe_failed kind=segment')
-    # Non-error segment outcomes fire once per segment and dominate sync stdout
-    # volume; rates stay observable via omi_sync_transcription_* metrics and the
-    # per-job summary line below stays INFO.
-    log = logger.debug if outcome in _NON_ERROR_SEGMENT_OUTCOMES else logger.error
+    log = (
+        logger.debug if outcome in _NON_ERROR_SEGMENT_OUTCOMES else logger.error
+    )  # routine success: DEBUG (volume); rates via omi_sync_* metrics
     reason = _sync_failure_reason(None if outcome in _NON_ERROR_SEGMENT_OUTCOMES else phase, exception)
     log(
         'event=sync_transcription_segment outcome=%s provider=%s model=%s lane=%s retryable=%s '
