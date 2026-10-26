@@ -7235,3 +7235,16 @@ Worker handoffs also carry a separate `worker_vad_receipt` with `version: 1`,
 `sample_rate_hz: 16000` and `input_uri_sha256` binding the staged input URI.
 The lease CAS validates its input, duration and agreement with measured seconds
 before storing it. `worker_empty_evidence` retains its existing exact shape.
+
+### Manual merge completion observation
+
+Manual merge admission now returns the preallocated, optional
+`merged_conversation_id` and uses the existing durable lifecycle merge job for
+every manual admission, including when the wider lifecycle mode is off/shadow. A mobile client can observe
+source 404s and the completed target without requiring a completion push;
+legacy clients ignore the additive field. Source cleanup, notification dispatch,
+audio custody and cleanup retries remain owned by the existing merge worker/job.
+Capture/transcription canary behavior is unchanged; manual merge correctness no
+longer depends on its serve cohort. Previously consumed source receipts are
+refused rather than merged again. See `app/docs/conversation-merge-recovery.md` for restart, cache and
+release verification.
