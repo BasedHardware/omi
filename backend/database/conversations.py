@@ -49,7 +49,12 @@ from utils.manual_speaker_assignments import (
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
-from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
+from database.sync_assignment import (
+    SyncAssignmentClock,
+    SyncAssignmentDiscovery,
+    encode_sync_assignment_plan,
+    run_sync_assignment,
+)
 from database.sync_conversation_snapshot import read_redirected, resolve_snapshot
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
@@ -4222,11 +4227,7 @@ def assign_sync_conversation(
     call: it receives the canonical and its donor lineage, and the caller
     converges each conversation once later (``index_sync_assignment``).
     """
-    from utils.sync.assignment import (
-        SyncAssignmentDiscoveryRequired,
-        assign_in_transaction,
-        run_with_size_limit_backstop,
-    )
+    from utils.sync.assignment import assign_in_transaction
     from config.sync_lineage import sync_lineage_resolve_enabled
     from utils.sync.intake_completion import log_sync_lineage_created
 
@@ -4238,9 +4239,7 @@ def assign_sync_conversation(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
 
-    live_candidate_ids: tuple[str, ...] = ()
-    live_lookup: dict = {'lookup_complete': False, 'incomplete_reason': 'discovery_skipped'}
-    discovery_attempted = False
+    discovery = SyncAssignmentDiscovery(lineage_eligible)
     absorbed: list[str] = []
 
     score_snapshots: dict = {}
@@ -4292,17 +4291,9 @@ def assign_sync_conversation(
                 encode=encode,
                 invalidate=clear_client_processing,
                 full_ids=full_ids,
-                live_candidate_ids=live_candidate_ids,
+                live_candidate_ids=discovery.candidate_ids,
                 absorbed=absorbed,
-                **(
-                    {
-                        'live_lookup_complete': live_lookup.get('lookup_complete', False),
-                        'live_lookup_incomplete_reason': live_lookup.get('incomplete_reason'),
-                        'discover_on_stamp_gap': not discovery_attempted,
-                    }
-                    if lineage_eligible
-                    else {}
-                ),
+                **discovery.plan_kwargs(),
             )
         # Remember the candidate before the transaction commits.
         attempted['canonical'] = planned[0]['id']
@@ -4313,21 +4304,8 @@ def assign_sync_conversation(
         return planned
 
     def discover_live_candidates():
-        nonlocal live_candidate_ids, discovery_attempted
-        discovery_attempted = True
-        # Missing diagnostics from an older discovery implementation must stay
-        # distinguishable from a lookup that never ran.
-        live_lookup.clear()
         with clock.timed('live_overlap'):
-            live_candidate_ids = find_sync_live_overlap_candidates(
-                user_ref, incoming, **({'diagnostics': live_lookup} if lineage_eligible else {})
-            )
-
-    def run_assignment():
-        return run_with_size_limit_backstop(
-            lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
-            lambda: attempted.get('canonical'),
-        )
+            discovery.discover(user_ref, incoming, find_sync_live_overlap_candidates)
 
     with clock.call():
         if not target_id and (
@@ -4335,11 +4313,11 @@ def assign_sync_conversation(
         ):
             discover_live_candidates()
         with clock.timed('transaction'):
-            try:
-                result = run_assignment()
-            except SyncAssignmentDiscoveryRequired:
-                discover_live_candidates()
-                result = run_assignment()
+            result = discovery.run(
+                lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
+                lambda: attempted.get('canonical'),
+                discover_live_candidates,
+            )
         conversation = result[0]
         for retired_id in sorted({conversation['id'], *absorbed}):
             stop_quiet_check_for_conversation(uid, retired_id, firestore_client=client)
