@@ -368,6 +368,9 @@ os_memblock_get(struct os_mempool *mp)
         if (block) {
             os_mempool_poison_check(mp, block);
             os_mempool_guard_check(mp, block);
+#if MYNEWT_VAL(OS_MEMPOOL_CHECK)
+            mp->mp_debug.omd_get_cnt++;
+#endif
         }
     }
 
@@ -423,6 +426,10 @@ os_memblock_put(struct os_mempool *mp, void *block_addr)
         ret = OS_INVALID_PARM;
         goto done;
     }
+
+#if MYNEWT_VAL(OS_MEMPOOL_CHECK)
+    mp->mp_debug.omd_put_cnt++;
+#endif
 
 #if MYNEWT_VAL(OS_MEMPOOL_CHECK)
     /* Check that the block we are freeing is a valid block! */
