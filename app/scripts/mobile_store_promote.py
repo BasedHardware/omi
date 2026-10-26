@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Promote a specifically identified, already-uploaded mobile build to store review."""
+"""Promote specifically identified mobile builds through Apple and Google release tracks."""
 
 from __future__ import annotations
 
@@ -386,6 +386,86 @@ def play_track(client: object, edit_id: str, track: str) -> object:
         raise PromotionError(f"Google Play {track} track lookup failed") from exc
 
 
+def promote_internal_android_to_alpha(client: object, edit_id: str, version: str, build_number: str) -> None:
+    """Promote only the completed internal release for this exact build to alpha."""
+    version_parts(version)
+    build_number = require_build(build_number, "BUILD_NUMBER")
+    try:
+        internal = play_track(client, edit_id, "internal")
+        alpha = play_track(client, edit_id, "alpha")
+        if not isinstance(internal, dict) or internal.get("track") != "internal":
+            raise PromotionError("Google Play internal track lookup failed")
+        if not isinstance(alpha, dict) or alpha.get("track") != "alpha":
+            raise PromotionError("Google Play alpha track lookup failed")
+        releases = internal.get("releases", [])
+        if not isinstance(releases, list):
+            raise PromotionError("Google Play internal track releases are invalid")
+
+        matches: list[dict[str, object]] = []
+        for release in releases:
+            if not isinstance(release, dict):
+                raise PromotionError("Google Play internal release is invalid")
+            codes = release_codes(release)
+            if build_number not in codes:
+                continue
+            name = release.get("name")
+            if (
+                codes != [build_number]
+                or not isinstance(name, str)
+                or production_release_version(name) != version
+                or release.get("status") != "completed"
+            ):
+                raise PromotionError("Play internal build does not match the exact completed version and code")
+            matches.append(release)
+        if len(matches) != 1:
+            raise PromotionError("Play internal track has no unique matching build")
+
+        promoted_release = dict(matches[0])
+        promoted_release["status"] = "completed"
+        promoted_release.pop("userFraction", None)
+        body = {"track": "alpha", "releases": [promoted_release]}
+        updated = client.edits().tracks().update(
+            packageName=PACKAGE_NAME,
+            editId=edit_id,
+            track="alpha",
+            body=body,
+        ).execute()
+        updated_releases = updated.get("releases") if isinstance(updated, dict) else None
+        updated_release = (
+            updated_releases[0]
+            if isinstance(updated_releases, list) and len(updated_releases) == 1
+            else None
+        )
+        if (
+            not isinstance(updated, dict)
+            or updated.get("track") != "alpha"
+            or not isinstance(updated_release, dict)
+            or release_codes(updated_release) != [build_number]
+            or updated_release.get("name") != matches[0].get("name")
+            or updated_release.get("status") != "completed"
+            or "userFraction" in updated_release
+        ):
+            raise PromotionError("Play alpha update response did not match the exact promoted release")
+        client.edits().commit(
+            packageName=PACKAGE_NAME,
+            editId=edit_id,
+            changesNotSentForReview=CHANGES_NOT_SENT_FOR_REVIEW,
+        ).execute()
+    except PromotionError:
+        try:
+            client.edits().delete(packageName=PACKAGE_NAME, editId=edit_id).execute()
+        except Exception:
+            pass
+        raise
+    except Exception as exc:
+        try:
+            client.edits().delete(packageName=PACKAGE_NAME, editId=edit_id).execute()
+        except Exception:
+            pass
+        detail = f": {exc}" if str(exc).strip() else ""
+        raise PromotionError(f"Google Play rejected exact internal-to-alpha promotion{detail}") from exc
+
+
 def prepare_android(version: str, build_number: str) -> tuple[object, str]:
     client, edit_id = play_edit()
     alpha = play_track(client, edit_id, "alpha")
@@ -491,6 +571,14 @@ def main() -> int:
     parser.add_argument("--android-build")
     args = parser.parse_args()
     try:
+        if args.confirm == "promote-internal-to-alpha":
+            if args.platform != "android" or args.ios_build:
+                raise PromotionError("internal-to-alpha promotion requires Android only")
+            build_number = require_build(args.android_build, "BUILD_NUMBER")
+            client, edit_id = play_edit()
+            promote_internal_android_to_alpha(client, edit_id, args.version, build_number)
+            print(f"Promoted Android {args.version} ({build_number}) from internal to alpha; held for review submission")
+            return 0
         if args.confirm != "submit-for-review":
             raise PromotionError("CONFIRM must be exactly submit-for-review")
         version_parts(args.version)

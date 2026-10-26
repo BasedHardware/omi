@@ -782,6 +782,8 @@ workflows:
     scripts:
       - name: Installing Android SDK
         script: |
+          set -euo pipefail
+          rm -f "$HOME/.omi-android-prod-internal-build-identity"
           export ANDROID_HOME="$HOME/opt/android-sdk"
           if [ ! -d "$ANDROID_HOME" ]; then
             echo "$ANDROID_HOME does not exist. Installing..."
@@ -910,6 +912,10 @@ workflows:
             --flavor prod \
             $PROVENANCE_ARGS
 
+          # Post-publish scripts also run after a failed build. Persist the exact
+          # identity only after Flutter has completed successfully.
+          printf '%s\n%s\n' "$BUILD_NAME" "$BUILD_NUMBER" > "$HOME/.omi-android-prod-internal-build-identity"
+
 
     artifacts:
       - build/**/outputs/**/*.aab
@@ -932,8 +938,21 @@ workflows:
         # Same Play constraint as the internal auto track: automated commits
         # must hold changes for the Console's Send for review step.
         changes_not_sent_for_review: true
-        release_promotion:
-          track: "alpha"
+      scripts:
+        - name: Promote the exact internal build to alpha
+          script: |
+            set -euo pipefail
+            IDENTITY="$HOME/.omi-android-prod-internal-build-identity"
+            if [[ ! -f "$IDENTITY" ]]; then
+              echo "Android internal build did not complete; skipping alpha promotion."
+              exit 0
+            fi
+            { read -r PROMOTE_BUILD_NAME; read -r PROMOTE_BUILD_NUMBER; } < "$IDENTITY"
+            python3 scripts/mobile_store_promote.py \
+              --confirm promote-internal-to-alpha \
+              --platform android \
+              --version "${PROMOTE_BUILD_NAME:?missing Android build name}" \
+              --android-build "${PROMOTE_BUILD_NUMBER:?missing Android build number}"
 
   ios-prod-patch:
     name: Patch iOS to Production

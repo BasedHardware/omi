@@ -326,6 +326,30 @@ def test_codemagic_workflow_contract_accepts_current_production_configuration():
     assert GUARDS.check_codemagic_release_publishers() == []
 
 
+def test_android_internal_alpha_promotion_uses_exact_build_and_held_api_commit():
+    document = yaml.safe_load((REPO_ROOT / "codemagic.yaml").read_text(encoding="utf-8"))
+    workflow = document["workflows"]["android-prod-internal"]
+    publisher = workflow["publishing"]
+
+    assert publisher["google_play"]["track"] == "internal"
+    assert publisher["google_play"]["changes_not_sent_for_review"] is True
+    assert "release_promotion" not in publisher["google_play"]
+
+    build_script = workflow["scripts"][-1]["script"]
+    assert build_script.index("flutter build appbundle") < build_script.index(".omi-android-prod-internal-build-identity")
+    assert "printf '%s\\n%s\\n' \"$BUILD_NAME\" \"$BUILD_NUMBER\"" in build_script
+    assert ".omi-android-prod-internal-build-identity\"\n" in workflow["scripts"][0]["script"]
+
+    post_publish = publisher["scripts"]
+    assert len(post_publish) == 1
+    promotion_script = post_publish[0]["script"]
+    assert "if [[ ! -f \"$IDENTITY\" ]]" in promotion_script
+    assert "--confirm promote-internal-to-alpha" in promotion_script
+    assert "--platform android" in promotion_script
+    assert "--version \"${PROMOTE_BUILD_NAME:?missing Android build name}\"" in promotion_script
+    assert "--android-build \"${PROMOTE_BUILD_NUMBER:?missing Android build number}\"" in promotion_script
+
+
 def _mobile_trigger_errors_after(tmp_path: Path, monkeypatch, old: str, new: str) -> list[str]:
     codemagic = tmp_path / "codemagic.yaml"
     shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
