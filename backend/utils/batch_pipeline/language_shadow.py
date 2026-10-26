@@ -19,7 +19,7 @@ from database.batch_pipeline_language_shadow import LanguageShadowStore
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.contracts import WorkItem, Priority
 from utils.batch_pipeline.retention import batch_artifact_authorize
-from utils.executors import db_executor, storage_executor, sync_executor, run_blocking, start_background_task
+from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.stt.batch_language import compare_shadow_pair
 from utils.stt_cap_dispatch import sync_allowed
 from utils.sync.content_id import compute_sync_content_id
@@ -93,9 +93,10 @@ async def offer_upload(*, uid, content_id, paths, conversation_id, byok, policy,
             return
         reserved = True
         directory, copies = await run_blocking(storage_executor, copy_paths, paths)
-        start_background_task(qualify(repository, item, copies, directory), name='batch_language_shadow')
-        directory = None  # The tracked task owns only its private copies.
+        owned_directory, directory = directory, None
         reserved = False
+        # Remain inside the already tracked offer task, including its cleanup.
+        await qualify(repository, item, copies, owned_directory)
     except Exception as error:
         UNITS.labels('error').inc()
         logger.info('event=batch_language_shadow outcome=error exception_type=%s', type(error).__name__)

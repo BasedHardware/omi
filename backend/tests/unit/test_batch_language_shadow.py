@@ -220,7 +220,6 @@ async def test_offer_and_pair_task_only_write_qualification_control_and_remove_p
 ):
     from utils.batch_pipeline import shadow_intake
 
-    pending = []
     directory = tmp_path / 'private-shadow'
 
     async def inline(_executor, function, *args, **kwargs):
@@ -242,7 +241,6 @@ async def test_offer_and_pair_task_only_write_qualification_control_and_remove_p
     monkeypatch.setattr(language_shadow, 'LanguageShadowStore', lambda _store: repository)
     monkeypatch.setattr(shadow_intake, 'repository_for_stage', lambda: SimpleNamespace(store=repository.store))
     monkeypatch.setattr(shadow_intake, 'copy_paths', copies)
-    monkeypatch.setattr(language_shadow, 'start_background_task', lambda coro, **kw: pending.append(coro))
     monkeypatch.setattr(language_shadow, 'first_unit', lambda _: SimpleNamespace(wav=b'canonical', duration_seconds=30))
     monkeypatch.setattr(language_shadow, 'sync_allowed', lambda *_a, **_kw: True)
 
@@ -259,8 +257,6 @@ async def test_offer_and_pair_task_only_write_qualification_control_and_remove_p
         byok=False,
         policy=object(),
     )
-    assert len(pending) == 1 and directory.exists()
-    await pending[0]
     assert not directory.exists()
     assert all(
         path[0] in {'batch_pipeline_dev_shadow_lid_probes', 'batch_pipeline_dev_shadow_lid_spend'}
@@ -275,4 +271,4 @@ async def test_offer_and_pair_task_only_write_qualification_control_and_remove_p
         byok=False,
         policy=object(),
     )
-    assert len(pending) == 1
+    assert not directory.exists()
