@@ -36,7 +36,12 @@ from database.batch_pipeline_recognizer_receipts import record_recognizer
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe, recognizer_attempt
+from utils.batch_pipeline.recovery_recognizers import (
+    transcribe,
+    second_transcribe,
+    recognizer_attempt,
+    independent_ready,
+)
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     silence_payload,
@@ -144,8 +149,10 @@ class QuarantineRecovery:
         measured = sum(span['end'] - span['start'] for span in empty.spans)
         try:
             # The allowance and consent are rechecked before spending the extra call.
-            if (byok and not guarded) or sync_allowed(
-                owner_id, item.duration_seconds, provider, lane='batch', path=DispatchPath.QUARANTINE
+            ready = not guarded or self.second_stt is not second_transcribe or independent_ready()
+            if ready and (
+                (byok and not guarded)
+                or sync_allowed(owner_id, item.duration_seconds, provider, lane='batch', path=DispatchPath.QUARANTINE)
             ):
                 if guarded and not record_recognizer(
                     self.store, item.segment_id, token, 'recovery', provider, 'started', None, measured, claim=True

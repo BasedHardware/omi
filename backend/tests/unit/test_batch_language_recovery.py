@@ -477,3 +477,29 @@ def test_recorded_provider_error_cannot_be_promoted_to_valid_empty():
         }
     }
     assert not prior_modulate_empty(job)
+
+
+def test_missing_soniox_key_does_not_burn_the_independent_attempt(setup, monkeypatch, legacy_dependencies):
+    client, store, binding, artifacts, _, soniox, recovery, _ = guarded(setup, monkeypatch, legacy_dependencies)
+    from utils.stt.soniox_batch import SonioxBatchError
+    from config.batch_language_recovery import independent_attempted
+
+    monkeypatch.setattr('utils.stt.soniox_batch.require_environment', Mock(side_effect=SonioxBatchError()))
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    assert not independent_attempted(row(client))
+    soniox.assert_not_called()
+    monkeypatch.setattr('utils.stt.soniox_batch.require_environment', lambda: None)
+    soniox.return_value = (WORDS, 'vi')
+    assert (
+        redrive_one(
+            store,
+            artifacts,
+            'bad',
+            binding.owner_id,
+            'new-plan',
+            deepcopy(row(client)['recovery']),
+            server_flags=SERVING_ENV,
+            independent_language=True,
+        )
+        == 'recovered'
+    )

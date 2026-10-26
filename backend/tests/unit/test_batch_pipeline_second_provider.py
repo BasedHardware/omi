@@ -27,6 +27,7 @@ def second_setup(setup, monkeypatch, legacy_dependencies, *, soniox=None, speech
     pre_recorded, vad, *_ = legacy_dependencies
     monkeypatch.setattr(vad, 'offline_pcm_speech_segments', lambda _: [{'start': speech[0], 'end': speech[1]}])
     second = soniox or Mock(return_value=([], 'en'))
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-only-key')
     from utils.stt import soniox_batch
 
     monkeypatch.setattr(soniox_batch, 'transcribe', second)

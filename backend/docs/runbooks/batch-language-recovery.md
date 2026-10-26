@@ -91,7 +91,9 @@ Deploy the CPU backend role that runs `QuarantineRecovery` and use the same sour
 for the operator CLI. The GPU worker itself does not contain this adapter. Verify
 `SONIOX_API_KEY` availability without printing it. This PR does not change secret
 bindings or deploy workflows; a missing key refuses the operator before starting
-its paid intent and leaves automatic recovery held with an error receipt.
+its paid intent and leaves automatic recovery held with a `refused` receipt.
+It does not consume the independent attempt, so explicit recovery can proceed
+after the runtime configuration is corrected.
 
 For the seven untouched epoch-2 units and three spent Modulate epoch-2 units,
 use `scripts/batch_pipeline_speech_redrive.py` with **both**

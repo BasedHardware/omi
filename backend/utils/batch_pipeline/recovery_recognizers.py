@@ -36,6 +36,16 @@ def recognizer_attempt(operation):
         return None, 'error', None
 
 
+def independent_ready():
+    from utils.stt.soniox_batch import require_environment, SonioxBatchError
+
+    try:
+        require_environment()
+        return True
+    except SonioxBatchError:
+        return False
+
+
 def transcribe(item, binding, audio, *, multilingual=None, force_recognition=False):
     """Use the sync client directly, with no whole-upload coordinator or retries."""
     # Preserve the existing deferred STT boundary: its transitive encryption
