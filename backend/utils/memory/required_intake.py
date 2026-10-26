@@ -50,11 +50,11 @@ def capture_budget():
 
 
 def normalize(item, *, request_timeout=policy.INLINE_TIMEOUT_SECONDS):
-    from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_llm
-    from utils.llm.usage_tracker import track_usage
-
     # Explicit Flex route: one attempt, no Standard/on-demand fallback.
     try:
+        from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_llm
+        from utils.llm.usage_tracker import track_usage
+
         llm = get_or_create_omi_gateway_llm(
             feature_auto_lane_id('memory_l2_flex'),
             options={'request_timeout': request_timeout, 'max_retries': 0},

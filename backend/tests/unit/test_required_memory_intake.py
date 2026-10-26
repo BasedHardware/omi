@@ -251,6 +251,25 @@ def test_dispatch_metadata_wait_cannot_start_provider_after_deadline(db, monkeyp
         intake.normalize_at_dispatch(stored(db), db_client=db, deadline=10)
 
 
+@pytest.mark.parametrize('dependency', ['utils.llm.clients', 'utils.llm.usage_tracker'])
+def test_model_dependency_import_failure_defers_without_quality_retry(db, monkeypatch, dependency):
+    import builtins
+
+    actual = builtins.__import__
+
+    def unavailable(name, *args, **kwargs):
+        if name == dependency:
+            raise ImportError('synthetic unavailable model dependency')
+        return actual(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, '__import__', unavailable)
+    result = intake.after_capture(UID, stored(db), db_client=db)
+    assert result.retryable and not result.processed
+    assert stored(db).processing_state.value == 'pending'
+    receipts = [value for path, value in db.rows.items() if 'required_processing_retry_' in path[-1]]
+    assert len(receipts) == 1 and receipts[0]['attempt_count'] == 0 and receipts[0]['lease_owner'] is None
+
+
 @pytest.mark.asyncio
 async def test_account_deletion_blocks_backlog_before_embedding(db):
     historical_candidate(db)
