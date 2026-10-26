@@ -24,6 +24,14 @@ from utils.other import notifications as notif
 
 UID = 'u1'
 
+# The recap's reference instant, pinned. _display_date_for_now applies a noon
+# split: before 12:00 in the user's zone the worker summarizes *yesterday*, so a
+# real-clock `today` in the fixture disagrees with the worker's day for half of
+# every UTC day — the stubbed by-date read then returns a pre-generated summary,
+# generation is skipped as a duplicate and the webhook never fires. 18:00 UTC
+# keeps the worker's display date on this pin's own calendar day.
+_AT = datetime(2026, 10, 25, 18, 0, tzinfo=timezone.utc)
+
 
 async def _dispatch(pass_requests):
     notif._start_open_loops_passes(pass_requests)
@@ -38,7 +46,7 @@ async def _bulk_then_drain(users, **kwargs):
 
 @pytest.fixture
 def recap_env(monkeypatch):
-    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    today = _AT.strftime('%Y-%m-%d')
 
     pass_calls = []
 
@@ -96,7 +104,7 @@ def recap_env(monkeypatch):
 
 def _user_data():
     # (uid, tokens, tz, at, retry_delivery, retry_attempt, delivery_completed)
-    return (UID, None, 'UTC', None, False, False, None)
+    return (UID, None, 'UTC', _AT, False, False, None)
 
 
 def test_recap_returns_the_pass_request_after_its_own_work(recap_env):
