@@ -900,7 +900,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     self._cancel_first_text_timer()
                     if self._first_speech_at is not None:
                         first_text_seconds = max(0.0, time.monotonic() - self._first_speech_at)
-                        SHAPE_FIRST_TEXT.labels(arm=self._shape_route.arm).observe(first_text_seconds)
+                        # A leg that crossed a kill/identity boundary cannot
+                        # populate the next experiment's fresh lookback.
+                        if not self._shape_route.drained:
+                            SHAPE_FIRST_TEXT.labels(arm=self._shape_route.arm).observe(first_text_seconds)
                         record_metric(
                             WINDOW_FIRST_TEXT,
                             {'demand_cohort': getattr(self, '_demand_cohort', 'ineligible')},
