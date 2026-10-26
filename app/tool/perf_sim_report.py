@@ -142,6 +142,23 @@ def summarize(directory, expected_runs):
     if expected_runs < 3 and first.get('timeline_enabled') is not True:
         raise ValueError('baseline needs at least 3 runs; only opt-in timeline diagnostics permit fewer')
     eligible = heavy_shape and first.get('timeline_enabled') is False and all(r.get("acceptance_eligible") is True and r["build_mode"] == "profile" for r in reports)
+    virtual = first.get('virtual_qualification') is True
+    if any(report.get('virtual_qualification', False) != virtual for report in reports):
+        raise ValueError('receipts disagree on virtual qualification')
+    if virtual:
+        runtime = identities[0].get('virtual_runtime', {})
+        protocol = identities[0].get('launch_protocol', {})
+        warmups = protocol.get('warmup_runs')
+        if (runtime.get('kind') not in ('android-emulator', 'ios-simulator')
+                or not runtime.get('runtime_build') or type(warmups) is not int or not 1 <= warmups <= 3
+                or protocol.get('measured_runs') != expected_runs or protocol.get('outlier_policy') != 'retain-all'):
+            raise ValueError('virtual qualification requires pinned runtime and retained warmup protocol')
+        for index in range(1, warmups + 1):
+            warmup = json.loads((directory / f'warmup-{index}.json').read_text())
+            validate(warmup.get('heavy_profile', {}))
+            if warmup.get('heavy_run') != identities[0]:
+                raise ValueError('warmup differs from measured source/binary/runtime/protocol')
+        eligible = False
     summary = {
         "runs": len(paths), "build_mode": first["build_mode"],
         "identity": identities[0],
@@ -152,6 +169,9 @@ def summarize(directory, expected_runs):
         "variance_pass": not failures, "variance_failures": failures,
         "acceptance_eligible": eligible,
         "accepted_baseline": eligible and not failures,
+        "virtual_qualification": virtual,
+        "qualified_virtual_baseline": (virtual and heavy_shape and not failures and expected_runs >= 3
+                                       and first['build_mode'] == 'profile' and not first['timeline_enabled']),
         "heavy_dataset": heavy_shape,
         "cpu_rankings": cpu_rankings,
         "over_100ms": sum(r["scenarios"][s]["frames_over_100ms"] for r in reports for s in SCENARIOS),

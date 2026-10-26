@@ -123,6 +123,27 @@ class ReportTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 reporter.summarize(root, 3)
 
+    def test_virtual_baseline_requires_retained_identical_warmup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            value = driver_response()
+            value['heavy_profile'].update(virtual_qualification=True, acceptance_eligible=False)
+            value['heavy_run'].update(platform='android',
+                                     virtual_runtime={'kind': 'android-emulator', 'runtime_build': 'pinned'},
+                                     launch_protocol={'warmup_runs': 1, 'measured_runs': 3, 'outlier_policy': 'retain-all'})
+            for i in range(1, 4):
+                (root / f'receipt-{i}.json').write_text(json.dumps(value))
+            with self.assertRaises(FileNotFoundError):
+                reporter.summarize(root, 3)
+            (root / 'warmup-1.json').write_text(json.dumps(value))
+            summary = reporter.summarize(root, 3)
+            self.assertTrue(summary['qualified_virtual_baseline'])
+            self.assertFalse(summary['accepted_baseline'])
+            value['heavy_run']['binary_sha256'] = 'different'
+            (root / 'warmup-1.json').write_text(json.dumps(value))
+            with self.assertRaisesRegex(ValueError, 'warmup differs'):
+                reporter.summarize(root, 3)
+
 
 if __name__ == '__main__':
     unittest.main()

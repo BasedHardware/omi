@@ -96,6 +96,10 @@ Future<void> main() async {
       'flutter_revision':
           (jsonDecode(await File('$output/flutter-version.json').readAsString()) as Map)['frameworkRevision'],
     };
+    if (Platform.environment['OMI_PERF_VIRTUAL'] == '1') {
+      data['heavy_run']['virtual_runtime'] = jsonDecode(await File('$output/virtual-runtime.json').readAsString());
+      data['heavy_run']['launch_protocol'] = jsonDecode(await File('$output/launch-protocol.json').readAsString());
+    }
     final scenarios = data['heavy_profile']?['scenarios'] as Map?;
     if (scenarios != null && scenarios.isNotEmpty) {
       final starts = scenarios.values.map((s) => s['start_vm_us'] as int).toList()..sort();
