@@ -206,6 +206,11 @@ class LiveAudioArchive:
         withholds the optional ACK (the client's WAL remains authoritative),
         never a captured frame.
         """
+        if not getattr(self.host, 'private_cloud_sync_enabled', False) or not self.sequence:
+            # No archive obligation is created without storage consent. An
+            # empty checkpoint is not a receipt and must not release WAL via
+            # the coverage ledger (including later HTTP coverage queries).
+            raise RuntimeError('audio custody unavailable; producer remains unacknowledged')
         if key not in self.pending_acks and len(self.pending_acks) >= 32:
             raise RuntimeError('audio custody coverage queue full; producer remains unacknowledged')
         pending = self.pending_acks.setdefault(key, [])

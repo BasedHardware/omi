@@ -6827,6 +6827,11 @@ discarding audio or releasing WAL. Audio-only WAL release waits for pack
 completion plus storage latency; coalesced coverage can include the next pack
 and retain WAL into the following active window. Idle partial windows wait for the next boundary or
 disconnect. See [durable audio custody](runbooks/audio-durable-outbox.md).
+With cloud-storage consent, an archive that accepted no frames cannot certify
+coverage. Missing/disabled cloud-storage consent follows the pre-custody
+transcript receipt contract: coverage ledger/ACK publication follows the
+successful durable transcript transaction, with no audio receipt or archive
+obligation. This avoids waiting forever for a consent-forbidden upload.
 Continuation uploads stage encrypted chunks by deterministic session and index,
 retain incomplete/expired assemblies for client retry, and only return a completed
 receipt after durable projection. Tombstone-first deletion purges staging even

@@ -23,6 +23,12 @@ A later window cannot release coverage across an earlier failed commit.
 A transport send or transcript receipt
 alone is never an audio archive receipt. Cloud-storage consent still applies;
 users with storage disabled do not acquire a new archive obligation.
+For those users, coverage follows the pre-custody transcript receipt contract:
+only a successful durable transcript transaction permits coverage publication
+and WAL release. It is never an audio-only receipt or proof of an immutable
+audio archive. This preserves bounded client retention without inventing an
+archive obligation. With storage consent, an empty archive cannot certify
+coverage; its accepted-frame checkpoint must have committed original audio.
 
 Pusher commits every incoming PCM run before trimming overlap or adding it to
 any derivative buffer. Its queue holds at most 20 generation-pinned receipts.

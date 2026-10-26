@@ -86,12 +86,16 @@ async def publish_committed(host: Any, conversation_id: str, snapshot: dict[str,
         return
     receiver = getattr(host, 'receiver', None)
     archive = getattr(receiver, 'raw_archive', None)
-    if archive is not None and archive.durable:
+    if archive is not None and archive.durable and getattr(host, 'private_cloud_sync_enabled', False):
         try:
             await archive.defer_ack(conversation_id, lambda: _publish_committed(host, conversation_id, snapshot))
         except Exception:
             observe('live_coverage', None)
         return
+    # Without cloud-audio consent, retain the pre-custody transcript receipt
+    # contract: the caller's LiveTranscriptMerge is already durable. Do not
+    # interpret an empty archive checkpoint as audio custody or retain WAL
+    # forever waiting for an upload that consent explicitly forbids.
     await _publish_committed(host, conversation_id, snapshot)
 
 

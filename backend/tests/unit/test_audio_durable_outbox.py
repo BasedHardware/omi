@@ -10,7 +10,7 @@ from pathlib import Path
 import struct
 import threading
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from starlette.websockets import WebSocketState
@@ -353,12 +353,77 @@ async def test_crash_mid_window_leaves_client_wal_unacknowledged(remote, monkeyp
 
     h.persistence = SimpleNamespace(call=persist)
     await archive.append(b'\x01\x00', 'conversation', 1000, 1)
-    await coverage.publish_committed(h, 'conversation', {'proof': coverage.PROOF_KIND, 'runs': []})
+    await coverage.publish_committed(
+        h,
+        'conversation',
+        {
+            'proof': coverage.PROOF_KIND,
+            'runs': [{'capture_root': 'source', 'source_frame_start': 0, 'source_frame_end': 1}],
+        },
+    )
     await archive.ensure_durable()
     assert not h.events and not remote.list_blobs('audio-outbox/')
     ledger.assert_not_called()
     # A process loss discards this object, but has issued no WAL-release ACK.
     assert archive.pending_acks and archive.packs and not archive.inflight
+
+
+@pytest.mark.asyncio
+async def test_empty_consented_archive_never_publishes_audio_backed_coverage(remote, monkeypatch):
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    h = host()
+    archive = LiveAudioArchive(h)
+    h.receiver = SimpleNamespace(raw_archive=archive)
+    h.persistence = SimpleNamespace(call=AsyncMock(return_value=[]))
+    # A committed transcript proof does not substitute for an audio receipt.
+    await coverage.publish_committed(
+        h,
+        'conversation',
+        {
+            'proof': coverage.PROOF_KIND,
+            'runs': [{'capture_root': 'source', 'source_frame_start': 0, 'source_frame_end': 1}],
+        },
+    )
+    await archive.close()
+    h.persistence.call.assert_not_awaited()
+    assert not h.events and not archive.pending_acks and not archive.sequence
+    assert not remote.list_blobs('raw-live/') and not remote.list_blobs('audio-outbox/')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('consent', [False, None])
+async def test_no_storage_keeps_transcript_receipt_semantics_without_claiming_audio_custody(
+    remote, monkeypatch, consent
+):
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    h = host()
+    if consent is None:
+        del h.private_cloud_sync_enabled
+    else:
+        h.private_cloud_sync_enabled = consent
+    archive = LiveAudioArchive(h)
+    h.receiver = SimpleNamespace(raw_archive=archive)
+    event = coverage.CaptureCommittedEvent(
+        conversation_id='conversation', capture_root='source', source_start=0, source_end=1
+    )
+    h.persistence = SimpleNamespace(call=AsyncMock(return_value=[event]))
+    await archive.append(b'\x01\x00', 'conversation', 1000, 1)
+    # publish_committed is entered only after the durable transcript merge;
+    # the transaction failure/success ordering is covered by the integration
+    # matrix in test_listen_capture_coverage.py, including consent disabled.
+    await coverage.publish_committed(
+        h,
+        'conversation',
+        {
+            'proof': coverage.PROOF_KIND,
+            'runs': [{'capture_root': 'source', 'source_frame_start': 0, 'source_frame_end': 1}],
+        },
+    )
+    await archive.close()
+    h.persistence.call.assert_awaited_once()
+    assert h.events == [event]  # Transcript receipt, never AudioCustodyEvent.
+    assert not archive.pending_acks and not archive.sequence
+    assert not remote.list_blobs('raw-live/') and not remote.list_blobs('audio-outbox/')
 
 
 @pytest.mark.asyncio
