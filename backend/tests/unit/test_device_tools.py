@@ -401,6 +401,57 @@ async def test_propose_message_to_a_searched_contact_is_polished_in_the_users_vo
 
 
 @pytest.mark.asyncio
+async def test_propose_message_is_rephrased_and_offers_the_users_usual_reaction(fake_redis, monkeypatch):
+    from utils.llm import user_voice_rephrase
+    from utils.llm.user_voice import build_profile, handle_key
+
+    thread = []
+    for i in range(10):
+        thread += [{'is_user': False, 'text': f'msg {i}'}, {'is_user': True, 'reaction': 'love'}, {'is_user': True, 'text': 'okk'}]
+    friend = build_profile(
+        'p-mia', 'Mia', [], [], written_lines=['okk im here', 'yeees lets go', 'omw now', 'no hurry'] * 3, thread=thread
+    )
+    seen = []
+
+    def engine(messages):
+        seen.append(messages)
+        return 'okk im here'
+
+    monkeypatch.setattr(user_voice_rephrase, 'configured', lambda: True)
+    monkeypatch.setattr(user_voice_rephrase, '_local_server_complete', engine)
+
+    def fake_annotate(uid, result):
+        return {handle_key('+15550100199'): friend.model_copy(update={'incoming': 'are you here'})}
+
+    callback = FakeCallback()
+    tools = {
+        t.name: t
+        for t in build_device_tools(
+            'uid-1', {'search_contacts', 'propose_message'}, callback, timeout_seconds=TEST_TIMEOUT
+        )
+    }
+
+    async def respond(index, payload):
+        while len(callback.requests) <= index:
+            await asyncio.sleep(0.01)
+        fake_redis.setex(device_tool_result_key('uid-1', callback.requests[index]['call_id']), 60, json.dumps(payload))
+
+    contacts = {'ok': True, 'contacts': [{'name': 'Mia Chen', 'preferred_messaging_handle': '+15550100199'}]}
+    with patch.object(device_tools, 'annotate_contacts_with_voice', fake_annotate):
+        responder = asyncio.create_task(respond(0, contacts))
+        await tools['search_contacts'].ainvoke({'query': 'Mia'})
+        await responder
+
+    responder = asyncio.create_task(respond(1, {'ok': True, 'status': 'sent'}))
+    raw = await tools['propose_message'].ainvoke({'to': ['+1 555 010 0199'], 'text': "I've arrived."})
+    await responder
+
+    assert callback.requests[1]['arguments']['text'] == 'okk im here'
+    assert 'They said: are you here' in seen[0][1]['content']
+    assert json.loads(raw)['suggested_reaction'] == 'love'
+
+
+@pytest.mark.asyncio
 async def test_a_voice_lookup_failure_leaves_the_contact_result_intact(fake_redis):
     def broken(uid, result):
         raise RuntimeError('firestore down')

@@ -33,8 +33,9 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 from database.redis_db import r as redis_client
-from utils.executors import db_executor, run_blocking
-from utils.llm.user_voice import UserVoiceProfile, annotate_contacts_with_voice, polish_draft, profile_for_recipients
+from utils.executors import db_executor, llm_executor, run_blocking
+from utils.llm.user_voice import UserVoiceProfile, annotate_contacts_with_voice, profile_for_recipients, suggest_reaction
+from utils.llm.user_voice_rephrase import rephrase_draft
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -308,14 +309,27 @@ async def _annotate_with_user_voice(uid: str, result: dict, voices: dict[str, Us
         )
 
 
-def _polish_with_user_voice(uid: str, arguments: dict, voices: dict[str, UserVoiceProfile]) -> None:
+async def _polish_with_user_voice(uid: str, arguments: dict, voices: dict[str, UserVoiceProfile]) -> Optional[str]:
+    """Rewrite (when a rephraser is configured) and polish the body; return a reaction to offer."""
     profile = profile_for_recipients(voices, arguments.get('to') or [])
     if profile is None or not arguments.get('text'):
-        return
-    polished = polish_draft(arguments['text'], profile)
-    if polished.changes:
-        arguments['text'] = polished.text
-        logger.info('User voice polish uid=%s changes=%s', uid, ','.join(polished.changes))
+        return None
+    result = await run_blocking(llm_executor, rephrase_draft, arguments['text'], profile, profile.incoming)
+    if result.engine_error:
+        record_fallback(
+            component='chat',
+            from_mode='user_voice_rephrase',
+            to_mode='polished_draft',
+            reason=result.engine_error,
+            outcome='degraded',
+            log=logger,
+        )
+    elif result.rejected:
+        logger.info('User voice rephrase kept the draft uid=%s guard=%s', uid, result.rejected)
+    if result.changes:
+        arguments['text'] = result.text
+        logger.info('User voice polish uid=%s changes=%s', uid, ','.join(result.changes))
+    return suggest_reaction(profile)
 
 
 def _build_one(
@@ -330,9 +344,10 @@ def _build_one(
         # Drop the RunnableConfig LangChain injects; it is not part of the
         # payload the device should receive.
         kwargs.pop('config', None)
+        reaction = None
         if name == 'propose_message':
             # Before the sheet opens, so the user sees and sends the polished text.
-            _polish_with_user_voice(uid, kwargs, voices)
+            reaction = await _polish_with_user_voice(uid, kwargs, voices)
         call_id = str(uuid.uuid4())
         request = {
             'call_id': call_id,
@@ -365,6 +380,9 @@ def _build_one(
         )
         if name == 'search_contacts':
             await _annotate_with_user_voice(uid, result, voices)
+        if reaction and isinstance(result, dict):
+            # The sheet cannot leave a tapback; the model offers it to the user in words.
+            result['suggested_reaction'] = reaction
         # Returned as JSON text: the model reads `status` and `ok` directly, and
         # a cancelled sheet must stay visibly distinct from a delivered message.
         return json.dumps(result)
