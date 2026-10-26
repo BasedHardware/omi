@@ -7,7 +7,7 @@ from pathlib import Path
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from config.prerecorded_stt import required_env_for_model_config  # noqa: E402
+from config.prerecorded_stt import required_env_for_model_config, required_env_for_held_recovery  # noqa: E402
 from config.stt_provider_policy import STTServingSurface, canonical_model_config, model_is_enabled  # noqa: E402
 from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
     validate_account_deletion_dispatch_contract as _validate_account_deletion_dispatch_contract,
@@ -525,6 +525,19 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
         )
 
     for scope, env_map, secrets_map in surfaces:
+        # This audience identifies the CPU recovery host, not general STT/GPU
+        # workers. Default-on independent recovery needs the same pure contract
+        # checked by the runtime before it claims its sole paid attempt.
+        independent = _manifest_literal_env_value(env_map, 'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED')
+        if (
+            _manifest_env_binding_is_configured(env_map, secrets_map, 'BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE')
+            and (independent or '').strip().lower() != 'false'
+        ):
+            for required_env in required_env_for_held_recovery():
+                if not _manifest_env_binding_is_configured(env_map, secrets_map, required_env):
+                    errors.append(
+                        ValidationError(scope, f'independent held recovery requires non-empty {required_env}')
+                    )
         model_is_bound = 'STT_PRERECORDED_MODEL' in env_map or 'STT_PRERECORDED_MODEL' in secrets_map
         is_required_cloud_run = scope in required_cloud_run_scopes
         if not model_is_bound and not is_required_cloud_run:
