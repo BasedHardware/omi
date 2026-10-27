@@ -342,7 +342,7 @@ def test_observation_failure_is_unknown(monkeypatch):
     live, donor = rows()
     incoming = absolute(donor)
     monkeypatch.setattr(
-        observation_module, '_live_segment_bounds', lambda *a: (_ for _ in ()).throw(RuntimeError('synthetic'))
+        observation_module, 'live_speech_bounds', lambda *a: (_ for _ in ()).throw(RuntimeError('synthetic'))
     )
     measured = observation_module.bridge_observation(
         live, [(incoming, DonorDedupe(incoming))], operation='assignment', target_kind='live'

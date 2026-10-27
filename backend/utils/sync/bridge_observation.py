@@ -4,7 +4,7 @@ import logging
 import math
 
 from utils.sync.donor_dedupe import DonorDedupe
-from utils.sync.live_speech_dedupe import _eligible_live, _incoming_span, _live_segment_bounds
+from utils.sync.live_speech_dedupe import eligible_live_segment, incoming_speech_span, live_speech_bounds
 from utils.sync.live_speech_dedupe import bounded_span_seconds, pinned_audio_timeline
 
 logger = logging.getLogger(__name__)
@@ -60,9 +60,9 @@ def bridge_observation(
         pinned = pinned_audio_timeline(reference.get('audio_timeline'))
         live_ranges = []
         for segment in reference.get('transcript_segments') or []:
-            if not _eligible_live(segment):
+            if not eligible_live_segment(segment):
                 continue
-            bounds = _live_segment_bounds(segment, origin, pinned)
+            bounds = live_speech_bounds(segment, origin, pinned)
             if bounds is None:
                 reason = 'invalid_timing'
             else:
@@ -86,7 +86,7 @@ def bridge_observation(
             lexical += report.lexical
             retry += report.exact_retry
             for segment in report.kept:
-                span = _incoming_span(segment)
+                span = incoming_speech_span(segment)
                 if span is None:
                     reason = 'invalid_timing'
                     continue

@@ -118,7 +118,8 @@ def _duration(seconds_pair: tuple[float, float]) -> float:
     return max(0.0, end - start)
 
 
-def _incoming_span(segment: dict) -> Optional[tuple[float, float]]:
+def incoming_speech_span(segment: dict) -> Optional[tuple[float, float]]:
+    """Finite absolute incoming speech bounds, shared with bridge observation."""
     start = _finite(segment.get('timestamp'))
     offset_start, offset_end = _finite(segment.get('start')), _finite(segment.get('end'))
     if start is None or offset_start is None or offset_end is None or offset_end <= offset_start:
@@ -129,7 +130,8 @@ def _incoming_span(segment: dict) -> Optional[tuple[float, float]]:
     return start, abs_end
 
 
-def _live_segment_bounds(segment: dict, origin: float, pinned: bool) -> Optional[tuple[float, float, str]]:
+def live_speech_bounds(segment: dict, origin: float, pinned: bool) -> Optional[tuple[float, float, str]]:
+    """Resolve capture bounds before falling back to stored content offsets."""
     capture_start = _finite(segment.get('audio_capture_start'))
     capture_end = _finite(segment.get('audio_capture_end'))
     if capture_start is not None and capture_end is not None and capture_end > capture_start:
@@ -150,7 +152,8 @@ def pinned_audio_timeline(marker: object) -> bool:
     return isinstance(marker, dict) and marker.get('version') == 2
 
 
-def _eligible_live(segment: dict) -> bool:
+def eligible_live_segment(segment: dict) -> bool:
+    """Stored sync contributions cannot serve as original live speech proof."""
     scope = segment.get('speaker_id_scope') or ''
     return not any(scope.startswith(prefix) for prefix in EXCLUDED_SCOPES)
 
@@ -327,9 +330,9 @@ def drop_covered_repeats(
         return list(incoming_segments), _zero_report()
     live_index = []
     for segment in live_segments:
-        if not _eligible_live(segment):
+        if not eligible_live_segment(segment):
             continue
-        bounds = _live_segment_bounds(segment, live_origin, live_pinned)
+        bounds = live_speech_bounds(segment, live_origin, live_pinned)
         text = segment.get('text') or ''
         if bounds is None or len(text) > MAX_CHARS:
             continue
@@ -353,7 +356,7 @@ def drop_covered_repeats(
             kept.append(segment)
             continue
         evaluated += 1
-        span = _incoming_span(segment)
+        span = incoming_speech_span(segment)
         text = segment.get('text') or ''
         if span is None or len(text) > MAX_CHARS:
             kept.append(segment)
