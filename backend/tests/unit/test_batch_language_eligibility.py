@@ -10,8 +10,13 @@ from unittest.mock import Mock
 from prometheus_client import REGISTRY
 import pytest
 
-from config.batch_pipeline import known_unsupported_batch_language, language_eligibility_enabled
+from config.batch_pipeline import (
+    known_unsupported_batch_language,
+    language_eligibility_enabled,
+    language_inheritance_enabled,
+)
 from config.policy import BatchUnitPolicy
+from diarizer.batch_pipeline_models import stt_language
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import intake
 from utils.batch_pipeline.artifacts import ProtectionContext
@@ -196,8 +201,6 @@ def test_known_unsupported_requires_a_recognized_non_parakeet_code(language, kno
 @pytest.mark.parametrize('ambient_language', ['vi', 'ja', 'ko'])
 @pytest.mark.parametrize('single', [False, True])
 async def test_bound_english_piece_never_redetects_ambient_language(monkeypatch, seconds, ambient_language, single):
-    from diarizer.batch_pipeline_models import stt_language
-
     detect = Mock(return_value=batch_language.LanguageDecision(ambient_language, 0.99, 'audio_lid', seconds))
     monkeypatch.setattr(batch_language, 'detect', detect)
     self_gate = Mock(return_value=(False, None))
@@ -276,8 +279,6 @@ async def test_inheritance_kill_switch_restores_per_piece_detection(monkeypatch)
 
 @pytest.mark.parametrize('raw', [None, '', 'true', 'TRUE', 'garbage'])
 def test_inheritance_on_by_default(monkeypatch, raw):
-    from config.batch_pipeline import language_inheritance_enabled
-
     monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', raising=False)
     if raw is not None:
         monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', raw)
@@ -286,8 +287,6 @@ def test_inheritance_on_by_default(monkeypatch, raw):
 
 @pytest.mark.asyncio
 async def test_parakeet_only_language_is_inherited(monkeypatch):
-    from diarizer.batch_pipeline_models import stt_language
-
     response, staged, probe = await upload(
         monkeypatch,
         user_language='en',
