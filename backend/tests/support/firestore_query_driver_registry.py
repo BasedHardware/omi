@@ -182,7 +182,9 @@ BODY_DIGEST = {
     # no query. Post-commit quiet retirement adds document reads only; terminal
     # streams still belong to the two driven callees. Retained extraction
     # re-encryption on protection upgrade adds no query or document read.
-    'database.smart_merge.absorb_conversation': '55c3b4249fd2ac67d6f49a0da36bbdd24715b803c62d2e44191de2de2b3a2a40',
+    # Donor dedupe uses the decoded transaction snapshot; its cohort gate can
+    # refresh a document read, while post-commit bridge logging adds no query.
+    'database.smart_merge.absorb_conversation': 'd2f4c29d3d2b15062fe20bc40cf90f038fcd4ce14ab620249d293da1d7b22f1d',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
     # Open-loop store: whole-subcollection stream by document id, filtered in Python.

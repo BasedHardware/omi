@@ -503,7 +503,9 @@ def test_all_repeat_stamp_fallback_with_a_donor_appends_and_reports_growth():
     assert created is False and len(survivors) == len(LIVE)
     donor = store.rows[('users', 'u', 'conversations', 'DONOR-1')]
     assert donor['sync_merged_into'] == LIVE_ID and donor['deleted'] is True
-    assert sorted(texts_of(store, LIVE_ID)) == sorted(LIVE + [reworded(text) for text in LIVE])
+    assert sorted(texts_of(store, LIVE_ID)) == sorted(
+        LIVE + [reworded(text) for text in LIVE] + texts_of(store, 'DONOR-1')
+    )
     assert assigned['_sync_lineage_dedupe']['span_delta_bucket'] == '0_60'
 
 

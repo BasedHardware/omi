@@ -20,6 +20,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
+from config.sync_live_dedupe import sync_live_dedupe_active_for
+from utils.sync.donor_dedupe import DonorDedupe, dedupe_donor, live_reference
+from utils.sync.bridge_observation import bridge_observation
 import config.speaker_match_scores as match_scores
 from config.conversation_smart_merge import (
     ELIGIBLE_SOURCES,
@@ -471,6 +474,9 @@ def rebase_donor_segments(
     survivor_segments: Sequence[Mapping[str, Any]],
     donor: Mapping[str, Any],
     donor_segments: Sequence[Mapping[str, Any]],
+    *,
+    uid: str | None = None,
+    observations: list[dict] | None = None,
 ) -> list[dict[str, Any]]:
     """Survivor transcript followed by the donor's, on the survivor's absolute timeline.
 
@@ -480,10 +486,28 @@ def rebase_donor_segments(
     Segment ids are kept, so an undo can remove exactly the donor's segments.
     """
     offset = donor['started_at'].timestamp() - survivor['started_at'].timestamp()
+    transferred = [dict(item) for item in deepcopy(list(donor_segments))]
+    # uid is supplied only at the transactional persistence boundary, after
+    # eligibility/planning, so policy checks and fragment/undo custody use the
+    # original donor. Reallocation touches only retained segments.
+    if uid is not None and sync_live_dedupe_active_for(uid) and not live_reference(dict(donor)):
+        reference = dict(survivor, transcript_segments=list(survivor_segments))
+        original = [dict(item, timestamp=donor['started_at'].timestamp() + item['start']) for item in transferred]
+        report = dedupe_donor(original, dict(donor), reference) if live_reference(reference) else DonorDedupe(original)
+        transferred = [{key: value for key, value in item.items() if key != 'timestamp'} for item in report.kept]
+        if observations is not None:
+            observations.append(
+                bridge_observation(
+                    reference,
+                    [(original, report)],
+                    operation='smart_absorb',
+                    target_kind='live' if live_reference(reference) else 'sync',
+                )
+            )
     allocator = ConversationSpeakerIdAllocator()
     allocator.hydrate(survivor_segments)
     merged = [dict(segment) for segment in deepcopy(list(survivor_segments))]
-    for segment in (dict(item) for item in deepcopy(list(donor_segments))):
+    for segment in transferred:
         if not segment.get('speaker_id_scope'):
             segment['speaker_id_scope'] = f"legacy-conversation:{donor['id']}:{segment.get('speaker_id')}"
         allocator.assign(segment)

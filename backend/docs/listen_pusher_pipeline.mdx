@@ -619,6 +619,31 @@ before VAD. Each refusal emits one bounded `s1_refused` outcome with a closed
 reason and no ids, names or claim content. The former S1 requirement flag was
 graduated on 2026-10-20; lineage admission and its kill switch remain authoritative.
 Widen only after the 48 h log gates in `ARCHITECTURE.md`, then watch 24 h.
+Stored sync donors consolidated into live rows now use the same lineage uid
+allowlist and `SYNC_LINEAGE_LIVE_DEDUPE_ENABLED` switch. Assignment and smart
+absorb freeze the transactionally read live transcript/evidence, then apply
+committed frame coverage with the documented residual lexical safety checks,
+lexical repeat proof without WAL context, and proven exact retry. Novel or uncertain speech stays;
+time overlap alone cannot drop it. Live committed evidence survives sync
+receipt aggregation. Rollback: `SYNC_LINEAGE_LIVE_DEDUPE_ENABLED=false` or revert.
+
+Each committed admitted donor consolidation attempts at most one content-free
+`event=sync_lineage_resolve stage=bridge outcome=bridge_clear|bridge_overlap|bridge_unknown`
+after commit, with bounded operation, target-kind, donor/proof counts, retained,
+dropped and overlapping seconds buckets, four numeric donor duration fields rounded
+to 0.1 s, and a closed incomplete reason. Post-commit emission is at-most-once;
+a lost line is unknown. Reconcile short counts with conversation revision metadata.
+Retries and receipt-only cleanup emit none. `created_clear` certifies creation
+time only; retained bridge overlap requires triage and incomplete measurement
+is unknown. Both block widening. Include transferred donor speech in both the
+doubled-speech numerator and denominator, counted once per source segment. Sum
+`appended_seconds_overlapping_live` plus `donor_seconds_retained_overlapping_live`
+for the numerator, and `appended_seconds` plus `donor_seconds_retained` for the
+denominator. Incomplete or missing measurements block widening;
+bridge observations have a separate denominator from resolver decisions and
+new-row observations. Field values and caps live in
+[`utils/sync/ARCHITECTURE.md`](../utils/sync/ARCHITECTURE.md).
+
 Gate 3 uses the id-free `event=sync_lineage_resolve stage=assignment` creation
 outcomes `created_clear|created_overlap|created_unknown`. Only lineage-admitted,
 S1-validated creates emit; unknown includes a closed `incomplete_reason` field,
