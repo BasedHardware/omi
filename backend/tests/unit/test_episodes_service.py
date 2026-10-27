@@ -9,6 +9,7 @@ import pytest
 
 from config import episodes as config
 from database import episode_receipts
+from database import conversations as conversations_db
 from database import episodes as episodes_db
 from models.episode import Episode
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -1103,16 +1104,17 @@ def test_a_sync_finalized_conversation_joins_the_live_episode_covering_it():
     assert after['id'] == episode['id'] and after['status'] == 'live'
     assert after['conversation_ids'] == ['c-live', 'c-wal']
     assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store)['id'] == episode['id']
-    # A parallel capture: no model call, and its duplicate text never feeds the notes.
-    assert len(model.calls) == 1
-    assert after['applied'].keys() == {'c-live'} and [m['conversation_id'] for m in after['moments']] == ['c-live']
-    # A later WAL chunk re-runs the hook and feeds nothing either.
+    # Membership/overlap is not proof every retained word reached the live notes.
+    assert len(model.calls) == 2
+    assert after['applied'].keys() == {'c-live', 'c-wal'}
+    assert [m['conversation_id'] for m in after['moments']] == ['c-live', 'c-wal']
+    # Repeating the same WAL snapshot consumes no further model call.
     assert (
         service.on_conversation_finalized(UID, 'c-wal', _wal_row(), trigger='sync_update', collaborators=c)
         == 'finalized'
     )
     replay = episodes_db.get_current_episode(UID, firestore_client=store)
-    assert replay['applied'].keys() == {'c-live'} and len(model.calls) == 1
+    assert replay['applied'].keys() == {'c-live', 'c-wal'} and len(model.calls) == 2
 
 
 def test_a_sync_finalized_conversation_never_reopens_a_closed_episode():
@@ -1214,14 +1216,15 @@ def test_a_sync_clip_joins_the_live_episode_at_intake_and_the_finalize_hook_stay
     assert after['id'] == episode['id'] and after['status'] == 'live'
     assert after['conversation_ids'] == ['c-live', 'c-wal']
     assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store)['id'] == episode['id']
-    # The cheap rules alone decided: no model call, and no text fed.
-    assert model.calls == [] and after['applied'].keys() == set() and after['moments'] == []
+    # Cheap rules decide membership; the retained WAL speech completes the notes.
+    assert len(model.calls) == 1 and after['applied'].keys() == {'c-wal'}
+    assert [m['conversation_id'] for m in after['moments']] == ['c-wal']
     # Enrichment finishing later neither re-joins nor replays the duplicate transcript.
     assert service.on_conversation_finalized(UID, 'c-wal', _wal_row(), trigger='sync_update', collaborators=c) == (
         'finalized'
     )
     replay = episodes_db.get_current_episode(UID, firestore_client=store)
-    assert replay['conversation_ids'] == ['c-live', 'c-wal'] and model.calls == []
+    assert replay['conversation_ids'] == ['c-live', 'c-wal'] and len(model.calls) == 1
     # A replayed intake is a no-op on the same membership.
     assert service.attach_synced_intake(UID, 'c-wal', _wal_row(), collaborators=c) == 'attached'
 
@@ -1350,8 +1353,8 @@ def test_a_late_sync_clip_rejoins_the_gap_closed_episode_and_reopens_it():
     assert reopened['conversation_ids'] == ['c-live', 'c-wal']
     assert episodes_db.get_current_episode(UID, firestore_client=store)['id'] == episode['id']
     assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store)['id'] == episode['id']
-    # A parallel capture still feeds no text, spends nothing, and its speech is activity.
-    assert len(model.calls) == 1 and reopened['applied'].keys() == {'c-live'}
+    # Retained speech merges into notes once and also counts as activity.
+    assert len(model.calls) == 2 and reopened['applied'].keys() == {'c-live', 'c-wal'}
     assert reopened['last_activity_at'] == _wal_row(minutes=15)['finished_at']
     # The recap no longer advertises the reopened episode as the last closed one.
     assert episodes_db.get_last_closed_episode(UID, firestore_client=store) is None
@@ -1507,3 +1510,85 @@ def test_late_sync_audio_from_before_the_closed_episode_stays_out():
     assert episodes_db.get_episode_for_conversation(UID, 'c-old', firestore_client=store) is None
     closed = episodes_db.get_episode(UID, episode['id'], firestore_client=store)
     assert closed['conversation_ids'] == ['c-live'] and closed['status'] == 'closed'
+
+
+def test_recovered_wal_speech_is_merged_at_attach_once_and_an_attached_tail_is_not_lost():
+    store = StrictFirestore()
+    model = FakeModel({'bullets': ['Live']}, {'bullets': ['Live', 'Recovered']}, {'bullets': ['Live', 'Tail']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.record_moment(UID, _moment('c-live'), c)
+    clip = _wal_row(text='The recovered decision is to ship the blue version tomorrow.')
+    assert service.attach_synced_intake(UID, 'c-wal', clip, collaborators=c) == 'joined'
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['bullets'] == ['Live', 'Recovered']
+    assert 'blue version tomorrow' in str(model.calls[-1])
+    service.attach_synced_intake(UID, 'c-wal', clip, collaborators=c)
+    service.on_conversation_finalized(UID, 'c-wal', clip, trigger='sync_update', collaborators=c)
+    assert len(model.calls) == 2
+    # Recovery may insert an earlier gap behind the already consumed offset.
+    tail = {'id': 'recovered-gap', 'text': 'Keep the red backup.', 'start': 0, 'end': 1}
+    clip = {**clip, 'transcript_segments': [*clip['transcript_segments'], tail]}
+    assert service.attach_synced_intake(UID, 'c-wal', clip, collaborators=c) == 'attached'
+    assert 'red backup' in str(model.calls[-1])
+    service.on_conversation_finalized(UID, 'c-wal', clip, trigger='sync_update', collaborators=c)
+    assert len(model.calls) == 3
+
+
+def test_close_merges_member_transcript_recovered_after_the_last_moment(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'bullets': ['Live']}, RuntimeError('temporary provider outage'), {'bullets': ['Live', 'WAL']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.record_moment(UID, _moment('c-live'), c)
+    clip = _wal_row(text='Recovered speech includes the agreement to send the final contract today.')
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a, **k: clip if a[1] == 'c-wal' else None)
+    assert service.attach_synced_intake(UID, 'c-wal', clip, collaborators=c) == 'joined'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['bullets'] == ['Live']
+    assert service.close_on_finalize(UID, 'c-live', trigger='client_finalize', collaborators=c) == 'closed'
+    closed = episodes_db.get_episode(UID, episode['id'], firestore_client=store)
+    assert closed['status'] == 'closed' and closed['bullets'] == ['Live', 'WAL']
+    assert 'final contract today' in str(model.calls[-1])
+    assert len(model.calls) == 3
+
+
+def test_synced_attach_retries_two_version_conflicts_and_preserves_other_members(monkeypatch):
+    store = StrictFirestore()
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'c-live', 'omi', started_at=T0, collaborators=c)
+    original = episodes_db.commit_moment
+    attempts = []
+
+    def racing(uid, **kwargs):
+        attempts.append(kwargs.get('expected_version'))
+        if len(attempts) < 3:
+            episode = episodes_db.get_current_episode(uid, firestore_client=store)
+            original(
+                uid,
+                expected_episode_id=episode['id'],
+                expected_version=episode['state_version'],
+                updates={'conversation_ids': [*episode['conversation_ids'], f'other-{len(attempts)}']},
+                firestore_client=store,
+            )
+            raise episodes_db.EpisodeConflict('state_version_changed')
+        return original(uid, **kwargs)
+
+    monkeypatch.setattr(episodes_db, 'commit_moment', racing)
+    assert service.attach_synced_intake(UID, 'c-wal', _wal_row(text=''), collaborators=c) == 'joined'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['conversation_ids'] == ['c-live', 'other-1', 'other-2', 'c-wal']
+    assert len(attempts) == 3 and len(set(attempts)) == 3
+
+
+def test_large_recovered_member_does_not_receipt_words_truncated_from_the_prompt():
+    store = StrictFirestore()
+    model = FakeModel()
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'c-live', 'omi', started_at=T0, collaborators=c)
+    words = [f'word{index:04d}' for index in range(1500)]
+    row = _wal_row(text=' '.join(words))
+    assert service.attach_synced_intake(UID, 'c-wal', row, collaborators=c) == 'joined'
+    prompts = '\n'.join(str(call[-1][1]).split('Newest moment:\n')[-1] for call in model.calls)
+    assert all(word in prompts for word in words)
+    calls = len(model.calls)
+    service.attach_synced_intake(UID, 'c-wal', row, collaborators=c)
+    assert len(model.calls) == calls

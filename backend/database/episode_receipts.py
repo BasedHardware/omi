@@ -1,10 +1,15 @@
-"""Per-conversation receipts of episode-consumed unplaced segments.
+"""Per-conversation receipts of episode-consumed unplaced and recovered segments.
 
 An unplaced segment (``audio_alignment=unplaced``, sentinel ``-1`` offsets)
 has no ordering cursor the notes pipeline could advance, so its id is kept
 after the episode consumes it: a retry, a later repaired placement and the
 conversation's finalization tail must never feed the same speech into the
 running notes twice (``utils/episodes/service.py``).
+
+Recovered WAL speech uses namespaced content hashes in the same transactional
+receipt store. A placed cursor cannot prove consumption of an earlier gap or
+an in-place text extension. Recovery reads all shards and records a receipt
+only for the bounded text batch that the notes update actually consumed.
 
 The receipts belong to the conversation, not to one episode: a conversation
 spans episode boundaries (an idle close, the hard cap) and its finalization

@@ -14,8 +14,8 @@ Entry points (all synchronous, fail-open, run on a worker thread by callers):
 - ``attach_synced_intake``: a sync (WAL) conversation the moment intake
   persisted it. It joins the live episode covering its span right away, so
   Home folds it under the live row from its first appearance instead of only
-  after enrichment finishes. Same rules as the finalize-time join: no model
-  call, never opens or closes an episode on its own — but a clip whose covering
+  after enrichment finishes. Retained speech merges into its notes with content
+  receipts. Never opens an episode on its own — but a clip whose covering
   episode closed on silence (``gap``/``idle``) rejoins it, reopening the
   episode when nothing newer exists.
 - ``on_conversation_finalized``: the conversation's normal processing has
@@ -39,10 +39,13 @@ Nothing here writes a conversation, an action item or a memory.
 from __future__ import annotations
 
 import logging
+import json
+import random
 import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
 
@@ -55,6 +58,7 @@ from config.episodes import (
     episodes_enabled_for,
 )
 from database import action_items as action_items_db
+from database import conversations as conversations_db
 from database import episode_receipts
 from database import episodes as episodes_db
 from database import notifications as notification_db
@@ -248,6 +252,18 @@ def _close(
     provisional until its processing reconciles them, and it never reopens this
     episode or opens another (``_closed_owner``).
     """
+    expected_activity_at = policy.utc(episode.get('last_activity_at')) if reason == 'idle' else None
+    # A WAL member may have gained speech since its last incremental update (or
+    # the provider was down at attach). Merge only unapplied member snapshots
+    # into these notes before closing. Explicit targeting avoids idle-close
+    # recursion and prevents a late member from opening/joining another episode.
+    for cid in episode.get('recovered_conversation_ids') or []:
+        if cid == detach:
+            continue
+        row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        if row and not any(row.get(key) for key in ('deleted', 'discarded', 'sync_merged_into')):
+            _record_recovered(uid, str(episode['id']), cid, row, c)
+    episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or episode
     items = provisional_items(episode)
     dropped = 0
     for item in items:
@@ -267,7 +283,7 @@ def _close(
         reason,
         closed_at=_idle_closed_at(episode, now) if reason == 'idle' else now,
         extra=extra,
-        expected_activity_at=policy.utc(episode.get('last_activity_at')) if reason == 'idle' else None,
+        expected_activity_at=expected_activity_at,
         firestore_client=c.firestore_client,
     )
     if closed is not None:
@@ -425,7 +441,13 @@ def _attach_once(uid: str, conversation_id: str, source: Optional[str], started_
     return 'pending' if decision.action == policy.ASK else 'joined'
 
 
-def record_moment(uid: str, moment: MomentInput, collaborators: Optional[Collaborators] = None) -> str:
+def record_moment(
+    uid: str,
+    moment: MomentInput,
+    collaborators: Optional[Collaborators] = None,
+    *,
+    member_episode_id: Optional[str] = None,
+) -> str:
     """Returns a bounded outcome label. Never raises."""
     c = collaborators or Collaborators()
     if not episodes_enabled_for(uid):
@@ -433,7 +455,7 @@ def record_moment(uid: str, moment: MomentInput, collaborators: Optional[Collabo
     outcome = 'error'
     for _ in range(2):
         try:
-            outcome = _record_moment_once(uid, moment, c)
+            outcome = _record_moment_once(uid, moment, c, member_episode_id=member_episode_id)
         except episodes_db.EpisodeConflict:
             outcome = 'conflict'
             continue
@@ -513,17 +535,33 @@ def _settle_boundary(
     return episode, pending
 
 
-def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
+def _record_moment_once(
+    uid: str, moment: MomentInput, c: Collaborators, *, member_episode_id: Optional[str] = None
+) -> str:
     now = _now(c)
-    episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
+    recovered = moment.trigger == 'sync_recovery'
+    episode = (
+        episodes_db.get_episode(uid, member_episode_id, firestore_client=c.firestore_client)
+        if member_episode_id
+        else episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
+    )
+    if member_episode_id and (not episode or moment.conversation_id not in (episode.get('conversation_ids') or [])):
+        return 'no_episode'
     # This entrypoint is also used without the realtime tracker. Record speech before
     # any short/rate-limit/model-error return, without consuming it for notes.
-    if moment.trigger != 'finalize' and any(str(s.get('text') or '').strip() for s in moment.segments):
+    if (
+        not member_episode_id
+        and moment.trigger != 'finalize'
+        and any(str(s.get('text') or '').strip() for s in moment.segments)
+    ):
         episode = _retain_activity(uid, episode, moment.conversation_id, moment.ended_at, c)
-    episode = _close_stale_current(uid, episode, c, now)
-    closed = _closed_owner(uid, episode, moment, c)
+    if not member_episode_id:
+        episode = _close_stale_current(uid, episode, c, now)
+    closed = episode if member_episode_id and not policy.is_live(episode) else None
+    if not member_episode_id:
+        closed = _closed_owner(uid, episode, moment, c)
     if closed is not None:
-        if moment.trigger != 'finalize':
+        if moment.trigger != 'finalize' and not recovered:
             metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_closed')
             return 'skipped_closed'
         # The tail of a conversation whose episode already closed completes that episode's notes.
@@ -541,7 +579,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         moment.conversation_id,
         # The finalization tail replays the whole stored transcript: only the
         # archives hold ids old enough to matter there. Live batches are recent.
-        all_shards=moment.trigger == 'finalize',
+        all_shards=moment.trigger == 'finalize' or recovered,
         firestore_client=c.firestore_client,
     )
     if not receipts_exist:
@@ -554,9 +592,27 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         sid = segment.get('id')
         if not str(segment.get('text') or '').strip():
             continue
+        if recovered:
+            # Recovery can fill a gap *behind* the placed cursor, or extend text
+            # in place. A content receipt, committed with notes, is the proof of
+            # consumption; temporal overlap with live speech is not that proof.
+            sid = (
+                'sync:'
+                + sha256(
+                    json.dumps(
+                        [
+                            sid if sid else [_segment_start(segment), _segment_end(segment)],
+                            str(segment.get('text') or '').strip(),
+                        ],
+                        ensure_ascii=False,
+                    ).encode()
+                ).hexdigest()
+            )
         if sid in consumed or sid in selected_ids:
             continue
-        if _segment_end(segment) < 0:
+        if recovered:
+            selected_ids.add(sid)
+        elif _segment_end(segment) < 0:
             # Unplaced segments retain individual IDs at persistence. Their sentinel
             # is not an ordering cursor; a repaired placement retains this receipt.
             if not sid:
@@ -579,7 +635,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
     if text.words == 0:
         metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_applied')
         return 'skipped_applied'
-    if text.words < (FINALIZE_MIN_WORDS if moment.trigger == 'finalize' else MOMENT_MIN_WORDS):
+    if not recovered and text.words < (FINALIZE_MIN_WORDS if moment.trigger == 'finalize' else MOMENT_MIN_WORDS):
         metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_short')
         return 'skipped_short'
     facts = policy.MomentFacts(
@@ -591,7 +647,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         speakers=policy.speaker_keys(segments),
     )
     pending: Optional[dict[str, Any]] = None
-    if closed is None:
+    if closed is None and not member_episode_id:
         previous_episode_id = episode.get('id') if episode else None
         settled = _settle_boundary(uid, episode, moment, facts, text.text, c, now)
         if isinstance(settled, str):
@@ -705,7 +761,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
             segment_receipts=segment_receipts,
             firestore_client=c.firestore_client,
         )
-    elif closed is not None:
+    elif closed is not None or member_episode_id:
         episodes_db.update_episode(
             uid,
             str(episode['id']),
@@ -849,6 +905,9 @@ def _sync_member_updates(
     join racing a live moment can never move the clock backwards.
     """
     updates = _with_conversation(episode, conversation_id, source)
+    updates['recovered_conversation_ids'] = list(
+        dict.fromkeys([*(episode.get('recovered_conversation_ids') or []), conversation_id])
+    )
     last = policy.utc(episode.get('last_activity_at'))
     activity = finished or started
     if now is not None and activity > now:
@@ -967,13 +1026,12 @@ def _rejoin_closed_synced(
     return 'rejoined_member'
 
 
-def _attach_synced(uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
+def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
     """A sync-finalized conversation joins the episode covering it, live or silence-closed.
 
     Offline-sync (WAL) conversations never attach at first words: no realtime
     stream carries them. When one lands inside the live episode's span it joins
-    as a parallel capture — a member, so Home folds it under the live row, whose
-    text the live stream already fed, so no moment and no reconcile. Its speech
+    as a parallel capture — a member, so Home folds it under the live row. Its speech
     also extends the episode's last activity, so an idle close cannot fire while
     sync speech keeps landing late. When the covering episode already closed on
     silence (``gap``/``idle``) the clip rejoins it (``_rejoin_closed_synced``).
@@ -1000,6 +1058,90 @@ def _attach_synced(uid: str, conversation_id: str, row: Mapping[str, Any], c: Co
     return _rejoin_closed_synced(uid, conversation_id, row, started, finished, c, allow_reopen=True)
 
 
+def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
+    segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
+    if not segments:
+        return 'skipped_applied'
+    started = policy.utc(row.get('started_at')) or policy.utc(row.get('created_at')) or _now(c)
+    ended = policy.utc(row.get('finished_at')) or _wall(started, max(_segment_end(s) for s in segments)) or started
+    outcome = 'skipped_applied'
+    for batch in _recovery_batches(segments):
+        outcome = record_moment(
+            uid,
+            MomentInput(
+                conversation_id=conversation_id,
+                source=str(row.get('source') or '') or None,
+                segments=batch,
+                started_at=started,
+                ended_at=min(ended, _now(c)),
+                trigger='sync_recovery',
+                calendar_identity=_calendar_identity(row),
+                language=row.get('language'),
+            ),
+            c,
+            member_episode_id=episode_id,
+        )
+        if outcome not in {'applied', 'skipped_applied'}:
+            return outcome
+    return outcome
+
+
+def _recovery_batches(segments: Sequence[Mapping[str, Any]]):
+    """Keep all recovered words inside the moment renderer's 6000-character budget.
+
+    Stable per-segment slices keep receipts independent of batch boundaries.
+    Head/tail truncation must never mark unseen middle speech as consumed.
+    """
+    batch, chars = [], 0
+    for segment in segments:
+        text = str(segment.get('text') or '').strip()
+        part = 0
+        while text:
+            cut = min(len(text), 1500)
+            if cut < len(text):
+                cut = text.rfind(' ', 0, cut) if ' ' in text[:cut] else cut
+            chunk, text = text[:cut], text[cut:].lstrip()
+            if batch and (chars + len(chunk) > 3000 or len(batch) >= 32):
+                yield batch
+                batch, chars = [], 0
+            identity = segment.get('id') or [_segment_start(segment), _segment_end(segment)]
+            batch.append({**segment, 'id': json.dumps([identity, part]), 'text': chunk})
+            chars += len(chunk)
+            part += 1
+    if batch:
+        yield batch
+
+
+def _attach_synced(uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
+    # Re-read both membership and the boundary on every lost CAS. A last WAL
+    # append cannot rely on another append arriving to repair a lost attachment.
+    for attempt in range(3):
+        try:
+            owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
+            outcome = 'attached' if owner else _attach_synced_once(uid, conversation_id, row, c)
+            owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
+            if owner is not None:
+                if conversation_id not in (owner.get('recovered_conversation_ids') or []):
+                    episodes_db.update_episode(
+                        uid,
+                        str(owner['id']),
+                        expected_version=int(owner.get('state_version') or 0),
+                        updates={
+                            'recovered_conversation_ids': list(
+                                dict.fromkeys([*(owner.get('recovered_conversation_ids') or []), conversation_id])
+                            )
+                        },
+                        firestore_client=c.firestore_client,
+                    )
+                _record_recovered(uid, str(owner['id']), conversation_id, row, c)
+            return outcome
+        except episodes_db.EpisodeConflict:
+            if attempt == 2:
+                return 'conflict'
+            time.sleep(random.uniform(0.01, 0.05) * (attempt + 1))
+    return 'conflict'
+
+
 def attach_synced_intake(
     uid: str,
     conversation_id: str,
@@ -1012,7 +1154,8 @@ def attach_synced_intake(
     Without this, a landed WAL clip stays a standalone Home row until its
     enrichment finalizes (``on_conversation_finalized``), which offline sync
     can leave minutes behind. The join is the same one the finalize-time path
-    makes (``_attach_synced``): no model call, never opens an episode, joins
+    makes (``_attach_synced``): never opens an episode, merges retained speech into
+    the member's notes through idempotent recovery moments, and joins
     only the current live episode covering its span or rejoins the
     silence-closed one it belongs to, and a conversation already owned by an
     episode (live or closed) never moves.
@@ -1029,8 +1172,9 @@ def attach_synced_intake(
             return 'skipped_discarded'
         _repoint_sync_donors(uid, conversation_id, row, c)
         owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
-        if owner is not None:
-            return 'attached' if policy.is_live(owner) else 'no_episode'
+        if owner is not None and not policy.is_live(owner):
+            _attach_synced(uid, conversation_id, row, c)
+            return 'no_episode'
         return _attach_synced(uid, conversation_id, row, c)
     except Exception as error:
         logger.warning('event=episode_sync_intake_attach outcome=error exception_type=%s', type(error).__name__)
@@ -1072,12 +1216,13 @@ def _on_finalized(
     if absorbed_from and episode:
         _repoint_absorbed(uid, episode, absorbed_from, conversation_id, c)
         episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client)
-    if episode is None and trigger == SYNC_UPDATE:
-        return _attach_synced(uid, conversation_id, row, c)
+    if trigger == SYNC_UPDATE and not absorbed_from:
+        outcome = _attach_synced(uid, conversation_id, row, c)
+        if episode is None:
+            return outcome
+        episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
     if segments and not absorbed_from and trigger != SYNC_UPDATE:
-        # A sync conversation never feeds text: its transcript is a second capture
-        # of speech the live stream already carried (``_attach_synced``), and each
-        # WAL chunk re-finalizes it, so the applied offsets dedupe nothing.
+        # Sync members use content receipts at attachment instead of this live cursor.
         ended = policy.utc(row.get('finished_at')) or _wall(started, max(_segment_end(s) for s in segments))
         tail = MomentInput(
             conversation_id=conversation_id,
@@ -1151,6 +1296,11 @@ def _repoint_absorbed(uid: str, episode: Mapping[str, Any], donor_id: str, survi
         expected_version=int(episode.get('state_version') or 0),
         updates={
             'conversation_ids': list(dict.fromkeys(ids)),
+            'recovered_conversation_ids': list(
+                dict.fromkeys(
+                    survivor_id if cid == donor_id else cid for cid in episode.get('recovered_conversation_ids') or []
+                )
+            ),
             'moments': moments,
             'provisional_items': items,
             'primary_conversation_id': (
