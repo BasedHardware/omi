@@ -20,8 +20,9 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 175,
+  "count": 176,
   "names": {
+    "BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED": {"owner": "langexcl / batch rollout lead", "review_by": "2026-11-15"},
     "BATCH_PIPELINE_API_URL": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS": {"seeded": "2026-10-25"},

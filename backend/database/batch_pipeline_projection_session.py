@@ -14,6 +14,7 @@ from database.batch_pipeline_privacy import (
     BatchPrivacyBlocked,
     BatchPrivacyReason,
 )
+from database.batch_pipeline_projection_privacy import HOLD_REASONS, checkpoint, completed_checkpoint_fields
 from database.batch_pipeline_projection_protocol import (
     ProjectionBlocked,
     ProjectionPredecessorPending,
@@ -60,16 +61,21 @@ class ProjectionSession:
         self.speaker_scope: str | None = None
         self.total_speech_seconds = 0.0
         self._source_deletion_transaction = None
+        self._privacy_refusal_transaction = None
+        self._privacy_replay_transaction = None
         self._privacy_fence_ids: set[str] | None = None
 
     def receipt(self) -> dict:
         parts = self.entry.get('projection_parts') or {}
         if self.part_index is not None and parts:
             return parts.get(str(self.part_index)) or {}
-        return self.entry.get('projection') or {}
+        receipt = self.entry.get('projection') or {}
+        return {} if receipt.get('privacy_control_only') else receipt
 
     def write_receipt(self, transaction, receipt):
         """Ready acknowledgment and summary share one result-keyed receipt."""
+        if self.entry.get('projection_privacy_refusal') or self._privacy_refusal_transaction is transaction:
+            raise ProjectionBlocked('privacy hold cannot acknowledge content')
         parts = dict(self.entry.get('projection_parts') or {})
         if self.part_index is None or not parts:
             transaction.update(self.result_ref, {'projection': receipt, 'projection_state': receipt['state']})
@@ -117,43 +123,7 @@ class ProjectionSession:
                 if len(self._privacy_fence_ids) > 256:
                     raise BatchPrivacyBlocked('conversation_fence_budget')
 
-    def prepare(self, transaction, *, replay=True, privacy_deleted=False):
-        self._source_deletion_transaction = None
-        self._privacy_fence_ids = set()
-        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
-            # A session may survive the pre-check and assignment retries. Only
-            # prepare and validate_plan within this attempt may share snapshots.
-            self._privacy_memo = BatchPrivacyMemo(self.client, transaction)
-        elif hasattr(self, '_privacy_memo'):
-            del self._privacy_memo
-        self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
-        self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
-        owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
-        self.ledger = self.ledger_ref.get(transaction=transaction).to_dict() or {}
-        if (
-            not self.job.get('projection_binding')
-            or normalized_binding(self.job['projection_binding']) != self.binding
-            or self.segment_id not in self.binding.segment_ids
-            or self.job.get('owner_id') != self.binding.owner_id
-            or self.entry.get('owner_key') != owner_key(self.binding.owner_id)
-            or not (
-                self.entry.get('protocol_version') == 1
-                or self.entry.get('protocol_version') == 2
-                and self.entry.get('lineage_quarantine_version') == 1
-                and any(
-                    part.get('quarantine_version') == 1 and part.get('state') == 'quarantined'
-                    for part in (
-                        self.entry.get('projection_parts') or {'single': self.entry.get('projection') or {}}
-                    ).values()
-                )
-            )
-            or self.entry.get('segment_id') != self.segment_id
-            or self.entry.get('capture_at') != self.job.get('capture_at')
-            or self.job.get('privacy_generation') != self.binding.privacy_generation
-            or self.job.get('result') != self.entry.get('result')
-            or 'previous_segment_id' not in self.entry
-        ):
-            raise ProjectionBlocked('immutable result binding mismatch')
+    def _prepare_privacy(self, transaction, *, privacy_deleted=False):
         ids = [
             chunk_identity(
                 self.binding.owner_id,
@@ -222,7 +192,61 @@ class ProjectionSession:
                 # A prior output was already assigned before the user deleted
                 # it. Reconcile its receipt, while later input parts still owe
                 # their own assignments. Never authorize input deletion here.
-        self._privacy_fence_ids = None
+
+    def prepare(self, transaction, *, replay=True, privacy_deleted=False, privacy_refusal=None, privacy_replay=False):
+        if privacy_deleted and privacy_refusal is not None:
+            raise ProjectionBlocked('privacy dispositions must be distinct')
+        self._privacy_refusal_transaction = None
+        self._privacy_replay_transaction = None
+        self._source_deletion_transaction = None
+        self._privacy_fence_ids = set()
+        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
+            # A session may survive the pre-check and assignment retries. Only
+            # prepare and validate_plan within this attempt may share snapshots.
+            self._privacy_memo = BatchPrivacyMemo(self.client, transaction)
+        elif hasattr(self, '_privacy_memo'):
+            del self._privacy_memo
+        self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
+        self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
+        owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
+        self.ledger = self.ledger_ref.get(transaction=transaction).to_dict() or {}
+        if (
+            not self.job.get('projection_binding')
+            or normalized_binding(self.job['projection_binding']) != self.binding
+            or self.segment_id not in self.binding.segment_ids
+            or self.job.get('owner_id') != self.binding.owner_id
+            or self.entry.get('owner_key') != owner_key(self.binding.owner_id)
+            or not (
+                self.entry.get('protocol_version') == 1
+                or self.entry.get('protocol_version') == 2
+                and checkpoint(self.entry)
+                or self.entry.get('protocol_version') == 2
+                and self.entry.get('lineage_quarantine_version') == 1
+                and any(
+                    part.get('quarantine_version') == 1 and part.get('state') == 'quarantined'
+                    for part in (
+                        self.entry.get('projection_parts') or {'single': self.entry.get('projection') or {}}
+                    ).values()
+                )
+            )
+            or self.entry.get('segment_id') != self.segment_id
+            or self.entry.get('capture_at') != self.job.get('capture_at')
+            or self.job.get('privacy_generation') != self.binding.privacy_generation
+            or self.job.get('result') != self.entry.get('result')
+            or 'previous_segment_id' not in self.entry
+        ):
+            raise ProjectionBlocked('immutable result binding mismatch')
+        try:
+            self._prepare_privacy(transaction, privacy_deleted=privacy_deleted)
+        except BatchPrivacyBlocked as error:
+            if privacy_refusal != error.reason or error.reason not in HOLD_REASONS:
+                raise
+            self._privacy_refusal_transaction = transaction
+        else:
+            if privacy_refusal is not None:
+                raise ProjectionBlocked('privacy refusal no longer applies')
+        finally:
+            self._privacy_fence_ids = None
         durable = self.ledger.get('batch_pipeline') or {}
         if (
             self.ledger.get('dispatch_protocol') != 'batch_v1'
@@ -243,6 +267,10 @@ class ProjectionSession:
             self.binding.run_epoch,
         ):
             raise ProjectionBlocked('content ledger owner lost')
+        if self.entry.get('projection_privacy_refusal') and privacy_refusal is None and not privacy_replay:
+            raise ProjectionBlocked('privacy hold requires fenced replay')
+        if checkpoint(self.entry):
+            self._privacy_replay_transaction = transaction
         if receipt:
             if replay:
                 raise ProjectionReplay(receipt)
@@ -252,6 +280,8 @@ class ProjectionSession:
                 raise ProjectionBlocked('immutable projection part count mismatch')
             if self.part_index and str(self.part_index - 1) not in (self.entry.get('projection_parts') or {}):
                 raise ProjectionBlocked('earlier projection part must persist first')
+        if self._privacy_replay_transaction is transaction:
+            return
         from database.batch_pipeline_privacy import erased_predecessors
 
         erased = erased_predecessors(
@@ -271,6 +301,9 @@ class ProjectionSession:
         self.guard(transaction, [planned['id'], *(planned.get('sync_merged_from') or [])])
 
     def persist(self, transaction, planned=None, *, superseded=False, quarantined=False, privacy_deleted=False):
+        if self._privacy_refusal_transaction is transaction or self.entry.get('projection_privacy_refusal'):
+            raise ProjectionBlocked('privacy hold cannot assign or acknowledge content')
+        privacy_replay = self._privacy_replay_transaction is transaction
         if privacy_deleted and (
             planned is not None or not superseded or quarantined or self._source_deletion_transaction is not transaction
         ):
@@ -326,6 +359,8 @@ class ProjectionSession:
             )
             parts = {**(self.entry.get('projection_parts') or {}), str(self.part_index): receipt}
             changes: dict[str, Any] = {'projection_parts': parts, 'projection_part_count': self.part_count}
+            if privacy_replay:
+                changes['projection_state'] = 'pending'
             if quarantined:
                 # Old projector binaries require result protocol 1. Fence them
                 # before they can turn an unknown held receipt into ready.
@@ -372,6 +407,7 @@ class ProjectionSession:
                     else 'persisted' if held else summary['state']
                 ),
             )
+            changes.update(completed_checkpoint_fields(self.entry, quarantined=held))
             transaction.update(self.result_ref, changes)
         else:
             transaction.update(
@@ -380,9 +416,11 @@ class ProjectionSession:
                     'projection': receipt,
                     'projection_state': 'quarantine_held' if quarantined else receipt['state'],
                     **({'protocol_version': 2, 'lineage_quarantine_version': 1} if quarantined else {}),
+                    **completed_checkpoint_fields(self.entry, quarantined=quarantined),
                 },
             )
-        transaction.update(self.owner_ref, {'projection_watermark': self.segment_id})
+        if not privacy_replay:
+            transaction.update(self.owner_ref, {'projection_watermark': self.segment_id})
         for reference in self.erased_predecessors:
             transaction.update(
                 reference,
