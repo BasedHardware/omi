@@ -20,6 +20,7 @@ from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config import audio_timeline as audio_flags
+from config.server_batch import suppress_live as server_batch_suppresses_live
 from config.cloud_live_stt import OFF, STREAM, resolve_cloud_live_stt_mode, suppresses_provider_stream
 from config.translation import resolve_ondemand_config
 from routers.listen.contracts import ConversationCaptureOrigin
@@ -1006,6 +1007,8 @@ class ListenReceiver(ReplayFilterMixin):
         same_provider: bool = False,
         replay_start_sample: int = 0,
     ) -> Any:
+        if getattr(self.host, 'server_batch_only', False) is True:
+            return None  # Includes failover, reconnect and idle-reopen callers.
         if managed_chain_enabled(self.host):
             from utils.stt.live_session import LiveChainSession
 
@@ -1309,6 +1312,14 @@ class ListenReceiver(ReplayFilterMixin):
             return await ListenReceiver._initialize_stt(self)
 
     async def _initialize_stt(self) -> bool:
+        self.host.server_batch_only = server_batch_suppresses_live(self.host)
+        self.host.server_batch_initialized = True
+        if self.host.server_batch_only:
+            self.cloud_live_suppressed = True
+            if not getattr(self, '_server_batch_logged', False):
+                logger.info('event=server_batch_only_admission mode=enabled')
+                self._server_batch_logged = True
+            return True
         capture_batch_preview(self.host, select_provider=False)
         mode = resolve_cloud_live_stt_mode()
         if getattr(self, '_cloud_live_mode', None) is None:
@@ -1487,6 +1498,8 @@ class ListenReceiver(ReplayFilterMixin):
     async def _open_deferred_stream(self) -> bool:
         """Audio reached a deferred session: open the provider stream it would have had."""
 
+        if getattr(self.host, 'server_batch_only', False) is True:
+            return True
         self._cloud_live_opening = True
         self.cloud_live_suppressed = False
         if not await self.initialize_stt():
@@ -2048,6 +2061,10 @@ class ListenReceiver(ReplayFilterMixin):
             await hold.notice()
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
+        if getattr(getattr(self, 'host', None), 'server_batch_only', False) is True:
+            buffer.clear()  # PCM forwarding and raw custody run independently below.
+            self._stt_buffer_start_sample = None
+            return
         if buffer and getattr(self, 'cloud_live_suppressed', False):
             if not await self._open_deferred_stream():
                 return
@@ -2558,7 +2575,7 @@ class ListenReceiver(ReplayFilterMixin):
             else None
         )
         frame_timer = FrameTimer(request.codec, multi_channel=self.host.is_multi_channel)
-        shadow = edge_shadow.session_mirror(self)
+        shadow = None if getattr(self.host, 'server_batch_only', False) is True else edge_shadow.session_mirror(self)
         try:
             while self.host.state.active:
                 frame_timer.stop()
