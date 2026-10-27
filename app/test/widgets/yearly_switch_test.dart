@@ -300,6 +300,42 @@ void main() {
       expect(find.byKey(const Key('yearly_switch_home_row')), findsOneWidget);
     });
 
+    testWidgets('a subscription that loads after Home mounts still gets the row', (tester) async {
+      final backend = _Backend(offer: _offer());
+      final usage = await _pump(tester, YearlySwitchHomeRow(load: backend.load, apply: backend.apply, now: () => _now));
+      final loaded = usage.subscription;
+      // Cold start: Home renders before /v1/users/me/subscription answers.
+      usage.debugSetSubscription(null);
+      await tester.pumpWidget(
+        ChangeNotifierProvider<UsageProvider>.value(
+          value: usage,
+          child: MaterialApp(
+            theme: buildOmiTheme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            locale: const Locale('en'),
+            home: Scaffold(
+              body: ListView(
+                children: [
+                  YearlySwitchHomeRow(key: UniqueKey(), load: backend.load, apply: backend.apply, now: () => _now),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      SharedPreferencesUtil().yearlySwitchHomeShownAt = 0;
+      backend.loads.clear();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('yearly_switch_home_row')), findsNothing);
+      expect(backend.loads, isEmpty);
+
+      usage.debugSetSubscription(loaded);
+      await tester.pumpAndSettle();
+      expect(backend.loads, [false]);
+      expect(find.byKey(const Key('yearly_switch_home_row')), findsOneWidget);
+    });
+
     testWidgets('a yearly subscriber is never looked up', (tester) async {
       final backend = _Backend(offer: _offer(eligible: false, reason: 'not_monthly'));
       await _pump(
