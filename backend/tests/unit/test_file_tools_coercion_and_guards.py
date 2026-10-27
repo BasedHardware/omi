@@ -2,10 +2,8 @@
 
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
-import pytest
 
 import utils.retrieval.tools.file_tools as file_tools
-from models.chat import ChatSession
 
 FIXED_TIME = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -33,7 +31,8 @@ class TestFileToolsCoercionAndGuards:
 
     def test_no_active_chat_session(self):
         cfg = {"configurable": {"user_id": "u1"}}
-        assert self.mod.search_files_tool.func("what is this?", config=cfg) == "No active chat session. Files are not available."
+        result = self.mod.search_files_tool.func("what is this?", config=cfg)
+        assert result == "No active chat session. Files are not available."
 
     def test_top_level_config_resolution(self):
         cfg = {"user_id": "top_u1", "chat_session_id": "top_s1"}
