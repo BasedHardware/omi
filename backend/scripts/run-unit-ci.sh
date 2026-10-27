@@ -91,11 +91,19 @@ fi
 "$PYTHON_BIN" scripts/select_backend_unit_tests.py "${selector_args[@]}"
 
 shard_note=""
+# Decide the type-check boundary once, BEFORE the deal, so the deal reserves
+# shard 1's capacity exactly when shard 1 will actually pay the check (a
+# changed-files run whose paths do not affect the typed boundary typechecks
+# nowhere and must not hand shard 1's capacity to its siblings).
+will_typecheck=1
+if [ "$mode" != "--all" ] && ! "$SCRIPT_DIR/needs-typecheck.sh" "$changed_files_arg"; then
+  will_typecheck=0
+fi
 if [ "$shard_total" -ge 2 ]; then
   full_count="$(wc -l < "$selected_tests" | tr -d ' ')"
   sliced="$(mktemp "${TMPDIR:-/tmp}/omi-backend-unit-tests-shard.XXXXXX")"
   # One-based shard labels; ties break on fewest files, then lowest shard.
-  "$PYTHON_BIN" - "$selected_tests" "$shard_total" "$shard_index" "$SCRIPT_DIR/backend_unit_shard_weights.tsv" \
+  "$PYTHON_BIN" - "$selected_tests" "$shard_total" "$shard_index" "$SCRIPT_DIR/backend_unit_shard_weights.tsv" "$will_typecheck" \
     >"$sliced" <<'PY'
 import os
 import sys
@@ -103,7 +111,7 @@ import sys
 DEFAULT_WEIGHT = 1.66  # mean measured wall seconds of the files below the table's 2s floor
 # (p90-wall table, 20 main runs to 2026-10-27; the old 1.1 priced pytest time
 # only and undercharged per-file import/collection startup)
-selection, total, shard, table = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+selection, total, shard, table, will_typecheck = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5] == '1'
 with open(selection, encoding='utf-8') as handle:
     paths = [line.rstrip('\n') for line in handle if line.strip()]
 measured = {}
@@ -118,7 +126,7 @@ load, count, assigned = [0.0] * total, [0] * total, {}
 # Only shard 1 runs the type check when CI fans out (see below): its ~90s of
 # fixed pre-test wall is charged to shard 1's load here (x4 because a shard's
 # wall is its load spread over 4 worker lanes) so every shard finishes level.
-if total >= 2:
+if total >= 2 and will_typecheck:
     load[0] += 360.0
 # deal order is also the slice order: test.sh launches files in list order
 # into its worker slots, so heaviest-first turns that scheduler into LPT and
@@ -151,7 +159,7 @@ reason="$(cat "$selection_reason")"
 # ~99s of pre-test wall for the same pyright result, ~8m of runner time per
 # main commit and ~99s of every shard's 720s budget).
 PYTHON="$PYTHON_BIN" bash test-preflight.sh
-if [ "$mode" = "--all" ] || "$SCRIPT_DIR/needs-typecheck.sh" "$changed_files_arg"; then
+if [ "$will_typecheck" -eq 1 ]; then
   if [ "$shard_total" -lt 2 ] || [ "$shard_index" -eq 1 ]; then
     PYTHON="$PYTHON_BIN" bash scripts/typecheck.sh
   else
