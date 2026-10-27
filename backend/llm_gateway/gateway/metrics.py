@@ -92,6 +92,25 @@ ACCOUNTING_EVENTS_TOTAL = Counter(
     ['api_surface', 'provider', 'payer', 'usage_status', 'cost_status', 'delivery'],
 )
 
+# Only newly persisted events contribute. Delivery failures/drops remain visible
+# in ACCOUNTING_EVENTS_TOTAL; duplicate persistence never bills a second time.
+_SPEND_LABELS = ['lane_id', 'provider', 'model', 'payer', 'traffic_type']
+ACCOUNTED_ATTEMPTS_TOTAL = Counter(
+    'llm_gateway_accounted_attempts_total',
+    'Newly persisted provider attempts by usage and cost coverage (not vendor invoices)',
+    [*_SPEND_LABELS, 'usage_status', 'cost_status'],
+)
+ACCOUNTED_TOKENS_TOTAL = Counter(
+    'llm_gateway_accounted_tokens_total',
+    'Reported token classes on newly persisted attempts; reasoning overlaps billable output',
+    [*_SPEND_LABELS, 'token_type'],
+)
+ESTIMATED_COST_MICRO_USD_TOTAL = Counter(
+    'llm_gateway_estimated_cost_micro_usd_total',
+    'Rate-card estimated Omi cost on newly persisted attempts, never invoice-backed savings',
+    [*_SPEND_LABELS, 'rate_card_id'],
+)
+
 GATEWAY_CONFIG_INFO = Gauge(
     'llm_gateway_config_info',
     'Immutable gateway build and route/config artifact identity',
@@ -337,6 +356,52 @@ def observe_accounting_event(event: AccountingEvent, *, delivery: str) -> None:
         cost_status=_bounded(event.cost_status.value),
         delivery=delivery_label,
     ).inc()
+    if delivery_label == 'written':
+        observe_accounted_spend(event)
+
+
+def observe_accounted_spend(event: AccountingEvent) -> None:
+    """Expose ledger coverage and reported units without customer identifiers.
+
+    This runs after persistence, outside response latency. Missing usage/cost
+    stays a coverage count, never an invented zero-dollar estimate. The existing
+    LLM_GATEWAY_ACCOUNTING_ENABLED switch also disables this observation path.
+    """
+    labels = {
+        'lane_id': _bounded(event.lane_id),
+        'provider': _bounded(event.provider),
+        'model': _bounded(event.resolved_model or event.configured_model),
+        'payer': event.payer if event.payer in {'omi', 'byok'} else 'unknown',
+        'traffic_type': (
+            event.traffic_type.lower()
+            if event.traffic_type
+            and event.traffic_type.lower()
+            in {'default', 'standard', 'flex', 'batch', 'priority', 'on_demand', 'provisioned_throughput'}
+            else 'unknown'
+        ),
+    }
+    ACCOUNTED_ATTEMPTS_TOTAL.labels(
+        **labels, usage_status=event.usage_status.value, cost_status=event.cost_status.value
+    ).inc()
+    if event.usage_status.value == 'confirmed' and event.unit_type == 'tokens':
+        for token_type, value in {
+            'prompt': event.prompt_tokens,
+            'uncached_input': event.uncached_input_tokens,
+            'cached_input': event.cached_input_tokens,
+            'cache_write': event.cache_write_tokens,
+            'tool_use_prompt': event.tool_use_prompt_tokens,
+            'output': (
+                event.output_tokens
+                if event.output_tokens_include_reasoning
+                else event.output_tokens + event.reasoning_tokens
+            ),
+            'reasoning': event.reasoning_tokens,
+        }.items():
+            ACCOUNTED_TOKENS_TOTAL.labels(**labels, token_type=token_type).inc(max(value, 0))
+    if event.payer == 'omi' and event.cost_status.value == 'estimated' and event.estimated_cost_micro_usd is not None:
+        ESTIMATED_COST_MICRO_USD_TOTAL.labels(**labels, rate_card_id=_bounded(event.rate_card_id or 'unknown')).inc(
+            max(event.estimated_cost_micro_usd, 0)
+        )
 
 
 def observe_gateway_config_identity(config: GatewayConfig, *, build_identity: str) -> None:
