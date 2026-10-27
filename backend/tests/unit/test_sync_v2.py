@@ -1394,6 +1394,9 @@ class TestAsyncCoordinatorBehavioral:
         prior_capture_evidence = sys.modules.get('utils.capture_evidence')
         from utils import capture_evidence as actual_capture_evidence
 
+        prior_size_limit = sys.modules.get('utils.conversations.size_limit')
+        from utils.conversations import size_limit as actual_size_limit
+
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -1571,6 +1574,10 @@ class TestAsyncCoordinatorBehavioral:
         # pipeline imports unknown_envelope at module scope, and a MagicMock
         # parent for utils is not a package.
         sys.modules['utils.capture_evidence'] = actual_capture_evidence
+        # Assignment's encoded-size primitive stays real even while the
+        # conversations parent package and cloud clients are stubbed.
+        saved_modules['utils.conversations.size_limit'] = prior_size_limit
+        sys.modules['utils.conversations.size_limit'] = actual_size_limit
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
@@ -3437,6 +3444,9 @@ class TestV2EndpointExecution:
         prior_capture_evidence = sys.modules.get('utils.capture_evidence')
         from utils import capture_evidence as actual_capture_evidence
 
+        prior_size_limit = sys.modules.get('utils.conversations.size_limit')
+        from utils.conversations import size_limit as actual_size_limit
+
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -3614,6 +3624,10 @@ class TestV2EndpointExecution:
         # pipeline imports unknown_envelope at module scope, and a MagicMock
         # parent for utils is not a package.
         sys.modules['utils.capture_evidence'] = actual_capture_evidence
+        # Assignment's encoded-size primitive stays real even while the
+        # conversations parent package and cloud clients are stubbed.
+        saved_modules['utils.conversations.size_limit'] = prior_size_limit
+        sys.modules['utils.conversations.size_limit'] = actual_size_limit
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
