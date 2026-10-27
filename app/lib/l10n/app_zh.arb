@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "处理中",
     "onTheWayAlmostReady": "即将完成",
     "onTheWayRecordingCount": "{count, plural, =1{1 条录音} other{{count} 条录音}}",
-    "onTheWaySummary": "处理中：{totals}",
-    "onTheWayUploadingCount": "{count} 条正在上传",
-    "onTheWayAlmostReadyCount": "{count} 条即将完成",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 条需要关注} other{{count} 条需要关注}}",
     "activityEmpty": "暂无活动",
     "activityNewSemantics": "活动，有新内容",
     "activityLoadFailed": "无法加载全部活动",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "你说的话会在一到两分钟后显示在这里。",
     "livePreviewNoEngineTitle": "正在安全录制",
     "livePreviewOnPhoneDivider": "在本机实时显示",
-    "livePreviewTurnOnLiveText": "打开实况文本"
+    "livePreviewTurnOnLiveText": "打开实况文本",
+    "deviceCatchUpOnItsWay": "在路上",
+    "deviceCatchUpWhenOnline": "联网后",
+    "onTheWayCatchingUp": "还有 {duration} 的录音待处理",
+    "onTheWayUploadsByItself": "自动上传。录音到达后，对话会自动补全。",
+    "onTheWayUploadsWhenOnline": "恢复网络后自动上传。录音到达后，对话会自动补全。",
+    "onTheWayDayUploading": "上传中",
+    "onTheWayDayNext": "下一个",
+    "onTheWayDayQueued": "排队中",
+    "onTheWayNoDate": "无日期",
+    "onTheWayFootnote": "失败的录音会在后台持续重试。我们无法转录的内容会自动报告给我们。",
+    "onTheWayDetailsForSupport": "支持详情"
 }

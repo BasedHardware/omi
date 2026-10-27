@@ -4209,10 +4209,6 @@
     "onTheWayTitle": "W drodze",
     "onTheWayAlmostReady": "Prawie gotowe",
     "onTheWayRecordingCount": "{count, plural, =1{1 nagranie} other{Nagrania: {count}}}",
-    "onTheWaySummary": "{totals} w drodze",
-    "onTheWayUploadingCount": "Przesyłanie: {count}",
-    "onTheWayAlmostReadyCount": "Prawie gotowe: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 wymaga uwagi} other{Wymaga uwagi: {count}}}",
     "activityEmpty": "Brak aktywności",
     "activityNewSemantics": "Aktywność, nowe elementy",
     "activityLoadFailed": "Nie udało się wczytać całej aktywności",
@@ -4487,5 +4483,16 @@
     "livePreviewNoEngineBody": "Twoje słowa pojawią się tutaj minutę lub dwie po wypowiedzeniu.",
     "livePreviewNoEngineTitle": "Bezpiecznie nagrywa",
     "livePreviewOnPhoneDivider": "Na żywo na tym telefonie",
-    "livePreviewTurnOnLiveText": "Włącz tekst na żywo"
+    "livePreviewTurnOnLiveText": "Włącz tekst na żywo",
+    "deviceCatchUpOnItsWay": "w drodze",
+    "deviceCatchUpWhenOnline": "gdy będziesz online",
+    "onTheWayCatchingUp": "{duration} w drodze",
+    "onTheWayUploadsByItself": "Wgrywa się samo. Rozmowy uzupełniają się w miarę napływania nagrań.",
+    "onTheWayUploadsWhenOnline": "Wgrywa się samo po powrocie do sieci. Rozmowy uzupełniają się w miarę napływania nagrań.",
+    "onTheWayDayUploading": "Wgrywanie",
+    "onTheWayDayNext": "Następne",
+    "onTheWayDayQueued": "W kolejce",
+    "onTheWayNoDate": "Brak daty",
+    "onTheWayFootnote": "Nagrania, których nie uda się wgrać, będą ponawiane w tle. Wszystko, czego nie potrafimy transkrybować, zostanie automatycznie zgłoszone.",
+    "onTheWayDetailsForSupport": "Szczegóły dla działu wsparcia"
 }

@@ -4209,10 +4209,6 @@
     "onTheWayTitle": "En route",
     "onTheWayAlmostReady": "Presque prêt",
     "onTheWayRecordingCount": "{count, plural, =1{1 enregistrement} other{{count} enregistrements}}",
-    "onTheWaySummary": "{totals} en route",
-    "onTheWayUploadingCount": "{count} en cours d'envoi",
-    "onTheWayAlmostReadyCount": "Presque prêts : {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 à vérifier} other{{count} à vérifier}}",
     "activityEmpty": "Aucune activité pour l'instant",
     "activityNewSemantics": "Activité, nouveaux éléments",
     "activityLoadFailed": "Impossible de charger toute votre activité",
@@ -4487,5 +4483,16 @@
     "livePreviewNoEngineBody": "Vos paroles apparaissent ici une à deux minutes après que vous les avez dites.",
     "livePreviewNoEngineTitle": "Enregistrement en toute sécurité",
     "livePreviewOnPhoneDivider": "En direct sur ce téléphone",
-    "livePreviewTurnOnLiveText": "Activer le texte en direct"
+    "livePreviewTurnOnLiveText": "Activer le texte en direct",
+    "deviceCatchUpOnItsWay": "en cours d'envoi",
+    "deviceCatchUpWhenOnline": "une fois en ligne",
+    "onTheWayCatchingUp": "{duration} à rattraper",
+    "onTheWayUploadsByItself": "L'envoi se fait tout seul. Les conversations se complètent au fur et à mesure.",
+    "onTheWayUploadsWhenOnline": "L'envoi se fait tout seul une fois de retour en ligne. Les conversations se complètent au fur et à mesure.",
+    "onTheWayDayUploading": "Envoi en cours",
+    "onTheWayDayNext": "Suivant",
+    "onTheWayDayQueued": "En file d'attente",
+    "onTheWayNoDate": "Sans date",
+    "onTheWayFootnote": "Les enregistrements qui échouent réessaient en arrière-plan. Tout ce que nous ne pouvons pas transcrire nous est signalé automatiquement.",
+    "onTheWayDetailsForSupport": "Détails pour le support"
 }

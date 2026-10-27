@@ -392,7 +392,7 @@ void main() {
         home: OnTheWayPage(pendingWork: PendingWorkStore()),
       ),
     ));
-    expect(find.textContaining('on the way'), findsOneWidget);
+    expect(find.textContaining('catching up'), findsOneWidget);
     final l = AppLocalizations.of(tester.element(find.byType(OnTheWayPage)));
 
     await tester.runAsync(() => coordinator.wake(WakeTrigger.startup));

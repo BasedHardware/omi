@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "På vei",
     "onTheWayAlmostReady": "Nesten klar",
     "onTheWayRecordingCount": "{count, plural, =1{1 opptak} other{{count} opptak}}",
-    "onTheWaySummary": "{totals} på vei",
-    "onTheWayUploadingCount": "{count} lastes opp",
-    "onTheWayAlmostReadyCount": "{count} nesten klar",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 krever oppmerksomhet} other{{count} krever oppmerksomhet}}",
     "activityEmpty": "Ingen aktivitet ennå",
     "activityNewSemantics": "Aktivitet, nye elementer",
     "activityLoadFailed": "Kunne ikke laste inn all aktiviteten din",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Ordene dine vises her ett til to minutter etter at du har sagt dem.",
     "livePreviewNoEngineTitle": "Tar opp trygt",
     "livePreviewOnPhoneDivider": "Direkte på denne telefonen",
-    "livePreviewTurnOnLiveText": "Slå på direkte tekst"
+    "livePreviewTurnOnLiveText": "Slå på direkte tekst",
+    "deviceCatchUpOnItsWay": "på vei",
+    "deviceCatchUpWhenOnline": "når du er på nett",
+    "onTheWayCatchingUp": "{duration} på vei",
+    "onTheWayUploadsByItself": "Laster opp av seg selv. Samtaler dukker opp etter hvert som det kommer frem.",
+    "onTheWayUploadsWhenOnline": "Laster opp av seg selv når du er på nett igjen. Samtaler dukker opp etter hvert som det kommer frem.",
+    "onTheWayDayUploading": "Laster opp",
+    "onTheWayDayNext": "Neste",
+    "onTheWayDayQueued": "I kø",
+    "onTheWayNoDate": "Ingen dato",
+    "onTheWayFootnote": "Opptak som feiler, prøver på nytt i bakgrunnen. Alt vi ikke får transkribert, rapporteres automatisk til oss.",
+    "onTheWayDetailsForSupport": "Detaljer for kundestøtte"
 }

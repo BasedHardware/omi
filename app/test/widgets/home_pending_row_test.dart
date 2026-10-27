@@ -159,15 +159,22 @@ Widget _app(SyncProvider sync, Widget child, {List<SingleChildWidget> extras = c
       ),
     );
 
-Future<void> _pumpPage(WidgetTester tester, SyncProvider sync, {List<SingleChildWidget> extras = const []}) async {
-  // The fixtures sit at the pinned 2026 instant: Today there so their day opens by default.
-  OnTheWayPage.resetFolds();
+/// Pumps On the Way. With [support] (the default) it opens Details for support, where every
+/// recording is its own row with its stage: what most of these tests read.
+Future<void> _pumpPage(WidgetTester tester, SyncProvider sync,
+    {List<SingleChildWidget> extras = const [], bool support = true}) async {
   await tester.pumpWidget(
     _app(sync,
         OnTheWayPage(multiFileSync: true, clock: () => DateTime.fromMillisecondsSinceEpoch((_baseSeconds + 60) * 1000)),
         extras: extras),
   );
   await tester.pump();
+  if (support) await _openSupport(tester);
+}
+
+Future<void> _openSupport(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('on_the_way_details_for_support')));
+  await tester.pumpAndSettle();
 }
 
 const _row = Key('home_pending_row');
@@ -207,7 +214,6 @@ void main() {
     }
 
     Future<void> pumpWithServerWork(WidgetTester tester, SyncProvider sync, PendingWorkStore store) async {
-      OnTheWayPage.resetFolds();
       await tester.pumpWidget(_app(
         sync,
         OnTheWayPage(
@@ -217,6 +223,7 @@ void main() {
         ),
       ));
       await tester.pump();
+      await _openSupport(tester);
     }
 
     testWidgets('lists server work the phone did not start instead of saying all is synced', (tester) async {
@@ -277,7 +284,7 @@ void main() {
     testWidgets('a fully synced twin hides its lagging device source completely', (tester) async {
       final phone = _wal('twin', 4, WalStatus.synced);
       final deviceTwin = _wal('twin', 4, WalStatus.miss)..storage = WalStorage.sdcard;
-      await _pumpPage(tester, _FakeSync(wals: [phone, deviceTwin]));
+      await _pumpPage(tester, _FakeSync(wals: [phone, deviceTwin]), support: false);
 
       expect(find.text('All recordings are synced'), findsOneWidget);
     });
@@ -353,8 +360,9 @@ void main() {
             originalStorage: WalStorage.flashPage,
             device: 'pendant',
           );
-      await _pumpPage(tester, _FakeSync(wals: [rest, piece(_baseSeconds), piece(_baseSeconds + 150)]));
-      expect(find.text('1 recording · 10m on the way'), findsOneWidget);
+      await _pumpPage(tester, _FakeSync(wals: [rest, piece(_baseSeconds), piece(_baseSeconds + 150)]), support: false);
+      expect(find.text('10m catching up'), findsOneWidget);
+      expect(find.text('1 recording · 10m'), findsOneWidget);
     });
 
     test('the catching-up check is answered once per WAL list, not per progress tick', () {
@@ -429,13 +437,14 @@ void main() {
     });
 
     testWidgets('refused recordings alone are never reported as all synced', (tester) async {
-      await _pumpPage(tester, _FakeSync(wals: [_wal('too-old', 3, WalStatus.outsideRecoveryWindow)]));
+      await _pumpPage(tester, _FakeSync(wals: [_wal('too-old', 3, WalStatus.outsideRecoveryWindow)]), support: false);
       expect(find.text('All recordings are synced'), findsNothing);
+      await _openSupport(tester);
       expect(find.text('1 recording need attention'), findsOneWidget);
     });
 
     testWidgets('a sync with no recording listed yet still reads as in progress', (tester) async {
-      await _pumpPage(tester, _FakeSync(fetching: true));
+      await _pumpPage(tester, _FakeSync(fetching: true), support: false);
       expect(find.text('All recordings are synced'), findsNothing);
       expect(find.text('Transcribing…'), findsOneWidget);
     });
@@ -509,12 +518,12 @@ void main() {
     });
 
     testWidgets('a transfer with no recording listed yet still reads as in progress', (tester) async {
-      await _pumpPage(tester, _FakeSync(syncing: true));
+      await _pumpPage(tester, _FakeSync(syncing: true), support: false);
       expect(find.text('Downloading from your device'), findsOneWidget);
     });
 
     testWidgets('says so when everything has landed', (tester) async {
-      await _pumpPage(tester, _FakeSync(wals: [_wal('done', 15, WalStatus.synced)]));
+      await _pumpPage(tester, _FakeSync(wals: [_wal('done', 15, WalStatus.synced)]), support: false);
       expect(find.text('All recordings are synced'), findsOneWidget);
     });
   });

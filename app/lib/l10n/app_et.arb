@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "Teel",
     "onTheWayAlmostReady": "Peaaegu valmis",
     "onTheWayRecordingCount": "{count, plural, =1{1 salvestis} other{{count} salvestist}}",
-    "onTheWaySummary": "{totals} teel",
-    "onTheWayUploadingCount": "Üleslaadimisel: {count}",
-    "onTheWayAlmostReadyCount": "Peaaegu valmis: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 vajab tähelepanu} other{{count} vajab tähelepanu}}",
     "activityEmpty": "Tegevusi veel pole",
     "activityNewSemantics": "Tegevus, uued üksused",
     "activityLoadFailed": "Kogu tegevust ei õnnestunud laadida",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Teie sõnad ilmuvad siia ühe kuni kahe minuti pärast.",
     "livePreviewNoEngineTitle": "Salvestab turvaliselt",
     "livePreviewOnPhoneDivider": "Otse selles telefonis",
-    "livePreviewTurnOnLiveText": "Lülita reaalajas tekst sisse"
+    "livePreviewTurnOnLiveText": "Lülita reaalajas tekst sisse",
+    "deviceCatchUpOnItsWay": "teel",
+    "deviceCatchUpWhenOnline": "võrgus olles",
+    "onTheWayCatchingUp": "Veel {duration} töödelda",
+    "onTheWayUploadsByItself": "Laadib ise üles. Vestlused täituvad, kui see kohale jõuab.",
+    "onTheWayUploadsWhenOnline": "Laadib ise üles, kui olete taas võrgus. Vestlused täituvad, kui see kohale jõuab.",
+    "onTheWayDayUploading": "Laadib üles",
+    "onTheWayDayNext": "Järgmine",
+    "onTheWayDayQueued": "Järjekorras",
+    "onTheWayNoDate": "Kuupäeveta",
+    "onTheWayFootnote": "Salvestised, mis ei õnnestu, proovitakse taustal pidevalt uuesti. Kõik, mida me ei suuda transkribeerida, raporteeritakse meile automaatselt.",
+    "onTheWayDetailsForSupport": "Üksikasjad toe jaoks"
 }

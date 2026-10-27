@@ -13438,32 +13438,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '準備中: $totals';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'アップロード中 $count件';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'まもなく完了 $count件';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '要確認 $count件',
-      one: '要確認 1件',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'アクティビティはまだありません';
 
   @override
@@ -14443,4 +14417,39 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'ライブテキストをオンにする';
+
+  @override
+  String get deviceCatchUpOnItsWay => '送信中';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'オンライン時に';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration を処理中';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => '自動でアップロードされます。届き次第、会話が追加されます。';
+
+  @override
+  String get onTheWayUploadsWhenOnline => 'オンラインに戻ると自動でアップロードされます。届き次第、会話が追加されます。';
+
+  @override
+  String get onTheWayDayUploading => 'アップロード中';
+
+  @override
+  String get onTheWayDayNext => '次';
+
+  @override
+  String get onTheWayDayQueued => '順番待ち';
+
+  @override
+  String get onTheWayNoDate => '日付なし';
+
+  @override
+  String get onTheWayFootnote => '失敗した録音はバックグラウンドで再試行を続けます。文字起こしできなかったものは自動的に報告されます。';
+
+  @override
+  String get onTheWayDetailsForSupport => 'サポート用の詳細';
 }

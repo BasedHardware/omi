@@ -13553,32 +13553,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals في الطريق';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'قيد الرفع: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'على وشك الجاهزية: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'بحاجة إلى المراجعة: $count',
-      one: 'تسجيل واحد بحاجة إلى المراجعة',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'لا يوجد نشاط بعد';
 
   @override
@@ -14566,4 +14540,41 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'تشغيل النص المباشر';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'في الطريق';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'عند الاتصال بالإنترنت';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration قيد الرفع';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'يُرفَع تلقائيًا. تظهر المحادثات فور وصول التسجيلات.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'يُرفَع تلقائيًا بمجرد عودة الاتصال بالإنترنت. تظهر المحادثات فور وصول التسجيلات.';
+
+  @override
+  String get onTheWayDayUploading => 'جارٍ الرفع';
+
+  @override
+  String get onTheWayDayNext => 'التالي';
+
+  @override
+  String get onTheWayDayQueued => 'في قائمة الانتظار';
+
+  @override
+  String get onTheWayNoDate => 'بدون تاريخ';
+
+  @override
+  String get onTheWayFootnote =>
+      'تستمر التسجيلات التي تفشل في إعادة المحاولة في الخلفية. ويُبلَّغنا تلقائيًا عن أي شيء يتعذر علينا تحويله إلى نص.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'تفاصيل لفريق الدعم';
 }

@@ -13728,32 +13728,6 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals unterwegs';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count im Upload';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count fast fertig';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count benötigen Aufmerksamkeit',
-      one: '1 benötigt Aufmerksamkeit',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Noch keine Aktivität';
 
   @override
@@ -14758,4 +14732,42 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Live-Text aktivieren';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'unterwegs';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'wenn wieder online';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Noch $duration werden hochgeladen';
+  }
+
+  @override
+  String get onTheWayUploadsByItself =>
+      'Wird von selbst hochgeladen. Die Unterhaltungen entstehen, sobald die Aufnahmen ankommen.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Wird von selbst hochgeladen, wenn Sie wieder online sind. Die Unterhaltungen entstehen, sobald die Aufnahmen ankommen.';
+
+  @override
+  String get onTheWayDayUploading => 'Wird hochgeladen';
+
+  @override
+  String get onTheWayDayNext => 'Als Nächstes';
+
+  @override
+  String get onTheWayDayQueued => 'In der Warteschlange';
+
+  @override
+  String get onTheWayNoDate => 'Ohne Datum';
+
+  @override
+  String get onTheWayFootnote =>
+      'Bei fehlgeschlagenen Aufnahmen wird im Hintergrund immer wieder versucht, sie hochzuladen. Alles, was wir nicht transkribieren können, wird uns automatisch gemeldet.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Details für den Support';
 }

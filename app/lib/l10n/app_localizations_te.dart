@@ -13681,32 +13681,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals మార్గంలో ఉంది';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'అప్‌లోడ్ అవుతోంది: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'దాదాపు సిద్ధం: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count రికార్డింగ్‌లకు శ్రద్ధ అవసరం',
-      one: '1 రికార్డింగ్‌కు శ్రద్ధ అవసరం',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'ఇంకా కార్యాచరణ లేదు';
 
   @override
@@ -14711,4 +14685,41 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'లైవ్ టెక్స్ట్ ఆన్ చేయండి';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'వచ్చుతోంది';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'ఆన్‌లైన్‌కి వచ్చాక';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration పూర్తి అవుతోంది';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'తానంతట తానే అప్‌లోడ్ అవుతుంది. చేరుకున్న కొద్దీ సంభాషణలు ఏర్పడతాయి.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'మీరు తిరిగి ఆన్‌లైన్‌కి వచ్చాక తానంతట తానే అప్‌లోడ్ అవుతుంది. చేరుకున్న కొద్దీ సంభాషణలు ఏర్పడతాయి.';
+
+  @override
+  String get onTheWayDayUploading => 'అప్‌లోడ్ అవుతోంది';
+
+  @override
+  String get onTheWayDayNext => 'తర్వాతిది';
+
+  @override
+  String get onTheWayDayQueued => 'క్యూలో ఉంది';
+
+  @override
+  String get onTheWayNoDate => 'తేదీ లేదు';
+
+  @override
+  String get onTheWayFootnote =>
+      'విఫలమైన రికార్డింగ్‌లు నేపథ్యంలో మళ్లీ ప్రయత్నిస్తూనే ఉంటాయి. మేము ట్రాన్స్‌క్రైబ్ చేయలేనివి ఆటోమేటిక్‌గా మాకు నివేదించబడతాయి.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'సపోర్ట్ కోసం వివరాలు';
 }

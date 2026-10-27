@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "На път",
     "onTheWayAlmostReady": "Почти готово",
     "onTheWayRecordingCount": "{count, plural, =1{1 запис} other{{count} записа}}",
-    "onTheWaySummary": "{totals} на път",
-    "onTheWayUploadingCount": "Качване: {count}",
-    "onTheWayAlmostReadyCount": "Почти готови: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 изисква внимание} other{{count} изискват внимание}}",
     "activityEmpty": "Все още няма активност",
     "activityNewSemantics": "Активност, нови елементи",
     "activityLoadFailed": "Не можахме да заредим цялата ви активност",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Думите ти се появяват тук минута-две след като ги изговориш.",
     "livePreviewNoEngineTitle": "Записва безопасно",
     "livePreviewOnPhoneDivider": "На живо на този телефон",
-    "livePreviewTurnOnLiveText": "Включи текста на живо"
+    "livePreviewTurnOnLiveText": "Включи текста на живо",
+    "deviceCatchUpOnItsWay": "на път",
+    "deviceCatchUpWhenOnline": "при интернет връзка",
+    "onTheWayCatchingUp": "{duration} се качва",
+    "onTheWayUploadsByItself": "Качва се автоматично. Разговорите се попълват, щом записите пристигнат.",
+    "onTheWayUploadsWhenOnline": "Качва се автоматично, щом отново сте онлайн. Разговорите се попълват, щом записите пристигнат.",
+    "onTheWayDayUploading": "Качва се",
+    "onTheWayDayNext": "Следващи",
+    "onTheWayDayQueued": "На опашка",
+    "onTheWayNoDate": "Без дата",
+    "onTheWayFootnote": "Неуспелите записи продължават да се опитват във фонов режим. Всичко, което не можем да транскрибираме, ни се докладва автоматично.",
+    "onTheWayDetailsForSupport": "Подробности за поддръжката"
 }

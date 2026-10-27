@@ -2242,11 +2242,11 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     for file in files:
         filename = file.filename
         if not filename:
-            raise HTTPException(status_code=400, detail='Uploaded file is missing a filename')
-        if not filename.endswith('.bin'):
-            raise HTTPException(status_code=400, detail='Invalid sync file format')
+            raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Missing sync filename'})
+        if '/' in filename or '\\' in filename or not filename.endswith('.bin'):
+            raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Invalid sync file format'})
         if '_' not in filename:
-            raise HTTPException(status_code=400, detail='Invalid sync file format')
+            raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Invalid sync file format'})
         try:
             timestamp = get_timestamp_from_path(filename)
         except CaptureTimeWindowError as error:

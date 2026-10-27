@@ -7595,3 +7595,20 @@ Capture/transcription canary behavior is unchanged; manual merge correctness no
 longer depends on its serve cohort. Previously consumed source receipts are
 refused rather than merged again. See `app/docs/conversation-merge-recovery.md` for restart, cache and
 release verification.
+
+
+### Sync admission: no-audio clips and bounded refusals
+
+`POST /v2/sync-local-files` acknowledges framed clips containing no audio payload
+(at most the four-byte length prefix) as a 200 empty result before clock or age
+admission. In a mixed request, nonempty members continue through normal intake.
+A short encoded recording is never discarded because of its byte size; decoded
+silence still goes through VAD. Empty admission creates no job, transcript or
+conversation. These no-audio clips need no raw-audio archive.
+
+Other 400 refusals expose closed codes for malformed multipart, part count,
+part size, invalid filenames and invalid capture time. Filename/time refusals
+log UID-scoped metadata only; parser failures happen before authentication and
+are classified by the client's registered `WAL Upload Refused` event. The mobile
+ledger retains audio and retries on a persisted daily schedule for seven days,
+then retains it as reported without requesting per-row user action.

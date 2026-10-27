@@ -13660,32 +13660,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals у дорозі';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Завантажується: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Майже готово: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Потребують уваги: $count',
-      one: '1 потребує уваги',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Поки немає активності';
 
   @override
@@ -14680,4 +14654,41 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Увімкнути текст наживо';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'в дорозі';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'коли з\'явиться інтернет';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Наздоганяємо $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Завантажується самостійно. Розмови з\'являться, щойно записи надійдуть.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Завантажиться самостійно, коли ви знову будете онлайн. Розмови з\'являться, щойно записи надійдуть.';
+
+  @override
+  String get onTheWayDayUploading => 'Завантаження';
+
+  @override
+  String get onTheWayDayNext => 'Наступні';
+
+  @override
+  String get onTheWayDayQueued => 'У черзі';
+
+  @override
+  String get onTheWayNoDate => 'Без дати';
+
+  @override
+  String get onTheWayFootnote =>
+      'Невдалі записи продовжать повторні спроби у фоновому режимі. Все, що ми не зможемо розшифрувати, автоматично повідомляється нам.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Подробиці для підтримки';
 }

@@ -3196,3 +3196,25 @@ final class LivePreviewNotes extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"engine": engine.wireName, "outcome": outcome.wireName, "latency_ms": latencyMs, "bullet_count": bulletCount};
 }
+
+enum WalUploadRefusedReason {
+  invalidCaptureTime("invalid_capture_time"),
+  tooLarge("too_large"),
+  serverRefused("server_refused"),
+  invalidFile("invalid_file"),
+  malformedMultipart("malformed_multipart"),
+  tooManyParts("too_many_parts"),
+  emptyClip("empty_clip");
+  const WalUploadRefusedReason(this.wireName);
+  final String wireName;
+}
+
+final class WalUploadRefused extends RegisteredEvent {
+  const WalUploadRefused({required this.reason, required this.statusCode});
+  final WalUploadRefusedReason reason;
+  final int statusCode;
+  @override
+  String get wireName => "WAL Upload Refused";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "status_code": statusCode};
+}

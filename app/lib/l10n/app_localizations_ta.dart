@@ -13721,32 +13721,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals வழியில்';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'பதிவேற்றப்படுகிறது: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'கிட்டத்தட்ட தயார்: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count பதிவுகளுக்குக் கவனம் தேவை',
-      one: '1 பதிவுக்குக் கவனம் தேவை',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'இதுவரை எந்தச் செயல்பாடும் இல்லை';
 
   @override
@@ -14750,4 +14724,41 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'நேரலை உரையை இயக்கு';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'வழியில் உள்ளது';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'ஆன்லைனில் இருக்கும்போது';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration வழியில் உள்ளது';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'தானாகவே பதிவேற்றப்படும். பதிவுகள் சேரும்போது உரையாடல்கள் உருவாகும்.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'இணையத்திற்குத் திரும்பியதும் தானாகவே பதிவேற்றப்படும். பதிவுகள் சேரும்போது உரையாடல்கள் உருவாகும்.';
+
+  @override
+  String get onTheWayDayUploading => 'பதிவேறுகிறது';
+
+  @override
+  String get onTheWayDayNext => 'அடுத்தது';
+
+  @override
+  String get onTheWayDayQueued => 'வரிசையில் உள்ளது';
+
+  @override
+  String get onTheWayNoDate => 'தேதி இல்லை';
+
+  @override
+  String get onTheWayFootnote =>
+      'தோல்வியுற்ற பதிவுகள் பின்னணியில் மீண்டும் முயற்சிக்கும். எழுத்துப்பெயர்க்க முடியாதவை தானாகவே எங்களுக்குத் தெரிவிக்கப்படும்.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'ஆதரவுக்கான விவரங்கள்';
 }

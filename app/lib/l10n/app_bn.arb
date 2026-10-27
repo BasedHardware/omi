@@ -11597,10 +11597,6 @@
     "onTheWayTitle": "আসছে",
     "onTheWayAlmostReady": "প্রায় প্রস্তুত",
     "onTheWayRecordingCount": "{count, plural, =1{১টি রেকর্ডিং} other{{count}টি রেকর্ডিং}}",
-    "onTheWaySummary": "{totals} আসছে",
-    "onTheWayUploadingCount": "{count}টি আপলোড হচ্ছে",
-    "onTheWayAlmostReadyCount": "{count}টি প্রায় প্রস্তুত",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{১টিতে মনোযোগ প্রয়োজন} other{{count}টিতে মনোযোগ প্রয়োজন}}",
     "activityEmpty": "এখনও কোনো কার্যকলাপ নেই",
     "activityNewSemantics": "কার্যকলাপ, নতুন আইটেম",
     "activityLoadFailed": "আপনার সব কার্যকলাপ লোড করা যায়নি",
@@ -11878,5 +11874,16 @@
     "livePreviewNoEngineBody": "বলার এক-দুই মিনিট পরে আপনার কথাগুলো এখানে দেখা যাবে।",
     "livePreviewNoEngineTitle": "নিরাপদে রেকর্ড হচ্ছে",
     "livePreviewOnPhoneDivider": "এই ফোনে লাইভ",
-    "livePreviewTurnOnLiveText": "লাইভ টেক্সট চালু করুন"
+    "livePreviewTurnOnLiveText": "লাইভ টেক্সট চালু করুন",
+    "deviceCatchUpOnItsWay": "পথে আছে",
+    "deviceCatchUpWhenOnline": "অনলাইনে এলে",
+    "onTheWayCatchingUp": "{duration} আপলোড হচ্ছে",
+    "onTheWayUploadsByItself": "নিজে থেকেই আপলোড হয়। পৌঁছানোমাত্র কথোপকথন যুক্ত হয়ে যায়।",
+    "onTheWayUploadsWhenOnline": "আপনি আবার অনলাইনে এলে নিজে থেকেই আপলোড হয়। পৌঁছানোমাত্র কথোপকথন যুক্ত হয়ে যায়।",
+    "onTheWayDayUploading": "আপলোড হচ্ছে",
+    "onTheWayDayNext": "পরবর্তী",
+    "onTheWayDayQueued": "সারিতে আছে",
+    "onTheWayNoDate": "তারিখ নেই",
+    "onTheWayFootnote": "ব্যর্থ হওয়া রেকর্ডিং পটভূমিতে আবার চেষ্টা করতে থাকে। আমরা যা ট্রান্সক্রাইব করতে পারি না, তা স্বয়ংক্রিয়ভাবে আমাদের কাছে জানানো হয়।",
+    "onTheWayDetailsForSupport": "সাপোর্টের জন্য বিস্তারিত"
 }

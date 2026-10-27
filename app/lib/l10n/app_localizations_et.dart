@@ -13622,32 +13622,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals teel';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Üleslaadimisel: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Peaaegu valmis: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count vajab tähelepanu',
-      one: '1 vajab tähelepanu',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Tegevusi veel pole';
 
   @override
@@ -14642,4 +14616,41 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Lülita reaalajas tekst sisse';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'teel';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'võrgus olles';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Veel $duration töödelda';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Laadib ise üles. Vestlused täituvad, kui see kohale jõuab.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Laadib ise üles, kui olete taas võrgus. Vestlused täituvad, kui see kohale jõuab.';
+
+  @override
+  String get onTheWayDayUploading => 'Laadib üles';
+
+  @override
+  String get onTheWayDayNext => 'Järgmine';
+
+  @override
+  String get onTheWayDayQueued => 'Järjekorras';
+
+  @override
+  String get onTheWayNoDate => 'Kuupäeveta';
+
+  @override
+  String get onTheWayFootnote =>
+      'Salvestised, mis ei õnnestu, proovitakse taustal pidevalt uuesti. Kõik, mida me ei suuda transkribeerida, raporteeritakse meile automaatselt.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Üksikasjad toe jaoks';
 }

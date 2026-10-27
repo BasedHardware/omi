@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "Na cestě",
     "onTheWayAlmostReady": "Téměř hotovo",
     "onTheWayRecordingCount": "{count, plural, =1{1 nahrávka} other{Nahrávek: {count}}}",
-    "onTheWaySummary": "{totals} na cestě",
-    "onTheWayUploadingCount": "Nahrává se: {count}",
-    "onTheWayAlmostReadyCount": "Téměř hotovo: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 vyžaduje pozornost} other{Vyžaduje pozornost: {count}}}",
     "activityEmpty": "Zatím žádná aktivita",
     "activityNewSemantics": "Aktivita, nové položky",
     "activityLoadFailed": "Nepodařilo se načíst celou vaši aktivitu",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Tvé slova se zde zobrazí jednu až dvě minuty po vyslovení.",
     "livePreviewNoEngineTitle": "Bezpečně nahrává",
     "livePreviewOnPhoneDivider": "Živě v tomto telefonu",
-    "livePreviewTurnOnLiveText": "Zapnout živý text"
+    "livePreviewTurnOnLiveText": "Zapnout živý text",
+    "deviceCatchUpOnItsWay": "na cestě",
+    "deviceCatchUpWhenOnline": "až bude připojení",
+    "onTheWayCatchingUp": "Zbývá zpracovat {duration}",
+    "onTheWayUploadsByItself": "Nahrává se samo. Konverzace se doplňují, jakmile nahrávky dorazí.",
+    "onTheWayUploadsWhenOnline": "Nahrává se samo, až budete zase online. Konverzace se doplňují, jakmile nahrávky dorazí.",
+    "onTheWayDayUploading": "Nahrává se",
+    "onTheWayDayNext": "Další",
+    "onTheWayDayQueued": "Ve frontě",
+    "onTheWayNoDate": "Bez data",
+    "onTheWayFootnote": "Nahrávky, které se nepodaří nahrát, se na pozadí odesílají znovu a znovu. Cokoli, co nedokážeme přepsat, se nám hlásí automaticky.",
+    "onTheWayDetailsForSupport": "Podrobnosti pro podporu"
 }

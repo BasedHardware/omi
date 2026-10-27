@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "Καθ' οδόν",
     "onTheWayAlmostReady": "Σχεδόν έτοιμο",
     "onTheWayRecordingCount": "{count, plural, =1{1 ηχογράφηση} other{{count} ηχογραφήσεις}}",
-    "onTheWaySummary": "{totals} καθ' οδόν",
-    "onTheWayUploadingCount": "Μεταφόρτωση: {count}",
-    "onTheWayAlmostReadyCount": "Σχεδόν έτοιμες: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 χρειάζεται προσοχή} other{{count} χρειάζονται προσοχή}}",
     "activityEmpty": "Δεν υπάρχει δραστηριότητα ακόμα",
     "activityNewSemantics": "Δραστηριότητα, νέα στοιχεία",
     "activityLoadFailed": "Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Τα λόγια σας εμφανίζονται εδώ ένα έως δύο λεπτά μετά τα πείτε.",
     "livePreviewNoEngineTitle": "Ασφαλή εγγραφή",
     "livePreviewOnPhoneDivider": "Ζωντανά σε αυτό το τηλέφωνο",
-    "livePreviewTurnOnLiveText": "Ενεργοποίηση ζωντανού κειμένου"
+    "livePreviewTurnOnLiveText": "Ενεργοποίηση ζωντανού κειμένου",
+    "deviceCatchUpOnItsWay": "στο δρόμο",
+    "deviceCatchUpWhenOnline": "μόλις επανέλθει η σύνδεση",
+    "onTheWayCatchingUp": "Απομένουν {duration}",
+    "onTheWayUploadsByItself": "Μεταφορτώνεται από μόνο του. Οι συνομιλίες συμπληρώνονται μόλις φτάσουν οι ηχογραφήσεις.",
+    "onTheWayUploadsWhenOnline": "Μεταφορτώνεται από μόνο του μόλις επανέλθει η σύνδεσή σας. Οι συνομιλίες συμπληρώνονται μόλις φτάσουν οι ηχογραφήσεις.",
+    "onTheWayDayUploading": "Γίνεται μεταφόρτωση",
+    "onTheWayDayNext": "Ακολουθεί",
+    "onTheWayDayQueued": "Σε αναμονή",
+    "onTheWayNoDate": "Χωρίς ημερομηνία",
+    "onTheWayFootnote": "Οι ηχογραφήσεις που αποτυγχάνουν συνεχίζουν να δοκιμάζουν στο παρασκήνιο. Οτιδήποτε δεν μπορούμε να μεταγράψουμε αναφέρεται αυτόματα σε εμάς.",
+    "onTheWayDetailsForSupport": "Λεπτομέρειες για την υποστήριξη"
 }

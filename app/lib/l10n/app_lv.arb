@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "Ceļā",
     "onTheWayAlmostReady": "Gandrīz gatavs",
     "onTheWayRecordingCount": "{count, plural, =1{1 ieraksts} other{Ieraksti: {count}}}",
-    "onTheWaySummary": "{totals} ceļā",
-    "onTheWayUploadingCount": "Augšupielādē: {count}",
-    "onTheWayAlmostReadyCount": "Gandrīz gatavi: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 nepieciešama uzmanība} other{Nepieciešama uzmanība: {count}}}",
     "activityEmpty": "Vēl nav aktivitātes",
     "activityNewSemantics": "Aktivitāte, jauni vienumi",
     "activityLoadFailed": "Neizdevās ielādēt visu jūsu aktivitāti",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Tavi vārdi šeit parādās vienu līdz divas minūtes pēc to izteikšanas.",
     "livePreviewNoEngineTitle": "Droši ieraksta",
     "livePreviewOnPhoneDivider": "Tiešraide šajā tālrunī",
-    "livePreviewTurnOnLiveText": "Ieslēgt tiešraides tekstu"
+    "livePreviewTurnOnLiveText": "Ieslēgt tiešraides tekstu",
+    "deviceCatchUpOnItsWay": "ceļā",
+    "deviceCatchUpWhenOnline": "kad būsiet tiešsaistē",
+    "onTheWayCatchingUp": "{duration} tiek apstrādāts",
+    "onTheWayUploadsByItself": "Augšupielāde notiek automātiski. Sarunas parādīsies, tiklīdz ieraksti būs klāt.",
+    "onTheWayUploadsWhenOnline": "Augšupielāde notiek automātiski, kad atkal būsiet tiešsaistē. Sarunas parādīsies, tiklīdz ieraksti būs klāt.",
+    "onTheWayDayUploading": "Notiek augšupielāde",
+    "onTheWayDayNext": "Nākamais rindā",
+    "onTheWayDayQueued": "Gaida rindā",
+    "onTheWayNoDate": "Bez datuma",
+    "onTheWayFootnote": "Ieraksti, kas neizdodas, turpina mēģināt fonā. Viss, ko nevaram transkribēt, mums tiek ziņots automātiski.",
+    "onTheWayDetailsForSupport": "Informācija atbalsta komandai"
 }

@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "У дорозі",
     "onTheWayAlmostReady": "Майже готово",
     "onTheWayRecordingCount": "{count, plural, =1{1 запис} other{Записів: {count}}}",
-    "onTheWaySummary": "{totals} у дорозі",
-    "onTheWayUploadingCount": "Завантажується: {count}",
-    "onTheWayAlmostReadyCount": "Майже готово: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 потребує уваги} other{Потребують уваги: {count}}}",
     "activityEmpty": "Поки немає активності",
     "activityNewSemantics": "Активність, нові елементи",
     "activityLoadFailed": "Не вдалося завантажити всю активність",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Ваші слова з’являться тут через хвилину-дві після того, як ви їх промовите.",
     "livePreviewNoEngineTitle": "Безпечний запис",
     "livePreviewOnPhoneDivider": "Наживо на цьому телефоні",
-    "livePreviewTurnOnLiveText": "Увімкнути текст наживо"
+    "livePreviewTurnOnLiveText": "Увімкнути текст наживо",
+    "deviceCatchUpOnItsWay": "в дорозі",
+    "deviceCatchUpWhenOnline": "коли з'явиться інтернет",
+    "onTheWayCatchingUp": "Наздоганяємо {duration}",
+    "onTheWayUploadsByItself": "Завантажується самостійно. Розмови з'являться, щойно записи надійдуть.",
+    "onTheWayUploadsWhenOnline": "Завантажиться самостійно, коли ви знову будете онлайн. Розмови з'являться, щойно записи надійдуть.",
+    "onTheWayDayUploading": "Завантаження",
+    "onTheWayDayNext": "Наступні",
+    "onTheWayDayQueued": "У черзі",
+    "onTheWayNoDate": "Без дати",
+    "onTheWayFootnote": "Невдалі записи продовжать повторні спроби у фоновому режимі. Все, що ми не зможемо розшифрувати, автоматично повідомляється нам.",
+    "onTheWayDetailsForSupport": "Подробиці для підтримки"
 }

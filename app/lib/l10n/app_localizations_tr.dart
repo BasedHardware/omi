@@ -13642,32 +13642,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals yolda';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count yükleniyor';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count neredeyse hazır';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ilgi bekliyor',
-      one: '1 ilgi bekliyor',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Henüz etkinlik yok';
 
   @override
@@ -14662,4 +14636,41 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Canlı metni aç';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'yolda';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'çevrimiçi olunca';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration hâlâ işleniyor';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Kendiliğinden yüklenir. Ulaştıkça görüşmeler tamamlanır.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Tekrar çevrimiçi olduğunuzda kendiliğinden yüklenir. Ulaştıkça görüşmeler tamamlanır.';
+
+  @override
+  String get onTheWayDayUploading => 'Yükleniyor';
+
+  @override
+  String get onTheWayDayNext => 'Sırada';
+
+  @override
+  String get onTheWayDayQueued => 'Kuyrukta';
+
+  @override
+  String get onTheWayNoDate => 'Tarih yok';
+
+  @override
+  String get onTheWayFootnote =>
+      'Başarısız olan kayıtlar arka planda yeniden denenmeye devam eder. Transkriptini çıkaramadığımız her şey bize otomatik olarak bildirilir.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Destek için ayrıntılar';
 }

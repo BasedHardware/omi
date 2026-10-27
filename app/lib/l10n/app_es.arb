@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "En camino",
     "onTheWayAlmostReady": "Casi listo",
     "onTheWayRecordingCount": "{count, plural, =1{1 grabación} other{{count} grabaciones}}",
-    "onTheWaySummary": "{totals} en camino",
-    "onTheWayUploadingCount": "Subiendo: {count}",
-    "onTheWayAlmostReadyCount": "Casi listas: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 necesita atención} other{{count} necesitan atención}}",
     "activityEmpty": "Aún no hay actividad",
     "activityNewSemantics": "Actividad, elementos nuevos",
     "activityLoadFailed": "No se pudo cargar toda tu actividad",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Tus palabras aparecen aquí uno o dos minutos después de decirlas.",
     "livePreviewNoEngineTitle": "Grabando de forma segura",
     "livePreviewOnPhoneDivider": "En vivo en este teléfono",
-    "livePreviewTurnOnLiveText": "Activar texto en vivo"
+    "livePreviewTurnOnLiveText": "Activar texto en vivo",
+    "deviceCatchUpOnItsWay": "en camino",
+    "deviceCatchUpWhenOnline": "cuando haya conexión",
+    "onTheWayCatchingUp": "Quedan {duration} de audio por procesar",
+    "onTheWayUploadsByItself": "Se sube solo. Las conversaciones se completan a medida que va llegando.",
+    "onTheWayUploadsWhenOnline": "Se sube solo cuando vuelvas a tener conexión. Las conversaciones se completan a medida que va llegando.",
+    "onTheWayDayUploading": "Subiendo",
+    "onTheWayDayNext": "Siguiente",
+    "onTheWayDayQueued": "En cola",
+    "onTheWayNoDate": "Sin fecha",
+    "onTheWayFootnote": "Las grabaciones que fallan siguen reintentándose en segundo plano. Todo lo que no podemos transcribir se nos notifica automáticamente.",
+    "onTheWayDetailsForSupport": "Detalles para soporte"
 }

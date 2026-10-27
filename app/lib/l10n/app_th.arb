@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "กำลังมา",
     "onTheWayAlmostReady": "ใกล้เสร็จแล้ว",
     "onTheWayRecordingCount": "{count, plural, =1{1 การบันทึก} other{{count} การบันทึก}}",
-    "onTheWaySummary": "{totals} กำลังมา",
-    "onTheWayUploadingCount": "กำลังอัปโหลด {count}",
-    "onTheWayAlmostReadyCount": "ใกล้เสร็จแล้ว {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{ต้องการความสนใจ 1} other{ต้องการความสนใจ {count}}}",
     "activityEmpty": "ยังไม่มีกิจกรรม",
     "activityNewSemantics": "กิจกรรม, รายการใหม่",
     "activityLoadFailed": "โหลดกิจกรรมทั้งหมดของคุณไม่ได้",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "คำของคุณจะปรากฏที่นี่ในหนึ่งถึงสองนาทีหลังจากพูด",
     "livePreviewNoEngineTitle": "กำลังบันทึกอย่างปลอดภัย",
     "livePreviewOnPhoneDivider": "แสดงสดบนเครื่องนี้",
-    "livePreviewTurnOnLiveText": "เปิดข้อความสด"
+    "livePreviewTurnOnLiveText": "เปิดข้อความสด",
+    "deviceCatchUpOnItsWay": "กำลังจะมาถึง",
+    "deviceCatchUpWhenOnline": "เมื่อกลับมาออนไลน์",
+    "onTheWayCatchingUp": "กำลังไล่ตามอีก {duration}",
+    "onTheWayUploadsByItself": "อัปโหลดเองอัตโนมัติ เมื่อถึงแล้ว การสนทนาจะเติมเต็มให้เอง",
+    "onTheWayUploadsWhenOnline": "จะอัปโหลดเองอัตโนมัติเมื่อคุณกลับมาออนไลน์ เมื่อถึงแล้ว การสนทนาจะเติมเต็มให้เอง",
+    "onTheWayDayUploading": "กำลังอัปโหลด",
+    "onTheWayDayNext": "ถัดไป",
+    "onTheWayDayQueued": "อยู่ในคิว",
+    "onTheWayNoDate": "ไม่มีวันที่",
+    "onTheWayFootnote": "การบันทึกที่ล้มเหลวจะลองใหม่ต่อในเบื้องหลัง ส่วนสิ่งที่เราถอดเสียงไม่ได้จะถูกรายงานถึงเราโดยอัตโนมัติ",
+    "onTheWayDetailsForSupport": "รายละเอียดสำหรับฝ่ายสนับสนุน"
 }
