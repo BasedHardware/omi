@@ -4474,5 +4474,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Готово",
     "openLoopAnswerRemind": "Напомнить позже",
-    "openLoopAnswerDrop": "Отклонить"
+    "openLoopAnswerDrop": "Отклонить",
+    "syncRejectionInvalidDate": "Недопустимая дата записи",
+    "syncDeleteKeptUploading": "Некоторые части всё ещё выгружаются и были сохранены",
+    "syncRejectionServer": "Отклонено сервером",
+    "syncRejectionTooLarge": "Слишком большой",
+    "deviceOnPhoneQueue": "{duration} на телефоне",
+    "syncCardUploadsPaused": "Загрузка ненадолго приостановлена — она возобновится автоматически"
 }

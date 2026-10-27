@@ -4439,5 +4439,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "เสร็จแล้ว",
     "openLoopAnswerRemind": "เตือนฉันทีหลัง",
-    "openLoopAnswerDrop": "ทิ้งไป"
+    "openLoopAnswerDrop": "ทิ้งไป",
+    "syncRejectionInvalidDate": "วันที่บันทึกเสียงไม่ถูกต้อง",
+    "syncDeleteKeptUploading": "บางส่วนยังคงอัปโหลดอยู่และถูกเก็บไว้",
+    "syncRejectionServer": "เซิร์ฟเวอร์ปฏิเสธ",
+    "syncRejectionTooLarge": "ใหญ่เกินไป",
+    "deviceOnPhoneQueue": "{duration} บนโทรศัพท์",
+    "syncCardUploadsPaused": "การอัปโหลดหยุดชั่วคราว — จะดำเนินต่อโดยอัตโนมัติ"
 }

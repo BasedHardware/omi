@@ -14594,4 +14594,24 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Jäta ära';
+
+  @override
+  String get syncRejectionInvalidDate => 'Vigane salvestuse kuupäev';
+
+  @override
+  String get syncDeleteKeptUploading => 'Mõned osad on endiselt üleslaadimisel ja need jäeti alles';
+
+  @override
+  String get syncRejectionServer => 'Server lükkas tagasi';
+
+  @override
+  String get syncRejectionTooLarge => 'Liiga suur';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration telefonis';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Üleslaadimine on hetkeks peatatud — see jätkub automaatselt';
 }

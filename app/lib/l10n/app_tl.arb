@@ -11865,5 +11865,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Tapos",
     "openLoopAnswerRemind": "Ipaalala sa akin mamaya",
-    "openLoopAnswerDrop": "Iwanan"
+    "openLoopAnswerDrop": "Iwanan",
+    "syncRejectionInvalidDate": "Di-wastong petsa ng pag-record",
+    "syncDeleteKeptUploading": "Ang ilang bahagi ay kasalukuyang ina-upload at pinanatili",
+    "syncRejectionServer": "Tinanggihan ng server",
+    "syncRejectionTooLarge": "Masyadong malaki",
+    "deviceOnPhoneQueue": "{duration} sa telepono",
+    "syncCardUploadsPaused": "Pansamantalang naka-pause ang mga upload — awtomatikong magpapatuloy ang mga ito"
 }

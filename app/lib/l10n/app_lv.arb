@@ -4439,5 +4439,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Pabeigts",
     "openLoopAnswerRemind": "Atgādināt vēlāk",
-    "openLoopAnswerDrop": "Atmest"
+    "openLoopAnswerDrop": "Atmest",
+    "syncRejectionInvalidDate": "Nederīgs ieraksta datums",
+    "syncDeleteKeptUploading": "Dažas daļas joprojām augšupielādē un tika paturētas",
+    "syncRejectionServer": "Serveris noraidīja",
+    "syncRejectionTooLarge": "Pārāk liels",
+    "deviceOnPhoneQueue": "{duration} telefonā",
+    "syncCardUploadsPaused": "Augšupielādes īsu brīdi ir pauzētas — tās automātiski atsāksies"
 }

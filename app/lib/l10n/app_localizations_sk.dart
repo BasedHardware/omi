@@ -14596,4 +14596,24 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Zahodiť';
+
+  @override
+  String get syncRejectionInvalidDate => 'Neplatný dátum nahrávky';
+
+  @override
+  String get syncDeleteKeptUploading => 'Niektoré časti sa stále nahrávajú a boli ponechané';
+
+  @override
+  String get syncRejectionServer => 'Server odmietol';
+
+  @override
+  String get syncRejectionTooLarge => 'Príliš veľké';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration v telefóne';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Nahrávanie je na chvíľu pozastavené — automaticky pokračuje';
 }

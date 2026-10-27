@@ -11865,5 +11865,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "בוצע",
     "openLoopAnswerRemind": "הזכר לי מאוחר יותר",
-    "openLoopAnswerDrop": "ותר על זה"
+    "openLoopAnswerDrop": "ותר על זה",
+    "syncRejectionInvalidDate": "תאריך הקלטה לא תקין",
+    "syncDeleteKeptUploading": "חלקים מסוימים עדיין בהעלאה ונשמרו",
+    "syncRejectionServer": "נדחה על ידי השרת",
+    "syncRejectionTooLarge": "גדול מדי",
+    "deviceOnPhoneQueue": "{duration} בטלפון",
+    "syncCardUploadsPaused": "ההעלאות הושהו לרגע — הן יימשכו אוטומטית"
 }

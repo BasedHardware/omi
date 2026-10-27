@@ -4439,5 +4439,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "완료",
     "openLoopAnswerRemind": "나중에 알려 줘",
-    "openLoopAnswerDrop": "버리기"
+    "openLoopAnswerDrop": "버리기",
+    "syncRejectionInvalidDate": "잘못된 녹음 날짜",
+    "syncDeleteKeptUploading": "일부 파트는 아직 업로드 중이며 유지되었습니다",
+    "syncRejectionServer": "서버가 거절함",
+    "syncRejectionTooLarge": "너무 큼",
+    "deviceOnPhoneQueue": "휴대전화에 {duration}",
+    "syncCardUploadsPaused": "업로드가 잠시 일시중지되었습니다 — 자동으로 다시 시작됩니다"
 }

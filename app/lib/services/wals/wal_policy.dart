@@ -129,6 +129,109 @@ bool isDefinitiveUploadRefusal(Object error) =>
 
 typedef WalCoverageTelemetryEmitter = void Function(Map<String, Object?> fields);
 
+/// The bounded refusal token for a terminal upload HTTP status.
+String uploadRejectionTokenForStatus(int statusCode) =>
+    statusCode == 413 ? WalUploadRejection.tooLarge : WalUploadRejection.serverRefused;
+
+/// An `invalid_capture_time` refusal on a recording, in the server's own
+/// terms: the audio is never deleted and never renamed for its claimed time —
+/// not even when a neighbour plausibly names another one, because a derived
+/// date can misfile the recording's day and the file's own name is the only
+/// honest witness left. A single-file refusal marks that WAL as needing
+/// attention with the reason kept ("Invalid recording date"), where the
+/// user's Delete decides and Retry resends the file unchanged — a server-side
+/// fix (the clock window server PR #23746 widened) can still accept it.
+extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
+  /// A request-level refusal proves nothing about every member: isolate the
+  /// batch so the next attempt names the actual file, exactly like a
+  /// definitive 400/413. A single-file refusal gets that file's verdict.
+  Future<void> handleBatchInvalidCaptureTime(
+    List<Wal> batchWals,
+    int generation,
+    SyncInvalidCaptureTimeException e, {
+    required Set<String> isolateAfterRefusal,
+    required Set<String> attemptedWalIds,
+    required String Function(Wal wal) walAttemptKey,
+  }) async {
+    if (batchWals.length > 1) {
+      await isolateBatchAfterRefusal(
+        batchWals,
+        generation,
+        isolateAfterRefusal: isolateAfterRefusal,
+        attemptedWalIds: attemptedWalIds,
+        walAttemptKey: walAttemptKey,
+        reason: 'invalid_capture_time',
+      );
+      return;
+    }
+    await applyInvalidCaptureTimeRefusal(batchWals, generation, e);
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
+  }
+
+  /// The single-recording retry path's share of the same verdict.
+  Future<void> handleSingleInvalidCaptureTime(
+    Wal wal,
+    int generation,
+    SyncInvalidCaptureTimeException e,
+  ) async {
+    wal.isSyncing = false;
+    wal.syncStartedAt = null;
+    wal.syncEtaSeconds = null;
+    await applyInvalidCaptureTimeRefusal([wal], generation, e);
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
+  }
+
+  /// Re-queues every member of a refused batch for its own single-file
+  /// attempt: clears the in-flight flags, pulls the batch's attempt keys, and
+  /// records the isolation. Shared by the definitive 400/413 handler and the
+  /// invalid-capture-time handler, whose refusals are equally unattributed at
+  /// the request level.
+  Future<void> isolateBatchAfterRefusal(
+    List<Wal> batchWals,
+    int generation, {
+    required Set<String> isolateAfterRefusal,
+    required Set<String> attemptedWalIds,
+    required String Function(Wal wal) walAttemptKey,
+    int statusCode = 400,
+    String reason = '',
+  }) async {
+    for (final wal in batchWals) {
+      final key = walAttemptKey(wal);
+      isolateAfterRefusal.add(key);
+      attemptedWalIds.remove(key);
+      wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      wal.syncEtaSeconds = null;
+    }
+    DebugLogManager.logEvent('local_upload_batch_isolated', {
+      'statusCode': statusCode,
+      'walCount': batchWals.length,
+      if (reason.isNotEmpty) 'reason': reason,
+    });
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
+  }
+
+  Future<void> applyInvalidCaptureTimeRefusal(
+    List<Wal> wals,
+    int generation,
+    SyncInvalidCaptureTimeException e,
+  ) async {
+    for (final wal in wals) {
+      wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      wal.syncEtaSeconds = null;
+      wal.markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime);
+      DebugLogManager.logEvent('invalid_capture_time_terminal', {
+        'walId': wal.id,
+        'reason': e.serverReason ?? '',
+      });
+    }
+  }
+}
+
 /// Lookup/proof helpers shared by native custody producers.
 extension NativeCustodyInventory on LocalWalSyncImpl {
   Wal? nativeWalForFileName(String name) {

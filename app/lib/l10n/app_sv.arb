@@ -4439,5 +4439,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Klar",
     "openLoopAnswerRemind": "Påminn mig senare",
-    "openLoopAnswerDrop": "Släpp det"
+    "openLoopAnswerDrop": "Släpp det",
+    "syncRejectionInvalidDate": "Ogiltigt inspelningsdatum",
+    "syncDeleteKeptUploading": "Vissa delar laddas fortfarande upp och behölls",
+    "syncRejectionServer": "Avvisad av servern",
+    "syncRejectionTooLarge": "För stor",
+    "deviceOnPhoneQueue": "{duration} på telefonen",
+    "syncCardUploadsPaused": "Uppladdningar har pausats en stund — de återupptas automatiskt"
 }

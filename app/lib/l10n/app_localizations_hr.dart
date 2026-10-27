@@ -14637,4 +14637,24 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Odbaci';
+
+  @override
+  String get syncRejectionInvalidDate => 'Nevažeći datum snimanja';
+
+  @override
+  String get syncDeleteKeptUploading => 'Neki su se dijelovi još uvijek prijenosu i zadržani su';
+
+  @override
+  String get syncRejectionServer => 'Server je odbio';
+
+  @override
+  String get syncRejectionTooLarge => 'Preveliko';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration na telefonu';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Prijenos je kratko pauziran — nastavit će se automatski';
 }

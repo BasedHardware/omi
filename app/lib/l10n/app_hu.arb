@@ -4535,5 +4535,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Kész",
     "openLoopAnswerRemind": "Emlékeztessen később",
-    "openLoopAnswerDrop": "Eldobás"
+    "openLoopAnswerDrop": "Eldobás",
+    "syncRejectionInvalidDate": "Érvénytelen felvételi dátum",
+    "syncDeleteKeptUploading": "Néhány rész még feltöltés alatt van, és meg lett tartva",
+    "syncRejectionServer": "A kiszolgáló elutasította",
+    "syncRejectionTooLarge": "Túl nagy",
+    "deviceOnPhoneQueue": "{duration} a telefonon",
+    "syncCardUploadsPaused": "A feltöltések rövid szünetben vannak — automatikusan folytatódnak"
 }

@@ -4439,5 +4439,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "تم",
     "openLoopAnswerRemind": "ذكّرني لاحقًا",
-    "openLoopAnswerDrop": "استبعدها"
+    "openLoopAnswerDrop": "استبعدها",
+    "syncRejectionInvalidDate": "تاريخ تسجيل غير صالح",
+    "syncDeleteKeptUploading": "بعض الأجزاء لا تزال قيد الرفع وقد تم الاحتفاظ بها",
+    "syncRejectionServer": "رفضه الخادم",
+    "syncRejectionTooLarge": "كبير جدًا",
+    "deviceOnPhoneQueue": "{duration} على الهاتف",
+    "syncCardUploadsPaused": "تم إيقاف الرفع مؤقتًا — سيستأنف تلقائيًا"
 }

@@ -11865,5 +11865,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Gotovo",
     "openLoopAnswerRemind": "Podsjeti me kasnije",
-    "openLoopAnswerDrop": "Odbaci"
+    "openLoopAnswerDrop": "Odbaci",
+    "syncRejectionInvalidDate": "Nevažeći datum snimanja",
+    "syncDeleteKeptUploading": "Neki su se dijelovi još uvijek prijenosu i zadržani su",
+    "syncRejectionServer": "Server je odbio",
+    "syncRejectionTooLarge": "Preveliko",
+    "deviceOnPhoneQueue": "{duration} na telefonu",
+    "syncCardUploadsPaused": "Prijenos je kratko pauziran — nastavit će se automatski"
 }

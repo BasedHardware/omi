@@ -4439,5 +4439,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Готово",
     "openLoopAnswerRemind": "Напомни по-късно",
-    "openLoopAnswerDrop": "Изостави го"
+    "openLoopAnswerDrop": "Изостави го",
+    "syncRejectionInvalidDate": "Невалидна дата на записа",
+    "syncDeleteKeptUploading": "Някои части все още се качват и бяха запазени",
+    "syncRejectionServer": "Отказано от сървъра",
+    "syncRejectionTooLarge": "Твърде голям",
+    "deviceOnPhoneQueue": "{duration} в телефона",
+    "syncCardUploadsPaused": "Качването е спряно за момент — ще продължи автоматично"
 }

@@ -14377,4 +14377,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => '放弃';
+
+  @override
+  String get syncRejectionInvalidDate => '录音日期无效';
+
+  @override
+  String get syncDeleteKeptUploading => '部分内容仍在上传中，已保留';
+
+  @override
+  String get syncRejectionServer => '被服务器拒绝';
+
+  @override
+  String get syncRejectionTooLarge => '过大';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '手机上还有$duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => '上传已暂停片刻 — 将自动恢复';
 }

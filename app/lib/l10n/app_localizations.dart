@@ -25826,6 +25826,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Drop it'**
   String get openLoopAnswerDrop;
+
+  /// A recording whose capture date the server refused
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid recording date'**
+  String get syncRejectionInvalidDate;
+
+  /// Shown when a block Delete skipped members that are still uploading, so only the refused idle members were deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Some parts are still uploading and were kept'**
+  String get syncDeleteKeptUploading;
+
+  /// The server refused this upload
+  ///
+  /// In en, this message translates to:
+  /// **'Rejected by server'**
+  String get syncRejectionServer;
+
+  /// The audio file is too large to upload
+  ///
+  /// In en, this message translates to:
+  /// **'Too large'**
+  String get syncRejectionTooLarge;
+
+  /// Audio queued on the phone waiting to upload, with its duration
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} on phone'**
+  String deviceOnPhoneQueue(Object duration);
+
+  /// Upload cooldown copy for a per-account dispatch hold, not server capacity
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads paused for a moment — they\'ll resume automatically'**
+  String get syncCardUploadsPaused;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

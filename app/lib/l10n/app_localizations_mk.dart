@@ -14666,4 +14666,24 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Отфрли';
+
+  @override
+  String get syncRejectionInvalidDate => 'Неважечки датум на снимање';
+
+  @override
+  String get syncDeleteKeptUploading => 'Некои делови сè уште се прикачуваат и беа задржани';
+
+  @override
+  String get syncRejectionServer => 'Одбиено од серверот';
+
+  @override
+  String get syncRejectionTooLarge => 'Преголемо';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration на телефонот';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Качувањата се привремено паузирани — ќе продолжат автоматски';
 }

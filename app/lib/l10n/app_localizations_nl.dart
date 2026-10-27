@@ -14640,4 +14640,24 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Negeren';
+
+  @override
+  String get syncRejectionInvalidDate => 'Ongeldige opnamedatum';
+
+  @override
+  String get syncDeleteKeptUploading => 'Sommige delen worden nog geüpload en zijn bewaard';
+
+  @override
+  String get syncRejectionServer => 'Afgewezen door de server';
+
+  @override
+  String get syncRejectionTooLarge => 'Te groot';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration op de telefoon';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Uploads zijn even gepauzeerd — ze worden automatisch hervat';
 }

@@ -11865,5 +11865,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "पूर्ण",
     "openLoopAnswerRemind": "नंतर लक्षात आणून द्या",
-    "openLoopAnswerDrop": "टाकून द्या"
+    "openLoopAnswerDrop": "टाकून द्या",
+    "syncRejectionInvalidDate": "अवैध रेकॉर्डिंग तारीख",
+    "syncDeleteKeptUploading": "काही भाग अजून अपलोड होत आहेत आणि ते ठेवले आहेत",
+    "syncRejectionServer": "सर्व्हरने नकार दिला",
+    "syncRejectionTooLarge": "खूप मोठे",
+    "deviceOnPhoneQueue": "फोनवर {duration}",
+    "syncCardUploadsPaused": "अपलोड थोड्या वेळासाठी थांबले आहेत — ते आपोआप पुन्हा सुरू होतील"
 }

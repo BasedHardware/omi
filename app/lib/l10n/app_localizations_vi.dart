@@ -14602,4 +14602,24 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Bỏ qua';
+
+  @override
+  String get syncRejectionInvalidDate => 'Ngày ghi âm không hợp lệ';
+
+  @override
+  String get syncDeleteKeptUploading => 'Một số phần vẫn đang được tải lên và đã được giữ lại';
+
+  @override
+  String get syncRejectionServer => 'Bị máy chủ từ chối';
+
+  @override
+  String get syncRejectionTooLarge => 'Quá lớn';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration trên điện thoại';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Tải lên tạm dừng trong chốc lát — sẽ tự động tiếp tục';
 }

@@ -14633,4 +14633,24 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Atmest';
+
+  @override
+  String get syncRejectionInvalidDate => 'Nederīgs ieraksta datums';
+
+  @override
+  String get syncDeleteKeptUploading => 'Dažas daļas joprojām augšupielādē un tika paturētas';
+
+  @override
+  String get syncRejectionServer => 'Serveris noraidīja';
+
+  @override
+  String get syncRejectionTooLarge => 'Pārāk liels';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration telefonā';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Augšupielādes īsu brīdi ir pauzētas — tās automātiski atsāksies';
 }

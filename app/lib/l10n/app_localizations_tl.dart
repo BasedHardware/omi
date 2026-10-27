@@ -14716,4 +14716,25 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Iwanan';
+
+  @override
+  String get syncRejectionInvalidDate => 'Di-wastong petsa ng pag-record';
+
+  @override
+  String get syncDeleteKeptUploading => 'Ang ilang bahagi ay kasalukuyang ina-upload at pinanatili';
+
+  @override
+  String get syncRejectionServer => 'Tinanggihan ng server';
+
+  @override
+  String get syncRejectionTooLarge => 'Masyadong malaki';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration sa telepono';
+  }
+
+  @override
+  String get syncCardUploadsPaused =>
+      'Pansamantalang naka-pause ang mga upload — awtomatikong magpapatuloy ang mga ito';
 }

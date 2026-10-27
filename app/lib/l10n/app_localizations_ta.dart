@@ -14701,4 +14701,24 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'விட்டுவிடு';
+
+  @override
+  String get syncRejectionInvalidDate => 'தவறான பதிவு தேதி';
+
+  @override
+  String get syncDeleteKeptUploading => 'சில பகுதிகள் இன்னும் பதிவேற்றப்பட்டு வருகின்றன, அவை வைக்கப்பட்டுள்ளன';
+
+  @override
+  String get syncRejectionServer => 'சேவையகம் நிராகரித்தது';
+
+  @override
+  String get syncRejectionTooLarge => 'மிகப் பெரியது';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'போனில் $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'பதிவேற்றங்கள் சிறிது நேரம் இடைநிறுத்தப்பட்டுள்ளன — தானாகவே தொடரும்';
 }

@@ -11865,5 +11865,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Гатова",
     "openLoopAnswerRemind": "Нагадаць пазней",
-    "openLoopAnswerDrop": "Адкінуць"
+    "openLoopAnswerDrop": "Адкінуць",
+    "syncRejectionInvalidDate": "Несапраўдная дата запісу",
+    "syncDeleteKeptUploading": "Некаторыя часткі ўсё яшчэ выгружаюцца і былі захаваны",
+    "syncRejectionServer": "Адхілена серверам",
+    "syncRejectionTooLarge": "Занадта вялікі",
+    "deviceOnPhoneQueue": "{duration} на тэлефоне",
+    "syncCardUploadsPaused": "Выгрузка часова прыпынена — яна аўтаматычна адновіцца"
 }

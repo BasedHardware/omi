@@ -14606,4 +14606,24 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Ohita';
+
+  @override
+  String get syncRejectionInvalidDate => 'Virheellinen tallennuspäivä';
+
+  @override
+  String get syncDeleteKeptUploading => 'Osatiedostoja lähetetään vielä ja ne säilytettiin';
+
+  @override
+  String get syncRejectionServer => 'Palvelin hylkäsi';
+
+  @override
+  String get syncRejectionTooLarge => 'Liian suuri';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration puhelimessa';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Lataukset on pysäytetty hetkeksi — ne jatkuvat automaattisesti';
 }

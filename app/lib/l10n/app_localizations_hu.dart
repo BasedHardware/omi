@@ -14659,4 +14659,24 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Eldobás';
+
+  @override
+  String get syncRejectionInvalidDate => 'Érvénytelen felvételi dátum';
+
+  @override
+  String get syncDeleteKeptUploading => 'Néhány rész még feltöltés alatt van, és meg lett tartva';
+
+  @override
+  String get syncRejectionServer => 'A kiszolgáló elutasította';
+
+  @override
+  String get syncRejectionTooLarge => 'Túl nagy';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration a telefonon';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'A feltöltések rövid szünetben vannak — automatikusan folytatódnak';
 }

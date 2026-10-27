@@ -14612,4 +14612,24 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'टाकून द्या';
+
+  @override
+  String get syncRejectionInvalidDate => 'अवैध रेकॉर्डिंग तारीख';
+
+  @override
+  String get syncDeleteKeptUploading => 'काही भाग अजून अपलोड होत आहेत आणि ते ठेवले आहेत';
+
+  @override
+  String get syncRejectionServer => 'सर्व्हरने नकार दिला';
+
+  @override
+  String get syncRejectionTooLarge => 'खूप मोठे';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'फोनवर $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'अपलोड थोड्या वेळासाठी थांबले आहेत — ते आपोआप पुन्हा सुरू होतील';
 }

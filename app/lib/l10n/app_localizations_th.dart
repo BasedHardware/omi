@@ -14529,4 +14529,24 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'ทิ้งไป';
+
+  @override
+  String get syncRejectionInvalidDate => 'วันที่บันทึกเสียงไม่ถูกต้อง';
+
+  @override
+  String get syncDeleteKeptUploading => 'บางส่วนยังคงอัปโหลดอยู่และถูกเก็บไว้';
+
+  @override
+  String get syncRejectionServer => 'เซิร์ฟเวอร์ปฏิเสธ';
+
+  @override
+  String get syncRejectionTooLarge => 'ใหญ่เกินไป';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration บนโทรศัพท์';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'การอัปโหลดหยุดชั่วคราว — จะดำเนินต่อโดยอัตโนมัติ';
 }

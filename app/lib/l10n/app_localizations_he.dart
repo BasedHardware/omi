@@ -14498,4 +14498,24 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'ותר על זה';
+
+  @override
+  String get syncRejectionInvalidDate => 'תאריך הקלטה לא תקין';
+
+  @override
+  String get syncDeleteKeptUploading => 'חלקים מסוימים עדיין בהעלאה ונשמרו';
+
+  @override
+  String get syncRejectionServer => 'נדחה על ידי השרת';
+
+  @override
+  String get syncRejectionTooLarge => 'גדול מדי';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration בטלפון';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'ההעלאות הושהו לרגע — הן יימשכו אוטומטית';
 }

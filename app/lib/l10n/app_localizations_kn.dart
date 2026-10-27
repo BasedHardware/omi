@@ -14649,4 +14649,24 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'ಬಿಡು';
+
+  @override
+  String get syncRejectionInvalidDate => 'ಅಮಾನ್ಯ ರೆಕಾರ್ಡಿಂಗ್ ದಿನಾಂಕ';
+
+  @override
+  String get syncDeleteKeptUploading => 'ಕೆಲವು ಭಾಗಗಳು ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿವೆ ಮತ್ತು ಅವನ್ನು ಇರಿಸಲಾಗಿದೆ';
+
+  @override
+  String get syncRejectionServer => 'ಸರ್ವರ್ ತಿರಸ್ಕರಿಸಿದೆ';
+
+  @override
+  String get syncRejectionTooLarge => 'ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'ಫೋನ್‌ನಲ್ಲಿ $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'ಅಪ್‌ಲೋಡ್‌ಗಳು ಕ್ಷಣಮಾತ್ರ ವಿರಾಮದಲ್ಲಿವೆ — ಅವು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮುಂದುವರಿಯುತ್ತವೆ';
 }

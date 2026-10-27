@@ -14585,4 +14585,24 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'इसे छोड़ दें';
+
+  @override
+  String get syncRejectionInvalidDate => 'अमान्य रिकॉर्डिंग तिथि';
+
+  @override
+  String get syncDeleteKeptUploading => 'कुछ हिस्से अभी भी अपलोड हो रहे हैं और रख लिए गए हैं';
+
+  @override
+  String get syncRejectionServer => 'सर्वर ने अस्वीकार किया';
+
+  @override
+  String get syncRejectionTooLarge => 'बहुत बड़ा';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'फ़ोन पर $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'अपलोड एक पल के लिए रुके हैं — ये अपने आप फिर शुरू होंगे';
 }

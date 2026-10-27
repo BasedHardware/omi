@@ -14597,4 +14597,24 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'বাদ দিন';
+
+  @override
+  String get syncRejectionInvalidDate => 'অবৈধ রেকর্ডিং তারিখ';
+
+  @override
+  String get syncDeleteKeptUploading => 'কিছু অংশ এখনও আপলোড হচ্ছে এবং রাখা হয়েছে';
+
+  @override
+  String get syncRejectionServer => 'সার্ভার প্রত্যাখ্যান করেছে';
+
+  @override
+  String get syncRejectionTooLarge => 'খুব বড়';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'ফোনে $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'আপলোড কিছুক্ষণের জন্য বিরত — স্বয়ংক্রিয়ভাবে আবার শুরু হবে';
 }

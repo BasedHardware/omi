@@ -4439,5 +4439,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "पूर्ण",
     "openLoopAnswerRemind": "बाद में याद दिलाएँ",
-    "openLoopAnswerDrop": "इसे छोड़ दें"
+    "openLoopAnswerDrop": "इसे छोड़ दें",
+    "syncRejectionInvalidDate": "अमान्य रिकॉर्डिंग तिथि",
+    "syncDeleteKeptUploading": "कुछ हिस्से अभी भी अपलोड हो रहे हैं और रख लिए गए हैं",
+    "syncRejectionServer": "सर्वर ने अस्वीकार किया",
+    "syncRejectionTooLarge": "बहुत बड़ा",
+    "deviceOnPhoneQueue": "फ़ोन पर {duration}",
+    "syncCardUploadsPaused": "अपलोड एक पल के लिए रुके हैं — ये अपने आप फिर शुरू होंगे"
 }

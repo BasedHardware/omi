@@ -4474,5 +4474,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Gotowe",
     "openLoopAnswerRemind": "Przypomnij później",
-    "openLoopAnswerDrop": "Odrzuć"
+    "openLoopAnswerDrop": "Odrzuć",
+    "syncRejectionInvalidDate": "Nieprawidłowa data nagrania",
+    "syncDeleteKeptUploading": "Niektóre części są nadal przesyłane i zostały zachowane",
+    "syncRejectionServer": "Odrzucone przez serwer",
+    "syncRejectionTooLarge": "Za duży",
+    "deviceOnPhoneQueue": "{duration} w telefonie",
+    "syncCardUploadsPaused": "Przesyłanie wstrzymane na chwilę — zostanie automatycznie wznowione"
 }

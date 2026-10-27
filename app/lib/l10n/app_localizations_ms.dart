@@ -14638,4 +14638,24 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Buang';
+
+  @override
+  String get syncRejectionInvalidDate => 'Tarikh rakaman tidak sah';
+
+  @override
+  String get syncDeleteKeptUploading => 'Beberapa bahagian masih dimuat naik dan disimpan';
+
+  @override
+  String get syncRejectionServer => 'Ditolak oleh pelayan';
+
+  @override
+  String get syncRejectionTooLarge => 'Terlalu besar';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration pada telefon';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Muat naik dijeda seketika — ia akan disambung semula secara automatik';
 }

@@ -4439,5 +4439,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Erledigt",
     "openLoopAnswerRemind": "Später erinnern",
-    "openLoopAnswerDrop": "Verwerfen"
+    "openLoopAnswerDrop": "Verwerfen",
+    "syncRejectionInvalidDate": "Ungültiges Aufnahmedatum",
+    "syncDeleteKeptUploading": "Einige Teile werden noch hochgeladen und wurden behalten",
+    "syncRejectionServer": "Vom Server abgelehnt",
+    "syncRejectionTooLarge": "Zu groß",
+    "deviceOnPhoneQueue": "{duration} auf dem Telefon",
+    "syncCardUploadsPaused": "Uploads wurden kurzzeitig pausiert — sie werden automatisch fortgesetzt"
 }

@@ -14600,4 +14600,24 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Zahodit';
+
+  @override
+  String get syncRejectionInvalidDate => 'Neplatné datum nahrávky';
+
+  @override
+  String get syncDeleteKeptUploading => 'Některé části se stále nahrávají a byly ponechány';
+
+  @override
+  String get syncRejectionServer => 'Server odmítl';
+
+  @override
+  String get syncRejectionTooLarge => 'Příliš velké';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration v telefonu';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Nahrávání bylo na chvíli pozastaveno — bude automaticky pokračovat';
 }

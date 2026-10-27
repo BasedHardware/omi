@@ -4439,5 +4439,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Ολοκληρώθηκε",
     "openLoopAnswerRemind": "Υπενθύμιση αργότερα",
-    "openLoopAnswerDrop": "Απόρριψη"
+    "openLoopAnswerDrop": "Απόρριψη",
+    "syncRejectionInvalidDate": "Μη έγκυρη ημερομηνία εγγραφής",
+    "syncDeleteKeptUploading": "Ορισμένα μέρη φορτώνονται ακόμα και διατηρήθηκαν",
+    "syncRejectionServer": "Απορρίφθηκε από τον διακομιστή",
+    "syncRejectionTooLarge": "Πολύ μεγάλο",
+    "deviceOnPhoneQueue": "{duration} στο τηλέφωνο",
+    "syncCardUploadsPaused": "Οι μεταφορτώσεις τέθηκαν προσωρινά σε παύση — θα συνεχιστούν αυτόματα"
 }

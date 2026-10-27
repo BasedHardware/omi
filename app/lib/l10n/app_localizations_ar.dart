@@ -14520,4 +14520,24 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'استبعدها';
+
+  @override
+  String get syncRejectionInvalidDate => 'تاريخ تسجيل غير صالح';
+
+  @override
+  String get syncDeleteKeptUploading => 'بعض الأجزاء لا تزال قيد الرفع وقد تم الاحتفاظ بها';
+
+  @override
+  String get syncRejectionServer => 'رفضه الخادم';
+
+  @override
+  String get syncRejectionTooLarge => 'كبير جدًا';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration على الهاتف';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'تم إيقاف الرفع مؤقتًا — سيستأنف تلقائيًا';
 }
