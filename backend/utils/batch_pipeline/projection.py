@@ -33,6 +33,7 @@ from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 from utils.batch_pipeline.projection_disposition import persist_disposition, mirror_assignment
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
@@ -505,6 +506,9 @@ class Projector:
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         session = self.store.session(segment_id, binding, self.clock(), policy=policy)
+        if job.get('_projection_privacy_deleted'):
+            persist_disposition(session, privacy_deleted=True)
+            return
         # A walk's fresh read showed no receipt; the transaction still fences.
         prechecked = not (hint is not None and hint.successor and not entry.get('projection'))
         if prechecked:
@@ -512,6 +516,11 @@ class Projector:
                 with projection_phase('predecessor', policy):
                     self.store.check(session)
             except ProjectionReplay:
+                return
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                    raise
+                persist_disposition(session, privacy_deleted=True)
                 return
         if entry['result']['outcome'] in {'silence', 'no_recoverable_speech'}:
             if entry['result']['outcome'] == 'no_recoverable_speech':
@@ -535,6 +544,10 @@ class Projector:
                 # Without the pre-check this is the replay it would have seen.
             except SyncAssignmentSuperseded:
                 self.supersede(session)
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                    raise
+                persist_disposition(session, privacy_deleted=True)
         else:
             with projection_phase('assignment', policy):
                 self.assign_parts(item, entry, binding, finish=finish, policy=policy, hint=hint)
@@ -891,6 +904,16 @@ class Projector:
                 receipt = persist_disposition(session, quarantined=True)
             except SyncAssignmentSuperseded:
                 receipt = self.supersede(session)
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                    if policy.projection_contention:
+                        logger.error(
+                            'event=batch_projection action=assignment outcome=error exception_type=%s%s',
+                            error_type(error),
+                            fence_reason_field(error),
+                        )
+                    raise
+                receipt = persist_disposition(session, privacy_deleted=True)
             except Exception as error:
                 if policy.projection_contention:
                     logger.error(
@@ -907,6 +930,10 @@ class Projector:
 
     def finish_part(self, item, binding, receipt, index, *, policy=None):
         policy = policy or self.store.policy(item.segment_id)
+        if receipt.get('conversation_id'):
+            self.store.settle_deleted_output(
+                item.segment_id, binding, self.clock(), receipt, part_index=index, policy=policy
+            )
         if receipt['state'] in {'ready', 'quarantined'}:
             return
         if receipt.get('conversation_id'):
