@@ -113,3 +113,37 @@ def prior_modulate_empty(job):
             # closed validated-empty failure is bound to this same audio window.
             return True
     return False
+
+
+def guarded_exhausted(job):
+    """Guarded no-speech evidence: both recognizers attempted and validated empty.
+
+    Receipts, never the shared ``empty_asr`` failure shape, are the evidence: an
+    operator take-over of a prepared intent can settle that same failure with
+    Soniox alone, and its unattempted Modulate side must keep blocking a
+    guarded terminal outcome.
+    """
+    receipts = (job.get('recovery') or {}).get('recognizers') or {}
+    return all(
+        (receipts.get(provider) or {}).get('outcome') == 'empty'
+        and (receipts.get(provider) or {}).get('word_count') == 0
+        for provider in ('modulate', 'soniox')
+    )
+
+
+def duration_limited(job):
+    """The exact shape RecoveryStore.hold_duration_limit settles (#23795): a
+    guarded epoch-1 intent held only by the >60s independent bound, never
+    started, with no provider call, receipt or failure. Only this shape may be
+    reopened for an operator take-over; a spent intent never reopens."""
+    recovery = job.get('recovery') or {}
+    refusal = recovery.get('refusal') or {}
+    return (
+        job.get('recovery_state') == 'failed_held'
+        and refusal.get('reason') == 'independent_duration_limit'
+        and refusal.get('max_audio_seconds') == MAX_AUDIO_SECONDS
+        and not recovery.get('started_at')
+        and not recovery.get('provider')
+        and not recovery.get('recognizers')
+        and not recovery.get('failure')
+    )

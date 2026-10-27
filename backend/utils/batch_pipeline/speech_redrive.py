@@ -9,17 +9,20 @@ from database.batch_pipeline_policy import load_stage_policy, UnpinnedPolicyRefu
 from config.prerecorded_stt import require_provider_environment, PrerecordedSTTService
 from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
 from config.batch_pipeline_empty_asr import terminal_empty_allowed
-from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from database.batch_pipeline_projection_protocol import normalized_binding
-from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive
-from database.batch_pipeline_recognizer_receipts import record_recognizer
 from config.batch_language_recovery import (
-    allowed as independent_allowed,
     MAX_AUDIO_SECONDS,
+    allowed as independent_allowed,
     below_silence_threshold,
+    duration_limited,
+    language_guarded,
     prior_modulate_empty,
     words_repair_eligible,
 )
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_projection_protocol import normalized_binding
+from database.batch_pipeline_quarantine_recovery import RecoveryStore
+from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive
+from database.batch_pipeline_recognizer_receipts import record_recognizer
 from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_result_allowed, worker_vad_speech
 from utils.batch_pipeline.quarantine_recovery import log_failure, log_terminal_empty
 from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe
@@ -298,4 +301,169 @@ def redrive_one(
     if changed and outcome == 'no_recoverable_speech':
         record_correctness('no_recoverable_speech', seconds=item.duration_seconds)
         log_terminal_empty()
+    return 'recovered' if changed else 'fenced'
+
+
+def prepared_independent_one(
+    store,
+    artifacts,
+    sid,
+    uid,
+    max_seconds,
+    *,
+    server_flags,
+    clock=time.time,
+    independent_stt=second_transcribe,
+):
+    """Operator take-over of a sealed prepared epoch-1 intent; one Soniox call at most.
+
+    Only this path may admit a language-guarded unit above the global 60s
+    independent bound, and only up to ``max_seconds`` for ids the sealed plan
+    froze. The existing epoch-1 token fence (``RecoveryStore.start``) stays the
+    sole paid-intent CAS: no new intent is created, custody is preserved, and
+    nothing is deleted. A unit that #23795's duration-limit refusal already
+    settled without ever starting the intent is admitted through the mirrored
+    ``RecoveryStore.start_duration_limited``; a spent intent never reopens. The
+    sealed cohort file and the lead's approved plan sha are the audit trail;
+    the receipts record the spend itself. An empty or failed answer settles
+    ``failed_held`` through the same Soniox receipts as the runtime independent
+    route; it never fabricates the unattempted Modulate receipt that the
+    independent silence contract requires, so a guarded take-over cannot
+    settle silence.
+    """
+    try:
+        job, policy = load_stage_policy(store, sid, 'recovery', server_flags=server_flags)
+    except UnpinnedPolicyRefused:
+        return 'policy_unpinned'
+    if policy is None or not policy.recovery_enabled:
+        return 'disabled'
+    recovery = job.get('recovery') or {}
+    if not language_guarded(job) or recovery.get('epoch') != 1 or not recovery.get('token'):
+        return 'unit_not_eligible'
+    item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
+    if not MAX_AUDIO_SECONDS < item.duration_seconds <= max_seconds:
+        return 'independent_budget_held'
+    protocol = RecoveryStore(store)
+    token = recovery['token']
+    if job.get('result'):
+        return 'already_applied'
+    # A duration-limit refusal (#23795) never spent the intent; it reopens here.
+    reopen = duration_limited(job)
+    if job['recovery_state'] == 'failed_held' and not reopen:
+        return 'failed_held'
+    if job['recovery_state'] == 'running':
+        # A crashed take-over reconciles its artifact without repeating STT.
+        uri = artifacts.find_recovery_result(item, token)
+        if uri:
+            payload = artifacts.load_result(item, uri)
+            outcome = result_outcome(payload)
+            if outcome != 'success' or not payload.get('words'):
+                failure = {'stage': 'payload_validation', 'reason': 'invalid_payload'}
+                return (
+                    'failed_held'
+                    if protocol.settle(
+                        sid,
+                        token,
+                        clock(),
+                        failure=failure,
+                        measured_held_vad_speech_seconds=result_vad_evidence(payload),
+                    )
+                    else 'fenced'
+                )
+            changed = protocol.settle(
+                sid,
+                token,
+                clock(),
+                uri,
+                outcome=outcome,
+                measured_held_vad_speech_seconds=result_vad_evidence(payload),
+                independent_silence=payload.get('words_provider') == 'independent_empty_strict_vad',
+            )
+            return 'reconciled' if changed else 'fenced'
+        if clock() - recovery.get('started_at', 0) > 900:
+            failure = {'stage': 'provider', 'reason': 'abandoned_running'}
+            if protocol.settle(sid, token, clock(), failure=failure):
+                log_failure(failure)
+                return 'failed_held'
+        return 'running_held'
+    if job['recovery_state'] != 'prepared' and not reopen:
+        return 'unit_not_eligible'
+    audio = artifacts.fetch_audio(item)
+    _, duration, spans = inspect_audio(item, audio)
+    measured = sum(span['end'] - span['start'] for span in spans)
+    # Bound worker VAD may locate guarded words that strict CPU VAD missed.
+    worker = worker_vad_speech(job)
+    if not reopen and not protocol.observe_vad(sid, token, measured):
+        return 'fenced'
+    # The allowance is rechecked against the independent provider, exactly as
+    # the runtime independent route does; the take-over never bypasses it.
+    if not sync_allowed(uid, item.duration_seconds, 'soniox', lane='batch', path=DispatchPath.QUARANTINE):
+        return 'allowance_held'
+    require_provider_environment(PrerecordedSTTService.SONIOX)
+    started = (
+        protocol.start_duration_limited(sid, token, clock(), audio_uri=item.audio_uri, audio_seconds=duration)
+        if reopen
+        else protocol.start(sid, token, clock(), provider='modulate')
+    )
+    if not started:
+        return 'fenced'
+    record_fallback(component='stt_selection', from_mode='batch', to_mode='soniox', reason='other', outcome='degraded')
+    if not record_recognizer(store, sid, token, 'recovery', 'soniox', 'started', None, measured, claim=True):
+        return 'running_held'
+    payload, failure, billable = None, None, False
+    try:
+        payload = independent_stt(item, audio, MultilingualEmpty(duration, spans, worker))
+        if result_outcome(payload) != 'success' or not payload.get('words'):
+            raise RecoveryFailure('payload_validation', 'invalid_payload')
+    except BatchPrivacyBlocked:
+        raise
+    except Exception as error:
+        failure = (
+            {'stage': error.stage, 'reason': error.reason}
+            if isinstance(error, RecoveryFailure)
+            else {'stage': 'provider', 'reason': 'operation_failed'}
+        )
+        empty = isinstance(error, MultilingualEmpty)
+        billable = isinstance(error, (MultilingualEmpty, WordsWithoutVad))
+        count = error.word_count if isinstance(error, WordsWithoutVad) else 0 if empty else None
+        record_recognizer(
+            store,
+            sid,
+            token,
+            'recovery',
+            'soniox',
+            'words' if count else 'empty' if empty else 'error',
+            count,
+            measured,
+        )
+    else:
+        billable = True
+        record_recognizer(store, sid, token, 'recovery', 'soniox', 'words', len(payload['words']), measured)
+    if billable and cap_enabled(uid, 'batch'):
+        # Valid empty responses also consume vendor spend.
+        record_audio(
+            'sync',
+            'accepted',
+            'soniox',
+            item.duration_seconds,
+            funded_allowance(uid, lane='batch').reason == 'plan_allowance_exhausted',
+        )
+    if failure:
+        if protocol.settle(sid, token, clock(), failure=failure, measured_held_vad_speech_seconds=measured):
+            log_failure(failure)
+        return 'failed_held'
+    if payload is None:
+        raise RecoveryFailure('payload_validation', 'invalid_payload')
+    # A storage/commit exception intentionally leaves running intact. A later
+    # invocation may reconcile the object, but can never call the provider again.
+    uri = artifacts.persist_recovery_result(item, payload, token)
+    changed = protocol.settle(
+        sid,
+        token,
+        clock(),
+        uri,
+        outcome=result_outcome(payload),
+        measured_held_vad_speech_seconds=result_vad_evidence(payload),
+        independent_silence=payload.get('words_provider') == 'independent_empty_strict_vad',
+    )
     return 'recovered' if changed else 'fenced'
