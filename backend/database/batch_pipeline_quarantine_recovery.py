@@ -33,6 +33,7 @@ class RecoveryStore:
         allow_completed_silence=False,
         allow_completed_speech_redrive=False,
         allow_completed_terminal=False,
+        allow_completed_recovery=False,
     ):
         job = tx.get('jobs', segment_id)
         if not job or not job.get('projection_binding'):
@@ -72,6 +73,13 @@ class RecoveryStore:
                     and ledger.get('job_id') == binding.job_id
                     and job.get('speech_redrive', {}).get('state') == 'completed'
                     and job.get('result', {}).get('outcome') in {'success', 'no_recoverable_speech', 'silence'}
+                )
+                or (
+                    allow_completed_recovery
+                    and ledger.get('status') == 'completed'
+                    and ledger.get('job_id') == binding.job_id
+                    and job.get('recovery_state') == 'recovered'
+                    and bool(job.get('result'))
                 )
                 or (
                     allow_completed_terminal
