@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 
 from config.audio_archive import admitted
 from config.audio_outbox import enabled as audio_outbox_enabled
-from database.conversations import note_server_batch_audio
+from database.server_batch_audio import note_server_batch_audio
 from models.message_event import AudioCustodyEvent
 from utils.executors import db_executor, run_blocking, storage_executor
 from utils.other.raw_audio import CapturePack

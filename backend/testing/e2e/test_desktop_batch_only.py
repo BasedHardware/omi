@@ -15,18 +15,19 @@ import pytest
 
 @pytest.mark.parametrize('consent,disabled', [(True, True), (False, True), (True, False)])
 @pytest.mark.parametrize(
-    'platform,source,mobile_percent',
+    'platform,source,mobile_percent,byok',
     [
-        ('macos', 'desktop', '0'),
-        ('windows', 'desktop', '0'),
-        ('ios', 'phone', '0'),
-        ('android', 'omi', '0'),
-        ('ios', 'phone', '100'),
-        ('android', 'omi', '100'),
+        ('macos', 'desktop', '0', False),
+        ('windows', 'desktop', '0', False),
+        ('ios', 'phone', '0', False),
+        ('android', 'omi', '0', False),
+        ('ios', 'phone', '100', False),
+        ('android', 'omi', '100', False),
+        ('macos', 'desktop', '0', True),
     ],
 )
 def test_native_desktop_custody_or_exact_live_rollback(
-    client, test_uid, monkeypatch, remote, consent, disabled, platform, source, mobile_percent
+    client, test_uid, monkeypatch, remote, consent, disabled, platform, source, mobile_percent, byok
 ):
     import routers.listen.runtime as runtime
     import utils.pusher as pusher_client
@@ -45,6 +46,8 @@ def test_native_desktop_custody_or_exact_live_rollback(
         monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
         monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', mobile_percent)
         monkeypatch.setattr(runtime, 'PUSHER_ENABLED', True)
+        if byok:
+            monkeypatch.setattr(runtime, 'get_byok_keys', lambda: {'soniox': 'synthetic-test-key'})
         monkeypatch.setattr(pusher_client, 'PusherAPI', peer.api_url)
         breaker = pusher_client.get_circuit_breaker()
         breaker._state = pusher_client.CircuitState.CLOSED
@@ -70,7 +73,7 @@ def test_native_desktop_custody_or_exact_live_rollback(
         row = user.collection('conversations').document(session['conversation_id']).get().to_dict()
         assert row is not None
         decoded = prepare_conversation_for_read(row, test_uid)
-        if disabled and consent and (platform in {'macos', 'windows'} or mobile_percent == '100'):
+        if disabled and consent and not byok and (platform in {'macos', 'windows'} or mobile_percent == '100'):
             assert owned(row) and not decoded.get('transcript_segments')
             assert row['has_content']
             assert not sockets

@@ -11,7 +11,7 @@ import pytest
 
 from config import server_batch
 from config.batch_live_preview import capture_snapshot
-from database import conversations, recording_sessions
+from database import recording_sessions, server_batch_audio
 from models.conversation_enums import ConversationStatus
 from routers.listen import receiver as receiver_module
 from routers.listen.receiver import ListenReceiver
@@ -128,6 +128,13 @@ def test_platform_defaults(platform, source, expected):
     assert server_batch.eligible(row, 'owner') is expected
 
 
+def test_validated_provider_byok_keeps_live_even_on_reserved_reconnect():
+    h = host()
+    h.server_batch_byok = True
+    assert not server_batch.request_eligible(h)
+    assert not server_batch.suppress_live(h)
+
+
 @pytest.mark.parametrize('platform', ['ios', 'android'])
 def test_mobile_percent_is_nested_in_actual_batch_admission(monkeypatch, platform):
     monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '100')
@@ -219,7 +226,7 @@ async def test_original_commit_keeps_zero_live_conversation_and_exact_capture_bo
     def note(owner, conversation, start, end):
         assert remote.list_blobs('raw-live/') and remote.list_blobs('audio-outbox/')
         order.append('committed')
-        return conversations.note_server_batch_audio(owner, conversation, start, end, firestore_client=db)
+        return server_batch_audio.note_server_batch_audio(owner, conversation, start, end, firestore_client=db)
 
     monkeypatch.setattr(live_audio_archive, 'note_server_batch_audio', note)
     packet = b'\x00\x00' * 160
@@ -230,8 +237,8 @@ async def test_original_commit_keeps_zero_live_conversation_and_exact_capture_bo
     assert order == ['committed'] and row['has_content'] and not row['transcript_segments']
     assert row['started_at'].timestamp() == 1000
     assert row['finished_at'].timestamp() == 1000.01
-    assert conversations.note_server_batch_audio('owner', 'conversation', 1001, 1002, firestore_client=db)
-    assert conversations.note_server_batch_audio('owner', 'conversation', 999, 1000, firestore_client=db)
+    assert server_batch_audio.note_server_batch_audio('owner', 'conversation', 1001, 1002, firestore_client=db)
+    assert server_batch_audio.note_server_batch_audio('owner', 'conversation', 999, 1000, firestore_client=db)
     assert db.rows[ROW]['started_at'].timestamp() == 999
     assert db.rows[ROW]['finished_at'].timestamp() == 1002
     assert not recording_sessions.tombstone_and_delete_empty_conversation(

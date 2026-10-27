@@ -190,6 +190,7 @@ class ListenSessionRuntime:
         )
         self.client_kind = resolve_client_kind_from_headers(request.websocket.headers)
         self.use_custom_stt = request.custom_stt_mode.value == 'enabled'
+        self.server_batch_byok = bool(get_byok_keys())
         self.pusher_enabled = PUSHER_ENABLED
         self.is_multi_channel = request.channels >= 2
         self.language = request.language

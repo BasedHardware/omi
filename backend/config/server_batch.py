@@ -4,7 +4,8 @@ import os
 from collections.abc import Mapping
 
 from config.audio_outbox import enabled as audio_outbox_enabled
-from config.policy import cohort_bucket, resolve_batch_policy
+from config.batch_pipeline import enabled_for as batch_enabled_for
+from config.policy import cohort_bucket
 from config.policy.batch import parse_percent
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
@@ -21,12 +22,7 @@ def selected(owner_id: str, platform: str | None, source: str | None) -> bool:
     platform = platform or ('macos' if source == 'desktop' else None)
     if platform in {'ios', 'android'}:
         percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '0'))
-        return bool(
-            owner_id
-            and percent > 0
-            and cohort_bucket(owner_id, '') < percent
-            and resolve_batch_policy(owner_id).batch_enabled
-        )
+        return bool(owner_id and percent > 0 and cohort_bucket(owner_id, '') < percent and batch_enabled_for(owner_id))
     platforms = {
         value.strip().lower() for value in os.getenv('SERVER_BATCH_ONLY_PLATFORMS', 'macos,windows').split(',')
     }
@@ -80,6 +76,7 @@ def request_eligible(host) -> bool:
     return bool(
         enabled()
         and not host.use_custom_stt
+        and not getattr(host, 'server_batch_byok', False)
         and not host.is_multi_channel
         and not host.request.onboarding_mode
         and selected(

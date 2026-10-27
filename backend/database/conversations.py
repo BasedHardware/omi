@@ -5,7 +5,6 @@ import copy
 import hashlib
 import json
 import logging
-import math
 import uuid
 import zlib
 from collections.abc import Mapping
@@ -84,7 +83,6 @@ from utils.other.portability_read import (
     verified_encrypted_read,
 )
 from config.transcription_final_pass import authoritative_for
-from config.server_batch import owned as server_batch_owned
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 import utils.firestore_document_size as document_size
@@ -2100,47 +2098,6 @@ def claim_record_lane_owner(uid: str, conversation_id: str, owner: str, expected
     except (NotFound, FailedPrecondition):
         return None
     return result.update_time
-
-
-def note_server_batch_audio(uid: str, conversation_id: str, start: float, end: float, *, firestore_client=None) -> bool:
-    """Retain audio-only content after a committed original-audio window.
-
-    Window/reconnect bounds merge monotonically in the same transaction that
-    fences empty cleanup. No per-frame reads or transcript fields are added.
-    """
-    if not (math.isfinite(start) and math.isfinite(end) and start < end):
-        raise ValueError('desktop batch requires a nonempty finite capture span')
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-
-    @firestore.transactional
-    def note(transaction):
-        snapshot = ref.get(transaction=transaction)
-        row = snapshot.to_dict() or {}
-        if (
-            not snapshot.exists
-            or not server_batch_owned(row)
-            or not row.get('private_cloud_sync_enabled')
-            or row.get('uses_custom_stt')
-            or row.get('data_protection_level', 'enhanced') not in {'standard', 'enhanced'}
-            or any(row.get(key) for key in ('deleted', 'discarded', 'is_locked'))
-        ):
-            return False
-        first = min(start, row.get('server_batch_audio_start', start))
-        last = max(end, row.get('server_batch_audio_end', end))
-        transaction.update(
-            ref,
-            {
-                'server_batch_audio_start': first,
-                'server_batch_audio_end': last,
-                'started_at': datetime.fromtimestamp(first, timezone.utc),
-                'finished_at': datetime.fromtimestamp(last, timezone.utc),
-                'has_content': True,
-            },
-        )
-        return True
-
-    return run_transactional(client, note)
 
 
 def seal_record_audio(uid: str, conversation_id: str) -> bool:
