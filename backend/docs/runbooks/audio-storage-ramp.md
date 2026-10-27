@@ -21,10 +21,14 @@ overlay maps, the generated manifest and flag registry. Development stays at
 zero. Rebase/recompose the next draft against current main before requesting
 merge; train operators must use that checked revision, rather than a live env
 patch that the next train overwrites. Both GKE and Cloud Run must read back the
-step before its full observation window starts.
+step before its full observation window starts. Lead ruling 6418ac requires
+the custody baseline after the 06Z roll's actual DONE plus one hour; no
+pre-roll lookback may become this ramp's baseline. First apply remains in the
+bundled post-10Z train, outside op2's 05:45 through GKE DONE+1h reservation.
 
 STOP_PCM rollback: percent 0, optionally disable; READ and custody remain on.
-Regional rollback: disable REGIONAL_CACHE, leaving BUCKET_AUDIO_DERIVED set so
+Regional rollback: set REGIONAL_CACHE_PERCENT=0 first, then disable
+REGIONAL_CACHE, leaving BUCKET_AUDIO_DERIVED set so
 dual-list reads still find artifacts written during the canary. Leave all
 archived audio, manifests, lifecycle settings and retention unchanged.
 
@@ -48,15 +52,32 @@ Receipt fields:
 
 - `previous_step`, `previous_applied_at`, `applied_at`: UTC timestamps; apply
   means every receiving surface has the new state. `baseline` precedes stop-5.
+- Except for stop-5, include the complete `previous_receipt`. It must pass its
+  own gates recursively, have the same prior apply timestamp, cover the full
+  required 12h/4h/1h soak, and end within one hour before the next apply. A
+  failed prior quality result cannot be replaced with a claimed step name.
 - `lead_apply_ref`, `baseline_acceptance_ref`, `cohort_attribution_ref`: bus or
   report references. Attribution compares similar traffic and cohort shares;
   PCM avoidance counts **verified skipped batches**, not bytes or all writes.
 - `before` and `after`: `start`, `end`, `private_write_per_hour`,
   `pcm_writes_avoided_per_hour`, `regional_write_per_hour`. Use >=1h windows;
   after begins only once all surfaces serve the new flags. End within 1h of check.
+- The baseline must end within 1h before apply and start after
+  `custody_roll_completed_at` plus 1h. `before.evidence_ref` names its actual
+  aggregate measurement. `accepted_baseline` repeats that exact `start`, `end`
+  and `evidence_ref` so an older accepted firehose window cannot be substituted.
 - `after.custody.listen` and `.pusher`: window deltas `commits`, `failures`,
   `would_drop`, and `evidence_ref`. Query each service's counters independently,
   including restarts; do not substitute Cloud Run's zero custody counters.
+- Listen failures/would_drop stay zero. Include `before.custody.pusher` with
+  the same reset-aware fields as after, from the matched post-roll window.
+  Both pusher windows split failures into `projection_transient`,
+  `commit_failures` (all commit-stage reasons), and `other_failures` (everything
+  else); split would_drop into `queue_would_drop` and `other_would_drop`.
+  The parts must sum to totals. Each part's hourly rate must not rise from the
+  matched baseline, including commit failures even when projection errors fall.
+  Long-soak deltas are divided by their window duration. This implements lead
+  6418ac; existing recoverable pressure is neither zeroed nor an automatic trip.
 - `serving`: all six surface names from the checker, each a list of every
   traffic-receiving revision/image. Each record has `release_sha`,
   `image_digest`, `share_percent` (sum 100), `ready`, and `effective_env`.
@@ -84,6 +105,10 @@ The historical 120–140k WriteObject/h target was an estimate. #23656 deployed
 2026-10-26 03:38Z; the latest full hour at 2026-10-27 04:22Z was ~302k/h, down
 from 1.345M/h before the roll. The old target is **not passed**. A lead baseline
 ruling is required before stop-5; do not rewrite that finding as acceptance.
+Lead ruling 658331 accepted ~302k/h, then 6418ac required a fresh post-06Z-roll
+matched-hour custody baseline. The pre-roll 03:44–04:44Z pusher snapshot had
+projection/transient ~1477, commit/other ~3, queue would_drop ~196; it is
+context, not the new step's acceptance baseline.
 
 ## Savings reporting
 
