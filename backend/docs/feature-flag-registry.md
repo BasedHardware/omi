@@ -451,7 +451,7 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_RELEASED_PROJECTION` | Default on; reuse exact raw released-memory queries only under current atomic writer heads and proven fleet coverage | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `MEMORY_REQUIRED_INTAKE_ENABLED` | Default on; one bounded Flex normalization after required capture commits, with retries owned by the existing Dream sweep | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `MEMORY_UNDECIDED_VISIBLE` | Default on; keep undecided and review Short-term memories visible until an explicit disposition | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
-| `NEW_BUYER_SINGLE_PLAN_ENABLED` | Default on; a buyer with no current paid subscription on an explicit non-desktop platform (mobile or web) is offered only Omi Pro (unlimited_v2) in the v1 catalog, a single-tier Omi Pro v2 storefront sheet and checkout | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `NEW_BUYER_SINGLE_PLAN_ENABLED` | Default on; Omi Pro (unlimited_v2) is the only plan sold on every platform (v1 catalog, single-tier v2 storefront sheet, checkout and plan changes). Subscribers on a retired plan still see and manage their own plan | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OCCASION_CONVERSATIONS_ENABLED` | Default on unless set off (0/false/off/no); for the episodes cohort with a capable client, a mobile live conversation stays open across lulls and reconnects for 15 min (3 h span cap), one occasion per conversation | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_CANONICAL_DEMAND_WINDOW_ENABLED` | Default on; refill raw canonical list batches to the requested page demand independently of indexed candidate rollout | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_DEV_ACTION_ITEMS_CACHE_NORMALIZE_ENABLED` | Default on unless false; canonicalize equivalent Developer action-item date query instants in cache keys only | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -873,7 +873,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_REQUIRED_INTAKE_ENABLED` — Default on; one bounded Flex normalization after required capture commits, with retries owned by the existing Dream sweep (fail: open)
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
 - `MEMORY_UNDECIDED_VISIBLE` — Default on; keep undecided and review Short-term memories visible until an explicit disposition (fail: open)
-- `NEW_BUYER_SINGLE_PLAN_ENABLED` — Default on; a buyer with no current paid subscription on an explicit non-desktop platform (mobile or web) is offered only Omi Pro (unlimited_v2) in the v1 catalog, a single-tier Omi Pro v2 storefront sheet and checkout (fail: open)
+- `NEW_BUYER_SINGLE_PLAN_ENABLED` — Default on; Omi Pro (unlimited_v2) is the only plan sold on every platform (v1 catalog, single-tier v2 storefront sheet, checkout and plan changes). Subscribers on a retired plan still see and manage their own plan (fail: open)
 - `NOTES_PACKET_V2_MODE` — One notes packet, output contract, safe speaker rendering, output language, word floor and recap revisions; default shadow (fail: closed)
 - `NOTES_PACKET_V2_MODE_SERVE_PERCENT` — Serve cohort percentage; default 0 (fail: closed)
 - `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` — Serve cohort SHA256 digests; default empty, never raw identifiers (fail: closed)
