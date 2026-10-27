@@ -32,6 +32,7 @@ from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
+from utils.daily_summary_validation import DailySummaryUnavailable, read_daily_summary_page, require_daily_summary
 from utils.client_device import resolve_client_device_from_request
 from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
 from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
@@ -1246,13 +1247,13 @@ def get_developer_daily_summaries(
     status = 500
     returned_count = 0
     try:
-        summaries = daily_summaries_db.get_daily_summaries(
-            auth.uid,
-            limit=limit,
-            offset=offset,
-            start_date=start_date,
-            end_date=end_date,
-        )
+        try:
+            summaries = read_daily_summary_page(
+                auth.uid, limit=limit, offset=offset, start_date=start_date, end_date=end_date, request=request
+            )
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
         returned_count = len(summaries)
         status = 200
         return {'summaries': summaries}
@@ -1287,9 +1288,14 @@ def get_developer_daily_summary(
         if not summary:
             status = 404
             raise HTTPException(status_code=404, detail='Daily summary not found')
+        try:
+            validated = require_daily_summary(summary, uid=auth.uid, operation='developer_detail')
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
         status = 200
         returned_count = 1
-        return summary
+        return validated
     finally:
         _audit_developer_read(
             request=request,
