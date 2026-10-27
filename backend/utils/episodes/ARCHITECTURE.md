@@ -106,6 +106,16 @@ one capture window's evidence.
      or `dropped`. A discarded conversation's items are dropped.
    - It closes the episode if the close at finalize start never ran.
 
+Live and recovery updates share content-revision receipts in a separate
+`content-v1:{conversation_id}` key of the existing receipt store. Complete
+live prompt input is recorded alongside its state, so attaching WAL to that
+same canonical row feeds only unconsumed content, including gaps behind the
+cursor. Existing unplaced-ID receipts remain consumption proof. Older placed
+cursor-only state has no exact content proof; its first recovery conservatively
+merges the retained snapshot once instead of dropping a potentially new gap.
+Sync donor repointing transfers both receipt namespaces in the membership CAS,
+and that repoint runs inside the three-attempt retry owner at intake/finalize.
+
 Sync attachment retries lost compare-and-swap commits up to three times with
 jitter and fresh membership/boundary reads. Saturated synchronous intake and
 finalize hooks enter a bounded deferred queue on the same executor; a released

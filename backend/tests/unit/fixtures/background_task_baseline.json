@@ -190,6 +190,13 @@
       "why": "reviewed safe (Episodes v1.1): the session-end flush is itself the recovery for an in-process buffer; if it is lost at SIGKILL the conversation's finalization tail applies the same segments past the episode's applied offset"
     },
     {
+      "path": "utils/executors.py",
+      "function": "MonitoredThreadPoolExecutor._drain_deferred",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "PR #23828: bounded admission retry for the existing best-effort episode finalize/intake hooks above, on their same executor. At most 64 deferred submissions; overflow backpressures synchronous producers, capacity callbacks retry admission, and shutdown explicitly cancels pending work. No conversation, audio, job, task or memory authority is delegated: source transcripts and ordinary processing remain persisted. SIGKILL can leave an ordinary WAL row unfolded or derived episode notes/shadow reconciliation stale, matching the existing hooks' documented lifetime; a later finalize/close can repair from retained transcripts. Saturation, context and shutdown behavior are tested in test_episodes_finalize_paths.py and test_executors.py."
+    },
+    {
       "path": "utils/llm/byok_errors.py",
       "function": "handle_llm_error_async",
       "kind": "submit_with_context",

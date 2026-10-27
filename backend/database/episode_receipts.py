@@ -6,10 +6,13 @@ after the episode consumes it: a retry, a later repaired placement and the
 conversation's finalization tail must never feed the same speech into the
 running notes twice (``utils/episodes/service.py``).
 
-Recovered WAL speech uses namespaced content hashes in the same transactional
-receipt store. A placed cursor cannot prove consumption of an earlier gap or
-an in-place text extension. Recovery reads all shards and records a receipt
-only for the bounded text batch that the notes update actually consumed.
+Live and recovered WAL speech share content hashes under the additional
+``content-v1:{conversation_id}`` receipt key in the same store. A live moment
+records content proof only when its rendered input is complete. Recovery can
+then skip live words while retaining an earlier gap or in-place text extension
+that a placed cursor cannot classify. Recovery reads all shards and records a
+receipt only for the bounded text batch the notes update consumed. Repointing
+a donor transfers both receipt namespaces with the membership CAS.
 
 The receipts belong to the conversation, not to one episode: a conversation
 spans episode boundaries (an idle close, the hard cap) and its finalization

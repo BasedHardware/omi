@@ -1632,3 +1632,84 @@ def test_failed_recovery_slice_does_not_consume_the_whole_unplaced_segment():
     service.attach_synced_intake(UID, 'c-wal', row, collaborators=c)
     consumed, _ = _consumed(store, 'c-wal')
     assert 'long-unplaced' in consumed
+
+
+def test_same_live_conversation_recovery_feeds_only_unconsumed_wal_speech():
+    store = StrictFirestore()
+    model = FakeModel({'bullets': ['Live']}, {'bullets': ['Live', 'Recovered']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    live = {'id': 'live-piece', 'text': LONG, 'start': 0, 'end': 30}
+    assert service.record_moment(UID, replace(_moment(), segments=[live]), c) == 'applied'
+    recovered = {'id': 'wal-gap', 'text': 'Send the blue contract tomorrow.', 'start': 1, 'end': 2}
+    row = _wal_row('c1', transcript_segments=[live, recovered])
+    assert service.attach_synced_intake(UID, 'c1', row, collaborators=c) == 'attached'
+    assert len(model.calls) == 2
+    newest = model.calls[-1][-1][1].split('Newest moment:\n')[-1]
+    assert recovered['text'] in newest and LONG not in newest
+    service.attach_synced_intake(UID, 'c1', row, collaborators=c)
+    assert len(model.calls) == 2
+
+
+def test_recovered_donor_receipts_follow_the_survivor_without_replaying_speech():
+    store = StrictFirestore()
+    model = FakeModel()
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'live', 'omi', started_at=T0, collaborators=c)
+    segment = {'id': 'retained-donor-segment', 'text': LONG, 'start': 0, 'end': 20}
+    donor = _wal_row('donor', transcript_segments=[segment])
+    service.attach_synced_intake(UID, 'donor', donor, collaborators=c)
+    assert len(model.calls) == 1
+    survivor = _wal_row('survivor', transcript_segments=[segment], sync_merged_from=['donor'])
+    assert service.attach_synced_intake(UID, 'survivor', survivor, collaborators=c) == 'attached'
+    assert len(model.calls) == 1
+    service.on_conversation_finalized(UID, 'survivor', survivor, trigger='sync_update', collaborators=c)
+    assert len(model.calls) == 1
+
+
+def test_donor_repoint_conflicts_retry_with_fresh_state_and_no_dead_member(monkeypatch):
+    store = StrictFirestore()
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'live', 'omi', started_at=T0, collaborators=c)
+    service.attach_synced_intake(UID, 'donor', _wal_row('donor', text=''), collaborators=c)
+    original = episodes_db.update_episode
+    attempts = []
+
+    def race(uid, episode_id, **kwargs):
+        if kwargs.get('link_conversation_ids') == ['survivor']:
+            attempts.append(kwargs['expected_version'])
+            if len(attempts) < 3:
+                original(
+                    uid,
+                    episode_id,
+                    expected_version=kwargs['expected_version'],
+                    updates={'open_questions': [f'race-{len(attempts)}']},
+                    firestore_client=store,
+                )
+                raise episodes_db.EpisodeConflict('state_version_changed')
+        return original(uid, episode_id, **kwargs)
+
+    monkeypatch.setattr(episodes_db, 'update_episode', race)
+    row = _wal_row('survivor', text='', sync_merged_from=['donor'])
+    assert service.attach_synced_intake(UID, 'survivor', row, collaborators=c) == 'attached'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['conversation_ids'] == ['live', 'survivor']
+    assert len(attempts) == 3 and len(set(attempts)) == 3
+
+
+def test_sync_absorb_finalization_applies_only_the_survivors_novel_speech(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel()
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'live', 'omi', started_at=T0, collaborators=c)
+    carried = {'id': 'carried-segment', 'text': LONG, 'start': 0, 'end': 20}
+    donor = _wal_row('donor', transcript_segments=[carried])
+    service.attach_synced_intake(UID, 'donor', donor, collaborators=c)
+    novel = {'id': 'survivor-gap', 'text': 'Send the signed green agreement.', 'start': 1, 'end': 2}
+    survivor = _wal_row('survivor', transcript_segments=[carried, novel])
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a, **k: survivor if a[1] == 'survivor' else None)
+    service.on_conversation_finalized(
+        UID, 'survivor', donor, trigger='sync_update', absorbed_from='donor', collaborators=c
+    )
+    assert len(model.calls) == 2
+    newest = model.calls[-1][-1][1].split('Newest moment:\n')[-1]
+    assert novel['text'] in newest and LONG not in newest

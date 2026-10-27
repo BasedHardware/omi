@@ -571,36 +571,23 @@ def _record_moment_once(
         # Pre-receipts episodes kept consumption in their document; adopt it into
         # the receipts on this write so the finalization tail still dedupes.
         consumed |= set(((consumption_owner or {}).get('applied_segment_ids') or {}).get(moment.conversation_id) or [])
-    segments = []
-    selected_ids = set()
-    for segment in moment.segments:
-        sid = segment.get('id')
-        if not str(segment.get('text') or '').strip():
-            continue
-        if recovered:
-            # Recovery can fill a gap *behind* the placed cursor, or extend text
-            # in place. A content receipt, committed with notes, is the proof of
-            # consumption; temporal overlap with live speech is not that proof.
-            sid = recovery.receipt_id(segment)
-        if sid in consumed or sid in selected_ids:
-            continue
-        if recovered:
-            selected_ids.add(sid)
-            if _segment_end(segment) < 0 and segment.get('id') and segment.get('_episode_recovery_last', True):
-                # Ordinary unplaced live/finalize replays consume original IDs.
-                # Recovery also needs its content receipt for in-place revisions.
-                selected_ids.add(segment['id'])
-        elif _segment_end(segment) < 0:
-            # Unplaced segments retain individual IDs at persistence. Their sentinel
-            # is not an ordering cursor; a repaired placement retains this receipt.
-            if not sid:
-                continue
-            selected_ids.add(sid)
-        elif _segment_end(segment) <= applied_until:
-            # Placed storage may extend an existing segment's text/end in place.
-            # Preserve that cursor contract rather than losing its later suffix.
-            continue
-        segments.append(segment)
+    consumed_content, _ = (
+        episode_receipts.get_consumed_ids(
+            uid,
+            recovery.receipt_namespace(moment.conversation_id),
+            all_shards=True,
+            firestore_client=c.firestore_client,
+        )
+        if recovered
+        else (set(), False)
+    )
+    segments, selected_ids, selected_content = recovery.select_segments(
+        moment.segments,
+        consumed,
+        consumed_content,
+        applied_until,
+        recovered=recovered,
+    )
     named = _named_segments(uid, segments, c)
     owner_name = _owner_name(uid, c)
     text = incremental.render_moment(
@@ -610,6 +597,8 @@ def _record_moment_once(
         owner_name=owner_name,
         voice_order=(episode or {}).get('speaker_display_order') or [],
     )
+    if recovered and text.truncated:
+        return 'error'  # Never consume recovered words the prompt did not carry.
     if text.words == 0:
         metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_applied')
         return 'skipped_applied'
@@ -710,7 +699,15 @@ def _record_moment_once(
     # receipt document adopts the legacy in-document ids on its first write instead.
     adopt = set() if receipts_exist else consumed
     receipt_ids = selected_ids | adopt
-    segment_receipts = {moment.conversation_id: sorted(receipt_ids)} if receipt_ids else None
+    segment_receipts = {moment.conversation_id: sorted(receipt_ids)} if receipt_ids else {}
+    if (
+        not recovered
+        and not text.truncated
+        and text.words == sum(len(str(s.get('text') or '').split()) for s in segments)
+    ):
+        selected_content = recovery.content_receipts(segments)
+    if selected_content:
+        segment_receipts[recovery.receipt_namespace(moment.conversation_id)] = sorted(selected_content)
     usage = dict(base.get('usage') or {})
     usage['calls'] = int(usage.get('calls') or 0) + 1
     usage['input_tokens'] = int(usage.get('input_tokens') or 0) + result.input_tokens
@@ -1050,6 +1047,7 @@ def _attach_synced(uid: str, conversation_id: str, row: Mapping[str, Any], c: Co
     # append cannot rely on another append arriving to repair a lost attachment.
     for attempt in range(3):
         try:
+            _repoint_sync_donors(uid, conversation_id, row, c)
             owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
             outcome = 'attached' if owner else _attach_synced_once(uid, conversation_id, row, c)
             owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
@@ -1103,7 +1101,6 @@ def attach_synced_intake(
         if row.get('discarded') or row.get('deleted') or row.get('sync_merged_into'):
             # A discarded fragment or a merge donor never joins (the finalize path's rule).
             return 'skipped_discarded'
-        _repoint_sync_donors(uid, conversation_id, row, c)
         owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
         if owner is not None and not policy.is_live(owner):
             _attach_synced(uid, conversation_id, row, c)
@@ -1149,8 +1146,14 @@ def _on_finalized(
     if absorbed_from and episode:
         _repoint_absorbed(uid, episode, absorbed_from, conversation_id, c)
         episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client)
-    if trigger == SYNC_UPDATE and not absorbed_from:
-        outcome = _attach_synced(uid, conversation_id, row, c)
+    if trigger == SYNC_UPDATE:
+        # Absorb callbacks carry the donor row; notes must read the survivor.
+        sync_row = (
+            (conversations_db.get_conversation(uid, conversation_id, firestore_client=c.firestore_client) or {})
+            if absorbed_from
+            else row
+        )
+        outcome = _attach_synced(uid, conversation_id, sync_row, c)
         if episode is None:
             return outcome
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
@@ -1223,6 +1226,23 @@ def _repoint_absorbed(uid: str, episode: Mapping[str, Any], donor_id: str, survi
         {**i, 'conversation_id': survivor_id} if i.get('conversation_id') == donor_id else dict(i)
         for i in provisional_items(episode)
     ]
+    donor_ids, _ = episode_receipts.get_consumed_ids(
+        uid,
+        donor_id,
+        all_shards=True,
+        firestore_client=c.firestore_client,
+    )
+    donor_content, _ = episode_receipts.get_consumed_ids(
+        uid,
+        recovery.receipt_namespace(donor_id),
+        all_shards=True,
+        firestore_client=c.firestore_client,
+    )
+    receipt_transfer = {}
+    if donor_ids:
+        receipt_transfer[survivor_id] = sorted(donor_ids)
+    if donor_content:
+        receipt_transfer[recovery.receipt_namespace(survivor_id)] = sorted(donor_content)
     episodes_db.update_episode(
         uid,
         str(episode['id']),
@@ -1242,6 +1262,7 @@ def _repoint_absorbed(uid: str, episode: Mapping[str, Any], donor_id: str, survi
                 else episode.get('primary_conversation_id')
             ),
         },
+        segment_receipts=receipt_transfer,
         link_conversation_ids=[survivor_id],
         firestore_client=c.firestore_client,
     )

@@ -7035,6 +7035,14 @@ append. The 64-entry process-local queue backpressures synchronous producers
 when full and is cancelled at shutdown; existing episode/lifecycle flags remain
 unchanged.
 
+Live notes write complete-input content receipts into the same recovery receipt
+namespace. WAL appended to that canonical conversation therefore skips proven
+live speech and keeps novel gaps; donor merges transfer receipts with episode
+membership in the same CAS. Legacy placed cursor-only state has no exact content
+proof, so its first recovery conservatively merges the retained snapshot once.
+The background-task inventory documents the bounded queue's shutdown behavior;
+this remains a best-effort episode overlay over persisted conversations.
+
 Client projection binding keeps transcript hash encoding v5. Because v5 does
 not bind `speaker_id_scope`, the binding helper rejects a stored transcript
 whose unnamed voices span multiple scopes (including legacy unscoped voices).

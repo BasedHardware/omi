@@ -12,6 +12,51 @@ from utils.episodes import policy
 from utils.episodes.moment import MomentInput
 
 
+def receipt_namespace(conversation_id: str) -> str:
+    """Separate content revisions from the legacy unplaced-ID receipt window."""
+    return f'content-v1:{conversation_id}'
+
+
+def content_receipts(segments: Sequence[Mapping[str, Any]]) -> set[str]:
+    return {receipt_id(segment) for batch in segment_batches(segments) for segment in batch}
+
+
+def select_segments(
+    segments: Sequence[Mapping[str, Any]],
+    consumed: set[str],
+    consumed_content: set[str],
+    applied_until: float,
+    *,
+    recovered: bool,
+) -> tuple[list[Mapping[str, Any]], set[str], set[str]]:
+    selected, ids, content = [], set(), set()
+    for segment in segments:
+        sid = segment.get('id')
+        if not str(segment.get('text') or '').strip():
+            continue
+        if recovered:
+            key = receipt_id(segment)
+            if key in consumed_content or key in content:
+                continue
+            # Legacy unplaced IDs are already durable proof of consumption.
+            if segment_end(segment) < 0 and sid and sid in consumed:
+                continue
+            content.add(key)
+            if segment_end(segment) < 0 and sid and segment.get('_episode_recovery_last', True):
+                ids.add(sid)
+        else:
+            if sid in consumed or sid in ids:
+                continue
+            if segment_end(segment) < 0:
+                if not sid:
+                    continue
+                ids.add(sid)
+            elif segment_end(segment) <= applied_until:
+                continue
+        selected.append(segment)
+    return selected, ids, content
+
+
 def segment_end(segment: Mapping[str, Any]) -> float:
     try:
         return float(segment.get('end') or 0.0)
