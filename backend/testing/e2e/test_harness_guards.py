@@ -151,7 +151,7 @@ def test_process_exit_is_prompt_after_hermetic_shutdown(tmp_path):
     """
     child = tmp_path / "child_shutdown_probe.py"
     child.write_text(
-        "import sys, time\n"
+        "import faulthandler, sys, time\n"
         f"sys.path.insert(0, {str(E2E_DIR)!r})\n"
         "import conftest  # hermetic env + socket guard, no pytest involved\n"
         "from fakes.redis import setup_fake_redis, patch_redis_client\n"
@@ -164,6 +164,10 @@ def test_process_exit_is_prompt_after_hermetic_shutdown(tmp_path):
         "from conftest import _teardown_hermetic_process_state\n"
         f"elapsed = _teardown_hermetic_process_state()  # asserts its own {HERMETIC_SHUTDOWN_BUDGET_SECONDS}s budget\n"
         "print(f'TEARDOWN {time.time():.3f} {elapsed:.3f}', flush=True)\n"
+        # The enforced bound lives here, on the child's monotonic clock: a
+        # slower-than-8s interpreter exit dumps all thread stacks and aborts
+        # the child, immune to runner wall-clock jumps between the processes.
+        "faulthandler.dump_traceback_later(8.0, exit=True)\n"
     )
     proc = subprocess.Popen(
         [sys.executable, "-I", str(child)],
@@ -182,14 +186,13 @@ def test_process_exit_is_prompt_after_hermetic_shutdown(tmp_path):
         pytest.fail("child did not exit within 60s of the hermetic shutdown probe")
     teardown_lines = [line.strip() for line in stdout.splitlines() if line.startswith("TEARDOWN")]
     assert teardown_lines, f"child never reported teardown completion:\n{stderr[-2000:]}"
-    assert proc.returncode == 0, f"child failed after hermetic shutdown:\n{stderr[-2000:]}"
+    # returncode 0 proves the child exited before its 8s faulthandler abort
+    # (the abort dumps all thread stacks into stderr for the failure message).
+    assert proc.returncode == 0, (
+        "child failed after hermetic shutdown (faulthandler abort means interpreter "
+        f"exit exceeded 8s):\n{stderr[-2000:]}"
+    )
+    # Informational only (wall clock can jump between processes); the bound
+    # itself is enforced by the child's faulthandler timer above.
     teardown_epoch = float(teardown_lines[-1].split()[1])
     exit_seconds = time.time() - teardown_epoch
-    # Healthy interpreter exit for this import set measures well under 2s;
-    # 8s leaves CI-variance headroom while still catching a single 5s atexit
-    # join, sentinel hang, or non-daemon thread park.
-    assert exit_seconds < 8.0, (
-        f"process took {exit_seconds:.2f}s to exit after hermetic teardown "
-        f"({teardown_lines[-1]}); a slow atexit hook or lingering thread is eating "
-        "the E2E_PYTEST_TIMEOUT wrapper budget"
-    )
