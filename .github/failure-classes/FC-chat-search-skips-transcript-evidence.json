@@ -2,17 +2,21 @@
   "schema_version": 1,
   "id": "FC-chat-search-skips-transcript-evidence",
   "violated_contract": "Chat must not treat a title/summary-only miss as proof that a specific fact is absent from recorded transcript text.",
-  "canonical_prevention": "Search indexed transcript chunks alongside titles and summaries, reconstruct bounded excerpts from authorized hydrated conversations, and label misses with the actual transcript-search coverage. Keep behavioral tests for transcript-only hits, inaccessible rows, and index-unavailable misses.",
+  "canonical_prevention": "Explicit transcript recall reads authoritative owner-scoped saved transcripts in bounded signed-cursor pages, independent of optional indexes/backfills. Return source-linked verbatim evidence, preserve pagination before unreturned matches, and label lexical misses, unreadable records and incomplete coverage honestly. User pushback is not new factual evidence. Semantic search may also hydrate legacy indexed chunk evidence.",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_chat_scope.py",
     "backend/tests/unit/test_mcp_transcript_search.py",
-    "backend/tests/unit/test_tools_router.py"
+    "backend/tests/unit/test_tools_router.py",
+    "backend/tests/unit/test_direct_transcript_search.py",
+    "backend/testing/e2e/test_retrieval_search.py"
   ],
-  "evidence_prs": [],
+  "evidence_prs": [20641, 20831],
   "scope_hints": [
     "backend/utils/retrieval/tools/conversation_tools.py",
     "backend/utils/retrieval/tool_services/conversations.py",
-    "backend/utils/conversations/mcp_transcript_search.py"
+    "backend/utils/conversations/mcp_transcript_search.py",
+    "backend/database/transcript_search.py",
+    "backend/utils/retrieval/tool_services/transcript_search.py"
   ],
   "status": "open"
 }

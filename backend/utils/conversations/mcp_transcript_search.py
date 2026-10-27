@@ -219,6 +219,7 @@ def build_transcript_match_snippets(
     context_neighbors: int = 1,
     max_snippets: int = 3,
     max_chars: int = _MAX_SNIPPET_CHARS,
+    center_match: bool = False,
 ) -> List[Dict[str, Any]]:
     """Return grep-style transcript snippets for segments matching ``query``.
 
@@ -276,7 +277,28 @@ def build_transcript_match_snippets(
         snippet_text = "\n".join(lines)
         max_chars = max(1, min(max_chars, _MAX_SNIPPET_CHARS))
         if len(snippet_text) > max_chars:
-            if max_chars > 3:
+            if center_match and max_chars > 6:
+                normalized = _normalize_text(snippet_text)
+                locations = [normalized.find(term) for term in ([query_norm] + list(terms)) if term]
+                at = min((pos for pos in locations if pos >= 0), default=0)
+                # Map the normalized match back to a raw-text window. Casefold
+                # and NFKC can change length; never return normalized speech as
+                # if it were the user's verbatim transcript.
+                lo, hi = 0, len(snippet_text)
+                while lo < hi:
+                    mid = (lo + hi) // 2
+                    if len(_normalize_text(snippet_text[:mid])) < at:
+                        lo = mid + 1
+                    else:
+                        hi = mid
+                start_char = max(0, lo - (max_chars - 6) // 3)
+                excerpt = snippet_text[start_char : start_char + max_chars - 6]
+                snippet_text = (
+                    ('...' if start_char else '')
+                    + excerpt
+                    + ('...' if start_char + len(excerpt) < len(snippet_text) else '')
+                )
+            elif max_chars > 3:
                 snippet_text = snippet_text[: max_chars - 3].rstrip() + "..."
             else:
                 snippet_text = snippet_text[:max_chars]
