@@ -715,7 +715,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get remembering => 'Emlékezés';
 
   @override
-  String get unlimitedPlan => 'Korlátlan csomag';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Csomag kezelése';
@@ -737,7 +737,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get upgrade => 'Frissítés';
 
   @override
-  String get upgradeToUnlimited => 'Frissítés korlátlanra';
+  String get upgradeToUnlimited => 'Frissítés Omi Pro-ra';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3174,7 +3174,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Frissítés Pro-ra';
+  String get upgradeToPro => 'Frissítés Omi Pro-ra';
 
   @override
   String get getOmiDevice => 'Omi eszköz beszerzése';
@@ -4301,7 +4301,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'Szerezze meg az Omi Unlimited-et ingyen, ha hozzájárul adataival az AI modellek képzéséhez.';
+      'Szerezze meg az Omi Pro-t ingyen, ha hozzájárul adataival az AI modellek képzéséhez.';
 
   @override
   String get trainingDataBullets =>
@@ -9702,7 +9702,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Váltás az ingyenes verzióra';
 
   @override
-  String get getFreeUnlimitedAccess => 'Szerezz ingyenes korlátlan hozzáférést';
+  String get getFreeUnlimitedAccess => 'Szerezd meg ingyen az Omi Pro-t';
 
   @override
   String get shareDataForTraining => 'Adatmegosztás tanításhoz';
@@ -12907,7 +12907,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Küldj egy hangüzenetet, és Omi válaszol rá.';
 
   @override
-  String get chatAppsPartOfPro => 'A csevegőalkalmazások a Pro részei';
+  String get chatAppsPartOfPro => 'A csevegőalkalmazások a Omi Pro részei';
 
   @override
   String get chatAppsMessagesApp => 'Üzenetek';
@@ -13540,7 +13540,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncDetailsCopy => 'Részletek másolása az ügyfélszolgálatnak';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Elérhető az Operator és Architect csomagban';
+  String get chatAppsChannelPlanRequired => 'Elérhető az Omi Pro csomagban';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14056,7 +14056,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'A telefon töltése közben fut.';
 
   @override
-  String get onDeviceUpgradeBody => 'Válts Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
+  String get onDeviceUpgradeBody => 'Válts Omi Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
 
   @override
   String get onDeviceAtCapFooter => 'Egyik esetben sem vész el semmi. Ezt itt módosíthatod: Beállítások › Átírás.';
@@ -14241,7 +14241,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Újra az Omi Clouddal';
 
   @override
-  String get onDeviceRedoHint => 'Válts Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
+  String get onDeviceRedoHint => 'Válts Omi Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
 
   @override
   String get onDeviceKeepEverything => 'Minden maradjon ezen a telefonon';

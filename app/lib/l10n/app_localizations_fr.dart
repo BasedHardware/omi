@@ -717,7 +717,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get remembering => 'Mémorisation';
 
   @override
-  String get unlimitedPlan => 'Forfait illimité';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Gérer le forfait';
@@ -739,7 +739,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get upgrade => 'Mettre à niveau';
 
   @override
-  String get upgradeToUnlimited => 'Passer à illimité';
+  String get upgradeToUnlimited => 'Passer à Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3181,7 +3181,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Passer à Pro';
+  String get upgradeToPro => 'Passer à Omi Pro';
 
   @override
   String get getOmiDevice => 'Obtenir un appareil Omi';
@@ -4314,7 +4314,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'Obtenez Omi Illimité gratuitement en contribuant vos données pour entraîner des modèles d\'IA.';
+      'Obtenez Omi Pro gratuitement en contribuant vos données pour entraîner des modèles d\'IA.';
 
   @override
   String get trainingDataBullets =>
@@ -9746,7 +9746,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Passer à la version gratuite';
 
   @override
-  String get getFreeUnlimitedAccess => 'Obtenez un accès illimité gratuit';
+  String get getFreeUnlimitedAccess => 'Obtenez Omi Pro gratuitement';
 
   @override
   String get shareDataForTraining => 'Partager des données pour l\'entraînement';
@@ -12958,7 +12958,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Envoyez une note vocale et Omi y répondra.';
 
   @override
-  String get chatAppsPartOfPro => 'Les applis de chat font partie de Pro';
+  String get chatAppsPartOfPro => 'Les applis de chat font partie de Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Messages';
@@ -13593,7 +13593,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get syncDetailsCopy => 'Copier les détails pour l\'assistance';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Disponible avec Operator et Architect';
+  String get chatAppsChannelPlanRequired => 'Disponible avec Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14109,7 +14109,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Fonctionne pendant que le téléphone charge.';
 
   @override
-  String get onDeviceUpgradeBody => 'Passez à Pro pour séparer les intervenants et obtenir une meilleure précision';
+  String get onDeviceUpgradeBody => 'Passez à Omi Pro pour séparer les intervenants et obtenir une meilleure précision';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14297,7 +14297,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Refaire avec Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Passez à Pro pour séparer les intervenants et obtenir une meilleure précision';
+  String get onDeviceRedoHint => 'Passez à Omi Pro pour séparer les intervenants et obtenir une meilleure précision';
 
   @override
   String get onDeviceKeepEverything => 'Tout garder sur ce téléphone';

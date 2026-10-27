@@ -917,7 +917,7 @@
     "@remembering": {
         "description": "Remembering stat title"
     },
-    "unlimitedPlan": "طرح نامحدود",
+    "unlimitedPlan": "Omi Pro",
     "@unlimitedPlan": {
         "description": "Unlimited plan name"
     },
@@ -957,7 +957,7 @@
     "@upgrade": {
         "description": "Upgrade button"
     },
-    "upgradeToUnlimited": "ارتقا به نامحدود",
+    "upgradeToUnlimited": "ارتقا به Omi Pro",
     "@upgradeToUnlimited": {
         "description": "Message shown on locked memory items"
     },
@@ -3652,7 +3652,7 @@
     "@pro": {
         "description": "Badge label for pro/unlimited users"
     },
-    "upgradeToPro": "ارتقا به Pro",
+    "upgradeToPro": "ارتقا به Omi Pro",
     "@upgradeToPro": {
         "description": "Subscription banner button text"
     },
@@ -4941,7 +4941,7 @@
     "@trainingDataProgram": {
         "description": "Label for training data program"
     },
-    "getOmiUnlimitedFree": "Omi Unlimited را برای رایگان دریافت کنید با مشارکت داده‌های خود برای آموزش مدل‌های هوش مصنوعی.",
+    "getOmiUnlimitedFree": "Omi Pro را برای رایگان دریافت کنید با مشارکت داده‌های خود برای آموزش مدل‌های هوش مصنوعی.",
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
@@ -10536,7 +10536,7 @@
     "freemiumLimitsIntro": "Omi رایگان است، اما نسخه رایگان محدودیت‌هایی دارد که بر تجربه شما اثر می‌گذارد:",
     "downgradeLimitDelayNotRealTime": "۵ تا ۷ ثانیه تأخیر (بلادرنگ نیست)",
     "downgradeToFreemiumAction": "بازگشت به نسخه رایگان",
-    "getFreeUnlimitedAccess": "دسترسی نامحدود رایگان بگیرید",
+    "getFreeUnlimitedAccess": "Omi Pro را رایگان بگیرید",
     "shareDataForTraining": "اشتراک‌گذاری داده برای آموزش",
     "yourRequestUnderReview": "درخواست شما در حال بررسی است",
     "pinAsBaseline": "سنجاق به‌عنوان مبنا",
@@ -11370,7 +11370,7 @@
     "chatAppsShowInAppOff": "خاموش: فقط در {app} آن‌ها را می‌بینید.",
     "chatAppsProPerkText": "از Telegram و iMessage به Omi پیام بدهید",
     "chatAppsVoiceNotesSubtitle": "یک پیام صوتی بفرستید تا Omi پاسخ دهد.",
-    "chatAppsPartOfPro": "برنامه‌های چت بخشی از Pro هستند",
+    "chatAppsPartOfPro": "برنامه‌های چت بخشی از Omi Pro هستند",
     "chatAppsMessagesApp": "پیام‌ها",
     "chatAppsTelegramOtherDevice": "Telegram روی دستگاه دیگری است؟",
     "chatAppsHeroMessage": "درباره روزتان بپرسید، خاطرات را ذخیره کنید و کارها را از Telegram یا iMessage مدیریت کنید. چت‌های شما در همان برنامه‌ای که استفاده می‌کنید می‌مانند و Omi هر چه را که گفته‌اید در همه‌جا به یاد دارد.",
@@ -11555,7 +11555,7 @@
     "syncDetailsAudioFiles": "فایل‌های صوتی",
     "syncDetailsServerJobs": "کارهای سرور (انجام‌شده / کل)",
     "syncDetailsCopy": "کپی جزئیات برای پشتیبانی",
-    "chatAppsChannelPlanRequired": "در Operator و Architect در دسترس است",
+    "chatAppsChannelPlanRequired": "در Omi Pro در دسترس است",
     "chatAppsAtCapacity": "ظرفیت {app} تکمیل است",
     "chatAppsJoinWaitlist": "پیوستن به فهرست انتظار",
     "chatAppsOnWaitlist": "شما در فهرست انتظار هستید",
@@ -11706,7 +11706,7 @@
     "onDeviceTranscribeOnPhone": "رونویسی روی همین گوشی",
     "onDeviceIncluded": "شامل",
     "onDeviceOptionChargingBody": "هنگام شارژ شدن گوشی اجرا می‌شود.",
-    "onDeviceUpgradeBody": "برای تفکیک گویندگان و دقت بیشتر به Pro ارتقا دهید",
+    "onDeviceUpgradeBody": "برای تفکیک گویندگان و دقت بیشتر به Omi Pro ارتقا دهید",
     "onDeviceAtCapFooter": "در هر صورت چیزی از دست نمی‌رود. می‌توانید این را در تنظیمات › رونویسی تغییر دهید.",
     "onDeviceStepOf": "مرحلهٔ {step} از {total}",
     "onDeviceSetupBody": "Omi یک‌بار مدل گفتار را دانلود می‌کند. بعد از آن ضبط‌های شما همین‌جا به متن تبدیل می‌شوند، بدون اینکه در مصرف شما حساب شوند.",
@@ -11759,7 +11759,7 @@
     "onDeviceWhyCloudIphone": "این iPhone به‌تنهایی نمی‌تواند خلاصه بنویسد (برای این کار iPhone 15 Pro یا جدیدتر لازم است). رونوشت روی گوشی شما ساخته شد و فقط متن آن برای خلاصه‌سازی به Omi ارسال شد. در مصرف شما حساب نمی‌شود.",
     "onDeviceWhyCloudPhone": "این گوشی به‌تنهایی نمی‌تواند خلاصه بنویسد. رونوشت روی گوشی شما ساخته شد و فقط متن آن برای خلاصه‌سازی به Omi ارسال شد. در مصرف شما حساب نمی‌شود.",
     "onDeviceRedoWithCloud": "انجام دوباره با Omi Cloud",
-    "onDeviceRedoHint": "برای تفکیک گویندگان و دقت بیشتر به Pro ارتقا دهید",
+    "onDeviceRedoHint": "برای تفکیک گویندگان و دقت بیشتر به Omi Pro ارتقا دهید",
     "onDeviceKeepEverything": "نگه‌داشتن همه چیز روی همین گوشی",
     "onDeviceKeepEverythingSubtitle": "فقط رونوشت، بدون خلاصه",
     "onDeviceAfterLiveHours": "وقتی به سقف خود می‌رسید",

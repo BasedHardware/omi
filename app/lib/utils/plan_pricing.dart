@@ -80,8 +80,8 @@ int? _annualMonthsFree(List<Map<String, dynamic>> plans) {
 /// that hid Continue for every annual subscriber and blocked Plus → Unlimited.
 /// Hide only when the user is already on the selected tier's annual price.
 /// Desktop-entitled plans are manage-only on this sheet: same-tier
-/// monthly→annual is still a management action; switching onto Plus /
-/// Unlimited / Neo is not.
+/// monthly→annual is still a management action, and switching onto Omi Pro
+/// (`unlimited_v2`, which also grants desktop) is allowed; any other tier is not.
 bool shouldShowPlanContinueButton({
   required bool isOnAnnualPlan,
   required bool hasScheduledUpgrade,
@@ -93,7 +93,11 @@ bool shouldShowPlanContinueButton({
   bool selectedPriceIsCurrent = false,
 }) {
   if (!plansLoaded || isCancelled || hasScheduledUpgrade || selectedPriceIsCurrent) return false;
-  if (currentGrantsDesktop && selectedTierId != null && currentTierId != null && selectedTierId != currentTierId) {
+  if (currentGrantsDesktop &&
+      selectedTierId != null &&
+      currentTierId != null &&
+      selectedTierId != currentTierId &&
+      selectedTierId != 'unlimited_v2') {
     return false;
   }
   if (isOnAnnualPlan && (selectedTierId == null || selectedTierId == currentTierId)) return false;
