@@ -3,7 +3,13 @@
 import math
 import os
 
-from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, normalized_stt_language
+from config.stt_provider_policy import (
+    MODULATE_SUPPORTED_LANGUAGES,
+    PARAKEET_MODEL_BY_SURFACE,
+    PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL,
+    STTServingSurface,
+    normalized_stt_language,
+)
 
 PROVIDER = 'soniox'
 MAX_AUDIO_SECONDS = 60.0
@@ -13,21 +19,17 @@ SILENCE_THRESHOLD_SECONDS = 0.032
 ESTIMATED_USD_PER_AUDIO_HOUR = 0.10
 
 
-def language_inheritance_enabled():
-    """Only an explicit false restores per-piece language detection."""
-    return os.getenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'true').strip().lower() != 'false'
-
-
 def inherited_language(conversation_language, user_language):
     """Prefer the bound conversation, then the user's configured language.
 
     Auto/multi/unknown and unrecognized codes are not language declarations.
     This applies to every piece, including short ambient-dominated WAL clips.
     """
+    parakeet = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PRERECORDED]]
     for value in (conversation_language, user_language):
         if isinstance(value, str):
             code = normalized_stt_language(value.strip())
-            if code not in {'multi', 'und', 'unknown', 'auto'} and code in MODULATE_SUPPORTED_LANGUAGES:
+            if code not in {'multi', 'und', 'unknown', 'auto'} and code in MODULATE_SUPPORTED_LANGUAGES | parakeet:
                 return code
     return None
 

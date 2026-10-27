@@ -30,6 +30,7 @@ def excluded_count() -> float:
 @pytest.fixture(autouse=True)
 def defaults(monkeypatch):
     monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', raising=False)
     monkeypatch.delenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', raising=False)
 
 
@@ -193,7 +194,8 @@ def test_known_unsupported_requires_a_recognized_non_parakeet_code(language, kno
 @pytest.mark.asyncio
 @pytest.mark.parametrize('seconds', [4, 9.9, 10, 30])
 @pytest.mark.parametrize('ambient_language', ['vi', 'ja', 'ko'])
-async def test_bound_english_piece_never_redetects_ambient_language(monkeypatch, seconds, ambient_language):
+@pytest.mark.parametrize('single', [False, True])
+async def test_bound_english_piece_never_redetects_ambient_language(monkeypatch, seconds, ambient_language, single):
     from diarizer.batch_pipeline_models import stt_language
 
     detect = Mock(return_value=batch_language.LanguageDecision(ambient_language, 0.99, 'audio_lid', seconds))
@@ -206,6 +208,7 @@ async def test_bound_english_piece_never_redetects_ambient_language(monkeypatch,
         conversation_language='en-US',
         real_language=True,
         seconds=seconds,
+        single=single,
     )
     assert admitted(response, staged)
     assert probe.call_args.args[0] == 'en'
@@ -232,7 +235,9 @@ async def test_unknown_conversation_uses_user_language_without_single_mode(monke
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('language', [None, '', 'multi', 'und', 'unknown', 'auto', 'xx'])
-async def test_both_unknown_still_detect_per_piece(monkeypatch, language):
+@pytest.mark.parametrize('single', [False, True])
+@pytest.mark.parametrize('mode', ['on', 'draining', 'dark'])
+async def test_both_unknown_still_detect_per_piece(monkeypatch, language, single, mode):
     detect = Mock(return_value=batch_language.LanguageDecision('en', 0.99, 'audio_lid', 4))
     monkeypatch.setattr(batch_language, 'detect', detect)
     monkeypatch.setattr(batch_language, '_self_gate', lambda *args: (False, None))
@@ -242,6 +247,8 @@ async def test_both_unknown_still_detect_per_piece(monkeypatch, language):
         conversation_language=language,
         real_language=True,
         seconds=4,
+        single=single,
+        mode=mode,
     )
     assert admitted(response, staged)
     assert probe.staged_context['stt_language'] == 'en'
@@ -269,9 +276,27 @@ async def test_inheritance_kill_switch_restores_per_piece_detection(monkeypatch)
 
 @pytest.mark.parametrize('raw', [None, '', 'true', 'TRUE', 'garbage'])
 def test_inheritance_on_by_default(monkeypatch, raw):
-    from config.batch_language_recovery import language_inheritance_enabled
+    from config.batch_pipeline import language_inheritance_enabled
 
     monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', raising=False)
     if raw is not None:
         monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', raw)
     assert language_inheritance_enabled()
+
+
+@pytest.mark.asyncio
+async def test_parakeet_only_language_is_inherited(monkeypatch):
+    from diarizer.batch_pipeline_models import stt_language
+
+    response, staged, probe = await upload(
+        monkeypatch,
+        user_language='en',
+        conversation_language='mt',
+        real_language=True,
+        seconds=4,
+    )
+    assert admitted(response, staged)
+    assert probe.call_args.args[0] == 'mt'
+    assert probe.staged_context['stt_language'] == 'mt'
+    assert probe.staged_context['stt_language_evidence'] == 'declared'
+    assert stt_language(probe.staged_context, duration_seconds=4) == 'mt'

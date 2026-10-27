@@ -881,10 +881,14 @@ async def test_legacy_live_persist_failure_is_retained_and_not_fatal(monkeypatch
 
 
 @pytest.mark.parametrize('reconnect_seconds,first_word_seconds', [(0, 485), (480, 5)])
-async def test_delayed_first_live_words_keep_capture_start(monkeypatch, reconnect_seconds, first_word_seconds):
+@pytest.mark.parametrize('stored_start', ['capture', None, 'unparseable'])
+async def test_delayed_first_live_words_keep_capture_start(
+    monkeypatch, reconnect_seconds, first_word_seconds, stored_start
+):
     store = StrictFirestore()
     start = datetime.fromtimestamp(T0, tz=timezone.utc)
-    row = _seed_row(store, 'conv-delayed', started_at=start)
+    saved = start if stored_start == 'capture' else stored_start
+    row = _seed_row(store, 'conv-delayed', started_at=saved)
     processor, _ = _processor(monkeypatch, store, current='conv-delayed')
     processor.host.state.capture_timeline_v2 = False
     processor.host.state.first_audio_byte_timestamp = T0 + reconnect_seconds
@@ -905,10 +909,11 @@ async def test_delayed_first_live_words_keep_capture_start(monkeypatch, reconnec
     processor.host.speakers.drain = _async_noop
     processor.flush_speaker_assignments = _async_noop
     await asyncio.wait_for(processor.process_loop(), timeout=3)
-    assert row['started_at'] == start
+    expected_origin = T0 if stored_start == 'capture' else T0 + reconnect_seconds
+    assert row['started_at'].timestamp() == expected_origin
     segments = conversations_db._decode_transcript_segments_strict(
         UID, row.get('transcript_segments', []), bool(row.get('transcript_segments_compressed'))
     )
     assert len(segments) == 1
-    assert segments[0]['start'] == pytest.approx(485)
+    assert segments[0]['start'] == pytest.approx(T0 + 485 - expected_origin)
     assert row['started_at'].timestamp() + segments[0]['start'] == pytest.approx(T0 + 485)

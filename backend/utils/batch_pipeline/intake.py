@@ -8,8 +8,8 @@ import time
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from config.batch_pipeline import known_unsupported_batch_language, priority_for
-from config.batch_language_recovery import inherited_language, language_inheritance_enabled
+from config.batch_pipeline import known_unsupported_batch_language, language_inheritance_enabled, priority_for
+from config.batch_language_recovery import inherited_language
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
 from config.prerecorded_language import language_guard_enabled, language_class
@@ -421,16 +421,22 @@ async def accept_upload(
                     lane=lane,
                 )
         language = normalized_stt_language(target.get('language') or user.get('language'))
-        # Match legacy sync's effective input: a primary app language is not a
-        # promise that the audio is monolingual. Do this only before new custody;
-        # previous batch receipts above always stay owned by their original lane.
+        # Switch-off retains legacy sync's input; new custody inherits known
+        # context. Previous batch receipts above always keep their original lane.
         prefs = user.get('transcription_preferences') or {}
         input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
-        inherited = (
-            inherited_language(target.get('language'), user.get('language')) if language_inheritance_enabled() else None
-        )
+        inherit = language_inheritance_enabled()
+        inherited = inherited_language(target.get('language'), user.get('language')) if inherit else None
         if inherited:
             language = inherited
+            if language_class(inherited) == 'supported':
+                # Bound supported context outranks a later user single-mode
+                # preference, including in the legacy eligibility guard.
+                input_language = inherited
+        elif inherit:
+            # Unknown declarations are classification inputs, not capability
+            # proof, even if single-language mode was selected.
+            language = input_language = 'multi'
         if mode is LegacySyncMode.ON and language_guard_enabled() and language_class(input_language) == 'unsupported':
             # Main's prerecorded language guard; with legacy draining or dark the C8
             # provider-STT route below serves unsupported speech instead of legacy.

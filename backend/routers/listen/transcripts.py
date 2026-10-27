@@ -1027,9 +1027,9 @@ class TranscriptProcessor:
                     # Project the new words against the retained origin below.
                     first_word = self.host.state.first_audio_byte_timestamp + raw_segments[0]['start']
                     capture_start = persisted_started_seconds(data.get('started_at'))
-                    started_at = datetime.fromtimestamp(
-                        min(capture_start, first_word) if capture_start is not None else first_word, tz=timezone.utc
-                    )
+                    if capture_start is None:
+                        capture_start = self.host.state.first_audio_byte_timestamp
+                    started_at = datetime.fromtimestamp(min(capture_start, first_word), tz=timezone.utc)
                     data['started_at'] = started_at
                 started_ts = (
                     persisted_started_seconds(data.get('started_at')) or self.host.state.first_audio_byte_timestamp
