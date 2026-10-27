@@ -45,10 +45,15 @@ done
 # one pytest process across files is blocked by dense sys.modules
 # contamination (see the BACKEND_PYTEST_PARALLEL_SESSION measurement in
 # test.sh). CI therefore fans the SAME selection out to N parallel jobs;
-# each shard executes an interleaved slice of the deterministic, sorted
-# file list, so slow files spread across shards and the union of the
-# shards is exactly the full selection (line i runs in shard
-# ((i-1) % total)+1, and every file keeps its own process).
+# each shard computes the same deterministic partition of the sorted file
+# list, so the union of the shards is exactly the full selection and every
+# file keeps its own process. Files are dealt heaviest-first to the least
+# loaded shard using measured per-file weights (backend_unit_shard_weights.tsv;
+# unlisted files weigh DEFAULT_WEIGHT). A round-robin slice let one inserted
+# file shift every later file and left shard walls 433-754s on PR #23767; in
+# leave-one-run-out checks over three full-suite runs the weighted deal cut
+# the worst projected shard from 725-757s to 653-708s. Without weights every
+# file ties and the deal is round-robin.
 shard_total=0
 shard_index=0
 if [ -n "$shard_spec" ]; then
@@ -87,11 +92,34 @@ shard_note=""
 if [ "$shard_total" -ge 2 ]; then
   full_count="$(wc -l < "$selected_tests" | tr -d ' ')"
   sliced="$(mktemp "${TMPDIR:-/tmp}/omi-backend-unit-tests-shard.XXXXXX")"
-  # One-based mapping so shard labels match the files they carry: line i
-  # runs in shard ((i - 1) % total) + 1, i.e. shard 1 takes files 1, 5, 9…
-  # (`index` is an awk builtin; the shard variable must be named else.)
-  awk -v total="$shard_total" -v shard="$shard_index" '(NR - 1) % total == shard - 1' \
-    "$selected_tests" >"$sliced"
+  # One-based shard labels; ties break on fewest files, then lowest shard.
+  "$PYTHON_BIN" - "$selected_tests" "$shard_total" "$shard_index" "$SCRIPT_DIR/backend_unit_shard_weights.tsv" \
+    >"$sliced" <<'PY'
+import os
+import sys
+
+DEFAULT_WEIGHT = 1.1  # mean measured seconds of the files below the table's 2s floor
+selection, total, shard, table = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+with open(selection, encoding='utf-8') as handle:
+    paths = [line.rstrip('\n') for line in handle if line.strip()]
+measured = {}
+if os.path.isfile(table):
+    with open(table, encoding='utf-8') as handle:
+        for line in handle:
+            if line.strip() and not line.startswith('#'):
+                path, seconds = line.rstrip('\n').split('\t')
+                measured[path] = float(seconds)
+weight = {path: measured.get(path, DEFAULT_WEIGHT) for path in paths}
+load, count, assigned = [0.0] * total, [0] * total, {}
+for path in sorted(paths, key=lambda path: (-weight[path], path)):
+    target = min(range(total), key=lambda index: (load[index], count[index], index))
+    load[target] += weight[path]
+    count[target] += 1
+    assigned[path] = target + 1
+for path in paths:
+    if assigned[path] == shard:
+        print(path)
+PY
   mv "$sliced" "$selected_tests"
   shard_note=" (shard ${shard_index}/${shard_total}: $(wc -l < "$selected_tests" | tr -d ' ') of ${full_count} files)"
 fi
