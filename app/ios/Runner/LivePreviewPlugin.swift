@@ -219,13 +219,17 @@ final class AnalyzerPreviewSession: LivePreviewSession {
                 for try await result in transcriber.results {
                     guard let session, !session.stopped else { return }
                     let text = String(result.text.characters)
+                    // Analyzer times run from the session's first sample; the wall clock of
+                    // that sample turns them into the audio times the coverage check uses.
+                    let origin = session.origin ?? 0
                     let spans = result.text.runs.map { run -> PreviewTimedSpan in
                         let range = run.audioTimeRange ?? result.range
                         return PreviewTimedSpan(text: String(result.text[run.range].characters),
-                                                start: range.start.seconds, end: CMTimeRangeGetEnd(range).seconds)
+                                                start: origin + range.start.seconds,
+                                                end: origin + CMTimeRangeGetEnd(range).seconds)
                     }
                     onResult(ids.id(isFinal: result.isFinal), text, result.isFinal,
-                             result.range.start.seconds, CMTimeRangeGetEnd(result.range).seconds, spans)
+                             origin + result.range.start.seconds, origin + CMTimeRangeGetEnd(result.range).seconds, spans)
                 }
             } catch {
                 NSLog("[LivePreview] SpeechAnalyzer results failed")
@@ -252,6 +256,8 @@ final class AnalyzerPreviewSession: LivePreviewSession {
     private var converter: AVAudioConverter?
     fileprivate var results: Task<Void, Never>?
     fileprivate var stopped = false
+    /// Wall-clock seconds of the first sample fed; analyzer result times are relative to it.
+    fileprivate var origin: TimeInterval?
 
     private init(analyzer: SpeechAnalyzer, inputFormat: AVAudioFormat, format: AVAudioFormat,
                  continuation: AsyncStream<AnalyzerInput>.Continuation) {
@@ -263,8 +269,11 @@ final class AnalyzerPreviewSession: LivePreviewSession {
 
     func append(pcm16 data: Data, startedAt: TimeInterval) -> Bool {
         guard !stopped, let input = int16Buffer(data), let buffer = convert(input) else { return false }
-        if case .dropped = continuation.yield(AnalyzerInput(buffer: buffer, bufferStartTime:
-            CMTime(seconds: startedAt, preferredTimescale: 16000))) { return false }
+        // Buffers stay contiguous on the analyzer's own timeline. Wall-clock start times
+        // from bursty BLE delivery overlap or leave gaps, and the analyzer stalls or fails
+        // on them; the wall clock is applied to its results instead.
+        if origin == nil { origin = startedAt }
+        if case .dropped = continuation.yield(AnalyzerInput(buffer: buffer)) { return false }
         return true
     }
 

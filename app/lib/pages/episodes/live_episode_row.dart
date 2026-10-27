@@ -11,6 +11,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_preview_coverage.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/ui.dart';
@@ -20,7 +21,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Home's live episode: the first row of Today. An outlined card, quieter than the filled rows
-/// around it: a tile with the breathing dot over the running length ("24m"), the episode's title,
+/// around it: a tile with the running length ("24m"), the episode's title,
 /// and on line two the newest preview words (trimmed at the start) or "2 people · topic".
 /// It scrolls with the list; there is no overlay and nothing sticks to the header. Opens the live
 /// episode.
@@ -108,9 +109,12 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     final topics = noAudio || named.isNotEmpty ? '' : EpisodePresentation.topics(episode);
     final peopleNamed = noAudio ? 0 : _peopleCount(capture);
     // A local-preview session reads its newest on-device words on line two, trimmed at the
-    // start so the latest words stay visible. The duration lives in the tile.
-    final preview = listening && capture.segments.isEmpty && capture.localPreviewAdmitted ? capture.livePreview : null;
-    final previewText = preview == null ? '' : _previewTail(preview.lines);
+    // start so the latest words stay visible, for the whole session: words the final
+    // transcript already covers drop out, the rest stay. The duration lives in the tile.
+    final preview = listening && capture.localPreviewAdmitted ? capture.livePreview : null;
+    String previewText() => preview == null
+        ? ''
+        : _previewTail(LivePreviewCoverage.uncovered(preview.lines, capture.segments, capture.liveTranscriptStartedAt));
     final status = noAudio
         ? l10n.captureNoAudioDetail
         : listening
@@ -157,7 +161,7 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
           label: [
             title,
             if (listening) (episode == null ? l10n.episodeCaptureFor : l10n.episodeLiveFor)(elapsed),
-            previewText.isNotEmpty ? previewText : rest,
+            previewText().isNotEmpty ? previewText() : rest,
           ].join(', '),
           onTap: open,
           excludeSemantics: true,
@@ -194,17 +198,23 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 3),
-                          if (previewText.isNotEmpty)
-                            StartTrimmedText(
-                              key: const Key('home_live_episode_preview'),
-                              runs: [(text: previewText, style: null)],
-                              style: subtitleStyle,
-                              // At accessibility sizes one line holds a word or two; a second
-                              // keeps the newest words readable.
-                              maxLines: MediaQuery.textScalerOf(context).scale(10) > 16 ? 2 : 1,
-                            )
-                          else
-                            Text(rest, style: subtitleStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          // Words land as the recognizer hears them, not on the clock's tick.
+                          ListenableBuilder(
+                            listenable: preview ?? const AlwaysStoppedAnimation<double>(0),
+                            builder: (context, _) {
+                              final text = previewText();
+                              return text.isNotEmpty
+                                  ? StartTrimmedText(
+                                      key: const Key('home_live_episode_preview'),
+                                      runs: [(text: text, style: null)],
+                                      style: subtitleStyle,
+                                      // At accessibility sizes one line holds a word or two; a
+                                      // second keeps the newest words readable.
+                                      maxLines: MediaQuery.textScalerOf(context).scale(10) > 16 ? 2 : 1,
+                                    )
+                                  : Text(rest, style: subtitleStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+                            },
+                          ),
                         ],
                       ),
                     ),
@@ -254,7 +264,8 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
   }
 }
 
-/// The live row's outlined tile: the breathing live dot over the running length, in ink, no colour.
+/// The live row's outlined tile: the running length alone, in ink, no colour (David, 10-27: no dot).
+/// Before a length exists it holds the breathing dot.
 class _DurationTile extends StatelessWidget {
   const _DurationTile({required this.live, required this.warning, required this.duration});
 
@@ -278,24 +289,16 @@ class _DurationTile extends StatelessWidget {
           // Scaled down, never clipped: an hour-long "1h 12m" or a large text size still fits.
           : FittedBox(
               fit: BoxFit.scaleDown,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // The app's live dot, breathing as it did alone in the tile; its ring's
-                  // extent is the gap above the length.
-                  OmiBreathingDot(live: live, size: 5),
-                  Text(
-                    duration!,
-                    key: const Key('home_live_episode_duration'),
-                    maxLines: 1,
-                    textScaler: TextScaler.noScaling,
-                    style: OmiType.footnote.copyWith(
-                      fontWeight: FontWeight.w600,
-                      height: 1,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
+              child: Text(
+                duration!,
+                key: const Key('home_live_episode_duration'),
+                maxLines: 1,
+                textScaler: TextScaler.noScaling,
+                style: OmiType.footnote.copyWith(
+                  fontWeight: FontWeight.w600,
+                  height: 1,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ),
     );
