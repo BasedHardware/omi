@@ -2,15 +2,6 @@ part of 'capture_controller.dart';
 
 /// Server transcript reads and ordered projection, separate from preview text.
 extension _CaptureTranscriptSnapshot on CaptureController {
-  Future _loadInProgressConversation() async {
-    if (_inProgressConversationLoader != null) {
-      await _inProgressConversationLoader!();
-      return;
-    }
-    final convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
-    applyInProgressConversation(convos.isNotEmpty ? convos.first : null);
-  }
-
   Future<void> _processNewSegmentReceived(List<TranscriptSegment> newSegments) async {
     if (newSegments.isEmpty) return;
     final arrivedAt = _nowSeconds;

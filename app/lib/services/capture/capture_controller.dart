@@ -3716,6 +3716,15 @@ class CaptureController extends ChangeNotifier
     }
   }
 
+  Future _loadInProgressConversation() async {
+    if (_inProgressConversationLoader != null) {
+      await _inProgressConversationLoader!();
+      return;
+    }
+    final convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
+    applyInProgressConversation(convos.isNotEmpty ? convos.first : null);
+  }
+
   /// Install an acknowledged server snapshot. Shared by REST refresh and
   /// hermetic capture scenarios that control the conversation boundary.
   void applyInProgressConversation(ServerConversation? nextConversation) {
