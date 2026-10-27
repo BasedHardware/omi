@@ -177,7 +177,7 @@ env:
   - name: AUDIO_ARCHIVE_PERCENT
     value: "100"
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
-    value: "25"
+    value: "100"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
