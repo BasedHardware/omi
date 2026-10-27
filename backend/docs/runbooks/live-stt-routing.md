@@ -168,9 +168,14 @@ The explicit environment must match `OMI_ENV_STAGE`. Both commands print only
 the target, environment, change identifier, stages and generations by language.
 Apply uses one Redis WATCH/MULTI transaction for `all` and every supported
 language: clears evidence/strikes, sets stage 100 and advances each generation.
-Generations advance above a Redis-time fence to also supersede unreconciled
-pod-local fault generations. Votes captured before the reset are rejected by
-the normal generation fence.
+Generations advance into a new Redis-time reset epoch to also supersede
+unreconciled pod-local fault generations. Every dial captures that epoch before
+awaiting the handshake; connect failures may follow ordinary gate changes but
+cannot cross an operator reset. A separate content-free generation floor
+persists under the target identity, so expiry of the normal 900-second healthy
+evidence key cannot re-admit a long-lived pre-reset session's votes. Refresh
+and cold writers seed missing evidence from that floor. The reset epoch carries
+no user/fairness data; the normal fairness-data TTL remains unchanged.
 A competing health update retries the entire reset, at most five times.
 The same transaction writes a content-free audit receipt under the target's
 endpoint/account namespace for 30 days; stdout and the warning log contain

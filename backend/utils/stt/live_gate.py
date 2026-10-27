@@ -16,6 +16,27 @@ FAILURE_RESERVE = 8
 RECOVERY_REBENCH_MINIMUM = 100
 RECOVERY_FAST_MINIMUM = 20
 RECOVERY_FAST_FAILURE_SHARE = 0.25
+# High digits identify an operator reset; low digits retain ordinary gate
+# generations. One million transitions of headroom keeps epochs distinct.
+RESET_GENERATION_STRIDE = 1_000_000
+
+
+def reset_generation_floor(raw: str | bytes | None) -> int:
+    if raw is None:
+        return 0
+    generation = int(raw)
+    if generation <= 0 or generation % RESET_GENERATION_STRIDE:
+        raise ValueError('invalid operator reset generation')
+    return generation
+
+
+def generation_allows(current: int, captured: int | None, *, connect: bool = False) -> bool:
+    """Connect failures follow ordinary gate changes, never an operator reset."""
+    if captured is None:
+        return current // RESET_GENERATION_STRIDE == 0
+    return current == captured or (
+        connect and current // RESET_GENERATION_STRIDE == captured // RESET_GENERATION_STRIDE
+    )
 
 
 @dataclass(frozen=True)
