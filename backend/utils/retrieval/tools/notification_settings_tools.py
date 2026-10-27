@@ -3,7 +3,7 @@ Tools for managing user notification settings.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -70,12 +70,13 @@ def manage_daily_summary_tool(
     """
     logger.info(f"🔧 manage_daily_summary_tool called - action: {action}, hour: {hour}")
 
-    if config is None:
+    cfg = cast(Optional[RunnableConfig], config)
+    if cfg is None:
         uid = _resolve_uid(None)
         if not uid:
             return "Error: Configuration not available"
     else:
-        uid = _resolve_uid(config)
+        uid = _resolve_uid(cfg)
         if not uid:
             return "Error: User ID not found"
     assert uid is not None

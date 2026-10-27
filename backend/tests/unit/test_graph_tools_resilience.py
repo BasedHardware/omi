@@ -57,22 +57,26 @@ agentic_mock.agent_config_context.get.return_value = None
 
 sys.path.insert(0, str(BACKEND_DIR))
 
-# Ensure integration_base is loaded for resolve_config_uid
-spec_base = importlib.util.spec_from_file_location(
-    "utils.retrieval.tools.integration_base",
-    str(BACKEND_DIR / "utils/retrieval/tools/integration_base.py"),
-)
-integration_base = importlib.util.module_from_spec(spec_base)
-sys.modules["utils.retrieval.tools.integration_base"] = integration_base
-spec_base.loader.exec_module(integration_base)
+def _load_module(name: str, file_path: Path):
+    spec = importlib.util.spec_from_file_location(name, str(file_path))
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load spec from {file_path}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
 
-spec = importlib.util.spec_from_file_location(
-    "utils.retrieval.tools._test_graph_tools",
-    str(BACKEND_DIR / "utils/retrieval/tools/graph_tools.py"),
+
+# Ensure integration_base is loaded for resolve_config_uid
+integration_base = _load_module(
+    "utils.retrieval.tools.integration_base",
+    BACKEND_DIR / "utils/retrieval/tools/integration_base.py",
 )
-graph_tools = importlib.util.module_from_spec(spec)
-sys.modules["utils.retrieval.tools._test_graph_tools"] = graph_tools
-spec.loader.exec_module(graph_tools)
+
+graph_tools = _load_module(
+    "utils.retrieval.tools._test_graph_tools",
+    BACKEND_DIR / "utils/retrieval/tools/graph_tools.py",
+)
 
 
 class TestGraphToolsResilience(unittest.TestCase):
