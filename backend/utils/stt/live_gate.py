@@ -8,10 +8,12 @@ from functools import lru_cache
 from typing import Any
 
 from config.policy.listen import disruption_gate
+from config.live_stt_resilience import recovery_sample_guard_enabled
 
 # 10x 1,800 sessions/hour is 1,500 identities per five-minute window.
 HEALTHY_USERS = 2048
 FAILURE_RESERVE = 8
+RECOVERY_REBENCH_MINIMUM = 100
 
 
 @dataclass(frozen=True)
@@ -228,9 +230,15 @@ def transition(
     # short burst of five failures must not bench a mostly healthy target.
     detected = evidence[0] >= 12 or evidence[1] >= 11 or (sum(counts) >= 8 and evidence[2] >= 10)
     decisive = (broad_failure and detected) or (sparse_failure and max(evidence) >= 14)
-    if required:
+    guarded_trial = required and recovery_sample_guard_enabled()
+    if guarded_trial:
+        # Trial n counts only admitted, non-censored outcomes in this bounded
+        # trial window. Never replace full-traffic burst evidence with a noisy
+        # failure share from the 5%/25% recovery cohort.
+        decisive = decisive and n >= RECOVERY_REBENCH_MINIMUM and user_rate > gate
+    elif required:
         decisive = decisive and user_rate > gate
-    rejected_trial = required and n >= required and user_rate > gate and broad_failure
+    rejected_trial = required and not guarded_trial and n >= required and user_rate > gate and broad_failure
     if n >= 8 and (decisive or rejected_trial):
         strikes = min(state.strikes + 1, 10)
         return GateState(

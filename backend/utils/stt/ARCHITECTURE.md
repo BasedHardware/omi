@@ -395,7 +395,10 @@ admitted window before the dwell holds at its stage. Per-witness votes stay
 capped at three admitted success/failure outcomes per trial window, so one
 repeated caller can neither fill the sample nor be a majority. Promotion also
 requires the majority-failure fraction across trial users at or under the gate;
-broad failures (at least four majority-failing users) re-bench, and anonymous
+broad failures (at least four majority-failing users) re-bench only after 100
+admitted outcomes in the current trial window and the same CUSUM burst evidence
+as stage 100. The earlier 30/60-vote rate-only rejection is disabled by default;
+`STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED=false` restores it. Anonymous
 simulation outcomes cannot promote because breadth cannot be proven. A witness
 whose three-outcome cap is already spent admits nothing new, but its return
 still re-evaluates the frozen cohort: once dwell has elapsed it promotes from

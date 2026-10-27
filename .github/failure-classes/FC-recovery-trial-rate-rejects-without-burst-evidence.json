@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-recovery-trial-rate-rejects-without-burst-evidence",
+  "violated_contract": "A reduced-traffic provider recovery trial must not re-bench from a tiny failure-share sample or a weaker rejection rule than the full-traffic burst detector.",
+  "canonical_prevention": "Use the shared gate transition for every target: require at least 100 admitted non-censored trial outcomes and the full-traffic burst evidence before rejection, retain witness fairness and promotion, and cover tiny samples, separated failures, real bursts, and censored observations with behavioral replays.",
+  "canonical_prevention_artifact": [
+    "backend/utils/stt/live_gate.py",
+    "backend/tests/unit/test_live_cost_router.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/stt/live_gate.py", "backend/utils/stt/live_cost_reset.py"],
+  "status": "open"
+}

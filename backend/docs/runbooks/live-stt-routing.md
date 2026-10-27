@@ -88,6 +88,13 @@ reconciliation. Trials retain their separate user votes, generation fences,
 30 admitted outcomes from at least 10 witnesses after 300 seconds for the 5%
 step, and 60 admitted outcomes from at least 20 witnesses after 600 seconds for
 the 25% step; a completed admitted window before the dwell holds at its stage.
+Recovery re-benching requires at least **100 admitted, non-censored outcomes in
+the current trial window**, the same CUSUM burst evidence as stage 100, broad
+failure witnesses, and a user failure share above the gate. A 30/60-outcome
+trial rejection based only on failure share is no longer used. Promotion and
+the bounded trial windows (120/240 outcomes) are unchanged. The default-on
+`STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED` switch restores the former
+rejection rules when explicitly set to `false`, `0`, or `off`.
 Redis CAS enforces all
 of this fleet-wide. Bench writes are one atomic Lua update — an active account
 quarantine rejects a selection write, same-kind writes keep the longest
@@ -127,6 +134,51 @@ provider errors bench at median 20/13/8 and p95 48/21/8 sessions. At 62 sessions
 per five minutes that is about four minutes at the 40% p95, plus settlement
 and cache delay. The rate must be representative admitted votes, not one
 client's repeated reconnects. These are synthetic bounds, not prod acceptance.
+
+## Audited operator cost-gate reset
+
+After a confirmed false bench, an authorized operator may reset **one registered
+target** using the deployed backend image and its existing runtime environment.
+Complete the rolling deployment first so old pods cannot reconcile pre-fix local
+fault evidence. This action writes cost-routing state, not user/account data.
+It does not change account quarantines, endpoint circuits, admission capacity,
+language capabilities, or allocation. No runtime config change is required;
+leave `STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED` unset or `true`.
+
+Run from `backend/` in that environment, first without `--apply`:
+
+```bash
+python scripts/reset_live_stt_cost_gate.py --target parakeet-window --environment prod --reason sttbench-20261027-06z
+python scripts/reset_live_stt_cost_gate.py --target parakeet-window --environment prod --reason sttbench-20261027-06z --apply
+```
+
+The explicit environment must match `OMI_ENV_STAGE`. Both commands print only
+the target, environment, change identifier, stages and generations by language.
+Apply uses one Redis WATCH/MULTI transaction for `all` and every supported
+language: clears evidence/strikes, sets stage 100 and advances each generation.
+Generations advance above a Redis-time fence to also supersede unreconciled
+pod-local fault generations. Votes captured before the reset are rejected by
+the normal generation fence.
+A competing health update retries the entire reset, at most five times.
+The same transaction writes a content-free audit receipt under the target's
+endpoint/account namespace for 30 days; stdout and the warning log contain
+the receipt and its `audit_id`. Retain the output in the operator's train record.
+This is a one-time reset; subsequent real failures can immediately bench again.
+
+After the next shared refresh (normally five seconds), verify stage 100 on every
+fresh pod and check language state, timeout counters, transcript success and
+first-text latency. A transport interruption after submission can make the
+command's result uncertain: use the pre-submit log's `audit_id` to read that
+target's `operator-audit:<audit_id>` receipt through the same runtime namespace
+and inspect fresh stage telemetry before retrying. A repeated apply advances generations
+again, so do not run it as a recurring job.
+
+To reverse the release, use the same command with `--stage 0`, a new reason and
+`--apply`: it benches the target for five minutes and then resumes normal staged
+recovery. Removing the command or changing the guard switch does not undo a
+committed reset. A malformed scope aborts the entire transaction, preserving all
+existing state. Healthy state retains the normal 900-second idle TTL; a reversed
+bench persists until normal recovery advances it.
 
 ## Minimum shadow go/no-go (normally 60–120 minutes)
 
