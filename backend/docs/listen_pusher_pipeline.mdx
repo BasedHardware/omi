@@ -7346,6 +7346,17 @@ holds — ordinals falling with rotations flat means the deferral is working, no
 that conversations gained fewer speakers.
 # Batch empty-ASR custody
 
+Batch projection also isolates recognized non-deletion privacy refusals in a
+versioned held ordering receipt. Account/protection/generation/recording fences
+and redirect/budget failures cannot strand unrelated later captures. Settlement
+reproduces the refusal transactionally and keeps binding, ledger ownership and
+predecessor checks; it writes batch control metadata only. Worker results,
+audio and part progress stay retained, follow-ups are fenced, and no user
+ledger, usage, conversation or derived content is written through a refusal.
+Holds remain in the unfinished-obligation age metric. Repair uses the ordinary
+fully fenced projector, retains once-only accounting, and never rewinds later
+ordering. See [serving](batch-pipeline-serving.md) for the protocol/repair rules.
+
 `BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED` ships on (set `false` on the
 batch worker and CPU recovery roles to roll back). Parakeet output with no
 words, or fewer than two alphanumeric characters for at least one second of

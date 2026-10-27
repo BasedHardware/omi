@@ -29,6 +29,15 @@ class BatchPrivacyReason(str, Enum):
     UNKNOWN = 'unknown'
 
 
+STRUCTURAL_REASONS = frozenset(
+    {
+        BatchPrivacyReason.CONVERSATION_REDIRECT_CYCLE,
+        BatchPrivacyReason.CONVERSATION_REDIRECT_MISSING,
+        BatchPrivacyReason.CONVERSATION_FENCE_BUDGET,
+    }
+)
+
+
 class BatchPrivacyBlocked(RuntimeError):
     """A deleted, migrating or E2EE owner/source cannot accept server results."""
 

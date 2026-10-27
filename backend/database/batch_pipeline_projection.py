@@ -18,6 +18,7 @@ from database.fsr_read_cache import writing
 from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, BatchPrivacyReason
+from database.batch_pipeline_projection_privacy import HOLD_REASONS
 from database.sync_ledger import (
     BATCH_PARTIAL_STATUS,
     batch_projection_ledger_owner_matches,
@@ -91,7 +92,7 @@ class ProjectionStore:
             try:
                 job, _ = load_stage_policy(self.store, segment_id, 'projection')
             except BatchPrivacyBlocked as error:
-                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED and error.reason not in HOLD_REASONS:
                     raise
                 # Deletion may win before the projection policy was first
                 # pinned. No policy or source mutation is allowed then. These
@@ -99,7 +100,11 @@ class ProjectionStore:
                 # Projector must never assign a job carrying this hint.
                 job = {
                     **job,
-                    '_projection_privacy_deleted': True,
+                    **(
+                        {'_projection_privacy_deleted': True}
+                        if error.reason == BatchPrivacyReason.CONVERSATION_DELETED
+                        else {'_projection_privacy_refusal': error.reason.value}
+                    ),
                     'policy_parts': {**(job.get('policy_parts') or {}), 'projection': ProjectionPolicy().to_dict()},
                 }
         entry = self.ref('results', segment_id).get().to_dict() or {}

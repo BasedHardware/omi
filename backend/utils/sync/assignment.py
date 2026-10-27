@@ -15,7 +15,7 @@ from config.sync_live_dedupe import sync_live_dedupe_active_for
 from config.sync_safety_wal import sync_safety_wal_enabled
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
-from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, STRUCTURAL_REASONS
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import apply_manual_assignments
@@ -716,40 +716,51 @@ def assign_in_transaction(
     # new conversation from the finite set this transaction can read.
     excluded: frozenset[str] = frozenset()
     segment_indices = tuple(range(len(incoming['transcript_segments'])))
+
+    def isolated_privacy_plan():
+        nonlocal live_stats, excluded
+        isolated_id = str(uuid5(NAMESPACE_URL, f'sync-privacy-replan:{incoming["id"]}'))
+        live_stats = None
+        excluded = frozenset(read) - {isolated_id}
+        result = plan(excluded, segment_indices, isolated_id=isolated_id)
+        logger.info('event=sync_assignment_target outcome=privacy_isolated created=%s', str(result.created).lower())
+        return result
+
     try:
         chosen = plan(excluded, segment_indices)
     except BatchPrivacyBlocked as error:
-        if error.reason != BatchPrivacyReason.CONVERSATION_DELETED or not error.conversation_id:
-            raise
-        # Validation can also discover deleted ancestry on an otherwise live
-        # donor. One read-only re-plan excludes every row carrying that source;
-        # prepare already fenced the input's own anchor and explicit target.
-        denied = error.conversation_id
-        excluded = privacy_excluded = frozenset(
-            {denied} | {cid for cid, row in read.items() if row and denied in (row.get('sync_merged_from') or [])}
-        )
-        logger.info('event=sync_assignment_target outcome=privacy_replan excluded=%d', len(excluded))
-        record_fallback(
-            component='sync_dispatch',
-            from_mode='canonical_append',
-            to_mode='privacy_replan',
-            reason='policy',
-            outcome='degraded',
-            log=logger,
-        )
-        try:
-            chosen = plan(excluded, segment_indices)
-        except BatchPrivacyBlocked as second_error:
-            if second_error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+        if error.reason in STRUCTURAL_REASONS:
+            # An unrelated donor graph/budget must not withhold this live
+            # input. The isolated plan reruns every source and target fence.
+            chosen = isolated_privacy_plan()
+        else:
+            if error.reason != BatchPrivacyReason.CONVERSATION_DELETED or not error.conversation_id:
                 raise
-            # A donor's deletion says nothing about the live input. Preserve
-            # all of its speech in a new identity, without any temporal match,
-            # explicit target or inherited ancestry. Every fence still runs.
-            isolated_id = str(uuid5(NAMESPACE_URL, f'sync-privacy-replan:{incoming["id"]}'))
-            live_stats = None
-            excluded = frozenset(read) - {isolated_id}
-            chosen = plan(excluded, segment_indices, isolated_id=isolated_id)
-            logger.info('event=sync_assignment_target outcome=privacy_isolated created=%s', str(chosen.created).lower())
+            # Validation can also discover deleted ancestry on an otherwise live
+            # donor. One read-only re-plan excludes every row carrying that source;
+            # prepare already fenced the input's own anchor and explicit target.
+            denied = error.conversation_id
+            excluded = privacy_excluded = frozenset(
+                {denied} | {cid for cid, row in read.items() if row and denied in (row.get('sync_merged_from') or [])}
+            )
+            logger.info('event=sync_assignment_target outcome=privacy_replan excluded=%d', len(excluded))
+            record_fallback(
+                component='sync_dispatch',
+                from_mode='canonical_append',
+                to_mode='privacy_replan',
+                reason='policy',
+                outcome='degraded',
+                log=logger,
+            )
+            try:
+                chosen = plan(excluded, segment_indices)
+            except BatchPrivacyBlocked as second_error:
+                if (
+                    second_error.reason != BatchPrivacyReason.CONVERSATION_DELETED
+                    and second_error.reason not in STRUCTURAL_REASONS
+                ):
+                    raise
+                chosen = isolated_privacy_plan()
     stamp_gap_refused = False
     if (
         lineage_binding == 'stamp_fallback'
