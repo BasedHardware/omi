@@ -240,12 +240,17 @@ unmarked legacy debt do not request new GPUs; warm workers still drain them
 under the existing funding/privacy checks. No historical backfill is required.
 
 The three priority counts publish atomically with a separate capacity freshness
-clock. The adapter requires all three classes younger than60seconds, takes the
+clock. Only the dedicated worker's supervised sampler runs these aggregates;
+serving requests keep their existing gauges without scanning GPU capacity.
+A capacity-query failure leaves its clock unchanged and cannot fail recovery
+or projection. The adapter requires all three classes younger than60seconds, takes the
 maximum per class across identical worker samplers, then sums the classes.
 Absent/stale/partial data stays unavailable; never replace it with zero or sum
 the same global queue once per replica.
 
-The production chart has two pool-pinned deployments and HPAs: original release
+Production values preserve four fixed workers with autoscaling and balanced
+pools off, so an image roll cannot activate an unqualified capacity target.
+The prepared cutover renders two pool-pinned deployments and HPAs: original release
 on OD and `<release>-spot` on Spot, each min1/max12 (total2/24), with independent
 pod selectors/PodMonitoring but the same metric release scope. This avoids
 strict topology spread, which GKE's node autoscaler does not support. Both HPAs
@@ -254,13 +259,15 @@ per-worker queued-unit target, dividing demand across the two pools. Node-pool
 ceilings are total12 each, not12 per zone; do not pre-provision nodes.
 
 `targetQueuedUnitsPerWorker=16` is **provisional slot arithmetic**, not a
-qualified throughput target. Before production apply, bramp3/op1 must benchmark
+qualified throughput target. Before enabling either scaler setting, bramp3/op1 must benchmark
 useful completions and queue latency on the exact qualified worker, pin the
 measured target, verify the new index READY and fresh external metric, and get
 the lead's exact apply approval. The current5c floor4 remains until its actual
 ladder-C verdict. Lead75481f permits tomorrow's25% on fixed4/no new nodes if the
 scaler is not ready by2026-10-28 09Z, with the utilization flag re-evaluated at25.
 This source change does not itself expand admission or authorize deployment.
+The qualification deadline is2026-10-28 09Z; bramp3 owns the benchmark and
+measured target, lead approves the resulting values change, and op1 applies it.
 
 For cutover/rollback, op1 captures the current release values/manifest privately,
 keeps the image pinned, preserves all runtime bindings and the1500s SIGTERM

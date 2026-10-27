@@ -2,7 +2,9 @@
 
 from prometheus_client import CollectorRegistry
 import pytest
+from unittest.mock import MagicMock
 
+from database.batch_pipeline_store import ready_for_capacity
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
@@ -59,7 +61,7 @@ class CapacityStore(MemoryStore):
 
 def test_three_priority_capacity_sample_is_atomic_and_never_missing_as_zero():
     registry = CollectorRegistry()
-    metrics = QueueMetrics(registry, worker_release='synthetic', namespace='synthetic')
+    metrics = QueueMetrics(registry, worker_release='synthetic', namespace='synthetic', capacity_sampling=True)
     store = CapacityStore()
     scope = {'worker_release': 'synthetic', 'namespace': 'synthetic'}
     metrics.refresh(store, 100)
@@ -71,19 +73,59 @@ def test_three_priority_capacity_sample_is_atomic_and_never_missing_as_zero():
         )
     store.counts = [0, 0, 0]
     store.fail_priority = 1
-    with pytest.raises(RuntimeError):
-        metrics.refresh(store, 200)
+    metrics.refresh(store, 200)
     assert registry.get_sample_value('omi_batch_pipeline_capacity_refreshed_at_seconds', scope) == 100
     assert registry.get_sample_value('omi_batch_pipeline_admissible_ready_units', {**scope, 'priority': 'fresh'}) == 4
 
 
 def test_never_observed_capacity_has_no_fresh_clock():
     registry = CollectorRegistry()
-    metrics = QueueMetrics(registry)
+    metrics = QueueMetrics(registry, capacity_sampling=True)
     store = CapacityStore()
     store.fail_priority = 0
-    with pytest.raises(RuntimeError):
-        metrics.refresh(store, 100)
+    metrics.refresh(store, 100)
     assert registry.get_sample_value(
         'omi_batch_pipeline_capacity_refreshed_at_seconds', {'worker_release': 'unscoped', 'namespace': 'unscoped'}
     ) in (None, 0)
+
+
+def test_serving_metrics_never_scan_worker_capacity():
+    class ServingStore(MemoryStore):
+        def ready_for_capacity(self, priority, now):
+            pytest.fail('serving request must not run GPU capacity aggregates')
+
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    metrics.refresh(ServingStore(), 100)
+    assert registry.get_sample_value(
+        'omi_batch_pipeline_capacity_refreshed_at_seconds', {'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    ) in (None, 0)
+
+
+def capacity_client(value):
+    client = MagicMock()
+    query = client.collection.return_value
+    query.where.return_value = query
+    query.count.return_value.get.return_value = [[type('Count', (), {'value': value})()]]
+    return client
+
+
+def test_real_firestore_sdk_zero_count_is_valid_empty_capacity():
+    from google.cloud.firestore_v1.base_aggregation import _query_response_to_result
+    from google.cloud.firestore_v1.types.firestore import RunAggregationQueryResponse
+
+    response = RunAggregationQueryResponse(result={'aggregate_fields': {'count': {'integer_value': 0}}})
+    result = _query_response_to_result(response)[0].value
+    assert type(result) is float and result == 0.0
+    assert ready_for_capacity(capacity_client(result), 'synthetic', 0, 100) == 0
+
+
+@pytest.mark.parametrize('value', [0, 7])
+def test_firestore_integer_capacity(value):
+    assert ready_for_capacity(capacity_client(value), 'synthetic', 0, 100) == value
+
+
+@pytest.mark.parametrize('value', [None, True, -1, 1.5, float('nan'), float('inf')])
+def test_malformed_firestore_count_never_becomes_zero(value):
+    with pytest.raises(ValueError, match='nonnegative integer'):
+        ready_for_capacity(capacity_client(value), 'synthetic', 0, 100)

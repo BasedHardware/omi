@@ -76,6 +76,9 @@ def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
         command.extend(['--show-only', template])
     if service == 'batch-pipeline-worker':
         command.extend(['--set-string', 'image.digest=sha256:' + 'b' * 64])
+        # The production default remains fixed4 until qualification. Verify the
+        # prepared HPA cutover against the adapter without enabling it by default.
+        command.extend(['--set', 'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true'])
     rendered = subprocess.run(command, check=True, capture_output=True, text=True).stdout
     hpas = [obj for obj in yaml.safe_load_all(rendered) if obj and obj['kind'] == 'HorizontalPodAutoscaler']
     assert hpas, f'{service}: no prod HPA rendered'

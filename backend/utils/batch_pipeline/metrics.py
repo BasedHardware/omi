@@ -1,5 +1,7 @@
 """Queue-age autoscaling export. Refresh from a supervised worker, never import IO."""
 
+import logging
+
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
 
 from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES
@@ -11,9 +13,15 @@ AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
 
 class QueueMetrics:
     def __init__(
-        self, registry: CollectorRegistry = REGISTRY, *, worker_release: str = 'unscoped', namespace: str = 'unscoped'
+        self,
+        registry: CollectorRegistry = REGISTRY,
+        *,
+        worker_release: str = 'unscoped',
+        namespace: str = 'unscoped',
+        capacity_sampling: bool = False,
     ):
         self.scope = (worker_release, namespace)
+        self.capacity_sampling = capacity_sampling
         self.projection_age = Gauge(
             'omi_batch_projection_obligation_oldest_age_seconds',
             'Oldest unfinished committed projection age, including held content; alarm above 900s',
@@ -115,12 +123,21 @@ class QueueMetrics:
         # Older injected stores may expose only the age contract. Their absent
         # capacity clock stays never-observed, so no adapter can fabricate zero.
         sampler = getattr(store, 'ready_for_capacity', None)
-        if callable(sampler):
-            for priority in Priority:
-                count = sampler(int(priority), now)
-                if type(count) is not int or count < 0:
-                    raise ValueError('nonnegative integer capacity count required')
-                capacity.append((priority, count))
+        if self.capacity_sampling and callable(sampler):
+            try:
+                for priority in Priority:
+                    count = sampler(int(priority), now)
+                    if type(count) is not int or count < 0:
+                        raise ValueError('nonnegative integer capacity count required')
+                    capacity.append((priority, count))
+            except Exception as error:
+                # Freeze this independent scaling signal without failing an
+                # otherwise successful recovery/projection request. Publish no
+                # partial counts and never advance its freshness on failure.
+                capacity = []
+                logging.getLogger(__name__).warning(
+                    'event=batch_capacity_sample outcome=unavailable exception_type=%s', type(error).__name__
+                )
         for priority, pending, ready, retry in samples:
             self.oldest_age.labels(LABELS[priority], *self.scope).set(
                 max(0.0, now - pending) if pending is not None else 0

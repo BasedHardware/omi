@@ -440,6 +440,11 @@ def ready_for_capacity(client: Any, namespace: str, priority: int, now: float) -
         .where('available_at', '<=', now)
     )
     count = query.count().get()[0][0].value
+    # The pinned SDK decodes integer_value=0 through ``integer or double``,
+    # yielding 0.0. Preserve that real empty result; do not coerce missing,
+    # fractional, negative or otherwise malformed responses into capacity.
+    if type(count) is float and count == 0.0:
+        count = 0
     if type(count) is not int or count < 0:
         raise ValueError('nonnegative integer capacity count required')
     return count
