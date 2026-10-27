@@ -54,7 +54,6 @@ _ATTACHMENT_PARAM_SUFFIXES = (
 )
 
 
-
 def _parse_seconds(val: Any) -> Optional[float]:
     """Parse a video timestamp in seconds safely, rejecting booleans, non-numerics, NaN, and Inf."""
     if val is None or isinstance(val, bool):
@@ -64,6 +63,7 @@ def _parse_seconds(val: Any) -> Optional[float]:
         return max(0.0, f) if not (math.isnan(f) or math.isinf(f)) else None
     except (ValueError, TypeError):
         return None
+
 
 def _names_request_field(param: object, code: object, provider_rejection: object = None) -> bool:
     """Whether one (param, code, provider_rejection) triple from a provider 400 names our request shape."""
@@ -163,7 +163,9 @@ def search_files_tool(
             return "Error: Configuration error"
         configurable = raw_configurable if isinstance(raw_configurable, dict) else {}
         uid = configurable.get('user_id') or (cfg.get('user_id') if isinstance(cfg, dict) else None)
-        chat_session_id = configurable.get('chat_session_id') or (cfg.get('chat_session_id') if isinstance(cfg, dict) else None)
+        chat_session_id = configurable.get('chat_session_id') or (
+            cfg.get('chat_session_id') if isinstance(cfg, dict) else None
+        )
 
         if raw_configurable is None and (not uid or not chat_session_id):
             return "Error: Configuration error"
@@ -212,7 +214,11 @@ def search_files_tool(
         parsed_end = _parse_seconds(end_seconds)
         video_window = None
         if parsed_start is not None or parsed_end is not None:
-            start = parsed_start if parsed_start is not None else max(0.0, (parsed_end if parsed_end is not None else 0.0) - 5.0)
+            start = (
+                parsed_start
+                if parsed_start is not None
+                else max(0.0, (parsed_end if parsed_end is not None else 0.0) - 5.0)
+            )
             end = max(start, parsed_end if parsed_end is not None else start + 5.0)
             video_window = (start, end)
         answer = fc_tool.process_chat_with_file(question, file_ids_to_search, video_window)
@@ -252,4 +258,3 @@ def search_files_tool(
             exc_info=True,
         )
         return "I encountered an error while searching the files. Please try again or rephrase your question."
-
