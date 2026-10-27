@@ -1,6 +1,6 @@
 """Tests for the API-key auth flow."""
 
-from __future__ import annotations
+import threading
 
 import json
 
@@ -262,3 +262,34 @@ def test_narrow_key_login_displays_scopes(authed_profile, respx_mock, cli_runner
     assert result.exit_code == 0
     assert info.call_count == 1
     assert "Scopes: action_items:read" in result.stderr
+
+def test_concurrent_store_api_key_different_profiles_both_survive(config_path):
+    """Concurrent logins for two different profiles must not lose either credential.
+
+    Regression test for #22972: concurrent read-modify-write of the TOML config
+    silently dropped one profile's credential because the last save() won.
+    """
+    import threading
+
+    errors = []
+
+    def write_profile(name: str, key: str) -> None:
+        try:
+            store_api_key(name, key)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=write_profile, args=("alpha", "omi_dev_" + "a" * 32)),
+        threading.Thread(target=write_profile, args=("beta", "omi_dev_" + "b" * 32)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not errors, f"concurrent writes raised: {errors}"
+
+    config = cfg.load()
+    assert config.get_profile("alpha").api_key == "omi_dev_" + "a" * 32
+    assert config.get_profile("beta").api_key == "omi_dev_" + "b" * 32
