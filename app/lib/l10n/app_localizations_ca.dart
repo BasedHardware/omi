@@ -14711,7 +14711,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Inclou crèdit per a la resta d\'aquest mes.';
 
   @override
-  String get yearlySwitchDeclined => 'El pagament no s\'ha completat. Continues amb el pagament mensual.';
+  String get yearlySwitchDeclined => 'Pagament rebutjat. Continues amb el pagament mensual.';
 
   @override
   String get yearlySwitchFailed => 'No s\'ha pogut canviar. Continues amb el pagament mensual.';

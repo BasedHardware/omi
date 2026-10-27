@@ -14649,7 +14649,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Bu ayın kalan kısmı için kredi içerir.';
 
   @override
-  String get yearlySwitchDeclined => 'Ödeme gerçekleşmedi. Aylık ödemeye devam ediyorsunuz.';
+  String get yearlySwitchDeclined => 'Ödeme reddedildi. Aylık ödemeye devam ediyorsunuz.';
 
   @override
   String get yearlySwitchFailed => 'Geçiş yapılamadı. Aylık ödemeye devam ediyorsunuz.';

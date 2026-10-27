@@ -14668,7 +14668,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Ietver kredītu par atlikušo šī mēneša daļu.';
 
   @override
-  String get yearlySwitchDeclined => 'Maksājums neizdevās. Jūs joprojām maksājat katru mēnesi.';
+  String get yearlySwitchDeclined => 'Maksājums noraidīts. Jūs joprojām maksājat katru mēnesi.';
 
   @override
   String get yearlySwitchFailed => 'Neizdevās pāriet. Jūs joprojām maksājat katru mēnesi.';

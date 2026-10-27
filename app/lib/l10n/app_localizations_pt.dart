@@ -14665,7 +14665,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Inclui crédito pelo restante deste mês.';
 
   @override
-  String get yearlySwitchDeclined => 'O pagamento não foi concluído. Você continua no plano mensal.';
+  String get yearlySwitchDeclined => 'Pagamento recusado. Você continua no plano mensal.';
 
   @override
   String get yearlySwitchFailed => 'Não foi possível mudar. Você continua no plano mensal.';

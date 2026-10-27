@@ -14632,7 +14632,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get yearlySwitchCreditNote => 'এই মাসের বাকি সময়ের ক্রেডিট অন্তর্ভুক্ত।';
 
   @override
-  String get yearlySwitchDeclined => 'পেমেন্ট সম্পন্ন হয়নি। আপনি এখনও মাসিক প্ল্যানে আছেন।';
+  String get yearlySwitchDeclined => 'পেমেন্ট প্রত্যাখ্যাত হয়েছে। আপনি এখনও মাসিক প্ল্যানে আছেন।';
 
   @override
   String get yearlySwitchFailed => 'পরিবর্তন করা যায়নি। আপনি এখনও মাসিক প্ল্যানে আছেন।';

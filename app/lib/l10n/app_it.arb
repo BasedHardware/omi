@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "Da pagare oggi",
     "yearlySwitchRenews": "Rinnovo",
     "yearlySwitchCreditNote": "Include un credito per il resto di questo mese.",
-    "yearlySwitchDeclined": "Il pagamento non è andato a buon fine. Resti sul mensile.",
+    "yearlySwitchDeclined": "Pagamento rifiutato. Resti sul mensile.",
     "yearlySwitchFailed": "Impossibile cambiare. Resti sul mensile.",
     "yearlySwitchPreviewFailed": "Impossibile caricare il prezzo.",
     "yearlySwitchUnavailable": "La fatturazione annuale non è disponibile per il tuo piano in questo momento.",

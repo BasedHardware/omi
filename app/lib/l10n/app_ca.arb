@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "A pagar avui",
     "yearlySwitchRenews": "Es renova",
     "yearlySwitchCreditNote": "Inclou crèdit per a la resta d'aquest mes.",
-    "yearlySwitchDeclined": "El pagament no s'ha completat. Continues amb el pagament mensual.",
+    "yearlySwitchDeclined": "Pagament rebutjat. Continues amb el pagament mensual.",
     "yearlySwitchFailed": "No s'ha pogut canviar. Continues amb el pagament mensual.",
     "yearlySwitchPreviewFailed": "No s'ha pogut carregar el preu.",
     "yearlySwitchUnavailable": "El pagament anual no està disponible per al teu pla ara mateix.",

@@ -14745,7 +14745,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Enthält eine Gutschrift für den Rest dieses Monats.';
 
   @override
-  String get yearlySwitchDeclined => 'Die Zahlung ist nicht durchgegangen. Sie zahlen weiterhin monatlich.';
+  String get yearlySwitchDeclined => 'Zahlung abgelehnt. Sie zahlen weiterhin monatlich.';
 
   @override
   String get yearlySwitchFailed => 'Wechsel nicht möglich. Sie zahlen weiterhin monatlich.';

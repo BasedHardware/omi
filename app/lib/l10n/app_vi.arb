@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "Thanh toán hôm nay",
     "yearlySwitchRenews": "Gia hạn",
     "yearlySwitchCreditNote": "Đã gồm khoản tín dụng cho phần còn lại của tháng này.",
-    "yearlySwitchDeclined": "Thanh toán không thành công. Bạn vẫn trả theo tháng.",
+    "yearlySwitchDeclined": "Thanh toán bị từ chối. Bạn vẫn trả theo tháng.",
     "yearlySwitchFailed": "Không thể chuyển. Bạn vẫn trả theo tháng.",
     "yearlySwitchPreviewFailed": "Không tải được giá của bạn.",
     "yearlySwitchUnavailable": "Hiện chưa thể trả theo năm cho gói của bạn.",

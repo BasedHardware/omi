@@ -4484,7 +4484,7 @@
     "yearlySwitchDueToday": "Do zapłaty dziś",
     "yearlySwitchRenews": "Odnowienie",
     "yearlySwitchCreditNote": "Zawiera kredyt za resztę tego miesiąca.",
-    "yearlySwitchDeclined": "Płatność nie przeszła. Nadal płacisz co miesiąc.",
+    "yearlySwitchDeclined": "Płatność odrzucona. Nadal płacisz co miesiąc.",
     "yearlySwitchFailed": "Nie udało się zmienić. Nadal płacisz co miesiąc.",
     "yearlySwitchPreviewFailed": "Nie udało się wczytać ceny.",
     "yearlySwitchUnavailable": "Płatność roczna nie jest teraz dostępna dla Twojego planu.",

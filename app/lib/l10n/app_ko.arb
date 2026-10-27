@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "오늘 결제 금액",
     "yearlySwitchRenews": "갱신일",
     "yearlySwitchCreditNote": "이번 달 남은 기간의 크레딧이 포함됩니다.",
-    "yearlySwitchDeclined": "결제가 완료되지 않았습니다. 월간 결제가 유지됩니다.",
+    "yearlySwitchDeclined": "결제가 거절되었습니다. 월간 결제가 유지됩니다.",
     "yearlySwitchFailed": "전환하지 못했습니다. 월간 결제가 유지됩니다.",
     "yearlySwitchPreviewFailed": "가격을 불러오지 못했습니다.",
     "yearlySwitchUnavailable": "지금은 사용 중인 플랜에서 연간 결제를 이용할 수 없습니다.",

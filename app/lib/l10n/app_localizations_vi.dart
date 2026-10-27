@@ -14637,7 +14637,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Đã gồm khoản tín dụng cho phần còn lại của tháng này.';
 
   @override
-  String get yearlySwitchDeclined => 'Thanh toán không thành công. Bạn vẫn trả theo tháng.';
+  String get yearlySwitchDeclined => 'Thanh toán bị từ chối. Bạn vẫn trả theo tháng.';
 
   @override
   String get yearlySwitchFailed => 'Không thể chuyển. Bạn vẫn trả theo tháng.';

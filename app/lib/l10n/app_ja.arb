@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "本日のお支払い",
     "yearlySwitchRenews": "次回更新",
     "yearlySwitchCreditNote": "今月の残り期間分のクレジットを含みます。",
-    "yearlySwitchDeclined": "お支払いが完了しませんでした。月払いのままです。",
+    "yearlySwitchDeclined": "お支払いが拒否されました。月払いのままです。",
     "yearlySwitchFailed": "切り替えられませんでした。月払いのままです。",
     "yearlySwitchPreviewFailed": "料金を読み込めませんでした。",
     "yearlySwitchUnavailable": "現在、お使いのプランでは年払いをご利用いただけません。",

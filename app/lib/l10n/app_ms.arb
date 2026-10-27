@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "Perlu dibayar hari ini",
     "yearlySwitchRenews": "Diperbaharui",
     "yearlySwitchCreditNote": "Termasuk kredit untuk baki bulan ini.",
-    "yearlySwitchDeclined": "Pembayaran tidak berjaya. Anda masih membayar bulanan.",
+    "yearlySwitchDeclined": "Pembayaran ditolak. Anda masih membayar bulanan.",
     "yearlySwitchFailed": "Tidak dapat menukar. Anda masih membayar bulanan.",
     "yearlySwitchPreviewFailed": "Tidak dapat memuatkan harga anda.",
     "yearlySwitchUnavailable": "Pengebilan tahunan tidak tersedia untuk pelan anda sekarang.",

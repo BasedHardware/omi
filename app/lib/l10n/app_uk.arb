@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "До сплати сьогодні",
     "yearlySwitchRenews": "Поновлення",
     "yearlySwitchCreditNote": "Містить кредит за решту цього місяця.",
-    "yearlySwitchDeclined": "Платіж не пройшов. Ви й надалі платите щомісяця.",
+    "yearlySwitchDeclined": "Платіж відхилено. Ви й надалі платите щомісяця.",
     "yearlySwitchFailed": "Не вдалося перейти. Ви й надалі платите щомісяця.",
     "yearlySwitchPreviewFailed": "Не вдалося завантажити ціну.",
     "yearlySwitchUnavailable": "Річна оплата зараз недоступна для вашого плану.",

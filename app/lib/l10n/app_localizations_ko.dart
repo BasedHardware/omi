@@ -14437,7 +14437,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get yearlySwitchCreditNote => '이번 달 남은 기간의 크레딧이 포함됩니다.';
 
   @override
-  String get yearlySwitchDeclined => '결제가 완료되지 않았습니다. 월간 결제가 유지됩니다.';
+  String get yearlySwitchDeclined => '결제가 거절되었습니다. 월간 결제가 유지됩니다.';
 
   @override
   String get yearlySwitchFailed => '전환하지 못했습니다. 월간 결제가 유지됩니다.';

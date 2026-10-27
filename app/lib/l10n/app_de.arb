@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "Heute fällig",
     "yearlySwitchRenews": "Verlängerung",
     "yearlySwitchCreditNote": "Enthält eine Gutschrift für den Rest dieses Monats.",
-    "yearlySwitchDeclined": "Die Zahlung ist nicht durchgegangen. Sie zahlen weiterhin monatlich.",
+    "yearlySwitchDeclined": "Zahlung abgelehnt. Sie zahlen weiterhin monatlich.",
     "yearlySwitchFailed": "Wechsel nicht möglich. Sie zahlen weiterhin monatlich.",
     "yearlySwitchPreviewFailed": "Preis konnte nicht geladen werden.",
     "yearlySwitchUnavailable": "Jährliche Zahlung ist für Ihren Plan gerade nicht verfügbar.",

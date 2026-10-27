@@ -14643,7 +14643,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Укључује кредит за остатак овог месеца.';
 
   @override
-  String get yearlySwitchDeclined => 'Плаћање није прошло. И даље плаћате месечно.';
+  String get yearlySwitchDeclined => 'Плаћање је одбијено. И даље плаћате месечно.';
 
   @override
   String get yearlySwitchFailed => 'Прелазак није успео. И даље плаћате месечно.';

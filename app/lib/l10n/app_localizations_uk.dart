@@ -14667,7 +14667,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Містить кредит за решту цього місяця.';
 
   @override
-  String get yearlySwitchDeclined => 'Платіж не пройшов. Ви й надалі платите щомісяця.';
+  String get yearlySwitchDeclined => 'Платіж відхилено. Ви й надалі платите щомісяця.';
 
   @override
   String get yearlySwitchFailed => 'Не вдалося перейти. Ви й надалі платите щомісяця.';

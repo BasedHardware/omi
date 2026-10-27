@@ -14564,7 +14564,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get yearlySwitchCreditNote => 'รวมเครดิตสำหรับช่วงที่เหลือของเดือนนี้แล้ว';
 
   @override
-  String get yearlySwitchDeclined => 'การชำระเงินไม่สำเร็จ คุณยังจ่ายแบบรายเดือนอยู่';
+  String get yearlySwitchDeclined => 'การชำระเงินถูกปฏิเสธ คุณยังจ่ายแบบรายเดือนอยู่';
 
   @override
   String get yearlySwitchFailed => 'เปลี่ยนไม่สำเร็จ คุณยังจ่ายแบบรายเดือนอยู่';

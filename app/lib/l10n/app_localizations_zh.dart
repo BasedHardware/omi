@@ -14412,7 +14412,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get yearlySwitchCreditNote => '已包含本月剩余天数的抵扣。';
 
   @override
-  String get yearlySwitchDeclined => '付款未成功。你仍按月付费。';
+  String get yearlySwitchDeclined => '付款被拒。你仍按月付费。';
 
   @override
   String get yearlySwitchFailed => '无法切换。你仍按月付费。';

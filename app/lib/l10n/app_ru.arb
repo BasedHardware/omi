@@ -4484,7 +4484,7 @@
     "yearlySwitchDueToday": "К оплате сегодня",
     "yearlySwitchRenews": "Продление",
     "yearlySwitchCreditNote": "Включает кредит за остаток этого месяца.",
-    "yearlySwitchDeclined": "Платёж не прошёл. Вы по-прежнему платите ежемесячно.",
+    "yearlySwitchDeclined": "Платёж отклонён. Вы по-прежнему платите ежемесячно.",
     "yearlySwitchFailed": "Не удалось перейти. Вы по-прежнему платите ежемесячно.",
     "yearlySwitchPreviewFailed": "Не удалось загрузить цену.",
     "yearlySwitchUnavailable": "Годовая оплата сейчас недоступна для вашего плана.",

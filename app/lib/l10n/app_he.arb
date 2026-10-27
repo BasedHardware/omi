@@ -11875,7 +11875,7 @@
     "yearlySwitchDueToday": "לתשלום היום",
     "yearlySwitchRenews": "מתחדש",
     "yearlySwitchCreditNote": "כולל זיכוי על יתרת החודש.",
-    "yearlySwitchDeclined": "התשלום לא עבר. נשארת בתשלום חודשי.",
+    "yearlySwitchDeclined": "התשלום נדחה. נשארת בתשלום חודשי.",
     "yearlySwitchFailed": "המעבר נכשל. נשארת בתשלום חודשי.",
     "yearlySwitchPreviewFailed": "לא ניתן היה לטעון את המחיר.",
     "yearlySwitchUnavailable": "תשלום שנתי אינו זמין כרגע לתוכנית שלך.",

@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "Maksājams šodien",
     "yearlySwitchRenews": "Atjaunojas",
     "yearlySwitchCreditNote": "Ietver kredītu par atlikušo šī mēneša daļu.",
-    "yearlySwitchDeclined": "Maksājums neizdevās. Jūs joprojām maksājat katru mēnesi.",
+    "yearlySwitchDeclined": "Maksājums noraidīts. Jūs joprojām maksājat katru mēnesi.",
     "yearlySwitchFailed": "Neizdevās pāriet. Jūs joprojām maksājat katru mēnesi.",
     "yearlySwitchPreviewFailed": "Neizdevās ielādēt cenu.",
     "yearlySwitchUnavailable": "Gada maksa jūsu plānam pašlaik nav pieejama.",

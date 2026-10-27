@@ -14629,7 +14629,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Sisaldab krediiti selle kuu ülejäänud aja eest.';
 
   @override
-  String get yearlySwitchDeclined => 'Makse ei õnnestunud. Maksad endiselt igakuiselt.';
+  String get yearlySwitchDeclined => 'Makse lükati tagasi. Maksad endiselt igakuiselt.';
 
   @override
   String get yearlySwitchFailed => 'Üleminek ebaõnnestus. Maksad endiselt igakuiselt.';

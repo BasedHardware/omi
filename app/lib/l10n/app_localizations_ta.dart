@@ -14736,7 +14736,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get yearlySwitchCreditNote => 'இந்த மாதத்தின் மீதி நாட்களுக்கான கிரெடிட் சேர்க்கப்பட்டுள்ளது.';
 
   @override
-  String get yearlySwitchDeclined => 'கட்டணம் செலுத்தப்படவில்லை. நீங்கள் இன்னும் மாதாந்திர திட்டத்தில் உள்ளீர்கள்.';
+  String get yearlySwitchDeclined => 'கட்டணம் நிராகரிக்கப்பட்டது. நீங்கள் இன்னும் மாதாந்திர திட்டத்தில் உள்ளீர்கள்.';
 
   @override
   String get yearlySwitchFailed => 'மாற்ற முடியவில்லை. நீங்கள் இன்னும் மாதாந்திர திட்டத்தில் உள்ளீர்கள்.';

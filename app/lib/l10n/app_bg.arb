@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "Дължимо днес",
     "yearlySwitchRenews": "Подновяване",
     "yearlySwitchCreditNote": "Включва кредит за остатъка от този месец.",
-    "yearlySwitchDeclined": "Плащането не премина. Оставате на месечно плащане.",
+    "yearlySwitchDeclined": "Плащането е отказано. Оставате на месечно плащане.",
     "yearlySwitchFailed": "Превключването не успя. Оставате на месечно плащане.",
     "yearlySwitchPreviewFailed": "Цената не можа да се зареди.",
     "yearlySwitchUnavailable": "Годишното плащане в момента не е достъпно за вашия план.",

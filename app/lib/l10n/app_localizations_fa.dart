@@ -14631,7 +14631,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get yearlySwitchCreditNote => 'شامل اعتبار باقی‌ماندهٔ این ماه است.';
 
   @override
-  String get yearlySwitchDeclined => 'پرداخت انجام نشد. همچنان ماهانه پرداخت می‌کنید.';
+  String get yearlySwitchDeclined => 'پرداخت رد شد. همچنان ماهانه پرداخت می‌کنید.';
 
   @override
   String get yearlySwitchFailed => 'تغییر انجام نشد. همچنان ماهانه پرداخت می‌کنید.';

@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "K úhradě dnes",
     "yearlySwitchRenews": "Obnovení",
     "yearlySwitchCreditNote": "Zahrnuje kredit za zbytek tohoto měsíce.",
-    "yearlySwitchDeclined": "Platba neproběhla. Dál platíte měsíčně.",
+    "yearlySwitchDeclined": "Platba byla zamítnuta. Dál platíte měsíčně.",
     "yearlySwitchFailed": "Přechod se nezdařil. Dál platíte měsíčně.",
     "yearlySwitchPreviewFailed": "Cenu se nepodařilo načíst.",
     "yearlySwitchUnavailable": "Roční platba teď pro váš plán není dostupná.",

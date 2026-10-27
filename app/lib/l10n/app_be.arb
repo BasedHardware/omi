@@ -11875,7 +11875,7 @@
     "yearlySwitchDueToday": "Да аплаты сёння",
     "yearlySwitchRenews": "Падаўжэнне",
     "yearlySwitchCreditNote": "Уключае крэдыт за астатак гэтага месяца.",
-    "yearlySwitchDeclined": "Аплата не прайшла. Вы застаяцеся на штомесячнай аплаце.",
+    "yearlySwitchDeclined": "Аплата адхілена. Вы застаяцеся на штомесячнай аплаце.",
     "yearlySwitchFailed": "Не ўдалося перайсці. Вы застаяцеся на штомесячнай аплаце.",
     "yearlySwitchPreviewFailed": "Не ўдалося загрузіць цану.",
     "yearlySwitchUnavailable": "Гадавая аплата зараз недаступная для вашага плана.",

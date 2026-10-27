@@ -14555,7 +14555,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get yearlySwitchCreditNote => 'يشمل رصيدًا عن بقية هذا الشهر.';
 
   @override
-  String get yearlySwitchDeclined => 'لم تكتمل عملية الدفع. ما زلت على الدفع الشهري.';
+  String get yearlySwitchDeclined => 'تم رفض الدفع. ما زلت على الدفع الشهري.';
 
   @override
   String get yearlySwitchFailed => 'تعذّر التبديل. ما زلت على الدفع الشهري.';

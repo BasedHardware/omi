@@ -14696,7 +14696,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get yearlySwitchCreditNote => 'ఈ నెలలో మిగిలిన రోజులకు క్రెడిట్ ఉంటుంది.';
 
   @override
-  String get yearlySwitchDeclined => 'చెల్లింపు పూర్తి కాలేదు. మీరు ఇంకా నెలవారీ ప్లాన్‌లోనే ఉన్నారు.';
+  String get yearlySwitchDeclined => 'చెల్లింపు తిరస్కరించబడింది. మీరు ఇంకా నెలవారీ ప్లాన్‌లోనే ఉన్నారు.';
 
   @override
   String get yearlySwitchFailed => 'మారడం సాధ్యం కాలేదు. మీరు ఇంకా నెలవారీ ప్లాన్‌లోనే ఉన్నారు.';

@@ -14713,7 +14713,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Include un credito per il resto di questo mese.';
 
   @override
-  String get yearlySwitchDeclined => 'Il pagamento non è andato a buon fine. Resti sul mensile.';
+  String get yearlySwitchDeclined => 'Pagamento rifiutato. Resti sul mensile.';
 
   @override
   String get yearlySwitchFailed => 'Impossibile cambiare. Resti sul mensile.';

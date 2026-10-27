@@ -14732,7 +14732,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Περιλαμβάνει πίστωση για το υπόλοιπο του μήνα.';
 
   @override
-  String get yearlySwitchDeclined => 'Η πληρωμή δεν ολοκληρώθηκε. Παραμένετε σε μηνιαία χρέωση.';
+  String get yearlySwitchDeclined => 'Η πληρωμή απορρίφθηκε. Παραμένετε σε μηνιαία χρέωση.';
 
   @override
   String get yearlySwitchFailed => 'Η αλλαγή δεν ήταν δυνατή. Παραμένετε σε μηνιαία χρέωση.';

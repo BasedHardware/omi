@@ -14751,7 +14751,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Kasama ang credit para sa natitirang bahagi ng buwang ito.';
 
   @override
-  String get yearlySwitchDeclined => 'Hindi natuloy ang bayad. Buwanan ka pa rin.';
+  String get yearlySwitchDeclined => 'Tinanggihan ang bayad. Buwanan ka pa rin.';
 
   @override
   String get yearlySwitchFailed => 'Hindi nakalipat. Buwanan ka pa rin.';

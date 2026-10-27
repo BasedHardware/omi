@@ -14649,7 +14649,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get yearlySwitchCreditNote => 'اس مہینے کے باقی دنوں کا کریڈٹ شامل ہے۔';
 
   @override
-  String get yearlySwitchDeclined => 'ادائیگی نہیں ہو سکی۔ آپ اب بھی ماہانہ پلان پر ہیں۔';
+  String get yearlySwitchDeclined => 'ادائیگی مسترد ہو گئی۔ آپ اب بھی ماہانہ پلان پر ہیں۔';
 
   @override
   String get yearlySwitchFailed => 'تبدیلی نہیں ہو سکی۔ آپ اب بھی ماہانہ پلان پر ہیں۔';

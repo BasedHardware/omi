@@ -14644,7 +14644,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Inkluderar kredit för resten av månaden.';
 
   @override
-  String get yearlySwitchDeclined => 'Betalningen gick inte igenom. Du betalar fortfarande månadsvis.';
+  String get yearlySwitchDeclined => 'Betalningen nekades. Du betalar fortfarande månadsvis.';
 
   @override
   String get yearlySwitchFailed => 'Det gick inte att byta. Du betalar fortfarande månadsvis.';

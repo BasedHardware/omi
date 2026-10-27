@@ -14679,7 +14679,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Zawiera kredyt za resztę tego miesiąca.';
 
   @override
-  String get yearlySwitchDeclined => 'Płatność nie przeszła. Nadal płacisz co miesiąc.';
+  String get yearlySwitchDeclined => 'Płatność odrzucona. Nadal płacisz co miesiąc.';
 
   @override
   String get yearlySwitchFailed => 'Nie udało się zmienić. Nadal płacisz co miesiąc.';

@@ -14685,7 +14685,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Включает кредит за остаток этого месяца.';
 
   @override
-  String get yearlySwitchDeclined => 'Платёж не прошёл. Вы по-прежнему платите ежемесячно.';
+  String get yearlySwitchDeclined => 'Платёж отклонён. Вы по-прежнему платите ежемесячно.';
 
   @override
   String get yearlySwitchFailed => 'Не удалось перейти. Вы по-прежнему платите ежемесячно.';

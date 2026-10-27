@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "今日应付",
     "yearlySwitchRenews": "续订日期",
     "yearlySwitchCreditNote": "已包含本月剩余天数的抵扣。",
-    "yearlySwitchDeclined": "付款未成功。你仍按月付费。",
+    "yearlySwitchDeclined": "付款被拒。你仍按月付费。",
     "yearlySwitchFailed": "无法切换。你仍按月付费。",
     "yearlySwitchPreviewFailed": "无法加载价格。",
     "yearlySwitchUnavailable": "你的计划目前不支持按年付费。",

@@ -14698,7 +14698,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Include credit pentru restul acestei luni.';
 
   @override
-  String get yearlySwitchDeclined => 'Plata nu a trecut. Rămâi la plata lunară.';
+  String get yearlySwitchDeclined => 'Plată refuzată. Rămâi la plata lunară.';
 
   @override
   String get yearlySwitchFailed => 'Nu s-a putut schimba. Rămâi la plata lunară.';

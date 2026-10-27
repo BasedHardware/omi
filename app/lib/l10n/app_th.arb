@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "ชำระวันนี้",
     "yearlySwitchRenews": "ต่ออายุ",
     "yearlySwitchCreditNote": "รวมเครดิตสำหรับช่วงที่เหลือของเดือนนี้แล้ว",
-    "yearlySwitchDeclined": "การชำระเงินไม่สำเร็จ คุณยังจ่ายแบบรายเดือนอยู่",
+    "yearlySwitchDeclined": "การชำระเงินถูกปฏิเสธ คุณยังจ่ายแบบรายเดือนอยู่",
     "yearlySwitchFailed": "เปลี่ยนไม่สำเร็จ คุณยังจ่ายแบบรายเดือนอยู่",
     "yearlySwitchPreviewFailed": "โหลดราคาไม่ได้",
     "yearlySwitchUnavailable": "ตอนนี้แพ็กเกจของคุณยังจ่ายรายปีไม่ได้",

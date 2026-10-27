@@ -14664,7 +14664,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Vključuje dobropis za preostanek tega meseca.';
 
   @override
-  String get yearlySwitchDeclined => 'Plačilo ni uspelo. Še vedno plačujete mesečno.';
+  String get yearlySwitchDeclined => 'Plačilo je bilo zavrnjeno. Še vedno plačujete mesečno.';
 
   @override
   String get yearlySwitchFailed => 'Preklop ni uspel. Še vedno plačujete mesečno.';

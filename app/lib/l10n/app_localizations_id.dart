@@ -14650,7 +14650,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Termasuk kredit untuk sisa bulan ini.';
 
   @override
-  String get yearlySwitchDeclined => 'Pembayaran tidak berhasil. Anda tetap bayar bulanan.';
+  String get yearlySwitchDeclined => 'Pembayaran ditolak. Anda tetap bayar bulanan.';
 
   @override
   String get yearlySwitchFailed => 'Tidak dapat beralih. Anda tetap bayar bulanan.';

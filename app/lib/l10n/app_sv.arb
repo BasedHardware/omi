@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "Att betala i dag",
     "yearlySwitchRenews": "Förnyas",
     "yearlySwitchCreditNote": "Inkluderar kredit för resten av månaden.",
-    "yearlySwitchDeclined": "Betalningen gick inte igenom. Du betalar fortfarande månadsvis.",
+    "yearlySwitchDeclined": "Betalningen nekades. Du betalar fortfarande månadsvis.",
     "yearlySwitchFailed": "Det gick inte att byta. Du betalar fortfarande månadsvis.",
     "yearlySwitchPreviewFailed": "Det gick inte att läsa in priset.",
     "yearlySwitchUnavailable": "Årsbetalning är inte tillgänglig för ditt abonnemang just nu.",

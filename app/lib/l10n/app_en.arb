@@ -17900,7 +17900,7 @@
     "@yearlySwitchCreditNote": {
         "description": "Under the switch-to-yearly preview: today’s charge is lower because the unused part of the current month is credited"
     },
-    "yearlySwitchDeclined": "The payment didn't go through. You're still on monthly.",
+    "yearlySwitchDeclined": "Payment declined. You're still on monthly.",
     "@yearlySwitchDeclined": {
         "description": "Shown when the card is declined while switching to yearly; nothing changed and the subscription stays monthly"
     },

@@ -14431,7 +14431,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get yearlySwitchCreditNote => '今月の残り期間分のクレジットを含みます。';
 
   @override
-  String get yearlySwitchDeclined => 'お支払いが完了しませんでした。月払いのままです。';
+  String get yearlySwitchDeclined => 'お支払いが拒否されました。月払いのままです。';
 
   @override
   String get yearlySwitchFailed => '切り替えられませんでした。月払いのままです。';

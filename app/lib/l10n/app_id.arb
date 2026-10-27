@@ -4484,7 +4484,7 @@
     "yearlySwitchDueToday": "Dibayar hari ini",
     "yearlySwitchRenews": "Diperpanjang",
     "yearlySwitchCreditNote": "Termasuk kredit untuk sisa bulan ini.",
-    "yearlySwitchDeclined": "Pembayaran tidak berhasil. Anda tetap bayar bulanan.",
+    "yearlySwitchDeclined": "Pembayaran ditolak. Anda tetap bayar bulanan.",
     "yearlySwitchFailed": "Tidak dapat beralih. Anda tetap bayar bulanan.",
     "yearlySwitchPreviewFailed": "Tidak dapat memuat harga Anda.",
     "yearlySwitchUnavailable": "Pembayaran tahunan belum tersedia untuk paket Anda saat ini.",

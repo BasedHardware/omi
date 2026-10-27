@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "Πληρωτέο σήμερα",
     "yearlySwitchRenews": "Ανανέωση",
     "yearlySwitchCreditNote": "Περιλαμβάνει πίστωση για το υπόλοιπο του μήνα.",
-    "yearlySwitchDeclined": "Η πληρωμή δεν ολοκληρώθηκε. Παραμένετε σε μηνιαία χρέωση.",
+    "yearlySwitchDeclined": "Η πληρωμή απορρίφθηκε. Παραμένετε σε μηνιαία χρέωση.",
     "yearlySwitchFailed": "Η αλλαγή δεν ήταν δυνατή. Παραμένετε σε μηνιαία χρέωση.",
     "yearlySwitchPreviewFailed": "Δεν ήταν δυνατή η φόρτωση της τιμής.",
     "yearlySwitchUnavailable": "Η ετήσια χρέωση δεν είναι διαθέσιμη για το πρόγραμμά σας αυτή τη στιγμή.",

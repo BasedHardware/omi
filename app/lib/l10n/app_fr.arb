@@ -4484,7 +4484,7 @@
     "yearlySwitchDueToday": "À payer aujourd'hui",
     "yearlySwitchRenews": "Renouvellement",
     "yearlySwitchCreditNote": "Inclut un crédit pour le reste de ce mois.",
-    "yearlySwitchDeclined": "Le paiement n'est pas passé. Vous restez au mensuel.",
+    "yearlySwitchDeclined": "Paiement refusé. Vous restez au mensuel.",
     "yearlySwitchFailed": "Changement impossible. Vous restez au mensuel.",
     "yearlySwitchPreviewFailed": "Impossible de charger votre prix.",
     "yearlySwitchUnavailable": "La facturation annuelle n'est pas disponible pour votre forfait pour le moment.",

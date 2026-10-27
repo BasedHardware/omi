@@ -14635,7 +14635,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Zahrnuje kredit za zbytek tohoto měsíce.';
 
   @override
-  String get yearlySwitchDeclined => 'Platba neproběhla. Dál platíte měsíčně.';
+  String get yearlySwitchDeclined => 'Platba byla zamítnuta. Dál platíte měsíčně.';
 
   @override
   String get yearlySwitchFailed => 'Přechod se nezdařil. Dál platíte měsíčně.';

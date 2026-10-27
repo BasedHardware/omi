@@ -14694,7 +14694,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Tartalmazza a hónap hátralévő részének jóváírását.';
 
   @override
-  String get yearlySwitchDeclined => 'A fizetés nem sikerült. Továbbra is havonta fizet.';
+  String get yearlySwitchDeclined => 'A fizetést elutasították. Továbbra is havonta fizet.';
 
   @override
   String get yearlySwitchFailed => 'A váltás nem sikerült. Továbbra is havonta fizet.';

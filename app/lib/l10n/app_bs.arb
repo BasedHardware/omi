@@ -11875,7 +11875,7 @@
     "yearlySwitchDueToday": "Za plaćanje danas",
     "yearlySwitchRenews": "Obnavlja se",
     "yearlySwitchCreditNote": "Uključuje kredit za ostatak ovog mjeseca.",
-    "yearlySwitchDeclined": "Plaćanje nije prošlo. I dalje plaćate mjesečno.",
+    "yearlySwitchDeclined": "Plaćanje je odbijeno. I dalje plaćate mjesečno.",
     "yearlySwitchFailed": "Prelazak nije uspio. I dalje plaćate mjesečno.",
     "yearlySwitchPreviewFailed": "Cijena se nije mogla učitati.",
     "yearlySwitchUnavailable": "Godišnje plaćanje trenutno nije dostupno za vaš plan.",

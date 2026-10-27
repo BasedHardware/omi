@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "De plată azi",
     "yearlySwitchRenews": "Se reînnoiește",
     "yearlySwitchCreditNote": "Include credit pentru restul acestei luni.",
-    "yearlySwitchDeclined": "Plata nu a trecut. Rămâi la plata lunară.",
+    "yearlySwitchDeclined": "Plată refuzată. Rămâi la plata lunară.",
     "yearlySwitchFailed": "Nu s-a putut schimba. Rămâi la plata lunară.",
     "yearlySwitchPreviewFailed": "Prețul nu a putut fi încărcat.",
     "yearlySwitchUnavailable": "Plata anuală nu este disponibilă acum pentru planul tău.",

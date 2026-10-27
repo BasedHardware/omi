@@ -14620,7 +14620,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get yearlySwitchCreditNote => 'इस महीने के बचे समय का क्रेडिट शामिल है।';
 
   @override
-  String get yearlySwitchDeclined => 'भुगतान नहीं हो पाया। आप अभी भी मासिक प्लान पर हैं।';
+  String get yearlySwitchDeclined => 'भुगतान अस्वीकार हुआ। आप अभी भी मासिक प्लान पर हैं।';
 
   @override
   String get yearlySwitchFailed => 'स्विच नहीं हो सका। आप अभी भी मासिक प्लान पर हैं।';

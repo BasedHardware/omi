@@ -11875,7 +11875,7 @@
     "yearlySwitchDueToday": "Za plačilo danes",
     "yearlySwitchRenews": "Podaljšanje",
     "yearlySwitchCreditNote": "Vključuje dobropis za preostanek tega meseca.",
-    "yearlySwitchDeclined": "Plačilo ni uspelo. Še vedno plačujete mesečno.",
+    "yearlySwitchDeclined": "Plačilo je bilo zavrnjeno. Še vedno plačujete mesečno.",
     "yearlySwitchFailed": "Preklop ni uspel. Še vedno plačujete mesečno.",
     "yearlySwitchPreviewFailed": "Cene ni bilo mogoče naložiti.",
     "yearlySwitchUnavailable": "Letno plačilo za vaš paket trenutno ni na voljo.",

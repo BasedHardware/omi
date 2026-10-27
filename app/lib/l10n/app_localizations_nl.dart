@@ -14675,7 +14675,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Inclusief tegoed voor de rest van deze maand.';
 
   @override
-  String get yearlySwitchDeclined => 'De betaling is niet gelukt. Je betaalt nog steeds maandelijks.';
+  String get yearlySwitchDeclined => 'Betaling geweigerd. Je betaalt nog steeds maandelijks.';
 
   @override
   String get yearlySwitchFailed => 'Overstappen is niet gelukt. Je betaalt nog steeds maandelijks.';

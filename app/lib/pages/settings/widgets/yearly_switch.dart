@@ -250,31 +250,27 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        OmiSettingsGroup(
-          children: [
-            OmiSettingsRow(
-              title: l10n.yearlySwitchPlanLabel,
-              value: l10n.yearlySwitchPlanValue(plan, yearlySwitchMoney(context, offer.yearlyAmount!, currency)),
-            ),
-            OmiSettingsRow(
-              title: l10n.yearlySwitchDueToday,
-              trailing: Text(
-                dueToday,
-                key: const Key('yearly_switch_due_today'),
-                style: OmiType.body.copyWith(fontWeight: FontWeight.w600),
-              ),
-            ),
-            OmiSettingsRow(title: l10n.yearlySwitchRenews, value: renews),
-          ],
+        _FactRow(
+          label: l10n.yearlySwitchPlanLabel,
+          value: l10n.yearlySwitchPlanValue(plan, yearlySwitchMoney(context, offer.yearlyAmount!, currency)),
         ),
+        Divider(height: 1, thickness: 1, color: OmiColors.border),
+        _FactRow(
+          label: l10n.yearlySwitchDueToday,
+          value: dueToday,
+          valueKey: const Key('yearly_switch_due_today'),
+          emphasized: true,
+        ),
+        Divider(height: 1, thickness: 1, color: OmiColors.border),
+        _FactRow(label: l10n.yearlySwitchRenews, value: renews),
         if (offer.amountDueToday! < offer.yearlyAmount!)
           Padding(
-            padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, 0),
+            padding: const EdgeInsets.only(top: OmiSpacing.xxs),
             child: Text(l10n.yearlySwitchCreditNote, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
           ),
         if (_error != null)
           Padding(
-            padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, 0),
+            padding: const EdgeInsets.only(top: OmiSpacing.md),
             child: Text(
               _error!,
               key: const Key('yearly_switch_error'),
@@ -298,6 +294,46 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
           onPressed: _switching ? null : () => Navigator.of(context).maybePop(),
         ),
       ],
+    );
+  }
+}
+
+/// One line of the preview: what it is on the left, its value on the right, aligned with the title.
+class _FactRow extends StatelessWidget {
+  const _FactRow({required this.label, required this.value, this.valueKey, this.emphasized = false});
+
+  final String label;
+  final String value;
+  final Key? valueKey;
+
+  /// The charge today: the line the reader is deciding on.
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    return MergeSemantics(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: OmiSpacing.sm),
+          child: Row(
+            children: [
+              Text(label, style: OmiType.body.copyWith(color: OmiColors.textPrimary)),
+              const SizedBox(width: OmiSpacing.md),
+              Expanded(
+                child: Text(
+                  value,
+                  key: valueKey,
+                  textAlign: TextAlign.end,
+                  style: emphasized
+                      ? OmiType.body.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600)
+                      : OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

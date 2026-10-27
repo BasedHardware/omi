@@ -14647,7 +14647,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get yearlySwitchCreditNote => 'या महिन्याच्या उरलेल्या कालावधीचे क्रेडिट समाविष्ट आहे.';
 
   @override
-  String get yearlySwitchDeclined => 'पेमेंट पूर्ण झाले नाही. तुम्ही अजूनही मासिक प्लॅनवर आहात.';
+  String get yearlySwitchDeclined => 'पेमेंट नाकारले गेले. तुम्ही अजूनही मासिक प्लॅनवर आहात.';
 
   @override
   String get yearlySwitchFailed => 'स्विच करता आले नाही. तुम्ही अजूनही मासिक प्लॅनवर आहात.';

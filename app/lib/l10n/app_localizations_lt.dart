@@ -14660,7 +14660,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Įskaičiuotas kreditas už likusią šio mėnesio dalį.';
 
   @override
-  String get yearlySwitchDeclined => 'Mokėjimas nepavyko. Toliau mokate kas mėnesį.';
+  String get yearlySwitchDeclined => 'Mokėjimas atmestas. Toliau mokate kas mėnesį.';
 
   @override
   String get yearlySwitchFailed => 'Nepavyko pereiti. Toliau mokate kas mėnesį.';

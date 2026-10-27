@@ -14701,7 +14701,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Вклучува кредит за остатокот од овој месец.';
 
   @override
-  String get yearlySwitchDeclined => 'Плаќањето не помина. И понатаму плаќате месечно.';
+  String get yearlySwitchDeclined => 'Плаќањето е одбиено. И понатаму плаќате месечно.';
 
   @override
   String get yearlySwitchFailed => 'Префрлањето не успеа. И понатаму плаќате месечно.';

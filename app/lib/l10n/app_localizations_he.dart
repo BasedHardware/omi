@@ -14533,7 +14533,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get yearlySwitchCreditNote => 'כולל זיכוי על יתרת החודש.';
 
   @override
-  String get yearlySwitchDeclined => 'התשלום לא עבר. נשארת בתשלום חודשי.';
+  String get yearlySwitchDeclined => 'התשלום נדחה. נשארת בתשלום חודשי.';
 
   @override
   String get yearlySwitchFailed => 'המעבר נכשל. נשארת בתשלום חודשי.';

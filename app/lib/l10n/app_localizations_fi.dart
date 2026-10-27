@@ -14641,7 +14641,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Sisältää hyvityksen tämän kuun jäljellä olevasta ajasta.';
 
   @override
-  String get yearlySwitchDeclined => 'Maksu ei mennyt läpi. Maksat edelleen kuukausittain.';
+  String get yearlySwitchDeclined => 'Maksu hylättiin. Maksat edelleen kuukausittain.';
 
   @override
   String get yearlySwitchFailed => 'Vaihto epäonnistui. Maksat edelleen kuukausittain.';

@@ -25884,7 +25884,7 @@ abstract class AppLocalizations {
   /// Shown when the card is declined while switching to yearly; nothing changed and the subscription stays monthly
   ///
   /// In en, this message translates to:
-  /// **'The payment didn\'t go through. You\'re still on monthly.'**
+  /// **'Payment declined. You\'re still on monthly.'**
   String get yearlySwitchDeclined;
 
   /// Shown when switching to yearly fails for another reason; nothing changed

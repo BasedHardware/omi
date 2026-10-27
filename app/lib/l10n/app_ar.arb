@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "المستحق اليوم",
     "yearlySwitchRenews": "يتجدد في",
     "yearlySwitchCreditNote": "يشمل رصيدًا عن بقية هذا الشهر.",
-    "yearlySwitchDeclined": "لم تكتمل عملية الدفع. ما زلت على الدفع الشهري.",
+    "yearlySwitchDeclined": "تم رفض الدفع. ما زلت على الدفع الشهري.",
     "yearlySwitchFailed": "تعذّر التبديل. ما زلت على الدفع الشهري.",
     "yearlySwitchPreviewFailed": "تعذّر تحميل السعر.",
     "yearlySwitchUnavailable": "الدفع السنوي غير متاح لخطتك حاليًا.",

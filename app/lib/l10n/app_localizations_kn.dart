@@ -14684,7 +14684,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get yearlySwitchCreditNote => 'ಈ ತಿಂಗಳ ಉಳಿದ ಅವಧಿಯ ಕ್ರೆಡಿಟ್ ಒಳಗೊಂಡಿದೆ.';
 
   @override
-  String get yearlySwitchDeclined => 'ಪಾವತಿ ಆಗಲಿಲ್ಲ. ನೀವು ಇನ್ನೂ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ.';
+  String get yearlySwitchDeclined => 'ಪಾವತಿ ನಿರಾಕರಿಸಲಾಗಿದೆ. ನೀವು ಇನ್ನೂ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ.';
 
   @override
   String get yearlySwitchFailed => 'ಬದಲಿಸಲು ಆಗಲಿಲ್ಲ. ನೀವು ಇನ್ನೂ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ.';

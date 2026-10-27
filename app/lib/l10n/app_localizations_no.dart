@@ -14640,7 +14640,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get yearlySwitchCreditNote => 'Inkluderer kreditt for resten av denne måneden.';
 
   @override
-  String get yearlySwitchDeclined => 'Betalingen gikk ikke gjennom. Du betaler fortsatt månedlig.';
+  String get yearlySwitchDeclined => 'Betalingen ble avvist. Du betaler fortsatt månedlig.';
 
   @override
   String get yearlySwitchFailed => 'Kunne ikke bytte. Du betaler fortsatt månedlig.';

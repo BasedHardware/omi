@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "Maksettava tänään",
     "yearlySwitchRenews": "Uusiutuu",
     "yearlySwitchCreditNote": "Sisältää hyvityksen tämän kuun jäljellä olevasta ajasta.",
-    "yearlySwitchDeclined": "Maksu ei mennyt läpi. Maksat edelleen kuukausittain.",
+    "yearlySwitchDeclined": "Maksu hylättiin. Maksat edelleen kuukausittain.",
     "yearlySwitchFailed": "Vaihto epäonnistui. Maksat edelleen kuukausittain.",
     "yearlySwitchPreviewFailed": "Hintaa ei voitu ladata.",
     "yearlySwitchUnavailable": "Vuosimaksu ei ole juuri nyt saatavilla tilauksellesi.",

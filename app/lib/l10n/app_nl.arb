@@ -4449,7 +4449,7 @@
     "yearlySwitchDueToday": "Vandaag te betalen",
     "yearlySwitchRenews": "Verlengt",
     "yearlySwitchCreditNote": "Inclusief tegoed voor de rest van deze maand.",
-    "yearlySwitchDeclined": "De betaling is niet gelukt. Je betaalt nog steeds maandelijks.",
+    "yearlySwitchDeclined": "Betaling geweigerd. Je betaalt nog steeds maandelijks.",
     "yearlySwitchFailed": "Overstappen is niet gelukt. Je betaalt nog steeds maandelijks.",
     "yearlySwitchPreviewFailed": "Je prijs kon niet worden geladen.",
     "yearlySwitchUnavailable": "Jaarlijks betalen is nu niet beschikbaar voor je abonnement.",

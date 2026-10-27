@@ -4491,7 +4491,7 @@
     "yearlySwitchDueToday": "Betales i dag",
     "yearlySwitchRenews": "Fornyes",
     "yearlySwitchCreditNote": "Inkluderer kredit for resten af denne måned.",
-    "yearlySwitchDeclined": "Betalingen gik ikke igennem. Du betaler stadig månedligt.",
+    "yearlySwitchDeclined": "Betalingen blev afvist. Du betaler stadig månedligt.",
     "yearlySwitchFailed": "Kunne ikke skifte. Du betaler stadig månedligt.",
     "yearlySwitchPreviewFailed": "Kunne ikke indlæse din pris.",
     "yearlySwitchUnavailable": "Årlig betaling er ikke tilgængelig for dit abonnement lige nu.",
