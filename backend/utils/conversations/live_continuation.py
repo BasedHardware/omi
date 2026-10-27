@@ -32,8 +32,8 @@ def resolve_live_continuation(
         timeout=timeout,
         proposed=proposed,
         firestore_client=firestore_client,
-        **({'language': language} if language is not None else {}),
-        **({'allow_server_batch': False} if not allow_server_batch else {}),
+        language=language,
+        allow_server_batch=allow_server_batch,
     )
     if retired:
         # Only empty generations are removed; transcript/photo content and its
