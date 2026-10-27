@@ -559,7 +559,7 @@ def search_conversations_tool(
                 OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="keyword", outcome="success").inc()
             except Exception as kw_err:
                 logger.warning("Keyword search failed during conversation search; falling back to vector/semantic search: %s", kw_err)
-                record_fallback(conversation_keyword_search=kw_err)
+                record_fallback(conversation_keyword_search=str(kw_err))
                 OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="keyword", outcome="fallback").inc()
                 keyword_degraded = True
 
@@ -618,7 +618,7 @@ def search_conversations_tool(
                 if max_transcript_segments != -1 and conversation.transcript_segments and len(conversation.transcript_segments) > max_transcript_segments:
                     total_segments = len(conversation.transcript_segments)
                     conversation.transcript_segments = conversation.transcript_segments[:max_transcript_segments]
-                    truncation_notes[conversation.id] = truncation_note(shown=len(conversation.transcript_segments), total=total_segments, unit='transcript segments', cut=True)
+                    truncation_notes[conversation.id] = truncation_note(shown=len(conversation.transcript_segments), total=total_segments, unit='transcript segments', how_to_get_more='Increase max_transcript_segments.', cut=True)
                 conversations.append(conversation)
             except Exception:
                 continue
