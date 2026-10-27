@@ -1,6 +1,9 @@
 """Projection binding validation and provider-free retry/publication guards."""
 
 from dataclasses import replace
+from dataclasses import asdict
+from copy import deepcopy
+from types import SimpleNamespace
 from config.policy import BatchUnitPolicy, ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
 import logging
 from unittest.mock import Mock
@@ -12,6 +15,10 @@ from utils.batch_pipeline.contracts import ProjectionBinding
 from database.batch_pipeline_projection import ProjectionStore
 from utils.batch_pipeline import projection
 from utils.sync import bridge
+from database.sync_ledger import sync_content_ledger_ref
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.batch_pipeline.scheduler import owner_key
+from utils.sync.capture import chunk_identity
 
 
 @pytest.fixture
@@ -642,6 +649,66 @@ def test_supersession_cannot_bypass_privacy_fence(binding):
     session.persist_empty.side_effect = BatchPrivacyBlocked('privacy_generation_changed')
     with pytest.raises(BatchPrivacyBlocked):
         projector.supersede(session)
+
+
+@pytest.mark.parametrize('source', ['live', 'donor_only', 'direct_deleted', 'redirect_deleted', 'soft_deleted'])
+def test_privacy_disposition_requires_transactional_input_tombstone_proof(binding, source, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_proof'))
+    user = client.collection('users').document(binding.owner_id)
+    user.create({'data_protection_level': 'standard'})
+    cid = chunk_identity(binding.owner_id, binding.source, binding.client_device_id, binding.is_locked, 1000)
+    if source == 'direct_deleted':
+        user.collection('deleted_conversations').document(cid).create({'deleted': True})
+    elif source == 'redirect_deleted':
+        user.collection('conversations').document(cid).create({'deleted': True, 'sync_merged_into': 'deleted-survivor'})
+        user.collection('deleted_conversations').document('deleted-survivor').create({'deleted': True})
+    elif source == 'soft_deleted':
+        user.collection('conversations').document(cid).create({'deleted': True})
+    elif source == 'donor_only':
+        user.collection('deleted_conversations').document('unrelated-donor').create({'deleted': True})
+    result = {'outcome': 'success', 'result_uri': 'gs://synthetic/result'}
+    store.ref('jobs', 'segment').create(
+        {
+            'projection_binding': asdict(binding),
+            'owner_id': binding.owner_id,
+            'capture_at': 1000,
+            'privacy_generation': 0,
+            'result': result,
+        }
+    )
+    store.ref('results', 'segment').create(
+        {
+            'owner_key': owner_key(binding.owner_id),
+            'protocol_version': 1,
+            'segment_id': 'segment',
+            'capture_at': 1000,
+            'previous_segment_id': None,
+            'result': result,
+        }
+    )
+    store.ref('owners', owner_key(binding.owner_id)).create({'projection_watermark': None})
+    sync_content_ledger_ref(client, binding.owner_id, binding.content_id).create(
+        {
+            'dispatch_protocol': 'batch_v1',
+            'status': 'processing',
+            'job_id': binding.job_id,
+            'batch_pipeline': {'protocol_version': 1, 'namespace': store.store.namespace, 'segment_ids': ['segment']},
+        }
+    )
+    session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
+    transaction = client.transaction()
+    before = deepcopy(client.rows)
+    if source in {'direct_deleted', 'redirect_deleted'}:
+        session.prepare(transaction, privacy_deleted=True)
+        receipt = session.persist(transaction, superseded=True, privacy_deleted=True)
+        assert receipt['privacy_reason'] == 'conversation_deleted' and receipt['speech_seconds'] == 0
+        assert store.projection_watermark(owner_key(binding.owner_id)) == 'segment'
+    else:
+        with pytest.raises(projection.ProjectionBlocked, match='requires a source deletion tombstone'):
+            session.prepare(transaction, privacy_deleted=True)
+        assert client.rows == before
 
 
 @pytest.mark.parametrize('reason', ['conversation_fence_budget', 'conversation_deleted', 'private-text-not-a-reason'])

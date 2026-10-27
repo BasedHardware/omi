@@ -40,8 +40,9 @@ sync retention and `save_other_voice_profiles` are required at execution and
 transactional publication. Sync-off tags do not create a durable roster.
 Corrections, deletion and privacy opt-out still retract with the switch off.
 Batch sync assignment also excludes user-deletion tombstones on still-live
-rows. A deleted source that cannot be re-planned settles without text and
-advances the owner's projection chain; account and generation fences remain
+rows. An input source proven user-deleted settles without text; otherwise a
+refused donor re-plan preserves speech in a new conversation. Both advance
+the owner's projection chain; account and generation fences remain
 authoritative. Cascade DELETE takes its account gate before writing intent, so
 a busy-gate 409 leaves no partial deletion. See
 [batch projection ordering](batch-pipeline-serving.md#bounded-merge-head-wait)

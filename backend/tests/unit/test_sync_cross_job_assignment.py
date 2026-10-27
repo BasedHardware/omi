@@ -131,18 +131,23 @@ def test_deleted_ancestry_replans_once_before_any_write(second_refusal):
             invalidate=lambda payload: None,
         )
 
+    assigned, created, survivors = assign()
+    assert created and survivors
+    assert assigned['id'] not in {'canonical', 'second'}
+    assert assigned['sync_merged_from'] == []
+    assert [part['text'] for part in assigned['transcript_segments']] == [
+        chunk('new', 1060)['transcript_segments'][0]['text']
+    ]
+    assert (
+        store.rows[('users', 'u', 'conversations', 'canonical')] == before[('users', 'u', 'conversations', 'canonical')]
+    )
     if second_refusal:
-        with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
-            assign()
-        assert store.rows == before
-    else:
-        assigned, created, survivors = assign()
-        assert assigned['id'] == 'new' and created and survivors
         assert (
-            store.rows[('users', 'u', 'conversations', 'canonical')]
-            == before[('users', 'u', 'conversations', 'canonical')]
+            store.rows[('users', 'u', 'conversations', 'second')] == before[('users', 'u', 'conversations', 'second')]
         )
-    assert len(plans) == 2
+    else:
+        assert assigned['id'] == 'new'
+    assert len(plans) == (3 if second_refusal else 2)
 
 
 @pytest.mark.parametrize('reverse', [False, True])

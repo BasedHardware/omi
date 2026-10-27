@@ -1377,21 +1377,18 @@ def delete_conversation(
 ):
     db_client = getattr(db_client_module, 'db', None) if cascade else None
     memory_service = MemoryService(db_client=db_client) if cascade else None
-    retract = cascade and not retraction_can_be_skipped(
-        uid, conversation_id, memory_service=memory_service, db_client=db_client
-    )
     # Acquire before recording delete intent. A busy account returns a retryable
     # 409 without leaving a tombstone on a still-live conversation. Nested
     # memory retraction reuses this exact gate and token.
     gate = (
         destructive_operation_gate(uid, kind='explicit_memory_deletion', firestore_client=db_client)
-        if retract
+        if cascade
         else nullcontext()
     )
     try:
         with gate:
             return _delete_conversation_under_gate(
-                conversation_id, background_tasks, cascade, http_request, uid, memory_service, retract
+                conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client
             )
     except RuntimeError as error:
         if type(error).__name__ not in {
@@ -1404,7 +1401,7 @@ def delete_conversation(
 
 
 def _delete_conversation_under_gate(
-    conversation_id, background_tasks, cascade, http_request, uid, memory_service, retract
+    conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client
 ):
     logger.info('event=conversation_delete cascade=%s', cascade)
 
@@ -1417,7 +1414,9 @@ def _delete_conversation_under_gate(
         # Delete associated memories and action items first so partial failure cannot orphan derived data.
         # Retraction is fenced with canonical intake; skip only when there is provably nothing to retract.
         # Any real memory still raises instead of being orphaned by conversation deletion.
-        if retract:
+        # Preserve the post-intent retraction check: an earlier emptiness hint
+        # could miss a canonical commit that won immediately before the gate.
+        if not retraction_can_be_skipped(uid, conversation_id, memory_service=memory_service, db_client=db_client):
             try:
                 memory_service.retract_conversation_memories(uid, conversation_id)
             except ConversationReplacementConflictError as error:

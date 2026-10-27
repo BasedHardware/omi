@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
+from database.batch_pipeline_projection_session import ProjectionSession
 from database.legal_holds import acquire_destructive_operation, finish_destructive_operation
 from tests.integration.test_batch_pipeline_projection_firestore import lane, active_rows
 from utils.batch_pipeline import projection
@@ -135,22 +136,51 @@ def test_privacy_settlement_cannot_skip_other_transactional_fences(lane, fence):
     assert not lane.tasks and not lane.published
 
 
-def test_second_plan_refusal_settles_and_owner_sweep_continues(lane, monkeypatch):
+def test_two_deleted_donor_ancestries_preserve_live_input_in_new_conversation(lane, monkeypatch):
     head = lane.seed()
     later = lane.seed(('later',), capture_at=2000)
+    blocked, live = overlap(lane, head, tombstoned=False)
+    other = lane.user.collection('conversations').document(live['id'])
+    blocked.update({'sync_merged_from': ['synthetic-deleted-a']})
+    other.update({'sync_merged_from': ['synthetic-deleted-b']})
+    for cid in ('synthetic-deleted-a', 'synthetic-deleted-b'):
+        lane.user.collection('deleted_conversations').document(cid).set({'deleted': True})
+    before = {ref: ref.get().to_dict() for ref in (blocked, other)}
     lane.finish(head)
     lane.finish(later)
-    original = lane.conversations.assign_sync_conversation
+    original = ProjectionSession.validate_plan
     calls = []
 
-    def refused(owner, incoming, **kwargs):
-        if incoming['started_at'].timestamp() == 1000:
-            calls.append(True)
-            raise BatchPrivacyBlocked('conversation_deleted', conversation_id='synthetic-deleted-ancestor')
-        return original(owner, incoming, **kwargs)
+    def validated(session, transaction, planned):
+        if session.segment_id == head.ids[0]:
+            calls.append(planned['id'])
+        return original(session, transaction, planned)
 
-    monkeypatch.setattr(lane.conversations, 'assign_sync_conversation', refused)
+    monkeypatch.setattr(ProjectionSession, 'validate_plan', validated)
+    monkeypatch.setattr(lane.conversations, 'get_closest_conversation_to_timestamps', lambda *args: live)
     lane.projector.project_owner(lane.uid, limit=16, budget_seconds=60)
-    assert len(calls) == 1
-    assert head.ledger.get().to_dict()['result']['reason_code'] == 'conversation_deleted'
+    result = head.ledger.get().to_dict()['result']
+    assert len(calls) == 3
+    assert len(result['new_memories']) == 1 and not result['updated_memories']
+    assert 'reason_code' not in result and 'superseded_segments' not in result
+    receipt = lane.projector.store.ref('results', head.ids[0]).get().to_dict()['projection']
+    assert receipt['speech_seconds'] == 4 and 'privacy_reason' not in receipt
+    assert head.ledger.get().to_dict()['usage_committed_seconds'] == 4
+    projected = next(row for row in active_rows(lane) if row['id'] == result['new_memories'][0])
+    assert projected['id'] not in {blocked.id, other.id}
+    assert projected['sync_merged_from'] == []
+    assert 'We discussed the project.' in ' '.join(part['text'] for part in projected['transcript_segments'])
+    assert all(ref.get().to_dict() == row for ref, row in before.items())
     assert later.ledger.get().to_dict()['status'] == 'completed'
+    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) == later.ids[-1]
+    assert lane.projector.project(head.ids[0]) == result
+
+
+def test_donor_refusal_alone_cannot_authorize_terminal_input_disposition(lane):
+    head = lane.seed()
+    lane.finish(head)
+    session = lane.projector.store.session(head.ids[0], head.binding, lane.clock())
+    with pytest.raises(ProjectionBlocked, match='requires a source deletion tombstone'):
+        session.persist_empty(superseded=True, privacy_deleted=True)
+    assert not lane.projector.store.ref('results', head.ids[0]).get().to_dict().get('projection')
+    assert head.ledger.get().to_dict()['status'] == 'processing'

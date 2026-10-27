@@ -59,6 +59,7 @@ class ProjectionSession:
         self.audio_end: float | None = None
         self.speaker_scope: str | None = None
         self.total_speech_seconds = 0.0
+        self._source_deletion_transaction = None
 
     def receipt(self) -> dict:
         parts = self.entry.get('projection_parts') or {}
@@ -100,6 +101,7 @@ class ProjectionSession:
         )
 
     def prepare(self, transaction, *, replay=True, privacy_deleted=False):
+        self._source_deletion_transaction = None
         if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
             # A session may survive the pre-check and assignment retries. Only
             # prepare and validate_plan within this attempt may share snapshots.
@@ -148,13 +150,29 @@ class ProjectionSession:
         if self.job.get('conversation_id'):
             ids.append(self.job['conversation_id'])
         ids.extend(self.job.get('conversation_ids') or [])
+        settling_deletion = privacy_deleted or self.receipt().get('privacy_reason') == 'conversation_deleted'
+
+        def source_tombstoned(error):
+            # The guard supplies the exact refused ID, including a survivor
+            # reached through this source's redirect chain. Donors from a
+            # proposed assignment are deliberately absent from `ids`.
+            return bool(
+                error.conversation_id
+                and self.client.collection('users')
+                .document(self.binding.owner_id)
+                .collection('deleted_conversations')
+                .document(error.conversation_id)
+                .get(transaction=transaction)
+                .exists
+            )
+
         try:
             self.guard(transaction, ids)
         except BatchPrivacyBlocked as error:
-            if error.reason != BatchPrivacyReason.CONVERSATION_DELETED or not (
-                privacy_deleted or self.receipt().get('privacy_reason') == 'conversation_deleted'
-            ):
+            if error.reason != BatchPrivacyReason.CONVERSATION_DELETED or not settling_deletion:
                 raise
+            if not source_tombstoned(error):
+                raise ProjectionBlocked('privacy disposition requires a source deletion tombstone') from error
             # A no-text deletion receipt may advance the owner chain, but must
             # still pass the account/protection/generation fence. Ordinary
             # assignment never enters this branch or skips a source fence.
@@ -165,6 +183,14 @@ class ProjectionSession:
                 except BatchPrivacyBlocked as source_error:
                     if source_error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
                         raise
+                    if not source_tombstoned(source_error):
+                        raise ProjectionBlocked(
+                            'privacy disposition requires a source deletion tombstone'
+                        ) from source_error
+            self._source_deletion_transaction = transaction
+        else:
+            if settling_deletion:
+                raise ProjectionBlocked('privacy disposition requires a source deletion tombstone')
         durable = self.ledger.get('batch_pipeline') or {}
         if (
             self.ledger.get('dispatch_protocol') != 'batch_v1'
@@ -213,7 +239,9 @@ class ProjectionSession:
         self.guard(transaction, [planned['id'], *(planned.get('sync_merged_from') or [])])
 
     def persist(self, transaction, planned=None, *, superseded=False, quarantined=False, privacy_deleted=False):
-        if privacy_deleted and (planned is not None or not superseded or quarantined):
+        if privacy_deleted and (
+            planned is not None or not superseded or quarantined or self._source_deletion_transaction is not transaction
+        ):
             raise ProjectionBlocked('privacy disposition cannot assign content')
         if quarantined and (planned is not None or superseded):
             raise ProjectionBlocked('quarantine cannot assign content')

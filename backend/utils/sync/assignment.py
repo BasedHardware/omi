@@ -8,6 +8,7 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 from copy import deepcopy
 import logging
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
+from uuid import NAMESPACE_URL, uuid5
 
 from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
 from config.sync_live_dedupe import sync_live_dedupe_active_for
@@ -367,23 +368,23 @@ def assign_in_transaction(
     live_stats: Optional[dict] = None
     privacy_excluded: frozenset[str] = frozenset()
 
-    def plan(excluded: frozenset[str], segment_indices: tuple[int, ...]) -> _Plan:
+    def plan(excluded: frozenset[str], segment_indices: tuple[int, ...], *, isolated_id: str | None = None) -> _Plan:
         """Choose, merge and encode without writing; ``excluded`` rows stay untouched.
 
         An excluded conversation is never this chunk's target, donor or bridge,
         and every fence below re-runs without it.
         """
         nonlocal live_stats
-        plan_target_id = target_id if target_id not in excluded else None
+        plan_target_id = target_id if not isolated_id and target_id not in excluded else None
         plan_target = target if plan_target_id else None
-        if own_anchor and not auto_mergeable(own_anchor) and own_id != plan_target_id:
+        if not isolated_id and own_anchor and not auto_mergeable(own_anchor) and own_id != plan_target_id:
             raise SyncAssignmentSuperseded('sync anchor is user managed')
 
         if plan_target_id and own_anchor and own_id != plan_target_id and own_anchor.get('manual_speaker_assignments'):
             raise SyncAssignmentSuperseded('sync anchor has manual speaker assignments')
 
         receipt_owner = plan_target_id or (
-            own_id if own_anchor and own_anchor.get('manual_speaker_assignments') else None
+            own_id if not isolated_id and own_anchor and own_anchor.get('manual_speaker_assignments') else None
         )
         matched = {}
         extent = deepcopy(incoming)
@@ -392,8 +393,13 @@ def assign_in_transaction(
             extent['started_at'] = min(extent['started_at'], plan_target['started_at'])
             extent['finished_at'] = max(extent['finished_at'], plan_target['finished_at'])
         while True:
-            ids = {row['id'] for row in index.read(extent) if interval_matches(row, extent)}
-            ids.update(cid for cid in (candidate_id, incoming['id'], own_id, target_hint) if cid)
+            if isolated_id:
+                # Preserve only this input, with no inherited donor content or
+                # ancestry. The stable key makes a lost reply replayable.
+                ids = {isolated_id}
+            else:
+                ids = {row['id'] for row in index.read(extent) if interval_matches(row, extent)}
+                ids.update(cid for cid in (candidate_id, incoming['id'], own_id, target_hint) if cid)
             ids -= excluded
             before = len(matched)
             candidates = []
@@ -425,7 +431,8 @@ def assign_in_transaction(
                 break
 
         canonical = (
-            plan_target_id
+            isolated_id
+            or plan_target_id
             or (receipt_owner if receipt_owner in matched else None)
             or (min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id'])
         )
@@ -435,6 +442,10 @@ def assign_in_transaction(
             raise BatchPrivacyBlocked('conversation_deleted', conversation_id=canonical)
         current = matched.get(canonical)
         created = current is None
+        if isolated_id and created and load(isolated_id) is not None:
+            raise SyncAssignmentConflict(
+                'isolated privacy target is not appendable', subtype=Reason.PROVENANCE_MISMATCH
+            )
         if created and tombstoned(canonical):
             # User deletion hard-deletes the row, so `own` cannot fence it. A
             # re-upload segmented like the original reproduces the deleted
@@ -718,7 +729,19 @@ def assign_in_transaction(
             outcome='degraded',
             log=logger,
         )
-        chosen = plan(excluded, segment_indices)
+        try:
+            chosen = plan(excluded, segment_indices)
+        except BatchPrivacyBlocked as second_error:
+            if second_error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                raise
+            # A donor's deletion says nothing about the live input. Preserve
+            # all of its speech in a new identity, without any temporal match,
+            # explicit target or inherited ancestry. Every fence still runs.
+            isolated_id = str(uuid5(NAMESPACE_URL, f'sync-privacy-replan:{incoming["id"]}'))
+            live_stats = None
+            excluded = frozenset(read) - {isolated_id}
+            chosen = plan(excluded, segment_indices, isolated_id=isolated_id)
+            logger.info('event=sync_assignment_target outcome=privacy_isolated created=%s', str(chosen.created).lower())
     stamp_gap_refused = False
     if (
         lineage_binding == 'stamp_fallback'

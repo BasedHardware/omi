@@ -15,7 +15,7 @@ drift: the router declaration and the generated app-client OpenAPI spec.
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -75,6 +75,7 @@ def _delete_client(monkeypatch) -> TestClient:
     ):
         monkeypatch.setattr(conversations, name, MagicMock())
     monkeypatch.setattr(conversations.conversation_tombstones, 'record_deletion', MagicMock())
+    monkeypatch.setattr(conversations, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
     monkeypatch.setattr(conversations.conversations_db, 'get_conversation', lambda *args: {})
     monkeypatch.setattr(conversations, 'retraction_can_be_skipped', lambda *args, **kwargs: True)
     monkeypatch.setattr(conversations.action_items_db, 'get_action_items_by_conversation', lambda *args, **kwargs: [])
@@ -119,7 +120,12 @@ def test_busy_delete_leaves_no_tombstone_or_cleanup_and_remains_retryable(monkey
 def test_cascade_gate_precedes_intent_and_covers_retraction_and_cleanup(monkeypatch):
     events = []
     with _delete_client(monkeypatch) as client:
-        monkeypatch.setattr(conversations, 'retraction_can_be_skipped', lambda *args, **kwargs: False)
+
+        def retraction_required(*args, **kwargs):
+            assert events == ['gate', 'intent']
+            return False
+
+        monkeypatch.setattr(conversations, 'retraction_can_be_skipped', retraction_required)
 
         @contextmanager
         def gate(*args, **kwargs):
