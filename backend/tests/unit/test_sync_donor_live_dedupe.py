@@ -348,3 +348,16 @@ def test_observation_failure_is_unknown(monkeypatch):
         live, [(incoming, DonorDedupe(incoming))], operation='assignment', target_kind='live'
     )
     assert measured['outcome'] == 'bridge_unknown' and measured['incomplete_reason'] == 'observation_error'
+
+
+def test_sync_smart_survivor_does_not_certify_a_live_transfer(monkeypatch, caplog):
+    store, _, _ = setup_transfer(monkeypatch)
+    store.rows[('users', 'u', 'conversations', 'live')].update(
+        sync_content_revision=2,
+        smart_merge={'role': 'survivor', 'revision': 1, 'fragments': []},
+    )
+    with caplog.at_level(logging.INFO):
+        transfer(store)
+    assert len(bridge_lines(caplog)) == 1
+    assert 'target_kind=sync' in bridge_lines(caplog)[0]
+    assert 'outcome=bridge_unknown' in bridge_lines(caplog)[0]

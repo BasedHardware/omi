@@ -39,7 +39,7 @@ from utils.sync.live_speech_dedupe import (
     pinned_audio_timeline,
 )
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
-from utils.sync.donor_dedupe import DonorDedupe, dedupe_donor
+from utils.sync.donor_dedupe import DonorDedupe, dedupe_donor, live_reference
 from utils.sync.bridge_observation import bridge_observation
 from utils.sync.assignment_telemetry import lineage_span_delta_bucket as _lineage_span_delta_bucket
 from utils.sync.assignment_telemetry import created_sync_row_observation
@@ -495,7 +495,7 @@ def assign_in_transaction(
         # donor or fresh-intake receipts can enter the survivor.
         live_row = next((row for row in records if row['id'] == canonical), None)
         observe_bridge = sync_live_dedupe_active_for(user_ref.id)
-        donor_policy = bool(result['sync_live_target'] and live_row is not None and observe_bridge)
+        donor_policy = bool(live_row is not None and live_reference(live_row) and observe_bridge)
         reference = deepcopy(live_row or result) if observe_bridge else {}
         transfers = []
         existing = []
@@ -544,7 +544,7 @@ def assign_in_transaction(
                 reference,
                 transfers,
                 operation='assignment',
-                target_kind='live' if result['sync_live_target'] else 'sync',
+                target_kind='live' if live_reference(reference) else 'sync',
             )
             if transfers
             else None
