@@ -40,11 +40,11 @@ from models.sync_job_status import (
 from routers.batch_pipeline import enrichment_response
 from database import conversations as conversations_db
 from database import fair_use as fair_use_db
-from database import sync_dead_letters
-from database import sync_backfill_sequencer
+from database import sync_dead_letters, sync_backfill_sequencer
 from database import users as users_db
 from database.memories import historical_scan_memo_scope
 from database.firestore_transaction_retry import transaction_retry_deadline_scope
+from database.person_aliases import people_scan_attempt
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_read_origin import read_origin
 from database.sync_jobs import (
@@ -3450,7 +3450,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
             # The in-request budget (see _run_sync_job_body) wraps this whole
             # attempt; on expiry the coordinator is cancelled like a lease loss
             # and the wrapper preserves the run lock for the redelivery.
-            with historical_scan_memo_scope(uid):
+            with historical_scan_memo_scope(uid), people_scan_attempt():
                 await _run_full_pipeline_background_async(
                     job_id,
                     uid,

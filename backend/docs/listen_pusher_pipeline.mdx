@@ -2867,6 +2867,37 @@ Verification and rollout checklist:
 - [ ] Merge/release and privately verify the affected account before closing
   #20590. Local fixtures do not establish production entitlement or recovery.
 
+### Attempt-scoped People spelling hints
+
+`people_scan_dedupe` (default 0) permits only opted-in spelling-hint readers to reuse raw
+People within one locked sync task attempt. `routers/sync.py` opens `people_scan_attempt()`
+beside the historical-memory scope; retry, cancellation and scope exit discard the memo.
+`known_spellings._people_spellings` opts in with its existing 200-document cap.
+`vocabulary._sources` remains live: it belongs to listen, outside the sync attempt.
+`get_people` and `find_person_by_name` remain live authority reads.
+
+Every People mutation atomically increments `users/{uid}/people_meta/generation.generation`
+with `Increment(1)` and `merge=True`, even with the reader lever off. This includes creation,
+rename/dismiss/delete, speech samples and profiles, pinning, speaker learning and its job
+ledger, auto-enrollment publication/retraction/privacy/revocation, manual-assignment evidence,
+chat edits/undo, Review edits/undo/redo, evidence backfill and recursive account-wipe batches.
+Account wipe removes the content-free generation head after all source deletions.
+
+A fill captures the generation before scanning. Each memo hit performs exactly one generation
+lookup; only an unchanged `(counter, document update_time)` permits reuse. A changed or
+unavailable generation reads People live. Missing/malformed metadata never admits a memo,
+so existing users first become eligible after a People write; deletion/recreation of metadata
+cannot revive an old snapshot. Generation-read errors emit the shared fallback telemetry.
+Existing in-process write, live-authority-read, client-identity, memory-size and scope fences
+remain in place. The single generation read has the ordinary write-then-read race bound;
+there is no TTL-based cross-request staleness window.
+
+The counter costs one extra atomic write per People mutation (one per recursive delete batch).
+For N repeated scans of P documents, unchanged-generation reads are P + N instead of N × P;
+this does not claim the 11–16M/day authority-scan pool, which remains live. Enablement requires
+all writer processes/operator tools to serve this protocol first; mixed old-writer releases
+are unsafe for memo reuse. This change leaves the lever at 0 for a separate serve/soak/ramp review.
+
 ### People-stats aggregate cache
 
 `GET /v1/users/people?include_stats=true` aggregates the newest conversations (locked/discarded excluded, `started_at` else `created_at`, per-segment `person_id`/`start`/`end`/`speaker_match_source`) into one `person_id -> {conversation_count, last_heard_at, talk_seconds, auto_conversation_count}` map per call. `database.people_stats_cache` caches only that map — Person rows and signed speech-sample URLs stay fresh reads. Entries live at `users/{uid}/people_stats/v1/{generation}/{scan_cap}` in the generic Redis cache (60 s TTL, 262144-byte serialized cap on read and write; oversize/corrupt/nonfinite payloads are misses). A per-uid generation token at `people_stats:v1:{uid}:generation` (86400 s TTL, fetch-or-create via `SET NX`) namespaces every entry: a writer-side bump retires all outstanding entries at once, so the 60 s entry TTL is only a safety cap for a failed invalidation — normal writes invalidate immediately. `collect_people_stats` resolves generation and entry before consuming the scan iterator, so a hit performs zero Firestore reads; it re-checks the generation before writing. If invalidation happens after that check, a fill may still be written under the retired key, which is unreachable. A `ListReadBudget`-truncated scan is never stored — only a full capped pass is cached. For N repeat loads within one unchanged 60 s generation, one capped scan serves all N: a fully populated first scan means a hit avoids all 1000 conversation reads (raw reads can reach 2000 because tombstones and invisible rows consume the document budget without yielding). Every operation fails open to the uncached scan; generation and invalidation failures log uid + error type and count `other`/`cached`->`uncached`/`connection_lost`/`recovered`.
