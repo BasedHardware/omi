@@ -1563,7 +1563,8 @@ def test_single_user_failed_recovery_step_holds_without_fleet_strike():
 
 
 @pytest.mark.parametrize('stage,required', [(5, 30), (25, 60)])
-def test_two_user_failed_trial_holds_then_healthy_window_promotes(stage, required):
+def test_legacy_two_user_failed_trial_holds_then_healthy_window_promotes(monkeypatch, stage, required):
+    monkeypatch.setenv('STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED', 'false')
     state = GateState(stage=stage, strikes=2, generation=4)
     language = state
     for i in range(4 * required):
@@ -1736,7 +1737,8 @@ async def test_new_endpoint_only_registry_keeps_configured_endpoint_tail(monkeyp
 
 
 @pytest.mark.parametrize('language_only', [False, True])
-def test_two_failing_users_and_healthy_majority_recover_after_trial_dwell(language_only):
+def test_legacy_two_failing_users_and_healthy_majority_recover_after_trial_dwell(monkeypatch, language_only):
+    monkeypatch.setenv('STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED', 'false')
     state = GateState(stage=5, strikes=2)
     completed = 0
     for stage, required, users, dwell in ((5, 30, 26, 300), (25, 60, 25, 600)):
@@ -1784,7 +1786,7 @@ def test_recovery_rebenches_at_100_only_with_same_burst_evidence(stage, language
         state = transition(state, i >= 87, 0, witness=f'{i:016x}', language_only=language_only)
         if i < 99:
             assert state.stage == stage
-    assert state.stage == 0 and state.n == 100 and state.failures == 13 and state.strikes == 1
+    assert state.stage == 0 and state.n == 100 and state.failures == 13 and state.strikes == 2
 
 
 @pytest.mark.parametrize('stage', [5, 25])
@@ -1794,6 +1796,51 @@ def test_recovery_high_share_without_burst_does_not_rebench(stage):
     for i in range(100):
         state = transition(state, i % 10 == 0, 0, witness=f'{i:016x}')
     assert state.stage == stage and state.n == 100 and state.failures == 10
+
+
+@pytest.mark.parametrize('stage', [5, 25])
+def test_recovery_fast_path_needs_twenty_votes_and_twenty_five_percent_failures(stage):
+    state = GateState(stage=stage)
+    for i in range(19):
+        state = transition(state, True, 0, witness=f'{i:016x}')
+        assert state.stage == stage
+    assert transition(state, True, 0, witness=f'{19:016x}').stage == 0
+    for failures, expected in ((4, stage), (5, 0)):
+        state = GateState(stage=stage)
+        for i in range(20):
+            state = transition(state, i % 4 == 0 and i // 4 < failures, 0, witness=f'{i:016x}')
+        assert state.stage == expected
+
+
+def test_false_bench_with_two_recovery_timeouts_completes_clean_ramp_and_resets_strikes():
+    state = GateState(stage=0, strikes=3, until=300)
+    state = begin_trial(state, 300)
+    for i in range(30):
+        state = transition(state, i in (4, 14), 600, witness=f'{i:016x}')
+    assert state.stage == 25 and state.strikes == 3
+    for i in range(60):
+        state = transition(state, i in (4, 44), 1200, witness=f'{i:016x}')
+    assert state.stage == 100 and state.strikes == 0
+
+
+def test_recovery_rebench_adds_extra_cooldown_exponent_caps_at_six_hours_and_clean_ramp_resets():
+    state = GateState(stage=5, strikes=1)
+    now = 0
+    for expected_strikes, wait in ((3, 1200), (5, 4800), (7, 19200), (9, 21600), (10, 21600)):
+        for i in range(20):
+            state = transition(state, True, now, witness=f'{i:016x}')
+        assert state.stage == 0 and state.strikes == expected_strikes and state.until == now + wait
+        now = state.until
+        state = begin_trial(state, now)
+    for stage, required, dwell in ((5, 30, 300), (25, 60, 600)):
+        assert state.stage == stage
+        now += dwell
+        for i in range(required):
+            state = transition(state, False, now, witness=f'{i:016x}')
+    assert state.stage == 100 and state.strikes == 0
+    for i in range(8):
+        state = transition(state, True, now, witness=f'{i:016x}')
+    assert state.stage == 0 and state.until == now + 300
 
 
 @pytest.mark.parametrize('n,failures,language_only', [(10200, 39, False), (16485, 264, True)])

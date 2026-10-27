@@ -14,6 +14,8 @@ from config.live_stt_resilience import recovery_sample_guard_enabled
 HEALTHY_USERS = 2048
 FAILURE_RESERVE = 8
 RECOVERY_REBENCH_MINIMUM = 100
+RECOVERY_FAST_MINIMUM = 20
+RECOVERY_FAST_FAILURE_SHARE = 0.25
 
 
 @dataclass(frozen=True)
@@ -232,15 +234,19 @@ def transition(
     decisive = (broad_failure and detected) or (sparse_failure and max(evidence) >= 14)
     guarded_trial = required and recovery_sample_guard_enabled()
     if guarded_trial:
-        # Trial n counts only admitted, non-censored outcomes in this bounded
-        # trial window. Never replace full-traffic burst evidence with a noisy
-        # failure share from the 5%/25% recovery cohort.
-        decisive = decisive and n >= RECOVERY_REBENCH_MINIMUM and user_rate > gate
+        # The ordinary burst path needs a meaningful sample. A separately
+        # bounded high-failure path still removes a truly broken trial quickly.
+        # Both use admitted, non-censored outcomes and retain witness fairness.
+        fast_failure = n >= RECOVERY_FAST_MINIMUM and failures / n >= RECOVERY_FAST_FAILURE_SHARE and broad_failure
+        decisive = (decisive and n >= RECOVERY_REBENCH_MINIMUM and user_rate > gate) or fast_failure
     elif required:
         decisive = decisive and user_rate > gate
     rejected_trial = required and not guarded_trial and n >= required and user_rate > gate and broad_failure
     if n >= 8 and (decisive or rejected_trial):
-        strikes = min(state.strikes + 1, 10)
+        # A larger recovery sample must not multiply chronic-outage exposure.
+        # Advance one extra cooldown exponent on consecutive trial rejections;
+        # the first full-traffic bench and its first re-entry wait are unchanged.
+        strikes = min(state.strikes + (2 if guarded_trial else 1), 10)
         return GateState(
             threshold=gate,
             stage=0,
@@ -249,7 +255,7 @@ def transition(
             evidence=evidence,
             recent_failures=state.recent_failures,
             trial_users=state.trial_users,
-            until=now + min(14400, 300 * 2 ** (strikes - 1)),
+            until=now + min(21600 if guarded_trial else 14400, 300 * 2 ** (strikes - 1)),
             strikes=strikes,
             generation=state.generation + 1,
         )
@@ -296,7 +302,7 @@ def _promote_trial(state: GateState, now: float) -> GateState:
         return GateState(
             threshold=state.threshold,
             stage=25 if state.stage == 5 else 100,
-            strikes=state.strikes,
+            strikes=0 if state.stage == 25 and recovery_sample_guard_enabled() else state.strikes,
             generation=state.generation + 1,
             trial_started_at=now,
         )
