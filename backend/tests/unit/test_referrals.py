@@ -67,6 +67,14 @@ def test_referral_claim_grants_exactly_30_days_of_omi_pro():
         ('existing-user', 'referrer', False, {}, 'existing_account'),
         ('paid-user', 'referrer', True, {'subscription': {'plan': 'operator'}}, 'paid'),
         ('claimed-user', 'referrer', True, {'referral': {'program': 'omi_pro_month_v1'}}, 'already_claimed'),
+        (
+            'legacy-claimed-user',
+            'referrer',
+            True,
+            {'referral': {'program': 'desktop_operator_month_v1'}},
+            'already_claimed',
+        ),
+        ('omi-pro-user', 'referrer', True, {'subscription': {'plan': 'unlimited_v2'}}, 'paid'),
     ],
 )
 def test_referral_claim_never_self_refers_rewards_existing_users_or_overwrites_paid_accounts(
