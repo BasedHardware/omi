@@ -559,7 +559,7 @@ def search_conversations_tool(
                 OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="keyword", outcome="success").inc()
             except Exception as kw_err:
                 logger.warning("Keyword search failed during conversation search; falling back to vector/semantic search: %s", kw_err)
-                record_fallback(conversation_keyword_search=str(kw_err))
+                record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded', log=logger)
                 OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="keyword", outcome="fallback").inc()
                 keyword_degraded = True
 
