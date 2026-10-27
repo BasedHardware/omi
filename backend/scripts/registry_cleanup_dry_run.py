@@ -8,7 +8,13 @@ import re
 from pathlib import Path
 
 REPOSITORY = 'projects/based-hardware/locations/us-central1/repositories/cloud-run-source-deploy'
-COVERAGE = ('cloud_run_revisions', 'gke_workloads_both_projects', 'cloud_run_jobs', 'rollback_receipts_30d')
+COVERAGE = (
+    'cloud_run_revisions',
+    'gke_workloads_both_projects',
+    'cloud_run_jobs',
+    'rollback_receipts_30d',
+    'oci_manifest_graph',
+)
 
 
 def render(snapshot: dict, now: dt.datetime | None = None) -> dict:

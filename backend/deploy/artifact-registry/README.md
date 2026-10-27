@@ -41,7 +41,8 @@ Input example (digest is illustrative; use a fresh, complete inventory):
     "cloud_run_revisions": true,
     "gke_workloads_both_projects": false,
     "cloud_run_jobs": true,
-    "rollback_receipts_30d": false
+    "rollback_receipts_30d": false,
+    "oci_manifest_graph": false
   }
 }
 ```

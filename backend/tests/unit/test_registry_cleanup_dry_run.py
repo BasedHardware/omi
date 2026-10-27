@@ -38,7 +38,14 @@ def test_complete_snapshot_preserves_runtime_and_release_boundaries(planner, sna
 
 
 @pytest.mark.parametrize(
-    'missing', ['cloud_run_revisions', 'gke_workloads_both_projects', 'cloud_run_jobs', 'rollback_receipts_30d']
+    'missing',
+    [
+        'cloud_run_revisions',
+        'gke_workloads_both_projects',
+        'cloud_run_jobs',
+        'rollback_receipts_30d',
+        'oci_manifest_graph',
+    ],
 )
 def test_each_missing_reference_surface_holds_every_image(planner, snapshot, missing):
     del snapshot['coverage'][missing]
