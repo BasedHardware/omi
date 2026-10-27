@@ -59,6 +59,17 @@ void main() {
     expect(provider.groupedConversations.values.expand((g) => g), isEmpty);
   });
 
+  test('a redirect into the running episode removes the donor without adding a second live row', () async {
+    final provider = ConversationProvider(isSignedIn: () => true);
+    addTearDown(provider.dispose);
+    await provider.addConversation(row('donor'));
+    provider.searchedConversations = [row('donor')];
+    provider.replaceBridgedConversation('donor', row('live')..status = ConversationStatus.in_progress);
+    expect(provider.conversations, isEmpty);
+    expect(provider.searchedConversations, isEmpty);
+    expect(provider.groupedConversations.values.expand((g) => g), isEmpty);
+  });
+
   test('incremental refresh drops a merged-away donor omitted from the server list', () async {
     final provider = ConversationProvider(
         isSignedIn: () => true, conversationListFetcher: () async => (items: [row('live')], ok: true));

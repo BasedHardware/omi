@@ -47,4 +47,36 @@ extension _ConversationVisibility on ConversationProvider {
     SiriIntegration.current.queueUpsertConversations([conversation]);
     notifyListeners();
   }
+
+  void _replaceBridgedProjections(String donorId, ServerConversation survivor) {
+    _mergedAwayConversationIds.add(donorId);
+    final completed = survivor.status == ConversationStatus.completed && !survivor.deleted && !survivor.isMergedDonor;
+    conversations
+        .removeWhere((conversation) => conversation.id == donorId || (!completed && conversation.id == survivor.id));
+    final survivorIndex = conversations.indexWhere((conversation) => conversation.id == survivor.id);
+    if (completed) {
+      if (survivorIndex == -1) {
+        conversations.add(survivor);
+      } else {
+        conversations[survivorIndex] = survivor;
+      }
+    }
+    conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+
+    final searchedDonorIndex = searchedConversations.indexWhere((conversation) => conversation.id == donorId);
+    searchedConversations
+        .removeWhere((conversation) => conversation.id == donorId || (!completed && conversation.id == survivor.id));
+    final searchedSurvivorIndex = searchedConversations.indexWhere((conversation) => conversation.id == survivor.id);
+    if (completed && searchedSurvivorIndex != -1) {
+      searchedConversations[searchedSurvivorIndex] = survivor;
+    } else if (completed && searchedDonorIndex != -1) {
+      searchedConversations.insert(searchedDonorIndex.clamp(0, searchedConversations.length), survivor);
+    }
+    if (hasActiveSearch) {
+      _groupSearchConvosByDateWithoutNotify();
+    } else {
+      _groupConversationsByDateWithoutNotify();
+    }
+    notifyListeners();
+  }
 }
