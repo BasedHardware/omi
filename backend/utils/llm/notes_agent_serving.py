@@ -14,6 +14,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from prometheus_client import Counter as PromCounter
 
+from config.llm_spend import notes_capture_dedupe_enabled
 from utils.byok import has_byok_keys
 from utils.conversations.notes_agent_tools import NotesToolbox, build_packet, owner_profile
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
@@ -42,6 +43,13 @@ from utils.observability.reasons import NotesAgentTransportReason, ReasonFamily,
 logger = logging.getLogger(__name__)
 TRANSPORT_SKIPS = PromCounter(
     'omi_notes_agent_transport_skips_total', 'Agentic notes skipped by transport eligibility reason', ['reason']
+)
+CAPTURE_SEEDS = PromCounter(
+    'omi_notes_agent_capture_seeds_total', 'Notes seed capture duplication decisions', ['outcome']
+)
+CAPTURE_CHARACTERS_REMOVED = PromCounter(
+    'omi_notes_agent_capture_characters_removed_total',
+    'Raw duplicate capture characters removed per seed, before provider tokenization',
 )
 
 # Speech rate used only to bound the screen/calendar window when the caller has no end time.
@@ -157,6 +165,15 @@ def agentic_notes_payload(
         identity = notes_identity(prefix, kwargs, packet)
         kwargs['notes_identity'] = identity
         seed = conversation_seed(packet, capture_evidence, explicit_cache=explicit_cache)
+        try:
+            duplicate = packet.get('capture_evidence') == capture_evidence
+            removed = duplicate and notes_capture_dedupe_enabled()
+            CAPTURE_SEEDS.labels('removed' if removed else 'retained' if duplicate else 'no_duplicate').inc()
+            if removed:
+                CAPTURE_CHARACTERS_REMOVED.inc(len(capture_evidence))
+        except Exception:
+            # Telemetry is content-free and must not affect the notes result.
+            pass
         toolbox = NotesToolbox(
             uid=uid,
             conversation_id=prefix.conversation_id,

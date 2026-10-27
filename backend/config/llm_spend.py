@@ -34,3 +34,8 @@ def memory_l1_owner_neutral_prefix_enabled() -> bool:
         'MEMORY_L1_OWNER_NEUTRAL_PREFIX_ENABLED',
         os.getenv('MEMORY_L1_OWNER_NEUTRAL_PREFIX_ENABLED', 'false').strip().lower() in _TRUE_WORDS,
     )
+
+
+def notes_capture_dedupe_enabled() -> bool:
+    """Exact duplicate capture removal stays off pending synthetic model parity."""
+    return os.getenv('CONVERSATION_NOTES_CAPTURE_DEDUPE_ENABLED', 'false').strip().lower() in _TRUE_WORDS

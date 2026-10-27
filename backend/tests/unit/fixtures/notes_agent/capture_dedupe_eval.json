@@ -1,0 +1,250 @@
+{
+  "synthetic": true,
+  "version": 1,
+  "description": "Invented qualification corpus. No production user content. Each arm must generate via the dev gateway; expected facts are fixed before generation.",
+  "cases": [
+    {
+      "id": "proposal-and-decision",
+      "owner_name": "Riley Tan",
+      "language": "en",
+      "repeat": 20,
+      "speaker_map": {
+        "0": "Riley Tan",
+        "1": "Maya Okafor"
+      },
+      "segments": [
+        [
+          "s001",
+          1,
+          "I propose forty dollars per seat for the first fifty pilot seats."
+        ],
+        [
+          "s002",
+          0,
+          "Usage-based pricing is also an option. We are not deciding pricing today."
+        ],
+        [
+          "s003",
+          0,
+          "We did agree to cap the pilot at fifty seats."
+        ]
+      ],
+      "expected_facts": [
+        "Pricing is undecided",
+        "Forty dollars per seat was a proposal",
+        "Pilot capacity is agreed at fifty seats"
+      ],
+      "forbidden_claims": [
+        "Pricing was approved",
+        "Riley committed to send a pricing model"
+      ]
+    },
+    {
+      "id": "unresolved-voice",
+      "owner_name": "Riley Tan",
+      "language": "en",
+      "repeat": 20,
+      "speaker_map": {
+        "0": "Riley Tan",
+        "1": null
+      },
+      "people": [
+        {
+          "name": "Maya Okafor"
+        }
+      ],
+      "segments": [
+        [
+          "s001",
+          0,
+          "Maya could not attend. The pilot timeline is on today's agenda."
+        ],
+        [
+          "s002",
+          1,
+          "The factory estimate is one week after the board fix is ready."
+        ],
+        [
+          "s003",
+          0,
+          "That is an estimate; nobody has promised a shipping date."
+        ]
+      ],
+      "expected_facts": [
+        "Factory estimate is one week after the board fix",
+        "No shipping date was promised"
+      ],
+      "forbidden_claims": [
+        "Maya said the factory estimate",
+        "A shipping date is confirmed",
+        "The unknown speaker is named from a People record"
+      ]
+    },
+    {
+      "id": "multilingual-evidence",
+      "owner_name": "Riley Tan",
+      "language": "en",
+      "repeat": 20,
+      "speaker_map": {
+        "0": "Riley Tan",
+        "1": "Maya Okafor"
+      },
+      "segments": [
+        [
+          "s001",
+          0,
+          "Ngân sách thử nghiệm là ba trăm đô la, chưa được duyệt."
+        ],
+        [
+          "s002",
+          1,
+          "予算案は三百ドルです。まだ承認されていません。"
+        ],
+        [
+          "s003",
+          0,
+          "Please keep the notes in English. The proposal is three hundred dollars and still unapproved."
+        ]
+      ],
+      "expected_facts": [
+        "Budget proposal is 300 dollars",
+        "The budget is not approved",
+        "Output language is English"
+      ],
+      "forbidden_claims": [
+        "Budget approved",
+        "Budget is 3000 dollars"
+      ]
+    },
+    {
+      "id": "existing-task-and-new-owner-commitment",
+      "owner_name": "Riley Tan",
+      "language": "en",
+      "repeat": 20,
+      "task_intelligence_capture": false,
+      "open_tasks": [
+        {
+          "description": "Send the pilot notes"
+        }
+      ],
+      "speaker_map": {
+        "0": "Riley Tan",
+        "1": "Maya Okafor"
+      },
+      "segments": [
+        [
+          "s001",
+          0,
+          "Sending the pilot notes is already on my task list."
+        ],
+        [
+          "s002",
+          1,
+          "I will model both pricing options."
+        ],
+        [
+          "s003",
+          0,
+          "I will check the board fix status with our team."
+        ]
+      ],
+      "expected_facts": [
+        "Riley has a new explicit commitment to check board fix status",
+        "Maya intends to model both pricing options"
+      ],
+      "forbidden_claims": [
+        "Create a duplicate send-pilot-notes task",
+        "Create Maya's modeling commitment as Riley's task"
+      ]
+    },
+    {
+      "id": "past-and-future-tense",
+      "owner_name": "Riley Tan",
+      "language": "en",
+      "repeat": 20,
+      "speaker_map": {
+        "0": "Riley Tan",
+        "1": "Maya Okafor"
+      },
+      "segments": [
+        [
+          "s001",
+          1,
+          "The prototype review happened last Friday. We found a loose connector."
+        ],
+        [
+          "s002",
+          0,
+          "We have not fixed the connector yet. I can investigate, but I am not committing to a date."
+        ],
+        [
+          "s003",
+          1,
+          "Let's discuss a retest once the fix exists; we have not scheduled one."
+        ]
+      ],
+      "expected_facts": [
+        "Review already happened",
+        "Loose connector remains unfixed",
+        "Retest is unscheduled"
+      ],
+      "forbidden_claims": [
+        "Review is next Friday",
+        "Connector fix is complete",
+        "Confirmed calendar event or completion date"
+      ]
+    },
+    {
+      "id": "long-multiple-topics",
+      "owner_name": "Riley Tan",
+      "language": "en",
+      "repeat": 60,
+      "speaker_map": {
+        "0": "Riley Tan",
+        "1": "Maya Okafor"
+      },
+      "segments": [
+        [
+          "s001",
+          0,
+          "Pilot capacity is fifty seats. Pricing is undecided."
+        ],
+        [
+          "s002",
+          1,
+          "The factory can ship one week after the board fix. This is an estimate."
+        ],
+        [
+          "s003",
+          0,
+          "The proposed support budget is three hundred dollars, not approved yet."
+        ],
+        [
+          "s004",
+          1,
+          "We agreed to use the existing help page for pilot support."
+        ],
+        [
+          "s005",
+          0,
+          "I will check the board fix status with the team."
+        ]
+      ],
+      "expected_facts": [
+        "All five substantive threads are covered",
+        "Fifty-seat cap",
+        "Pricing undecided",
+        "Conditional factory estimate",
+        "300-dollar unapproved support budget",
+        "Existing help page chosen",
+        "Owner commitment to check board fix"
+      ],
+      "forbidden_claims": [
+        "Repeated identical segments are separate commitments",
+        "Estimated dates become confirmed",
+        "A proposal becomes a decision",
+        "A substantive thread disappears only in the candidate"
+      ]
+    }
+  ]
+}
