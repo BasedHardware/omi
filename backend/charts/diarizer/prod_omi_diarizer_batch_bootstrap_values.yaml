@@ -1,0 +1,7 @@
+# First lead-owned upgrade ONLY: retain instance selectors and on-demand
+# primary placement while the same release creates and warms the fallback.
+# Then upgrade without this overlay to join both sets of Ready endpoints.
+service:
+  selectorLabels: null
+nodeSelector:
+  cloud.google.com/gke-nodepool: diarizer-batch-pool

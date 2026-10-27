@@ -5,6 +5,13 @@
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
 
+# One fixed warm Deployment in this SAME Helm release. Derives its image,
+# runtime settings and probes from the primary, so every deploy rolls both.
+warmFallback:
+  enabled: false
+  maxTotalReplicas: 18
+  nodeSelector: {}
+
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: nginx

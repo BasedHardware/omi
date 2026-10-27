@@ -1,5 +1,5 @@
-# Autoscaled burst release; a separate on-demand release supplies one warm pod.
-# Combined serving ceiling is 18 (17 here + 1 fallback).
+# Autoscaled burst plus one fixed warm Deployment in the same Helm release.
+# Combined steady-state ceiling is 18 (17 here + 1 fallback); allow rollout surge.
 # Separate release only: -f prod_omi_diarizer_values.yaml -f this file.
 # Lead-owned opt-in deployment; never install over prod-omi-diarizer.
 fullnameOverride: prod-omi-diarizer-batch
@@ -32,8 +32,15 @@ affinity:
 nodeSelector:
   service: diarizer-batch
   env: prod
-# Both batch releases serve through the existing ClusterIP and Gateway Service.
-# Deployment selectors retain their release instance, so controllers cannot overlap.
+warmFallback:
+  enabled: true
+  nodeSelector:
+    service: diarizer-batch
+    env: prod
+    cloud.google.com/gke-nodepool: diarizer-batch-pool
+    cloud.google.com/gke-provisioning: standard
+# Both Deployments serve through the existing ClusterIP and Gateway Service.
+# The warm Deployment uses a suffixed instance label, so controllers cannot overlap.
 podLabels:
   omi.ai/diarizer-batch-route: prod
 service:

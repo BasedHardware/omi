@@ -2,7 +2,7 @@
 
 Owner: rollout lead. This is an apply packet, **not an applied change**. The
 author used `ro-prod` for infrastructure, aggregate metrics, catalog and billing
-reads. Node-pool creation and both Helm releases require the lead's approved
+reads. Node-pool creation and the Helm upgrades require the lead's approved
 fleet-change window and GKE write identity. Do not change `batch-pipeline-pool`,
 its Spot sibling, Parakeet, embedding, IAM, or cohort admission.
 
@@ -60,16 +60,21 @@ Raw receipts and query: workspace `data/run-2026-10-27-spotdiar/`.
 2. Add `diarizer-batch-pool-spot`, same T4/node shape, zones, service/env labels,
    GPU and batch taints; total min 0 / max 16, `ANY`. This cap fits the observed
    Spot T4 quota. No autoscaler or priority changes to other pools.
-3. First install **`prod-omi-diarizer-batch-fallback`**, fixed one replica, pinned
-   to the on-demand pool and `gke-provisioning=standard`. It uses the same batch
-   command, probes, resources, secrets references and exact immutable image as
-   the existing release. It has its own Deployment selector and resource names,
-   no HPA, no Ingress and no competing HTTPRoute.
+3. The **same Helm release** renders `prod-omi-diarizer-batch-fallback`, fixed
+   one replica and pinned to the on-demand pool with `gke-provisioning=standard`.
+   Its complete runtime spec is derived from the primary Deployment; only its
+   name, instance selector, replicas and placement differ. Normal batch workflow
+   upgrades therefore roll both Deployments to the same digest automatically.
+   It reuses the primary ServiceAccount and has no separate release, HPA,
+   Service, Ingress, BackendConfig or HTTPRoute to drift or collide.
+   The renderer rejects a primary maximum plus the fixed warm replica above
+   `warmFallback.maxTotalReplicas=18`; remove the drained warm Deployment before
+   restoring a primary maximum of18.
 4. Upgrade `prod-omi-diarizer-batch`: min 1 / max 17, prefer existing Spot nodes
    but allow on-demand spillover. Both Services select the batch-specific route
-   label shared by the two releases. Embedding and dev lack that label. The
+   label shared by the two Deployments. Embedding and dev lack that label. The
    shared Gateway path remains `/diarizer-batch`, timeout 900s, and balances over
-   individual Ready endpoints from both releases (no fixed per-release weight).
+   individual Ready endpoints from both Deployments (no fixed per-group weight).
 5. Include the fallback instance in the existing Prometheus scrape job. Its
    queue is observable, while HPA continues to select only its own burst pods.
 
@@ -79,13 +84,16 @@ full throughput during a stockout. GKE gives Spot Pods at most 15s to terminate;
 the batch timeout is 900s. Retry/custody behavior must be qualified before
 apply. Do not claim a PDB or PriorityClass can prevent provider preemption.
 
-The two-release design raises the minimum from one GPU pod to two. At sustained
+The warm-Deployment design raises the minimum from one GPU pod to two. At sustained
 one-pod demand this costs an extra Spot node (~$298/month list + disk), so the
 lead must compare **total** before/after node-hours. Do not book savings just
 because Spot nodes exist. Preferred affinity does not drive autoscaler decisions
 or migrate existing pods; GKE normally expands the cheaper eligible pool, but
 stockouts and already-running on-demand pods can prevent the expected saving.
 Use normal safe scale-down, never force an eviction to manufacture savings.
+The 18-replica bound is steady state; default rolling updates can request extra
+surge GPUs temporarily. Include old, new, warm and Pending capacity in the cost
+window; a pool cap is not a promise of capacity or instantaneous rollout.
 
 ## Lead apply sequence
 
@@ -132,20 +140,23 @@ that probe after recording receipts. A failed stock or image probe stops here.
 Prove Spot-loss retries and the shared-endpoint behavior in a non-serving
 qualification release first; this author has no authority to run that experiment.
 
-Install the warm replica **before** changing the primary Service selectors:
+Bootstrap the warm Deployment **inside the existing release**, retaining the
+old Service selectors and on-demand primary placement. This first upgrade is
+mandatory before any normal batch workflow deploy on the new chart. There is
+no new release to install or independently update:
 
 ```bash
 : "${SPOTDIAR_IMAGE_DIGEST:?exact currently served sha256 digest}"
 helm --kube-context "$SPOTDIAR_CONTEXT" -n "$SPOTDIAR_NAMESPACE" \
-  upgrade --install prod-omi-diarizer-batch-fallback backend/charts/diarizer \
+  upgrade prod-omi-diarizer-batch backend/charts/diarizer \
   -f backend/charts/diarizer/prod_omi_diarizer_values.yaml \
   -f backend/charts/diarizer/prod_omi_diarizer_batch_values.yaml \
-  -f backend/charts/diarizer/prod_omi_diarizer_batch_fallback_values.yaml \
+  -f backend/charts/diarizer/prod_omi_diarizer_batch_bootstrap_values.yaml \
   --set-string image.digest="$SPOTDIAR_IMAGE_DIGEST" --atomic --wait --timeout 15m
 kubectl --context "$SPOTDIAR_CONTEXT" -n "$SPOTDIAR_NAMESPACE" \
   rollout status deployment/prod-omi-diarizer-batch-fallback --timeout=900s
-# Inspect only scheduling/Ready/image fields; verify standard provisioning and
-# probe this replica directly with /health and synthetic audio before proceeding.
+# Verify BOTH Deployments are Ready on-demand, and synthetic /health and audio
+# pass directly on the warm replica. Then omit ONLY the bootstrap overlay:
 helm --kube-context "$SPOTDIAR_CONTEXT" -n "$SPOTDIAR_NAMESPACE" \
   upgrade prod-omi-diarizer-batch backend/charts/diarizer \
   -f backend/charts/diarizer/prod_omi_diarizer_values.yaml \
@@ -154,9 +165,10 @@ helm --kube-context "$SPOTDIAR_CONTEXT" -n "$SPOTDIAR_NAMESPACE" \
 ```
 
 Apply any captured tuning overrides to both commands after the checked-in
-values; explicitly retain the reviewed scheduling, route labels and unique
-fallback BackendConfig name. Verify the rendered fallback and primary image,
-command, resources and env references match before applying either release.
+values; retain the reviewed scheduling and route labels. Verify both rendered
+Deployment images, commands, resources and env references match before apply.
+Do not use `--reuse-values`: the second upgrade must remove the temporary
+primary nodepool pin and restore the shared Service selector from batch values.
 Apply the monitoring scrape delta through the lead's existing monitoring Helm
 release (see [batch installation](../../scripts/diarization_eval/batch_install.md));
 preserve unrelated monitoring values and chart version.
@@ -176,23 +188,28 @@ Record billable net costs after export settles before claiming savings.
 
 ## Rollback (lead-owned; no node or data deletion)
 
-Retain the fallback release while restoring primary capacity. Upgrade the
-primary with the same reviewed values/digest **plus** a nodepool selector for
-`diarizer-batch-pool`, and `--set autoscaling.maxReplicas=18`. Keep the shared
-route selector until primary replicas are Ready and requests/queues recover.
-Use `--atomic --wait --timeout 15m`; verify on-demand endpoints before removing
-any Spot capacity. Existing on-demand min 1 / max 18 is unchanged and can grow.
+1. Upgrade the current release with the same reviewed values/digest **plus**
+   `--set-string 'nodeSelector.cloud\.google\.com/gke-nodepool=diarizer-batch-pool'`.
+   Keep `warmFallback.enabled=true`, the shared selectors, and primary HPA max
+   **17**. Use `--atomic --wait --timeout 15m`; verify primary replicas are Ready
+   on-demand and queues recover before removing any warm serving capacity.
+   The existing on-demand pool remains total min 1 / max 18.
+2. Upgrade with the bootstrap overlay again. It retains the on-demand pin and
+   HPA max17, but restores instance-only Service selectors. The warm Deployment
+   remains running while requests already assigned to it drain. Prove its active
+   requests and queue are zero; retain a full request-timeout window if those
+   signals are unavailable. At every steady stage, 17 primary + 1 warm fits18.
+3. Only after that drain, repeat the bootstrap-overlay upgrade with
+   `--set warmFallback.enabled=false --set autoscaling.maxReplicas=18`. Helm
+   removes only the drained warm Deployment; there is still one release and
+   the primary stays pinned on-demand. Do not restore max18 before this step.
 
-Once primary capacity and endpoint health are proven, `helm rollback` the
-primary to its recorded pre-change revision (restores its instance-only Service
-selectors, 1–18 HPA and old placement). Keep the warm release running until its
-in-flight requests drain, then scale **only** its Deployment to zero. Keep the
-empty Spot pool with min 0; no pool/release/data deletion is needed for recovery.
-Revert the fallback scrape inclusion in the next normal monitoring roll if
-desired. Verify final replicas, node placement, exact served digest, Gateway
-health, queue recovery and costs. No Cloud Run/backend/listen/pusher deploy is
-part of this change. Every subsequent manual batch-image roll must update both
-batch releases together while preserving one Ready on-demand endpoint.
+Keep the empty Spot pool at min0; primary placement now excludes it. Do not
+blindly roll back to the original Helm revision: its unpinned primary could
+scale onto Spot again. No pool, release or customer data deletion is needed.
+Revert the fallback scrape inclusion in the next monitoring roll if desired.
+Verify replicas, placement, served digest, Gateway health, queue recovery and
+costs. No Cloud Run/backend/listen/pusher deploy is part of this change.
 
 References: [GKE Spot behavior](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/spot-vms),
 [autoscaler choice](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/cluster-autoscaler),

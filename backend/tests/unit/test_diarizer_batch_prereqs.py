@@ -26,7 +26,11 @@ def rendered(batch):
     ]
     if batch:
         command += ['-f', str(CHART / 'prod_omi_diarizer_batch_values.yaml')]
-    return {o['kind']: o for o in yaml.safe_load_all(subprocess.check_output(command, text=True)) if o}
+    return {
+        o['kind']: o
+        for o in yaml.safe_load_all(subprocess.check_output(command, text=True))
+        if o and not o['metadata']['name'].endswith('-fallback')
+    }
 
 
 def test_batch_scheduling_and_resources_are_disjoint_from_embedding():
