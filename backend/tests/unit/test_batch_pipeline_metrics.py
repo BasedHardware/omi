@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 from prometheus_client import CollectorRegistry
@@ -364,7 +365,7 @@ def test_allowance_hold_through_an_unevaluated_reevaluation_does_not_flap_the_pr
     metrics = QueueMetrics(registry)
     store = MemoryStore()
     queue = Scheduler(store)
-    queue.enqueue(item('held'), 0)
+    queue.enqueue(replace(item('held'), requires_compute_admission=True), 0)
     lease = queue.pull(100)[0]
     assert queue.defer('held', lease.token, 110, 60, held_reason='allowance_exhausted', admission_refused=True)
     queue.recover(200)
@@ -375,6 +376,25 @@ def test_allowance_hold_through_an_unevaluated_reevaluation_does_not_flap_the_pr
     assert job['last_policy_hold'] == {'reason': 'allowance_exhausted', 'at': 110}
     metrics.refresh(store, 194_400)  # ~54h later: still parked, not a commitment
     assert _deep_oldest_age(registry) == 0
+
+
+def test_lease_that_bypasses_admission_ends_the_parked_hold():
+    # Review (Luna): with offline enforcement off, a unit that does not require
+    # compute admission dispatches without authorize(); its lease is a real
+    # commitment, so a stale hold marker must not hide it from the proxy.
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('held'), 0)
+    lease = queue.pull(100)[0]
+    assert queue.defer('held', lease.token, 110, 60, held_reason='allowance_exhausted', admission_refused=True)
+    queue.recover(200)
+    lease = queue.pull(200)[0]
+    assert queue.defer('held', lease.token, 210, admission_refused=True)
+    assert 'last_policy_hold' not in store.rows['jobs', 'held']
+    metrics.refresh(store, 1900)
+    assert _deep_oldest_age(registry) == 1900
 
 
 def test_firestore_oldest_skips_a_decisionless_job_with_a_last_allowance_hold():

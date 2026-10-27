@@ -10,6 +10,7 @@ from database.batch_pipeline_store import Store, Transaction
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS, scheduler_control_key
 from config.policy import resolve_batch_policy
+from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
@@ -385,6 +386,10 @@ class Scheduler:
                     lease_until=now + LEASE_SECONDS,
                     shared_gpu_key=gpu_key,
                 )
+                if not job.get('requires_compute_admission') and not cap_dispatch_enabled(job['owner_id'], 'batch'):
+                    # The pump dispatches this lease without admission, so it
+                    # is a real commitment: a parked hold must not hide it.
+                    job.pop('last_policy_hold', None)
                 if gpu_key:
                     tx.put(
                         'gpus',
