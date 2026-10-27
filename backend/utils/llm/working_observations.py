@@ -8,7 +8,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
 
-from config.llm_spend import memory_l1_owner_neutral_prefix_enabled
+from config.llm_spend import memory_l1_owner_neutral_prefix_enabled, memory_l1_prompt_schema_trim_enabled
 from database.memory_non_active_routes import (
     NonActiveRoute,
     NonActiveRouteOutcome,
@@ -467,7 +467,7 @@ def extract_l1_memory_archive_items_from_text(
         name,
         source_type,
         text,
-        _l1_format_instructions(),
+        _l1_format_instructions() if memory_l1_prompt_schema_trim_enabled() else parser.get_format_instructions(),
         language_instruction=language_instruction,
         rejected_memory_examples=rejected_memory_examples,
         owner_neutral=owner_neutral,

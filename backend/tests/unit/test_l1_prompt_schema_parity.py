@@ -86,3 +86,18 @@ def test_empty_extraction_and_full_parser_contract_stay_available():
 def test_projected_response_still_rejects_missing_memory_text():
     with pytest.raises(extraction.WorkingObservationExtractionError):
         extract([{'about': 'the user', 'evidence_quotes': ['I chose the Friday launch.']}])
+
+
+@pytest.mark.parametrize('value', ['false', 'off', '0', 'NO'])
+def test_schema_kill_switch_restores_legacy_prompt_and_identical_output(monkeypatch, value):
+    case = FIXTURE['cases'][0]
+    monkeypatch.delenv('MEMORY_L1_PROMPT_SCHEMA_TRIM_ENABLED', raising=False)
+    trimmed, _ = extract([case['item']])
+    monkeypatch.setenv('MEMORY_L1_PROMPT_SCHEMA_TRIM_ENABLED', value)
+    legacy, model = extract([case['item']])
+    assert legacy == trimmed
+    instructions = extraction.PydanticOutputParser(
+        pydantic_object=extraction.WorkingObservationBatch
+    ).get_format_instructions()
+    assert instructions in model.messages[0]['content']
+    assert all(f'"{key}"' in instructions for key in DERIVED)
