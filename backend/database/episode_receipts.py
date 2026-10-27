@@ -114,7 +114,7 @@ def plan_write(
     shards = int((existing or {}).get('shards') or 0)
     archives: list[tuple[int, list[str]]] = []
     while len(merged) > SHARD_SIZE:
-        spill = len(merged) - SHARD_SIZE
+        spill = min(SHARD_SIZE, len(merged) - SHARD_SIZE)
         archives.append((shards, merged[:spill]))
         shards += 1
         merged = merged[spill:]

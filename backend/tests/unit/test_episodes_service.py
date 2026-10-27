@@ -1666,7 +1666,8 @@ def test_recovered_donor_receipts_follow_the_survivor_without_replaying_speech()
     assert len(model.calls) == 1
 
 
-def test_donor_repoint_conflicts_retry_with_fresh_state_and_no_dead_member(monkeypatch):
+@pytest.mark.parametrize('absorbed_callback', [False, True])
+def test_donor_repoint_conflicts_retry_with_fresh_state_and_no_dead_member(monkeypatch, absorbed_callback):
     store = StrictFirestore()
     c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=2), store=store)
     service.attach_conversation(UID, 'live', 'omi', started_at=T0, collaborators=c)
@@ -1689,11 +1690,48 @@ def test_donor_repoint_conflicts_retry_with_fresh_state_and_no_dead_member(monke
         return original(uid, episode_id, **kwargs)
 
     monkeypatch.setattr(episodes_db, 'update_episode', race)
-    row = _wal_row('survivor', text='', sync_merged_from=['donor'])
-    assert service.attach_synced_intake(UID, 'survivor', row, collaborators=c) == 'attached'
+    row = _wal_row('survivor', text=LONG if absorbed_callback else '', sync_merged_from=['donor'])
+    if absorbed_callback:
+        monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a, **k: row)
+        assert (
+            service.on_conversation_finalized(
+                UID,
+                'survivor',
+                _wal_row('donor', text=''),
+                trigger='sync_update',
+                absorbed_from='donor',
+                collaborators=c,
+            )
+            != 'error'
+        )
+        assert len(c.invoke.calls) == 1
+    else:
+        assert service.attach_synced_intake(UID, 'survivor', row, collaborators=c) == 'attached'
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
     assert episode['conversation_ids'] == ['live', 'survivor']
     assert len(attempts) == 3 and len(set(attempts)) == 3
+
+
+def test_repoint_adopts_legacy_unplaced_receipts_before_member_moves():
+    store = StrictFirestore()
+    model = FakeModel()
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'live', 'omi', started_at=T0, collaborators=c)
+    service.attach_synced_intake(UID, 'donor', _wal_row('donor', text=''), collaborators=c)
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    segment = {'id': 'legacy-retained', 'text': LONG, 'start': -1, 'end': -1, 'audio_alignment': 'unplaced'}
+    episodes_db.update_episode(
+        UID,
+        episode['id'],
+        expected_version=episode['state_version'],
+        updates={'applied_segment_ids': {'donor': [segment['id']]}},
+        firestore_client=store,
+    )
+    survivor = _wal_row('survivor', transcript_segments=[segment], sync_merged_from=['donor'])
+    assert service.attach_synced_intake(UID, 'survivor', survivor, collaborators=c) == 'attached'
+    assert model.calls == []
+    consumed, _ = _consumed(store, 'survivor')
+    assert segment['id'] in consumed
 
 
 def test_sync_absorb_finalization_applies_only_the_survivors_novel_speech(monkeypatch):

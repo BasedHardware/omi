@@ -1042,26 +1042,31 @@ def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapp
     return outcome
 
 
-def _attach_synced(uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
+def _attach_synced(
+    uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators, *, absorbed_from: Optional[str] = None
+) -> str:
     # Re-read both membership and the boundary on every lost CAS. A last WAL
     # append cannot rely on another append arriving to repair a lost attachment.
     for attempt in range(3):
         try:
+            if absorbed_from:
+                donor = episodes_db.get_episode_for_conversation(
+                    uid, absorbed_from, firestore_client=c.firestore_client
+                )
+                if donor and absorbed_from in (donor.get('conversation_ids') or []):
+                    _repoint_absorbed(uid, donor, absorbed_from, conversation_id, c)
             _repoint_sync_donors(uid, conversation_id, row, c)
             owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
             outcome = 'attached' if owner else _attach_synced_once(uid, conversation_id, row, c)
             owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
             if owner is not None:
                 if conversation_id not in (owner.get('recovered_conversation_ids') or []):
+                    recovered_ids = [*(owner.get('recovered_conversation_ids') or []), conversation_id]
                     episodes_db.update_episode(
                         uid,
                         str(owner['id']),
                         expected_version=int(owner.get('state_version') or 0),
-                        updates={
-                            'recovered_conversation_ids': list(
-                                dict.fromkeys([*(owner.get('recovered_conversation_ids') or []), conversation_id])
-                            )
-                        },
+                        updates={'recovered_conversation_ids': list(dict.fromkeys(recovered_ids))},
                         firestore_client=c.firestore_client,
                     )
                 _record_recovered(uid, str(owner['id']), conversation_id, row, c)
@@ -1143,7 +1148,7 @@ def _on_finalized(
     episode = episodes_db.get_episode_for_conversation(
         uid, absorbed_from or conversation_id, firestore_client=c.firestore_client
     )
-    if absorbed_from and episode:
+    if absorbed_from and episode and trigger != SYNC_UPDATE:
         _repoint_absorbed(uid, episode, absorbed_from, conversation_id, c)
         episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client)
     if trigger == SYNC_UPDATE:
@@ -1153,8 +1158,8 @@ def _on_finalized(
             if absorbed_from
             else row
         )
-        outcome = _attach_synced(uid, conversation_id, sync_row, c)
-        if episode is None:
+        outcome = _attach_synced(uid, conversation_id, sync_row, c, absorbed_from=absorbed_from)
+        if outcome == 'conflict' or episode is None:
             return outcome
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
     if segments and not absorbed_from and trigger != SYNC_UPDATE:
@@ -1226,12 +1231,14 @@ def _repoint_absorbed(uid: str, episode: Mapping[str, Any], donor_id: str, survi
         {**i, 'conversation_id': survivor_id} if i.get('conversation_id') == donor_id else dict(i)
         for i in provisional_items(episode)
     ]
-    donor_ids, _ = episode_receipts.get_consumed_ids(
+    donor_ids, receipts_exist = episode_receipts.get_consumed_ids(
         uid,
         donor_id,
         all_shards=True,
         firestore_client=c.firestore_client,
     )
+    if not receipts_exist:
+        donor_ids |= set((episode.get('applied_segment_ids') or {}).get(donor_id) or [])
     donor_content, _ = episode_receipts.get_consumed_ids(
         uid,
         recovery.receipt_namespace(donor_id),
