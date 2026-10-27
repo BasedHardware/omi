@@ -1022,8 +1022,13 @@ class TranscriptProcessor:
             if raw_segments:
                 self.host.state.last_transcript_time = time.time()
                 if not data.get('transcript_segments'):
+                    # Delayed first words (or a reconnect before any words) must
+                    # not replace the capture start with the later merge time.
+                    # Project the new words against the retained origin below.
+                    first_word = self.host.state.first_audio_byte_timestamp + raw_segments[0]['start']
+                    capture_start = persisted_started_seconds(data.get('started_at'))
                     started_at = datetime.fromtimestamp(
-                        self.host.state.first_audio_byte_timestamp + raw_segments[0]['start'], tz=timezone.utc
+                        min(capture_start, first_word) if capture_start is not None else first_word, tz=timezone.utc
                     )
                     data['started_at'] = started_at
                 started_ts = (

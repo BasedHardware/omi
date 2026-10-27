@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from config.batch_pipeline import known_unsupported_batch_language, priority_for
+from config.batch_language_recovery import inherited_language, language_inheritance_enabled
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
 from config.prerecorded_language import language_guard_enabled, language_class
@@ -425,6 +426,11 @@ async def accept_upload(
         # previous batch receipts above always stay owned by their original lane.
         prefs = user.get('transcription_preferences') or {}
         input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
+        inherited = (
+            inherited_language(target.get('language'), user.get('language')) if language_inheritance_enabled() else None
+        )
+        if inherited:
+            language = inherited
         if mode is LegacySyncMode.ON and language_guard_enabled() and language_class(input_language) == 'unsupported':
             # Main's prerecorded language guard; with legacy draining or dark the C8
             # provider-STT route below serves unsupported speech instead of legacy.
@@ -447,6 +453,8 @@ async def accept_upload(
             record_route('intake', language, 'multilingual')
             logger.info('event=batch_language_eligibility outcome=legacy reason=known_unsupported_language')
             return None
+        if inherited:
+            input_language = inherited
         route = resolve_route(language, byok=byok_enabled)
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
         # to the batch provider-STT stage instead of the legacy fallback.
@@ -576,7 +584,7 @@ async def accept_upload(
             data_protection_level=context.level,
             target_conversation_id=conversation_id,
             privacy_generation=context.generation,
-            language=target.get('language'),
+            language=inherited or target.get('language'),
             record_origin=record_origin,
         )
         wakes: dict[str, str] = {}
