@@ -86,7 +86,7 @@ class ProjectionStore:
 
     def read(self, segment_id: str) -> tuple[dict[str, Any], dict[str, Any], ProjectionBinding]:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.
-        job = self.ref('jobs', segment_id).get().to_dict() or {}
+        job: dict[str, Any] = self.ref('jobs', segment_id).get().to_dict() or {}
         if job.get('projection_binding') and (job.get('policy_parts') or {}).get('projection') is None:
             try:
                 job, _ = load_stage_policy(self.store, segment_id, 'projection')
