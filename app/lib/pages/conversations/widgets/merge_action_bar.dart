@@ -58,9 +58,12 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
               decoration: BoxDecoration(
                 color: OmiColors.surface1,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(OmiRadius.lg)),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, -4)),
-                ],
+                boxShadow: isActive
+                    ? [
+                        BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, -4)),
+                      ]
+                    : null,
               ),
               child: SafeArea(
                 top: false,

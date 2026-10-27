@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -27,7 +25,7 @@ class _AuthComponentState extends State<AuthComponent> {
       builder: (context, provider, child) {
         return OnboardingStep(
           card: OnboardingCard(
-            padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 26, OmiSpacing.xxl, OmiSpacing.xs),
+            padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, OmiSpacing.xl, OmiSpacing.xxl, OmiSpacing.xs),
             content: [
               // Loading indicator or spacing
               SizedBox(
@@ -36,82 +34,54 @@ class _AuthComponentState extends State<AuthComponent> {
               ),
 
               // Title text
-              Text(
-                context.l10n.speakTranscribeSummarize,
-                style: TextStyle(
-                  color: OmiColors.textPrimary,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  height: 1.2,
-                  fontFamily: 'Manrope',
+              MediaQuery.withClampedTextScaling(
+                maxScaleFactor: 1.4,
+                child: Text(
+                  context.l10n.speakTranscribeSummarize,
+                  style: TextStyle(
+                    color: OmiColors.textPrimary,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    height: 1.2,
+                    fontFamily: 'Manrope',
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
               ),
 
               const SizedBox(height: 32),
-
+            ],
+            footer: [
               // Sign in buttons
-              if (!provider.isLocalDevProfile && (Platform.isIOS || Platform.isAndroid)) ...[
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      OmiHaptics.selection();
-                      provider.onAppleSignIn(widget.onSignIn);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: OmiColors.accent,
-                      foregroundColor: OmiColors.onAccent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const FaIcon(FontAwesomeIcons.apple, size: 24),
-                        const SizedBox(width: 8),
-                        Text(
-                          context.l10n.signInWithApple,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'Manrope',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+              if (!provider.isLocalDevProfile &&
+                  (Theme.of(context).platform == TargetPlatform.iOS ||
+                      Theme.of(context).platform == TargetPlatform.android)) ...[
+                OmiButton(
+                  key: const Key('auth_sign_in_apple'),
+                  label: context.l10n.signInWithApple,
+                  leading: const FaIcon(FontAwesomeIcons.apple),
+                  expand: true,
+                  maxLines: 3,
+                  onPressed: () {
+                    OmiHaptics.selection();
+                    provider.onAppleSignIn(widget.onSignIn);
+                  },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: OmiSpacing.md),
               ],
 
               // Google sign in button
               if (!provider.isLocalDevProfile)
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      OmiHaptics.selection();
-                      provider.onGoogleSignIn(widget.onSignIn);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: OmiColors.accent,
-                      foregroundColor: OmiColors.onAccent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const FaIcon(FontAwesomeIcons.google, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          context.l10n.signInWithGoogle,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                        ),
-                      ],
-                    ),
-                  ),
+                OmiButton(
+                  key: const Key('auth_sign_in_google'),
+                  label: context.l10n.signInWithGoogle,
+                  leading: const FaIcon(FontAwesomeIcons.google),
+                  expand: true,
+                  maxLines: 3,
+                  onPressed: () {
+                    OmiHaptics.selection();
+                    provider.onGoogleSignIn(widget.onSignIn);
+                  },
                 ),
 
               // Local development sign-in. Only rendered for a local_dev
@@ -121,10 +91,10 @@ class _AuthComponentState extends State<AuthComponent> {
               // one. Never shown in a production-family build.
               if (provider.isLocalDevProfile) ...[
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 56),
                   child: OutlinedButton(
+                    key: const Key('auth_sign_in_local_dev'),
                     onPressed: () {
                       OmiHaptics.selection();
                       provider.onLocalDevSignIn(widget.onSignIn);
