@@ -1,19 +1,25 @@
 """Synthetic language-guard recovery, paid-intent fencing and measured receipts."""
 
 from copy import deepcopy
+import io
+import wave
 from unittest.mock import Mock, AsyncMock
 
 import pytest
 
 from config.batch_language_recovery import allowed, below_silence_threshold
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_projection import ProjectionStore
+from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
-from tests.unit.test_batch_pipeline_quarantine_recovery import setup, legacy_dependencies, row
+from tests.unit.test_batch_pipeline_quarantine_recovery import setup, legacy_dependencies, row, PARTIAL_ACCOUNTING
 from tests.unit.test_batch_pipeline_speech_redrive import enabled
 from tests.unit.test_batch_pipeline_empty_disposition import SERVING_ENV
 from utils.batch_pipeline.recovery_recognizers import transcribe
 from utils.batch_pipeline.recovery_disposition import RecoveryFailure, independent_silence_payload, result_outcome
 from utils.batch_pipeline.speech_redrive import redrive_one
+from utils.batch_pipeline.contracts import vad_receipt
 
 WORDS = [{'text': 'Synthetic.', 'timestamp': [1, 2], 'speaker': '0'}]
 
@@ -62,6 +68,98 @@ def test_two_empty_recognizers_retain_measured_speech(setup, monkeypatch, legacy
     artifacts.persist_recovery_result.assert_not_called()
     modulate.assert_called_once()
     soniox.assert_called_once()
+
+
+@pytest.mark.parametrize('census', [0, 2])
+@pytest.mark.parametrize('stored,decoded', [(61, 61), (59.96, 60.04), (60, 60.04)])
+def test_hard_duration_refusal_retains_audio_without_repeating_inspection(
+    setup, monkeypatch, legacy_dependencies, census, stored, decoded
+):
+    client, store, binding, artifacts, modulate, soniox, recovery, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0
+    )
+    job = row(client)
+    job['duration_seconds'] = stored
+    job['measured_held_vad_speech_seconds'] = census
+    job['worker_vad_receipt'] = original = vad_receipt(job['audio_uri'], round(stored * 16000), census)
+    audio = io.BytesIO()
+    with wave.open(audio, 'wb') as handle:
+        handle.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        handle.writeframes(b'\0' * (round(decoded * 16000) * 2))
+    artifacts.fetch_audio.return_value = audio.getvalue()
+    audio_uri = job['audio_uri']
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    held = row(client)
+    assert held['recovery_state'] == 'failed_held' and held['state'] == 'quarantined'
+    assert held['audio_uri'] == audio_uri and held['worker_vad_receipt'] == original
+    assert held['measured_held_vad_speech_seconds'] == census
+    assert held['recovery']['refusal'] == {
+        'reason': 'independent_duration_limit',
+        'max_audio_seconds': 60,
+        'audio_seconds': decoded,
+    }
+    assert not set(held['recovery']) & {'provider', 'started_at', 'recognizers'}
+    assert not held.get('result')
+    for _ in range(3):
+        assert recovery.recover('bad', binding.owner_id) == 'held'
+    artifacts.fetch_audio.assert_called_once()
+    artifacts.persist_recovery_result.assert_not_called()
+    modulate.assert_not_called()
+    soniox.assert_not_called()
+    # Retaining an unspent intent must not fabricate eligibility for the paid
+    # redrive tool, whose ownership proof requires a previously started epoch.
+    with pytest.raises(ProjectionBlocked, match='speech redrive ownership changed'):
+        SpeechRedriveStore(store, server_flags=SERVING_ENV).prepare(
+            'bad', binding.owner_id, 'reviewed-plan', deepcopy(held['recovery']), 101
+        )
+    # The client can finish its successful sibling while the original audio
+    # remains held for a reviewed redrive. No held seconds are charged.
+    assert ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING)[0]['held_segments'] == 1
+    assert row(client)['audio_uri'] == audio_uri and not row(client).get('result')
+
+
+@pytest.mark.parametrize(
+    'change', ['token', 'running', 'lease', 'result', 'duration', 'audio', 'not_guarded', 'privacy']
+)
+def test_hard_duration_hold_requires_current_prepared_privacy_fenced_intent(
+    setup, monkeypatch, legacy_dependencies, change
+):
+    client, _, binding, artifacts, modulate, soniox, recovery, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0
+    )
+    row(client)['duration_seconds'] = 61
+    prepared = recovery.protocol.prepare('bad', binding.owner_id, 100)
+    token = prepared['recovery']['token']
+    expected_audio_uri = prepared['audio_uri']
+    job = row(client)
+    if change == 'token':
+        token = 'stale'
+    elif change == 'running':
+        assert recovery.protocol.start('bad', token, 100)
+    elif change == 'lease':
+        job['lease_until'] = 200
+    elif change == 'result':
+        job['result'] = {'outcome': 'success'}
+    elif change == 'duration':
+        job['duration_seconds'] = 60
+    elif change == 'audio':
+        job['audio_uri'] = 'gs://synthetic/different-audio'
+    elif change == 'not_guarded':
+        job.pop('worker_failure')
+    else:
+        client.rows[('users', binding.owner_id)]['migration_status'] = 'pending'
+    before = deepcopy(client.rows)
+    if change == 'privacy':
+        with pytest.raises(BatchPrivacyBlocked):
+            recovery.protocol.hold_duration_limit('bad', token, 101, audio_uri=expected_audio_uri, audio_seconds=61)
+    else:
+        assert not recovery.protocol.hold_duration_limit(
+            'bad', token, 101, audio_uri=expected_audio_uri, audio_seconds=61
+        )
+    assert client.rows == before
+    artifacts.fetch_audio.assert_not_called()
+    modulate.assert_not_called()
+    soniox.assert_not_called()
 
 
 def test_independent_words_recover_without_repeating_modulate(setup, monkeypatch, legacy_dependencies):

@@ -771,7 +771,8 @@ OPERATOR_INTENTS = ('speech_redrive', 'terminal_disposition', 'silence_dispositi
 def held_without_recovery(job: dict) -> bool:
     """A quarantined unit that nothing automatic will change.
 
-    Its one paid recovery settled without words (``failed_held``), or its
+    Its recovery settled without words or hit the hard independent duration
+    limit before spending (``failed_held``), or its
     recorded recovery policy is off and no paid call was ever authorized. Either
     way its encrypted audio stays server-side for a reviewed operator redrive.
     """
