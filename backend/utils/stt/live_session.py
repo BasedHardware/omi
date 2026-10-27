@@ -1277,7 +1277,8 @@ class LiveLegSocket(STTSocket):
 
     async def complete_send(self) -> bool:
         if getattr(self.raw, 'idle_reopen_cost_reselect_pending', False) is True:
-            return await self.raw.request_cost_reselect()
+            request = cast(Callable[[], Awaitable[bool]], getattr(self.raw, 'request_cost_reselect'))
+            return await request()
         offset = getattr(self.raw, 'set_resume_provider_offset', None)
         if self._send_tracker is not None and callable(offset):
             offset(
