@@ -10,17 +10,17 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-# Preserve the approved four-worker floor on image-only Helm rolls. Each
-# replica requests one L4; actual ready capacity still gates admission.
-# Higher ladder steps must explicitly reconcile their desired replica count
-# after a roll: the node-pool maximum alone does not create worker demand.
-# Leases, ordered merge and privacy fences stay durable per segment/owner.
-replicaCount: 4
+# Lead45e4af: activate after the current5c verdict, with adapter/quota proof.
+# Two pool-pinned HPAs each keep1 warm and grow to12 on shared ready-work age.
+# Maxima express demand ceilings; they do not pre-provision GPU nodes.
+replicaCount: 2
 autoscaling:
-  enabled: false
-# The null drops the base chart's pool pin: batch-pipeline-pool and its Spot
-# sibling share the service/env labels and omi.ai taints, so the autoscaler
-# can place replicas on Spot first while the on-demand pool stays the fallback.
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 24
+  balancedPools:
+    enabled: true
+# Each generated deployment adds its exact OD/Spot pool pin to these labels.
 nodeSelector:
   cloud.google.com/gke-nodepool: null
   service: batch-pipeline
@@ -35,6 +35,8 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  # Preserve the measured profiling-on state across the scaler Helm upgrade.
+  stageProfilingEnabled: true
   shadowRecoveryApiUrl: "https://backend-integration-hhibjajaja-uc.a.run.app"
   apiUrl: https://backend-sync-hhibjajaja-uc.a.run.app
   audience: https://backend-sync-hhibjajaja-uc.a.run.app

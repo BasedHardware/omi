@@ -48,6 +48,18 @@ class QueueMetrics:
             ['worker_release', 'namespace'],
             registry=registry,
         )
+        self.ready_units = Gauge(
+            'omi_batch_pipeline_admissible_ready_units',
+            'Ready admitted units excluding held, parked, unmarked legacy and unevaluated refusals',
+            ['priority', 'worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.capacity_refreshed_at = Gauge(
+            'omi_batch_pipeline_capacity_refreshed_at_seconds',
+            'Last complete three-priority admissible capacity count',
+            ['worker_release', 'namespace'],
+            registry=registry,
+        )
         self.owner_wait = Histogram(
             'omi_batch_pipeline_owner_wait_seconds',
             'Per-item admission to lease wait; no owner labels',
@@ -99,6 +111,16 @@ class QueueMetrics:
             pending = store.oldest(int(priority), ready_only=False)
             ready = store.oldest(int(priority), ready_only=True)
             samples.append((priority, pending, ready, store.oldest_retry(int(priority))))
+        capacity = []
+        # Older injected stores may expose only the age contract. Their absent
+        # capacity clock stays never-observed, so no adapter can fabricate zero.
+        sampler = getattr(store, 'ready_for_capacity', None)
+        if callable(sampler):
+            for priority in Priority:
+                count = sampler(int(priority), now)
+                if type(count) is not int or count < 0:
+                    raise ValueError('nonnegative integer capacity count required')
+                capacity.append((priority, count))
         for priority, pending, ready, retry in samples:
             self.oldest_age.labels(LABELS[priority], *self.scope).set(
                 max(0.0, now - pending) if pending is not None else 0
@@ -106,6 +128,10 @@ class QueueMetrics:
             self.ready_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - ready) if ready is not None else 0)
             self.retry_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - retry) if retry is not None else 0)
         self.refreshed_at.labels(*self.scope).set(now)
+        if capacity:
+            for priority, count in capacity:
+                self.ready_units.labels(LABELS[priority], *self.scope).set(count)
+            self.capacity_refreshed_at.labels(*self.scope).set(now)
         if isinstance(store, FirestoreStore):
             self.refresh_projection(store, now)
 

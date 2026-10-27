@@ -40,6 +40,22 @@ def _contains(field_path: str) -> FirestoreIndexField:
 INDEX_ONLY_REQUIREMENTS = (
     *(
         FirestoreIndexRequirement(
+            f'{stage}_batch_capacity_ready',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (
+                _asc('priority'),
+                _asc('state'),
+                _asc('merge_pending'),
+                _asc('compute_decision.outcome'),
+                _asc('available_at'),
+                _asc('__name__'),
+            ),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
             f'{stage}_batch_ramp_owner_load',
             f'batch_pipeline_{stage}_jobs',
             'COLLECTION',
