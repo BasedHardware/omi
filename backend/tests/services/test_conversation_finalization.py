@@ -70,6 +70,7 @@ def test_reconcile_listen_finalization_jobs_disabled(mock_dependencies):
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'terminalized': 0,
     }
     mock_dependencies["publish_metrics"].assert_called_once()
     mock_dependencies["get_candidates"].assert_not_called()
@@ -89,6 +90,7 @@ def test_reconcile_listen_finalization_jobs_query_fails(mock_dependencies):
         'retired': 0,
         'advanced': 0,
         'error': 1,
+        'terminalized': 0,
     }
     mock_dependencies["publish_metrics"].assert_called_once()
 
@@ -107,6 +109,7 @@ def test_reconcile_listen_finalization_jobs_skips_invalid_job_id(mock_dependenci
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'terminalized': 0,
     }
     mock_dependencies["claim_replay"].assert_not_called()
     mock_dependencies["publish_metrics"].assert_called_once()
@@ -127,6 +130,7 @@ def test_reconcile_listen_finalization_jobs_claim_fails(mock_dependencies):
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'terminalized': 0,
     }
     mock_dependencies["publish_metrics"].assert_called_once()
 
@@ -149,6 +153,7 @@ def test_reconcile_listen_finalization_jobs_claim_not_queued(mock_dependencies):
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'terminalized': 0,
     }
     assert mock_dependencies["claim_replay"].call_count == 2
     mock_dependencies["enqueue_job"].assert_not_called()
@@ -171,6 +176,7 @@ def test_reconcile_listen_finalization_jobs_enqueue_fails(mock_dependencies):
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'terminalized': 0,
     }
     mock_dependencies["record_reconciliation"].assert_called_once_with('enqueue_failed')
     mock_dependencies["record_fallback"].assert_called_once()
@@ -192,6 +198,7 @@ def test_reconcile_listen_finalization_jobs_success(mock_dependencies):
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'terminalized': 0,
     }
     mock_dependencies["claim_replay"].assert_called_once_with("job1", stale_after="stale_after", firestore_client=None)
     mock_dependencies["enqueue_job"].assert_called_once_with("job1", 1)
@@ -219,6 +226,7 @@ def test_reconcile_skips_generation_already_dispatched_by_another_tick(mock_depe
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'terminalized': 0,
     }
     mock_dependencies['enqueue_job'].assert_not_called()
 
@@ -321,3 +329,104 @@ def test_serial_rollback_uses_no_additional_thread_pool(mock_dependencies, monke
     monkeypatch.setattr(conversation_finalization.quiet_finalization, 'run', mock.Mock(return_value='done'))
     result = reconcile_listen_finalization_jobs()
     assert result['retired'] == 2
+
+
+# ---------------------------------------------------------------------------
+# Requeue-exhausted terminalization (#20114): the delivery-independent close.
+# ---------------------------------------------------------------------------
+
+_EXHAUSTED_REQUEUED = {
+    'job_id': 'job-1',
+    'kind': 'listen_finalization',
+    'status': 'queued',
+    'attempt_count': 5,
+    'budget_requeue_count': 1,
+    'dispatch_generation': 3,
+    'lease_epoch': 2,
+    'last_failure_code': 'processing_failed',
+    'fanout_status': 'pending',
+}
+
+
+def _patch_terminalize(monkeypatch, return_value=True):
+    monkeypatch.setattr(
+        conversation_finalization, 'get_listen_finalization_tasks_max_attempts', mock.Mock(return_value=5)
+    )
+    terminalize = mock.Mock(return_value=return_value)
+    monkeypatch.setattr(conversation_finalization.jobs_db, 'terminalize_exhausted_requeued_job', terminalize)
+    return terminalize
+
+
+def test_reconciler_terminalizes_an_exhausted_requeued_candidate_before_replay(mock_dependencies, monkeypatch, caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger=conversation_finalization.logger.name)
+    terminalize = _patch_terminalize(monkeypatch)
+    emit_before = conversation_finalization.OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL.labels(
+        cause='processing_failed'
+    )._value.get()
+    mock_dependencies['get_candidates'].return_value = [dict(_EXHAUSTED_REQUEUED)]
+
+    result = reconcile_listen_finalization_jobs()
+
+    assert result['terminalized'] == 1
+    assert result['requeued'] == 0
+    terminalize.assert_called_once_with(
+        'job-1',
+        expected_status='queued',
+        expected_dispatch_generation=3,
+        expected_lease_epoch=2,
+        failure_code='processing_failed',
+        firestore_client=None,
+    )
+    mock_dependencies['claim_replay'].assert_not_called()
+    mock_dependencies['enqueue_job'].assert_not_called()
+    emits = [
+        r.getMessage() for r in caplog.records if r.getMessage().startswith('listen finalization dead_letter terminal=')
+    ]
+    assert len(emits) == 1
+    assert 'source=reconciler' in emits[0]
+    assert 'budget_requeues=1' in emits[0]
+    assert (
+        conversation_finalization.OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL.labels(
+            cause='processing_failed'
+        )._value.get()
+        == emit_before + 1
+    )
+
+
+def test_reconciler_leaves_an_exhausted_but_unrequeued_candidate_to_replay(mock_dependencies, monkeypatch):
+    """The grant happens on the candidate's next delivery, never speculatively."""
+    terminalize = _patch_terminalize(monkeypatch)
+    candidate = dict(_EXHAUSTED_REQUEUED, budget_requeue_count=0)
+    mock_dependencies['get_candidates'].return_value = [candidate]
+    mock_dependencies['claim_replay'].return_value = {'status': 'queued', 'dispatch_generation': 4, 'created': True}
+
+    result = reconcile_listen_finalization_jobs()
+
+    assert result['requeued'] == 1
+    assert result['terminalized'] == 0
+    terminalize.assert_not_called()
+    mock_dependencies['enqueue_job'].assert_called_once_with('job-1', 4)
+
+
+@pytest.mark.parametrize(
+    'overrides',
+    [
+        {'attempt_count': 4},  # under budget: the second life still has attempts
+        {'budget_requeue_count': 0},  # first life: the grant path owns it
+        {'fanout_status': 'completed'},  # committed fanout is success; replay converges it
+        {'status': 'leased'},  # a leased row belongs to the claim paths
+    ],
+)
+def test_reconciler_terminalize_condition_table(mock_dependencies, monkeypatch, overrides):
+    terminalize = _patch_terminalize(monkeypatch)
+    candidate = dict(_EXHAUSTED_REQUEUED, **overrides)
+    mock_dependencies['get_candidates'].return_value = [candidate]
+    mock_dependencies['claim_replay'].return_value = {'status': 'queued', 'dispatch_generation': 4, 'created': True}
+
+    result = reconcile_listen_finalization_jobs()
+
+    terminalize.assert_not_called()
+    assert result['terminalized'] == 0
+    assert result['requeued'] == 1

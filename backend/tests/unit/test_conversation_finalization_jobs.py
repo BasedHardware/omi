@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
 from google.api_core.exceptions import Aborted
 
 from database import conversation_finalization_jobs as jobs
@@ -1905,3 +1906,306 @@ def test_selfheal_cursor_preserves_verification_deadline(monkeypatch):
     cursor = jobs.get_in_progress_content_sweep_cursor(firestore_client=client)
 
     assert cursor['pending_verifications'] == [entry]
+
+
+# ---------------------------------------------------------------------------
+# Budget-free delayed requeue (#20114): one parked second life, then terminal.
+# ---------------------------------------------------------------------------
+
+
+def _exhausted_leased_job(**overrides) -> _Ref:
+    data = {
+        'status': 'leased',
+        'dispatch_generation': 4,
+        'lease_epoch': 2,
+        'attempt_count': 5,
+        'worker_claim_count': 5,
+        'task_retry_count': 2,
+        'requires_byok': False,
+        'fanout_status': 'pending',
+        'uid': 'uid-1',
+        'conversation_id': 'conversation-1',
+        'finalization_revision': 3,
+        'projection_generation': jobs.FINALIZATION_PROJECTION_GENERATION,
+        'projection_shard': 3,
+        'dispatch_requested_at': _now() - timedelta(hours=2),
+    }
+    data.update(overrides)
+    return _Ref('job-1', data)
+
+
+def _apply(transaction: _Transaction) -> None:
+    for ref, patch in transaction.updates:
+        ref.data = ref.data | patch
+
+
+def test_budget_requeue_grant_resets_the_budget_and_parks_the_row(monkeypatch):
+    monkeypatch.setenv('LISTEN_FINALIZATION_BUDGET_REQUEUE_DELAY_SECONDS', '2700')
+    transaction = _Transaction()
+    projection = _Collection({})
+    job_ref = _exhausted_leased_job()
+
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(transaction, job_ref, 4, 2, 'processing_failed', _now(), projection)
+        == 'requeued'
+    )
+
+    update = transaction.updates[0][1]
+    assert update['status'] == 'queued'
+    assert update['attempt_count'] == 0
+    assert update['worker_claim_count'] == 0
+    assert update['task_retry_count'] == 0
+    assert update['budget_requeue_count'] == 1
+    assert update['budget_requeued_at'] == _now()
+    assert update['last_failure_code'] == 'processing_failed'
+    assert update['reconcile_after_at'] == _now() + timedelta(seconds=2700)
+    assert update['lease_expires_at'] == _now()
+    # The parked row keeps its dispatch generation; the replay sweep mints the
+    # next one only once the park elapses.
+    assert 'dispatch_generation' not in update
+    assert 'dispatch_requested_at' not in update
+    # Leased -> queued moves the projection exactly like mark_finalization_retryable.
+    assert len(transaction.sets) == 1
+    shard = transaction.sets[0][1]
+    assert shard['leased'] == jobs.firestore.Increment(-1)
+    assert shard['queued'] == jobs.firestore.Increment(1)
+
+
+def test_second_budget_requeue_grant_is_refused_without_a_write():
+    transaction = _Transaction()
+    job_ref = _exhausted_leased_job(budget_requeue_count=1)
+
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(transaction, job_ref, 4, 2, 'processing_failed', _now(), None)
+        == 'already_requeued'
+    )
+    assert transaction.updates == []
+
+
+@pytest.mark.parametrize(
+    'overrides',
+    [
+        {'dispatch_generation': 3},
+        {'lease_epoch': 1},
+        {'status': 'queued', 'lease_expires_at': _now()},
+    ],
+)
+def test_budget_requeue_grant_fence_losses_return_conflict_without_a_write(overrides):
+    transaction = _Transaction()
+
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(
+            transaction, _exhausted_leased_job(**overrides), 4, 2, 'processing_failed', _now(), None
+        )
+        == 'conflict'
+    )
+    assert transaction.updates == []
+
+
+def test_budget_requeue_grant_refuses_committed_fanout():
+    transaction = _Transaction()
+
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(
+            transaction, _exhausted_leased_job(fanout_status='completed'), 4, 2, 'processing_failed', _now(), None
+        )
+        == 'conflict'
+    )
+    assert transaction.updates == []
+
+
+def test_budget_requeue_grant_refuses_byok_rows():
+    transaction = _Transaction()
+
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(
+            transaction, _exhausted_leased_job(requires_byok=True), 4, 2, 'processing_failed', _now(), None
+        )
+        == 'conflict'
+    )
+    assert transaction.updates == []
+
+
+@pytest.mark.parametrize('cause', sorted(jobs.NEVER_REQUEUE_CAUSES))
+def test_budget_requeue_grant_refuses_never_requeue_causes_without_a_write(cause):
+    transaction = _Transaction()
+
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(transaction, _exhausted_leased_job(), 4, 2, cause, _now(), None)
+        == 'not_requeueable'
+    )
+    assert transaction.updates == []
+
+
+def test_terminalize_exhausted_requeued_job_closes_the_parked_row_and_its_conversation():
+    transaction = _Transaction()
+    projection = _Collection({})
+    job_ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 4,
+            'lease_epoch': 2,
+            'attempt_count': 5,
+            'budget_requeue_count': 1,
+            'last_failure_code': 'processing_failed',
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 3,
+            'projection_generation': jobs.FINALIZATION_PROJECTION_GENERATION,
+            'projection_shard': 3,
+        },
+    )
+    conversation_ref = _conversation(
+        {
+            'status': 'processing',
+            'discarded': False,
+            'finalization_job_id': 'job-1',
+            'finalization_revision': 3,
+            'structured': {'title': 'Existing summary'},
+        }
+    )
+
+    assert (
+        jobs._terminalize_exhausted_requeued_job_txn(
+            transaction,
+            job_ref,
+            'queued',
+            4,
+            2,
+            'processing_failed',
+            _now(),
+            lambda uid, conversation_id: conversation_ref,
+            projection,
+        )
+        is True
+    )
+
+    job_update = transaction.updates[0][1]
+    assert job_update['status'] == 'dead_letter'
+    assert job_update['terminal_outcome'] == 'failure'
+    assert job_update['terminal_at'] == _now()
+    assert job_update['reconcile_after_at'] == jobs.firestore.DELETE_FIELD
+    assert job_update['last_failure_code'] == 'processing_failed'
+    assert transaction.updates[1] == (
+        conversation_ref,
+        {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'},
+    )
+    # A queued source row decrements queued — never the dead-letter txn's leased=-1.
+    shard = transaction.sets[-1][1]
+    assert shard['queued'] == jobs.firestore.Increment(-1)
+    assert shard['dead_letter'] == jobs.firestore.Increment(1)
+    assert shard['failure'] == jobs.firestore.Increment(1)
+
+
+@pytest.mark.parametrize(
+    ('expected_dispatch_generation', 'expected_lease_epoch', 'overrides'),
+    [
+        (5, 2, {}),
+        (4, 3, {}),
+        (4, 2, {'status': 'leased', 'lease_expires_at': _now() - timedelta(minutes=1)}),
+        (4, 2, {'fanout_status': 'completed'}),
+    ],
+)
+def test_terminalize_refuses_fence_losses_and_committed_fanout(
+    expected_dispatch_generation, expected_lease_epoch, overrides
+):
+    transaction = _Transaction()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 4,
+            'lease_epoch': 2,
+            'budget_requeue_count': 1,
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+        }
+        | overrides,
+    )
+
+    assert (
+        jobs._terminalize_exhausted_requeued_job_txn(
+            transaction,
+            job_ref,
+            'queued',
+            expected_dispatch_generation,
+            expected_lease_epoch,
+            'processing_failed',
+            _now(),
+            lambda uid, conversation_id: pytest.fail('the bound conversation must not be read on a fence loss'),
+            None,
+        )
+        is False
+    )
+    assert transaction.updates == []
+    assert transaction.sets == []
+
+
+class _CutoffReplayCollection:
+    """Fake due query: models the frozen-cutoff ``reconcile_after_at <= cutoff`` filter."""
+
+    def __init__(self, refs):
+        self.refs = refs
+        self.where_calls: list[tuple[str, str]] = []
+        self._cutoff: datetime | None = None
+        self._limit: int | None = None
+
+    def where(self, field, operator, value):
+        self.where_calls.append((field, operator))
+        self._cutoff = value
+        return self
+
+    def order_by(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, value):
+        self._limit = value
+        return self
+
+    def stream(self):
+        rows = [
+            ref
+            for ref in self.refs
+            if isinstance(ref.data.get('reconcile_after_at'), datetime)
+            and ref.data['reconcile_after_at'] <= self._cutoff
+        ]
+        return rows[: self._limit]
+
+
+def test_parked_budget_requeue_row_is_invisible_to_replay_candidates_until_due(monkeypatch):
+    monkeypatch.setenv('LISTEN_FINALIZATION_BUDGET_REQUEUE_DELAY_SECONDS', '2700')
+    now = _now()
+    monkeypatch.setattr(jobs, '_now', lambda: now)
+    monkeypatch.setattr(jobs, '_advance_finalization_replay_cursor_txn', lambda *args: True)
+    monkeypatch.setattr(jobs.firestore, 'transactional', lambda fn: fn)
+    job_ref = _exhausted_leased_job()
+    grant = _Transaction()
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(grant, job_ref, 4, 2, 'processing_failed', now, None) == 'requeued'
+    )
+    _apply(grant)
+
+    parked_collection = _CutoffReplayCollection([job_ref])
+    state = {'cutoff': now}
+
+    def client_for(cursor_state):
+        state_ref = SimpleNamespace(get=lambda: SimpleNamespace(to_dict=lambda: cursor_state))
+        state_collection = SimpleNamespace(document=lambda name: state_ref)
+        return SimpleNamespace(
+            collection=lambda name: (
+                parked_collection if name == jobs.FINALIZATION_JOBS_COLLECTION else state_collection
+            ),
+            transaction=lambda: object(),
+        )
+
+    # The sweep-start cutoff is frozen at `now`: the 45-minute park makes the
+    # row invisible to every pass until its reconcile_after_at falls due.
+    assert jobs.get_finalization_replay_candidates(limit=10, firestore_client=client_for({})) == []
+    assert parked_collection.where_calls == [('reconcile_after_at', '<=')]
+
+    due = now + timedelta(seconds=2700) + timedelta(seconds=1)
+    candidates = jobs.get_finalization_replay_candidates(
+        limit=10, firestore_client=client_for({'cursor': {'cutoff': due}})
+    )
+    assert [candidate['job_id'] for candidate in candidates] == ['job-1']

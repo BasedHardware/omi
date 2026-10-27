@@ -31,7 +31,12 @@ from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.episode_runtime import process_with_episode_budget
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.conversations.smart_merge import smart_merge_step
+from utils.conversations.smart_merge import (
+    _INCOMPLETE_CODES,  # pyright: ignore[reportPrivateUsage] — the closed incomplete-code set this boundary must reuse, never re-declare
+    SmartMergeIncomplete,
+    _incomplete_cause,  # pyright: ignore[reportPrivateUsage]
+    smart_merge_step,
+)
 from utils.conversations.smart_merge_policy import is_donor
 from utils.conversations.meeting_evidence_admission import await_meeting_evidence
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
@@ -616,7 +621,16 @@ async def finalize_persisted_conversation(
             finalization_diagnostic_id(conversation_id),
             dispatch_generation,
         )
-        raise ConversationFinalizationError('processing_failed') from error
+        # A smart-merge incomplete keeps its bounded fence code so the retry
+        # budget, counters, and logs can class it; a non-member code (the
+        # generic wrapper stores an exception class name) and any other
+        # failure collapse to the generic code, keeping the conversation-row
+        # vocabulary and retry affordance byte-identical. Never the exception
+        # message (transcript risk).
+        incomplete_cause = _incomplete_cause(error) if isinstance(error, SmartMergeIncomplete) else None
+        raise ConversationFinalizationError(
+            incomplete_cause if incomplete_cause in _INCOMPLETE_CODES else 'processing_failed'
+        ) from error
 
 
 async def _load_admitted_conversation(

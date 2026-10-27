@@ -96,6 +96,7 @@ from utils.metrics import (
     record_smart_merge_flatten,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.finalization import finalization_diagnostic_id
 from utils.other.storage import compute_audio_files_fingerprint, enqueue_conversation_artifact_build
 
 logger = logging.getLogger(__name__)
@@ -674,7 +675,8 @@ def finish_absorb(uid: str, donor_id: str, *, owner: str, resumed: bool = False)
             raise
         raise SmartMergeIncomplete(type(error).__name__) from error
     if resumed:
-        logger.info('event=smart_merge outcome=resumed_ok')
+        # Closed vocabulary: the hash only, never the raw finalization job id.
+        logger.info('event=smart_merge outcome=resumed_ok job_hash=%s', finalization_diagnostic_id(owner))
 
 
 _DEFERRED_RETRACTION = (DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable)
