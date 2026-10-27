@@ -561,15 +561,20 @@ resources:
   # request 450m yields exactly three pods per n4-highmem-2 node — 3x450m =
   # 1350m of ~1530m allocatable after ~358m of DaemonSet requests, while
   # 4x450m = 1800m can never fit — and aggregate p99 usage (3x495m = 1485m)
-  # stays under the node's 1930m allocatable. CPU limit is unchanged, so
-  # per-pod burst headroom is identical to the 2-pods-per-node era. The HPA is
-  # unaffected: it scales on the external pusher_active_ws_connections_per_pod
-  # metric, not resource utilization.
+  # stays under the node's 1930m allocatable. The HPA is unaffected: it
+  # scales on the external pusher_active_ws_connections_per_pod metric, not
+  # resource utilization.
+  # CPU limit raised 0.7 -> 1.0 on 2026-10-27: with the 0.7 limit the pusher
+  # container was CFS-throttled in 22% of periods (steady over 1h and 6h)
+  # while its p99 usage was only 409m, so sub-100ms bursts on the live audio
+  # path were hitting the cap. Scheduling uses requests, so packing (three
+  # pods per node) and node count are unchanged; under node contention CFS
+  # still shares CPU by request weight.
   requests:
     cpu: 0.45
     memory: 2Gi
   limits:
-    cpu: 0.7
+    cpu: 1.0
     memory: 3.5Gi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/

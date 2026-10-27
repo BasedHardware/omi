@@ -879,6 +879,72 @@ bool isSyncRecoveryWindowExceededResponse(http.Response response) {
   }
 }
 
+/// Bounded `code` the sync upload route puts on a 400 refusal, or null when
+/// the body carries none. Never parses human-readable text into behavior.
+@visibleForTesting
+String? syncUploadErrorCode(http.Response response) {
+  try {
+    // omi-perf-allow: history-json-on-ui -- a small error body, never a conversation list
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic>) {
+      final code = decoded['code'];
+      if (code is String && code.trim().isNotEmpty) return code.trim();
+    }
+  } catch (_) {}
+  return null;
+}
+
+/// The server's own one-line reason from a 400 body, for logs and terminal
+/// rows: kept verbatim but bounded, so display surfaces never echo an
+/// unbounded error string.
+@visibleForTesting
+String? syncUploadErrorReason(http.Response response) {
+  try {
+    // omi-perf-allow: history-json-on-ui -- a small error body, never a conversation list
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic>) {
+      for (final key in ['detail', 'message', 'error']) {
+        final value = decoded[key];
+        if (value is String && value.trim().isNotEmpty) {
+          final reason = value.trim();
+          return reason.length > 200 ? reason.substring(0, 200) : reason;
+        }
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+/// The exact detail the deployed upload route puts on a 400 whose filename
+/// timestamp it refuses (`utils/sync/pipeline.py`, before the bounded `code`
+/// field existed). Matched verbatim — never a substring of other refusals.
+const String _kInvalidCaptureTimeDetail = 'Invalid sync file format: invalid timestamp';
+
+/// Whether a sync-upload 400 refuses the recording's claimed capture time.
+/// The server names this refusal two ways: the bounded `code`
+/// `invalid_capture_time` (server PR #23746) or, on the currently deployed
+/// route, the exact detail line above with no code at all.
+@visibleForTesting
+bool isInvalidCaptureTimeResponse(http.Response response) {
+  if (syncUploadErrorCode(response) == 'invalid_capture_time') return true;
+  return syncUploadErrorReason(response) == _kInvalidCaptureTimeDetail;
+}
+
+/// Thrown when the server refuses an upload because its filename carries a
+/// capture time it will not accept (HTTP 400 `invalid_capture_time`): before
+/// 2024-01-01 or in the future. The audio is fine — only its claimed time is
+/// not. The app never deletes or renames the file for this: the row parks on
+/// attention with the reason kept, and a retry resends it unchanged, which a
+/// later server-side widening of the clock window can still accept.
+class SyncInvalidCaptureTimeException implements Exception {
+  final String? serverReason;
+
+  const SyncInvalidCaptureTimeException({this.serverReason});
+
+  @override
+  String toString() => 'SyncInvalidCaptureTimeException(reason: $serverReason)';
+}
+
 /// A synchronous upload response that durably reached the server but did not
 /// transcribe every segment. Callers keep the local WAL and retry it; the
 /// backend deduplicates any segments that already succeeded.
@@ -1042,7 +1108,16 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     return UploadFilesResult.queued(start.jobId, pollAfterMs: start.pollAfterMs);
   }
   if (response.statusCode == 400) {
-    throw SyncUploadHttpException(response.statusCode, 'Audio file could not be processed by server');
+    if (isInvalidCaptureTimeResponse(response)) {
+      throw SyncInvalidCaptureTimeException(serverReason: syncUploadErrorReason(response));
+    }
+    // Other 400s stay terminal, but the server's own reason travels with the
+    // refusal instead of being dropped at the HTTP boundary.
+    final reason = syncUploadErrorReason(response);
+    throw SyncUploadHttpException(
+      response.statusCode,
+      reason ?? 'Audio file could not be processed by server',
+    );
   } else if (response.statusCode == 401 || response.statusCode == 403) {
     throw SyncUploadHttpException(response.statusCode, 'Upload authentication failed');
   } else if (response.statusCode == 413) {

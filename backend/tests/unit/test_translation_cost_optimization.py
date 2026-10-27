@@ -15,7 +15,7 @@ from tests.unit.translation_test_support import (
     provider_error,
     translations,
 )
-from utils.translation import TranslationNeed, TranslationStatus
+from utils.translation import TranslationNeed, TranslationService, TranslationStatus
 from utils.translation_cache import ConversationLanguageState
 from utils.translation_coordinator import (
     STABILITY_IS_FINAL,
@@ -26,8 +26,11 @@ from utils.translation_coordinator import (
     _compute_stability_signals,
     _is_text_stable,
 )
-from utils.translation_core.cache import CachedTranslation
+from utils.translation_core.cache import CachedTranslation, TranslationCache
+from utils.translation_core.engine import TranslationEngine
+from utils.translation_core.metrics import NoopTranslationMetrics
 from utils.translation_core.planner import fingerprint_text
+from utils.translation_core.providers import TranslationProviderChain
 
 
 def _segment(segment_id: str, text: str) -> TranscriptSegment:
@@ -527,3 +530,108 @@ def test_coordinator_does_not_negative_cache_unchanged_foreign_text():
     assert store.negative == set()
     assert not coordinator.language_state.monolingual
     assert coordinator.language_state.consecutive_target == 0
+
+
+class RecordingDecisionMetrics:
+    def __init__(self) -> None:
+        self.decisions: list[tuple[str, str, str]] = []
+
+    def demand(self, *args, **kwargs) -> None:
+        return None
+
+    def cache(self, *args, **kwargs) -> None:
+        return None
+
+    def batch(self, *args, **kwargs) -> None:
+        return None
+
+    def success(self, *args, **kwargs) -> None:
+        return None
+
+    def error(self, *args, **kwargs) -> None:
+        return None
+
+    def skip(self, target_language: str, reason: str) -> None:
+        return None
+
+    def decision(self, target_language: str, decision: str, reason: str) -> None:
+        self.decisions.append((target_language, decision, reason))
+
+
+def test_unsupported_target_skips_dispatch_and_logs_once_per_session(monkeypatch, caplog):
+    """lt/tl sessions on the NLLB-primary lane produce 400s on every batch; the
+    coordinator must skip dispatch entirely and log the reason once."""
+    metrics = RecordingDecisionMetrics()
+    monkeypatch.setattr('utils.translation_coordinator.get_translation_metrics', lambda: metrics)
+    provider = FakeProvider(TranslationProvider.nllb, responses=[translations(('Sveiki.', 'lt'))])
+    service, _cache = build_service({TranslationProvider.nllb: provider})
+    callbacks: list[tuple[str, ...]] = []
+
+    async def on_ready(*args) -> None:
+        callbacks.append(args)
+
+    coordinator = TranslationCoordinator('lt', service, on_ready)
+    coordinator.language_state.source_is_plausible = lambda *args: True
+    coordinator.language_state.observe = lambda *args, **kwargs: False
+
+    async def run():
+        with caplog.at_level('WARNING', logger='utils.translation_coordinator'):
+            await coordinator.observe([_segment('s1', 'Laba diena.')], [], 'conversation-1')
+            await coordinator.observe([_segment('s1', 'Laba diena. Kaip sekasi?')], [], 'conversation-1')
+        await coordinator.flush()
+
+    asyncio.run(run())
+
+    assert provider.calls == []
+    assert callbacks == []
+    assert not coordinator._batch_buffer
+    assert metrics.decisions == [('lt', 'skip', 'unsupported_target'), ('lt', 'skip', 'unsupported_target')]
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelname == 'WARNING' and 'not supported' in record.getMessage()
+    ]
+    assert len(warnings) == 1
+
+
+def test_luna_primary_lane_still_translates_targets_outside_the_nllb_table(monkeypatch):
+    monkeypatch.setattr(
+        'utils.translation_coordinator.classify_translation_need', lambda *a, **k: TranslationNeed.TRANSLATE
+    )
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Hello world.', 'en'))])
+    service, _cache = build_service({TranslationProvider.luna: provider})
+    callbacks: list[tuple[str, ...]] = []
+
+    async def on_ready(*args) -> None:
+        callbacks.append(args)
+
+    coordinator = TranslationCoordinator('lt', service, on_ready)
+    coordinator.language_state.source_is_plausible = lambda *args: True
+    coordinator.language_state.observe = lambda *args, **kwargs: False
+
+    async def run():
+        await coordinator.observe([_segment('s1', 'Labas pasaulis.')], [], 'conversation-1')
+        coordinator._cancel_batch_timer()
+        await coordinator._flush_batch()
+
+    asyncio.run(run())
+
+    assert provider.calls and provider.calls[0]['target_language'] == 'lt'
+    assert callbacks and callbacks[0][1] == 'Hello world.'
+
+
+def test_primary_provider_reports_the_injected_engines_lane():
+    """Luna R1: the engine owns dispatch, so an engine-injected service must
+    report the engine's primary provider even when the constructor's default
+    resolver (env, NLLB-primary) would disagree."""
+    metrics = NoopTranslationMetrics()
+    engine = TranslationEngine(
+        cache=TranslationCache(persistent=DictTranslationStore(), metrics=metrics),
+        providers=TranslationProviderChain(
+            {TranslationProvider.luna: FakeProvider(TranslationProvider.luna, [])}, metrics
+        ),
+        profile_resolver=lambda: profile((TranslationProvider.luna,)),
+    )
+    service = TranslationService(engine=engine)
+
+    assert service.primary_provider() == TranslationProvider.luna

@@ -917,7 +917,7 @@
     "@remembering": {
         "description": "Remembering stat title"
     },
-    "unlimitedPlan": "मर्यादित योजना",
+    "unlimitedPlan": "Omi Pro",
     "@unlimitedPlan": {
         "description": "Unlimited plan name"
     },
@@ -957,7 +957,7 @@
     "@upgrade": {
         "description": "Upgrade button"
     },
-    "upgradeToUnlimited": "मर्यादित अपग्रेड करा",
+    "upgradeToUnlimited": "Omi Pro मध्ये अपग्रेड करा",
     "@upgradeToUnlimited": {
         "description": "Message shown on locked memory items"
     },
@@ -3652,7 +3652,7 @@
     "@pro": {
         "description": "Badge label for pro/unlimited users"
     },
-    "upgradeToPro": "Pro मध्ये अपग्रेड करा",
+    "upgradeToPro": "Omi Pro मध्ये अपग्रेड करा",
     "@upgradeToPro": {
         "description": "Subscription banner button text"
     },
@@ -4941,7 +4941,7 @@
     "@trainingDataProgram": {
         "description": "Label for training data program"
     },
-    "getOmiUnlimitedFree": "AI मॉडेल प्रशिक्षण साठी आपल्या डेटा योगदान करून Omi Unlimited विनामूल्य प्राप्त करा.",
+    "getOmiUnlimitedFree": "AI मॉडेल प्रशिक्षण साठी आपल्या डेटा योगदान करून Omi Pro विनामूल्य प्राप्त करा.",
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
@@ -10536,7 +10536,7 @@
     "freemiumLimitsIntro": "Omi मोफत आहे, परंतु मोफत आवृत्तीला मर्यादा आहेत ज्या तुमच्या अनुभवावर परिणाम करतात:",
     "downgradeLimitDelayNotRealTime": "5-7 सेकंद विलंब (रिअल-टाइम नाही)",
     "downgradeToFreemiumAction": "मोफत आवृत्तीवर जा",
-    "getFreeUnlimitedAccess": "मोफत अमर्यादित प्रवेश मिळवा",
+    "getFreeUnlimitedAccess": "Omi Pro मोफत मिळवा",
     "shareDataForTraining": "प्रशिक्षणासाठी डेटा सामायिक करा",
     "yourRequestUnderReview": "तुमची विनंती पुनरावलोकनाधीन आहे",
     "pinAsBaseline": "आधार म्हणून पिन करा",
@@ -11370,7 +11370,7 @@
     "chatAppsShowInAppOff": "बंद: तुम्हाला ते फक्त {app} मध्ये दिसतात.",
     "chatAppsProPerkText": "Telegram आणि iMessage वरून Omi ला मेसेज करा",
     "chatAppsVoiceNotesSubtitle": "व्हॉइस नोट पाठवा आणि Omi त्याला उत्तर देईल.",
-    "chatAppsPartOfPro": "चॅट अॅप्स Pro चा भाग आहेत",
+    "chatAppsPartOfPro": "चॅट अॅप्स Omi Pro चा भाग आहेत",
     "chatAppsMessagesApp": "संदेश",
     "chatAppsTelegramOtherDevice": "दुसऱ्या डिव्हाइसवर Telegram आहे?",
     "chatAppsHeroMessage": "Telegram किंवा iMessage वरून तुमच्या दिवसाबद्दल विचारा, आठवणी सेव्ह करा आणि कामे व्यवस्थापित करा. तुमचे चॅट तुम्ही वापरत असलेल्या अॅपमध्येच राहतात आणि तुम्ही काय बोललात ते Omi सर्वत्र लक्षात ठेवते.",
@@ -11555,7 +11555,7 @@
     "syncDetailsAudioFiles": "ऑडिओ फाइल्स",
     "syncDetailsServerJobs": "सर्व्हर जॉब्स (पूर्ण / एकूण)",
     "syncDetailsCopy": "सपोर्टसाठी तपशील कॉपी करा",
-    "chatAppsChannelPlanRequired": "Operator आणि Architect वर उपलब्ध",
+    "chatAppsChannelPlanRequired": "Omi Pro वर उपलब्ध",
     "chatAppsAtCapacity": "{app} ची क्षमता पूर्ण झाली आहे",
     "chatAppsJoinWaitlist": "प्रतीक्षा यादीत सामील व्हा",
     "chatAppsOnWaitlist": "तुम्ही प्रतीक्षा यादीत आहात",
@@ -11706,7 +11706,7 @@
     "onDeviceTranscribeOnPhone": "या फोनवर ट्रान्सक्राइब करा",
     "onDeviceIncluded": "समाविष्ट",
     "onDeviceOptionChargingBody": "फोन चार्ज होत असताना चालते.",
-    "onDeviceUpgradeBody": "वक्ते वेगळे ओळखण्यासाठी आणि अधिक अचूकतेसाठी Pro वर अपग्रेड करा",
+    "onDeviceUpgradeBody": "वक्ते वेगळे ओळखण्यासाठी आणि अधिक अचूकतेसाठी Omi Pro वर अपग्रेड करा",
     "onDeviceAtCapFooter": "कोणत्याही प्रकारे काहीही गमावले जात नाही. तुम्ही हे सेटिंग्ज › प्रतिलेख मध्ये बदलू शकता.",
     "onDeviceStepOf": "पायरी {step}/{total}",
     "onDeviceSetupBody": "Omi एकदा स्पीच मॉडेल डाउनलोड करते. त्यानंतर तुमच्या रेकॉर्डिंग येथेच मजकुरात बदलतात, तुमच्या वापरात मोजल्याशिवाय.",
@@ -11759,7 +11759,7 @@
     "onDeviceWhyCloudIphone": "हा iPhone स्वतः सारांश तयार करू शकत नाही (त्यासाठी iPhone 15 Pro किंवा नवीन आवश्यक आहे). ट्रान्सक्रिप्ट तुमच्या फोनवर तयार झाला आणि सारांशासाठी फक्त त्याचा मजकूर Omi कडे पाठवला गेला. हे तुमच्या वापरात मोजले जात नाही.",
     "onDeviceWhyCloudPhone": "हा फोन स्वतः सारांश तयार करू शकत नाही. ट्रान्सक्रिप्ट तुमच्या फोनवर तयार झाला आणि सारांशासाठी फक्त त्याचा मजकूर Omi कडे पाठवला गेला. हे तुमच्या वापरात मोजले जात नाही.",
     "onDeviceRedoWithCloud": "Omi Cloud सह पुन्हा करा",
-    "onDeviceRedoHint": "वक्ते वेगळे ओळखण्यासाठी आणि अधिक अचूकतेसाठी Pro वर अपग्रेड करा",
+    "onDeviceRedoHint": "वक्ते वेगळे ओळखण्यासाठी आणि अधिक अचूकतेसाठी Omi Pro वर अपग्रेड करा",
     "onDeviceKeepEverything": "सर्व काही या फोनवर ठेवा",
     "onDeviceKeepEverythingSubtitle": "फक्त ट्रान्सक्रिप्ट, सारांश नाहीत",
     "onDeviceAfterLiveHours": "जेव्हा तुम्ही मर्यादा गाठता",
@@ -11865,5 +11865,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "पूर्ण",
     "openLoopAnswerRemind": "नंतर लक्षात आणून द्या",
-    "openLoopAnswerDrop": "टाकून द्या"
+    "openLoopAnswerDrop": "टाकून द्या",
+    "syncRejectionInvalidDate": "अवैध रेकॉर्डिंग तारीख",
+    "syncDeleteKeptUploading": "काही भाग अजून अपलोड होत आहेत आणि ते ठेवले आहेत",
+    "syncRejectionServer": "सर्व्हरने नकार दिला",
+    "syncRejectionTooLarge": "खूप मोठे",
+    "deviceOnPhoneQueue": "फोनवर {duration}",
+    "syncCardUploadsPaused": "अपलोड थोड्या वेळासाठी थांबले आहेत — ते आपोआप पुन्हा सुरू होतील"
 }

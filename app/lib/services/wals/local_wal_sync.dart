@@ -1563,6 +1563,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       _notifyUpdated(generation);
       return;
     }
+    // Re-checked here, at the moment of deletion: a caller's row can be stale
+    // by the time its confirmation resolves, and audio that is mid-upload is
+    // never deleted under a refusal label that belongs to another member.
+    if (target.isSyncing) {
+      Logger.debug('deleteWal skipped ${target.id}: still uploading');
+      _notifyUpdated(generation);
+      return;
+    }
     if (await _deleteWal(target, generation: generation)) {
       await _saveWalsToFile(generation);
     }
@@ -2236,33 +2244,39 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         await _saveWalsToFile(generation);
         _notifyUpdated(generation);
         continue;
+      } on SyncInvalidCaptureTimeException catch (e) {
+        if (!_isCurrent(generation)) return resp;
+        await handleBatchInvalidCaptureTime(
+          batchWals,
+          generation,
+          e,
+          isolateAfterRefusal: isolateAfterRefusal,
+          attemptedWalIds: attemptedWalIds,
+          walAttemptKey: walAttemptKey,
+        );
+        continue;
       } on SyncUploadHttpException catch (e) {
         if (!_isCurrent(generation)) return resp;
         final definitive = isDefinitiveUploadRefusal(e);
         // A request-level 400/413 proves nothing about every member. Try each
         // retained file once through the same gate before retiring that file.
         if (definitive && batchWals.length > 1) {
-          for (final wal in batchWals) {
-            final key = walAttemptKey(wal);
-            isolateAfterRefusal.add(key);
-            attemptedWalIds.remove(key);
-            wal.isSyncing = false;
-            wal.syncStartedAt = null;
-            wal.syncEtaSeconds = null;
-          }
-          DebugLogManager.logEvent('local_upload_batch_isolated', {
-            'statusCode': e.statusCode,
-            'walCount': batchWals.length,
-          });
-          await _saveWalsToFile(generation);
-          _notifyUpdated(generation);
+          await isolateBatchAfterRefusal(
+            batchWals,
+            generation,
+            isolateAfterRefusal: isolateAfterRefusal,
+            attemptedWalIds: attemptedWalIds,
+            walAttemptKey: walAttemptKey,
+            statusCode: e.statusCode,
+          );
           continue;
         }
         batchesFailed++;
         final authenticationFailed = e.statusCode == 401 || e.statusCode == 403;
         if (definitive) {
+          final reasonCode = uploadRejectionTokenForStatus(e.statusCode);
           for (final wal in batchWals) {
-            wal.markUploadRejected();
+            wal.markUploadRejected(reasonCode: reasonCode);
           }
           resp.localUploadPermanentFailures += batchWals.length;
           resp.localUploadPermanentError = e.toString();
@@ -2527,9 +2541,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       await _saveWalsToFile(generation);
       _notifyUpdated(generation);
       return resp;
+    } on SyncInvalidCaptureTimeException catch (e) {
+      await handleSingleInvalidCaptureTime(walToSync, generation, e);
+      return resp;
     } on SyncUploadHttpException catch (e) {
       if (isDefinitiveUploadRefusal(e)) {
-        walToSync.markUploadRejected();
+        walToSync.markUploadRejected(reasonCode: uploadRejectionTokenForStatus(e.statusCode));
         resp.localUploadFailures = 1;
         resp.localUploadPermanentFailures = 1;
         resp.localUploadPermanentError = e.toString();

@@ -1558,7 +1558,7 @@ environment_shared:
             category: telemetry
           SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
             provisional: true
-            value: '300'
+            value: '600'
             category: rollout
           GCP_LOCATION:
             value: us-central1
@@ -1919,7 +1919,7 @@ environment_shared:
             category: telemetry
           SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
             provisional: true
-            value: '300'
+            value: '600'
             category: rollout
           GCP_LOCATION:
             value: us-central1

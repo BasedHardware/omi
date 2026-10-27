@@ -712,7 +712,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get remembering => 'Mengingat';
 
   @override
-  String get unlimitedPlan => 'Paket Tanpa Batas';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Kelola Paket';
@@ -734,7 +734,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get upgrade => 'Tingkatkan';
 
   @override
-  String get upgradeToUnlimited => 'Tingkatkan ke tanpa batas';
+  String get upgradeToUnlimited => 'Tingkatkan ke Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3157,7 +3157,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Tingkatkan ke Pro';
+  String get upgradeToPro => 'Tingkatkan ke Omi Pro';
 
   @override
   String get getOmiDevice => 'Dapatkan Perangkat Omi';
@@ -4280,8 +4280,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get trainingDataProgram => 'Program Data Pelatihan';
 
   @override
-  String get getOmiUnlimitedFree =>
-      'Dapatkan Omi Unlimited gratis dengan menyumbangkan data Anda untuk melatih model AI.';
+  String get getOmiUnlimitedFree => 'Dapatkan Omi Pro gratis dengan menyumbangkan data Anda untuk melatih model AI.';
 
   @override
   String get trainingDataBullets => '• Datamu membantu meningkatkan model AI\n• Hanya data non-sensitif yang dibagikan';
@@ -9665,7 +9664,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Turunkan ke versi gratis';
 
   @override
-  String get getFreeUnlimitedAccess => 'Dapatkan akses tanpa batas gratis';
+  String get getFreeUnlimitedAccess => 'Dapatkan Omi Pro gratis';
 
   @override
   String get shareDataForTraining => 'Bagikan data untuk pelatihan';
@@ -12865,7 +12864,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Kirim catatan suara dan Omi akan menjawabnya.';
 
   @override
-  String get chatAppsPartOfPro => 'Aplikasi chat adalah bagian dari Pro';
+  String get chatAppsPartOfPro => 'Aplikasi chat adalah bagian dari Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Pesan';
@@ -13499,7 +13498,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncDetailsCopy => 'Salin detail untuk dukungan';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Tersedia di Operator dan Architect';
+  String get chatAppsChannelPlanRequired => 'Tersedia di Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14014,7 +14013,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Berjalan saat ponsel mengisi daya.';
 
   @override
-  String get onDeviceUpgradeBody => 'Upgrade ke Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
+  String get onDeviceUpgradeBody => 'Upgrade ke Omi Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
 
   @override
   String get onDeviceAtCapFooter => 'Tidak ada yang hilang. Anda dapat mengubahnya di Pengaturan › Transkripsi.';
@@ -14197,7 +14196,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Ulangi dengan Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Upgrade ke Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
+  String get onDeviceRedoHint => 'Upgrade ke Omi Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
 
   @override
   String get onDeviceKeepEverything => 'Simpan semuanya di ponsel ini';
@@ -14615,4 +14614,24 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Abaikan';
+
+  @override
+  String get syncRejectionInvalidDate => 'Tanggal perekaman tidak valid';
+
+  @override
+  String get syncDeleteKeptUploading => 'Beberapa bagian masih diunggah dan tetap disimpan';
+
+  @override
+  String get syncRejectionServer => 'Ditolak oleh server';
+
+  @override
+  String get syncRejectionTooLarge => 'Terlalu besar';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration di ponsel';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Unggahan dijeda sejenak — akan dilanjutkan otomatis';
 }

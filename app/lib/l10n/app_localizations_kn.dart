@@ -711,7 +711,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get remembering => 'ನೆನಪುವಿಕೆ';
 
   @override
-  String get unlimitedPlan => 'ಸೀಮಾ ರಹಿತ ಯೋಜನೆ';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'ಯೋಜನೆ ನಿರ್ವಹಿಸಿ';
@@ -733,7 +733,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get upgrade => 'ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
 
   @override
-  String get upgradeToUnlimited => 'ಸೀಮಾ ರಹಿತಗೆ ಅಪ್‌ಗ್ರೇಡ್';
+  String get upgradeToUnlimited => 'Omi Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3167,7 +3167,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
+  String get upgradeToPro => 'Omi Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
 
   @override
   String get getOmiDevice => 'Omi ಯಂತ್ರ ಪಡೆಯಿರಿ';
@@ -4293,7 +4293,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'AI ಮಾದರಿಗಳನ್ನು ತರಾಜು ಮಾಡಲು ನಿಮ್ಮ ಡೇಟಾವನ್ನು ಕಾರ್ಯಕ್ರಮದಿಂದ ಉಚಿತ ಎಂದು Omi Unlimited ಪಡೆಯಿರಿ.';
+      'AI ಮಾದರಿಗಳನ್ನು ತರಾಜು ಮಾಡಲು ನಿಮ್ಮ ಡೇಟಾವನ್ನು ಕಾರ್ಯಕ್ರಮದಿಂದ ಉಚಿತ ಎಂದು Omi Pro ಪಡೆಯಿರಿ.';
 
   @override
   String get trainingDataBullets =>
@@ -9693,7 +9693,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get downgradeToFreemiumAction => 'ಉಚಿತ ಆವೃತ್ತಿಗೆ ಬದಲಿಸಿ';
 
   @override
-  String get getFreeUnlimitedAccess => 'ಉಚಿತ ಅಮಿತ ಪ್ರವೇಶ ಪಡೆಯಿರಿ';
+  String get getFreeUnlimitedAccess => 'Omi Pro ಅನ್ನು ಉಚಿತವಾಗಿ ಪಡೆಯಿರಿ';
 
   @override
   String get shareDataForTraining => 'ತರಬೇತಿಗಾಗಿ ಡೇಟಾ ಹಂಚಿಕೊಳ್ಳಿ';
@@ -12895,7 +12895,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'ಧ್ವನಿ ಟಿಪ್ಪಣಿ ಕಳುಹಿಸಿ, Omi ಅದಕ್ಕೆ ಉತ್ತರಿಸುತ್ತದೆ.';
 
   @override
-  String get chatAppsPartOfPro => 'ಚಾಟ್ ಆ್ಯಪ್‌ಗಳು Pro ನ ಭಾಗವಾಗಿವೆ';
+  String get chatAppsPartOfPro => 'ಚಾಟ್ ಆ್ಯಪ್‌ಗಳು Omi Pro ನ ಭಾಗವಾಗಿವೆ';
 
   @override
   String get chatAppsMessagesApp => 'ಸಂದೇಶಗಳು';
@@ -13528,7 +13528,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get syncDetailsCopy => 'ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳನ್ನು ನಕಲಿಸಿ';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator ಮತ್ತು Architect ನಲ್ಲಿ ಲಭ್ಯವಿದೆ';
+  String get chatAppsChannelPlanRequired => 'Omi Pro ನಲ್ಲಿ ಲಭ್ಯವಿದೆ';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14043,7 +14043,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'ಫೋನ್ ಚಾರ್ಜ್ ಆಗುವಾಗ ಚಾಲನೆಯಲ್ಲಿರುತ್ತದೆ.';
 
   @override
-  String get onDeviceUpgradeBody => 'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
+  String get onDeviceUpgradeBody => 'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Omi Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14230,7 +14230,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud ಮೂಲಕ ಮತ್ತೆ ಮಾಡಿ';
 
   @override
-  String get onDeviceRedoHint => 'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
+  String get onDeviceRedoHint => 'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Omi Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
 
   @override
   String get onDeviceKeepEverything => 'ಎಲ್ಲವನ್ನೂ ಈ ಫೋನ್‌ನಲ್ಲೇ ಇರಿಸಿ';
@@ -14649,4 +14649,24 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'ಬಿಡು';
+
+  @override
+  String get syncRejectionInvalidDate => 'ಅಮಾನ್ಯ ರೆಕಾರ್ಡಿಂಗ್ ದಿನಾಂಕ';
+
+  @override
+  String get syncDeleteKeptUploading => 'ಕೆಲವು ಭಾಗಗಳು ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿವೆ ಮತ್ತು ಅವನ್ನು ಇರಿಸಲಾಗಿದೆ';
+
+  @override
+  String get syncRejectionServer => 'ಸರ್ವರ್ ತಿರಸ್ಕರಿಸಿದೆ';
+
+  @override
+  String get syncRejectionTooLarge => 'ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'ಫೋನ್‌ನಲ್ಲಿ $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'ಅಪ್‌ಲೋಡ್‌ಗಳು ಕ್ಷಣಮಾತ್ರ ವಿರಾಮದಲ್ಲಿವೆ — ಅವು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮುಂದುವರಿಯುತ್ತವೆ';
 }

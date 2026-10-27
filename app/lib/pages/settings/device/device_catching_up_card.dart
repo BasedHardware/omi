@@ -12,6 +12,7 @@ import 'package:omi/utils/sync/offline_sync_amounts.dart';
 /// outside capture/episode listeners, so streaming metrics never rescan recording history.
 typedef DeviceCatchUpLocal = ({
   int onDeviceSeconds,
+  int onPhoneSeconds,
   bool hasPending,
   bool hasUploaded,
   DateTime? start,
@@ -31,12 +32,19 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
   final uploaded = wals.where((w) => w.status == WalStatus.uploaded).toList(growable: false);
   final rows = [...uploaded, ...SyncPendingWork.syncingOf(wals)];
   var onDeviceSeconds = 0;
+  var onPhoneSeconds = 0;
   DateTime? start, end;
   final ids = <String>{};
   for (final w in rows) {
     if (w.conversationId case final id? when id.isNotEmpty) ids.add(id);
     if (w.seconds <= 0) continue;
-    if (walIsOnDevice(w)) onDeviceSeconds += w.seconds;
+    if (walIsOnDevice(w)) {
+      onDeviceSeconds += w.seconds;
+    } else if (w.status == WalStatus.miss) {
+      // Recorded on the phone, waiting for its upload: the device card says
+      // where the backlog sits instead of reading 0s while hours are queued.
+      onPhoneSeconds += w.seconds;
+    }
     if (w.timerStart <= 0) continue;
     // A recording time before the plausibility floor is a device clock that was
     // never set; the seconds still count, but the range must not stretch to it.
@@ -52,6 +60,7 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
   final targets = ids.toList()..sort();
   final result = (
     onDeviceSeconds: onDeviceSeconds,
+    onPhoneSeconds: onPhoneSeconds,
     hasPending: rows.isNotEmpty,
     hasUploaded: uploaded.isNotEmpty,
     start: start,

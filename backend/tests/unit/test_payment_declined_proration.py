@@ -120,6 +120,7 @@ def _install_stub_modules() -> None:
     sub_mod.find_active_paid_subscription_for_user = _shared_mock()
     sub_mod.price_ids_match_plan_and_interval = _shared_mock(return_value=False)
     sub_mod.desktop_to_consumer_plan_change_error = _shared_mock(return_value=None)
+    sub_mod.retired_plan_change_error = _shared_mock(return_value=None)
 
     fallback_mod = types.ModuleType("utils.observability.fallback")
     fallback_mod.record_fallback = _shared_mock()

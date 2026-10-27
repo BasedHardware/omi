@@ -21,9 +21,9 @@ import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_d
 import 'package:omi/pages/settings/device/device_control_sheets.dart';
 import 'package:omi/pages/settings/device/device_info_groups.dart';
 import 'package:omi/pages/settings/device/device_live_sections.dart';
+import 'package:omi/pages/settings/device/heard_today.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/settings/device/device_page_header.dart';
@@ -698,6 +698,7 @@ extension _DeviceLiveSections on _DeviceSettingsState {
                       isCharging: isCharging,
                       heardTodaySeconds: _heardTodaySeconds(context),
                       onDeviceSeconds: local.onDeviceSeconds,
+                      phoneQueueSeconds: local.onPhoneSeconds,
                     )),
             gap,
           ],
@@ -714,14 +715,45 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     });
   }
 
-  /// Speech heard today, by the conversation list's own length rule.
+  /// Speech heard today: transcript time inside today's local day across the
+  /// loaded conversations, plus the active live episode's own interval since
+  /// its start or anchor, merged so nothing is counted twice. A pendant that
+  /// streams without a break files its conversations under the session's start
+  /// day, so bucketing by that day hid today's speech.
   int _heardTodaySeconds(BuildContext context) {
+    final liveEpisodeStart = _liveEpisodeStart(context);
     return context.select<ConversationProvider?, int>((conversations) {
-      final today = DateUtils.dateOnly(DateTime.now());
-      return (conversations?.groupedConversations[today] ?? const <ServerConversation>[])
-          .where((c) => !c.discarded)
-          .fold<int>(0, (sum, c) => sum + c.getDurationInSeconds());
+      return heardTodaySpeechSeconds(
+        conversations: conversations == null
+            ? const []
+            : [
+                ...conversations.groupedConversations.values.expand((group) => group),
+                ...conversations.processingConversations,
+              ],
+        now: DateTime.now(),
+        liveEpisodeStart: liveEpisodeStart,
+      );
     });
+  }
+
+  /// The active live episode's own start: the server episode's start, kept
+  /// stable by the shared anchor across reconnects and restarts. Null when no
+  /// episode is live. Never the capture session's origin
+  /// (`liveCaptureStartedAt`): a pendant that streams without a break never
+  /// resets it, so it would name the whole session as heard.
+  DateTime? _liveEpisodeStart(BuildContext context) {
+    final episodes = _maybeProvider<EpisodeProvider>(context, listen: false);
+    if (episodes == null || !episodes.enabled) return null;
+    final capture = _maybeProvider<CaptureProvider>(context, listen: false);
+    return context.select<EpisodeProvider, DateTime?>((e) => _anchoredLiveEpisodeStart(e, capture, DateTime.now()));
+  }
+
+  static DateTime? _anchoredLiveEpisodeStart(EpisodeProvider e, CaptureProvider? capture, DateTime now) {
+    final episode = e.live;
+    if (episode == null) return null;
+    if (capture == null) return episode.startedAt.isAfter(now) ? null : episode.startedAt;
+    final elapsed = EpisodePresentation.elapsed(episode, capture, now, anchor: e.liveAnchor);
+    return elapsed.inSeconds <= 0 ? null : now.subtract(elapsed);
   }
 
   DeviceRightNowGroup _rightNow(BuildContext context,

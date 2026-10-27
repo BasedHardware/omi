@@ -1557,10 +1557,10 @@ abstract class AppLocalizations {
   /// **'Remembering'**
   String get remembering;
 
-  /// Unlimited plan name
+  /// Plan name shown after a successful purchase; Omi Pro is a product name and is not translated
   ///
   /// In en, this message translates to:
-  /// **'Unlimited Plan'**
+  /// **'Omi Pro'**
   String get unlimitedPlan;
 
   /// Manage plan button
@@ -1596,7 +1596,7 @@ abstract class AppLocalizations {
   /// Message shown on locked memory items
   ///
   /// In en, this message translates to:
-  /// **'Upgrade to Unlimited'**
+  /// **'Upgrade to Omi Pro'**
   String get upgradeToUnlimited;
 
   /// Basic plan description
@@ -6114,7 +6114,7 @@ abstract class AppLocalizations {
   /// Subscription banner button text
   ///
   /// In en, this message translates to:
-  /// **'Upgrade to Pro'**
+  /// **'Upgrade to Omi Pro'**
   String get upgradeToPro;
 
   /// Widget title for device promotion
@@ -8175,10 +8175,10 @@ abstract class AppLocalizations {
   /// **'Training Data Program'**
   String get trainingDataProgram;
 
-  /// Description for getting Omi Unlimited free by contributing data
+  /// Description for getting Omi Pro free by contributing data
   ///
   /// In en, this message translates to:
-  /// **'Get Omi Unlimited for free by contributing your data to train AI models.'**
+  /// **'Get Omi Pro for free by contributing your data to train AI models.'**
   String get getOmiUnlimitedFree;
 
   /// Bullet points explaining training data program benefits
@@ -17985,10 +17985,10 @@ abstract class AppLocalizations {
   /// **'Downgrade to Freemium'**
   String get downgradeToFreemiumAction;
 
-  /// Title of the training-data opt-in card offering free unlimited access
+  /// Title of the training-data opt-in card offering free Omi Pro
   ///
   /// In en, this message translates to:
-  /// **'Get Free Unlimited Access'**
+  /// **'Get Omi Pro Free'**
   String get getFreeUnlimitedAccess;
 
   /// Subtitle of the training-data opt-in card
@@ -22872,7 +22872,7 @@ abstract class AppLocalizations {
   /// Heading of the upgrade card for free users
   ///
   /// In en, this message translates to:
-  /// **'Chat apps are part of Pro'**
+  /// **'Chat apps are part of Omi Pro'**
   String get chatAppsPartOfPro;
 
   /// Name of Apple's Messages app, as shown on the device in this language
@@ -23979,10 +23979,10 @@ abstract class AppLocalizations {
   /// **'Copy details for support'**
   String get syncDetailsCopy;
 
-  /// Chat apps row subtitle when the channel (iMessage) needs the Operator or Architect plan; plan names are not translated
+  /// Chat apps row subtitle when the channel (iMessage) needs the Omi Pro plan; the plan name is not translated
   ///
   /// In en, this message translates to:
-  /// **'Available on Operator and Architect'**
+  /// **'Available on Omi Pro'**
   String get chatAppsChannelPlanRequired;
 
   /// Chat apps row subtitle when all seats for the channel are taken; app is iMessage or Telegram
@@ -24870,7 +24870,7 @@ abstract class AppLocalizations {
   /// Explains what upgrading the plan gives
   ///
   /// In en, this message translates to:
-  /// **'Upgrade to Pro for speaker separation and higher accuracy'**
+  /// **'Upgrade to Omi Pro for speaker separation and higher accuracy'**
   String get onDeviceUpgradeBody;
 
   /// Footer under the usage-limit sheet; 'Settings › Transcription' is a menu path
@@ -25188,7 +25188,7 @@ abstract class AppLocalizations {
   /// Hint under the Redo with Omi Cloud button
   ///
   /// In en, this message translates to:
-  /// **'Upgrade to Pro for speaker separation and higher accuracy'**
+  /// **'Upgrade to Omi Pro for speaker separation and higher accuracy'**
   String get onDeviceRedoHint;
 
   /// Setting: never send anything to the cloud
@@ -25826,6 +25826,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Drop it'**
   String get openLoopAnswerDrop;
+
+  /// A recording whose capture date the server refused
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid recording date'**
+  String get syncRejectionInvalidDate;
+
+  /// Shown when a block Delete skipped members that are still uploading, so only the refused idle members were deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Some parts are still uploading and were kept'**
+  String get syncDeleteKeptUploading;
+
+  /// The server refused this upload
+  ///
+  /// In en, this message translates to:
+  /// **'Rejected by server'**
+  String get syncRejectionServer;
+
+  /// The audio file is too large to upload
+  ///
+  /// In en, this message translates to:
+  /// **'Too large'**
+  String get syncRejectionTooLarge;
+
+  /// Audio queued on the phone waiting to upload, with its duration
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} on phone'**
+  String deviceOnPhoneQueue(Object duration);
+
+  /// Upload cooldown copy for a per-account dispatch hold, not server capacity
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads paused for a moment — they\'ll resume automatically'**
+  String get syncCardUploadsPaused;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

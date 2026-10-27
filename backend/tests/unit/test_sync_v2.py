@@ -1724,6 +1724,10 @@ class TestAsyncCoordinatorBehavioral:
         stubs['analytics'] = sys.modules['utils.analytics']
         stubs['pipeline'] = pipeline_mod
         stubs['saved_modules'] = saved_modules
+        # The coordinator reads segment clocks during persistence (the one
+        # request-wide capture offset); tests that do not pin their own clock
+        # reader get this numeric default instead of an automock.
+        pipeline_mod.get_timestamp_from_path = MagicMock(return_value=1700000001.0)
 
         return module, stubs
 

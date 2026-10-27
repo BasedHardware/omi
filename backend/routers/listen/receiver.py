@@ -29,6 +29,7 @@ from routers.listen.demand_routing import attach_live_demand
 from routers.listen.demand_switch import switch_live_demand
 from routers.listen.lane_meter import LiveLaneMeter
 from utils.observability.demand_cohort import host_cohort, telemetry_call
+from utils.observability.demand_cohort import current_transport_origin
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.stt.replay_capture_accounting import record_replay_sends
 from utils.capture_evidence import SourcePositionMap, parse_live_frame
@@ -110,7 +111,7 @@ from utils.stt.replay_delivery import (
     enable_recovery_writer_pace,
 )
 from config.stt_provider_policy import provider_for_service
-from utils.stt.live_rollout import managed_chain_enabled
+from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.stt.brand_terms import normalize_brand_segments
 from utils.stt.resilient_stream import (
     ReplayFilterMixin,
@@ -1500,7 +1501,11 @@ class ListenReceiver(ReplayFilterMixin):
     async def _failover_stt_socket(self) -> bool:
         """Serialize monitor/send-path failover so only one replacement is adopted."""
         if getattr(self, 'recovery', None) is None:
-            return await legacy_recovery.failover_stt_socket(self)
+            origin_token = current_transport_origin.set('replacement')
+            try:
+                return await legacy_recovery.failover_stt_socket(self)
+            finally:
+                current_transport_origin.reset(origin_token)
         async with self._stt_failover_lock:
             if self.recovery.state in (RecoveryState.exhausted, RecoveryState.client_leaving):
                 return False
@@ -1511,13 +1516,28 @@ class ListenReceiver(ReplayFilterMixin):
                 return False
             if self.stt_socket is not None and not live_stt_socket_is_dead(self.stt_socket):
                 return True
-            self.recovery.begin(self.stt_socket, provider_for_service(self.host.stt_service))
+            idle_reopen = getattr(self.stt_socket, 'idle_cost_reselect_requested', False) is True
+            idle_transport = replay_delivery.raw_transport(self.stt_socket) if idle_reopen else None
+            if idle_reopen:
+                # Planned idle retirement is a fresh selection, not a failed
+                # provider or a spent failure episode. Fleet/account benches
+                # and cap admission still apply to every candidate dial.
+                episodes = self.recovery.episode_count
+                self.recovery = LiveRecoveryController(self.host)
+                self.recovery.begin(family=provider_for_service(self.host.stt_service))
+                self.recovery.episode_count = episodes
+            else:
+                self.recovery.begin(self.stt_socket, provider_for_service(self.host.stt_service))
             if self.recovery.state in (RecoveryState.exhausted, RecoveryState.client_leaving):
                 return False
+            origin_token = current_transport_origin.set('idle_reopened' if idle_reopen else 'replacement')
             try:
-                if await self._reconnect_stt_socket_locked():
+                if not idle_reopen and await self._reconnect_stt_socket_locked():
                     return True
-                return await self._rebuild_stt_socket_locked()
+                rebuilt = await self._rebuild_stt_socket_locked(idle_reopen=idle_reopen)
+                if rebuilt and idle_transport is not None:
+                    idle_transport.note_cost_reopened()
+                return rebuilt
             except asyncio.CancelledError:
                 self._settle_pending_live_failover_failure(continuing=True)
                 if self._replay_delivery is not None:
@@ -1525,6 +1545,7 @@ class ListenReceiver(ReplayFilterMixin):
                     self._replay_delivery.finish()
                 raise
             finally:
+                current_transport_origin.reset(origin_token)
                 self._replay_delivery = None
                 self._replay_ingesting = False
 
@@ -1717,7 +1738,7 @@ class ListenReceiver(ReplayFilterMixin):
             finally:
                 release_live_stt_socket(previous)
 
-    async def _rebuild_stt_socket_locked(self) -> bool:
+    async def _rebuild_stt_socket_locked(self, *, idle_reopen: bool = False) -> bool:
         if getattr(self, 'recovery', None) is None:
             return await legacy_recovery.rebuild_stt_socket_locked(self)
         rebuild = getattr(self, '_stt_rebuild', None)
@@ -1733,6 +1754,7 @@ class ListenReceiver(ReplayFilterMixin):
             demand.policy.reason = 'fallback'
             demand.meter()
         sample_rate = rebuild[1]
+        planned_idle = idle_reopen
         while True:
             if self.recovery.episode_expired():
                 self._settle_pending_live_failover_failure()
@@ -1742,9 +1764,24 @@ class ListenReceiver(ReplayFilterMixin):
             if self.recovery.client_has_left() or self.host.state.stt_terminal_failure:
                 return False
             dead_provider = provider_for_service(self.host.stt_service)
-            service, language, model = select_live_replacement(
-                self, dead_provider, get_stt_service_for_language, managed=managed_chain_enabled(self.host)
-            )
+            if idle_reopen:
+                # Stale session-local failures must not pin a recovered cheap
+                # provider out forever. The configured chain rechecks current
+                # stages, capability, account health and per-user permission.
+                self._stt_failed_providers.clear()
+                self._stt_failed_targets.clear()
+                self._stt_failed_reasons.clear()
+                service, language, model = get_stt_service_for_language(
+                    self.host.language,
+                    multi_lang_enabled=self.host.multi_lang_enabled,
+                    language_profile=self.host.language_profile,
+                    **window_selection_kwargs(self.host, self.host.request.uid),
+                )
+                idle_reopen = False
+            else:
+                service, language, model = select_live_replacement(
+                    self, dead_provider, get_stt_service_for_language, managed=managed_chain_enabled(self.host)
+                )
             if service is None:
                 self._settle_pending_live_failover_failure()
                 settle_terminal_socket(self.stt_socket, self._serving_provider(), 'connection_lost')
@@ -1871,7 +1908,7 @@ class ListenReceiver(ReplayFilterMixin):
                 self._replay_live_tail.extendleft(reversed(previous.take_tail()))
                 self._replay_tail_bytes = sum(len(packet.data) for packet in self._replay_live_tail)
             retire = getattr(previous, 'retire_for_replay', None)
-            if window_ring is not None and callable(retire):
+            if (window_ring is not None or planned_idle) and callable(retire):
                 retire()
             if previous is not None:
                 note_stream_close_intent(previous, US_FAILOVER)

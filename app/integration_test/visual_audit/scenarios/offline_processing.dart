@@ -59,13 +59,16 @@ final _now = DateTime.now();
 final _today = DateTime(_now.year, _now.month, _now.day);
 DateTime _at(int daysAgo, int hour, int minute) => DateTime(_now.year, _now.month, _now.day - daysAgo, hour, minute);
 
-Wal _wal(DateTime start, int minutes, WalStatus status, {WalStorage storage = WalStorage.disk}) => Wal(
+Wal _wal(DateTime start, int minutes, WalStatus status,
+        {WalStorage storage = WalStorage.disk, String? rejectionReason}) =>
+    Wal(
       timerStart: start.millisecondsSinceEpoch ~/ 1000,
       codec: BleAudioCodec.opus,
       seconds: minutes * 60,
       status: status,
       storage: storage,
       device: 'pendant',
+      uploadRejectionReason: rejectionReason,
     );
 
 ServerConversation _convo(String id, String title, String emoji, DateTime at, int minutes) => ServerConversation(
@@ -324,7 +327,7 @@ final offlineProcessingScenarios = <AuditScenario>[
     title: 'On the Way',
     page: 'lib/pages/conversations/on_the_way_page.dart (OnTheWayPage)',
     state: 'One recording transcribing, one uploading from the phone, one still on the pendant, '
-        'and one the server refused',
+        'and three the server refused: too old, an invalid capture date, and too large',
     run: (a) async {
       final sync = _SyncAuditProvider(
         phase: SyncPhase.uploadingToCloud,
@@ -333,6 +336,8 @@ final offlineProcessingScenarios = <AuditScenario>[
           _wal(_at(0, 17, 58), 3, WalStatus.miss)..isSyncing = true,
           _wal(_at(0, 17, 40), 1, WalStatus.miss, storage: WalStorage.sdcard),
           _wal(_at(2, 9, 0), 5, WalStatus.outsideRecoveryWindow),
+          _wal(_at(2, 8, 30), 2, WalStatus.uploadRejected, rejectionReason: WalUploadRejection.invalidCaptureTime),
+          _wal(_at(2, 8, 0), 4, WalStatus.uploadRejected, rejectionReason: WalUploadRejection.tooLarge),
         ],
       );
       await a.pump(
