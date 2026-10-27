@@ -279,9 +279,14 @@ def _calling_function() -> str:
     this_module = __name__
     frame = sys._getframe(1)
     fallback = ''
+    transparent = ''
     while frame is not None:
         module = frame.f_globals.get('__name__', '')
         if module == this_module:
+            frame = frame.f_back
+            continue
+        if module == 'database.released_memory_projection':
+            transparent = transparent or f'{module}.{frame.f_code.co_qualname}'
             frame = frame.f_back
             continue
         if module == 'database' or module.startswith('database.'):
@@ -289,7 +294,7 @@ def _calling_function() -> str:
         if not fallback and module and not module.startswith('tests.support'):
             fallback = f'{module}.{frame.f_code.co_qualname}'
         frame = frame.f_back
-    return fallback
+    return fallback or transparent
 
 
 @dataclass(frozen=True)

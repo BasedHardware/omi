@@ -19,6 +19,7 @@ class DeviceStatsRow extends StatelessWidget {
     required this.isCharging,
     required this.heardTodaySeconds,
     required this.onDeviceSeconds,
+    this.phoneQueueSeconds = 0,
   });
 
   /// Battery percent, or <= 0 when the device has not reported one.
@@ -26,6 +27,10 @@ class DeviceStatsRow extends StatelessWidget {
   final bool isCharging;
   final int heardTodaySeconds;
   final int onDeviceSeconds;
+
+  /// Audio recorded on the phone still waiting for its upload: the On Device
+  /// tile names it so hours of phone queue never read as nothing to sync.
+  final int phoneQueueSeconds;
 
   @override
   Widget build(BuildContext context) {
@@ -48,16 +53,24 @@ class DeviceStatsRow extends StatelessWidget {
         label: l10n.onDevice,
         value: OmiDuration.compact(_minutes(onDeviceSeconds), l10n),
         caption: onDeviceSeconds > 0 ? l10n.deviceToSync : null,
+        secondCaption:
+            phoneQueueSeconds > 0 ? l10n.deviceOnPhoneQueue(OmiDuration.compact(phoneQueueSeconds, l10n)) : null,
       ),
     ];
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < tiles.length; i++) ...[
-          if (i > 0) const SizedBox(width: OmiSpacing.xs),
-          Expanded(child: tiles[i]),
+    // One row height for every tile: the tallest tile's captions (usually On
+    // Device's phone-queue line) raise the whole row, so a captioned tile never
+    // towers over its neighbours. IntrinsicHeight + stretch sizes the row to
+    // its own content only — never to whatever height the viewport has left.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < tiles.length; i++) ...[
+            if (i > 0) const SizedBox(width: OmiSpacing.xs),
+            Expanded(child: tiles[i]),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -65,22 +78,30 @@ class DeviceStatsRow extends StatelessWidget {
 }
 
 class _StatTile extends StatelessWidget {
-  const _StatTile({super.key, required this.label, required this.value, this.caption});
+  const _StatTile({super.key, required this.label, required this.value, this.caption, this.secondCaption});
 
   final String label;
   final String value;
   final String? caption;
 
+  /// A second line under the caption, in the same style.
+  final String? secondCaption;
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: [label, value, if (caption != null) caption!].join(', '),
+      label: [label, value, if (caption != null) caption!, if (secondCaption != null) secondCaption!].join(', '),
       excludeSemantics: true,
       child: Container(
         constraints: const BoxConstraints(minHeight: 84),
         padding: const EdgeInsets.all(OmiSpacing.sm),
         decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+        // Min, not max: the tile floors at 84 and otherwise sizes to its own
+        // lines — the row's IntrinsicHeight shares the tallest tile's height,
+        // never whatever height the viewport has left over.
         child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
@@ -89,6 +110,10 @@ class _StatTile extends StatelessWidget {
             if (caption != null) ...[
               const SizedBox(height: 2),
               Text(caption!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+            ],
+            if (secondCaption != null) ...[
+              const SizedBox(height: 2),
+              Text(secondCaption!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             ],
           ],
         ),
@@ -104,6 +129,9 @@ class DeviceRightNowGroup extends StatelessWidget {
     this.liveTitle,
     this.liveLength,
     this.liveLengthNow,
+    this.liveSubtitle,
+    this.liveProblem = false,
+    this.onFixProblem,
     this.onOpenLive,
     this.catchingUp,
     this.onOpenCatchingUp,
@@ -114,6 +142,15 @@ class DeviceRightNowGroup extends StatelessWidget {
 
   /// The running length read fresh each second; only the live row re-renders, not the page.
   final String Function(DateTime now)? liveLengthNow;
+
+  /// A fixed subtitle instead of a running length: "Connecting…" while the pendant's
+  /// audio is still being verified, or the failure sentence when [liveProblem] is set.
+  final String? liveSubtitle;
+
+  /// The live row is a failure the reader can act on ([onFixProblem]); no length, no clock.
+  final bool liveProblem;
+  final VoidCallback? onFixProblem;
+
   final VoidCallback? onOpenLive;
 
   final DeviceCatchUpSummary? catchingUp;
@@ -129,6 +166,15 @@ class DeviceRightNowGroup extends StatelessWidget {
         onTap: onOpenLive,
       );
 
+  /// The pendant owes audio: the row names the failure and its tap is the fix.
+  Widget _problemRow() => OmiSettingsRow(
+        key: const Key('device_right_now_no_audio'),
+        leading: Icon(Icons.warning_amber_rounded, color: OmiColors.warning),
+        title: liveTitle!,
+        subtitle: liveSubtitle,
+        onTap: onFixProblem,
+      );
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -137,12 +183,16 @@ class DeviceRightNowGroup extends StatelessWidget {
       header: l10n.deviceRightNow,
       children: [
         if (liveTitle != null)
-          liveLengthNow == null
-              ? _liveRow(l10n.deviceLiveEpisode(liveLength ?? ''))
-              : LiveEpisodeClock(
-                  clock: DateTime.now,
-                  builder: (context, now) => _liveRow(l10n.deviceLiveEpisode(liveLengthNow!(now))),
-                ),
+          liveProblem
+              ? _problemRow()
+              : liveSubtitle != null
+                  ? _liveRow(liveSubtitle!)
+                  : liveLengthNow == null
+                      ? _liveRow(l10n.deviceLiveEpisode(liveLength ?? ''))
+                      : LiveEpisodeClock(
+                          clock: DateTime.now,
+                          builder: (context, now) => _liveRow(l10n.deviceLiveEpisode(liveLengthNow!(now))),
+                        ),
         if (catchingUp != null)
           DeviceCatchingUpCard(
             key: const Key('device_right_now_catching_up'),

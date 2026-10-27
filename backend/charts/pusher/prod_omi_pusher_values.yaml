@@ -154,6 +154,8 @@ env:
     value: "false"
   - name: REPEAT_WORK_REVISION_ENABLED
     value: "false"
+  - name: CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+    value: "true"
   - name: REPEAT_WORK_LLM_VERSION
     value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
@@ -175,6 +177,8 @@ env:
   - name: AUDIO_ARCHIVE_PERCENT
     value: "100"
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
+    value: "0"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: ""
@@ -201,7 +205,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
+    value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":0}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "0"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -212,6 +216,8 @@ env:
     value: "300"
   - name: FSR_DELETION_NEGATIVE_TTL_SECONDS
     value: "30"
+  - name: FSR_USAGE_MONTH_TOTAL_EPOCH
+    value: "v1"
   - name: FSR_USAGE_MONTH_TTL_SECONDS
     value: "60"
   - name: FSR_SUBSCRIPTION_TTL_SECONDS
@@ -544,16 +550,32 @@ env:
         key: METRICS_SECRET
 
 resources:
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # Right-sized 2026-10-26 from 7d prod telemetry (172 pods, 5m steps, ro-prod
+  # Prometheus): working set fleet p50/p99 = 0.68/1.18Gi, worst-pod p99 1.38Gi,
+  # fleet max 2.27Gi; CPU fleet p50/p99 = 220/495m, per-pod max 694m; zero
+  # container restarts or OOM kills in 30d. Memory request = 1.44x worst-pod
+  # p99; limit 3.5Gi = 1.54x fleet max and keeps the sum of three co-located
+  # limits (10.5Gi) plus ~0.6Gi of DaemonSet requests under the node's 12.87Gi
+  # allocatable, so correlated spikes cannot reach kubelet node-pressure
+  # eviction (lead ruling 2026-10-26: three pods per node, not four). CPU
+  # request 450m yields exactly three pods per n4-highmem-2 node — 3x450m =
+  # 1350m of ~1530m allocatable after ~358m of DaemonSet requests, while
+  # 4x450m = 1800m can never fit — and aggregate p99 usage (3x495m = 1485m)
+  # stays under the node's 1930m allocatable. The HPA is unaffected: it
+  # scales on the external pusher_active_ws_connections_per_pod metric, not
+  # resource utilization.
+  # CPU limit raised 0.7 -> 1.0 on 2026-10-27: with the 0.7 limit the pusher
+  # container was CFS-throttled in 22% of periods (steady over 1h and 6h)
+  # while its p99 usage was only 409m, so sub-100ms bursts on the live audio
+  # path were hitting the cap. Scheduling uses requests, so packing (three
+  # pods per node) and node count are unchanged; under node contention CFS
+  # still shares CPU by request weight.
   requests:
-    cpu: 0.7
-    memory: 4.5Gi
+    cpu: 0.45
+    memory: 2Gi
   limits:
-    cpu: 0.7
-    memory: 4.5Gi
+    cpu: 1.0
+    memory: 3.5Gi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:

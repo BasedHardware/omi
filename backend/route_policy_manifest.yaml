@@ -6,6 +6,10 @@
 schema_version: 1
 service: backend-main
 routes:
+  # Exact app/account/conversation-scoped HS256 capability, followed by current
+  # account, installation and conversation eligibility checks in the handler.
+  - {route_type: http, method: GET, path: "/v1/apps/{app_id}/backup-audio/{conversation_id}", policy: {review_status: reviewed, auth: {mechanisms: [plugin_capability], placement: handler, scopes: [audio]}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: developer_api, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: HEAD, path: "/v1/apps/{app_id}/backup-audio/{conversation_id}", policy: {review_status: reviewed, auth: {mechanisms: [plugin_capability], placement: handler, scopes: [audio]}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: developer_api, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: /v1/capture/boundary-evidence, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: "episodes:write", key_subject: uid, enforcement: fail_open, placement: dependency}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: conversations, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: GET, path: /v2/capture-coverage, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: "capture_coverage:query", key_subject: uid, enforcement: fail_closed, placement: inline}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: conversations, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: /v2/cap-hold-recovery/sweep, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
@@ -25,6 +29,7 @@ routes:
       owner: backend
   - {"route_type":"http","method":"GET","path":"/v1/pending-work","policy":{"review_status":"reviewed","auth":{"mechanisms":["firebase_id_token","admin_key_uid_prefix"],"placement":"dependency","scopes":[]},"byok":"validated_when_headers_present","rate_limit":{"policy_name":"none","key_subject":"none","enforcement":"none","placement":"none"},"timeout_class":"default_method","surface":"first_party_app","visibility":"first_party","data_domain":"conversations","deprecation":{"state":"active"},"owner":"backend"}}
   - {"route_type":"http","method":"GET","path":"/v1/episodes/live","policy":{"review_status":"reviewed","auth":{"mechanisms":["firebase_id_token","admin_key_uid_prefix"],"placement":"dependency","scopes":[]},"byok":"validated_when_headers_present","rate_limit":{"policy_name":"none","key_subject":"none","enforcement":"none","placement":"none"},"timeout_class":"default_method","surface":"first_party_app","visibility":"first_party","data_domain":"conversations","deprecation":{"state":"active"},"owner":"backend"}}
+  - {"route_type":"http","method":"GET","path":"/v1/episodes/{episode_id}","policy":{"review_status":"reviewed","auth":{"mechanisms":["firebase_id_token","admin_key_uid_prefix"],"placement":"dependency","scopes":[]},"byok":"validated_when_headers_present","rate_limit":{"policy_name":"none","key_subject":"none","enforcement":"none","placement":"none"},"timeout_class":"default_method","surface":"first_party_app","visibility":"first_party","data_domain":"conversations","deprecation":{"state":"active"},"owner":"backend"}}
   - {"route_type":"http","method":"GET","path":"/v1/episodes/by-conversation/{conversation_id}","policy":{"review_status":"reviewed","auth":{"mechanisms":["firebase_id_token","admin_key_uid_prefix"],"placement":"dependency","scopes":[]},"byok":"validated_when_headers_present","rate_limit":{"policy_name":"none","key_subject":"none","enforcement":"none","placement":"none"},"timeout_class":"default_method","surface":"first_party_app","visibility":"first_party","data_domain":"conversations","deprecation":{"state":"active"},"owner":"backend"}}
   - {"route_type":"http","method":"POST","path":"/v1/episodes/{episode_id}/wrap-up","policy":{"review_status":"reviewed","auth":{"mechanisms":["firebase_id_token","admin_key_uid_prefix"],"placement":"dependency","scopes":[]},"byok":"validated_when_headers_present","rate_limit":{"policy_name":"episodes:write","key_subject":"uid","enforcement":"fail_open","placement":"dependency"},"timeout_class":"default_method","surface":"first_party_app","visibility":"first_party","data_domain":"conversations","deprecation":{"state":"active"},"owner":"backend"}}
   - {"route_type":"http","method":"POST","path":"/v1/episodes/{episode_id}/items/{item_id}/dismiss","policy":{"review_status":"reviewed","auth":{"mechanisms":["firebase_id_token","admin_key_uid_prefix"],"placement":"dependency","scopes":[]},"byok":"validated_when_headers_present","rate_limit":{"policy_name":"episodes:write","key_subject":"uid","enforcement":"fail_open","placement":"dependency"},"timeout_class":"default_method","surface":"first_party_app","visibility":"first_party","data_domain":"conversations","deprecation":{"state":"active"},"owner":"backend"}}
@@ -51,7 +56,8 @@ routes:
       data_domain: billing
       deprecation: {state: active}
       owner: backend
-  - {route_type: http, method: GET, path: /v1/payments/retention-offer, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: billing, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v1/payments/redeem-code, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: "payments:redeem_code", key_subject: uid, enforcement: fail_open, placement: dependency}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: billing, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: GET, path: /v1/payments/retention-offer,policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: billing, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: /v1/payments/retention-offer, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: billing, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: "/v1/messaging/webhooks/{adapter_id}", policy: {review_status: reviewed, auth: {mechanisms: [webhook_signature], placement: handler, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: webhook, visibility: internal, data_domain: chat, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: /v2/files/video, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: validated_when_headers_present, rate_limit: {policy_name: "file:upload", key_subject: uid, enforcement: fail_open, placement: dependency}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: chat, deprecation: {state: active}, owner: backend}}
@@ -1646,24 +1652,6 @@ routes:
       surface: internal_task
       visibility: internal
       data_domain: user_profile
-      deprecation:
-        state: active
-  - route_type: http
-    method: POST
-    path: /v1/commitment-followup-jobs/run
-    policy:
-      review_status: reviewed
-      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
-      byok: not_applicable
-      rate_limit:
-        policy_name: none
-        key_subject: none
-        enforcement: none
-        placement: none
-      timeout_class: default_method
-      surface: internal_task
-      visibility: internal
-      data_domain: action_items
       deprecation:
         state: active
   - route_type: http
@@ -4035,7 +4023,7 @@ routes:
       visibility: first_party
       data_domain: user_profile
       deprecation:
-        state: active
+        state: deprecated
       owner: backend
   - route_type: http
     method: POST
@@ -4057,7 +4045,7 @@ routes:
       visibility: first_party
       data_domain: user_profile
       deprecation:
-        state: active
+        state: deprecated
       owner: backend
   - route_type: http
     method: GET
@@ -4130,6 +4118,54 @@ routes:
   - route_type: http
     method: POST
     path: /v1/review/items/{item_id}/answer
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+        - firebase_id_token
+        - admin_key_uid_prefix
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: review:write
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/review/open-loops
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+        - firebase_id_token
+        - admin_key_uid_prefix
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: review:read
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/review/open-loops/{date}/{card_id}/answer
     policy:
       review_status: reviewed
       auth:
@@ -4656,3 +4692,4 @@ routes:
   - {"route_type":"http","method":"POST","path":"/v1/jit/trigger-feedback","policy":{"review_status":"reviewed","auth":{"mechanisms":["firebase_id_token"],"placement":"dependency","scopes":[]},"byok":"not_applicable","rate_limit":{"policy_name":"memories:modify","key_subject":"uid","enforcement":"fail_open","placement":"dependency"},"timeout_class":"default_method","surface":"first_party_app","visibility":"first_party","data_domain":"memories","deprecation":{"state":"deprecated"},"owner":"backend"}}
   - {"route_type":"http","method":"POST","path":"/v1/jit/proactivity/reservations","policy":{"review_status":"reviewed","auth":{"mechanisms":["firebase_id_token"],"placement":"dependency","scopes":[]},"byok":"not_applicable","rate_limit":{"policy_name":"agent:execute_tool","key_subject":"uid","enforcement":"fail_open","placement":"dependency"},"timeout_class":"default_method","surface":"first_party_app","visibility":"first_party","data_domain":"memories","deprecation":{"state":"deprecated"},"owner":"backend"}}
   - {"route_type":"http","method":"GET","path":"/v1/frame-requests/temporary/{request_id}/image","policy":{"review_status":"reviewed","auth":{"mechanisms":["firebase_id_token"],"placement":"dependency","scopes":[]},"byok":"not_applicable","rate_limit":{"policy_name":"frame_requests:read","key_subject":"uid","enforcement":"fail_open","placement":"dependency"},"timeout_class":"default_method","surface":"first_party_app","visibility":"first_party","data_domain":"user_profile","deprecation":{"state":"deprecated"},"owner":"backend"}}
+  - {"route_type":"http","method":"POST","path":"/v1/apps/{app_id}/mcp/authorize","policy":{"review_status":"reviewed","auth":{"mechanisms":["firebase_id_token","admin_key_uid_prefix"],"placement":"dependency","scopes":[]},"byok":"not_applicable","rate_limit":{"policy_name":"none","key_subject":"none","enforcement":"none","placement":"none"},"timeout_class":"default_method","surface":"first_party_app","visibility":"first_party","data_domain":"credentials","deprecation":{"state":"active"},"owner":"backend"}}

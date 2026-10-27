@@ -409,6 +409,10 @@ def cta_label(*, action: str, tier_plan: str, current_plan: str, locale: str | N
         return labels['get_pro'] if current_plan == 'basic' else labels['upgrade_pro']
     if tier_plan == 'architect':
         return labels['get_architect'] if current_plan == 'basic' else labels['upgrade_architect']
+    # Omi Pro: the new-buyer single-plan offer sheet (build_single_plan_storefront)
+    # only ever shows this tier to a basic caller.
+    if tier_plan == 'unlimited_v2' and current_plan == 'basic':
+        return labels['get_unlimited']
     return None
 
 
@@ -550,9 +554,8 @@ def _meter_hours_line(text: dict[str, Any], *, shown: int, left: int, reset: str
 def chat_at_cap(plan_id: str, reset_at: int, locale: str | None = None) -> dict[str, Any]:
     """One backend-owned pause state shared by admission, quota and storefront."""
     text = copy_for(locale)['chat_at_cap']
-    upgrade = {'basic': ('plus', 'Plus'), 'plus': ('operator', 'Pro'), 'operator': ('architect', 'Architect')}.get(
-        plan_id
-    )
+    # Omi Pro is the only plan sold; Omi Pro and Architect have nothing to upgrade to.
+    upgrade = ('unlimited_v2', 'Omi Pro') if plan_id not in ('unlimited_v2', 'architect') else None
     return {
         'state': 'paused',
         'title': text['title'],

@@ -53,7 +53,6 @@ tests/unit/test_backend_runtime_env_validator.py::test_desktop_backend_compose_r
 tests/unit/test_backend_runtime_env_validator.py::test_desktop_backend_vertex_pt_omission_fails_loud
 tests/unit/test_render_backend_runtime_env.py::test_selected_job_renders_only_shared_network_and_named_job_outputs
 tests/unit/test_render_backend_runtime_env.py::test_render_prod_gateway_callers_inject_verified_endpoint
-tests/unit/test_render_backend_runtime_env.py::test_render_prod_emits_memory_maintenance_job_cron_on
 tests/unit/test_render_backend_runtime_env.py::test_render_prod_requires_vpc_env_vars_before_job_outputs
 tests/unit/test_render_backend_runtime_env.py::test_selected_job_rejects_unknown_name_without_emitting_partial_output
 # MEMORY_ENABLED product-flag tests parse the composed runtime manifest.
@@ -62,14 +61,12 @@ tests/unit/test_memory_enabled_product_flag.py::test_memory_enabled_on_does_not_
 tests/unit/test_backend_runtime_env_validator.py::test_repo_ilb_endpoints_use_http_scheme[dev]
 tests/unit/test_backend_runtime_env_validator.py::test_scheduler_runtime_surfaces_declare_orphan_stale_setting[prod]
 tests/unit/test_backend_runtime_env_validator.py::test_scheduler_runtime_surfaces_declare_orphan_stale_setting[dev]
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job
 tests/unit/test_backend_runtime_env_validator.py::test_parakeet_admission_deploy_contract_rejects_missing_or_invalid_values[PARAKEET_STREAM_CAPACITY-None-missing PARAKEET_STREAM_CAPACITY]
 tests/unit/test_backend_runtime_env_validator.py::test_parakeet_admission_deploy_contract_rejects_missing_or_invalid_values[PARAKEET_STREAM_ALLOCATION_PERCENT-101-PARAKEET_STREAM_ALLOCATION_PERCENT must be an integer from 0 through 100]
 tests/unit/test_backend_runtime_env_validator.py::test_prod_account_deletion_dispatch_contract_rejects_missing_or_inline_profile
 tests/unit/test_backend_runtime_env_validator.py::test_prod_listen_finalization_contract_requires_the_dedicated_worker_bindings
 tests/unit/test_backend_runtime_env_validator.py::test_listen_finalization_contract_requires_maps_key_on_backend_sync
 tests/unit/test_backend_runtime_env_validator.py::test_prod_cloud_run_secret_bindings_exclude_stale_optional_secrets
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_allows_write_without_job_cron
 tests/unit/test_backend_runtime_env_validator.py::test_repo_prod_rendered_cloud_run_state_matches_manifest
 tests/unit/test_backend_runtime_env_validator.py::test_dev_cloud_run_pusher_contract_rejects_legacy_and_non_listener_bindings
 tests/unit/test_backend_runtime_env_validator.py::test_dev_cloud_run_pusher_contract_rejects_job_binding
@@ -83,7 +80,11 @@ tests/unit/test_backend_runtime_env_validator.py::test_firestore_readiness_contr
 tests/unit/test_backend_runtime_env_validator.py::test_firestore_readiness_contract_rejects_backend_deployment_credentials[gcp_backend.yml]
 tests/unit/test_backend_runtime_env_validator.py::test_firestore_readiness_contract_rejects_backend_deployment_credentials[gcp_backend_auto_dev.yml]
 tests/unit/test_backend_runtime_env_validator.py::test_workflow_validation_uses_immutable_workflow_root_with_admitted_runtime_manifest
-tests/unit/test_runtime_image_contracts.py::test_registered_runtime_image_sources_are_closed
+# Stage every registered image's runtime surface and AST-walk its first-party closure; hermetic but
+# CPU-bound. Formerly one ~183s test in test_runtime_image_contracts.py; split by contract-name
+# parity into two half-files so the walk does not serialize one shard lane.
+tests/unit/test_runtime_image_source_closures_half_a.py::test_registered_runtime_image_sources_are_closed
+tests/unit/test_runtime_image_source_closures_half_b.py::test_registered_runtime_image_sources_are_closed
 tests/unit/test_runtime_image_contracts.py::test_pusher_contract_rejects_omitted_shared_package
 tests/unit/test_runtime_image_contracts.py::test_pusher_dependency_probe_includes_jsonschema
 tests/unit/test_runtime_image_contracts.py::test_modal_contract_rejects_omitted_shared_package
@@ -100,20 +101,10 @@ tests/unit/test_audio_merge_tasks.py::TestEnqueueAudioMergeJob::test_task_named_
 tests/unit/test_backend_runtime_env_validator.py::test_cloud_run_state_rejects_old_secret_versions
 tests/unit/test_backend_runtime_env_validator.py::test_cloud_run_state_reports_missing_gateway_url
 tests/unit/test_backend_runtime_env_validator.py::test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outputs
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_passes_for_repo_manifest
+tests/unit/test_backend_runtime_env_validator.py::test_memory_job_retirement_passes_for_repo_manifest
 # Each parameter renders and validates the complete runtime manifest after injecting the three
 # forbidden daily-sweep bindings; this is the same hermetic manifest path as the entries above.
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_and_posthog_bindings[dev]
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_and_posthog_bindings[prod]
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_empty_surface_allowlist
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_mismatched_surface_allowlist
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_missing_job
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_config
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_request_path_cron
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_wrong_dev_capacity_value
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_requires_gateway_luna_bindings_when_enabled
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_pinned_gateway_endpoint_when_enabled
 tests/unit/test_backend_runtime_env_validator.py::test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_validation_modes
 tests/unit/test_backend_runtime_env_validator.py::test_repo_prod_manifest_rejects_noncanonical_model_order_for_every_surface
 tests/unit/test_backend_runtime_env_validator.py::test_repo_cloud_run_workflows_match_manifest
@@ -231,7 +222,7 @@ tests/unit/test_parakeet_nim.py::TestNimTranscribe::test_nim_text_only_fallback
 tests/unit/test_parakeet_prerecorded.py::TestProviderClass::test_provider_transcribe_url_delegates
 tests/unit/test_parakeet_stream_session.py::TestStreamSessionFeed::test_silence_produces_no_segments
 tests/unit/test_parakeet_stream_session.py::TestStreamSessionRNNTStreaming::test_streaming_utterance_does_not_call_batch_transcribe_when_text_not_ready
-tests/unit/test_payment_promotion_codes.py::test_checkout_invalid_promo_returns_400
+ tests/unit/test_payment_promotion_codes.py::test_checkout_invalid_promo_returns_400
 tests/unit/test_payment_promotion_codes.py::test_release_attached_schedules_releases_only_matching_active
 tests/unit/test_payment_promotion_codes.py::test_release_attached_schedules_noop_without_customer
 tests/unit/test_people_conversations_500s.py::TestGetPeopleDocIdInjection::test_get_people_injects_doc_id
@@ -359,8 +350,6 @@ tests/unit/test_client_processing_trust_boundary.py
 # (0.19-0.26s CPU), so they keep guard suppression against a busier host. Every
 # other runtime_env validator and rollout test touched by this change measured
 # under 0.10s CPU even saturated and stays guard-visible.
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog[dev]
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog[prod]
 # First route test in its file: amortizes the routers.users FastAPI/pydantic import into its call
 # phase. Structural (the file-isolation runner model), not a per-test regression.
 tests/unit/test_daily_summary_generation.py::test_create_route_happy_path
@@ -374,7 +363,6 @@ tests/unit/test_windows_rest_inventory.py::test_every_in_scope_windows_rest_rout
 tests/unit/test_windows_rest_inventory.py::test_known_missing_routes_do_not_rot
 tests/unit/test_windows_rest_inventory.py::test_windows_sources_exist_and_declare_backend_routes
 tests/unit/test_windows_rest_inventory.py::test_out_of_scope_prefixes_match_at_least_one_route
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_enabled_surface_without_enabled_job
 tests/unit/test_selfheal_recovery.py::test_recovery_minimum_structure_raises_before_persist_or_fanout
 # First await of terminate_live_stt_session pays the lazy provider/telemetry import; measured 0.16-0.57s CPU
 # locally under full-suite load (2026-09-28, flaked pre-push on main-based branches), <0.30s when warm.
@@ -504,6 +492,16 @@ tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_no
 # --all shards and locally. Same boundary shape as the Dream retry entries above; the decode is the
 # test's real work, so keep it in the unit lane via the allowlist rather than a global threshold bump.
 tests/unit/test_batch_audio_language.py::test_admitted_short_false_permission_cannot_bypass_worker_barrier[zh-clean_speech-6s-pcm16]
+# 2026-10-22 #23358 regression proving the batch retry policy stays off Cloud Tasks: walks the
+# batch-pipeline-worker closure twice (first_party_import_closure + third_party_dependency_modules
+# over the same 109-module AST walk). Measured 0.98-1.15s CPU on four consecutive CI shard runs of
+# the same code (#23358 head shard 2, 0.98s pass then 1.07s fail; main-merge run 39876683920 shard 2
+# 1.13s; PR #23356 run 39878478985 shard 3, 1.15s; 10-22/23) vs the 1.0s guard -- right on the
+# budget, flaking by 0.02s margins; 0.28s on a quiet host. Both walks are the assertion's real
+# contract work (same shape as the closure-walk entries above), not sleeps or hidden setup.
+# Assertions passed in every run; keep the test in the unit lane via the allowlist rather than a
+# global threshold bump.
+tests/unit/test_runtime_image_contracts.py::test_gpu_batch_retry_cap_does_not_reach_cloud_tasks
 # PR #22861 shard 2: the production callback drives LiveChainSession.connect, which
 # imports dream vocabulary and builds a VAD gate in the call phase. Measured 3.99s
 # then 6.63s CPU vs the 1.00s fail limit (two CI runs, 10-23). The assertions are
@@ -513,3 +511,24 @@ tests/unit/test_live_speaker_renumber_dedup.py::test_production_callback_dedupli
 # runner. Same boundary shape as the other PR-shard overruns above.
 tests/unit/test_task_sync_cloud_export_dedup.py::test_retried_cloud_sync_does_not_create_a_second_external_task
 tests/unit/test_task_sync_cloud_export_dedup.py::test_batch_cloud_sync_isolates_a_failing_item_from_the_rest
+# Main run 40063148564 shard 5 (10-24, 4b4e35fdc9d6): 1.04s CPU vs the 1.00s fail limit.
+# First test of its file; pays the file-isolation import amortization plus importlib
+# drop/install machinery in the call phase. Assertions passed; same boundary shape as
+# the entries above.
+tests/unit/test_memory_import_isolation_order_independence.py::test_drop_then_install_stubs_a_module_that_was_imported_first
+# Feeds 50k unplaced segments through the real record_moment/receipts path (25 moments
+# plus a whole-transcript finalization tail): the volume is the contract under test
+# (receipt documents must shard; no document may approach the 1 MiB Firestore limit).
+# Hermetic; the CPU sits in the id volume itself (~0.6-0.7s), close enough to the 1.00s
+# fail limit that a saturated runner would flake without this entry.
+tests/unit/test_episodes_service.py::test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_reprocess
+# PR #23504 shard 6 (run 40118527240, 10-24, f4165e1b): 1.64/1.44/1.29s CPU and
+# the prior run's shard 6 (40115474313, 444a17bc): 1.95/1.77/1.62s CPU vs the
+# 1.00s fail limit. The file landed on main by direct train push (612b01861b,
+# #23416) without the fast-unit CPU guard ever measuring it; the first test of
+# the file amortizes the payment router/app import graph under file isolation
+# and the 402-snapshot cases build full subscription/stripe objects. Assertions
+# pass; same boundary shape as the entries above.
+tests/unit/test_payment_declined_proration.py::test_declined_proration_card_error_returns_402_and_preserves_paid_plan
+tests/unit/test_payment_declined_proration.py::test_declined_proration_past_due_snapshot_returns_402_and_never_projects_basic
+tests/unit/test_payment_declined_proration.py::test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify

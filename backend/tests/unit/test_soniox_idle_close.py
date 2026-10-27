@@ -1094,7 +1094,12 @@ def test_connected_seconds_counts_open_wall_time_once(monkeypatch):
     from utils.observability import demand_cohort
 
     def value():
-        return REGISTRY.get_sample_value('omi_soniox_connected_seconds_total', {'demand_cohort': 'ineligible'}) or 0.0
+        return (
+            REGISTRY.get_sample_value(
+                'omi_soniox_connected_seconds_total', {'demand_cohort': 'ineligible', 'origin': 'initial'}
+            )
+            or 0.0
+        )
 
     clock = [1000.0]
     monkeypatch.setattr(demand_cohort, 'monotonic', lambda: clock[0])
@@ -1126,7 +1131,13 @@ def test_connected_seconds_stop_while_idle_closed(monkeypatch):
     from utils.observability import demand_cohort
 
     def value():
-        return REGISTRY.get_sample_value('omi_soniox_connected_seconds_total', {'demand_cohort': 'ineligible'}) or 0.0
+        return sum(
+            REGISTRY.get_sample_value(
+                'omi_soniox_connected_seconds_total', {'demand_cohort': 'ineligible', 'origin': origin}
+            )
+            or 0.0
+            for origin in demand_cohort.TRANSPORT_ORIGINS
+        )
 
     async def run():
         socket, idle, _, peers, _, tick = build(monkeypatch, seconds=20)

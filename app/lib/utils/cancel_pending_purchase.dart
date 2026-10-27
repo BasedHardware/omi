@@ -18,10 +18,14 @@ CancelPendingPurchase cancelPendingPurchase({
   return CancelPendingPurchase.blocked;
 }
 
-/// The upgrade route's only 409 is a pending cancellation. Checkout uses 400
-/// for that refusal, and its own 409 means an existing subscription, so this
-/// must only ever classify upgrade responses.
-bool isUpgradePendingCancelConflict(Object? statusCode) => statusCode == 409;
+/// Upgrade 409 can mean cancellation or a stale currency offer. Preserve the
+/// cancellation message for legacy responses without detail, while showing
+/// other conflicts as returned. Checkout's 409 has a separate meaning.
+bool isUpgradePendingCancelConflict(Object? statusCode, {String? detail}) =>
+    statusCode == 409 &&
+    (detail == null ||
+        detail ==
+            'Plan changes are available after the current subscription ends. Reactivate your current plan to keep it.');
 
 /// Stripe period timestamps are unix seconds. Null when the value is not a date.
 String? billingDateLabel(BuildContext context, Object? raw) {

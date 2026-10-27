@@ -30,8 +30,6 @@ from utils import executors
 from utils.observability.fallback import record_fallback
 from utils.rollout.runtime_percent import configure_runtime_percent
 from utils.stt_cap_cohort import runtime_cohort
-from database.request_read_context import cohort_memberships
-from database.firestore_read_origin import read_origin
 
 TTL_SECONDS = 60
 MAX_USERS = 4096
@@ -71,7 +69,7 @@ class _TTLReads:
         if self.discovery and key.endswith(':dream-agent') and not value:
             _dream_cohort_degraded('unavailable' if value is None else 'empty')
         with self.lock:
-            entry.expires = time.monotonic() + TTL_SECONDS
+            entry.expires = min(time.monotonic() + TTL_SECONDS, getattr(value, 'deadline', float('inf')))
             entry.future.set_result(value)
 
     def request(self, key: str, *, background: bool) -> Future:
@@ -120,11 +118,6 @@ class _TTLReads:
 _cache = _TTLReads(read_memberships)
 
 
-@read_origin('task:cohort_membership_lookup')
-def _request_memberships(uid: str):
-    return cohort_memberships(uid, lambda: _cache.get(uid))
-
-
 def _dream_cohort_degraded(outcome: str) -> None:
     logger.error('event=dream_cohort_health outcome=%s', outcome)
     record_fallback(
@@ -143,7 +136,7 @@ def _in_rollout_cohort(
     """Warm checks cost zero reads; missing fields retain explicit legacy env members."""
     if not valid_uid(uid) or name not in COHORT_ENVS:
         return False
-    members = _request_memberships(uid)
+    members = _cache.get(uid)
     if members is None:
         if name == 'dream-agent':
             _dream_cohort_degraded('unavailable')
@@ -162,7 +155,7 @@ def _load_rollout_cohorts(uid: str) -> None:
     """Preload in a synchronous request dependency (already on a worker thread)."""
     if valid_uid(uid):
         runtime_cohort.tokens()
-        _request_memberships(uid)
+        _cache.get(uid)
 
 
 async def _warm_rollout_cohorts(uid: str) -> None:

@@ -1,6 +1,9 @@
 """Projection binding validation and provider-free retry/publication guards."""
 
 from dataclasses import replace
+from dataclasses import asdict
+from copy import deepcopy
+from types import SimpleNamespace
 from config.policy import BatchUnitPolicy, ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
 import logging
 from unittest.mock import Mock
@@ -12,6 +15,10 @@ from utils.batch_pipeline.contracts import ProjectionBinding
 from database.batch_pipeline_projection import ProjectionStore
 from utils.batch_pipeline import projection
 from utils.sync import bridge
+from database.sync_ledger import sync_content_ledger_ref
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.batch_pipeline.scheduler import owner_key
+from utils.sync.capture import chunk_identity
 
 
 @pytest.fixture
@@ -269,14 +276,215 @@ def test_owner_claim_is_shared_token_fenced_with_bounded_ttl(monkeypatch, claim_
     assert not redis.exists('batch_projection:synthetic:owner')
 
 
-def test_claim_redis_unavailable_keeps_firestore_as_authority(monkeypatch):
+def test_late_writer_after_claim_takeover_replays_receipt_and_keeps_replacement_claim(monkeypatch, claim_redis):
+    """A writer whose advisory claim expired mid-flight cannot corrupt projection.
+
+    The claim is advisory and never a mutation fence: the Firestore projection
+    receipts are. Writer A's lease expires, writer B takes the same owner claim
+    and commits the segment. A's late transaction body must fence on B's
+    committed receipt (ProjectionReplay, nothing staged), its completion must
+    replay B's committed result without a write, and A's token-fenced release
+    must never evict B's live claim.
+    """
+    import contextlib
+    from dataclasses import asdict
+    from types import SimpleNamespace
+
     from database import batch_pipeline_projection_claim as claims
+    from database.batch_pipeline_projection import ProjectionReplay
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from utils.batch_pipeline.contracts import WorkItem, Priority
+    from utils.batch_pipeline.scheduler import owner_key
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')  # unprefixed production ledger name, entirely in memory
+    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
+    monkeypatch.setattr('database.batch_pipeline_projection.writing', lambda *a, **k: contextlib.nullcontext())
+    uid, sid, namespace = 'synthetic-owner', 'segment', 'batch_pipeline_dev'
+    binding = ProjectionBinding(uid, 'job', 'content', (sid,))
+    work = WorkItem(sid, uid, 1000.0, 'gs://synthetic/segment#1', 30, Priority.DEEP, privacy_generation=0)
+    result = {'outcome': 'success'}
+    committed = {'state': 'ready', 'conversation_id': 'synthetic-b-conversation', 'created': True, 'speech_seconds': 4}
+    ledger_result = {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'}
+    key = owner_key(uid)
+    client = StrictFirestore(
+        {
+            ('users', uid): {'data_protection_level': 'standard'},
+            ('users', uid, 'conversations', committed['conversation_id']): {'id': committed['conversation_id']},
+            (f'{namespace}_jobs', sid): {**asdict(work), 'projection_binding': asdict(binding), 'result': result},
+            # Writer B's committed projection receipt is already durable here.
+            (f'{namespace}_results', sid): {
+                'protocol_version': 1,
+                'segment_id': sid,
+                'owner_key': key,
+                'capture_at': work.capture_at,
+                'previous_segment_id': None,
+                'result': result,
+                'projection_state': 'ready',
+                'projection': committed,
+            },
+            (f'{namespace}_owners', key): {'projection_watermark': sid},
+            ('users', uid, 'sync_content_ledger', binding.content_id): {
+                'dispatch_protocol': 'batch_v1',
+                'status': 'completed',
+                'job_id': binding.job_id,
+                'batch_pipeline': {'protocol_version': 1, 'namespace': namespace, 'segment_ids': [sid]},
+                'result': ledger_result,
+            },
+        }
+    )
+    store = ProjectionStore(SimpleNamespace(client=client, namespace=namespace))
+    store.policy = lambda _: ProjectionPolicy()
+    claim_key = f'batch_projection:{namespace}:{key}'
+
+    with claims.projection_claim(namespace, key) as writer_a:
+        assert writer_a
+        # The Redis TTL expires A's lease; writer B takes the same owner claim.
+        claim_redis.delete(claim_key)
+        claim_redis.set(claim_key, b'writer-b-token', ex=claims.LEASE_SECONDS)
+
+        # A's late assignment body (the before_assign fence) replays B's
+        # committed receipt instead of appending again.
+        session = store.session(sid, binding, 2.0, policy=ProjectionPolicy())
+        transaction = client.transaction()
+        with pytest.raises(ProjectionReplay) as replay:
+            session.prepare(transaction)
+        assert replay.value.receipt == committed
+        assert not transaction.sets and not transaction.updates
+
+        # A's late completion replays B's committed result without a write.
+        accounting = {
+            'seconds': 4,
+            'source': 'sync_fresh',
+            'updates': {},
+            'hour': '',
+            'completed': True,
+            'charged': 0.0,
+            'steps': [0.0],
+            'step_times': [],
+        }
+        assert store.complete(sid, binding, 2.0, accounting, policy=ProjectionPolicy()) == ledger_result
+        late = client.transactions[-1]
+        assert not late.sets and not late.updates
+        assert client.rows[(f'{namespace}_results', sid)]['projection'] == committed
+
+    # A's token-fenced release never evicts writer B's live claim.
+    assert claim_redis.get(claim_key) == b'writer-b-token'
+
+
+def test_claim_redis_unavailable_keeps_firestore_as_authority(monkeypatch):
+    import time as real_time
+
+    from database import batch_pipeline_projection_claim as claims
+    from database import firestore_transaction_retry
 
     redis = Mock()
     redis.set.side_effect = ConnectionError('synthetic')
     monkeypatch.setattr(claims, '_redis_client', lambda: redis)
     with claims.projection_claim('synthetic', 'owner') as acquired:
         assert acquired
+        # The fail-open path carries the same local lease budget: without it,
+        # its retries would fall back to the attempt count with no wall-time
+        # bound at all.
+        now = real_time.monotonic()
+        deadline = firestore_transaction_retry._retry_deadline.get()
+        assert claims.LEASE_SECONDS - 5 < deadline - now <= claims.LEASE_SECONDS
+    assert firestore_transaction_retry._retry_deadline.get() is None
+
+
+def test_claim_scopes_the_transaction_retry_deadline_to_its_full_lease(claim_redis):
+    import time as real_time
+
+    from database import batch_pipeline_projection_claim as claims
+    from database import firestore_transaction_retry
+
+    with claims.projection_claim('synthetic', 'owner'):
+        now = real_time.monotonic()
+        deadline = firestore_transaction_retry._retry_deadline.get()
+        # Anchored at claim start over the full lease — never lease minus a
+        # margin, which suppressed the claim's first transaction.
+        assert claims.LEASE_SECONDS - 5 < deadline - now <= claims.LEASE_SECONDS
+    assert firestore_transaction_retry._retry_deadline.get() is None
+
+
+def test_claim_lease_runs_the_first_chain_and_bounds_the_storm(monkeypatch, claim_redis):
+    import time as real_time
+    from functools import partial
+
+    from database import batch_pipeline_projection_claim as claims
+    from database import firestore_transaction_retry
+    from database.firestore_transaction_retry import (
+        FIRESTORE_TRANSACTION_CHAIN_SECONDS,
+        FirestoreContentionExhausted,
+    )
+
+    EXPIRED = 'The referenced transaction has expired or is no longer valid.'
+
+    class Clock:
+        """One time base for the claim's lease anchor and the retry gates."""
+
+        def __init__(self):
+            self.now = real_time.monotonic()
+
+        def monotonic(self):
+            return self.now
+
+        def sleep(self, seconds):
+            self.now += seconds
+
+    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+    monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
+    clock = Clock()
+    actual = firestore_transaction_retry.run_with_transaction_contention_retry
+    # Production retry configuration: no estimate override and no clock
+    # shortcut beyond the shared time base.
+    monkeypatch.setattr(
+        firestore_transaction_retry,
+        'run_with_transaction_contention_retry',
+        partial(actual, sleep=clock.sleep, random_value=lambda: 0, monotonic=clock.monotonic),
+    )
+    client = Mock()
+    store = ProjectionStore(Mock(client=client))
+    policy = resolve_stage_policy('synthetic-owner', 'projection')
+    calls = []
+
+    # Real work time (> the 30 s reserve floor) passes between claim
+    # acquisition and helper entry; the first transaction still runs and fast
+    # Aborted contention spends the five-attempt cap inside the lease.
+    def fast_aborted(transaction):
+        calls.append(transaction)
+        clock.now += 0.01
+        raise Aborted('synthetic contention')
+
+    claim_started = clock.monotonic()
+    with claims.projection_claim('synthetic', 'owner', monotonic=clock.monotonic) as acquired:
+        assert acquired
+        clock.now += 31.0
+        with pytest.raises(FirestoreContentionExhausted) as raised:
+            store.run(fast_aborted, policy=policy)
+        assert raised.value.reason == 'attempts_exhausted'
+        assert len(calls) == 5
+    assert clock.monotonic() - claim_started <= claims.LEASE_SECONDS
+
+    # A chain that consumed real time raises the next reserve (270 s x 1.5),
+    # so an expired-chain storm stops inside the accepted bound: the lease
+    # plus one in-flight chain the helper cannot stop.
+    calls.clear()
+
+    def slow_expired(transaction):
+        calls.append(transaction)
+        clock.now += FIRESTORE_TRANSACTION_CHAIN_SECONDS
+        raise InvalidArgument(EXPIRED)
+
+    claim_started = clock.monotonic()
+    with claims.projection_claim('synthetic', 'owner', monotonic=clock.monotonic) as acquired:
+        assert acquired
+        clock.now += 31.0
+        with pytest.raises(FirestoreContentionExhausted) as raised:
+            store.run(slow_expired, policy=policy)
+        assert raised.value.reason == 'deadline_exhausted'
+        assert len(calls) == 1
+    assert clock.monotonic() - claim_started <= claims.LEASE_SECONDS + FIRESTORE_TRANSACTION_CHAIN_SECONDS
 
 
 def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch):
@@ -352,6 +560,7 @@ def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(bind
     monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda *_, **kw: 'synthetic-conversation')
     playback = Mock(side_effect=ValueError('private-error-must-never-be-logged'))
     projector = projection.Projector(Mock(), Mock(), playback=playback)
+    monkeypatch.setattr(projector.store, 'settle_deleted_output', Mock())
     receipt = {
         'state': 'persisted',
         'conversation_id': 'synthetic-conversation',
@@ -443,6 +652,105 @@ def test_supersession_cannot_bypass_privacy_fence(binding):
         projector.supersede(session)
 
 
+@pytest.mark.parametrize(
+    'source', ['live', 'donor_only', 'output_only', 'direct_deleted', 'redirect_deleted', 'soft_deleted']
+)
+def test_privacy_disposition_requires_transactional_input_tombstone_proof(binding, source, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_proof'))
+    user = client.collection('users').document(binding.owner_id)
+    user.create({'data_protection_level': 'standard'})
+    cid = chunk_identity(binding.owner_id, binding.source, binding.client_device_id, binding.is_locked, 1000)
+    if source == 'direct_deleted':
+        user.collection('deleted_conversations').document(cid).create({'deleted': True})
+    elif source == 'redirect_deleted':
+        user.collection('conversations').document(cid).create({'deleted': True, 'sync_merged_into': 'deleted-survivor'})
+        user.collection('deleted_conversations').document('deleted-survivor').create({'deleted': True})
+    elif source == 'soft_deleted':
+        user.collection('conversations').document(cid).create({'deleted': True})
+    elif source in {'donor_only', 'output_only'}:
+        user.collection('deleted_conversations').document('unrelated-donor').create({'deleted': True})
+    result = {'outcome': 'success', 'result_uri': 'gs://synthetic/result'}
+    store.ref('jobs', 'segment').create(
+        {
+            'projection_binding': asdict(binding),
+            'owner_id': binding.owner_id,
+            'capture_at': 1000,
+            'privacy_generation': 0,
+            'result': result,
+            **({'conversation_ids': ['unrelated-donor']} if source == 'output_only' else {}),
+        }
+    )
+    store.ref('results', 'segment').create(
+        {
+            'owner_key': owner_key(binding.owner_id),
+            'protocol_version': 1,
+            'segment_id': 'segment',
+            'capture_at': 1000,
+            'previous_segment_id': None,
+            'result': result,
+        }
+    )
+    store.ref('owners', owner_key(binding.owner_id)).create({'projection_watermark': None})
+    sync_content_ledger_ref(client, binding.owner_id, binding.content_id).create(
+        {
+            'dispatch_protocol': 'batch_v1',
+            'status': 'processing',
+            'job_id': binding.job_id,
+            'batch_pipeline': {'protocol_version': 1, 'namespace': store.store.namespace, 'segment_ids': ['segment']},
+        }
+    )
+    session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
+    transaction = client.transaction()
+    before = deepcopy(client.rows)
+    if source == 'output_only':
+        session.prepare(transaction)
+        assert client.rows == before
+        transaction = client.transaction()
+    if source in {'direct_deleted', 'redirect_deleted'}:
+        session.prepare(transaction, privacy_deleted=True)
+        receipt = session.persist(transaction, superseded=True, privacy_deleted=True)
+        assert receipt['privacy_reason'] == 'conversation_deleted' and receipt['speech_seconds'] == 0
+        assert store.projection_watermark(owner_key(binding.owner_id)) == 'segment'
+    else:
+        with pytest.raises(projection.ProjectionBlocked, match='requires a source deletion tombstone'):
+            session.prepare(transaction, privacy_deleted=True)
+        assert client.rows == before
+
+
+@pytest.mark.parametrize('deleted', [False, True])
+def test_separate_output_guards_preserve_distinct_document_budget(binding, deleted, monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_budget'))
+    user = client.collection('users').document(binding.owner_id)
+    user.create({'data_protection_level': 'standard'})
+    session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
+    session._privacy_fence_ids = set()  # The grouped input/output prepare phase.
+    transaction = client.transaction()
+    for index in range(256):
+        cid = f'output-{index}'
+        if deleted:
+            user.collection('deleted_conversations').document(cid).create({'deleted': True})
+            with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
+                session.guard(transaction, [cid])
+        else:
+            session.guard(transaction, [cid])
+    # Rechecking a previously seen source does not consume another slot.
+    if deleted:
+        with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
+            session.guard(transaction, ['output-0'])
+    else:
+        session.guard(transaction, ['output-0'])
+    with pytest.raises(BatchPrivacyBlocked, match='conversation_fence_budget'):
+        session.guard(transaction, ['later-input'])
+    session._privacy_fence_ids = None  # Later validate_plan keeps its existing budget.
+    session.guard(transaction, ['later-input'])
+
+
 @pytest.mark.parametrize('reason', ['conversation_fence_budget', 'conversation_deleted', 'private-text-not-a-reason'])
 def test_assignment_privacy_fence_logs_bounded_reason(binding, monkeypatch, caplog, reason):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -473,15 +781,26 @@ def test_assignment_privacy_fence_logs_bounded_reason(binding, monkeypatch, capl
     monkeypatch.setattr(
         projection.conversations_db, 'assign_sync_conversation', Mock(side_effect=BatchPrivacyBlocked(reason))
     )
-    with caplog.at_level(logging.INFO, logger=projection.__name__):
-        with pytest.raises(BatchPrivacyBlocked):
-            with projection.projection_phase('assignment', policy):
-                projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, policy=policy)
+    session = projector.store.session.return_value
+    session.persist_empty.return_value = {'state': 'ready', 'privacy_reason': 'conversation_deleted'}
+    with caplog.at_level(logging.INFO):
+        if reason == 'conversation_deleted':
+            projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, policy=policy)
+            session.persist_empty.assert_called_once_with(superseded=True, privacy_deleted=True)
+        else:
+            with pytest.raises(BatchPrivacyBlocked):
+                with projection.projection_phase('assignment', policy):
+                    projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, policy=policy)
     expected = reason if reason != 'private-text-not-a-reason' else 'unknown'
     text = caplog.text
-    assert f'action=assignment outcome=error exception_type=BatchPrivacyBlocked fence_reason={expected}' in text
-    assert f'phase=assignment outcome=error' in text
-    assert text.count(f'fence_reason={expected}') == 2
+    if reason == 'conversation_deleted':
+        assert 'action=assignment outcome=privacy_terminal fence_reason=conversation_deleted' in text
+        assert 'phase=assignment outcome=error' not in text
+        assert text.count(f'fence_reason={expected}') == 1
+    else:
+        assert f'action=assignment outcome=error exception_type=BatchPrivacyBlocked fence_reason={expected}' in text
+        assert 'phase=assignment outcome=error' in text
+        assert text.count(f'fence_reason={expected}') == 2
     assert 'private-text' not in text
     assert binding.owner_id not in text
 

@@ -29,8 +29,8 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = '92a8140d796926c205e6546624439b4c67609d69f471f5eeb89e63c4619f9419'
-CATALOG_REVISION: Final = 10
+CATALOG_SHA256: Final = 'ffc47f59113f510e04b187c499122ceeaf626e810d72f433484b7281ca00c579'
+CATALOG_REVISION: Final = 12
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
  'price_amount': 'stripe_live',
@@ -78,6 +78,23 @@ LADDER_V1_PRICE_BINDINGS: Final[dict[str, Any]] = {'ladder_v1_plus_month': {'pla
                               'interval': 'year',
                               'env_var': 'LADDER_V1_ARCHITECT_YEAR_PRICE_ID'}}
 LADDER_V1_STRIPE_PRICES: Final[list[str]] = []
+MANAGEMENT_CURRENCY_PRICES: Final[dict[str, Any]] = {'price_1ULq6b1F8wnoWYvwtchjjNqq': {'price_id': 'price_1ULq6b1F8wnoWYvwtchjjNqq',
+                                    'plan_id': 'plus',
+                                    'interval': 'month',
+                                    'currency': 'jpy'},
+ 'price_1ULq7H1F8wnoWYvwC1poOtd5': {'price_id': 'price_1ULq7H1F8wnoWYvwC1poOtd5',
+                                    'plan_id': 'plus',
+                                    'interval': 'year',
+                                    'currency': 'jpy'},
+ 'price_1ULq501F8wnoWYvwwN56CHzO': {'price_id': 'price_1ULq501F8wnoWYvwwN56CHzO',
+                                    'plan_id': 'unlimited_v2',
+                                    'interval': 'month',
+                                    'currency': 'jpy'},
+ 'price_1ULq5e1F8wnoWYvwQT8XQ4Uw': {'price_id': 'price_1ULq5e1F8wnoWYvwQT8XQ4Uw',
+                                    'plan_id': 'unlimited_v2',
+                                    'interval': 'year',
+                                    'currency': 'jpy'}}
+
 RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'price_1RrxXL1F8wnoWYvwIddzR902': 'legacy',
  'price_1RrxXL1F8wnoWYvw3kDbWmjs': 'legacy',
  'price_1RtJPm1F8wnoWYvwhVJ38kLb': 'legacy',
@@ -195,7 +212,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
                'display_name': 'Architect',
                'wire_aliases': ['pro'],
                'wire_fallback_plan': None,
-               'lifecycle': 'current',
+               'lifecycle': 'deprecated',
                'is_paid': True,
                'storefronts': ['macos', 'web', 'windows'],
                'desktop_profile': 'desktop_architect',
@@ -228,7 +245,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
               'display_name': 'Pro',
               'wire_aliases': [],
               'wire_fallback_plan': None,
-              'lifecycle': 'current',
+              'lifecycle': 'deprecated',
               'is_paid': True,
               'storefronts': ['macos', 'web', 'windows'],
               'desktop_profile': 'desktop_full',
@@ -255,7 +272,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
           'display_name': 'Plus',
           'wire_aliases': [],
           'wire_fallback_plan': 'unlimited',
-          'lifecycle': 'current',
+          'lifecycle': 'deprecated',
           'is_paid': True,
           'storefronts': ['android', 'ios', 'web'],
           'desktop_profile': 'desktop_free',
@@ -287,7 +304,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
                   'lifecycle': 'current',
                   'is_paid': True,
                   'storefronts': ['android', 'ios', 'web'],
-                  'desktop_profile': 'desktop_free',
+                  'desktop_profile': 'desktop_full',
                   'conditional_desktop_profiles': [],
                   'fair_use_profile': 'unlimited_transcription',
                   'phone_calls_profile': 'paid',
@@ -319,7 +336,7 @@ PLAN_TYPE_VALUES: Final[frozenset[str]] = frozenset(['basic', 'unlimited', 'arch
 PAID_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.unlimited, PlanType.architect, PlanType.operator, PlanType.plus, PlanType.unlimited_v2})
 PAID_PLAN_IDS: Final[frozenset[str]] = frozenset(plan.value for plan in PAID_PLAN_TYPES)
 MOBILE_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.plus, PlanType.unlimited_v2})
-DESKTOP_ENTITLED_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.architect, PlanType.operator})
+DESKTOP_ENTITLED_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.architect, PlanType.operator, PlanType.unlimited_v2})
 UNLIMITED_TRANSCRIPTION_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.unlimited, PlanType.architect, PlanType.operator, PlanType.unlimited_v2})
 WIRE_FALLBACK_PLAN_TYPES: Final[dict[PlanType, PlanType]] = {
     PlanType.plus: PlanType.unlimited,
@@ -447,6 +464,7 @@ __all__ = [
     'LADDER_V1_STRIPE_PRICES',
     'LADDER_V1_PRICE_BINDINGS',
     'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS',
+    'MANAGEMENT_CURRENCY_PRICES',
     'BILLING_ENV_VAR_PLAN_TYPES',
     'CATALOG_AUTHORITY',
     'CATALOG_REVISION',

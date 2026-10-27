@@ -410,3 +410,17 @@ def test_bounded_span_seconds_clamps_pathological_inputs():
     assert bounded_span_seconds([{'start': -10.0, 'end': 0.0}]) == 10.0
     assert bounded_span_seconds([{'start': 0.0, 'end': 10**9}]) == 86400.0
     assert bounded_span_seconds([{'start': 'x', 'end': float('inf')}]) == 0.0
+
+
+@pytest.mark.parametrize('require_capture_proof', [True, False])
+def test_donor_helper_signature_preserves_incoming_proof_default(require_capture_proof):
+    segments = [incoming(LIVE[0], 0)]
+    kept, report = drop_covered_repeats(
+        segments,
+        live_row_segments(),
+        live_origin=ORIGIN,
+        live_pinned=False,
+        require_capture_proof=require_capture_proof,
+    )
+    assert kept == (segments if require_capture_proof else [])
+    assert report['methods'] == ([] if require_capture_proof else ['lexical'])

@@ -1,70 +1,63 @@
-# Firestore quick reads
+# Firestore structural query reads
 
-These structural optimizations default on. Set the corresponding environment
-key to `off` to restore the prior read path. The reads loop owns measurement;
-the brief's 10.5M/8M/1M/3M reads/day predictions are not measured savings.
+PR #23442 now retains two default-on structural optimizations. The public catalog
+and request-cohort cache changes were dropped during the 2026-10-27 main merge:
+main already has public-list single-flight/Redis reuse and deadline-bounded shared
+cohort observations. This PR adds no request or cross-request cache lifetime.
 
-| Key | Scope | Origin |
+| Kill switch (`off` restores the prior path) | Scope | Origin |
 | --- | --- | --- |
-| `FSR_SMART_MERGE_PARTITION` | Unbounded smart-merge discarded-barrier scan for explicit devices | `task:smart_merge_partition_lookup` |
+| `FSR_SMART_MERGE_PARTITION` | Unbounded discarded-barrier scan for explicit devices | `task:smart_merge_partition_lookup` |
 | `FSR_KG_CITATION_INDEX` | Reverse-citation node lookup during KG pruning | `task:kg_citation_prune` |
-| `FSR_PUBLIC_CATALOG_CACHE` | Public catalog base shared by search and list variants | `task:public_app_catalog` |
-| `FSR_COHORT_REQUEST_CACHE` | Membership snapshots inside an existing request scope, at most 64 users | `task:cohort_membership_lookup` |
 
-## Index gate
+## Index and policy gates
 
-The release lead must reconcile `firestore.indexes.json` before deploying and
-verify the registered `conversations_smart_merge_device_preceding` composite is
-READY. The lead uses the existing `backend/scripts/reconcile_firestore_indexes.py`
-workflow with the authorized operator identity. This lane performs no cloud writes.
-While the new index is missing or building, a missing-index `FailedPrecondition`
-falls back to the old query and records shared fallback telemetry. Other errors
-propagate. Both attempts retain the caller's transaction.
+The lead must reconcile the generated manifest and verify
+`conversations_smart_merge_device_preceding` READY before serving this source.
+Use the existing schema approval/readiness path; this lane performs no applies,
+access changes, production writes or deployment. A missing/building-index
+`FailedPrecondition` falls back to the old query before returning rows; other
+errors propagate. Both attempts retain the caller's transaction.
 
-The finite predecessor query still uses the global six-row window: partitioning
-before that limit would admit a predecessor beyond the original window. Missing
-or empty device IDs retain the old scan so absent fields remain visible. Discarded
-barriers stay unbounded and deleted barriers still count.
-
-## KG coverage and remaining work
+The finite predecessor lookup keeps its global six-row window. Missing or empty
+device IDs retain the old scan so absent fields remain visible. Discarded barriers
+stay unbounded within the same device, including deleted barriers. Main's donor
+rebasing, source/lineage checks, open-loop extraction and retirement paths remain.
 
 Firestore's native `memory_ids` array index is the reverse-citation writer: it
-updates atomically with existing node writes, including citation unions, and
-Firestore backfills historical documents before the index serves queries. There
-is no separate citation collection whose empty result could hide unindexed data.
-Chunks of at most 30 memory IDs are fully materialized and deduplicated before
-mutations. A missing index returns to the old scan before any write.
+updates with existing node writes and covers historical data before serving.
+There is no separate side collection or backfill. At most 30 memory IDs per query
+are materialized and nodes deduplicated before mutations. A missing index falls
+back before any write. Global surviving-node and orphan-edge scans remain: the
+operation must still remove unrelated pre-existing dangling edges. No canonical
+promotion, deletion/hold authority, transcription, speaker or Free-plan change.
 
-The global surviving-node and edge scans remain because the old operation also
-removes unrelated pre-existing dangling edges. Replacing them with only native
-`source_id`/`target_id` adjacency queries requires a separately proven global
-orphan-cleanup contract and coverage protocol. This release therefore reduces
-the initial node scan only; it does not claim the full P8 adjacency prediction.
-No canonical-memory or deletion/hold authority is changed.
+## Measurement and economics
 
-## Cache bounds
+The 10-26 fleet caller pools are **16.749388M reads/day** for
+`smart_merge:find_preceding_conversations` and **8.915616M/day** for
+`knowledge_graph:prune_memory_citations_from_kg`. At $0.43–0.47/M and 30 days:
 
-The public catalog uses one existing cache/invalidation key, a process single-flight
-with 30-second TTL and the existing 600-second Redis backing. Disabling this
-optimization restores Redis read-through. Empty lists are hits;
-the shared raw catalog is copied before enrichment. Private/user app slices and
-authorization reads retain their existing paths. Pub/sub initialization is
-serialized so simultaneous first requests share one cache. Single-flight is
-per process; Redis shares completed values across processes.
+- Smart merge's entire caller pool is $216–236/month. The removable fraction is
+  only explicit-device unbounded barriers multiplied by the off-device rows they
+  currently download. The saved aggregate does not identify either fraction.
+  **$0–236/month gross ceiling; no defensible point forecast.** The synthetic
+  121-to-1 lookup is mechanism evidence, not the fleet traffic mix.
+- KG removes only the first of two full node scans; the edge scan remains. Its
+  full caller pool is $115–126/month, but this change's structural ceiling is
+  **$0–63/month**, before empty-query floors and chunk overlap. The 206-to-106
+  synthetic fixture corresponds to $56–61/month only if that graph shape holds
+  fleet-wide; it is not a measured forecast.
 
-The cohort snapshot adds no cross-request lifetime. It wraps the existing
-60-second process cache, stores successful membership maps only, and clears on
-request teardown. Fresh-read scopes and the kill switch bypass request reuse.
-Predicates, environment fallbacks and fail-closed unavailable behavior still run
-at each check. Long-lived background contexts cannot reuse a closed holder.
+The retained bundle's **$0–299/month** is an upper bound, before added composite
+index storage and fallback overhead. Existing writes maintain the native indexes;
+no new application document writes are introduced. New verified/realized savings
+are **$0**. Earlier 22.5M/day predictions are retired, not booked.
 
-## Grading
-
-Compare absolute caller totals as well as origins. The SDK probe attributes the
-new inner collector to `smart_merge:collect` (including the unchanged finite
-window) and indexed node lookups to `knowledge_graph:_citation_nodes`; the
-remaining graph sweeps stay under `knowledge_graph:prune_memory_citations_from_kg`.
-Grade those callers together against the old `smart_merge:find_preceding_conversations`
-and `knowledge_graph:prune_memory_citations_from_kg` baselines. Count new origins
-together with the old callers so relabelling cannot look like savings. Fleet
-savings require complete service coverage and billing confirmation.
+Compare old and new callers together: smart merge's inner collector is attributed
+to `smart_merge:collect` (including the unchanged finite query), KG's new lookup to
+`knowledge_graph:_citation_nodes`, and remaining sweeps to the old prune caller.
+Track both new origins, legacy callers, fallback counts, query/RPC latency,
+merge/barrier correctness and graph-cleanup equivalence. After lead serving,
+compare matched windows against the 10-24/25 billing baseline and confirm net
+reads/writes/storage at D+1 in the billing export. A renamed caller is not saving.

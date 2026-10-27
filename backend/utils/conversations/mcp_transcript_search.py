@@ -25,6 +25,7 @@ from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.model_text import DisplayClock, truncation_note
 from utils.observability.fallback import record_fallback
+from utils.speakers.display import display_participants
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +219,7 @@ def build_transcript_match_snippets(
     context_neighbors: int = 1,
     max_snippets: int = 3,
     max_chars: int = _MAX_SNIPPET_CHARS,
+    center_match: bool = False,
 ) -> List[Dict[str, Any]]:
     """Return grep-style transcript snippets for segments matching ``query``.
 
@@ -239,6 +241,7 @@ def build_transcript_match_snippets(
 
     snippets: List[Dict[str, Any]] = []
     used_centers: set[int] = set()
+    display = display_participants(segs, owner_name='You')
     for center in match_idxs:
         if len(snippets) >= max_snippets:
             break
@@ -247,18 +250,19 @@ def build_transcript_match_snippets(
         lo = max(0, center - max(0, context_neighbors))
         hi = min(len(segs), center + max(0, context_neighbors) + 1)
         window = segs[lo:hi]
-        used_centers.update(range(lo, hi))
-
         lines: List[str] = []
-        for seg in window:
+        line_offset = center_line_start = center_offset = 0
+        center_text = ''
+        for index, seg in enumerate(window, start=lo):
             text = (seg.get("text") or "").strip()
             if not text:
                 continue
-            speaker = seg.get("speaker_id")
-            prefix = f"Speaker {speaker}: " if speaker is not None else ""
-            if seg.get("is_user"):
-                prefix = "User: "
-            lines.append(f"{prefix}{text}")
+            prefix = f"{display.label(seg)}: "
+            line = f"{prefix}{text}"
+            if index == center:
+                center_line_start, center_offset, center_text = line_offset, line_offset + len(prefix), text
+            lines.append(line)
+            line_offset += len(line) + 1
         if not lines:
             continue
 
@@ -275,12 +279,40 @@ def build_transcript_match_snippets(
             end_f = None
 
         snippet_text = "\n".join(lines)
+        clip_start, clip_end = 0, len(snippet_text)
         max_chars = max(1, min(max_chars, _MAX_SNIPPET_CHARS))
         if len(snippet_text) > max_chars:
-            if max_chars > 3:
+            if center_match and max_chars > 6:
+                normalized = _normalize_text(center_text)
+                at = normalized.find(query_norm) if query_norm else -1
+                if at < 0:
+                    locations = [normalized.find(term) for term in terms if term]
+                    at = min((pos for pos in locations if pos >= 0), default=0)
+                # Map the normalized match back to a raw-text window. Casefold
+                # and NFKC can change length; never return normalized speech as
+                # if it were the user's verbatim transcript.
+                left, right = 0, len(center_text)
+                while left < right:
+                    mid = (left + right) // 2
+                    if len(_normalize_text(center_text[:mid])) < at:
+                        left = mid + 1
+                    else:
+                        right = mid
+                clip_start = max(center_line_start, center_offset + left - (max_chars - 6) // 3)
+                clip_end = min(len(snippet_text), clip_start + max_chars - 6)
+                excerpt = snippet_text[clip_start:clip_end]
+                snippet_text = ('...' if clip_start else '') + excerpt + ('...' if clip_end < len(snippet_text) else '')
+            elif max_chars > 3:
+                clip_end = max_chars - 3
                 snippet_text = snippet_text[: max_chars - 3].rstrip() + "..."
             else:
+                clip_end = max_chars
                 snippet_text = snippet_text[:max_chars]
+        if center_match:
+            quoted_center = center_text[max(0, clip_start - center_offset) : max(0, clip_end - center_offset)]
+            if not _segment_matches(quoted_center, query_norm, terms):
+                continue
+        used_centers.update(range(lo, hi))
         snippets.append(
             {
                 "text": snippet_text,
@@ -289,7 +321,9 @@ def build_transcript_match_snippets(
                 "end": end_f,
                 "start_ms": _seconds_to_ms(start_f),
                 "end_ms": _seconds_to_ms(end_f),
-                "speaker_id": hit.get("speaker_id"),
+                "speaker_id": None,
+                "speaker_key": display.for_segment(hit).key,
+                "speaker_label": display.label(hit),
             }
         )
     return snippets

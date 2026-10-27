@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from google.cloud import firestore
 
+from database.people_generation import bump_people_generation
 from database._client import run_transactional
 from models.person_confidence import AUTO_CORRECTED, MANUAL_LABELS
 from utils.manual_speaker_assignments import apply_manual_assignments
@@ -108,6 +109,7 @@ def backfill_person(
                 )
             if tally is not None and apply:
                 transaction.update(ref, {'label_evidence': tally})
+                bump_people_generation(transaction, ref)
             return tally
 
         tally = run_transactional(client, merge)

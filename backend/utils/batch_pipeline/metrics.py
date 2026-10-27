@@ -2,7 +2,7 @@
 
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
 
-from database.batch_pipeline_store import Store
+from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES
 from utils.batch_pipeline.contracts import Priority
 
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
@@ -14,6 +14,16 @@ class QueueMetrics:
         self, registry: CollectorRegistry = REGISTRY, *, worker_release: str = 'unscoped', namespace: str = 'unscoped'
     ):
         self.scope = (worker_release, namespace)
+        self.projection_age = Gauge(
+            'omi_batch_projection_obligation_oldest_age_seconds',
+            'Oldest unfinished committed projection age, including held content; alarm above 900s',
+            registry=registry,
+        )
+        self.projection_observed_at = Gauge(
+            'omi_batch_projection_obligation_observed_at_seconds',
+            'Last successful oldest projection obligation observation',
+            registry=registry,
+        )
         self.oldest_age = Gauge(
             'omi_batch_pipeline_oldest_age_seconds',
             'Oldest admitted uncommitted item age',
@@ -96,6 +106,21 @@ class QueueMetrics:
             self.ready_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - ready) if ready is not None else 0)
             self.retry_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - retry) if retry is not None else 0)
         self.refreshed_at.labels(*self.scope).set(now)
+        if isinstance(store, FirestoreStore):
+            self.refresh_projection(store, now)
+
+    def refresh_projection(self, store: FirestoreStore, now: float) -> None:
+        # Reuses the indexed discovery shape, one row, including durable holds.
+        # A failed query/read leaves freshness unchanged; never exports false zero.
+        ids, _ = store.projection_page(limit=1, states=PROJECTION_OBLIGATION_STATES)
+        age = 0.0
+        if ids:
+            row = store.client.collection(f'{store.namespace}_results').document(ids[0]).get().to_dict()
+            if row is None:  # concurrent privacy erase; retry next supervised tick
+                return
+            age = max(0.0, now - row['committed_at'])
+        self.projection_age.set(age)
+        self.projection_observed_at.set(now)
 
     def record(self, event: str, *, wait_seconds: float | None = None) -> None:
         if event not in {
@@ -107,6 +132,8 @@ class QueueMetrics:
             'committed',
             'quarantined',
             'recovery_held',
+            'admission_policy_deferred',
+            'admission_unevaluated_deferred',
         }:
             raise ValueError('metric event must be a static worker transition')
         self.events.labels(event).inc()

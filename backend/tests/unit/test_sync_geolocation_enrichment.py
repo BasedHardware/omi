@@ -159,6 +159,7 @@ def _prepare(pipeline, wav_paths):
     )
     pipeline._cleanup_files = MagicMock()
     pipeline.get_timestamp_from_path = MagicMock(return_value=123)
+    pipeline.get_wav_duration = MagicMock(return_value=1.0)  # the coordinator reads real durations
     pipeline.get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))
     pipeline.get_sync_job = MagicMock(return_value={})
     pipeline.bind_or_converge_sync_ledger_completion = MagicMock(return_value=None)

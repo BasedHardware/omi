@@ -54,6 +54,20 @@ void main() {
     expect(() => second.validateOwner(UploadFilesResult.queued('dead')), throwsA(isA<SyncRateLimitedException>()));
   });
 
+  test('fetch provenance distinguishes a missing confirmation, a local deferral and a network transient', () async {
+    final poller = SyncJobPoller(clock: () => now);
+    final first = await poller.fetch('missing', _missing);
+    expect(first.outcome, SyncJobFetchOutcome.transient);
+    expect(first.pollAdmitted, isTrue);
+    expect(first.missingConfirmationPending, isTrue);
+    final deferred = await poller.fetch('missing', _missing);
+    expect(deferred.pollAdmitted, isFalse);
+    expect(deferred.missingConfirmationPending, isFalse);
+    final network = await poller.fetch('network', (_) async => const SyncJobFetch(SyncJobFetchOutcome.transient));
+    expect(network.pollAdmitted, isTrue);
+    expect(network.missingConfirmationPending, isFalse);
+  });
+
   test('confirmation still needs five minutes, even across processes', () async {
     final store = _MemoryStore();
     await SyncJobPoller(clock: () => now, missingStore: store).fetch('dead', _missing);
@@ -122,5 +136,32 @@ void main() {
     final poller = SyncJobPoller(clock: () => now);
     poller.defer('later', 60000);
     expect(poller.ordered(['later', 'b', 'a']), ['a', 'b', 'later']);
+  });
+
+  test('pass batches honor budget, transient backoff, server hints and missing confirmation', () async {
+    final poller = SyncJobPoller(clock: () => now);
+    final jobs = List.generate(100, (i) => 'job-${i.toString().padLeft(3, '0')}');
+    expect(poller.dueForPass(jobs), hasLength(SyncJobPoller.maxRequestsPerMinute));
+    await poller.fetch(jobs[0], (_) async => const SyncJobFetch(SyncJobFetchOutcome.transient));
+    await poller.fetch(jobs[1], _missing);
+    await poller.fetch(
+      jobs[2],
+      (id) async => SyncJobFetch(
+        SyncJobFetchOutcome.ok,
+        SyncJobStatusResponse(jobId: id, status: 'processing', pollAfterMs: 90000),
+      ),
+    );
+    final remainder = poller.dueForPass(jobs);
+    expect(remainder, hasLength(SyncJobPoller.maxRequestsPerMinute - 3));
+    expect(remainder, isNot(anyOf(contains(jobs[0]), contains(jobs[1]), contains(jobs[2]))));
+    for (final id in remainder) {
+      await poller.fetch(id, (_) async => const SyncJobFetch(SyncJobFetchOutcome.transient));
+    }
+    expect(poller.dueForPass(jobs), isEmpty);
+    now = now.add(const Duration(minutes: 1));
+    final retry = poller.dueForPass(jobs.take(3));
+    expect(retry, [jobs[0]], reason: 'transient backoff elapsed, but missing confirmation and server hint have not');
+    limiter.markLimited(retryAfterSeconds: 120, reason: RateLimitReason.edgeThrottle);
+    expect(poller.dueForPass(jobs), isEmpty);
   });
 }

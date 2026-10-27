@@ -395,6 +395,8 @@ class GeneratedPlanLimits {
 }
 
 class GeneratedPaymentPricingOption {
+  final String? billingTotal;
+  final String currency;
   final String? description;
   final String? eyebrow;
   final String id;
@@ -407,6 +409,8 @@ class GeneratedPaymentPricingOption {
   final int unitAmount;
 
   const GeneratedPaymentPricingOption({
+    this.billingTotal,
+    this.currency = "usd",
     this.description,
     this.eyebrow,
     required this.id,
@@ -421,6 +425,8 @@ class GeneratedPaymentPricingOption {
 
   factory GeneratedPaymentPricingOption.fromJson(Map<String, dynamic> json) {
     return GeneratedPaymentPricingOption(
+      billingTotal: _readFieldValue<String>(_readField(json, const ["billing_total"]), "billing_total", _readString, requiredField: false, nullable: true),
+      currency: _required(_readFieldValue<String>(_readField(json, const ["currency"]), "currency", _readString, requiredField: false, nullable: false, defaultValue: "usd"), "currency"),
       description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: true),
       eyebrow: _readFieldValue<String>(_readField(json, const ["eyebrow"]), "eyebrow", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
@@ -436,6 +442,8 @@ class GeneratedPaymentPricingOption {
 
   Map<String, dynamic> toJson() {
     return {
+      'billing_total': billingTotal,
+      'currency': currency,
       'description': description,
       'eyebrow': eyebrow,
       'id': id,

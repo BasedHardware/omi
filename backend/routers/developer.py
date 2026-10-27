@@ -26,11 +26,13 @@ import database.daily_summaries as daily_summaries_db
 from database._client import db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
+from utils.list_version_check import ListVersionCheck
 
 from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
+from utils.daily_summary_validation import DailySummaryUnavailable, read_daily_summary_page, require_daily_summary
 from utils.client_device import resolve_client_device_from_request
 from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
 from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
@@ -859,9 +861,16 @@ def get_action_items(
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
     observe_action_items_page(limit, offset)
+    version_check = ListVersionCheck.start(request, uid, 'action_items')
+    if version_check.not_modified is not None:
+        return version_check.not_modified
     with read_component(ReadComponent.OTHER):
         budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
-        cached = external_lists.cached_external_list(request, response, auth, locals())
+        cached = (
+            external_lists.cached_external_list(request, response, auth, locals())
+            if not (version_check.active and 'lp1-' in request.headers.get('if-none-match', ''))
+            else None
+        )
         observe_action_items_shape(
             conversation_id is not None, start_date is not None or end_date is not None, completed, cached is not None
         )
@@ -882,6 +891,7 @@ def get_action_items(
     valid_action_items = external_lists.validate_developer_action_items(action_items, ActionItemResponse, uid, logger)
     observe_action_items_rows('returned', len(valid_action_items))
     finish_list_budget(response, budget)
+    version_check.finish(response, truncated=budget.truncated)
     return valid_action_items
 
 
@@ -1237,13 +1247,13 @@ def get_developer_daily_summaries(
     status = 500
     returned_count = 0
     try:
-        summaries = daily_summaries_db.get_daily_summaries(
-            auth.uid,
-            limit=limit,
-            offset=offset,
-            start_date=start_date,
-            end_date=end_date,
-        )
+        try:
+            summaries = read_daily_summary_page(
+                auth.uid, limit=limit, offset=offset, start_date=start_date, end_date=end_date, request=request
+            )
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
         returned_count = len(summaries)
         status = 200
         return {'summaries': summaries}
@@ -1278,9 +1288,14 @@ def get_developer_daily_summary(
         if not summary:
             status = 404
             raise HTTPException(status_code=404, detail='Daily summary not found')
+        try:
+            validated = require_daily_summary(summary, uid=auth.uid, operation='developer_detail')
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
         status = 200
         returned_count = 1
-        return summary
+        return validated
     finally:
         _audit_developer_read(
             request=request,
@@ -1561,7 +1576,7 @@ def get_conversations(
         unlocked_conversations = [conv for conv in conversations if not conv.get('is_locked', False)]
 
         for conv in unlocked_conversations:
-            conv.update(conversation_participants(conv))
+            conv.update(conversation_participants(conv, include_display=False))
             conv['transcript_included'] = include_transcript
 
         # Remove transcript_segments if not requested
@@ -1569,7 +1584,7 @@ def get_conversations(
             for conv in unlocked_conversations:
                 conv.pop('transcript_segments', None)
         else:
-            populate_speaker_names(uid, unlocked_conversations)
+            populate_speaker_names(uid, unlocked_conversations, preserve_api_values=True)
 
         populate_folder_names(uid, unlocked_conversations)
 
@@ -1729,14 +1744,14 @@ def get_conversation_endpoint(
 
         from utils.mcp_server.helpers import conversation_participants
 
-        conversation.update(conversation_participants(conversation))
+        conversation.update(conversation_participants(conversation, include_display=False))
         conversation['transcript_included'] = include_transcript
 
         # Remove transcript_segments if not requested
         if not include_transcript:
             conversation.pop('transcript_segments', None)
         else:
-            populate_speaker_names(uid, [conversation])
+            populate_speaker_names(uid, [conversation], preserve_api_values=True)
 
         populate_folder_names(uid, [conversation])
 

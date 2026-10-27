@@ -716,7 +716,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get remembering => 'நினைவு';
 
   @override
-  String get unlimitedPlan => 'வரம்பற்ற திட்டம்';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'திட்டத்தை நிர்வகிக்கவும்';
@@ -738,7 +738,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get upgrade => 'மேம்படுத்தவும்';
 
   @override
-  String get upgradeToUnlimited => 'வரம்பற்ற மேம்படுத்தவும்';
+  String get upgradeToUnlimited => 'Omi Pro க்கு மேம்படுத்து';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3180,7 +3180,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Pro க்கு மேம்படுத்து';
+  String get upgradeToPro => 'Omi Pro க்கு மேம்படுத்து';
 
   @override
   String get getOmiDevice => 'Omi சாதனத்தைப் பெறுக';
@@ -4311,7 +4311,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'AI மாதிரികளை பயிற்சி செய்ய உங்கள் தரவு பங்களிப்பதன் மூலம் Omi Unlimited ஐ இலவசமாகப் பெறவும்.';
+      'AI மாதிரികளை பயிற்சி செய்ய உங்கள் தரவு பங்களிப்பதன் மூலம் Omi Pro ஐ இலவசமாகப் பெறவும்.';
 
   @override
   String get trainingDataBullets =>
@@ -8666,6 +8666,9 @@ class AppLocalizationsTa extends AppLocalizations {
       'டிரான்ஸ்கிரிப்ஷன் கிடைக்கவில்லை — பதிவு தொடர்கிறது, உங்கள் ஆடியோ சேமிக்கப்படுகிறது.';
 
   @override
+  String get captureNoAudioFromPendant => 'பதக்கத்திலிருந்து ஆடியோ இல்லை';
+
+  @override
   String get capturing => 'பதிவுசெய்கிறது';
 
   @override
@@ -9731,7 +9734,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get downgradeToFreemiumAction => 'இலவச பதிப்புக்கு மாறவும்';
 
   @override
-  String get getFreeUnlimitedAccess => 'இலவச வரம்பற்ற அணுகலைப் பெறுங்கள்';
+  String get getFreeUnlimitedAccess => 'Omi Pro-ஐ இலவசமாகப் பெறுங்கள்';
 
   @override
   String get shareDataForTraining => 'பயிற்சிக்காக தரவைப் பகிரவும்';
@@ -11170,6 +11173,12 @@ class AppLocalizationsTa extends AppLocalizations {
       'உங்கள் Omi-உடனான புளூடூத் இணைப்பு தடைபட்டுள்ளது, எனவே ஆடியோ ஆப்பை அடையவில்லை. Omi சாதனத்தில் பதிவு செய்வதைத் தொடர்கிறது, இணைப்பு மீட்டமைக்கப்பட்டவுடன் ஒத்திசைக்கப்படும். மீண்டும் முயற்சிப்பது இணைப்பை மீண்டும் ஏற்படுத்தும்; தொடர்ந்து தோல்வியுற்றால், அமைப்புகள் > சாதனம் பகுதியில் உங்கள் சாதனத்தைச் சரிபார்க்கவும்.';
 
   @override
+  String get captureConnecting => 'இணைக்கிறது…';
+
+  @override
+  String get captureNoAudioDetail => 'பெண்டன்ட் இணைக்கப்பட்டுள்ளது, ஆனால் எந்த ஆடியோவும் உங்கள் போனை அடையவில்லை';
+
+  @override
   String get captureIngressNeedsReconnect => 'ஆடியோ ஆப்பை அடையவில்லை — உங்கள் Omi-ஐ மீண்டும் இணைக்கவும்';
 
   @override
@@ -11198,13 +11207,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi தானாகவே மீண்டும் இணையும்';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12339,12 +12341,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'இணைப்பைச் சரிபார்க்கவும்';
 
   @override
-  String get forYou => 'உங்களுக்காக';
-
-  @override
-  String get stopThese => 'இவற்றை நிறுத்து';
-
-  @override
   String get dismiss => 'மறை';
 
   @override
@@ -12948,7 +12944,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'குரல் குறிப்பை அனுப்புங்கள், Omi பதிலளிக்கும்.';
 
   @override
-  String get chatAppsPartOfPro => 'சாட் ஆப்ஸ் Pro-வின் ஒரு பகுதி';
+  String get chatAppsPartOfPro => 'சாட் ஆப்ஸ் Omi Pro-வின் ஒரு பகுதி';
 
   @override
   String get chatAppsMessagesApp => 'செய்திகள்';
@@ -13583,7 +13579,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncDetailsCopy => 'ஆதரவுக்காக விவரங்களை நகலெடுக்கவும்';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator மற்றும் Architect இல் கிடைக்கும்';
+  String get chatAppsChannelPlanRequired => 'Omi Pro இல் கிடைக்கும்';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14103,7 +14099,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'தொலைபேசி சார்ஜ் ஆகும்போது இயங்கும்.';
 
   @override
-  String get onDeviceUpgradeBody => 'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Pro-க்கு மேம்படுத்தவும்';
+  String get onDeviceUpgradeBody => 'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Omi Pro-க்கு மேம்படுத்தவும்';
 
   @override
   String get onDeviceAtCapFooter => 'எந்த வழியிலும் எதுவும் இழக்கப்படாது. இதை அமைப்புகள் › பேச்சு என்பதில் மாற்றலாம்.';
@@ -14285,7 +14281,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud மூலம் மீண்டும் செய்';
 
   @override
-  String get onDeviceRedoHint => 'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Pro-க்கு மேம்படுத்தவும்';
+  String get onDeviceRedoHint => 'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Omi Pro-க்கு மேம்படுத்தவும்';
 
   @override
   String get onDeviceKeepEverything => 'எல்லாவற்றையும் இந்த ஃபோனிலேயே வை';
@@ -14518,10 +14514,24 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get episodeNotesSoon => 'பேச்சின் முதல் சில நிமிடங்களுக்குப் பிறகு குறிப்புகள் தோன்றும்.';
+  String get episodeNotesUnavailable =>
+      'நடப்பு குறிப்புகள் புதுப்பிக்கப்படவில்லை. இப்போதைக்கு உரைப்பதிவைப் பார்க்கவும்.';
 
   @override
-  String get episodeOpenAll => 'அனைத்தையும் திற';
+  String episodeCaptureFor(String duration) {
+    return 'பதிவு செய்கிறது · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'முந்தைய பகுதி';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'நிலுவையில் உள்ள துண்டுகள்: $pending';
+  }
+
+  @override
+  String get episodeNotesSoon => 'பேச்சின் முதல் சில நிமிடங்களுக்குப் பிறகு குறிப்புகள் தோன்றும்.';
 
   @override
   String get episodeWrapUpNow => 'இப்போதே முடி';
@@ -14655,4 +14665,89 @@ class AppLocalizationsTa extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'முடிந்தது. $percent% தள்ளுபடி, அடுத்த $months மாதங்களுக்கு.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'மற்றவர்கள்';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get openLoopAnswerDone => 'முடிந்தது';
+
+  @override
+  String get openLoopAnswerRemind => 'பின்னர் நினைவூட்டு';
+
+  @override
+  String get openLoopAnswerDrop => 'விட்டுவிடு';
+
+  @override
+  String get syncRejectionInvalidDate => 'தவறான பதிவு தேதி';
+
+  @override
+  String get syncDeleteKeptUploading => 'சில பகுதிகள் இன்னும் பதிவேற்றப்பட்டு வருகின்றன, அவை வைக்கப்பட்டுள்ளன';
+
+  @override
+  String get syncRejectionServer => 'சேவையகம் நிராகரித்தது';
+
+  @override
+  String get syncRejectionTooLarge => 'மிகப் பெரியது';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'போனில் $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'பதிவேற்றங்கள் சிறிது நேரம் இடைநிறுத்தப்பட்டுள்ளன — தானாகவே தொடரும்';
+
+  @override
+  String episodeContinues(Object title) {
+    return '“$title” தொடர்கிறது';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· $time முதல்';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'இறுதி எழுத்துப்பிரதி வந்தவுடன் குறிப்புகள் தொடங்கும்.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'நீங்கள் பேசும்போது உங்கள் ஃபோனிலேயே எழுதப்படுகிறது. முழு குறிப்புகள் இறுதி எழுத்துப்பிரதியுடன் வரும்.';
+
+  @override
+  String get episodeOnThisPhone => 'இந்த ஃபோனில்';
+
+  @override
+  String get episodeOpenTranscript => 'எழுத்துப்பிரதியைத் திற';
+
+  @override
+  String get liveCardTitle => 'நேரலை';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'இறுதி எழுத்துப்பிரதி சுமார் $duration பின்தங்கியுள்ளது';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'இறுதி எழுத்துப்பிரதி பின்தொடர்கிறது';
+
+  @override
+  String get livePreviewNoEngineBody =>
+      'நீங்கள் சொன்ன ஒன்று அல்லது இரண்டு நிமிடங்களில் உங்கள் வார்த்தைகள் இங்கே தோன்றும்.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'பாதுகாப்பாக பதிவு செய்கிறது';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'இந்த ஃபோனில் நேரலை';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'நேரலை உரையை இயக்கு';
 }

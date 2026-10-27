@@ -173,8 +173,15 @@ def commit_expected(client: object, edit_id: str, expected: object, open_edits: 
     commit = client.edits().commit(packageName=promote.PACKAGE_NAME, editId=edit_id)
     # The runner's pinned discovery document predates this query option.
     # Attach it to the authenticated request without depending on SDK schema age.
+    # changesNotSentForReview follows promote.CHANGES_NOT_SENT_FOR_REVIEW so a
+    # brake edit joins the same held-changes queue (and the same Play Console
+    # -> Publishing overview -> Send for review step) as every other committed
+    # Play edit, and unholds with them when the constant flips back.
     separator = "&" if "?" in commit.uri else "?"
-    commit.uri += separator + urllib.parse.urlencode({"changesInReviewBehavior": "ERROR_IF_IN_REVIEW"})
+    commit_params = {"changesInReviewBehavior": "ERROR_IF_IN_REVIEW"}
+    if promote.CHANGES_NOT_SENT_FOR_REVIEW:
+        commit_params["changesNotSentForReview"] = "true"
+    commit.uri += separator + urllib.parse.urlencode(commit_params)
     commit.execute()
     open_edits.remove(edit_id)
     # A committed edit cannot be reused. Open a fresh edit to read live state.

@@ -30,3 +30,10 @@ class AudioFile(BaseModel):
     chunk_spans: Optional[List[ChunkSpan]] = Field(
         default=None, description="Validated contiguous coverage spans (v2 only)"
     )
+    # Server-clock (capture-skew normalized) start of this part's first chunk,
+    # from chunk blob metadata. The playback manifest's wall offsets use it;
+    # chunk_timestamps/started_at keep the raw capture clock for storage
+    # identity. Absent when any chunk in the group predates skew persistence.
+    playback_start: Optional[float] = Field(
+        default=None, description="Normalized server-clock start for playback wall math (v2 only)"
+    )

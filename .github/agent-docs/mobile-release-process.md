@@ -44,6 +44,68 @@ platform-matched distribution evidence. Upload/build completion alone is not a
 distribution receipt. The current destination policy remains TestFlight
 internal for iOS and Play internal with alpha promotion for Android.
 
+Play held changes (2026-10-26 → 2026-10-27, currently off): Play's
+requirement for the `changesNotSentForReview` commit parameter has flipped
+both ways within a day, and each direction has broken publishing while it
+disagreed with the repo:
+
+- 2026-10-26: Play rejected this app's automated `edits.commit` ("Changes
+  cannot be sent for review automatically. Please set the query parameter
+  changesNotSentForReview to true."), so every Play-side commit held its
+  changes for manual review submission — Codemagic publishing via
+  `changes_not_sent_for_review: true` in `codemagic.yaml`, and our own
+  scripts via the `changesNotSentForReview` commit parameter
+  (`mobile_store_promote.py`, `mobile_rollout_brake.py`; the flag is the
+  `CHANGES_NOT_SENT_FOR_REVIEW` constant there, read by the train below).
+- 2026-10-27: Play reverted — it auto-sends changes for review again and
+  rejects any commit that sets the parameter ("The query parameter
+  changesNotSentForReview must not be set."), which failed every
+  `android-internal-auto` Codemagic build at the Publishing step
+  (6ae027d351896e4d7456241e, 6adff5257fc36211fd770f24,
+  6adfc38e82d3cae8a7ae890b).
+
+Since 2026-10-27 the parameter is not sent anywhere: `CHANGES_NOT_SENT_FOR_REVIEW`
+is `False` (commit sites pass the parameter only while it is `True`),
+`ANDROID_HELD_CHANGES_MODE` in `.github/scripts/mobile_distribution.py` is
+`False`, and `codemagic.yaml` sets no `changes_not_sent_for_review`. Committed
+changes go to review automatically; there is no Send-for-review press.
+
+To flip held mode back on if Play again refuses automated review submission
+(one line plus its pinned tests): set `mobile_store_promote.py`'s
+`CHANGES_NOT_SENT_FOR_REVIEW = True` (every commit then carries
+`changesNotSentForReview=true`, the train parks the ladder, and the brake
+joins the held queue), set `ANDROID_HELD_CHANGES_MODE = True` in
+`.github/scripts/mobile_distribution.py`, add `changes_not_sent_for_review:
+true` to both Play publishing blocks in `codemagic.yaml` (and regenerate the
+workflow-contract fixture digests), and update the tests that pin the mode
+(`test_check_release_process_guards.py`,
+`test_dispatch_mobile_internal_builds.py`,
+`app/scripts/mobile_store_promote_test.py`, `app/scripts/mobile_daily_train_test.py`,
+`backend/tests/unit/test_mobile_rollout_brake.py`). While the mode is on,
+the consequences below apply:
+
+- Distribution evidence: a settled Codemagic publishing action only proves
+  the edit committed — testers cannot install a held change. The internal
+  dispatcher's Android baseline still advances on that settled action
+  (deliberately: a held publish is not a failed publish, and rebuilding
+  the same source would not unhold it — it would drift back to a build per
+  scheduled run); while the mode is on, every scheduled dispatcher run
+  prints an `android_distribution=held-changes-mode` line so a held
+  distribution cannot stall silently. The press itself is operator
+  evidence: the release gate treats Android internal distribution as done
+  only after it.
+- The press submits every pending change together, not just ours: check
+  Publishing overview for unrelated pending changes (listing edits, store
+  listings, other apps' automated edits) before pressing, exactly as the
+  brake's operator prerequisites require for its own commits.
+- The daily train parks the Android exposure ladder
+  (`mobile_daily_train.py` reads `CHANGES_NOT_SENT_FOR_REVIEW`): a held hop
+  is invisible to the API, so hopping blind could stack 10% -> 50% -> 100%
+  as held changes and one press would then release full exposure with no
+  observation windows. The train still stages a new candidate (the press
+  plus review gate its first exposure step); exposure then advances in
+  Play Console.
+
 ## Release notes
 
 User-facing mobile PRs author one JSON fragment per change under
@@ -142,6 +204,20 @@ Gate receipts: see "Intraday exposure ladder" above — every advancing Android
 action stamps a minute-precision receipt into the Play release name so a
 retry inside an observation window cannot hop twice.
 
+### One iOS version with Apple at a time
+
+A version that is `WAITING_FOR_REVIEW`, `IN_REVIEW`, waiting for export
+compliance, processing, or approved and unreleased (`PENDING_DEVELOPER_RELEASE`
+or `PENDING_APPLE_RELEASE`) is never withdrawn or developer-rejected to make
+room for a newer build. Withdrawing restarts Apple's queue: on 2026-10-23 three
+overnight withdrawals (1.0.571 at 04:44Z, 1.0.572 at 12:03Z, 1.0.573 at 15:14Z
+UTC), each made to ship a newer build, kept every one of them out of the store.
+A newer build waits for the next train after the in-flight version is released;
+urgent fixes ask Apple to expedite the version already in review. The train
+holds on these states, `mobile_store_promote.py` refuses an iOS submission while
+another version is in them, and an exception needs Nik's explicit go-ahead in
+chat naming the version to withdraw.
+
 iOS (App Store Connect, versions are read per state because the unfiltered
 listing only returns live versions):
 
@@ -191,7 +267,12 @@ A legacy Play draft holding the selected code converts straight into the
 staged rollout. Setting `STAGED_ROLLOUT_FRACTION = None` restores the
 queue-for-human behavior: candidates are written as `draft` releases (a human
 presses Release in Play Console), and any rollout already in flight is parked
-for a human instead of being advanced further.
+for a human instead of being advanced further. While held-changes mode is on
+(see "Store and distribution behavior"), the staged write lands as a held
+change: it goes live only after the human Play Console → Publishing overview
+→ Send for review press, and the train parks the ladder — it never hops a
+rollout whose liveness it cannot read; the operator advances exposure in
+Play Console.
 
 Release notes: the train runs `collect` for a **new** candidate version in
 its checkout (unreleased fragments fold into `releases/<version>.json`
@@ -238,4 +319,6 @@ phases pausable in App Store Connect, Android's staged rollout is haltable in
 Play Console, and the manual lane needs an explicit confirmation. What changed
 on 2026-10-14 is the queue point: after approval, releases proceed without a
 further human console press (previously: manual developer release on iOS and
-a Play production draft).
+a Play production draft). The Play Publishing overview → Send for review
+press required 2026-10-26 → 2026-10-27 was part of Play's held-changes mode,
+which is off again (see "Store and distribution behavior").

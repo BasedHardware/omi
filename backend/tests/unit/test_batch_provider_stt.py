@@ -681,6 +681,8 @@ UPLOAD = dict(
 
 @pytest.fixture
 def dark_intake(world, monkeypatch):
+    # Pin the existing provider route independently of admission exclusion.
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
     from types import SimpleNamespace
     from utils.batch_pipeline import intake
     from utils.sync.legacy_dark import LegacySyncMode
@@ -811,8 +813,12 @@ async def test_on_mode_keeps_todays_routes(dark_intake, monkeypatch):
     assert await dark_intake.intake.accept_upload(**UPLOAD) is None  # legacy claimant stays authoritative
     dark_intake.store.run(lambda tx: tx.put('content', f'{OWNER}/content', {}))
     dark_intake.user['language'] = 'ja'
+    # Batch eligibility (lead 41e13b): a known unsupported language stays on legacy sync at 'on'.
+    assert await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': True}) is None
+    assert dark_intake.calls == []
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'false')
     response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': True})
-    assert response.status_code == 202  # BYOK admitted like any upload; GPU route at 'on'
+    assert response.status_code == 202  # kill switch off: BYOK admitted like any upload; GPU route at 'on'
     ((items, kwargs),) = dark_intake.calls
     assert kwargs['enqueue'] is None and kwargs['adopt'] is None and items[0].requires_compute_admission is True
 
@@ -847,15 +853,18 @@ def test_policy_route_fields_default_validate_and_fail_closed_on_read():
         ('DRAINING', 'ja', False, ('provider', 'unsupported_language', 'modulate')),
         ('DRAINING', 'ja', True, ('provider', 'byok', 'modulate')),
         # legacy_sync 'on' never takes the provider route; only the BYOK funding decision is kept.
+        # (A known unsupported language reaches batch at 'on' only with the eligibility kill switch off.)
         ('ON', 'ja', False, ('parakeet', 'none', 'none')),
         ('ON', 'ja', True, ('parakeet', 'byok', 'none')),
     ],
 )
 async def test_intake_records_the_route_it_takes_in_the_admission_policy(
-    dark_intake, mode_name, language, byok, expected
+    dark_intake, monkeypatch, mode_name, language, byok, expected
 ):
     from utils.sync.legacy_dark import LegacySyncMode
 
+    if mode_name == 'ON':
+        monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'false')
     dark_intake.mode['value'] = LegacySyncMode[mode_name]
     dark_intake.user['language'] = language
     response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': byok})
@@ -892,8 +901,8 @@ async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake,
     monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,sync,batch')
     monkeypatch.setattr(cap_policy, '_BATCH_LANE_READY', True)
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
-    gate = Mock(return_value=False)  # the owner's keyless allowance is exhausted
-    monkeypatch.setattr(admission, 'sync_allowed', gate)
+    gate = Mock(return_value=(False, 'allowance_exhausted'))  # the owner's keyless allowance is exhausted
+    monkeypatch.setattr(admission, 'sync_admission', gate)
     monkeypatch.setattr(admission, 'get_hard_restriction_status', Mock(return_value=(False, None)))
     monkeypatch.setattr(admission, 'is_daily_audio_ceiling_exceeded', Mock(return_value=False))
     monkeypatch.setattr(admission, 'reserve_backfill_speech', Mock(return_value=type('R', (), {'allowed': True})()))
@@ -902,7 +911,11 @@ async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake,
         assert receipt['allowed'] == [lease.item.segment_id]
         gate.assert_not_called()
     else:
-        assert receipt == {'allowed': [], 'retry_after': {lease.item.segment_id: 60}}
+        assert receipt == {
+            'allowed': [],
+            'retry_after': {lease.item.segment_id: 60},
+            'held_reason': {lease.item.segment_id: 'allowance_exhausted'},
+        }
 
 
 # --- a legacy_final_pass_v1 conversation in draining/dark (M3 review; lead ruling b209a5) ---------
@@ -970,3 +983,40 @@ async def test_final_pass_owner_keeps_the_legacy_receipt_at_on(dark_intake, monk
     monkeypatch.setattr(final_pass_rehome, 'upload_rehome', lambda *a, **k: pytest.fail('re-home ran at on'))
     assert await dark_intake.intake.accept_upload(**{**UPLOAD, 'conversation_id': 'record'}) is None
     assert dark_intake.calls == []
+
+
+@pytest.mark.parametrize('access', ['capped', 'byok', 'reviewer', 'paid', 'kill_off'])
+def test_default_provider_gate_uses_batch_scope_without_vendor_spend(world, monkeypatch, access):
+    from types import SimpleNamespace
+    from utils import stt_cap_dispatch as cap
+
+    _, store = world
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false' if access == 'kill_off' else 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    route = SttRoute('provider', 'byok', 'modulate', 'ja') if access == 'byok' else JA
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', route)
+    resolver = Mock(
+        return_value=SimpleNamespace(managed=access in {'reviewer', 'paid'}, reason='plan_allowance_exhausted')
+    )
+    monkeypatch.setattr(cap, 'funded_allowance', resolver)
+    artifacts, vendor = Artifacts(), Vendor()
+    runner = ProviderSttStage(store, artifacts, stt=vendor, inspect=lambda *_: SPEECH, clock=lambda: 200)
+    result = runner.run('p1')
+    assert vendor.calls == (0 if access == 'capped' else 1)
+    if access == 'capped':
+        assert result.outcome == 'deferred' and job(store, 'p1')['state'] == PENDING
+        assert artifacts.fetches == 0
+    if access in {'byok', 'kill_off'}:
+        resolver.assert_not_called()
+
+
+def test_allowance_exhausted_during_inspection_leaves_vendor_intent_unspent(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    vendor = Vendor()
+    allowed = Mock(side_effect=[True, False])
+    result = stage(store, Artifacts(), vendor, allowed=allowed).run('p1')
+    assert result.outcome == 'deferred' and vendor.calls == 0
+    assert job(store, 'p1')['state'] == PENDING
+    assert 'provider_intent' not in job(store, 'p1')

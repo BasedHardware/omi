@@ -917,7 +917,7 @@
     "@remembering": {
         "description": "Remembering stat title"
     },
-    "unlimitedPlan": "Unlimited Plan",
+    "unlimitedPlan": "Omi Pro",
     "@unlimitedPlan": {
         "description": "Unlimited plan name"
     },
@@ -957,7 +957,7 @@
     "@upgrade": {
         "description": "Upgrade button"
     },
-    "upgradeToUnlimited": "I-upgrade sa unlimited",
+    "upgradeToUnlimited": "Mag-upgrade sa Omi Pro",
     "@upgradeToUnlimited": {
         "description": "Message shown on locked memory items"
     },
@@ -3652,7 +3652,7 @@
     "@pro": {
         "description": "Badge label for pro/unlimited users"
     },
-    "upgradeToPro": "Mag-upgrade sa Pro",
+    "upgradeToPro": "Mag-upgrade sa Omi Pro",
     "@upgradeToPro": {
         "description": "Subscription banner button text"
     },
@@ -4941,7 +4941,7 @@
     "@trainingDataProgram": {
         "description": "Label for training data program"
     },
-    "getOmiUnlimitedFree": "Makakuha ng Omi Unlimited nang libre sa pamamagitan ng pagbibigay ng iyong data upang magsanay sa AI models.",
+    "getOmiUnlimitedFree": "Makakuha ng Omi Pro nang libre sa pamamagitan ng pagbibigay ng iyong data upang magsanay sa AI models.",
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
@@ -10536,7 +10536,7 @@
     "freemiumLimitsIntro": "Libre ang Omi, pero may mga limitasyon ang libreng bersyon na nakakaapekto sa iyong karanasan:",
     "downgradeLimitDelayNotRealTime": "5-7 segundong delay (hindi real-time)",
     "downgradeToFreemiumAction": "Lumipat sa libreng bersyon",
-    "getFreeUnlimitedAccess": "Kumuha ng libreng walang limitasyong access",
+    "getFreeUnlimitedAccess": "Kumuha ng Omi Pro nang libre",
     "shareDataForTraining": "Magbahagi ng data para sa training",
     "yourRequestUnderReview": "Sinusuri ang iyong kahilingan",
     "pinAsBaseline": "I-pin bilang baseline",
@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "Nabigo ang pag-upload — {duration} na audio ang nakatago sa iyong phone.",
     "audioUploadFailedTapRetry": "Nabigo ang pag-upload — {duration} na audio ang nakatago sa iyong phone. I-tap para subukang muli.",
     "audioUploadRetrying": "Sinusubukang i-upload muli… {duration} na audio ang nakatago sa iyong phone",
+    "captureNoAudioFromPendant": "Walang audio mula sa pendant",
     "capturing": "Kumukuha",
     "capturingPhotos": "Kumukuha ng mga larawan",
     "listeningTranscriptWillAppear": "Nakikinig… lalabas dito ang transcript.",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "Subukang ikonekta muli",
     "captureBannerRetrySync": "Subukang i-sync muli",
     "captureWedgeBleExplanation": "Nag-stall ang Bluetooth link sa iyong Omi, kaya hindi umaabot sa app ang audio. Patuloy na nagre-record ang Omi sa device at mag-si-sync kapag nakabawi ang link. Ang pag-subok muli ay muling nagkokonekta ng link; kung patuloy itong nabibigo, tingnan ang iyong device sa Mga Setting > Device.",
+    "captureConnecting": "Kumokonekta…",
+    "captureNoAudioDetail": "Nakakonekta ang pendant, ngunit walang audio na umaabot sa iyong telepono",
     "captureIngressNeedsReconnect": "Hindi naabot ng audio ang app — i-reconnect ang iyong Omi",
     "captureIngressNeedsReconnectExplanation": "Hindi na makuha ng app ang audio mula sa Omi device at hindi nito mabawi ang koneksyon nang awtomatiko. I-disconnect at i-reconnect ang device — mula sa mga setting ng device, o sa pagpatay at pagbukas nito. Ang audio na naka-save sa device ay magsi-sync sa ibang pagkakataon.",
     "captureStillRecording": "Nagre-record pa rin",
@@ -10926,7 +10929,6 @@
     "captureStarting": "Nagsisimula…",
     "capturePhoneStorageFull": "Puno na ang storage ng telepono",
     "captureStorageAlmostFull": "Halos puno na ang storage",
-    "capturePendantDisconnectedDetail": "Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.",
     "participantsSummaryUncounted": "{name} at iba pa",
     "deviceOnboardingVoiceReplyTitle": "Pakinggan ang mga sagot ni Omi",
     "deviceOnboardingVoiceReplySample": "Nakuha ko. Magsisimula ang susunod mong meeting sa loob ng dalawampung minuto.",
@@ -11204,9 +11206,6 @@
     "playbackAudioUnavailable": "Hindi Magagamit ang Audio",
     "playbackAudioLoadFailed": "Hindi Ma-load ang Audio",
     "playbackAudioNetworkFailed": "Suriin ang Koneksyon",
-    "capturePendantDisconnectedShort": "Kusang kokonekta muli ang Omi",
-    "forYou": "Para Sa Iyo",
-    "stopThese": "Itigil Ang Mga Ito",
     "dismiss": "Isara",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
@@ -11371,7 +11370,7 @@
     "chatAppsShowInAppOff": "Naka-off: makikita mo lang ang mga ito sa {app}.",
     "chatAppsProPerkText": "Mag-text kay Omi mula sa Telegram at iMessage",
     "chatAppsVoiceNotesSubtitle": "Magpadala ng voice note at sasagutin ito ni Omi.",
-    "chatAppsPartOfPro": "Bahagi ng Pro ang mga chat app",
+    "chatAppsPartOfPro": "Bahagi ng Omi Pro ang mga chat app",
     "chatAppsMessagesApp": "Messages",
     "chatAppsTelegramOtherDevice": "Nasa ibang device ang Telegram?",
     "chatAppsHeroMessage": "Magtanong tungkol sa araw mo, mag-save ng mga alaala, at mamahala ng mga gawain mula sa Telegram o iMessage. Nananatili ang mga chat mo sa app na ginagamit mo, at naaalala ni Omi ang pinag-usapan ninyo saanman.",
@@ -11556,7 +11555,7 @@
     "syncDetailsAudioFiles": "Mga audio file",
     "syncDetailsServerJobs": "Mga server job (tapos / kabuuan)",
     "syncDetailsCopy": "Kopyahin ang mga detalye para sa support",
-    "chatAppsChannelPlanRequired": "Available sa Operator at Architect",
+    "chatAppsChannelPlanRequired": "Available sa Omi Pro",
     "chatAppsAtCapacity": "Puno na ang {app}",
     "chatAppsJoinWaitlist": "Sumali sa waitlist",
     "chatAppsOnWaitlist": "Nasa waitlist ka na",
@@ -11707,7 +11706,7 @@
     "onDeviceTranscribeOnPhone": "I-transcribe sa phone na ito",
     "onDeviceIncluded": "Kasama",
     "onDeviceOptionChargingBody": "Tumatakbo habang nagcha-charge ang telepono.",
-    "onDeviceUpgradeBody": "Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan",
+    "onDeviceUpgradeBody": "Mag-upgrade sa Omi Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan",
     "onDeviceAtCapFooter": "Walang mawawala alinman ang piliin mo. Mababago mo ito sa Mga Setting › Transcription.",
     "onDeviceStepOf": "Hakbang {step} sa {total}",
     "onDeviceSetupBody": "Nagda-download ang Omi ng speech model nang isang beses. Pagkatapos, nagiging text ang mga recording mo dito mismo, nang hindi binibilang sa paggamit mo.",
@@ -11760,7 +11759,7 @@
     "onDeviceWhyCloudIphone": "Hindi kayang mag-buod ng iPhone na ito nang mag-isa (kailangan nito ng iPhone 15 Pro o mas bago). Ginawa ang transcript sa phone mo, at ang text lang nito ang ipinadala sa Omi para ibuod. Hindi ito binibilang sa paggamit mo.",
     "onDeviceWhyCloudPhone": "Hindi kayang mag-buod ng phone na ito nang mag-isa. Ginawa ang transcript sa phone mo, at ang text lang nito ang ipinadala sa Omi para ibuod. Hindi ito binibilang sa paggamit mo.",
     "onDeviceRedoWithCloud": "Ulitin gamit ang Omi Cloud",
-    "onDeviceRedoHint": "Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan",
+    "onDeviceRedoHint": "Mag-upgrade sa Omi Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan",
     "onDeviceKeepEverything": "Itago ang lahat sa phone na ito",
     "onDeviceKeepEverythingSubtitle": "Mga transcript lang, walang buod",
     "onDeviceAfterLiveHours": "Kapag naabot mo ang limitasyon",
@@ -11816,8 +11815,11 @@
     "episodeSoFar": "Sa ngayon",
     "episodeUpdatedJustNow": "Na-update ngayon lang · buong tala kapag natapos",
     "episodeUpdatedMinutesAgo": "Na-update {minutes} min ang nakalipas · buong tala kapag natapos",
+    "episodeNotesUnavailable": "Hindi nag-a-update ang mga live na tala. Tingnan muna ang transcript.",
+    "episodeCaptureFor": "Nagre-record · {duration}",
+    "episodePrevious": "Nakaraang episode",
+    "captureChunksPending": "Mga nakabinbing chunk: {pending}",
     "episodeNotesSoon": "Lalabas ang mga tala pagkatapos ng unang ilang minuto ng usapan.",
-    "episodeOpenAll": "Buksan Lahat",
     "episodeWrapUpNow": "Tapusin Ngayon",
     "episodeWrapsUpHint": "Tatapusin ito ng Omi kapag lumipat ka na",
     "episodeTaskCaptured": "Nakuhang gawain: {text}",
@@ -11851,5 +11853,30 @@
     "recapInTheBackground": "Sa background",
     "retentionOfferAccept": "Manatili nang may {percent}% diskwento",
     "retentionOfferBody": "Manatili at magbayad ng {price} kada buwan sa susunod na {months} buwan.",
-    "retentionOfferApplied": "Tapos na. {percent}% diskwento sa susunod na {months} buwan."
+    "retentionOfferApplied": "Tapos na. {percent}% diskwento sa susunod na {months} buwan.",
+    "othersSpeakerLabel": "Iba pa",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "openLoopAnswerDone": "Tapos",
+    "openLoopAnswerRemind": "Ipaalala sa akin mamaya",
+    "openLoopAnswerDrop": "Iwanan",
+    "syncRejectionInvalidDate": "Di-wastong petsa ng pag-record",
+    "syncDeleteKeptUploading": "Ang ilang bahagi ay kasalukuyang ina-upload at pinanatili",
+    "syncRejectionServer": "Tinanggihan ng server",
+    "syncRejectionTooLarge": "Masyadong malaki",
+    "deviceOnPhoneQueue": "{duration} sa telepono",
+    "syncCardUploadsPaused": "Pansamantalang naka-pause ang mga upload — awtomatikong magpapatuloy ang mga ito",
+    "episodeContinues": "Nagpapatuloy sa “{title}”",
+    "episodeLiveSince": "· mula {time}",
+    "episodeNotesStartWithTranscript": "Nagsisimula ang tala kapag dumarating ang panghuling transcript.",
+    "episodeOnDeviceNotesFootnote": "Nakasulat sa phone mo habang nagsasalita ka. Dumarating ang kumpletong tala kasama ng panghuling transcript.",
+    "episodeOnThisPhone": "Sa phone na ito",
+    "episodeOpenTranscript": "Buksan ang transcript",
+    "liveCardTitle": "Live",
+    "livePreviewBehind": "Naiwan ng mga {duration} ang panghuling transcript",
+    "livePreviewCatchingUp": "Sumusunod na ang panghuling transcript",
+    "livePreviewNoEngineBody": "Lalabas ang mga salita mo dito isa hanggang dalawang minuto pagkatapos mong sabihin.",
+    "livePreviewNoEngineTitle": "Ligtas na nagre-record",
+    "livePreviewOnPhoneDivider": "Live sa phone na ito",
+    "livePreviewTurnOnLiveText": "I-on ang live text"
 }

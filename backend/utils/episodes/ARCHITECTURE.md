@@ -53,14 +53,47 @@ one capture window's evidence.
      sealed with the user's key. A lost race retries once.
 3. When a conversation's finalize starts, its live episode closes
    (`service.close_on_finalize`, through `finalize.close_now`; see "Close and wrap-up").
-4. After a conversation's finalization job completes,
+4. A sync (WAL) conversation joins the episode covering its span the
+   moment intake persisted it (`service.attach_synced_intake`, through
+   `finalize.attach_synced_at_intake`, called from the sync pipeline's
+   `complete_sync_intake`). The join is the cheap parallel-capture one below,
+   so Home folds the clip under the live row from its first appearance instead
+   of only after its enrichment finalizes; a clip whose covering episode
+   already closed on silence rejoins it exactly as in the finalize-time hook.
+   Fail-open and gated on the same admission and client-capability markers as
+   the finalize-time hook.
+5. After a conversation's finalization job completes,
    `utils/conversations/finalizer.py` calls `service.on_conversation_finalized`
    (bounded, fail-open, after `complete_finalization_fanout`). The synchronous
    `POST /v1/conversations` route runs the same hook off the request path
-   (`finalize.schedule_after_finalization`). The hook:
+   (`finalize.schedule_after_finalization`). The sync lane runs it too, off its
+   own lane, after WAL processing persists the conversation
+   (`ProcessingTrigger.SYNC_UPDATE`). The hook:
    - It applies trailing text the live stream never delivered (dedupe by the
      per-conversation applied offset), to the conversation's own episode even
      when that one has closed.
+   - A sync-finalized conversation that never attached (no realtime stream
+     carried it, and intake did not or could not join it) joins the episode
+     covering its span first, as a parallel capture: a member whose
+     text the live stream already fed, so no moment and no reconcile. It never
+     closes the live episode and never opens one; a discarded conversation
+     never joins. Its speech extends the
+     episode's `last_activity_at`, so an idle close cannot fire while sync
+     speech keeps landing late. A clip that started
+     before the episode's recorded start still joins when its span reaches the
+     episode or it began within `CONTINUE_GAP_SECONDS` of that start (the
+     pendant and the phone clock separately); one that ended earlier belongs
+     to an occasion already over.
+   - A clip that lands after its covering episode closed on silence (`gap` or
+     `idle`, never a user close, wrap-up or hard boundary) rejoins it
+     (`policy.rejoinable_closed_episode`): the clip's span overlaps the closed
+     episode's `started_at..closed_at` window, or starts within
+     `CONTINUE_GAP_SECONDS` of its end. When the closed episode is the most
+     recent one and no newer episode exists it reopens
+     (`database.episodes.reopen_episode`, transactional; the recap link stops
+     advertising it as last closed); when a newer episode owns the now the clip
+     attaches as a member of the closed one without reopening it. A user,
+     wrap-up or boundary close stays closed.
    - It repoints a smart-merge donor to its survivor.
    - It reconciles the provisional items heard in that conversation against the
      tasks its normal processing saved: each becomes `kept` (with the task id)

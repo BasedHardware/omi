@@ -105,20 +105,35 @@ class BrakeTests(unittest.TestCase):
         play = FakePlay()
         expected = copy.deepcopy(play.live)
         expected["releases"][1]["status"] = "halted"
-        self.assertEqual(
-            self.run_action(play),
-            "BRAKE_RESULT action=halt versionCode=1471 status_before=inProgress status_after=halted userFraction=0.1",
-        )
+        # Held-changes mode path (constant True): the module default is False
+        # since 2026-10-27, so the held commit parameter is patched in.
+        with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", True):
+            self.assertEqual(
+                self.run_action(play),
+                "BRAKE_RESULT action=halt versionCode=1471 status_before=inProgress status_after=halted userFraction=0.1",
+            )
         self.assertEqual(play.live, expected)
         self.assertEqual([name for name, _ in play.calls], ["get", "update", "commit", "insert", "get", "delete"])
         self.assertEqual(play.calls[-2][1]["editId"], "readback")
         self.assertEqual(
             parse_qs(urlsplit(play.commit_request.uri).query)["changesInReviewBehavior"], ["ERROR_IF_IN_REVIEW"]
         )
+        self.assertEqual(parse_qs(urlsplit(play.commit_request.uri).query)["changesNotSentForReview"], ["true"])
         for _, args in play.calls:
             self.assertEqual(args["packageName"], "com.friend.ios")
             if "track" in args:
                 self.assertEqual(args["track"], "production")
+
+    def test_held_mode_follows_the_shared_constant(self):
+        # With the constant False (the module default since 2026-10-27, when
+        # Play went back to auto-sending changes for review), a brake commit
+        # must not hold its changes: only the in-review guard stays.
+        play = FakePlay()
+        with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", False):
+            self.assertIn("status_after=halted", self.run_action(play))
+        query = parse_qs(urlsplit(play.commit_request.uri).query)
+        self.assertEqual(query["changesInReviewBehavior"], ["ERROR_IF_IN_REVIEW"])
+        self.assertNotIn("changesNotSentForReview", query)
 
     def test_status_never_updates_or_commits(self):
         play = FakePlay()
@@ -220,7 +235,10 @@ class BrakeTests(unittest.TestCase):
     def test_stage_replaces_only_halted_release_at_requested_fraction(self):
         play = self.halted_play()
         completed = copy.deepcopy(play.live["releases"][0])
-        result = self.stage(play)
+        # Held-changes mode path (constant True): the module default is False
+        # since 2026-10-27, so the held commit parameter is patched in.
+        with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", True):
+            result = self.stage(play)
         self.assertTrue(result.startswith("BRAKE_RESULT action=stage versionCode=1477 status_before=absent"))
         self.assertIn("userFraction=0.01 supersedes=1471 superseded_status=halted superseded_userFraction=0.1", result)
         self.assertEqual(play.live["releases"][0], completed)
@@ -244,6 +262,7 @@ class BrakeTests(unittest.TestCase):
         self.assertEqual(
             parse_qs(urlsplit(play.commit_request.uri).query)["changesInReviewBehavior"], ["ERROR_IF_IN_REVIEW"]
         )
+        self.assertEqual(parse_qs(urlsplit(play.commit_request.uri).query)["changesNotSentForReview"], ["true"])
         self.assertEqual([args["track"] for name, args in play.calls if name == "update"], ["production"])
 
     def test_stage_refuses_unless_superseded_release_is_halted(self):

@@ -14,6 +14,8 @@ later delivery of a running unit reconciles the deterministic per-token result
 object and never calls the vendor again.
 """
 
+from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
+
 from dataclasses import asdict, dataclass, fields
 import io
 import logging
@@ -355,7 +357,7 @@ class UnitOutcome:
 def _default_allowed(owner_id: str, seconds: float, service: str) -> bool:
     from utils.stt_cap_dispatch import sync_allowed
 
-    return sync_allowed(owner_id, seconds, service)
+    return sync_allowed(owner_id, seconds, service, lane='batch', path=DispatchPath.BATCH_PROVIDER)
 
 
 class ProviderSttStage:
@@ -405,9 +407,9 @@ class ProviderSttStage:
         if job['state'] == RUNNING:
             return self._reconcile(segment_id, job, item)
         # A BYOK unit was funded at admission; the keyless re-check would hold it forever.
-        if route.provider_reason != 'byok' and not self.allowed(
-            item.owner_id, item.duration_seconds, route.provider_service
-        ):
+        if route.provider_reason == 'byok':
+            record_decision(DispatchPath.BATCH_PROVIDER, True, DispatchReason.BYOK)
+        elif not self.allowed(item.owner_id, item.duration_seconds, route.provider_service):
             return UnitOutcome('deferred', 'not_due', self.clock() + FUNDING_RETRY_SECONDS)
         audio = self.artifacts.fetch_audio(item)
         inspected, failure = None, None
@@ -415,6 +417,12 @@ class ProviderSttStage:
             inspected = self.inspect(item, audio)
         except RecoveryFailure as error:
             failure = {'stage': error.stage, 'reason': error.reason}
+        # Download/inspection can queue behind other work. Recheck before the
+        # one durable provider intent; denial must leave it unspent.
+        if route.provider_reason != 'byok' and not self.allowed(
+            item.owner_id, item.duration_seconds, route.provider_service
+        ):
+            return UnitOutcome('deferred', 'not_due', self.clock() + FUNDING_RETRY_SECONDS)
         token = uuid4().hex
         started = self.protocol.start(segment_id, token, self.clock(), route.provider_service)
         if started is None:
@@ -485,7 +493,7 @@ def _service_stage() -> ProviderSttStage:
     # Deferred: the batch store namespace and artifact bucket are resolved per host stage.
     from database.batch_pipeline_shadow_hook import shadow_from_env
     from database.batch_pipeline_store import FirestoreStore
-    from utils.batch_pipeline.intake import artifacts_for
+    from utils.batch_pipeline.artifact_policy import artifacts_for
     from utils.sync.stage import current_stage
 
     store = shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))  # A2 seam: provider-STT writes

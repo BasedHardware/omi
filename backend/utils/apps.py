@@ -17,7 +17,7 @@ from database.apps import (
     PUBLIC_APPROVED_APPS_CACHE_KEY,
     get_private_apps_db,
     get_public_unapproved_apps_db,
-    get_public_approved_apps_cached_db,
+    get_public_approved_apps_db,
     get_app_by_id_db,
     get_app_usage_history_db,
     set_app_review_in_db,
@@ -78,6 +78,7 @@ from utils.conversations.render import conversations_to_string
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.llm.usage_tracker import track_usage, Features
+from utils.plugin_transport import plugin_transport
 from utils.executors import run_blocking, db_executor, llm_executor
 from utils.social import get_twitter_timeline
 from utils.marketplace_reviewers import parse_marketplace_reviewers, is_marketplace_reviewer
@@ -135,7 +136,21 @@ def validate_app_endpoints_for_reenable(app_dict: Dict[str, Any], update_dict: D
     seen_urls: Set[str] = set()
     webhook_url: Any = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
     if webhook_url:
-        endpoints_to_check.append(('webhook', str(webhook_url), 'POST', True))
+        try:
+            transport = plugin_transport(app_id)
+            if transport is not None:
+                transport.validate_url(str(webhook_url))
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail='Webhook does not match this app\'s trusted connection. Fix it before re-enabling.',
+            )
+        if transport is not None:
+            # An authenticated delivery endpoint rejects an unsigned empty POST by
+            # design; its service exposes a non-mutating health probe instead.
+            endpoints_to_check.append(('webhook', transport.health_url(), 'GET', True))
+        else:
+            endpoints_to_check.append(('webhook', str(webhook_url), 'POST', True))
         seen_urls.add(str(webhook_url))
     mcp_url: Any = updated_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
     if mcp_url:
@@ -348,12 +363,28 @@ def get_popular_apps() -> List[App]:
 
 
 def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
+    cache_key = PUBLIC_APPROVED_APPS_CACHE_KEY
     memory_cache = get_memory_cache()
 
     # Cache tester flag per user (30s TTL) to avoid Firestore lookup every 1s (#5439 sub-task 3)
     tester = memory_cache.get_or_fetch(f"is_tester:{uid}", lambda: is_tester(uid), ttl=30)
 
-    public_approved_data = get_public_approved_apps_cached_db()
+    def fetch_public_approved() -> List[Dict[str, Any]]:
+        """Fetch from Redis or DB (called only once with singleflight)."""
+        if cached := get_generic_cache(cache_key):
+            logger.info('get_public_approved_apps_data from Redis cache')
+            return cast(List[Dict[str, Any]], cached)
+        logger.info('get_public_approved_apps_data from db')
+        data = get_public_approved_apps_db()
+        # Reduce cache size by excluding large fields
+        reduced_data = [App.reduce_dict(app) for app in data]
+        set_generic_cache(cache_key, reduced_data, 60 * 10)  # 10 minutes cached
+        return reduced_data
+
+    # Singleflight: only ONE request fetches, others wait
+    public_approved_data: List[Dict[str, Any]] = (
+        cast(List[Dict[str, Any]], memory_cache.get_or_fetch(cache_key, fetch_public_approved, ttl=30)) or []
+    )
 
     # Cache per-user app slice (private + unapproved + tester apps) with 30s TTL (#5439 sub-task 3)
     def fetch_user_apps_slice() -> Dict[str, Any]:
@@ -497,12 +528,24 @@ def invalidate_approved_apps_cache() -> None:
 def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     # Use separate cache keys for with/without reviews
     cache_key = f'{PUBLIC_APPROVED_APPS_CACHE_KEY}:reviews={int(include_reviews)}'
+    redis_cache_key = PUBLIC_APPROVED_APPS_CACHE_KEY
     memory_cache = get_memory_cache()
 
     def fetch_and_process() -> List[App]:
         """Fetch from Redis/DB and process apps (called only once with singleflight)."""
-        # Review variants and search share the same base-key single-flight.
-        all_apps = get_public_approved_apps_cached_db()
+        # Check Redis cache
+        all_apps: List[Dict[str, Any]]
+        if cached_apps := get_generic_cache(redis_cache_key):
+            logger.info('get_public_approved_apps_data from Redis cache')
+            all_apps = cast(List[Dict[str, Any]], cached_apps)
+        else:
+            # Database query
+            logger.info('get_public_approved_apps_data from db')
+            all_apps = get_public_approved_apps_db()
+            # Reduce cache size by excluding large fields
+            reduced_apps = [App.reduce_dict(app) for app in all_apps]
+            set_generic_cache(redis_cache_key, reduced_apps, 60 * 10)  # 10 minutes cached
+            all_apps = reduced_apps
 
         usable_apps = _records_with_ids(all_apps)
 

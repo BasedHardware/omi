@@ -171,6 +171,24 @@ BATCH_STAGE_ENV_RATCHET_PREFIXES = (
 )
 
 
+# Flag budget (ADR 0006): a new env read anywhere in the pipeline env surface, or an edit to the
+# allowlist itself, must fail in its own changed-file CI. tests/unit/test_flag_budget.py asserts these
+# prefixes cover its SCOPE.
+FLAG_BUDGET_TESTS = ('tests/unit/test_flag_budget.py',)
+FLAG_BUDGET_PREFIXES = (
+    'backend/utils/batch_pipeline/',
+    'backend/diarizer/batch_pipeline',
+    'backend/config/batch_pipeline',
+    'backend/utils/sync/',
+    'backend/utils/stt/',
+    'backend/config/policy/',
+    'backend/config/prerecorded_',
+    'backend/config/live_stt_',
+    'backend/config/transcription_final_pass.py',
+    'backend/config/flag_budget.json',
+)
+
+
 def is_reason_label_scope_path(path: str) -> bool:
     return path.startswith('backend/') and path.endswith('.py') and not path.startswith('backend/tests/')
 
@@ -214,6 +232,15 @@ def is_firestore_index_guard_path(path: str) -> bool:
 
 
 AREA_TESTS = (
+    (
+        ('backend/charts/incluster-guards/',),
+        (
+            'backend/charts/monitoring/prometheus-adapter/*_omi_prometheus_adapter.yaml',
+            'backend/charts/parakeet/*_omi_parakeet_values.yaml',
+        ),
+        ('tests/unit/test_incluster_guards.py',),
+    ),
+    (('backend/config/flag_budget.json',), (), FLAG_BUDGET_TESTS),
     (
         # Task-target routes whose expected retries must stay 409 (contract (d)). #22431 moved
         # FirstSummaryCallbackPending and a router edit could no longer see the stale EXPECTED_RETRIES
@@ -422,7 +449,7 @@ AREA_TESTS = (
     (
         ('backend/routers/notifications', 'backend/services/notifications/', 'backend/utils/notifications'),
         (),
-        ('tests/unit/test_*notification*.py', 'tests/unit/test_mentor_notifications.py'),
+        ('tests/unit/test_*notification*.py',),
     ),
     (
         ('backend/routers/twilio', 'backend/services/twilio/', 'backend/utils/twilio'),
@@ -533,6 +560,8 @@ def is_selectable_backend_path(path: str) -> bool:
         return False
     if path.startswith('backend/docs/'):
         return False
+    if path.startswith('backend/charts/incluster-guards/'):
+        return True
     if path.startswith('backend/charts/'):
         monitoring_contract_prefixes = MONITORING_CONTRACT_SOURCES
         return any(
@@ -613,6 +642,8 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         selected.update(test for test in REASON_LABEL_ENUM_TESTS if test in all_tests)
     if any(path.startswith(BATCH_STAGE_ENV_RATCHET_PREFIXES) for path in changed_paths):
         selected.update(test for test in BATCH_STAGE_ENV_RATCHET_TESTS if test in all_tests)
+    if any(path.startswith(FLAG_BUDGET_PREFIXES) for path in changed_paths):
+        selected.update(test for test in FLAG_BUDGET_TESTS if test in all_tests)
     backend_paths = [path for path in changed_paths if is_selectable_backend_path(path)]
     test_paths = [path for path in backend_paths if path.startswith('backend/tests/') and path.endswith('.py')]
 

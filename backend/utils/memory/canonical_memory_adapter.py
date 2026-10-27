@@ -21,6 +21,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from config import firestore_read_levers
 from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
+from database.released_memory_projection import projected_stream_list
 from database.firestore_index_registry import (
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
     UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY,
@@ -68,7 +69,6 @@ from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
     budgeted_document_get,
-    budgeted_stream_list,
     indexed_list_reads_enabled,
 )
 from models.memory_domain import (
@@ -77,6 +77,7 @@ from models.memory_domain import (
     assert_legal_state,
     physical_status_to_record_status,
 )
+from models.memory_admission import valid_required_processing_receipt
 from models.memory_evidence import (
     ArtifactRef,
     ArtifactPreservationState,
@@ -120,6 +121,7 @@ from utils.memory.required_promotion import (
     REQUIRED_PROCESSOR_VERSION,
     REQUIRED_PROMOTION_STATUS_PENDING,
 )
+from utils.memory.required_intake import after_capture as process_required_after_capture
 from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.retrieval.hybrid import rrf_rerank
 from utils.memory.canonical_vector_sync import delete_canonical_memory_vector
@@ -932,7 +934,7 @@ def read_canonical_scan_page(
                 }
             )
         try:
-            branch = budgeted_stream_list(query.limit(bounded_limit), budget)
+            branch = projected_stream_list(query.limit(bounded_limit), budget, surface='canonical_scan')
         except ListReadBudgetExhausted as exc:
             branch = getattr(exc, 'partial_snapshots', [])
             interrupted = True
@@ -1669,7 +1671,21 @@ def _is_live_identical_row(item: MemoryItem, content: Any) -> bool:
         # successful retry target.  Reusing it would silently resurrect a
         # user-rejected statement under the old content-derived identity.
         return False
-    return (item.content or "").strip() == str(content or "").strip()
+    submitted = str(content or "").strip()
+    if (item.content or "").strip() == submitted:
+        return True
+    promotion = item.promotion or {}
+    receipt = promotion.get('processing_receipt') or {}
+    # Inline normalization changes text before the create response returns.
+    # A retry of that same raw submission must not mint a second memory merely
+    # because the first one has already been normalized. Current lineage-bound
+    # receipts cannot match a later owner edit or a rejected/tombstoned row.
+    return (
+        valid_required_processing_receipt(
+            content=item.content or '', item_revision=item.item_revision, promotion=promotion
+        )
+        and receipt.get('input_hash') == hashlib.sha256(submitted.encode('utf-8')).hexdigest()
+    )
 
 
 _DUPLICATE_ADD_SNAPSHOT_RETRY_DELAYS: tuple[float, ...] = (0.05, 0.15, 0.3)
@@ -1809,6 +1825,7 @@ def write_canonical_extraction_memory(
             physical_status_to_record_status(item.status.value),
             MemoryProcessingState(item.processing_state.value),
         )
+        process_required_after_capture(uid, item, db_client=client)
 
     return committed_id
 

@@ -711,7 +711,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get remembering => 'Husker';
 
   @override
-  String get unlimitedPlan => 'Ubegrænset plan';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Administrer plan';
@@ -733,7 +733,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get upgrade => 'Opgrader';
 
   @override
-  String get upgradeToUnlimited => 'Opgrader til ubegrænset';
+  String get upgradeToUnlimited => 'Opgrader til Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3141,7 +3141,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Opgrader til Pro';
+  String get upgradeToPro => 'Opgrader til Omi Pro';
 
   @override
   String get getOmiDevice => 'Få Omi-enhed';
@@ -4264,7 +4264,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get trainingDataProgram => 'Træningsdataprogram';
 
   @override
-  String get getOmiUnlimitedFree => 'Få Omi Unlimited gratis ved at bidrage med dine data til at træne AI-modeller.';
+  String get getOmiUnlimitedFree => 'Få Omi Pro gratis ved at bidrage med dine data til at træne AI-modeller.';
 
   @override
   String get trainingDataBullets => '• Dine data hjælper med at forbedre AI-modeller\n• Kun ikke-følsomme data deles';
@@ -8588,6 +8588,9 @@ class AppLocalizationsDa extends AppLocalizations {
       'Transskription er ikke tilgængelig — optagelsen fortsætter, og din lyd gemmes.';
 
   @override
+  String get captureNoAudioFromPendant => 'Ingen lyd fra vedhænget';
+
+  @override
   String get capturing => 'Optager';
 
   @override
@@ -9647,7 +9650,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Skift til gratisversionen';
 
   @override
-  String get getFreeUnlimitedAccess => 'Få gratis ubegrænset adgang';
+  String get getFreeUnlimitedAccess => 'Få Omi Pro gratis';
 
   @override
   String get shareDataForTraining => 'Del data til træning';
@@ -11077,6 +11080,12 @@ class AppLocalizationsDa extends AppLocalizations {
       'Bluetooth-forbindelsen til din Omi er gået i stå, så lyden når ikke frem til appen. Omi optager videre på enheden og synkroniseres, når forbindelsen er tilbage. Prøv igen opretter forbindelsen igen; hvis det fortsat fejler, tjek din enhed under Indstillinger > Enhed.';
 
   @override
+  String get captureConnecting => 'Forbinder…';
+
+  @override
+  String get captureNoAudioDetail => 'Pendanten er forbundet, men der når ingen lyd din telefon';
+
+  @override
   String get captureIngressNeedsReconnect => 'Lyden når ikke appen — tilslut din Omi igen';
 
   @override
@@ -11105,13 +11114,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Lageret er næsten fuldt';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Dit vedhæng mistede forbindelsen til denne telefon. Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden. Alt optaget før dette er i sikkerhed.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi genopretter forbindelsen af sig selv';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12242,12 +12244,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Tjek forbindelsen';
 
   @override
-  String get forYou => 'Til dig';
-
-  @override
-  String get stopThese => 'Stop disse';
-
-  @override
   String get dismiss => 'Afvis';
 
   @override
@@ -12847,7 +12843,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Send en talebesked, så svarer Omi på den.';
 
   @override
-  String get chatAppsPartOfPro => 'Chat-apps er en del af Pro';
+  String get chatAppsPartOfPro => 'Chat-apps er en del af Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Beskeder';
@@ -13479,7 +13475,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncDetailsCopy => 'Kopiér detaljer til support';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Tilgængelig med Operator og Architect';
+  String get chatAppsChannelPlanRequired => 'Tilgængelig med Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13992,7 +13988,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Kører, mens telefonen oplader.';
 
   @override
-  String get onDeviceUpgradeBody => 'Opgrader til Pro for taleradskillelse og højere præcision';
+  String get onDeviceUpgradeBody => 'Opgrader til Omi Pro for taleradskillelse og højere præcision';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14177,7 +14173,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Lav igen med Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Opgrader til Pro for taleradskillelse og højere præcision';
+  String get onDeviceRedoHint => 'Opgrader til Omi Pro for taleradskillelse og højere præcision';
 
   @override
   String get onDeviceKeepEverything => 'Behold alt på denne telefon';
@@ -14410,10 +14406,23 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get episodeNotesSoon => 'Noterne vises efter de første minutters snak.';
+  String get episodeNotesUnavailable => 'Løbende noter opdateres ikke. Se transskriptionen indtil videre.';
 
   @override
-  String get episodeOpenAll => 'Åbn alle';
+  String episodeCaptureFor(String duration) {
+    return 'Optager · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Forrige episode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Afventende dele: $pending';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Noterne vises efter de første minutters snak.';
 
   @override
   String get episodeWrapUpNow => 'Afslut nu';
@@ -14547,4 +14556,88 @@ class AppLocalizationsDa extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Færdig. $percent% rabat de næste $months måneder.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Andre';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get openLoopAnswerDone => 'Færdig';
+
+  @override
+  String get openLoopAnswerRemind => 'Mind mig senere';
+
+  @override
+  String get openLoopAnswerDrop => 'Drop det';
+
+  @override
+  String get syncRejectionInvalidDate => 'Ugyldig optagedato';
+
+  @override
+  String get syncDeleteKeptUploading => 'Nogle dele uploades stadig og blev beholdt';
+
+  @override
+  String get syncRejectionServer => 'Afvist af serveren';
+
+  @override
+  String get syncRejectionTooLarge => 'For stor';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration på telefonen';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Uploads er sat på pause et øjeblik — de fortsætter automatisk';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Fortsætter ”$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· siden $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Noter begynder, når den endelige transskription ankommer.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Udarbejdet på din telefon, mens du taler. De fuldstændige noter kommer med den endelige transskription.';
+
+  @override
+  String get episodeOnThisPhone => 'På denne telefon';
+
+  @override
+  String get episodeOpenTranscript => 'Åbn transskription';
+
+  @override
+  String get liveCardTitle => 'Live';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Endelig transskription ca. $duration bagefter';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Endelig transskription indhenter';
+
+  @override
+  String get livePreviewNoEngineBody => 'Dine ord vises her et til to minutter efter, du har sagt dem.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Optager sikkert';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Live på denne telefon';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Aktivér live-tekst';
 }

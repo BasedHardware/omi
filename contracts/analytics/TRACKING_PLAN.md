@@ -194,7 +194,15 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingWebviewCompleted | Onboarding Webview Completed | none | active | mobile-instrumentation-presence |
 | onboardingWebviewFallback | Onboarding Webview Fallback | reason | active | mobile-instrumentation-presence |
 | captureRecoveryObserved | Capture Recovery Observed | kind, trigger | active | capture-recovery |
+| pendantFramesDropped | Pendant Frames Dropped | count, reason | active | wal-backlog-health |
+| walReconcilePollSummary | WAL Reconcile Poll Summary | backlog_jobs, polled_jobs, transient_jobs, throttled_jobs, missing_confirmation_jobs, locally_deferred_jobs | active | wal-backlog-health |
 | nativeCustodyObserved | Native Custody Observed | outcome | active | native-custody-health |
+| livePreviewEngineSelected | Live Preview Engine | engine, reason, platform, os_major, bundled_installed | active | live-preview |
+| livePreviewFirstWord | Live Preview First Word | engine, latency_ms | active | live-preview |
+| livePreviewSessionEnded | Live Preview Session Ended | engine, preview_words, preview_audio_ms, dropped_audio_ms | active | live-preview |
+| livePreviewNotRequested | Live Preview Not Requested | reason, mid_session | active | live-preview |
+| livePreviewVerdict | Live Preview Verdict | verdict, platform, verdict_latency_ms, hold_duration_ms, held_frames, hold_timeout_replayed | active | live-preview |
+| livePreviewNotes | Live Preview Notes | engine, outcome, latency_ms, bullet_count | active | live-preview |
 
 ## App Review Opportunity decisions
 

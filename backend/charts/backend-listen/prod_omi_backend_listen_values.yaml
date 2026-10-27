@@ -17,6 +17,9 @@ image:
 gcpProjectId: based-hardware
 runtimeGcpProjectId: based-hardware
 
+# Reject key credentials even when supplied through protected private values.
+workloadIdentityOnly: true
+
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
 # This is to override the chart name.
@@ -30,9 +33,9 @@ serviceAccount:
   # Automatically mount a ServiceAccount's API credentials?
   automount: true
   # Annotations to add to the service account.
-  # Keyless runtime identity (Workload Identity) that replaces the nik-164
-  # SERVICE_ACCOUNT_JSON key once the key env is removed; while the key env is
-  # present the JSON still wins. Shared by the listen canary deployments.
+  # Keyless runtime identity (Workload Identity), shared by listen canaries.
+  # Do not inject SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS:
+  # they override ADC and can resurrect a revoked key on the next rollout.
   annotations:
     iam.gke.io/gcp-service-account: backend-listen-runtime@based-hardware.iam.gserviceaccount.com
   # The name of the service account to use.
@@ -149,6 +152,8 @@ env:
     value: "true"
   - name: REPEAT_WORK_REVISION_ENABLED
     value: "false"
+  - name: CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+    value: "true"
   - name: REPEAT_WORK_LLM_VERSION
     value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
@@ -203,6 +208,8 @@ env:
     value: "100"
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
     value: "0"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
+    value: "0"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: ""
   - name: BUCKET_AUDIO_DERIVED
@@ -217,7 +224,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
+    value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":0}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -228,6 +235,8 @@ env:
     value: "300"
   - name: FSR_DELETION_NEGATIVE_TTL_SECONDS
     value: "30"
+  - name: FSR_USAGE_MONTH_TOTAL_EPOCH
+    value: "v1"
   - name: FSR_USAGE_MONTH_TTL_SECONDS
     value: "60"
   - name: FSR_SUBSCRIPTION_TTL_SECONDS
@@ -390,8 +399,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MEMORY_V3_CURSOR_SECRET
-  - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
-    value: "false"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -450,16 +457,6 @@ env:
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local"
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
-  - name: SERVICE_ACCOUNT_JSON
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: SERVICE_ACCOUNT_JSON
   - name: OMI_CUSTOMER_DATA_PROJECT
     value: "based-hardware"
   - name: HOSTED_PUSHER_API_URL
@@ -572,7 +569,7 @@ env:
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
     value: "0.075"
   - name: STT_ROUTING_ON_PERCENT
-    value: "90"
+    value: "100"
   - name: STT_ROUTING_TARGETS_JSON
     value: ""
   - name: STT_ROUTING_DISRUPTION_GATE
@@ -812,7 +809,7 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 40
+  minReplicas: 30
   maxReplicas: 60
   behavior:
     scaleDown:

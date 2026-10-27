@@ -17,11 +17,11 @@ PARAKEET_URL = 'http://parakeet.test'
 GATE_URL = PARAKEET_URL + '/v2/language'
 
 
-def wav(seconds=6.0):
+def wav(seconds=6.0, sample_value=1):
     output = BytesIO()
     with wave.open(output, 'wb') as writer:
         writer.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
-        writer.writeframes(b'\x01\x00' * int(seconds * 16000))
+        writer.writeframes(bytes([sample_value, 0]) * int(seconds * 16000))
     return output.getvalue()
 
 
@@ -196,28 +196,128 @@ def test_service_route_is_not_trusted_over_the_backend_threshold(monkeypatch):
         (3.0, 0.985, True),
         (5.99, 0.98, False),
         (6.0, 0.9218, False),  # highest offline P(supported) on >=6 s unsupported speech
-        (6.0, 0.95, True),
+        (6.0, 0.95, False),
+        (16.7, 0.9700, False),
+        (30.0, 0.9757, False),
+        (6.0, 0.985, True),
         (30, 0.949, False),
     ],
 )
 def test_self_gate_threshold_by_measured_seconds(monkeypatch, seconds, p_supported, safe):
     monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
     Wire(monkeypatch, self_gate=gate_body('en', p_supported, seconds))
-    assert lid.resolve_language('multi', wav(max(seconds, 1))).parakeet_safe is safe
+    assert lid.resolve_language('multi', wav(seconds)).parakeet_safe is safe
 
 
 def test_unsupported_top_language_is_never_parakeet_even_with_high_p_supported():
     assert not lid.LanguageDecision('sqi', 0.97, 'self_lid', 10).parakeet_safe
-    assert lid.LanguageDecision('pt', 0.97, 'self_lid', 10).parakeet_safe
+    assert lid.LanguageDecision('pt', 0.99, 'self_lid', 10).parakeet_safe
     assert not lid.LanguageDecision('pt', 0.97, 'self_lid', None).parakeet_safe
 
 
-def test_batch_intake_is_shadow_only_even_at_full_enforcement(monkeypatch):
+def test_batch_intake_enforces_the_existing_percent_cohort(monkeypatch):
     monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=gate_body('en', 0.99))
+    decision = lid.resolve_language('multi', wav(), surface='batch')
+    assert decision.evidence == 'self_lid' and decision.parakeet_safe
+    assert wire.vendor_calls == [] and len(wire.gate_calls) == 1
+
+
+def test_batch_intake_keeps_zero_percent_as_shadow_only(monkeypatch):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '0')
     wire = Wire(monkeypatch, vendor=('en', 0.99), self_gate=gate_body('ar', 0.0))
     decision = lid.resolve_language('multi', wav(), surface='batch')
     assert decision.evidence == 'audio_lid'
     assert len(wire.vendor_calls) == 1 and len(wire.gate_calls) == 1
+
+
+def test_pair_only_qualifier_ignores_enforcement_and_compares_identical_bounded_audio(monkeypatch):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    wire = Wire(monkeypatch, self_gate=gate_body('en', 0.99, 30))
+    requests = []
+    post = wire.post
+
+    def capture(url, **kwargs):
+        requests.append(next(iter(kwargs['files'].values()))[1])
+        return post(url, **kwargs)
+
+    wire.post = capture
+    before = Mock(return_value=True)
+    assert lid.compare_shadow_pair(wav(40), before_call=before)
+    assert before.call_count == 2
+    assert len(wire.vendor_calls) == len(wire.gate_calls) == 1
+    assert requests[0] == requests[1]
+    assert lid.probe_wav(requests[0])[1] == 30
+
+
+def test_pair_only_qualifier_rechecks_permission_before_vendor(monkeypatch):
+    wire = Wire(monkeypatch)
+    before = Mock(side_effect=[True, False])
+    assert not lid.compare_shadow_pair(wav(), before_call=before)
+    assert len(wire.gate_calls) == 1 and wire.vendor_calls == []
+
+
+@pytest.mark.parametrize('enrolled', [True, False])
+def test_batch_percent_uses_one_owner_cohort_across_different_audio(monkeypatch, enrolled):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '5')
+    owner = next(f'uid-{i}' for i in range(1000) if gate.enforced_for(f'uid-{i}', b'') is enrolled)
+    Wire(monkeypatch, vendor=('ja', 0.99), self_gate=gate_body('en', 0.99))
+    for sample_value in range(1, 16):
+        audio = wav(sample_value=sample_value)
+        decision = lid.resolve_language('multi', audio, surface='batch', cohort_key=owner)
+        assert decision.evidence == ('self_lid' if enrolled else 'audio_lid')
+
+
+@pytest.mark.parametrize('language', ['en\n', ' en', 'en ', 'en_uk', '-en', 'en-', 'en--us', '12', 'e1', 'éé'])
+def test_malformed_self_language_falls_back_to_vendor(monkeypatch, language):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=gate_body(language, 0.99))
+    decision = lid.resolve_language('multi', wav(), surface='batch', cohort_key='synthetic-owner')
+    assert decision.evidence == 'audio_lid' and decision.language == 'ja'
+    assert len(wire.gate_calls) == 1 and len(wire.vendor_calls) == 1
+
+
+def test_batch_short_floor_uses_the_local_probe_duration(monkeypatch):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    # The service rounds its duration across the six-second boundary. Intake's
+    # measured 5.99 seconds must still require the short 0.985 floor.
+    wire = Wire(monkeypatch, self_gate=gate_body('en', 0.98, 6.0))
+    decision = lid.resolve_language('multi', wav(5.99), surface='batch')
+    assert decision.evidence == 'self_lid' and not decision.parakeet_safe
+    assert wire.vendor_calls == []
+
+
+@pytest.mark.parametrize('reported_seconds', [True, float('nan'), 6.2, 0.5])
+def test_invalid_self_gate_duration_falls_back_to_vendor(monkeypatch, reported_seconds):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=gate_body('en', 0.99, reported_seconds))
+    decision = lid.resolve_language('multi', wav(), surface='batch')
+    assert decision.evidence == 'audio_lid' and decision.language == 'ja'
+    assert len(wire.gate_calls) == 1 and len(wire.vendor_calls) == 1
+
+
+def test_unsupported_self_gate_result_does_not_call_vendor_lid(monkeypatch):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    wire = Wire(monkeypatch, vendor=('en', 0.99), self_gate=gate_body('ar', 0.0))
+    decision = lid.resolve_language('multi', wav(), surface='batch')
+    assert decision.evidence == 'self_lid' and decision.language == 'ar'
+    assert not decision.parakeet_safe and wire.vendor_calls == []
+
+
+def test_batch_unknown_self_gate_result_does_not_use_vendor_lid(monkeypatch):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    wire = Wire(monkeypatch, vendor=('en', 0.99), self_gate=gate_body('und', 0.0))
+    decision = lid.resolve_language('multi', wav(), surface='batch')
+    assert decision.evidence == 'self_lid' and decision.language == 'und'
+    assert not decision.parakeet_safe and wire.vendor_calls == []
+
+
+def test_batch_unavailable_self_gate_falls_back_to_vendor(monkeypatch):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    wire = Wire(monkeypatch, vendor=('ja', 0.99), self_status=503)
+    decision = lid.resolve_language('multi', wav(), surface='batch')
+    assert decision.evidence == 'audio_lid' and decision.language == 'ja'
+    assert len(wire.gate_calls) == 1 and len(wire.vendor_calls) == 1
 
 
 @pytest.mark.parametrize('raw,value', [(None, 0), ('0', 0), ('5', 5), ('25', 25), ('100', 100), ('150', 100),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
@@ -77,13 +78,7 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
         final processing = context.watch<ConversationProvider?>()?.processingConversations ?? const [];
         final processingIds = {for (final c in processing) c.id};
         final items = <_PendingItem>[
-          for (final c in processing)
-            _PendingItem(
-              start: (c.startedAt ?? c.createdAt).toLocal(),
-              seconds: c.getDurationInSeconds(),
-              label: l.processing,
-              step: 3,
-            ),
+          for (final c in processing) _PendingItem.processing(c, l),
         ];
         // One recording's fragments can straddle stages (an upload batch done, the next still
         // syncing): group every pending fragment first, then a block is only as far along as
@@ -103,18 +98,32 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
           // would hide the terminal state the block must show.
           ...SyncPendingWork.attention(p),
         ]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
+        // Rows with no trustworthy time: server work the phone did not start, and
+        // recordings whose device clock predates the plausibility floor.
+        final undated = <_PendingItem>[];
         for (final block in groupRecordingBlocks(pending, joinDeviceCopies: true)) {
+          _PendingItem item;
           if (SyncPendingWork.needsAttention(block.state)) {
             // Refused recordings stay on the day they were made, in the Offline Sync page's words.
-            items.add(_PendingItem.block(block, label: _attentionLabel(block.state, l), step: 0));
+            item = _PendingItem.block(
+              block,
+              label: _attentionLabel(
+                block.state,
+                l,
+                rejectionReason: block.representative.uploadRejectionReason,
+              ),
+              step: 0,
+            );
           } else if (block.wals.every((w) => w.status == WalStatus.uploaded)) {
-            items.add(_PendingItem.block(block, label: l.transcribing, step: 2));
+            item = _PendingItem.block(block, label: l.transcribing, step: 2);
           } else {
-            items.add(_PendingItem.block(block, label: _syncingLabel(block, l), step: 1));
+            item = _PendingItem.block(block, label: _syncingLabel(block, l), step: 1);
           }
+          // A time before the plausibility floor is a device clock that was never set:
+          // the recording still counts, listed without a time rather than on a bogus day.
+          (item.start == null ? undated : items).add(item);
         }
 
-        final undated = <_PendingItem>[];
         // Server work the phone did not start (another device, or a relaunch mid-job) is what the device's
         // card stands for when nothing local is pending: list it by the same rule, so the row never
         // opens on "all synced". A conversation already listed as processing is not repeated, and a
@@ -154,6 +163,38 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
             clock: widget.clock,
           );
           void openDetails() => openOfflineSyncDetails(context, p, multiFileSync: widget.multiFileSync);
+          // A row stands for one recording made of several WALs, so its actions
+          // go over every member WAL — like the Offline Sync block action — not
+          // just the representative the label came from.
+          void retryWals(List<Wal> wals) {
+            for (final wal in wals.where(walRetryCanHelp)) {
+              p.syncWal(wal);
+            }
+          }
+
+          Future<void> deleteWals(List<Wal> wals) async {
+            final confirmed = await showOmiConfirm(
+              context,
+              title: l.deleteRecording,
+              message: l.thisCannotBeUndone,
+              confirmLabel: l.delete,
+              destructive: true,
+            );
+            if (!confirmed || !mounted) return;
+            // Re-check every member at delete time, not at row-build time: a
+            // block that reads as refused can still have one member mid-upload,
+            // and only an idle attention member may be deleted — audio on its
+            // way is never destroyed under a refusal label that belongs to
+            // another member.
+            final deletable = wals.where(walDeletionAllowed).toList();
+            for (final wal in deletable) {
+              await p.deleteWal(wal);
+            }
+            if (deletable.length < wals.length && context.mounted) {
+              OmiFeedback.info(context, l.syncDeleteKeptUploading);
+            }
+          }
+
           const gutter = EdgeInsets.symmetric(horizontal: OmiSpacing.md);
           body = CustomScrollView(
             slivers: [
@@ -162,7 +203,15 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
               if (undated.isNotEmpty)
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
-                  sliver: SliverToBoxAdapter(child: _Group(items: undated, dates: dates)),
+                  sliver: SliverToBoxAdapter(
+                    child: _Group(
+                      items: undated,
+                      dates: dates,
+                      onAttentionTap: openDetails,
+                      onRetry: retryWals,
+                      onDelete: deleteWals,
+                    ),
+                  ),
                 ),
               for (var i = 0; i < days.length; i++)
                 SliverPadding(
@@ -188,7 +237,13 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
                         SliverToBoxAdapter(
                           child: Padding(
                             padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
-                            child: _Group(items: days[i].items, dates: dates, onAttentionTap: openDetails),
+                            child: _Group(
+                              items: days[i].items,
+                              dates: dates,
+                              onAttentionTap: openDetails,
+                              onRetry: retryWals,
+                              onDelete: deleteWals,
+                            ),
                           ),
                         ),
                     ],
@@ -245,14 +300,10 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
   static String _dayKey(DateTime day) =>
       '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
 
-  /// The Offline Sync page's own reason for each refused state.
-  static String _attentionLabel(WalSyncDisplayState state, AppLocalizations l) => switch (state) {
-        WalSyncDisplayState.corrupted => l.syncStatusFileUnavailable,
-        WalSyncDisplayState.outsideRecoveryWindow => l.syncStatusTooOld,
-        WalSyncDisplayState.unsupportedAudio => l.syncStatusUnsupportedAudio,
-        WalSyncDisplayState.uploadRejected => l.failedStatus,
-        _ => l.syncStatusFailed,
-      };
+  /// The Offline Sync page's own reason for each refused state; a server
+  /// refusal names which refusal it was instead of a bare "Failed".
+  static String _attentionLabel(WalSyncDisplayState state, AppLocalizations l, {String? rejectionReason}) =>
+      walAttentionLabel(state, l, rejectionReason: rejectionReason);
 
   static String _syncingLabel(RecordingBlock block, AppLocalizations l) {
     final onDevice = walIsOnDevice(block.representative);
@@ -263,28 +314,66 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
 }
 
 class _PendingItem {
-  const _PendingItem({required this.start, required this.seconds, required this.label, required this.step});
+  /// A conversation already on the server, writing itself now.
+  _PendingItem.processing(ServerConversation conversation, AppLocalizations l)
+      : start = (conversation.startedAt ?? conversation.createdAt).toLocal(),
+        seconds = conversation.getDurationInSeconds(),
+        label = l.processing,
+        step = 3,
+        wal = null,
+        actionWals = null;
+
+  /// A recording block's start, or null when no device clock value in the block
+  /// is plausible: a never-set clock shows no time rather than a bogus one.
+  static DateTime? _blockStart(RecordingBlock block) {
+    final seconds = block.startSeconds;
+    if (walTimerStartPlausible(seconds)) return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+    logImplausibleRecordingStart('on_the_way', block.representative.id, seconds);
+    return null;
+  }
 
   _PendingItem.block(RecordingBlock block, {required this.label, required this.step})
-      : start = DateTime.fromMillisecondsSinceEpoch(block.startSeconds * 1000),
-        seconds = block.seconds;
+      : start = _blockStart(block),
+        seconds = block.seconds,
+        wal = block.representative,
+        actionWals = block.wals;
 
   /// A stage with no recording to name yet: only the label shows.
   const _PendingItem.status({required this.label, required this.step})
       : start = null,
-        seconds = 0;
+        seconds = 0,
+        wal = null,
+        actionWals = null;
 
-  /// Work the server reports: `summarizing` is step 3, `transcribing` step 2, and `queued` (synced,
-  /// waiting its turn) reads as processing like Home's row does.
+  /// Server-reported work's start, or null when unreported or before the
+  /// plausibility floor (a device clock that was never set).
+  static DateTime? _serverStart(PendingWorkItem work) {
+    final startedAt = work.startedAt;
+    if (startedAt == null) return null;
+    if (recordingStartPlausible(startedAt)) return startedAt.toLocal();
+    logImplausibleRecordingStart('on_the_way', work.id, startedAt.millisecondsSinceEpoch ~/ 1000);
+    return null;
+  }
+
   _PendingItem.server(PendingWorkItem work, AppLocalizations l)
-      : start = work.startedAt?.toLocal(),
+      : start = _serverStart(work),
         seconds = work.durationSeconds ?? 0,
         label = work.state == 'transcribing' ? l.transcribing : l.processing,
-        step = work.state == 'summarizing' ? 3 : 2;
+        step = work.state == 'summarizing' ? 3 : 2,
+        wal = null,
+        actionWals = null;
 
   final DateTime? start;
   final int seconds;
   final String label;
+
+  /// The recording a needs-attention row stands for, for its row actions.
+  /// Null for stages with no recording to act on (server work, status lines).
+  final Wal? wal;
+
+  /// Every WAL of the recording the row stands for: the block's members, so
+  /// row actions cover the whole recording. Null when there is nothing to act on.
+  final List<Wal>? actionWals;
 
   /// 1: still syncing, 2: transcribing, 3: writing the conversation, 0: refused, needs attention.
   final int step;
@@ -410,17 +499,28 @@ class _DayHeader extends StatelessWidget {
 }
 
 class _Group extends StatelessWidget {
-  const _Group({required this.items, required this.dates, this.onAttentionTap});
+  const _Group({
+    required this.items,
+    required this.dates,
+    this.onAttentionTap,
+    this.onRetry,
+    this.onDelete,
+  });
 
   final List<_PendingItem> items;
   final OmiDateFormat dates;
 
-  /// A refused row is not progressing: it opens Sync Details instead of showing the bars.
+  /// Every row opens the same Sync Details the dated rows open.
   final VoidCallback? onAttentionTap;
+
+  /// Row actions for recordings that need attention, reusing the Offline Sync
+  /// page's actions over the whole recording: Retry where a deliberate retry
+  /// can help, Delete always.
+  final void Function(List<Wal> wals)? onRetry;
+  final Future<void> Function(List<Wal> wals)? onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final l = context.l10n;
     return Material(
       color: OmiColors.surface1,
       borderRadius: OmiRadius.xlAll,
@@ -429,55 +529,97 @@ class _Group extends StatelessWidget {
         children: [
           for (var i = 0; i < items.length; i++) ...[
             if (i > 0) Divider(height: 1, thickness: 1, indent: OmiSpacing.md, color: OmiColors.surface2),
-            Semantics(
-              liveRegion: true,
-              button: items[i].needsAttention,
-              label: [
-                if (items[i].start != null) dates.time(items[i].start!),
-                if (items[i].seconds > 0) OmiDuration.compact(items[i].seconds, l),
-                items[i].label,
-              ].join(', '),
-              excludeSemantics: true,
-              child: InkWell(
-                onTap: items[i].needsAttention ? onAttentionTap : null,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (items[i].start != null) ...[
-                              Text(
-                                items[i].seconds > 0
-                                    ? '${dates.time(items[i].start!)} · ${OmiDuration.compact(items[i].seconds, l)}'
-                                    : dates.time(items[i].start!),
-                                style: OmiType.body,
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                items[i].label,
-                                style: OmiType.subhead.copyWith(
-                                  color: items[i].needsAttention ? OmiColors.warning : OmiColors.textTertiary,
-                                ),
-                              ),
-                            ] else
-                              Text(items[i].label, style: OmiType.body),
-                          ],
-                        ),
-                      ),
-                      if (items[i].needsAttention)
-                        Icon(Icons.chevron_right, color: OmiColors.textTertiary)
-                      else
-                        _Steps(step: items[i].step),
-                    ],
-                  ),
-                ),
-              ),
+            _Row(
+              item: items[i],
+              dates: dates,
+              onTap: onAttentionTap,
+              onRetry: onRetry,
+              onDelete: onDelete,
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// One pending recording. The first line names when it started (when a
+/// plausible clock exists) and how long it is; the second names its stage or,
+/// in warning colour, the short reason it needs attention.
+class _Row extends StatelessWidget {
+  const _Row({required this.item, required this.dates, this.onTap, this.onRetry, this.onDelete});
+
+  final _PendingItem item;
+  final OmiDateFormat dates;
+  final VoidCallback? onTap;
+  final void Function(List<Wal> wals)? onRetry;
+  final Future<void> Function(List<Wal> wals)? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final headline = [
+      if (item.start != null) dates.time(item.start!),
+      if (item.seconds > 0) OmiDuration.compact(item.seconds, l),
+    ].join(' · ');
+    final members = item.actionWals;
+    // The recording can be re-offered when any of its members can be; a
+    // too-large member keeps its own guaranteed-fail upload out of the batch.
+    final retryable = members != null && members.any(walRetryCanHelp) && onRetry != null;
+    return Semantics(
+      liveRegion: true,
+      button: true,
+      label: [
+        if (item.start != null) dates.time(item.start!),
+        if (item.seconds > 0) OmiDuration.compact(item.seconds, l),
+        item.label,
+      ].join(', '),
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (headline.isEmpty)
+                      Text(item.label, style: OmiType.body)
+                    else ...[
+                      Text(headline, style: OmiType.body),
+                      const SizedBox(height: 3),
+                      Text(
+                        item.label,
+                        style: OmiType.subhead.copyWith(
+                          color: item.needsAttention ? OmiColors.warning : OmiColors.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (item.needsAttention && members != null) ...[
+                if (retryable) ...[
+                  OmiButton.secondary(
+                    label: l.tryAgain,
+                    size: OmiButtonSize.compact,
+                    onPressed: () => onRetry!(members),
+                  ),
+                  const SizedBox(width: OmiSpacing.xs),
+                ],
+                if (onDelete != null)
+                  OmiButton.destructive(
+                    label: l.delete,
+                    size: OmiButtonSize.compact,
+                    onPressed: () => onDelete!(members),
+                  ),
+              ] else
+                _Steps(step: item.step),
+            ],
+          ),
+        ),
       ),
     );
   }

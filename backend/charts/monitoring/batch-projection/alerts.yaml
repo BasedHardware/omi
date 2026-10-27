@@ -1,0 +1,26 @@
+# Lead installs with the metrics scrape; this file does not change live alerts.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: omi-batch-projection
+  labels:
+    release: prod-omi-kube-prometheus-stack
+spec:
+  groups:
+    - name: omi.batch.projection
+      rules:
+        - alert: OmiBatchProjectionObligationOverdue
+          expr: >-
+            (omi_batch_projection_obligation_oldest_age_seconds > 900)
+            and (time() - omi_batch_projection_obligation_observed_at_seconds < 120)
+          labels: {severity: warning}
+          annotations:
+            summary: "Committed batch projection obligation older than 15 minutes"
+            description: "Includes ambiguity quarantine. Retain custody; use the owner repair runbook. Never disable lineage fencing."
+        - alert: OmiBatchProjectionObservationStale
+          expr: >-
+            time() - omi_batch_projection_obligation_observed_at_seconds >= 120
+          for: 2m
+          labels: {severity: warning}
+          annotations:
+            summary: "Batch projection obligation observation is stale or was never taken"

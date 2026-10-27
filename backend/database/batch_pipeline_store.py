@@ -20,6 +20,7 @@ from utils.sync.stage import collection_name
 # Every state an obligation can drain from. Assignment needs only ``pending``;
 # completion of persisted/ready rows has its own page. All share one index.
 PROJECTION_DISCOVERY_STATES = ('pending', 'persisted', 'ready')
+PROJECTION_OBLIGATION_STATES = (*PROJECTION_DISCOVERY_STATES, 'quarantine_held')
 PROJECTION_ASSIGNMENT_STATES = ('pending',)
 PROJECTION_FINISH_STATES = ('persisted', 'ready')
 
@@ -238,7 +239,7 @@ def projection_page(
     Cursor values are discovery hints, never authorization or ordering fences.
     ``states`` narrows the same ``in`` filter to a subset of the drain states.
     """
-    if not states or not set(states) <= set(PROJECTION_DISCOVERY_STATES):
+    if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
         raise ValueError('projection discovery states must be drain states')
     collection = client.collection(f'{namespace}_results')
     query = collection.where('projection_state', 'in', list(states)).order_by('committed_at').order_by('__name__')
@@ -391,11 +392,65 @@ def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -
     return [doc.id for doc in docs]
 
 
+# Bounded FIFO prefix the uncommitted-age proxy walks past policy holds. A
+# hold population that fills the entire prefix fails the proxy toward tripping
+# on the oldest hold's age (an unmeasured commitment may sit beyond the bound);
+# retiring the holds themselves stays with the custody track.
+OLDEST_POLICY_HOLD_SCAN_LIMIT = 500
+
+
+def is_allowance_policy_hold(job: dict[str, Any]) -> bool:
+    """A durable end-of-allowance hold parks the obligation outside compute.
+
+    scheduler.defer records the decision on the job document; an
+    allowance_exhausted hold is a policy parking state, not a compute
+    commitment, so age-based safety proxies must not measure it (2026-10-25:
+    131 such holds, ~26h old, kept the in-cluster guard's
+    uncommitted_job_age_over_30m proxy tripped permanently and masked real
+    wedges). An unevaluated re-evaluation clears the decision to BLIND without
+    ending the hold; until an allow or another hold replaces it, the job's
+    last_policy_hold still classifies it (2026-10-27: held jobs re-read as
+    decisionless between evaluations flapped the proxy to ~54h).
+    """
+    decision = job.get('compute_decision')
+    if not decision:
+        return (job.get('last_policy_hold') or {}).get('reason') == 'allowance_exhausted'
+    return decision.get('outcome') == 'held' and decision.get('reason') == 'allowance_exhausted'
+
+
 def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = False) -> float | None:
     query = client.collection(f'{namespace}_jobs').where('priority', '==', priority)
-    query = query.where('state', '==', 'ready') if ready_only else query.where('merge_pending', '==', True)
-    docs = list(query.order_by('enqueued_at').limit(1).stream())
-    return docs[0].to_dict()['enqueued_at'] if docs else None
+    if ready_only:
+        docs = list(query.where('state', '==', 'ready').order_by('enqueued_at').limit(1).stream())
+        return docs[0].to_dict()['enqueued_at'] if docs else None
+    # The uncommitted-age proxy must measure the oldest real commitment: walk a
+    # bounded prefix of the FIFO and skip allowance policy holds. Early return
+    # keeps the healthy case a one-document read; a sentinel row beyond the
+    # bound (limit + 1) distinguishes truncation from a FIFO that happens to be
+    # exactly as long as the bound.
+    docs = iter(
+        query.where('merge_pending', '==', True)
+        .order_by('enqueued_at')
+        .limit(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)
+        .stream()
+    )
+    oldest_hold: float | None = None
+    scanned = 0
+    for doc in docs:
+        scanned += 1
+        if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT:
+            break  # the sentinel row exists: the scan was truncated
+        job = doc.to_dict()
+        if is_allowance_policy_hold(job):
+            oldest_hold = oldest_hold if oldest_hold is not None else job['enqueued_at']
+            continue
+        return job['enqueued_at']
+    if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT and oldest_hold is not None:
+        # An unmeasured commitment may exist beyond the bound, so fail toward
+        # tripping on the oldest hold's age instead of publishing a false fresh
+        # zero.
+        return oldest_hold
+    return None
 
 
 def control_candidate(client: Any, namespace: str, priority: int, pool: str, now: float) -> str | None:

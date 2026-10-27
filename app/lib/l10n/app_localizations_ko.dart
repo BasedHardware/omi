@@ -701,7 +701,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get remembering => '기억';
 
   @override
-  String get unlimitedPlan => '무제한 플랜';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => '플랜 관리';
@@ -723,7 +723,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get upgrade => '업그레이드';
 
   @override
-  String get upgradeToUnlimited => '무제한으로 업그레이드';
+  String get upgradeToUnlimited => 'Omi Pro로 업그레이드';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3106,7 +3106,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Pro로 업그레이드';
+  String get upgradeToPro => 'Omi Pro로 업그레이드';
 
   @override
   String get getOmiDevice => 'Omi 장치 받기';
@@ -4211,7 +4211,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get trainingDataProgram => '훈련 데이터 프로그램';
 
   @override
-  String get getOmiUnlimitedFree => '데이터를 제공하여 AI 모델 훈련에 기여하면 Omi Unlimited를 무료로 받으세요.';
+  String get getOmiUnlimitedFree => '데이터를 제공하여 AI 모델 훈련에 기여하면 Omi Pro를 무료로 받으세요.';
 
   @override
   String get trainingDataBullets => '• 여러분의 데이터는 AI 모델 개선에 도움이 돼요\n• 민감하지 않은 데이터만 공유돼요';
@@ -8475,6 +8475,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcriptionUnavailableRecordingSaved => '텍스트 변환을 사용할 수 없습니다 — 녹음은 계속되며 오디오는 저장됩니다.';
 
   @override
+  String get captureNoAudioFromPendant => '펜던트 오디오 없음';
+
+  @override
   String get capturing => '캡처 중';
 
   @override
@@ -9511,7 +9514,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get downgradeToFreemiumAction => '무료 버전으로 변경';
 
   @override
-  String get getFreeUnlimitedAccess => '무제한 액세스를 무료로 받기';
+  String get getFreeUnlimitedAccess => 'Omi Pro 무료로 받기';
 
   @override
   String get shareDataForTraining => '학습을 위한 데이터 공유';
@@ -10925,6 +10928,12 @@ class AppLocalizationsKo extends AppLocalizations {
       'Omi와의 블루투스 연결이 중단되어 오디오가 앱에 도달하지 못합니다. Omi는 기기에서 계속 녹음하며 연결이 복구되면 동기화됩니다. 다시 시도하면 연결이 다시 설정됩니다. 계속 실패하면 설정 > 기기에서 기기를 확인하세요.';
 
   @override
+  String get captureConnecting => '연결 중…';
+
+  @override
+  String get captureNoAudioDetail => '펜던트는 연결되어 있지만 오디오가 휴대전화에 도달하지 않습니다';
+
+  @override
   String get captureIngressNeedsReconnect => '오디오가 앱에 도달하지 못합니다 — Omi를 다시 연결하세요';
 
   @override
@@ -10953,13 +10962,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => '저장 공간 거의 참';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      '펜던트와 이 휴대폰의 연결이 끊겼어요. 펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요. 그 전에 녹음된 내용은 안전하게 보관돼요.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi가 자동으로 다시 연결해요';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12079,12 +12081,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get playbackAudioNetworkFailed => '연결 확인';
 
   @override
-  String get forYou => '나를 위한 추천';
-
-  @override
-  String get stopThese => '이 유형 중지';
-
-  @override
   String get dismiss => '닫기';
 
   @override
@@ -12678,7 +12674,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => '음성 메모를 보내면 Omi가 답합니다.';
 
   @override
-  String get chatAppsPartOfPro => '채팅 앱은 Pro에 포함됩니다';
+  String get chatAppsPartOfPro => '채팅 앱은 Omi Pro에 포함됩니다';
 
   @override
   String get chatAppsMessagesApp => '메시지';
@@ -13309,7 +13305,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncDetailsCopy => '지원팀용 상세 정보 복사';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator 및 Architect에서 사용 가능';
+  String get chatAppsChannelPlanRequired => 'Omi Pro에서 사용 가능';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13815,7 +13811,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceOptionChargingBody => '휴대폰이 충전되는 동안 실행돼요.';
 
   @override
-  String get onDeviceUpgradeBody => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
+  String get onDeviceUpgradeBody => '화자 분리와 더 높은 정확도를 위해 Omi Pro로 업그레이드하세요';
 
   @override
   String get onDeviceAtCapFooter => '어느 쪽을 선택해도 잃는 건 없어요. 설정 › 음성 변환에서 변경할 수 있어요.';
@@ -13993,7 +13989,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud로 다시 하기';
 
   @override
-  String get onDeviceRedoHint => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
+  String get onDeviceRedoHint => '화자 분리와 더 높은 정확도를 위해 Omi Pro로 업그레이드하세요';
 
   @override
   String get onDeviceKeepEverything => '모두 이 휴대폰에 보관';
@@ -14221,10 +14217,23 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get episodeNotesSoon => '대화가 몇 분 지나면 노트가 나타납니다.';
+  String get episodeNotesUnavailable => '실시간 메모가 업데이트되지 않고 있습니다. 우선 대화록을 확인하세요.';
 
   @override
-  String get episodeOpenAll => '모두 열기';
+  String episodeCaptureFor(String duration) {
+    return '녹음 중 · $duration';
+  }
+
+  @override
+  String get episodePrevious => '이전 에피소드';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '대기 중인 청크: $pending';
+  }
+
+  @override
+  String get episodeNotesSoon => '대화가 몇 분 지나면 노트가 나타납니다.';
 
   @override
   String get episodeWrapUpNow => '지금 마무리';
@@ -14357,4 +14366,87 @@ class AppLocalizationsKo extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return '완료되었습니다. $percent% 할인이 $months개월 동안 적용됩니다.';
   }
+
+  @override
+  String get othersSpeakerLabel => '기타';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get openLoopAnswerDone => '완료';
+
+  @override
+  String get openLoopAnswerRemind => '나중에 알려 줘';
+
+  @override
+  String get openLoopAnswerDrop => '버리기';
+
+  @override
+  String get syncRejectionInvalidDate => '잘못된 녹음 날짜';
+
+  @override
+  String get syncDeleteKeptUploading => '일부 파트는 아직 업로드 중이며 유지되었습니다';
+
+  @override
+  String get syncRejectionServer => '서버가 거절함';
+
+  @override
+  String get syncRejectionTooLarge => '너무 큼';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '휴대전화에 $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => '업로드가 잠시 일시중지되었습니다 — 자동으로 다시 시작됩니다';
+
+  @override
+  String episodeContinues(Object title) {
+    return '“$title” 이어서';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· $time부터';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => '최종 스크립트가 도착하면 노트가 시작됩니다.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote => '말하는 동안 휴대전화에서 초안이 작성됩니다. 전체 노트는 최종 스크립트와 함께 도착합니다.';
+
+  @override
+  String get episodeOnThisPhone => '이 휴대전화에서';
+
+  @override
+  String get episodeOpenTranscript => '스크립트 열기';
+
+  @override
+  String get liveCardTitle => '라이브';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return '최종 스크립트가 약 $duration 뒤처져 있습니다';
+  }
+
+  @override
+  String get livePreviewCatchingUp => '최종 스크립트가 곧 도착합니다';
+
+  @override
+  String get livePreviewNoEngineBody => '말한 내용은 1~2분 후 이곳에 나타납니다.';
+
+  @override
+  String get livePreviewNoEngineTitle => '안전하게 기록 중입니다';
+
+  @override
+  String get livePreviewOnPhoneDivider => '이 휴대전화에서 실시간';
+
+  @override
+  String get livePreviewTurnOnLiveText => '실시간 텍스트 켜기';
 }

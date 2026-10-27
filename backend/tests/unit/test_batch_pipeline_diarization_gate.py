@@ -122,7 +122,7 @@ class _Words:
 
     def transcribe_batch(self, samples):
         self.calls.append([len(s) for s in samples])
-        return [[{'word': 'w', 'timestamp': list(self.clocks.pop(0))}] for _ in samples]
+        return [[{'word': 'word', 'timestamp': list(self.clocks.pop(0))}] for _ in samples]
 
 
 def _worker(vad_spans, clocks, *, diarize=None):
@@ -326,3 +326,113 @@ def test_short_single_enables_only_on_explicit_true(monkeypatch, value, enabled)
     assert not short_speech_single_enabled()
     monkeypatch.setenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', value)
     assert short_speech_single_enabled() is enabled
+
+
+# --- per-unit diarization shape telemetry ----------------------------------------
+
+
+def test_record_unit_diarization_buckets_speakers_flight_and_turns():
+    from utils.batch_pipeline.gpu_skip_metrics import record_unit_diarization
+
+    before_on = _metric('omi_batch_pipeline_unit_speakers_total', {'speakers': '2', 'flight': 'on'})
+    before_off = _metric('omi_batch_pipeline_unit_speakers_total', {'speakers': '2', 'flight': 'off'})
+    before_outcome = _metric('omi_batch_pipeline_unit_diarization_outcome_total', {'outcome': 'diarized'})
+    before_turns = _metric('omi_batch_pipeline_unit_speaker_turns_count', {'flight': 'on'})
+    before_bucket = _metric('omi_batch_pipeline_unit_speaker_turns_bucket', {'le': '2.0', 'flight': 'on'})
+
+    record_unit_diarization(
+        'diarized',
+        [
+            {'start': 0.0, 'end': 2.0, 'speaker': 'SPEAKER_00'},
+            {'start': 2.0, 'end': 4.0, 'speaker': 'SPEAKER_01'},
+        ],
+        flight_batching=True,
+    )
+
+    assert _metric('omi_batch_pipeline_unit_speakers_total', {'speakers': '2', 'flight': 'on'}) == before_on + 1
+    assert _metric('omi_batch_pipeline_unit_speakers_total', {'speakers': '2', 'flight': 'off'}) == before_off
+    assert _metric('omi_batch_pipeline_unit_diarization_outcome_total', {'outcome': 'diarized'}) == before_outcome + 1
+    assert _metric('omi_batch_pipeline_unit_speaker_turns_count', {'flight': 'on'}) == before_turns + 1
+    assert _metric('omi_batch_pipeline_unit_speaker_turns_bucket', {'le': '2.0', 'flight': 'on'}) == before_bucket + 1
+
+
+def test_record_unit_diarization_caps_speaker_bucket_and_counts_silence():
+    from utils.batch_pipeline.gpu_skip_metrics import record_unit_diarization
+
+    before_zero = _metric('omi_batch_pipeline_unit_speakers_total', {'speakers': '0', 'flight': 'off'})
+    before_plus = _metric('omi_batch_pipeline_unit_speakers_total', {'speakers': '6_plus', 'flight': 'off'})
+    before_silence = _metric('omi_batch_pipeline_unit_diarization_outcome_total', {'outcome': 'silence'})
+
+    record_unit_diarization('silence', [], flight_batching=False)
+    record_unit_diarization(
+        'diarized',
+        [{'start': float(i), 'end': float(i) + 1, 'speaker': f'SPEAKER_0{i}'} for i in range(9)],
+        flight_batching=False,
+    )
+
+    assert _metric('omi_batch_pipeline_unit_speakers_total', {'speakers': '0', 'flight': 'off'}) == before_zero + 1
+    assert _metric('omi_batch_pipeline_unit_speakers_total', {'speakers': '6_plus', 'flight': 'off'}) == before_plus + 1
+    assert _metric('omi_batch_pipeline_unit_diarization_outcome_total', {'outcome': 'silence'}) == before_silence + 1
+
+
+def test_record_unit_diarization_rejects_open_outcome_tokens():
+    from utils.batch_pipeline.gpu_skip_metrics import record_unit_diarization
+
+    with pytest.raises(ValueError):
+        record_unit_diarization('bogus', [], flight_batching=False)
+
+
+def test_record_unit_diarization_swallows_observability_failures():
+    from utils.batch_pipeline.gpu_skip_metrics import record_unit_diarization
+
+    def exploding_turns():
+        raise RuntimeError('prometheus is down')
+        yield  # pragma: no cover
+
+    record_unit_diarization('diarized', exploding_turns(), flight_batching=False)
+
+
+def test_gpu_skip_counters_register_on_the_worker_explicit_registry():
+    from prometheus_client import CollectorRegistry, generate_latest
+
+    from utils.batch_pipeline import gpu_skip_metrics
+
+    registry = CollectorRegistry()
+    gpu_skip_metrics.register_on(registry)
+    body = generate_latest(registry).decode()
+    for name in (
+        'omi_batch_pipeline_unit_speakers_total',
+        'omi_batch_pipeline_unit_speaker_turns_bucket',
+        'omi_batch_pipeline_unit_diarization_outcome_total',
+        'omi_batch_pipeline_diarization_decisions_total',
+        'omi_batch_pipeline_diarization_audio_seconds_total',
+    ):
+        assert name in body
+
+
+def test_process_batch_counts_diarized_unit_speakers_and_turns():
+    before_speakers = _metric('omi_batch_pipeline_unit_speakers_total', {'speakers': '1', 'flight': 'off'})
+    before_outcome = _metric('omi_batch_pipeline_unit_diarization_outcome_total', {'outcome': 'diarized'})
+    before_turns = _metric('omi_batch_pipeline_unit_speaker_turns_count', {'flight': 'off'})
+
+    worker, _, saved, _ = _worker([(10, 14), (150, 156)], [(1.0, 1.5), (3.0, 3.4)])
+    worker.process_batch([_item()])
+
+    assert _metric('omi_batch_pipeline_unit_speakers_total', {'speakers': '1', 'flight': 'off'}) == before_speakers + 1
+    assert _metric('omi_batch_pipeline_unit_diarization_outcome_total', {'outcome': 'diarized'}) == before_outcome + 1
+    assert _metric('omi_batch_pipeline_unit_speaker_turns_count', {'flight': 'off'}) == before_turns + 1
+    assert _metric('omi_batch_pipeline_unit_speaker_turns_sum', {'flight': 'off'}) >= len(
+        saved['a']['diarization']['turns']
+    )
+
+
+def test_process_batch_counts_silence_unit_outcome():
+    before_outcome = _metric('omi_batch_pipeline_unit_diarization_outcome_total', {'outcome': 'silence'})
+    before_speakers = _metric('omi_batch_pipeline_unit_speakers_total', {'speakers': '0', 'flight': 'off'})
+
+    worker, _, _, _ = _worker([], [])
+    results = worker.process_batch([_item()])
+
+    assert results[0].outcome == 'silence'
+    assert _metric('omi_batch_pipeline_unit_diarization_outcome_total', {'outcome': 'silence'}) == before_outcome + 1
+    assert _metric('omi_batch_pipeline_unit_speakers_total', {'speakers': '0', 'flight': 'off'}) == before_speakers + 1

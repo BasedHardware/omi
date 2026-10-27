@@ -12,6 +12,7 @@ import 'package:omi/utils/sync/offline_sync_amounts.dart';
 /// outside capture/episode listeners, so streaming metrics never rescan recording history.
 typedef DeviceCatchUpLocal = ({
   int onDeviceSeconds,
+  int onPhoneSeconds,
   bool hasPending,
   bool hasUploaded,
   DateTime? start,
@@ -31,13 +32,26 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
   final uploaded = wals.where((w) => w.status == WalStatus.uploaded).toList(growable: false);
   final rows = [...uploaded, ...SyncPendingWork.syncingOf(wals)];
   var onDeviceSeconds = 0;
+  var onPhoneSeconds = 0;
   DateTime? start, end;
   final ids = <String>{};
   for (final w in rows) {
     if (w.conversationId case final id? when id.isNotEmpty) ids.add(id);
     if (w.seconds <= 0) continue;
-    if (walIsOnDevice(w)) onDeviceSeconds += w.seconds;
+    if (walIsOnDevice(w)) {
+      onDeviceSeconds += w.seconds;
+    } else if (w.status == WalStatus.miss) {
+      // Recorded on the phone, waiting for its upload: the device card says
+      // where the backlog sits instead of reading 0s while hours are queued.
+      onPhoneSeconds += w.seconds;
+    }
     if (w.timerStart <= 0) continue;
+    // A recording time before the plausibility floor is a device clock that was
+    // never set; the seconds still count, but the range must not stretch to it.
+    if (!walTimerStartPlausible(w.timerStart)) {
+      logImplausibleRecordingStart('catch_up_card', w.id, w.timerStart);
+      continue;
+    }
     final from = DateTime.fromMillisecondsSinceEpoch(w.timerStart * 1000);
     final to = from.add(Duration(seconds: w.seconds));
     if (start == null || from.isBefore(start)) start = from;
@@ -46,6 +60,7 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
   final targets = ids.toList()..sort();
   final result = (
     onDeviceSeconds: onDeviceSeconds,
+    onPhoneSeconds: onPhoneSeconds,
     hasPending: rows.isNotEmpty,
     hasUploaded: uploaded.isNotEmpty,
     start: start,
@@ -82,9 +97,15 @@ class DeviceCatchUpSummary {
     if (!local.hasPending && !serverProcessing && pending.isEmpty && processing.isEmpty) return null;
     var start = local.start, end = local.end;
     final ids = {if (local.targetIds.isNotEmpty) ...local.targetIds.split('\n')};
-    void include(DateTime? from, int seconds) {
+    void include(DateTime? from, int seconds, String id) {
       if (from == null || seconds <= 0) return;
       from = from.toLocal();
+      // The floor the card applies to WAL times also guards server-provided
+      // starts, which inherit the same never-set device clock.
+      if (!recordingStartPlausible(from)) {
+        logImplausibleRecordingStart('catch_up_card', id, from.millisecondsSinceEpoch ~/ 1000);
+        return;
+      }
       final to = from.add(Duration(seconds: seconds));
       if (start == null || from.isBefore(start!)) start = from;
       if (end == null || to.isAfter(end!)) end = to;
@@ -92,11 +113,11 @@ class DeviceCatchUpSummary {
 
     for (final work in pending) {
       ids.addAll(work.conversationIds);
-      include(work.startedAt, work.durationSeconds ?? 0);
+      include(work.startedAt, work.durationSeconds ?? 0, work.id);
     }
     for (final conversation in processing) {
       ids.add(conversation.id);
-      include(conversation.startedAt, conversation.getDurationInSeconds());
+      include(conversation.startedAt, conversation.getDurationInSeconds(), conversation.id);
     }
     final titles = <String>[];
     for (final id in ids) {

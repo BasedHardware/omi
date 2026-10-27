@@ -917,7 +917,7 @@
     "@remembering": {
         "description": "Remembering stat title"
     },
-    "unlimitedPlan": "غیر محدود منصوبہ",
+    "unlimitedPlan": "Omi Pro",
     "@unlimitedPlan": {
         "description": "Unlimited plan name"
     },
@@ -957,7 +957,7 @@
     "@upgrade": {
         "description": "Upgrade button"
     },
-    "upgradeToUnlimited": "غیر محدود میں اپ گریڈ کریں",
+    "upgradeToUnlimited": "Omi Pro میں اپ گریڈ کریں",
     "@upgradeToUnlimited": {
         "description": "Message shown on locked memory items"
     },
@@ -3652,7 +3652,7 @@
     "@pro": {
         "description": "Badge label for pro/unlimited users"
     },
-    "upgradeToPro": "Pro میں اپ گریڈ کریں",
+    "upgradeToPro": "Omi Pro میں اپ گریڈ کریں",
     "@upgradeToPro": {
         "description": "Subscription banner button text"
     },
@@ -4941,7 +4941,7 @@
     "@trainingDataProgram": {
         "description": "Label for training data program"
     },
-    "getOmiUnlimitedFree": "اپنے ڈیٹا کو AI ماڈلز کی تربیت کے لیے شراکت کر کے Omi Unlimited مفت حاصل کریں۔",
+    "getOmiUnlimitedFree": "اپنے ڈیٹا کو AI ماڈلز کی تربیت کے لیے شراکت کر کے Omi Pro مفت حاصل کریں۔",
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
@@ -10536,7 +10536,7 @@
     "freemiumLimitsIntro": "Omi مفت ہے، لیکن مفت ورژن میں ایسی حدود ہیں جو آپ کے تجربے پر اثر ڈالتی ہیں:",
     "downgradeLimitDelayNotRealTime": "5-7 سیکنڈ کی تاخیر (ریئل ٹائم نہیں)",
     "downgradeToFreemiumAction": "مفت ورژن پر جائیں",
-    "getFreeUnlimitedAccess": "مفت لامحدود رسائی حاصل کریں",
+    "getFreeUnlimitedAccess": "Omi Pro مفت حاصل کریں",
     "shareDataForTraining": "تربیت کے لیے ڈیٹا شیئر کریں",
     "yourRequestUnderReview": "آپ کی درخواست زیرِ غور ہے",
     "pinAsBaseline": "بنیاد کے طور پر پن کریں",
@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "اپ لوڈ ناکام ہو گیا — {duration} کا آڈیو آپ کے فون پر محفوظ ہے۔",
     "audioUploadFailedTapRetry": "اپ لوڈ ناکام ہو گیا — {duration} کا آڈیو آپ کے فون پر محفوظ ہے۔ دوبارہ کوشش کرنے کے لیے تھپتھپائیں۔",
     "audioUploadRetrying": "اپ لوڈ دوبارہ کیا جا رہا ہے… {duration} کا آڈیو آپ کے فون پر محفوظ ہے",
+    "captureNoAudioFromPendant": "پینڈنٹ سے کوئی آڈیو نہیں",
     "capturing": "کیپچر ہو رہا ہے",
     "capturingPhotos": "تصاویر کیپچر ہو رہی ہیں",
     "listeningTranscriptWillAppear": "سن رہے ہیں… ٹرانسکرپٹ یہاں ظاہر ہوگا۔",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "دوبارہ کنیکٹ کرنے کی کوشش کریں",
     "captureBannerRetrySync": "ہم وقت کرنے کی دوبارہ کوشش کریں",
     "captureWedgeBleExplanation": "آپ کے Omi سے بلوٹوتھ کنکشن رکاوٹ کا شکار ہے، اس لیے آڈیو ایپ تک نہیں پہنچ رہا۔ Omi ڈیوائس پر ریکارڈنگ جاری رکھتا ہے اور کنکشن بحال ہوتے ہی سنک ہو جائے گا۔ دوبارہ کوشش کرنے سے کنکشن دوبارہ قائم ہوتا ہے؛ اگر یہ بار بار ناکام ہو، تو سیٹنگز > ڈیوائس میں اپنا ڈیوائس چیک کریں۔",
+    "captureConnecting": "کنیکٹ ہو رہا ہے…",
+    "captureNoAudioDetail": "پینڈنٹ منسلک ہے، لیکن کوئی آڈیو آپ کے فون تک نہیں پہنچ رہا",
     "captureIngressNeedsReconnect": "آڈیو ایپ تک نہیں پہنچ رہا — اپنا Omi دوبارہ جوڑیں",
     "captureIngressNeedsReconnectExplanation": "ایپ اب Omi ڈیوائس سے آڈیو حاصل نہیں کر سکتی اور کنکشن خودکار طور پر بحال نہیں ہو سکا۔ ڈیوائس کو غیر منسلک کر کے دوبارہ جوڑیں — ڈیوائس کی ترتیبات سے، یا اسے بند کر کے چالو کر کے۔ ڈیوائس پر محفوظ آڈیو بعد میں سنک ہوگا۔",
     "captureStillRecording": "ریکارڈنگ جاری ہے",
@@ -10926,7 +10929,6 @@
     "captureStarting": "شروع ہو رہا ہے…",
     "capturePhoneStorageFull": "فون اسٹوریج بھر گئی",
     "captureStorageAlmostFull": "اسٹوریج تقریباً بھر گئی",
-    "capturePendantDisconnectedDetail": "آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔ پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔",
     "participantsSummaryUncounted": "{name} اور دیگر",
     "deviceOnboardingVoiceReplyTitle": "Omi کے جوابات سنیں",
     "deviceOnboardingVoiceReplySample": "سمجھ گیا۔ آپ کی اگلی میٹنگ بیس منٹ میں شروع ہوگی۔",
@@ -11204,9 +11206,6 @@
     "playbackAudioUnavailable": "آڈیو دستیاب نہیں",
     "playbackAudioLoadFailed": "آڈیو لوڈ نہیں ہو سکا",
     "playbackAudioNetworkFailed": "کنکشن چیک کریں",
-    "capturePendantDisconnectedShort": "Omi خود دوبارہ جڑ جائے گا",
-    "forYou": "آپ کے لیے",
-    "stopThese": "یہ روکیں",
     "dismiss": "چھپائیں",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
@@ -11371,7 +11370,7 @@
     "chatAppsShowInAppOff": "بند: آپ انہیں صرف {app} میں دیکھیں گے۔",
     "chatAppsProPerkText": "Telegram اور iMessage سے Omi کو ٹیکسٹ کریں",
     "chatAppsVoiceNotesSubtitle": "وائس نوٹ بھیجیں اور Omi جواب دے گا۔",
-    "chatAppsPartOfPro": "چیٹ ایپس Pro کا حصہ ہیں",
+    "chatAppsPartOfPro": "چیٹ ایپس Omi Pro کا حصہ ہیں",
     "chatAppsMessagesApp": "پیغامات",
     "chatAppsTelegramOtherDevice": "Telegram کسی اور ڈیوائس پر ہے؟",
     "chatAppsHeroMessage": "Telegram یا iMessage سے اپنے دن کے بارے میں پوچھیں، یادیں محفوظ کریں اور کام منظم کریں۔ آپ کی چیٹس اسی ایپ میں رہتی ہیں جو آپ استعمال کرتے ہیں، اور Omi ہر جگہ یاد رکھتا ہے کہ آپ نے کیا بات کی۔",
@@ -11556,7 +11555,7 @@
     "syncDetailsAudioFiles": "آڈیو فائلیں",
     "syncDetailsServerJobs": "سرور جابز (مکمل / کل)",
     "syncDetailsCopy": "سپورٹ کے لیے تفصیلات کاپی کریں",
-    "chatAppsChannelPlanRequired": "Operator اور Architect پر دستیاب",
+    "chatAppsChannelPlanRequired": "Omi Pro پر دستیاب",
     "chatAppsAtCapacity": "{app} کی گنجائش پوری ہو گئی ہے",
     "chatAppsJoinWaitlist": "ویٹ لسٹ میں شامل ہوں",
     "chatAppsOnWaitlist": "آپ ویٹ لسٹ میں ہیں",
@@ -11707,7 +11706,7 @@
     "onDeviceTranscribeOnPhone": "اسی فون پر ٹرانسکرائب کریں",
     "onDeviceIncluded": "شامل",
     "onDeviceOptionChargingBody": "فون چارج ہوتے ہوئے چلتا ہے۔",
-    "onDeviceUpgradeBody": "بولنے والوں کو الگ پہچاننے اور زیادہ درستگی کے لیے Pro میں اپ گریڈ کریں",
+    "onDeviceUpgradeBody": "بولنے والوں کو الگ پہچاننے اور زیادہ درستگی کے لیے Omi Pro میں اپ گریڈ کریں",
     "onDeviceAtCapFooter": "دونوں صورتوں میں کچھ ضائع نہیں ہوتا۔ آپ اسے ترتیبات › تحریری شکل میں تبدیلی میں بدل سکتے ہیں۔",
     "onDeviceStepOf": "مرحلہ {step} از {total}",
     "onDeviceSetupBody": "Omi اسپیچ ماڈل ایک بار ڈاؤن لوڈ کرتا ہے۔ اس کے بعد آپ کی ریکارڈنگز یہیں متن بن جاتی ہیں، آپ کے استعمال میں شمار کیے بغیر۔",
@@ -11760,7 +11759,7 @@
     "onDeviceWhyCloudIphone": "یہ iPhone خود خلاصہ نہیں بنا سکتا (اس کے لیے iPhone 15 Pro یا جدید تر درکار ہے)۔ ٹرانسکرپٹ آپ کے فون پر بنایا گیا، اور خلاصے کے لیے صرف اس کا متن Omi کو بھیجا گیا۔ یہ آپ کے استعمال میں شمار نہیں ہوتا۔",
     "onDeviceWhyCloudPhone": "یہ فون خود خلاصہ نہیں بنا سکتا۔ ٹرانسکرپٹ آپ کے فون پر بنایا گیا، اور خلاصے کے لیے صرف اس کا متن Omi کو بھیجا گیا۔ یہ آپ کے استعمال میں شمار نہیں ہوتا۔",
     "onDeviceRedoWithCloud": "Omi Cloud سے دوبارہ کریں",
-    "onDeviceRedoHint": "بولنے والوں کو الگ پہچاننے اور زیادہ درستگی کے لیے Pro میں اپ گریڈ کریں",
+    "onDeviceRedoHint": "بولنے والوں کو الگ پہچاننے اور زیادہ درستگی کے لیے Omi Pro میں اپ گریڈ کریں",
     "onDeviceKeepEverything": "سب کچھ اسی فون پر رکھیں",
     "onDeviceKeepEverythingSubtitle": "صرف ٹرانسکرپٹس، کوئی خلاصہ نہیں",
     "onDeviceAfterLiveHours": "جب آپ اپنی حد تک پہنچیں",
@@ -11816,8 +11815,11 @@
     "episodeSoFar": "اب تک",
     "episodeUpdatedJustNow": "ابھی اپ ڈیٹ ہوا · آخر میں مکمل نوٹس",
     "episodeUpdatedMinutesAgo": "{minutes} منٹ پہلے اپ ڈیٹ ہوا · آخر میں مکمل نوٹس",
+    "episodeNotesUnavailable": "جاری نوٹس اپ ڈیٹ نہیں ہو رہے۔ فی الحال متن دیکھیں۔",
+    "episodeCaptureFor": "ریکارڈنگ · {duration}",
+    "episodePrevious": "پچھلی قسط",
+    "captureChunksPending": "زیرِ التوا حصے: {pending}",
     "episodeNotesSoon": "گفتگو کے پہلے چند منٹ بعد نوٹس ظاہر ہوں گے۔",
-    "episodeOpenAll": "سب کھولیں",
     "episodeWrapUpNow": "ابھی ختم کریں",
     "episodeWrapsUpHint": "جب آپ آگے بڑھیں گے تو Omi اسے ختم کر دے گا",
     "episodeTaskCaptured": "کام نوٹ کیا گیا: {text}",
@@ -11851,5 +11853,30 @@
     "recapInTheBackground": "پس منظر میں",
     "retentionOfferAccept": "{percent}% رعایت کے ساتھ رہیں",
     "retentionOfferBody": "رہیں اور ہر ماہ {price} ادا کریں، اگلے {months} مہینے۔",
-    "retentionOfferApplied": "ہو گیا۔ {percent}% رعایت، اگلے {months} مہینے۔"
+    "retentionOfferApplied": "ہو گیا۔ {percent}% رعایت، اگلے {months} مہینے۔",
+    "othersSpeakerLabel": "دیگر",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "openLoopAnswerDone": "مکمل",
+    "openLoopAnswerRemind": "بعد میں یاد دلائیں",
+    "openLoopAnswerDrop": "چھوڑ دیں",
+    "syncRejectionInvalidDate": "غلط ریکارڈنگ کی تاریخ",
+    "syncDeleteKeptUploading": "کچھ حصے اب بھی اپلوڈ ہو رہے ہیں اور محفوظ رکھے گئے ہیں",
+    "syncRejectionServer": "سرور نے مسترد کیا",
+    "syncRejectionTooLarge": "بہت بڑا",
+    "deviceOnPhoneQueue": "فون پر {duration}",
+    "syncCardUploadsPaused": "اپلوڈز چند لمحے کے لیے روک دیے گئے ہیں — یہ خودکار طور پر دوبارہ شروع ہوں گے",
+    "episodeContinues": "“{title}” جاری ہے",
+    "episodeLiveSince": "· {time} سے",
+    "episodeNotesStartWithTranscript": "نوٹس حتمی نقل کے پہنچنے پر شروع ہوں گے۔",
+    "episodeOnDeviceNotesFootnote": "آپ بولتے وقت آپ کے فون پر تیار ہوتی ہیں۔ مکمل نوٹس حتمی نقل کے ساتھ آئیں گے۔",
+    "episodeOnThisPhone": "اس فون پر",
+    "episodeOpenTranscript": "نقل کھولیں",
+    "liveCardTitle": "براہِ راست",
+    "livePreviewBehind": "حتمی نقل تقریباً {duration} پیچھے ہے",
+    "livePreviewCatchingUp": "حتمی نقل پہنچ رہا ہے",
+    "livePreviewNoEngineBody": "آپ کے الفاظ کہنے کے ایک دو منٹ بعد یہاں ظاہر ہوتے ہیں۔",
+    "livePreviewNoEngineTitle": "محفوظ طریقے سے ریکارڈ ہو رہا ہے",
+    "livePreviewOnPhoneDivider": "اس فون پر براہِ راست",
+    "livePreviewTurnOnLiveText": "براہِ راست متن آن کریں"
 }

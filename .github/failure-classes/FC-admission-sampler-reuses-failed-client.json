@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-admission-sampler-reuses-failed-client",
+  "violated_contract": "A process-local admission sampler must not refuse a healthy shared service indefinitely by retrying a failed HTTP client forever while suppressing all per-replica errors.",
+  "canonical_prevention": "Bound last-good observation age without renewing timestamps on failure, retain conservative quorum and unknown-replica accounting, recreate the HTTP client and rediscover after a bounded number of sweeps without a new quorum, and alarm on per-pod zero freshness or frozen sampler progress independently of admission traffic.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_parakeet_batch_pressure.py",
+    "backend/tests/unit/test_live_stt_alert_behavior.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/stt/batch_pressure.py",
+    "backend/charts/monitoring/alerts/live-stt.json"
+  ],
+  "status": "open"
+}

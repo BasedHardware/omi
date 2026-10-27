@@ -113,18 +113,18 @@
       "why": "pre-existing; unreviewed"
     },
     {
-      "path": "utils/batch_pipeline/intake.py",
+      "path": "utils/batch_pipeline/artifact_policy.py",
       "function": "artifacts_for",
       "name": "BUCKET_BATCH_PIPELINE",
       "count": 1,
-      "why": "pre-existing; unreviewed"
+      "why": "Shared artifact IO composition, relocated unchanged from intake to isolate readers from admission/GPU stages."
     },
     {
-      "path": "utils/batch_pipeline/intake.py",
+      "path": "utils/batch_pipeline/artifact_policy.py",
       "function": "artifacts_for",
       "name": "ENCRYPTION_SECRET",
       "count": 1,
-      "why": "pre-existing; unreviewed"
+      "why": "Shared artifact IO composition, relocated unchanged from intake to isolate readers from admission/GPU stages."
     },
     {
       "path": "utils/batch_pipeline/live.py",

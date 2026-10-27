@@ -86,16 +86,24 @@ def cli(monkeypatch, tmp_path):
     monkeypatch.setattr(module, 'create_artifact_store', lambda *a: Mock())
     monkeypatch.setattr(module, 'configure_rollout_runtime', lambda: None)
     monkeypatch.setattr(scope, 'owner_jobs', lambda *a: (document(sid) for sid in rows))
-    monkeypatch.setattr(module, 'checked_job', lambda store, sid, uid, key: deepcopy(rows[sid]))
+    monkeypatch.setattr(
+        module, 'checked_job', lambda store, sid, uid, key, independent=False, repair=False: deepcopy(rows[sid])
+    )
     monkeypatch.setattr(module, 'inspect_unit', lambda *a: 'speech')
     calls = []
 
     def redrive(store, artifacts, sid, uid, digest, recovery, **kw):
         calls.append(sid)
+        previous = deepcopy(rows[sid].get('speech_redrive') or {})
         rows[sid].update(
             state='result_ready',
             recovery_state='recovered',
-            speech_redrive={'plan_digest': digest, 'silent': kw['silent']},
+            speech_redrive={
+                'plan_digest': digest,
+                'silent': kw['silent'],
+                'provider': 'soniox' if kw.get('independent_language') else 'modulate',
+                **({'prior_speech_redrive': previous} if kw.get('independent_language') else {}),
+            },
         )
         return 'recovered'
 
@@ -196,3 +204,35 @@ def test_cli_changed_digest_never_dispatches(cli, monkeypatch, capsys):
     with pytest.raises(module.held.Refused, match='source_census_changed'):
         run(['--apply', '--source-census-sha256', '0' * 64, '--approve-plan-sha256', output['plan_sha256']])
     assert not calls
+
+
+def test_independent_cli_plan_is_metadata_only_and_replays_exact_prefix(cli, monkeypatch, capsys, tmp_path):
+    module, run, rows, calls, _ = cli
+    for sid in ('a', 'b'):
+        rows[sid]['worker_failure'] = {'reason': 'unsupported_language'}
+        rows[sid]['recovery'].update(
+            provider='modulate', failure={'stage': 'response_validation', 'reason': 'empty_asr'}
+        )
+    ids = tmp_path / 'units.json'
+    ids.write_text(json.dumps(['a', 'b']))
+    flags = ['--independent-language', '--paid-epoch', '3', '--unit-ids-file', str(ids)]
+    run(flags)
+    plan = json.loads(capsys.readouterr().out)
+    assert plan['provider'] == 'soniox' and plan['paid_epoch'] == 3
+    assert plan['strict_vad'] == {'unmeasured': 2}
+    assert plan['paid_stt_calls'] == plan['firestore_writes'] == 0 and calls == []
+    monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
+    approval = [
+        '--apply',
+        '--source-census-sha256',
+        plan['source_census_sha256'],
+        '--approve-plan-sha256',
+        plan['plan_sha256'],
+    ]
+    run(flags + approval + ['--apply-limit', '1'])
+    capsys.readouterr()
+    assert calls == ['a']
+    monkeypatch.setattr(module, 'redrive_one', lambda *a, **kw: 'already_applied')
+    run(flags + approval + ['--apply-limit', '1'])
+    assert calls == ['a']
+    assert json.loads(capsys.readouterr().out)['source_census_sha256'] == plan['source_census_sha256']

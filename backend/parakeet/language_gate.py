@@ -25,7 +25,7 @@ SAMPLE_RATE = 16000
 MAX_SECONDS = 30.0
 MIN_SECONDS = 1.0
 SHORT_SECONDS = 6.0
-LONG_THRESHOLD = 0.95
+LONG_THRESHOLD = 0.985
 SHORT_THRESHOLD = 0.985
 
 # TDT v3 (nvidia/parakeet-tdt-0.6b-v3) languages; keep equal to the backend's

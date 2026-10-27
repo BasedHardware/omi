@@ -28,6 +28,37 @@ _test_ctxvar = contextvars.ContextVar("test_key", default=None)
 
 
 @pytest.mark.asyncio
+async def test_cancelled_db_call_never_starts_late_post_commit_io(monkeypatch):
+    from utils import executors
+
+    started = asyncio.Event()
+    release = threading.Event()
+    called = []
+    loop = asyncio.get_running_loop()
+
+    async def provider():
+        called.append('provider')
+
+    def late_commit():
+        loop.call_soon_threadsafe(started.set)
+        assert release.wait(10)
+        assert executors.after_db_call(provider)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(executors, 'db_executor', pool)
+        task = asyncio.create_task(run_blocking(pool, late_commit))
+        try:
+            await asyncio.wait_for(started.wait(), 5)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        finally:
+            release.set()
+        await run_blocking(pool, lambda: None)
+    assert not called
+
+
+@pytest.mark.asyncio
 async def test_run_blocking_uses_provided_executor():
     """run_blocking must execute fn on the given executor, not the default pool."""
     captured = {}
@@ -177,6 +208,7 @@ def test_get_executor_metrics_returns_all_pools():
     assert len(metrics) == len(_ALL_EXECUTORS)
     names = {m['name'] for m in metrics}
     expected = {
+        'quiet_replay',
         'critical',
         'db',
         'llm',
@@ -187,6 +219,7 @@ def test_get_executor_metrics_returns_all_pools():
         'storage',
         'speaker_tag_verify',
         'cimd',
+        'open_loops',
     }
     assert names == expected
 

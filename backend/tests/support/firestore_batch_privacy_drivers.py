@@ -14,6 +14,12 @@ def entries():
             neutrals={'after': (None, 'document cursor only; filters unchanged')},
         ),
         DriverEntry(
+            'database.batch_pipeline_privacy_queries.artifacts_by_owner_id',
+            base={'uid': 'synthetic-owner'},
+            domains={'namespace': namespaces},
+            neutrals={'after': (None, 'document cursor only; filters unchanged')},
+        ),
+        DriverEntry(
             'database.batch_pipeline_privacy_queries.predecessor_documents',
             base={'segment_id': 'synthetic-segment'},
             domains={'namespace': namespaces},

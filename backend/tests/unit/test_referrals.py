@@ -39,7 +39,7 @@ def test_referral_code_round_trips_and_rejects_tampering():
         referrer_uid_from_code(f'{code[:-1]}x', secret=TEST_SECRET)
 
 
-def test_referral_claim_grants_exactly_30_days_of_operator():
+def test_referral_claim_grants_exactly_30_days_of_omi_pro():
     now = datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc)
 
     patch, reason = referral_claim_patch(
@@ -52,11 +52,11 @@ def test_referral_claim_grants_exactly_30_days_of_operator():
 
     assert patch is not None
     assert reason == 'granted'
-    assert patch['subscription']['plan'] == 'operator'
+    assert patch['subscription']['plan'] == 'unlimited_v2'
     assert patch['subscription']['status'] == 'active'
     assert patch['subscription']['cancel_at_period_end'] is True
     assert patch['subscription']['current_period_end'] - patch['subscription']['current_period_start'] == 30 * 86400
-    assert patch['referral']['program'] == 'desktop_operator_month_v1'
+    assert patch['referral']['program'] == 'omi_pro_month_v1'
     assert patch['referral']['referrer_uid'] == 'referrer'
 
 
@@ -66,7 +66,15 @@ def test_referral_claim_grants_exactly_30_days_of_operator():
         ('same-user', 'same-user', True, {}, 'self_refer'),
         ('existing-user', 'referrer', False, {}, 'existing_account'),
         ('paid-user', 'referrer', True, {'subscription': {'plan': 'operator'}}, 'paid'),
-        ('claimed-user', 'referrer', True, {'referral': {'program': 'desktop_operator_month_v1'}}, 'already_claimed'),
+        ('claimed-user', 'referrer', True, {'referral': {'program': 'omi_pro_month_v1'}}, 'already_claimed'),
+        (
+            'legacy-claimed-user',
+            'referrer',
+            True,
+            {'referral': {'program': 'desktop_operator_month_v1'}},
+            'already_claimed',
+        ),
+        ('omi-pro-user', 'referrer', True, {'subscription': {'plan': 'unlimited_v2'}}, 'paid'),
     ],
 )
 def test_referral_claim_never_self_refers_rewards_existing_users_or_overwrites_paid_accounts(
@@ -99,7 +107,7 @@ def test_referral_link_captures_secure_cookie_and_opens_signup_before_download(m
     assert 'HttpOnly' in cookie
     assert 'Secure' in cookie
     assert 'SameSite=lax' in cookie
-    assert events == [('referrer-123', 'Referral Link Captured', {'program': 'desktop_operator_month_v1'})]
+    assert events == [('referrer-123', 'Referral Link Captured', {'program': 'omi_pro_month_v1'})]
 
 
 def test_unknown_referral_link_does_not_emit_capture(monkeypatch):
@@ -153,7 +161,7 @@ def test_referral_claim_grants_trial_only_to_a_fresh_authenticated_account(monke
     assert response.trial_days == 30
     assert claims == [('new-user', 'referrer-123', True)]
     assert events == [
-        ('new-user', 'Referral Claimed', {'program': 'desktop_operator_month_v1', 'claimed': True, 'reason': 'granted'})
+        ('new-user', 'Referral Claimed', {'program': 'omi_pro_month_v1', 'claimed': True, 'reason': 'granted'})
     ]
 
 
@@ -185,7 +193,7 @@ def test_referral_claim_marks_an_existing_authenticated_account_ineligible(monke
         (
             'existing-user',
             'Referral Claimed',
-            {'program': 'desktop_operator_month_v1', 'claimed': False, 'reason': 'existing_account'},
+            {'program': 'omi_pro_month_v1', 'claimed': False, 'reason': 'existing_account'},
         )
     ]
 
@@ -219,7 +227,7 @@ def test_referral_claim_emits_ineligible_reason(monkeypatch, uid, referrer_uid, 
         (
             uid,
             'Referral Claimed',
-            {'program': 'desktop_operator_month_v1', 'claimed': False, 'reason': reason},
+            {'program': 'omi_pro_month_v1', 'claimed': False, 'reason': reason},
         )
     ]
 
@@ -262,9 +270,9 @@ def test_authenticated_referrer_receives_a_stable_unique_https_link(monkeypatch)
     assert first != other
     assert first.startswith('https://omi.me/r/ref1.')
     assert events == [
-        ('referrer-123', 'Referral Link Issued', {'program': 'desktop_operator_month_v1'}),
-        ('referrer-123', 'Referral Link Issued', {'program': 'desktop_operator_month_v1'}),
-        ('another-user', 'Referral Link Issued', {'program': 'desktop_operator_month_v1'}),
+        ('referrer-123', 'Referral Link Issued', {'program': 'omi_pro_month_v1'}),
+        ('referrer-123', 'Referral Link Issued', {'program': 'omi_pro_month_v1'}),
+        ('another-user', 'Referral Link Issued', {'program': 'omi_pro_month_v1'}),
     ]
 
 
@@ -334,7 +342,7 @@ async def test_new_user_auth_redeems_captured_referral(monkeypatch):
     assert token == 'custom-token'
     assert claims == [('new-user', 'referrer-123', True)]
     assert events == [
-        ('new-user', 'Referral Claimed', {'program': 'desktop_operator_month_v1', 'claimed': True, 'reason': 'granted'})
+        ('new-user', 'Referral Claimed', {'program': 'omi_pro_month_v1', 'claimed': True, 'reason': 'granted'})
     ]
 
 

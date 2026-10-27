@@ -8,7 +8,13 @@ import os
 
 from config.rollout_cohorts import rollout_cohort_members
 from typing import Callable, TypeVar
-from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
+from config.stt_provider_policy import (
+    MODULATE_SUPPORTED_LANGUAGES,
+    PARAKEET_MODEL_BY_SURFACE,
+    PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL,
+    STTServingSurface,
+    normalized_stt_language,
+)
 
 
 class Priority(IntEnum):
@@ -53,6 +59,44 @@ def fresh_gpu_priority_enabled() -> bool:
         'BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED',
         os.getenv('BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED', 'true').strip().lower() != 'false',
     )
+
+
+def language_inheritance_enabled() -> bool:
+    """Default-on context inheritance; false restores per-piece detection input."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED',
+        os.getenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
+def language_eligibility_enabled() -> bool:
+    """Kill switch (unset is on; only ``false`` disables it).
+
+    While legacy sync is on, a new sync upload whose conversation-or-user language
+    is a named language the batch Parakeet model cannot serve stays on legacy sync
+    instead of entering batch custody, where the worker language guard would
+    quarantine it. Blank, ``multi`` and unknown languages are unaffected.
+    ``false`` restores admitting those uploads to batch.
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED',
+        os.getenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
+def known_unsupported_batch_language(language: str | None) -> bool:
+    """True only for a recognized language code the batch Parakeet model cannot serve.
+
+    Lead ruling 304254: not English-only admission. Blank, ``multi``, ``auto``,
+    ``und`` and any unrecognized value are unknown, never "known unsupported";
+    only a code an STT provider recognizes (the stored-preference vocabulary)
+    that the prerecorded Parakeet model does not support qualifies.
+    """
+    if not language_eligibility_enabled() or not isinstance(language, str):
+        return False
+    code = normalized_stt_language(language.strip())
+    parakeet = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PRERECORDED]]
+    return code in MODULATE_SUPPORTED_LANGUAGES and code not in parakeet
 
 
 def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
@@ -422,6 +466,22 @@ def worker_pipeline_depth() -> int:
 
 WORKER_IO_CONCURRENCY_DEFAULT = 3
 WORKER_IO_CONCURRENCY_MAX = 8
+
+
+def stage_profiling_enabled() -> bool:
+    """Dedicated-worker per-stage wall-clock histograms (metrics-only).
+
+    Default on only for the ``dev`` stage; ``prod`` and an unset stage stay off.
+    An explicit ``true``/``false`` (also 1/0, on/off, yes/no) overrides the
+    stage default so local/offline can opt in; malformed values fall back to
+    the stage default rather than failing the worker.
+    """
+    raw = os.getenv('BATCH_PIPELINE_STAGE_PROFILING_ENABLED', '').strip().lower()
+    if raw in {'true', '1', 'on', 'yes'}:
+        return True
+    if raw in {'false', '0', 'off', 'no'}:
+        return False
+    return os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'dev'
 
 
 def worker_io_concurrency() -> int:

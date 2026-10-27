@@ -88,7 +88,7 @@ def test_notes_routing_calls_only_shaped_entrypoint(monkeypatch, mode, uid):
     monkeypatch.setattr(notes, '_get_shaped_conversation_notes', write)
     assert notes.get_conversation_notes(prefix, uid=uid, language_code='en') is result
     # The owner uid reaches the writer so the agentic notes tools can be bound to that owner.
-    assert calls == [(prefix, {'uid': uid, 'language_code': 'en'})]
+    assert calls == [(prefix, {'uid': uid, 'open_loop_out': None, 'language_code': 'en'})]
 
 
 @pytest.mark.parametrize('route', ['off', 'cohort', 'on'])
@@ -167,9 +167,9 @@ def test_notes_evidence_after_breakpoint_and_roster_unbound(monkeypatch):
         transcript_segment_ids=['s1'],
         uid='anyone',
     )
-    assert 'spk 0 Expected Alice' in prefix.context  # Legacy behavior still intact.
+    assert 'spk c0 Expected Alice' in prefix.context  # Legacy behavior still intact.
     packet = json.loads(prefix.shaped_context.split('\nFULL TRANSCRIPT\n')[0])
-    assert packet['speaker_map'] == {'0': None}
+    assert packet['speaker_map'] == {'c0': None}
     assert packet['expected_calendar']['participants'][0]['name'] == 'Expected Alice'
     assert packet['observed_screen_listing'] is None
     messages = notes_mount().messages([{'role': 'user', 'content': prefix.shaped_context}], explicit_cache=True)
@@ -659,4 +659,4 @@ def test_merged_notes_keep_calendar_and_screen_participants_separate(monkeypatch
     packet = json.loads(prefix.shaped_context.split('\nFULL TRANSCRIPT\n')[0])
     assert [p['name'] for p in packet['expected_calendar']['participants']] == ['Expected Alice', 'Shared Sam']
     assert [p['name'] for p in packet['observed_screen_listing']['participants']] == ['Observed Bob', 'Shared Sam']
-    assert packet['speaker_map'] == {'0': None}
+    assert packet['speaker_map'] == {'c0': None}

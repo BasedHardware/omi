@@ -6,6 +6,7 @@ collaborators rather than importing network clients or asserting source strings.
 
 import ast
 import asyncio
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace, MethodType
 from unittest.mock import MagicMock, AsyncMock
@@ -58,6 +59,10 @@ class Ref:
 
 
 def function(path, name, namespace):
+    if path == 'routers/conversations.py' and name == 'delete_conversation':
+        namespace['nullcontext'] = nullcontext
+        namespace.setdefault('destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+        function(path, '_delete_conversation_under_gate', namespace)
     node = next(
         n
         for n in ast.walk(ast.parse((ROOT / path).read_text()))
@@ -185,6 +190,9 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
     data_plane = Store()
     data_plane.rows['rollout_cohorts/u'] = {'cohorts': {'dev': {'batch-pipeline': True}}}
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: data_plane)
+    # Global quiet-job pagination is covered by the real Firestore emulator.
+    quiet_cleanup = MagicMock()
+    monkeypatch.setattr(user_data_deletion, 'stop_quiet_checks_for_account', quiet_cleanup)
 
     def purge(ref, **kwargs):
         for path in list(store.rows):
@@ -201,6 +209,7 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
         },
     )
     wipe('u')
+    quiet_cleanup.assert_called_once_with('u', firestore_client=store)
     assert data_plane.rows == {}
     assert store.rows == {}
     assert not tombstones.is_deleted('u', 'c')

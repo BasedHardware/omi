@@ -77,6 +77,7 @@ def _load_module_from_file(module_name, file_path):
 # They are restored right after the modules under test are imported.
 # ---------------------------------------------------------------------------
 _SYS_MODULE_NAMES = [
+    "utils.retrieval.tool_services.transcript_search",
     "firebase_admin",
     "firebase_admin.firestore",
     "firebase_admin.auth",
@@ -210,6 +211,8 @@ _stub_package("utils.conversations")
 _stub_package("utils.retrieval")
 _stub_package("utils.retrieval.tools")
 _stub_package("utils.retrieval.tool_services")
+direct_transcript_svc = _stub_module("utils.retrieval.tool_services.transcript_search")
+direct_transcript_svc.search_saved_transcripts_text = MagicMock(return_value="Direct transcript search result")
 _stub_package("utils.other")
 _stub_package("utils.memory")
 transcript_for_llm_stub = _stub_module("utils.conversations.transcript_for_llm")

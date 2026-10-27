@@ -1,6 +1,7 @@
 """Executable presentation policy, live-price arithmetic, and dark-route contract."""
 
 import json
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -11,7 +12,7 @@ from models.users import PlanType, Subscription
 from models.storefront import StorefrontUsage
 from routers import storefront as route
 from utils.rate_limit_config import get_effective_limit
-from utils.storefront import _valid_price_rows, build_storefront, load_ladder
+from utils.storefront import _valid_price_rows, build_single_plan_storefront, build_storefront, load_ladder
 from utils.storefront_copy import months_free
 
 
@@ -30,6 +31,12 @@ def price(identifier, amount, interval='month', **overrides):
         'recurring': {'interval': interval, 'interval_count': 1},
         **overrides,
     }
+
+
+SINGLE_PLAN_PRICES = {
+    'price_omi_pro_month': price('price_omi_pro_month', 2999, 'month'),
+    'price_omi_pro_year': price('price_omi_pro_year', 26991, 'year'),
+}
 
 
 def build(plan='basic', current_price=None, rows=None, bindings=None, recognized=None, source=None, trigger=None):
@@ -111,6 +118,55 @@ def test_price_currency_interval_and_months_free_validation():
     assert months_free(1000, 11000) == 1
 
 
+def test_single_plan_storefront_builder_pins_golden(monkeypatch):
+    """The new-buyer Omi Pro sheet: one checkout tier over a Free current row.
+    Pinned byte-exact to the golden the web plans panel renders in its tests —
+    no dead 'Couldn't load plans' state for a new buyer."""
+    monkeypatch.setenv('STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID', 'price_omi_pro_month')
+    monkeypatch.setenv('STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID', 'price_omi_pro_year')
+    sheet = build_single_plan_storefront(
+        catalog_revision=6,
+        subscription=Subscription(),
+        usage=StorefrontUsage(),
+        retrieve_price=lambda key: SINGLE_PLAN_PRICES[key],
+    )
+    assert [tier.tier_id for tier in sheet.tiers] == ['unlimited_v2:single_plan', 'basic:single_plan']
+    tier = sheet.tiers[0]
+    assert tier.name == 'Unlimited' and tier.recommended and tier.is_current is False
+    assert tier.action == 'checkout' and tier.cta_label == 'Get Unlimited'
+    assert [item.price_id for item in tier.prices] == ['price_omi_pro_month', 'price_omi_pro_year']
+    assert tier.prices[0].headline == '$29.99/month'
+    assert tier.prices[1].months_free == 3 and tier.prices[1].subline == '$269.91 billed yearly · 3 months free'
+    assert sheet.current.plan_id == 'basic' and sheet.current.line == "You're on Free"
+    free_card = sheet.tiers[1]
+    assert free_card.is_current and free_card.action == 'current' and free_card.bullets == []
+    assert sheet.current.legacy is False and sheet.current.price_id is None
+    assert sheet.yearly_toggle_label == 'Yearly · 3 months free'
+    payload = json.dumps(sheet.model_dump(mode='json'), indent=2, ensure_ascii=False) + '\n'
+    golden = Path(__file__).resolve().parents[1] / 'fixtures' / 'storefront_v2' / 'single_plan_omi_pro.json'
+    assert golden.read_text(encoding='utf-8') == payload
+
+
+def test_single_plan_storefront_without_live_prices_keeps_sheet_not_dead(monkeypatch):
+    """Price retrieval failure degrades the tier to action=none — still a v2
+    sheet (no 404), so the client shows the card rather than an error panel."""
+    monkeypatch.setenv('STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID', 'price_omi_pro_month')
+    monkeypatch.delenv('STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID', raising=False)
+
+    def _explode(price_id):
+        raise RuntimeError('stripe unavailable')
+
+    sheet = build_single_plan_storefront(
+        catalog_revision=6,
+        subscription=Subscription(),
+        usage=StorefrontUsage(),
+        retrieve_price=_explode,
+    )
+    assert sheet.tiers and sheet.tiers[0].plan_id == 'unlimited_v2'
+    assert sheet.tiers[0].action == 'none' and sheet.tiers[0].prices == []
+    assert sheet.current.plan_id == 'basic'
+
+
 @pytest.fixture
 def client(monkeypatch):
     app = FastAPI()
@@ -119,10 +175,58 @@ def client(monkeypatch):
     monkeypatch.setattr(route.auth, 'check_rate_limit', lambda *args: (True, 12, 0))
     monkeypatch.setattr(route.auth, 'RATE_LIMIT_SHADOW', False)
     monkeypatch.setenv('STOREFRONT_LADDER_V1_ENABLED', 'true')
+    # These tests pin ladder presentation policy for a default (basic) caller.
+    # The 2026-10-24 new-buyer single-plan rule serves that caller the Omi Pro
+    # sheet on explicit non-desktop platforms (see
+    # test_new_buyer_single_plan_rule_serves_omi_pro_sheet), so restore the
+    # pre-ruling ladder here; the rule itself has its own tests.
+    monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
     monkeypatch.setattr(route, 'should_hide_subscription_ui', lambda *args: False)
     monkeypatch.setattr(route.users_db, 'get_user_valid_subscription', lambda uid, **kwargs: Subscription())
     monkeypatch.setattr(route, '_usage', lambda *args: StorefrontUsage())
     return TestClient(app)
+
+
+def _omi_pro_env(monkeypatch):
+    monkeypatch.setenv('STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID', 'price_omi_pro_month')
+    monkeypatch.setenv('STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID', 'price_omi_pro_year')
+    monkeypatch.setattr(route, '_retrieve_price', lambda price_id: SINGLE_PLAN_PRICES[price_id])
+
+
+def test_new_buyer_single_plan_rule_serves_omi_pro_sheet(client, monkeypatch):
+    """Omi Pro is the only plan sold: a basic buyer on every platform (desktop,
+    missing and unknown headers included) gets a single-tier Omi Pro sheet.
+    Existing subscribers and the kill switch keep the ladder sheet."""
+    monkeypatch.delenv('NEW_BUYER_SINGLE_PLAN_ENABLED', raising=False)
+    _omi_pro_env(monkeypatch)
+
+    callers = [{'X-App-Platform': p} for p in ('ios', 'android', 'web', 'macos', 'windows', 'not-a-platform')] + [{}]
+    for headers in callers:
+        response = client.get('/v2/payments/plans', headers=headers)
+        assert response.status_code == 200, headers
+        payload = response.json()
+        assert [tier['plan_id'] for tier in payload['tiers']] == ['unlimited_v2', 'basic'], headers
+        assert [item['price_id'] for item in payload['tiers'][0]['prices']] == [
+            'price_omi_pro_month',
+            'price_omi_pro_year',
+        ], headers
+        assert payload['tiers'][0]['action'] == 'checkout'
+        assert payload['current']['plan_id'] == 'basic'
+
+    monkeypatch.setattr(
+        route.users_db, 'get_user_valid_subscription', lambda uid, **kwargs: Subscription(plan=PlanType.plus)
+    )
+    assert all(
+        tier['plan_id'] != 'unlimited_v2'
+        for tier in client.get('/v2/payments/plans', headers={'X-App-Platform': 'ios'}).json()['tiers']
+    )
+
+    monkeypatch.setattr(route.users_db, 'get_user_valid_subscription', lambda uid, **kwargs: Subscription())
+    monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
+    for platform in ('ios', 'web'):
+        response = client.get('/v2/payments/plans', headers={'X-App-Platform': platform})
+        assert response.status_code == 200, platform
+        assert all(tier['plan_id'] != 'unlimited_v2' for tier in response.json()['tiers']), platform
 
 
 def test_route_dark_by_default_and_bad_flag_cannot_read_data(client, monkeypatch):

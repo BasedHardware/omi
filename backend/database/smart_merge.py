@@ -27,17 +27,22 @@ from google.api_core.exceptions import FailedPrecondition
 
 from database import conversations as conversations_db
 from database import smart_merge_audit as audit_db
+from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client, run_transactional
 from database.firestore_index_registry import (
     CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
     CONVERSATIONS_SMART_MERGE_PARTITION_QUERY,
 )
 from database.people_stats_cache import invalidate_people_stats_cache
+from config.sync_live_dedupe import sync_live_dedupe_active_for
+from utils.conversations.smart_merge_policy import rebase_donor_segments
+from utils.sync.bridge_observation import log_bridge_observation
 from config import merge_ancestry
 from config.conversation_smart_merge import smart_merge_flatten_enabled
 from config.firestore_quick_reads import smart_merge_partition_enabled
 from database.firestore_read_origin import read_origin
 from utils.observability.fallback import record_fallback
+from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD, OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +98,7 @@ class AbsorbResult:
     reason: str
     audit: str = 'none'  # audit sibling outcome of a committed absorb (database/smart_merge_audit.py)
     flattened_ancestor_count: int = 0
+    bridge: dict | None = None
 
 
 _UNSET = object()
@@ -389,9 +395,30 @@ def absorb_conversation(
         )
         if reason is not None or survivor_update is None or donor_update is None:
             return AbsorbResult('rejected', reason or 'survivor_changed')
+        bridge_observations = []
+        # Metadata-only plans do not transfer transcript content.
+        if 'transcript_segments' in survivor_update and sync_live_dedupe_active_for(uid):
+            survivor_update['transcript_segments'] = rebase_donor_segments(
+                survivor,
+                survivor_segments,
+                donor,
+                donor_segments,
+                uid=uid,
+                observations=bridge_observations,
+            )
         # Last read, only on the absorbing path: the gate fence for the audit sibling.
         audit = audit_db.SKIPPED_ERROR if audit_unavailable else audit_db.gate_skip(transaction, client, uid)
         level = survivor_update.get('data_protection_level') or 'enhanced'
+        if survivor_raw.get('data_protection_level', 'standard') != level:
+            # A mixed-protection absorb upgrades retained derived content too.
+            # Decode strictly: never clear an unreadable blob or retain plaintext
+            # under an enhanced document's protection marker.
+            if OPEN_LOOP_EXTRACTIONS_FIELD in survivor_raw:
+                survivor_update[OPEN_LOOP_EXTRACTIONS_FIELD] = conversations_db.decode_open_loop_extractions(
+                    uid,
+                    survivor_raw[OPEN_LOOP_EXTRACTIONS_FIELD],
+                    bool(survivor_raw.get(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD)),
+                )
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
         conversations_db.guard_match_score_size(payload, survivor_raw)
         if (
@@ -423,7 +450,13 @@ def absorb_conversation(
             donor_update=donor_update,
             source=donor.get('source'),
         )
-        return AbsorbResult('absorbed', 'absorbed', audit, flattened_ancestor_count=len(ancestor_updates))
+        return AbsorbResult(
+            'absorbed',
+            'absorbed',
+            audit,
+            flattened_ancestor_count=len(ancestor_updates),
+            bridge=bridge_observations[0] if bridge_observations else None,
+        )
 
     @firestore.transactional
     def absorb(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
@@ -446,6 +479,10 @@ def absorb_conversation(
         logger.warning('event=smart_merge_audit_restart reason=io_failed uid=%s', uid)
         result = run_transactional(client, absorb, audit_unavailable=True)
     if result.outcome == 'absorbed':
+        if result.bridge is not None:
+            log_bridge_observation(result.bridge)
+        for retired_id in (donor_id, survivor_id):
+            stop_quiet_check_for_conversation(uid, retired_id, firestore_client=client)
         invalidate_people_stats_cache(uid)
         # The same fail-open search-index hooks the conversation adapter runs after its writes.
         conversations_db._sync_conversation_search_index(uid, survivor_id)  # pyright: ignore[reportPrivateUsage]

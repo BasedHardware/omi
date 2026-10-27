@@ -503,7 +503,9 @@ def test_all_repeat_stamp_fallback_with_a_donor_appends_and_reports_growth():
     assert created is False and len(survivors) == len(LIVE)
     donor = store.rows[('users', 'u', 'conversations', 'DONOR-1')]
     assert donor['sync_merged_into'] == LIVE_ID and donor['deleted'] is True
-    assert sorted(texts_of(store, LIVE_ID)) == sorted(LIVE + [reworded(text) for text in LIVE])
+    assert sorted(texts_of(store, LIVE_ID)) == sorted(
+        LIVE + [reworded(text) for text in LIVE] + texts_of(store, 'DONOR-1')
+    )
     assert assigned['_sync_lineage_dedupe']['span_delta_bucket'] == '0_60'
 
 
@@ -794,3 +796,36 @@ def test_fully_deduped_stamp_gap_keeps_live_and_landed_sync_row_unchanged(monkey
     assert assigned['id'] == (landed['id'] if retry_anchor else LIVE_ID) and not created
     assert assigned['_sync_lineage_repeat_only'] is True
     assert assigned['_sync_lineage_stamp_gap_refused'] is True
+
+
+@pytest.mark.parametrize('repeat_only', [False, True])
+def test_complete_sync_intake_folds_a_landed_row_into_the_live_episode_before_downstream_work(repeat_only):
+    import threading
+
+    from utils.sync.intake_completion import complete_sync_intake
+
+    order = []
+    assigned = {'id': SENTINEL_ID, 'sync_relevance': 'keep'}
+    if repeat_only:
+        assigned['_sync_lineage_repeat_only'] = True
+    complete_sync_intake(
+        uid='synthetic-owner',
+        assigned=assigned,
+        created=not repeat_only,
+        survivors=[],
+        response={'new_memories': set(), 'updated_memories': set()},
+        lock=threading.Lock(),
+        language='en',
+        audio_enabled=True,
+        store_audio=lambda cid: order.append(('store_audio', cid)),
+        finish=lambda *a, **k: order.append(('finish',)),
+        mark_finalize=lambda: None,
+        acknowledge=lambda: None,
+        attach_episode=lambda uid, cid, row: order.append(('attach', uid, cid)) or 'joined',
+    )
+    # Membership exists before audio storage or enrichment can stall behind it;
+    # a transient repeat-only intake wrote nothing and owes no membership work.
+    if repeat_only:
+        assert order == [('store_audio', SENTINEL_ID)]
+    else:
+        assert order == [('attach', 'synthetic-owner', SENTINEL_ID), ('store_audio', SENTINEL_ID), ('finish',)]

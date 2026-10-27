@@ -1557,10 +1557,10 @@ abstract class AppLocalizations {
   /// **'Remembering'**
   String get remembering;
 
-  /// Unlimited plan name
+  /// Plan name shown after a successful purchase; Omi Pro is a product name and is not translated
   ///
   /// In en, this message translates to:
-  /// **'Unlimited Plan'**
+  /// **'Omi Pro'**
   String get unlimitedPlan;
 
   /// Manage plan button
@@ -1596,7 +1596,7 @@ abstract class AppLocalizations {
   /// Message shown on locked memory items
   ///
   /// In en, this message translates to:
-  /// **'Upgrade to Unlimited'**
+  /// **'Upgrade to Omi Pro'**
   String get upgradeToUnlimited;
 
   /// Basic plan description
@@ -6114,7 +6114,7 @@ abstract class AppLocalizations {
   /// Subscription banner button text
   ///
   /// In en, this message translates to:
-  /// **'Upgrade to Pro'**
+  /// **'Upgrade to Omi Pro'**
   String get upgradeToPro;
 
   /// Widget title for device promotion
@@ -8175,10 +8175,10 @@ abstract class AppLocalizations {
   /// **'Training Data Program'**
   String get trainingDataProgram;
 
-  /// Description for getting Omi Unlimited free by contributing data
+  /// Description for getting Omi Pro free by contributing data
   ///
   /// In en, this message translates to:
-  /// **'Get Omi Unlimited for free by contributing your data to train AI models.'**
+  /// **'Get Omi Pro for free by contributing your data to train AI models.'**
   String get getOmiUnlimitedFree;
 
   /// Bullet points explaining training data program benefits
@@ -16071,6 +16071,12 @@ abstract class AppLocalizations {
   /// **'Transcription is unavailable — recording continues and your audio is saved.'**
   String get transcriptionUnavailableRecordingSaved;
 
+  /// Capture status when the pendant is connected but its audio never arrived and automatic recovery is exhausted. Same wording as the Live Activity notice.
+  ///
+  /// In en, this message translates to:
+  /// **'No audio from pendant'**
+  String get captureNoAudioFromPendant;
+
   /// Live-capture app bar title while both audio and photos are being captured
   ///
   /// In en, this message translates to:
@@ -17979,10 +17985,10 @@ abstract class AppLocalizations {
   /// **'Downgrade to Freemium'**
   String get downgradeToFreemiumAction;
 
-  /// Title of the training-data opt-in card offering free unlimited access
+  /// Title of the training-data opt-in card offering free Omi Pro
   ///
   /// In en, this message translates to:
-  /// **'Get Free Unlimited Access'**
+  /// **'Get Omi Pro Free'**
   String get getFreeUnlimitedAccess;
 
   /// Subtitle of the training-data opt-in card
@@ -20163,6 +20169,18 @@ abstract class AppLocalizations {
   /// **'The Bluetooth link to your Omi stalled, so audio isn\'t reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.'**
   String get captureWedgeBleExplanation;
 
+  /// Capture status while a pendant link is being verified: no Listening claim and no timer until the subscription is confirmed (CaptureIngressHealth).
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get captureConnecting;
+
+  /// Detail line under the no-audio-from-pendant warning: the link is fine, the audio is not flowing.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant connected, but no audio is reaching your phone'**
+  String get captureNoAudioDetail;
+
   /// Capture recovery banner title for an ingress_recovery_failed episode: automatic recovery is exhausted, so the reader must manually reconnect the device. Not a retry affordance and not an in-progress claim.
   ///
   /// In en, this message translates to:
@@ -20216,18 +20234,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Storage almost full'**
   String get captureStorageAlmostFull;
-
-  /// Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture.
-  ///
-  /// In en, this message translates to:
-  /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
-  String get capturePendantDisconnectedDetail;
-
-  /// Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation.
-  ///
-  /// In en, this message translates to:
-  /// **'Omi reconnects on its own'**
-  String get capturePendantDisconnectedShort;
 
   /// Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'
   ///
@@ -21891,18 +21897,6 @@ abstract class AppLocalizations {
   /// **'Check Connection'**
   String get playbackAudioNetworkFailed;
 
-  /// Home proactivity feed section title
-  ///
-  /// In en, this message translates to:
-  /// **'For You'**
-  String get forYou;
-
-  /// Disable the producer of a For You card
-  ///
-  /// In en, this message translates to:
-  /// **'Stop These'**
-  String get stopThese;
-
   /// Hide a For You card
   ///
   /// In en, this message translates to:
@@ -22878,7 +22872,7 @@ abstract class AppLocalizations {
   /// Heading of the upgrade card for free users
   ///
   /// In en, this message translates to:
-  /// **'Chat apps are part of Pro'**
+  /// **'Chat apps are part of Omi Pro'**
   String get chatAppsPartOfPro;
 
   /// Name of Apple's Messages app, as shown on the device in this language
@@ -23985,10 +23979,10 @@ abstract class AppLocalizations {
   /// **'Copy details for support'**
   String get syncDetailsCopy;
 
-  /// Chat apps row subtitle when the channel (iMessage) needs the Operator or Architect plan; plan names are not translated
+  /// Chat apps row subtitle when the channel (iMessage) needs the Omi Pro plan; the plan name is not translated
   ///
   /// In en, this message translates to:
-  /// **'Available on Operator and Architect'**
+  /// **'Available on Omi Pro'**
   String get chatAppsChannelPlanRequired;
 
   /// Chat apps row subtitle when all seats for the channel are taken; app is iMessage or Telegram
@@ -24876,7 +24870,7 @@ abstract class AppLocalizations {
   /// Explains what upgrading the plan gives
   ///
   /// In en, this message translates to:
-  /// **'Upgrade to Pro for speaker separation and higher accuracy'**
+  /// **'Upgrade to Omi Pro for speaker separation and higher accuracy'**
   String get onDeviceUpgradeBody;
 
   /// Footer under the usage-limit sheet; 'Settings › Transcription' is a menu path
@@ -25194,7 +25188,7 @@ abstract class AppLocalizations {
   /// Hint under the Redo with Omi Cloud button
   ///
   /// In en, this message translates to:
-  /// **'Upgrade to Pro for speaker separation and higher accuracy'**
+  /// **'Upgrade to Omi Pro for speaker separation and higher accuracy'**
   String get onDeviceRedoHint;
 
   /// Setting: never send anything to the cloud
@@ -25527,22 +25521,40 @@ abstract class AppLocalizations {
   /// **'Updated {minutes} min ago · full notes when it wraps up'**
   String episodeUpdatedMinutesAgo(int minutes);
 
+  /// No description provided for @episodeNotesUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Running notes aren’t updating. View the transcript for now.'**
+  String get episodeNotesUnavailable;
+
+  /// No description provided for @episodeCaptureFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Capturing · {duration}'**
+  String episodeCaptureFor(String duration);
+
+  /// No description provided for @episodePrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous episode'**
+  String get episodePrevious;
+
+  /// No description provided for @captureChunksPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Chunks pending: {pending}'**
+  String captureChunksPending(int pending);
+
   /// Shown in the running notes card before the first notes exist.
   ///
   /// In en, this message translates to:
   /// **'Running notes appear after the first few minutes of talk.'**
   String get episodeNotesSoon;
 
-  /// Opens the full live transcript from its preview on a live episode.
-  ///
-  /// In en, this message translates to:
-  /// **'Open All'**
-  String get episodeOpenAll;
-
   /// Button that ends a live episode now and makes its full notes.
   ///
   /// In en, this message translates to:
-  /// **'Wrap Up Now'**
+  /// **'Wrap up now'**
   String get episodeWrapUpNow;
 
   /// Above the Wrap Up Now button: the episode also ends by itself when the user moves on.
@@ -25742,6 +25754,156 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Done. {percent}% off your next {months} months.'**
   String retentionOfferApplied(int percent, int months);
+
+  /// Collective label for unidentified voices with too little evidence in an over-split transcript; not a participant count.
+  ///
+  /// In en, this message translates to:
+  /// **'Others'**
+  String get othersSpeakerLabel;
+
+  /// Live preview is running on the phone but no words have been recognized yet
+  ///
+  /// In en, this message translates to:
+  /// **'Listening… words appear here as you speak.'**
+  String get livePreviewListening;
+
+  /// The on-device live preview engine is starting
+  ///
+  /// In en, this message translates to:
+  /// **'Starting live preview…'**
+  String get livePreviewStarting;
+
+  /// Answer button on an open-loop Review card: the follow-up happened.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get openLoopAnswerDone;
+
+  /// Answer button on an open-loop Review card: ask again in two days.
+  ///
+  /// In en, this message translates to:
+  /// **'Remind me later'**
+  String get openLoopAnswerRemind;
+
+  /// Answer button on an open-loop Review card: stop asking about this follow-up.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop it'**
+  String get openLoopAnswerDrop;
+
+  /// A recording whose capture date the server refused
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid recording date'**
+  String get syncRejectionInvalidDate;
+
+  /// Shown when a block Delete skipped members that are still uploading, so only the refused idle members were deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Some parts are still uploading and were kept'**
+  String get syncDeleteKeptUploading;
+
+  /// The server refused this upload
+  ///
+  /// In en, this message translates to:
+  /// **'Rejected by server'**
+  String get syncRejectionServer;
+
+  /// The audio file is too large to upload
+  ///
+  /// In en, this message translates to:
+  /// **'Too large'**
+  String get syncRejectionTooLarge;
+
+  /// Audio queued on the phone waiting to upload, with its duration
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} on phone'**
+  String deviceOnPhoneQueue(Object duration);
+
+  /// Upload cooldown copy for a per-account dispatch hold, not server capacity
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads paused for a moment — they\'ll resume automatically'**
+  String get syncCardUploadsPaused;
+
+  /// Pill under the live duration: this capture continues the previous episode.
+  ///
+  /// In en, this message translates to:
+  /// **'Continues “{title}”'**
+  String episodeContinues(Object title);
+
+  /// The wall-clock start of the live session, after its running length.
+  ///
+  /// In en, this message translates to:
+  /// **'· since {time}'**
+  String episodeLiveSince(Object time);
+
+  /// Quiet line when no on-device notes can be drafted.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes start when the final transcript arrives.'**
+  String get episodeNotesStartWithTranscript;
+
+  /// Footnote under on-device live notes.
+  ///
+  /// In en, this message translates to:
+  /// **'Drafted on your phone as you talk. The full notes arrive with the final transcript.'**
+  String get episodeOnDeviceNotesFootnote;
+
+  /// Tag on notes drafted on-device from the live preview.
+  ///
+  /// In en, this message translates to:
+  /// **'On this phone'**
+  String get episodeOnThisPhone;
+
+  /// Link from the Summary live card to the Transcript tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Open transcript'**
+  String get episodeOpenTranscript;
+
+  /// Title of the live preview card on the Summary tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Live'**
+  String get liveCardTitle;
+
+  /// Quiet line: how far the final transcript lags the live preview.
+  ///
+  /// In en, this message translates to:
+  /// **'Final transcript about {duration} behind'**
+  String livePreviewBehind(Object duration);
+
+  /// Quiet line when the final-transcript lag is unknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Final transcript catching up'**
+  String get livePreviewCatchingUp;
+
+  /// No-engine preview card body.
+  ///
+  /// In en, this message translates to:
+  /// **'Your words show up here a minute or two after you say them.'**
+  String get livePreviewNoEngineBody;
+
+  /// No-engine preview card title.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording safely'**
+  String get livePreviewNoEngineTitle;
+
+  /// Divider between the final transcript and the on-device preview lines.
+  ///
+  /// In en, this message translates to:
+  /// **'Live on this phone'**
+  String get livePreviewOnPhoneDivider;
+
+  /// Link to the speech settings where the platform can deep-link to them.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on live text'**
+  String get livePreviewTurnOnLiveText;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

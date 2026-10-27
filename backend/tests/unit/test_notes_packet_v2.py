@@ -35,6 +35,7 @@ def isolated_flags(monkeypatch):
         monkeypatch.delenv(flag + '_SERVE_PERCENT', raising=False)
         monkeypatch.delenv(flag + '_SERVE_UID_SHA256S', raising=False)
     monkeypatch.setattr(packet, 'get_evidence', lambda *_args: None)
+    monkeypatch.setattr(incremental, 'get_user_name', lambda *_a, **_kw: None)
     from utils.llm import known_spellings
 
     monkeypatch.setattr(
@@ -140,7 +141,14 @@ def test_one_builder_supplies_agent_and_oneshot_language_local_time_density_spel
 
 
 def candidate(name, probability, band, person_id='synthetic-contact'):
-    return SpeakerCandidate(person_id=person_id, name=name, probability=probability, band=band, source='voice')
+    return SpeakerCandidate(
+        person_id=person_id,
+        name=name,
+        probability=probability,
+        band=band,
+        source='voice',
+        label_eligible=band != 'unknown',
+    )
 
 
 def test_speaker_evidence_lists_best_probability_bands_and_similarity():
@@ -152,7 +160,8 @@ def test_speaker_evidence_lists_best_probability_bands_and_similarity():
                 id='v0',
                 segment_ids=['synthetic-a'],
                 candidates=[candidate('Other', 0.35, 'unknown'), candidate('Nik', 0.8, 'likely')],
-            )
+            ),
+            VoiceCluster(id='v1', segment_ids=['synthetic-b']),
         ],
         similarities=[ClusterSimilarity(a='v0', b='v1', similarity=0.82)],
     )
@@ -173,7 +182,35 @@ def test_two_speakers_with_unknown_owner_never_get_named_attribution(evidence):
     assert fixture['segments'][0]['is_user'] is True  # Source labels are never rewritten.
 
 
-@pytest.mark.parametrize('band,expected', [('confident', 'Nik'), ('likely', 'likely Nik'), ('unknown', None)])
+@pytest.mark.parametrize('status,expected', [('unknown', None), ('ambiguous', None), ('user', 'Morgan')])
+def test_owner_boolean_without_positive_identity_stays_anonymous(status, expected):
+    rows = [
+        {
+            'id': 'synthetic-owner',
+            'text': 'A personal story.',
+            'speaker_id': 0,
+            'is_user': True,
+            'speaker_identity_status': status,
+            'speaker_match_source': 'conversation_voice' if status == 'user' else None,
+        }
+    ]
+    text, mapping = render_cluster_transcript(rows, names={}, owner_name='Morgan')
+    assert mapping['c0'] == expected
+    assert ('Morgan' in text) == (expected == 'Morgan')
+    assert rows[0]['is_user'] is True
+
+
+def test_unproven_legacy_owner_cannot_veto_a_manual_owner_on_another_voice():
+    rows = [
+        dict(id='legacy', speaker_id=0, text='Uncertain speech.', is_user=True, speaker_identity_status='user'),
+        dict(id='manual', speaker_id=1, text='Confirmed speech.', is_user=True, speaker_label_source='manual'),
+    ]
+    _, mapping = render_cluster_transcript(rows, names={}, owner_name='Morgan')
+    assert list(mapping.values()) == [None, 'Morgan']
+    assert all(row['is_user'] for row in rows)
+
+
+@pytest.mark.parametrize('band,expected', [('confident', 'Nik'), ('likely', None), ('unknown', None)])
 def test_renderer_uses_the_policy_band_and_higher_probability(band, expected):
     evidence = SpeakerEvidence(
         status='resolved',
@@ -182,16 +219,21 @@ def test_renderer_uses_the_policy_band_and_higher_probability(band, expected):
             VoiceCluster(
                 id='v0',
                 segment_ids=['synthetic-a'],
-                candidates=[candidate('Wrong', 0.1, 'confident'), candidate('Nik', 0.8, band)],
+                candidates=[
+                    SpeakerCandidate(
+                        person_id='wrong', name='Wrong', probability=0.1, band='confident', source='roster'
+                    ),
+                    candidate('Nik', 0.8, band),
+                ],
             )
         ],
     )
     text, mapping = render_cluster_transcript(
         [{'id': 'synthetic-a', 'text': 'A synthetic remark', 'speaker_id': 0}], names={}, evidence=evidence
     )
-    assert mapping['v0'] == expected
+    assert mapping['c0'] == expected
     assert 'Wrong' not in text
-    assert '[synthetic-a v0]' in text
+    assert '[synthetic-a c0]' in text
 
 
 def test_scopes_do_not_collapse_reused_numeric_speaker_keys():
@@ -249,7 +291,7 @@ def test_topic_title_has_resolved_english_instruction_and_no_chinese_noise(monke
 def test_episode_shadow_has_exact_legacy_text(monkeypatch, mode):
     monkeypatch.setenv(packet.FLAG, mode)
     moment = incremental.render_moment([{'text': 'A synthetic remark', 'is_user': True}], uid='synthetic-account')
-    assert moment.text == 'Owner: A synthetic remark'
+    assert moment.text == 'You: A synthetic remark'
     messages = incremental.build_messages('{}', moment.text, now=START, tz_name='UTC')
     assert messages[0] == ('system', incremental.PROMPT_PREFIX)
 
@@ -263,7 +305,7 @@ def test_word_floor_never_uses_duration_or_discards(monkeypatch, words, minimum)
     result = notes_short_clip.quiet_minimum('synthetic-account', conversation, tz='UTC')
     assert (result is not None) is minimum
     if minimum:
-        assert result.title and result.emoji == '' and result.sections == [] and result.action_items == []
+        assert result.title and result.emoji == '💬' and result.sections == [] and result.action_items == []
         assert result.title_provenance == 'server_minimum'
 
 
@@ -368,7 +410,7 @@ def test_every_trigger_skips_paid_notes_for_fragments(monkeypatch, processing, t
         relevance_observer=decisions.append,
         recovery_minimum_fallback_observer=lambda: minimum.append(True),
     )
-    assert structured.title and structured.emoji == '' and not discarded
+    assert structured.title and structured.emoji == '💬' and not discarded
     assert decisions[0].trigger == trigger and minimum == [True]
 
 
@@ -413,9 +455,10 @@ def test_a_submission_without_a_usable_emoji_never_stores_the_default():
     assert blank.emoji == '🩺'
     chosen = NotesOutput.model_validate({'title': 'Pitch', 'category': 'business', 'emoji': '🎯'}).to_structured()
     assert chosen.emoji == '🎯'
-    # Nothing else is derivable for an unmapped category: the default survives.
+    # Category `other` maps to the neutral emoji, so a miscellaneous note also
+    # escapes the brain.
     unmapped = NotesOutput.model_validate({'title': 'Misc', 'category': 'other'}).to_structured()
-    assert unmapped.emoji == '🧠'
+    assert unmapped.emoji == '💬'
 
 
 def test_served_one_shot_output_without_an_emoji_uses_the_category_fallback(monkeypatch):
@@ -523,7 +566,7 @@ def test_external_audio_fragments_also_get_the_model_free_minimum(monkeypatch):
     monkeypatch.setenv(packet.FLAG, 'serve')
     audio = SimpleNamespace(text_source='audio', text='A short synthetic utterance', started_at=START, photos=[])
     minimum = notes_short_clip.quiet_minimum('synthetic-account', audio)
-    assert minimum.title == 'A short synthetic utterance' and minimum.emoji == ''
+    assert minimum.title == 'A short synthetic utterance' and minimum.emoji == '💬'
 
 
 def test_photo_content_is_not_judged_by_a_speech_word_floor(monkeypatch):

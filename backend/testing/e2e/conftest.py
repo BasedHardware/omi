@@ -10,6 +10,8 @@ import json
 import os
 import socket
 import sys
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator
@@ -84,10 +86,11 @@ def _set_e2e_env():
     os.environ["TYPESENSE_HOST"] = "localhost"
     os.environ["TYPESENSE_HOST_PORT"] = "8108"
     os.environ["TYPESENSE_API_KEY"] = "fake-typesense-key"
-    # The hermetic harness runs no Typesense server: an enabled first-party
-    # conversation index writer would block ~5s per durable conversation write
-    # on refused localhost:8108 retries and blow the e2e timing budget. The
-    # projection is covered by tests/unit/test_conversation_typesense_index.py.
+    # The hermetic harness runs no Typesense server: the write gate below
+    # stops index upserts, and the runtime seam routing in
+    # _create_backend_app keeps the ungated privacy deletes and lazy keyword
+    # searches off the refused dummy port too. The projection is covered by
+    # tests/unit/test_conversation_typesense_index.py.
     os.environ["TYPESENSE_CONVERSATION_INDEX_WRITES"] = "0"
     os.environ["BUCKET_SPEECH_PROFILES"] = "speech-profiles"
     os.environ["BUCKET_POSTPROCESSING"] = "postprocessing"
@@ -245,6 +248,108 @@ def fake_storage():
     teardown_fake_storage()
 
 
+# ─── Deterministic process teardown ─────────────────────────────────────
+
+# Measured on a green suite (2026-10-27, run 40513231489 job 122220618067):
+# the atexit chain itself completes in ~12ms, but pytest's own exit path
+# (~1.7s) plus C-level interpreter teardown of the fully imported backend
+# (~1.75s) both have to fit inside the wrapper's E2E_PYTEST_TIMEOUT budget
+# after a 112.74s session, and the wrapper SIGTERMed green runs. Leaving the
+# pub/sub manager and shared executors to atexit also ran their cleanup after
+# pytest closed capture streams, producing `--- Logging error --- ...
+# ValueError: I/O operation on closed file` noise. Stop that machinery
+# explicitly at session end, while streams are open and with a hard budget,
+# so a slow-teardown regression fails loudly here instead of silently eating
+# the wrapper budget at process exit.
+HERMETIC_SHUTDOWN_BUDGET_SECONDS = 5.0
+
+
+def _teardown_hermetic_process_state() -> float:
+    """Stop process-global background machinery the e2e session started.
+
+    Must stay prompt and idempotent: the session fixture calls it at session
+    end, and test_harness_guards.py replays it in a fresh interpreter to
+    bound process exit. Returns elapsed seconds.
+    """
+    started = time.monotonic()
+
+    # The Redis pub/sub manager is normally stopped by database.cache's
+    # atexit hook — after pytest closed its capture streams. Stop it here and
+    # clear the module state so the atexit hook becomes a no-op.
+    import database.cache as cache_module
+
+    manager = getattr(cache_module, "_pubsub_manager", None)
+    if manager is not None:
+        manager.stop()
+    cache_module._pubsub_manager = None
+    cache_module._initialized = False
+
+    # Shared executors are likewise shut down by an atexit hook; cancel
+    # queued work now instead of after the report is printed.
+    import utils.executors as executors_module
+
+    executors_module.shutdown_executors()
+
+    # shutdown(wait=False) leaves idle workers parked on their work queue and
+    # running workers mid-task. Both are non-daemon: threading._shutdown would
+    # join them unboundedly at interpreter exit, silently eating the wrapper
+    # budget after this teardown already passed. Deliver the None sentinels the
+    # concurrent.futures atexit hook would push (executor._shutdown is already
+    # set, so they stick), then bound the whole drain by the same budget below.
+    pool_workers: set = set()
+    for executor in executors_module._ALL_EXECUTORS:
+        workers = getattr(executor, "_threads", None) or ()
+        pool_workers.update(workers)
+        work_queue = getattr(executor, "_work_queue", None)
+        if work_queue is not None:
+            for _ in workers:
+                work_queue.put(None)
+
+    # Every non-daemon thread that is not the main thread must be gone within
+    # the budget: a leaked foreign thread stalls process exit the same way,
+    # and a pool worker still alive past the budget means a task outlived the
+    # session. Name whichever class is left.
+    deadline = started + HERMETIC_SHUTDOWN_BUDGET_SECONDS
+    strays: list = []
+    lingering_workers: list = []
+    while True:
+        lingering_workers = [t for t in pool_workers if t.is_alive()]
+        strays = [
+            t
+            for t in threading.enumerate()
+            if t is not threading.main_thread() and not t.daemon and t.is_alive() and t not in pool_workers
+        ]
+        if (not strays and not lingering_workers) or time.monotonic() >= deadline:
+            break
+        time.sleep(0.05)
+    elapsed = time.monotonic() - started
+    if strays:
+        names = ", ".join(sorted(t.name for t in strays))
+        raise AssertionError(
+            f"Hermetic e2e teardown left non-daemon thread(s) alive after {elapsed:.2f}s: {names}. "
+            "They would stall process exit past the E2E_PYTEST_TIMEOUT wrapper budget."
+        )
+    if lingering_workers:
+        names = ", ".join(sorted(t.name for t in lingering_workers))
+        raise AssertionError(
+            f"Shared executor worker(s) still alive after {elapsed:.2f}s: {names}. "
+            "A task outlived the session and would stall process exit past the "
+            "E2E_PYTEST_TIMEOUT wrapper budget."
+        )
+    if elapsed > HERMETIC_SHUTDOWN_BUDGET_SECONDS:
+        raise AssertionError(
+            f"Hermetic e2e teardown took {elapsed:.2f}s, over the {HERMETIC_SHUTDOWN_BUDGET_SECONDS:.1f}s budget."
+        )
+    return elapsed
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _hermetic_process_shutdown():
+    """Tear down process-global machinery deterministically at session end."""
+    yield
+    _teardown_hermetic_process_state()
+
+
 # ─── Backend app factory (cached per-session) ───────────────────────────
 
 _app_cache = None
@@ -323,6 +428,30 @@ def _create_backend_app(fake_firestore_instance, fake_redis_instance, fake_stora
 
     # Import the real FastAPI app (triggers all backend module imports)
     import main as backend_main
+
+    # The hermetic stack runs no Typesense server, but the dummy env kept for
+    # import-time client construction makes `typesense_configured()` true, so
+    # every ungated index delete (conversation delete/finalize syncs) and lazy
+    # keyword-search call attempted real HTTP against refused localhost:8108;
+    # urllib3's retry ladder cost ~4s per attempt (~60s across the suite, the
+    # bulk of the 112.74s CI session that outgrew the E2E_PYTEST_TIMEOUT
+    # budget). Route the three runtime seams to instant hermetic behavior:
+    # the two configured-guards take their designed `skipped_unconfigured`
+    # branches, and the shared lazy client raises the same transient
+    # `connection refused` the dead port produced, so fail-open keyword
+    # search keeps its exact semantics. Typesense behavior itself is covered
+    # by tests/unit/test_conversation_typesense_index.py.
+    import utils.conversations.search as conversation_search
+    import utils.conversations.typesense_index as conversation_index
+    import utils.memory.atom_keyword_index as atom_keyword_index
+
+    class _HermeticTypesenseClient:
+        def __getattr__(self, name: str):
+            raise ConnectionError(f"connection refused: hermetic e2e runs no Typesense server ({name})")
+
+    conversation_search.client = _HermeticTypesenseClient()
+    conversation_index.typesense_configured = lambda: False
+    atom_keyword_index.typesense_configured = lambda: False
 
     _install_hermetic_privacy_projection_fakes()
 
@@ -480,6 +609,18 @@ def auth_headers():
 def test_uid():
     """Return the fixed dev-test UID."""
     return DEV_UID
+
+
+@pytest.fixture()
+def live_user(fake_firestore, test_uid):
+    """Model the persisted account behind authenticated usage-producing requests.
+
+    Dev-token authentication alone does not create a user root. Seed it only
+    for tests that require a live account; missing-root tests stay explicit.
+    """
+    user = fake_firestore.collection("users").document(test_uid)
+    user.set({"id": test_uid})
+    return user
 
 
 @pytest.fixture()

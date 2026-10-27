@@ -55,6 +55,9 @@ overlay:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '0'
+          value: '0'
+        AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
+          value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
@@ -74,7 +77,7 @@ overlay:
         STT_ROUTING_MODE:
           value: 'on'
         STT_ROUTING_ON_PERCENT:
-          value: '90'
+          value: '100'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
           value: '100'
         PARAKEET_WINDOW_MAX_SESSIONS:
@@ -199,10 +202,6 @@ overlay:
           config_map:
             name: prod-omi-backend-config
             key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
-        SERVICE_ACCOUNT_JSON:
-          secret:
-            name: prod-omi-backend-secrets
-            key: SERVICE_ACCOUNT_JSON
         OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
           value: 'true'
           category: rollout
@@ -229,6 +228,9 @@ overlay:
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+          value: '0'
+          value: '0'
+        AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
@@ -449,6 +451,13 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          # Monthly-total scope deliberately stays 100/c2fs_20261026_r1 on these four prod services;
+          # base/GKE/jobs/desktop/dev stay 0/v1. Full literal also carries people=5, memory=0, privacy=0.
+          # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
+          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
+          # Enforce funded STT cap dispatch admission (cohort- and lane-gated); the cap cohort is runtime-doc driven.
+          STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
           FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
@@ -471,6 +480,9 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
+            value: '0'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
@@ -732,6 +744,9 @@ overlay:
           REPEAT_WORK_REVISION_ENABLED:
             value: 'false'
             category: rollout
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
           SYNC_DURABLE_STATUS_RECONCILIATION:
             value: 'true'
             category: rollout
@@ -757,6 +772,12 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          # Monthly-total scope deliberately stays 100/c2fs_20261026_r1 on these four prod services;
+          # base/GKE/jobs/desktop/dev stay 0/v1. Full literal also carries people=5, memory=0, privacy=0.
+          # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
+          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
+          STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
@@ -783,6 +804,9 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
+            value: '0'
             value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
@@ -1113,6 +1137,11 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          # Monthly-total scope deliberately stays 100/c2fs_20261026_r1 on these four prod services;
+          # base/GKE/jobs/desktop/dev stay 0/v1. Full literal also carries people=5, memory=0, privacy=0.
+          # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
+          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
@@ -1132,6 +1161,9 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
+            value: '0'
             value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
@@ -1428,6 +1460,11 @@ overlay:
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-integration:
+        # Approved recovery-only binding; op1 pre-binds and verifies access before deploy.
+        secrets:
+          SONIOX_API_KEY:
+            secret: SONIOX_API_KEY
+            version: latest
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
@@ -1437,7 +1474,15 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          # Monthly-total scope deliberately stays 100/c2fs_20261026_r1 on these four prod services;
+          # base/GKE/jobs/desktop/dev stay 0/v1. Full literal also carries people=5, memory=0, privacy=0.
+          # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
+          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
+          # Activated at runtime 2026-10-27 02:07Z (lead 5da7dc/ebc45a) after the 5% unsupported-language held
+          # loop; declared here so a train carries the serving value instead of resetting it to false.
+          BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
             value: https://backend-integration-hhibjajaja-uc.a.run.app
             category: service_auth
@@ -1477,6 +1522,9 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
+            value: '0'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
@@ -1623,6 +1671,9 @@ overlay:
           REPEAT_WORK_REVISION_ENABLED:
             value: 'false'
             category: rollout
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'true'
             category: rollout
@@ -1653,19 +1704,6 @@ overlay:
             value: 'on'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
-      memory-maintenance-job:
-        secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
-        env:
-          PINECONE_INDEX_NAME:
-            value: memories-backend
-          OMI_CUSTOMER_DATA_PROJECT:
-            value: based-hardware
-          OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
-            value: 'true'
-            category: rollout
       frame-request-retention-job:
         secrets:
           SERVICE_ACCOUNT_JSON:
@@ -1690,7 +1728,6 @@ overlay:
     - .github/workflows/gcp_backend.yml
     - .github/workflows/gcp_notifications_job.yml
     - .github/workflows/gcp_x_connector_sync_job.yml
-    - .github/workflows/gcp_memory_maintenance_job.yml
     - .github/workflows/gcp_frame_request_retention_job.yml
     - .github/workflows/gcp_day3_reengagement_email_job.yml
   data_plane_project: based-hardware

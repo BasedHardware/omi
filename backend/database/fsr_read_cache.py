@@ -15,23 +15,28 @@ import time
 import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass, field
 from datetime import datetime
 from functools import lru_cache, wraps
+from typing import Any
 
 from config.firestore_read_levers import lever_enabled
 from database import redis_db
 from database.firestore_cache_metrics import record_request
 from database.fsr_cache_telemetry import record_fallback
-from database.request_read_context import (
-    RequestReads as RequestReads,
-    request_reads as _request,
-    bypass as _bypass,
-    cohort_memberships as cohort_memberships,
-)
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class RequestReads:
+    values: dict = field(default_factory=dict)
+    lock: Any = field(default_factory=threading.RLock)
+    closed: bool = False
+
+
+_request: ContextVar[RequestReads | None] = ContextVar('s4_request_reads', default=None)
+_bypass: ContextVar[bool] = ContextVar('s4_fresh_reads', default=False)
 _fresh_families: ContextVar[frozenset[str]] = ContextVar('s4_fresh_families', default=frozenset())
 
 
@@ -45,7 +50,6 @@ async def request_read_scope():
         with holder.lock:
             holder.closed = True
             holder.values.clear()
-            holder.cohort_values.clear()
         try:
             _request.reset(token)
         except ValueError:

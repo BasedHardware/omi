@@ -16,9 +16,9 @@ from config.batch_pipeline import (
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.batch_pipeline_staging import reap
-from utils.batch_pipeline.intake import artifacts_for
+from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.live import drain_recordings
-from utils.batch_pipeline.projection import Projector, error_type
+from utils.batch_pipeline.projection import HELD_PARTIAL_PAGE, Projector, error_type
 from utils.executors import run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
@@ -30,6 +30,19 @@ from utils.sync.stage import current_stage
 from utils.sync import reprocess
 
 HELD_PARTIAL_INTERVAL_SECONDS = 300
+# One maintenance tick chains held-partial pages into at most this much sweep
+# time; a pass stopped by either budget keeps its cursor and resumes on the
+# next supervisor tick instead of waiting out the interval above.
+HELD_PARTIAL_TICK_SECONDS = 20.0
+# Hourly read governor for the held sweep. The sweep charges its exact
+# code-derived read count (one per examined document plus 5 per sibling and 7
+# per attempted upload); this per-unit figure is only the pacing estimate for
+# the page cap and the fallback for projector models that report no reads.
+# 16 is the measured worst case for an upload per held unit (15 attempt reads
+# + the query read; steady replays cost 14).
+HELD_PARTIAL_READS_PER_HOUR = 120_000
+HELD_PARTIAL_READS_PER_UNIT = 16
+HELD_PARTIAL_WINDOW_SECONDS = 3600.0
 
 
 class Serving:
@@ -58,6 +71,9 @@ class Serving:
         # Held units change only on a recovery or operator settle: scan them
         # at a slow cadence, not every maintenance pass.
         self.held_partial_due = 0.0
+        # (monotonic instant, reads charged) pairs: the hourly read governor.
+        # Per serving instance; the maintenance lease usually pins one leader.
+        self.held_partial_reads: list[tuple[float, int]] = []
 
     def queue(self, pool='batch'):
         return Scheduler(self.store, metrics=self.metrics, pool=pool)
@@ -149,6 +165,22 @@ class Serving:
             return None
         return self.recovery.sweep()
 
+    def _charge_held_partial_reads(self, counts: dict) -> None:
+        reads = counts.get('reads')
+        if not isinstance(reads, int) or reads < 0:
+            reads = counts.get('units', 0) * HELD_PARTIAL_READS_PER_UNIT
+        if reads > 0:
+            self.held_partial_reads.append((time.monotonic(), reads))
+
+    def _held_partial_page_budget(self) -> int:
+        """Full pages this tick may still examine under the hourly read governor."""
+        now = time.monotonic()
+        self.held_partial_reads = [
+            charged for charged in self.held_partial_reads if now - charged[0] < HELD_PARTIAL_WINDOW_SECONDS
+        ]
+        spent = sum(reads for _, reads in self.held_partial_reads)
+        return (HELD_PARTIAL_READS_PER_HOUR - spent) // (HELD_PARTIAL_PAGE * HELD_PARTIAL_READS_PER_UNIT)
+
     def _maintain(self, *, recover_quarantine: bool):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
         if self.cleanup:
@@ -168,7 +200,18 @@ class Serving:
         if sweep_held is not None and time.monotonic() >= self.held_partial_due and held_partial_enabled():
             self.held_partial_due = time.monotonic() + HELD_PARTIAL_INTERVAL_SECONDS
             try:
-                sweep_held()
+                pages = self._held_partial_page_budget()
+                if pages < 1:
+                    # The hourly read governor is spent; rechecking it next tick
+                    # costs no reads, and the backlog resumes as it refills.
+                    self.held_partial_due = time.monotonic()
+                else:
+                    counts = sweep_held(deadline=time.monotonic() + HELD_PARTIAL_TICK_SECONDS, max_pages=pages)
+                    if isinstance(counts, dict):
+                        self._charge_held_partial_reads(counts)
+                        if counts.get('more'):
+                            # The tick or read budget stopped the pass mid-backlog.
+                            self.held_partial_due = time.monotonic()
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_held_partial action=sweep outcome=retry exception_type=%s', type(error).__name__

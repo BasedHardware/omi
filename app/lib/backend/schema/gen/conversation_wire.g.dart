@@ -459,7 +459,7 @@ class GeneratedStructured {
   const GeneratedStructured({
     this.actionItems,
     this.category = "other",
-    this.emoji = "\ud83e\udde0",
+    this.emoji = "\ud83d\udcac",
     this.events,
     this.insights,
     this.meetingType,
@@ -475,7 +475,7 @@ class GeneratedStructured {
     return GeneratedStructured(
       actionItems: _readFieldValue<List<GeneratedActionItem>>(_readField(json, const ["action_items", "actionItems"]), "action_items", (value) => _readObjectList(value, GeneratedActionItem.fromJson), requiredField: false, nullable: true),
       category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: "other"), "category"),
-      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: "\ud83e\udde0"), "emoji"),
+      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: "\ud83d\udcac"), "emoji"),
       events: _readFieldValue<List<GeneratedEvent>>(_readField(json, const ["events"]), "events", (value) => _readObjectList(value, GeneratedEvent.fromJson), requiredField: false, nullable: true),
       insights: _readFieldValue<List<GeneratedInsight>>(_readField(json, const ["insights"]), "insights", (value) => _readObjectList(value, GeneratedInsight.fromJson), requiredField: false, nullable: true),
       meetingType: _readFieldValue<String>(_readField(json, const ["meeting_type"]), "meeting_type", _readString, requiredField: false, nullable: true),
@@ -636,6 +636,7 @@ class GeneratedAudioFile {
   final String conversationId;
   final double duration;
   final String id;
+  final double? playbackStart;
   final String provider;
   final String? sourceFingerprint;
   final DateTime? startedAt;
@@ -647,6 +648,7 @@ class GeneratedAudioFile {
     required this.conversationId,
     required this.duration,
     required this.id,
+    this.playbackStart,
     this.provider = "gcp",
     this.sourceFingerprint,
     this.startedAt,
@@ -660,6 +662,7 @@ class GeneratedAudioFile {
       conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
       duration: _required(_readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: true, nullable: false), "duration"),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      playbackStart: _readFieldValue<double>(_readField(json, const ["playback_start"]), "playback_start", _readDouble, requiredField: false, nullable: true),
       provider: _required(_readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString, requiredField: false, nullable: false, defaultValue: "gcp"), "provider"),
       sourceFingerprint: _readFieldValue<String>(_readField(json, const ["source_fingerprint"]), "source_fingerprint", _readString, requiredField: false, nullable: true),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: false, nullable: true),
@@ -674,6 +677,7 @@ class GeneratedAudioFile {
       'conversation_id': conversationId,
       'duration': duration,
       'id': id,
+      'playback_start': playbackStart,
       'provider': provider,
       'source_fingerprint': sourceFingerprint,
       'started_at': startedAt?.toUtc().toIso8601String(),
@@ -1296,7 +1300,7 @@ class GeneratedProjectedStructure {
 
   const GeneratedProjectedStructure({
     this.category = "other",
-    this.emoji = "\ud83e\udde0",
+    this.emoji = "",
     this.events,
     this.overview = "",
     this.sections,
@@ -1306,7 +1310,7 @@ class GeneratedProjectedStructure {
   factory GeneratedProjectedStructure.fromJson(Map<String, dynamic> json) {
     return GeneratedProjectedStructure(
       category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: "other"), "category"),
-      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: "\ud83e\udde0"), "emoji"),
+      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: ""), "emoji"),
       events: _readFieldValue<List<GeneratedProjectedEvent>>(_readField(json, const ["events"]), "events", (value) => _readObjectList(value, GeneratedProjectedEvent.fromJson), requiredField: false, nullable: true),
       overview: _required(_readFieldValue<String>(_readField(json, const ["overview"]), "overview", _readString, requiredField: false, nullable: false, defaultValue: ""), "overview"),
       sections: _readFieldValue<List<GeneratedProjectedSection>>(_readField(json, const ["sections"]), "sections", (value) => _readObjectList(value, GeneratedProjectedSection.fromJson), requiredField: false, nullable: true),
@@ -1672,12 +1676,14 @@ class GeneratedConversationTestPromptResponse {
 
 class GeneratedMergeConversationsResponse {
   final List<String> conversationIds;
+  final String? mergedConversationId;
   final String message;
   final String status;
   final String? warning;
 
   const GeneratedMergeConversationsResponse({
     required this.conversationIds,
+    this.mergedConversationId,
     this.message = "Merge started",
     this.status = "merging",
     this.warning,
@@ -1686,6 +1692,7 @@ class GeneratedMergeConversationsResponse {
   factory GeneratedMergeConversationsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedMergeConversationsResponse(
       conversationIds: _required(_readFieldValue<List<String>>(_readField(json, const ["conversation_ids"]), "conversation_ids", _readStringList, requiredField: true, nullable: false), "conversation_ids"),
+      mergedConversationId: _readFieldValue<String>(_readField(json, const ["merged_conversation_id"]), "merged_conversation_id", _readString, requiredField: false, nullable: true),
       message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: false, nullable: false, defaultValue: "Merge started"), "message"),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "merging"), "status"),
       warning: _readFieldValue<String>(_readField(json, const ["warning"]), "warning", _readString, requiredField: false, nullable: true),
@@ -1695,6 +1702,7 @@ class GeneratedMergeConversationsResponse {
   Map<String, dynamic> toJson() {
     return {
       'conversation_ids': conversationIds,
+      'merged_conversation_id': mergedConversationId,
       'message': message,
       'status': status,
       'warning': warning,

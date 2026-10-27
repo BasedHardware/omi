@@ -6,6 +6,7 @@ import 'package:omi/backend/http/api/dream.dart' as dream_api;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/pages/review/dream_report_page.dart';
 import 'package:omi/pages/review/recent_changes_page.dart';
+import 'package:omi/pages/review/widgets/open_loop_card.dart';
 import 'package:omi/pages/review/widgets/review_question_card.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -38,12 +39,16 @@ class _ReviewPageState extends State<ReviewPage> {
     final l10n = context.l10n;
     final provider = context.watch<ReviewProvider>();
     final items = provider.items;
+    // Open-loop cards age out with the day, so they come first; without any,
+    // the page looks exactly as it did before they existed.
+    final openLoops = provider.openLoopCards;
+    final bool nothingLeft = items.isEmpty && openLoops.isEmpty;
     final Widget body;
-    if (items.isEmpty && provider.loading) {
+    if (nothingLeft && provider.loading) {
       body = const OmiLoadingState();
-    } else if (items.isEmpty && provider.loadFailed) {
+    } else if (nothingLeft && provider.loadFailed) {
       body = OmiErrorState(message: l10n.reviewLoadFailed, onRetry: provider.load);
-    } else if (items.isEmpty) {
+    } else if (nothingLeft) {
       body = OmiEmptyState(
         icon: Icons.check_circle_outline,
         title: l10n.reviewCaughtUpTitle,
@@ -61,6 +66,12 @@ class _ReviewPageState extends State<ReviewPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xxl),
           children: [
+            for (final card in openLoops)
+              OpenLoopQuestionCard(
+                key: ValueKey(card.cardId),
+                card: card,
+                margin: const EdgeInsets.only(bottom: OmiSpacing.sm),
+              ),
             for (final item in items)
               ReviewQuestionCard(
                 key: ValueKey(item.itemId),

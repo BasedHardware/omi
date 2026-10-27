@@ -119,7 +119,7 @@ Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, Stri
     Logger.debug('upgradeSubscription response: ${response.body}');
     return generated.toJson();
   }
-  if (response.statusCode == 400 || response.statusCode == 409) {
+  if (response.statusCode == 400 || response.statusCode == 402 || response.statusCode == 409) {
     return _paymentError(response);
   }
   return null;
@@ -145,7 +145,7 @@ Future<Map<String, dynamic>?> getAppSubscription(String appId) async {
 Future<Map<String, dynamic>?> getAvailablePlans() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/available-plans',
-    headers: {},
+    headers: {'X-Omi-Billing-Currency': '1'},
     method: 'GET',
     body: '',
   );

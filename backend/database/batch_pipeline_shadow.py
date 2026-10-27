@@ -13,7 +13,14 @@ import time
 from config.batch_pipeline_shadow import paid_recovery_limit, shadow_percent
 from config.policy import resolve_stage_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from utils.batch_pipeline.contracts import WorkItem, RecoveryWork, ValidationFailureWork
+from utils.batch_pipeline.contracts import (
+    WorkItem,
+    RecoveryWork,
+    ValidationFailureWork,
+    attach_held_vad,
+    held_vad_census,
+    held_silence_allowed,
+)
 from utils.batch_pipeline.shadow_metrics import OUTCOMES, PAID, PAID_AUDIO, record
 
 MAX_OFFERS = 4
@@ -51,10 +58,35 @@ class ShadowStore:
         # ordinary GPU work wins, including a flight prefetched by another lane.
         return pool_busy(self.store.client, self.store.namespace)
 
-    def _finish(self, tx, segment, outcome, *, speech=0.0, vad='unknown'):
+    def _finish(self, tx, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None):
         job = tx.get('shadow_jobs', segment)
         if job.get('shadow') is not True or job.get('state') == 'settled':
             return None
+        context = {'duration_seconds': (job.get('item') or {}).get('duration_seconds'), **job}
+        measured = speech if vad in {'strict', 'worker'} else None
+        census = held_vad_census(context, measured)
+        independent = (
+            isinstance(recognizers, dict)
+            and set(recognizers) == {'modulate', 'soniox'}
+            and all(
+                isinstance(r, dict)
+                and r.get('provider') == p
+                and r.get('outcome') == 'empty'
+                and r.get('word_count') == 0
+                for p, r in recognizers.items()
+            )
+        )
+        # Positive-VAD historical exhaustion also uses "empty" and retains loss
+        # accounting. A zero/unknown silence claim must respect earlier speech.
+        if (
+            outcome == 'empty'
+            and measured in (None, 0)
+            and not held_silence_allowed(context, measured, independent=independent)
+        ):
+            outcome = 'failed_held'
+        speech, vad = census or 0.0, (
+            vad if measured is not None and census == measured else 'strict' if census is not None else 'unknown'
+        )
         row = {
             'shadow': True,
             'state': 'settled',
@@ -62,6 +94,7 @@ class ShadowStore:
             'class': job['class'],
             'outcome': outcome,
             'vad': vad,
+            **({'recognizers': recognizers, 'paid_providers': job.get('paid', [])} if recognizers is not None else {}),
             **({'reason_code': 'shadow_paid_skipped'} if outcome == 'paid_skipped' else {}),
             'speech_seconds': float(speech),
             'speech_loss_seconds': float(speech) if outcome != 'recovered' else 0.0,
@@ -71,10 +104,12 @@ class ShadowStore:
         tx.put('shadow_jobs', segment, row)
         return row
 
-    def finish(self, segment, outcome, *, speech=0.0, vad='unknown'):
+    def finish(self, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None):
         if outcome not in OUTCOMES:
             raise ValueError('closed shadow outcome required')
-        row = self.store.run(lambda tx: self._finish(tx, segment, outcome, speech=speech, vad=vad))
+        row = self.store.run(
+            lambda tx: self._finish(tx, segment, outcome, speech=speech, vad=vad, recognizers=recognizers)
+        )
         if row:
             record(row)
 
@@ -225,7 +260,7 @@ class ShadowStore:
 
     def paid(self, segment, provider):
         """Each provider is reserved once, across replicas/retries and hour rollover."""
-        if provider not in {'modulate', 'deepgram'} or not shadow_percent():
+        if provider not in {'modulate', 'deepgram', 'soniox'} or not shadow_percent():
             return False
         now, limit = self.clock(), paid_recovery_limit()
         hour = str(int(now // 3600))
@@ -277,9 +312,16 @@ class ShadowStore:
             job = tx.get('shadow_jobs', segment)
             if job.get('shadow') is not True or job.get('state') != 'running':
                 return False
-            evidence_fields = {}
+            bound = dict(job['item'])
+            bound['measured_held_vad_speech_seconds'] = held_vad_census({**bound, **job})
+            attach_held_vad(bound, evidence.measured_held_vad_speech_seconds, evidence.worker_vad_receipt)
+            evidence_fields = {
+                key: bound[key] for key in ('measured_held_vad_speech_seconds', 'worker_vad_receipt') if key in bound
+            }
             if isinstance(evidence, RecoveryWork) and evidence.padded_retry:
                 evidence_fields['worker_empty_evidence'] = {'padded_retry': evidence.padded_retry, 'version': 1}
+            if isinstance(evidence, ValidationFailureWork):
+                evidence_fields['worker_failure'] = {'stage': evidence.stage, 'reason': evidence.reason}
             tx.put('shadow_jobs', segment, {**job, **evidence_fields, 'state': 'recovery_ready'})
             return True
 

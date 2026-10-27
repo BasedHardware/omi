@@ -4,18 +4,22 @@
   before its processing runs (``service.close_on_finalize``), so the app's next read
   shows no live episode and the next words open a new one. The durable finalizer
   calls it when a job starts; client-finalize routes call it with the request.
+- ``attach_synced_at_intake``: the sync lane's intake hook. A WAL conversation
+  joins the live episode covering its span the moment intake persisted it
+  (``service.attach_synced_intake``), so Home folds it under the live row from
+  its first appearance instead of after enrichment finishes.
 - ``schedule_after_finalization``: the durable finalizer's post-processing hook
   (``service.on_conversation_finalized``: tail notes, item reconciliation) for
   the synchronous ``POST /v1/conversations`` route, run off the request path.
 
-Both are fail-open and cheap for users outside the episodes cohort. The episode
+All are fail-open and cheap for users outside the episodes cohort. The episode
 service is imported at the call, so importing a router never loads it.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Mapping
 
 from config.episodes import episodes_enabled_for
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -23,6 +27,44 @@ from utils.episodes import client_gate
 from utils.executors import lifecycle_executor, submit_with_context
 
 logger = logging.getLogger(__name__)
+
+
+def attach_synced_at_intake(uid: str, conversation_id: str, row: Mapping[str, Any] | None) -> str:
+    """A sync row the moment intake persisted it joins the live episode covering it. Never raises.
+
+    ``row`` is the assigned conversation document; its ``source`` may still be the
+    pydantic enum member at this boundary, so it is normalized to the wire value
+    the boundary rules compare against. The capability marker is read through the
+    short process cache: a batch lands many segments, and a faulting Redis must
+    cost one read per window, not one per segment.
+    """
+    if not episodes_enabled_for(uid) or not conversation_id:
+        return 'disabled'
+    try:
+        if not client_gate.client_seen_cached(uid):
+            return 'skipped_no_client'
+        from utils.episodes.service import attach_synced_intake
+
+        normalized = dict(row) if isinstance(row, Mapping) else {}
+        raw_source = normalized.get('source')
+        normalized['source'] = getattr(raw_source, 'value', raw_source)
+        return attach_synced_intake(uid, conversation_id, normalized)
+    except Exception as error:
+        logger.warning('event=episode_sync_intake_attach outcome=error exception_type=%s', type(error).__name__)
+        return 'error'
+
+
+def schedule_synced_intake_attach(uid: str, conversation_id: str, row: Mapping[str, Any] | None) -> None:
+    """Run the intake episode join on the episode pool; sync intake never waits on Firestore for it."""
+    if not episodes_enabled_for(uid) or not conversation_id:
+        return
+    snapshot = dict(row) if isinstance(row, Mapping) else {}
+    try:
+        submit_with_context(
+            lifecycle_executor(uid, episode=True), attach_synced_at_intake, uid, conversation_id, snapshot
+        )
+    except Exception as error:
+        logger.warning('event=episode_sync_intake_attach outcome=error exception_type=%s', type(error).__name__)
 
 
 def close_now(uid: str, conversation_id: str, trigger: ProcessingTrigger, source: Any = None) -> str:

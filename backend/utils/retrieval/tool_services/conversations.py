@@ -39,6 +39,7 @@ from utils.model_text import (
     withheld_note,
 )
 from utils.user_clock import clock_for_uid
+from utils.retrieval.tool_services.transcript_search import search_saved_transcripts_text
 import logging
 
 logger = logging.getLogger(__name__)
@@ -255,6 +256,8 @@ def search_conversations_text(
     include_transcript: bool = True,
     include_timestamps: bool = False,
     source_sink: Optional[List[dict[str, Any]]] = None,
+    transcript_query: Optional[str] = None,
+    transcript_cursor: Optional[str] = None,
 ) -> str:
     """Hybrid keyword + semantic vector search for conversations, formatted as LLM-ready text."""
     exact_conversation_id = parse_exact_conversation_reference(query)
@@ -289,6 +292,23 @@ def search_conversations_text(
             ends_at = int(end_dt.timestamp())
         except ValueError as e:
             return f"Error: Invalid end_date format: {e}"
+
+    if transcript_cursor is not None and transcript_query is None:
+        return 'Error: transcript_cursor requires the original transcript_query.'
+    if transcript_query is not None:
+        if not include_transcript:
+            return 'Error: direct transcript search requires include_transcript=true.'
+        return search_saved_transcripts_text(
+            uid,
+            transcript_query,
+            start_date=start_dt,
+            end_date=end_dt,
+            limit=limit,
+            cursor=transcript_cursor,
+            conversation_id=exact_conversation_id,
+            clock=display_clock,
+            source_sink=source_sink,
+        )
 
     # Guard one-sided date ranges: vector_db.query_vectors sets both $gte and $lte
     # when starts_at is provided, so we need to fill in the missing bound.

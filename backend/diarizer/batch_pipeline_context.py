@@ -168,3 +168,24 @@ START_IN_SPEECH_SECONDS = 0.5
 def starts_in_speech(spans) -> bool:
     """VAD speech begins at the capture's first samples (likely mid-utterance)."""
     return bool(spans) and min(start for start, _ in spans) <= START_IN_SPEECH_SECONDS
+
+
+def empty_retry_audio(state, index, max_padded_seconds):
+    """One context-bearing retry; offset maps its words back into the unit.
+
+    Keep the complete unit when prefixing a contiguous predecessor. Otherwise
+    start one second before the first VAD onset, retaining every speech span.
+    The existing adapter adds its silence margins and enforces the 120s bound.
+    """
+    samples = state['samples']
+    if not isinstance(samples, np.ndarray):
+        return samples, 0.0
+    duration = len(samples) / SAMPLE_RATE
+    context = index.lookup(state['item'], duration, state.get('stream'))
+    room = int((min(120, max_padded_seconds) - duration - 4) * SAMPLE_RATE)
+    if context is not None and room > 0:
+        context = context[-room:]
+        return np.concatenate([context.astype(samples.dtype, copy=False), samples]), -len(context) / SAMPLE_RATE
+    spans = state.get('speech_spans') or []
+    start = max(0, int((min((s['start'] for s in spans), default=0) - 1) * SAMPLE_RATE))
+    return samples[start:], start / SAMPLE_RATE

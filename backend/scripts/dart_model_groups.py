@@ -96,6 +96,10 @@ SCHEMA_GROUPS = {
             'ReviewChange',
             'ReviewChangeDiff',
             'ReviewChangesResponse',
+            'OpenLoopCard',
+            'OpenLoopCardsResponse',
+            'OpenLoopAnswerRequest',
+            'OpenLoopAnswerResponse',
         ),
     },
     'entity_pages': {
@@ -120,16 +124,6 @@ SCHEMA_GROUPS = {
             'EntityPage',
             'EntityCorrection',
             'EntitiesResponse',
-        ),
-    },
-    'proactivity': {
-        'output': DEFAULT_OUTPUT_DIR / 'proactivity_wire.g.dart',
-        'schemas': (
-            'ProactivityTarget',
-            'ProactivityFeedItem',
-            'ProactivityFeedResponse',
-            'ProactivityOutcomeRequest',
-            'ProactivityOutcomeResponse',
         ),
     },
     'frame_requests': {
@@ -447,6 +441,7 @@ SCHEMA_GROUPS = {
             'AppCreateResponse',
             'AppMigrationResponse',
             'McpAddServerResponse',
+            'McpAuthorizeResponse',
             'AppDescriptionGenerationResponse',
             'AppDescriptionEmojiGenerationResponse',
             'AppPromptsGenerationResponse',

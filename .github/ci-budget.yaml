@@ -237,7 +237,7 @@
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "#21780 runs 38823920783/38827426342 hit the 10m whole-job ceiling; the second completed all 2040 assertions in 535.44s before setup/cleanup pushed it over. A bounded 15m ceiling admits the complete suite. Retain the 3m p50 improvement target and existing runner, triggers, matrix and daily forecast. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "#21780 runs 38823920783/38827426342 hit the 10m whole-job ceiling; the second completed all 2040 assertions in 535.44s before setup/cleanup pushed it over. A bounded 15m ceiling admits the complete suite. Retain the 3m p50 improvement target and existing runner, triggers, matrix and daily forecast. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -265,7 +265,7 @@
       "matrix_size": 6,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#21237: run 38168319908 selected 1727 files; four shard contract walls were 710/472/772/651s. Six shards reduce 432 files to at most 288, forecasting about 8 minutes per runner including fixed preflight/typecheck work. The 720-second regression gate is unchanged; fanout raises aggregate forecast from 36 to 48 Linux runner-minutes per run without relaxing coverage or isolation. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "#21237: run 38168319908 selected 1727 files; four shard contract walls were 710/472/772/651s. Six shards reduce 432 files to at most 288, forecasting about 8 minutes per runner including fixed preflight/typecheck work. The 720-second regression gate is unchanged; fanout raises aggregate forecast from 36 to 48 Linux runner-minutes per run without relaxing coverage or isolation. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -288,7 +288,7 @@
         "backend-unit-guardrails"
       ],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 116 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 116 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -307,7 +307,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily label read over the PR M forecast of 118 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily label read over the PR M forecast of 118 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1305,7 +1305,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_cloud_run_metrics_egress.yml/deploy": {
-      "budget_p50_minutes": 15,
+      "budget_p50_minutes": 16,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1314,7 +1314,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Planning budget increased from 5 to 15 minutes for pinned base/candidate render verification, operator-created replica validation, frontend rollout and authenticated query probes; the trigger now also spans resilience.json and the GMP frontend overlay; main/dev or explicit prod only, not a measured p50.",
+      "rationale": "Planning budget increased from 15 to 16 minutes: the trigger now also spans verify_pusher_live_alert_route.py and mute-timings.json so import-path fixes re-provision alerts on main; pinned base/candidate render verification, operator-created replica validation, frontend rollout and authenticated query probes unchanged; main/dev or explicit prod only, not a measured p50.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1323,7 +1323,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_cloud_run_metrics_egress.yml/provision-live-alerts": {
-      "budget_p50_minutes": 7,
+      "budget_p50_minutes": 8,
       "display_name": "provision-live-alerts",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 0,
@@ -1332,7 +1332,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Planning budget increased from 5 to 7 minutes for canary-first import/readback and live-STT coverage; the trigger now spans both resilience.json and the GMP frontend overlay; no PR execution and no new runner.",
+      "rationale": "Planning budget increased from 7 to 8 minutes: the import now ensures referenced mute timings exist before any rule write (dev Grafana froze qualification on 2026-10-25 without it) and the trigger spans verify_pusher_live_alert_route.py and mute-timings.json; canary-first import/readback and live-STT coverage unchanged; no PR execution and no new runner.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1377,7 +1377,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_diarizer.yml/deploy": {
-      "budget_p50_minutes": 20,
+      "budget_p50_minutes": 21,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1386,7 +1386,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1574,6 +1574,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_incluster_guards.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": "inputs.environment != 'prod' || github.ref == 'refs/heads/main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend infrastructure",
+      "rationale": "Manual independent guard-only Helm release; no image build or serving rollout; zero PR runs.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "gcp_llm_gateway.yml/deploy": {
       "budget_p50_minutes": 6,
       "display_name": "deploy",
@@ -1603,42 +1621,6 @@
       "needs": "deploy",
       "owner": "CI maintainers",
       "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan B B3 adds the gateway_image_digest dispatch input (backend-gateway role-image opt-in, blank by default); the audit job still runs only on a break-glass dispatch with no PR runs, and the one-minute bump records the trigger change",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_memory_maintenance_job.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "deploy",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_memory_maintenance_job_auto_dev.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "deploy",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3437,7 +3419,7 @@
     "backend-unit-tests.yml": {
       "name": "Backend Unit Tests",
       "owner": "CI maintainers",
-      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively. The 2026-10-18 JIT retirement removes the deleted local QA harness from this workflow's path filter. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
+      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively. The 2026-10-18 JIT retirement removes the deleted local QA harness from this workflow's path filter. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. The 2026-10-26 memory-maintenance-job retirement drops the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -3474,8 +3456,6 @@
             ".github/workflows/gcp_firestore_indexes.yml",
             ".github/workflows/gcp_backend*.yml",
             ".github/workflows/gcp_llm_gateway.yml",
-            ".github/workflows/gcp_memory_maintenance_job.yml",
-            ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
             ".github/workflows/gcp_notifications_job.yml",
             ".github/workflows/gcp_x_connector_sync_job.yml",
             ".github/scripts/check_backend_deploy_source_admission.py",
@@ -3529,8 +3509,6 @@
             ".github/workflows/gcp_firestore_indexes.yml",
             ".github/workflows/gcp_backend*.yml",
             ".github/workflows/gcp_llm_gateway.yml",
-            ".github/workflows/gcp_memory_maintenance_job.yml",
-            ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
             ".github/workflows/gcp_notifications_job.yml",
             ".github/workflows/gcp_x_connector_sync_job.yml",
             ".github/scripts/check_backend_deploy_source_admission.py",
@@ -4660,7 +4638,7 @@
     "gcp_cloud_run_metrics_egress.yml": {
       "name": "Deploy Cloud Run Metrics Egress",
       "owner": "CI maintainers",
-      "rationale": "Existing main/dev and explicit protected prod workflow; triggers now span the GMP frontend overlay and resilience.json, and render/query-path gates add work without adding runners or PR events.",
+      "rationale": "Existing main/dev and explicit protected prod workflow; triggers now also span verify_pusher_live_alert_route.py and mute-timings.json so alert-import fixes re-provision Grafana on main; render/query-path gates add work without adding runners or PR events.",
       "triggers": {
         "push": {
           "branches": [
@@ -4672,7 +4650,9 @@
             "backend/charts/monitoring/alerts/live-stt.json",
             "backend/charts/monitoring/alerts/resilience.json",
             "backend/charts/monitoring/live-alert-gate.json",
+            "backend/charts/monitoring/mute-timings.json",
             "backend/charts/monitoring/gmp/frontend-values.prod.yaml",
+            "backend/scripts/verify_pusher_live_alert_route.py",
             ".github/workflows/gcp_cloud_run_metrics_egress.yml"
           ]
         },
@@ -4744,7 +4724,7 @@
     "gcp_diarizer.yml": {
       "name": "Deploy Diarizer to GKE",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added; triggers otherwise unchanged",
+      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4784,6 +4764,7 @@
               "description": "Select the GPU service to deploy",
               "options": [
                 "diarizer",
+                "diarizer-batch",
                 "batch-pipeline-worker"
               ],
               "required": "true",
@@ -4969,6 +4950,44 @@
         }
       }
     },
+    "gcp_incluster_guards.yml": {
+      "name": "Deploy In-cluster Safety Guards",
+      "owner": "Backend infrastructure",
+      "rationale": "Manual independent guard-only Helm release; no image build or serving rollout; zero PR runs.",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "dry_run": {
+              "default": "false",
+              "description": "Kill switch for HPA writes (development always dry runs)",
+              "required": "true",
+              "type": "boolean"
+            },
+            "enabled": {
+              "default": "true",
+              "description": "Enable guard resources (false removes this release's guards)",
+              "required": "true",
+              "type": "boolean"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Environment for the independent guard release",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "source_sha": {
+              "description": "Full merged source SHA (must be an ancestor of main)",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "gcp_llm_gateway.yml": {
       "name": "Deploy LLM Gateway to GKE",
       "owner": "CI maintainers",
@@ -5024,55 +5043,6 @@
               "type": "boolean"
             }
           }
-        }
-      }
-    },
-    "gcp_memory_maintenance_job.yml": {
-      "name": "Deploy Memory Maintenance Job to Cloud RUN",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "workflow_dispatch": {
-          "inputs": {
-            "branch": {
-              "default": "main",
-              "description": "Branch to deploy from",
-              "required": "true",
-              "type": "string"
-            },
-            "environment": {
-              "default": "development",
-              "description": "Select the environment to deploy to",
-              "options": [
-                "development",
-                "prod"
-              ],
-              "required": "true",
-              "type": "choice"
-            },
-            "release_version": {
-              "default": "",
-              "description": "Release version (optional)",
-              "required": "false"
-            }
-          }
-        }
-      }
-    },
-    "gcp_memory_maintenance_job_auto_dev.yml": {
-      "name": "Auto Deploy Memory Maintenance Job to Development",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "push": {
-          "branches": [
-            "main"
-          ],
-          "paths": [
-            "backend/**",
-            ".github/workflows/gcp_memory_maintenance_job.yml",
-            ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml"
-          ]
         }
       }
     },

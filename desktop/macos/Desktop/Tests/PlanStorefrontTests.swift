@@ -123,6 +123,33 @@ final class PlanStorefrontTests: XCTestCase {
     XCTAssertEqual(free.shouldGate(.proactiveAgent), free.usage.proGates.contains("proactive_agent"))
     XCTAssertFalse(try Self.golden("pro_budget_cap").shouldGate(.proactiveAgent))
     XCTAssertFalse(try Self.golden("legacy_neo").shouldGate(.proactiveAgent))
+
+    var omiPro = try Self.raw("free_pro_gate_proactive")
+    var current = try XCTUnwrap(omiPro["current"] as? [String: Any])
+    current["plan_id"] = "unlimited_v2"
+    omiPro["current"] = current
+    XCTAssertFalse(try Self.decode(omiPro).shouldGate(.proactiveAgent))
+    XCTAssertFalse(try Self.decode(omiPro).shouldGate(.screenContext))
+  }
+
+  func testOmiProIsPurchasable() throws {
+    let data = try Self.golden("single_plan_omi_pro")
+    XCTAssertEqual(Self.buttons(data), ["unlimited_v2": "Get Unlimited", "basic": ""])
+    XCTAssertEqual(Self.buttons(data, .year)["unlimited_v2"], "Get Unlimited")
+  }
+
+  func testRetiredPlanMaySwitchOnlyToOmiPro() throws {
+    var payload = try Self.raw("legacy_neo")
+    var tiers = try XCTUnwrap(payload["tiers"] as? [[String: Any]])
+    let omiPro = try XCTUnwrap((Self.raw("single_plan_omi_pro")["tiers"] as? [[String: Any]])?.first)
+    tiers.append(omiPro)
+    tiers[1]["action"] = "checkout"
+    tiers[1]["cta_label"] = "Get Pro"
+    payload["tiers"] = tiers
+
+    let buttons = Self.buttons(try Self.decode(payload))
+    XCTAssertEqual(buttons["unlimited_v2"], "Get Unlimited")
+    XCTAssertEqual(buttons["operator"], "", "retired plans never sell, even if offered")
   }
 
   func testRejectsOtherSchemaVersions() throws {

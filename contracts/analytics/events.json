@@ -32,9 +32,9 @@
             "attempted",
             "connected",
             "failed_not_ready",
-          "failed_timeout",
-          "failed_adapter_not_ready",
-          "failed_native_connect",
+            "failed_timeout",
+            "failed_adapter_not_ready",
+            "failed_native_connect",
             "failed_connection",
             "failed_connect",
             "failed_disconnected",
@@ -79,7 +79,11 @@
         "source": {
           "type": "enum",
           "wire_name": "source",
-          "values": ["phone", "omi", "watch"]
+          "values": [
+            "phone",
+            "omi",
+            "watch"
+          ]
         },
         "durationSeconds": {
           "type": "int",
@@ -92,10 +96,16 @@
         "reason": {
           "type": "enum",
           "wire_name": "reason",
-          "values": ["empty_deleted", "discarded", "null_result"]
+          "values": [
+            "empty_deleted",
+            "discarded",
+            "null_result"
+          ]
         }
       },
-      "consumers": ["onboarding-activation-funnel"],
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
       "correlation": null
     },
     {
@@ -106,7 +116,9 @@
       "phase": "point",
       "intent": null,
       "properties": {},
-      "consumers": ["onboarding-activation-funnel"],
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
       "correlation": null
     },
     {
@@ -117,7 +129,9 @@
       "phase": "point",
       "intent": null,
       "properties": {},
-      "consumers": ["onboarding-activation-funnel"],
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
       "correlation": null
     },
     {
@@ -131,10 +145,15 @@
         "provider": {
           "type": "enum",
           "wire_name": "provider",
-          "values": ["apple", "google"]
+          "values": [
+            "apple",
+            "google"
+          ]
         }
       },
-      "consumers": ["onboarding-activation-funnel"],
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
       "correlation": null
     },
     {
@@ -148,15 +167,26 @@
         "provider": {
           "type": "enum",
           "wire_name": "provider",
-          "values": ["apple", "google"]
+          "values": [
+            "apple",
+            "google"
+          ]
         },
         "errorClass": {
           "type": "enum",
           "wire_name": "error_class",
-          "values": ["cancelled", "network", "credential", "configuration", "unknown"]
+          "values": [
+            "cancelled",
+            "network",
+            "credential",
+            "configuration",
+            "unknown"
+          ]
         }
       },
-      "consumers": ["onboarding-activation-funnel"],
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
       "correlation": null
     },
     {
@@ -170,7 +200,11 @@
         "permission": {
           "type": "enum",
           "wire_name": "permission",
-          "values": ["notifications", "location", "background_activity"]
+          "values": [
+            "notifications",
+            "location",
+            "background_activity"
+          ]
         },
         "granted": {
           "type": "bool",
@@ -185,7 +219,9 @@
           "wire_name": "services_disabled"
         }
       },
-      "consumers": ["onboarding-activation-funnel"],
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
       "correlation": null
     },
     {
@@ -217,7 +253,9 @@
           "wire_name": "ios_version"
         }
       },
-      "consumers": ["onboarding-activation-funnel"],
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
       "correlation": null
     },
     {
@@ -233,7 +271,9 @@
           "wire_name": "after_seconds"
         }
       },
-      "consumers": ["onboarding-activation-funnel"],
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
       "correlation": null
     },
     {
@@ -293,7 +333,9 @@
           ]
         }
       },
-      "consumers": ["onboarding-activation-funnel"],
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
       "correlation": null
     },
     {
@@ -4375,16 +4417,94 @@
         "kind": {
           "type": "enum",
           "wire_name": "kind",
-          "values": ["capture_start_skipped", "capture_start_redriven", "pendant_audio_orphaned", "transfer_pass_timed_out"]
+          "values": [
+            "capture_start_skipped",
+            "capture_start_redriven",
+            "pendant_audio_orphaned",
+            "transfer_pass_timed_out"
+          ]
         },
         "trigger": {
           "type": "enum",
           "wire_name": "trigger",
-          "values": ["sync_pass", "pass_ended", "app_resumed", "orphan_audio", "periodic", "other"]
+          "values": [
+            "sync_pass",
+            "pass_ended",
+            "app_resumed",
+            "orphan_audio",
+            "periodic",
+            "other"
+          ]
         }
       },
       "consumers": [
         "capture-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "pendantFramesDropped",
+      "wire_name": "Pendant Frames Dropped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "count": {
+          "type": "int",
+          "wire_name": "count"
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "count_cap",
+            "disk_reserve",
+            "disk_space_unknown",
+            "storage_write_failed"
+          ]
+        }
+      },
+      "consumers": [
+        "wal-backlog-health"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "walReconcilePollSummary",
+      "wire_name": "WAL Reconcile Poll Summary",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "backlogJobs": {
+          "type": "int",
+          "wire_name": "backlog_jobs"
+        },
+        "polledJobs": {
+          "type": "int",
+          "wire_name": "polled_jobs"
+        },
+        "transientJobs": {
+          "type": "int",
+          "wire_name": "transient_jobs"
+        },
+        "throttledJobs": {
+          "type": "int",
+          "wire_name": "throttled_jobs"
+        },
+        "missingConfirmationJobs": {
+          "type": "int",
+          "wire_name": "missing_confirmation_jobs"
+        },
+        "locallyDeferredJobs": {
+          "type": "int",
+          "wire_name": "locally_deferred_jobs"
+        }
+      },
+      "consumers": [
+        "wal-backlog-health"
       ],
       "correlation": null
     },
@@ -4413,38 +4533,380 @@
         "native-custody-health"
       ],
       "correlation": null
+    },
+    {
+      "id": "livePreviewEngineSelected",
+      "wire_name": "Live Preview Engine",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "engine": {
+          "type": "enum",
+          "wire_name": "engine",
+          "values": [
+            "speech_transcriber",
+            "sf_speech",
+            "android_on_device",
+            "parakeet",
+            "whisper",
+            "none"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "ok",
+            "not_admitted",
+            "kill_switch",
+            "os_too_old",
+            "os_engine_unavailable",
+            "locale_unsupported",
+            "locale_asset_missing",
+            "speech_permission_denied",
+            "bundled_not_installed",
+            "bundled_not_built",
+            "engine_error"
+          ]
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "ios",
+            "android"
+          ]
+        },
+        "osMajor": {
+          "type": "int",
+          "wire_name": "os_major"
+        },
+        "bundledInstalled": {
+          "type": "bool",
+          "wire_name": "bundled_installed"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "livePreviewFirstWord",
+      "wire_name": "Live Preview First Word",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "engine": {
+          "type": "enum",
+          "wire_name": "engine",
+          "values": [
+            "speech_transcriber",
+            "sf_speech",
+            "android_on_device",
+            "parakeet",
+            "whisper",
+            "none"
+          ]
+        },
+        "latencyMs": {
+          "type": "int",
+          "wire_name": "latency_ms"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "livePreviewSessionEnded",
+      "wire_name": "Live Preview Session Ended",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "engine": {
+          "type": "enum",
+          "wire_name": "engine",
+          "values": [
+            "speech_transcriber",
+            "sf_speech",
+            "android_on_device",
+            "parakeet",
+            "whisper",
+            "none"
+          ]
+        },
+        "previewWords": {
+          "type": "int",
+          "wire_name": "preview_words"
+        },
+        "previewAudioMs": {
+          "type": "int",
+          "wire_name": "preview_audio_ms"
+        },
+        "droppedAudioMs": {
+          "type": "int",
+          "wire_name": "dropped_audio_ms"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "livePreviewNotRequested",
+      "wire_name": "Live Preview Not Requested",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "kill_switch",
+            "device_unsupported",
+            "codec_unsupported",
+            "auto_sync_off",
+            "transcribe_later",
+            "custom_stt",
+            "kept_on_phone",
+            "onboarding",
+            "no_journal"
+          ]
+        },
+        "midSession": {
+          "type": "bool",
+          "wire_name": "mid_session"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "livePreviewVerdict",
+      "wire_name": "Live Preview Verdict",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "verdict": {
+          "type": "enum",
+          "wire_name": "verdict",
+          "values": [
+            "granted",
+            "refused",
+            "timeout",
+            "overflow",
+            "socket_closed"
+          ]
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "ios",
+            "android"
+          ]
+        },
+        "verdictLatencyMs": {
+          "type": "int",
+          "wire_name": "verdict_latency_ms"
+        },
+        "holdDurationMs": {
+          "type": "int",
+          "wire_name": "hold_duration_ms"
+        },
+        "heldFrames": {
+          "type": "int",
+          "wire_name": "held_frames"
+        },
+        "holdTimeoutReplayed": {
+          "type": "bool",
+          "wire_name": "hold_timeout_replayed"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "livePreviewNotes",
+      "wire_name": "Live Preview Notes",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "engine": {
+          "type": "enum",
+          "wire_name": "engine",
+          "values": [
+            "apple_foundation_models",
+            "none"
+          ]
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "ok",
+            "unavailable",
+            "error",
+            "dropped_busy"
+          ]
+        },
+        "latencyMs": {
+          "type": "int",
+          "wire_name": "latency_ms"
+        },
+        "bulletCount": {
+          "type": "int",
+          "wire_name": "bullet_count"
+        }
+      },
+      "consumers": [
+        "live-preview"
+      ],
+      "correlation": null
     }
   ],
-"transport_dispositions": {
+  "transport_dispositions": {
     "source": "docs/finops/telemetry-transport-contract.md section 4",
     "note": "Legacy required events stay in the events array. Recording Requested is documented here with request_origin semantics. It is not inserted into events[] in this change because the registry generator would also rewrite app/lib/utils/analytics/registry/events.g.dart, which is outside the admin and analytics write boundary. Parent regenerates that Dart file if the event is later promoted into events[].",
     "recording_requested": {
       "wire_name": "Recording Requested",
       "disposition": "keep",
       "consumer": "PostHog capture-session preparation. explicit_user only for the user-attempt funnel.",
-      "request_origin": ["explicit_user", "automatic_roll", "unknown"],
+      "request_origin": [
+        "explicit_user",
+        "automatic_roll",
+        "unknown"
+      ],
       "semantics": "Preparing a capture session emits Recording Requested, including automatic session rolls. The capture controller completes the previous session with reason session_roll and prepares the next one. request_origin=explicit_user is a proven user attempt. automatic_roll is not a user attempt. unknown is used when caller intent is not proven. Do not infer user intent from the event's existence."
     },
     "events": [
-      {"wire_name": "Recording Upload Started/Completed/Failed", "disposition": "move_after_parity", "consumer": "durable upload aggregates / Grafana", "legacy_required_until_parity": true},
-      {"wire_name": "Conversation Processing Completed", "disposition": "move_after_parity", "consumer": "client-visible completion aggregates / Grafana", "legacy_required_until_parity": true},
-      {"wire_name": "Capture Ingress Health", "disposition": "move_after_parity", "consumer": "ingress/recovery aggregates / Grafana", "legacy_required_until_parity": true},
-      {"wire_name": "Capture Wedge Detected", "disposition": "move_after_parity", "consumer": "ingress/recovery aggregates / Grafana", "legacy_required_until_parity": true},
-      {"wire_name": "Device Session Ended", "disposition": "move_after_parity", "consumer": "session aggregates / Grafana", "legacy_required_until_parity": true},
-      {"wire_name": "Screen Task Frame Terminal", "disposition": "move_after_parity", "consumer": "screen-task aggregates / Grafana", "legacy_required_until_parity": true},
-      {"wire_name": "desktop_health_event", "disposition": "keep", "consumer": "admin voice reader and fallback triage. Shadow voice/fallback now. Retire only after both consumers pass.", "legacy_required_until_parity": true},
-      {"wire_name": "Device Disconnected Detailed", "disposition": "keep", "consumer": "mobile connection-balance PostHog consumer", "legacy_required_until_parity": true},
-      {"wire_name": "Device Disconnected", "disposition": "keep", "consumer": "macOS connection-balance PostHog consumer. Deprecated as the mobile disconnect signal.", "legacy_required_until_parity": true},
-      {"wire_name": "Device Connected", "disposition": "keep", "consumer": "product and connection balance, segmented by platform and vendor", "legacy_required_until_parity": true},
-      {"wire_name": "Recording Requested", "disposition": "keep", "consumer": "PostHog capture-session preparation", "legacy_required_until_parity": true},
-      {"wire_name": "Mobile Render Observation", "disposition": "delete_routine_posthog", "consumer": "bounded opt-in local debug only", "legacy_required_until_parity": false},
-      {"wire_name": "wal_transcript_coverage", "disposition": "delete_posthog_duplicate", "consumer": "existing debug log", "legacy_required_until_parity": false},
-      {"wire_name": "Suggestion Assistant Gate Outcome", "disposition": "keep_eligible_consumed", "consumer": "PostHog product evaluation outcomes. Suppress repeated skippedDwell and skippedCooldown.", "legacy_required_until_parity": true},
-      {"wire_name": "Recording Started", "disposition": "keep", "consumer": "existing PostHog consumers", "legacy_required_until_parity": true},
-      {"wire_name": "Recording Start Failed", "disposition": "keep", "consumer": "existing PostHog consumers", "legacy_required_until_parity": true},
-      {"wire_name": "Memory Created", "disposition": "keep", "consumer": "existing PostHog consumers", "legacy_required_until_parity": true},
-      {"wire_name": "onboarding/chat/purchases/product outcomes", "disposition": "keep", "consumer": "existing PostHog consumers", "legacy_required_until_parity": true}
+      {
+        "wire_name": "Recording Upload Started/Completed/Failed",
+        "disposition": "move_after_parity",
+        "consumer": "durable upload aggregates / Grafana",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "Conversation Processing Completed",
+        "disposition": "move_after_parity",
+        "consumer": "client-visible completion aggregates / Grafana",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "Capture Ingress Health",
+        "disposition": "move_after_parity",
+        "consumer": "ingress/recovery aggregates / Grafana",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "Capture Wedge Detected",
+        "disposition": "move_after_parity",
+        "consumer": "ingress/recovery aggregates / Grafana",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "Device Session Ended",
+        "disposition": "move_after_parity",
+        "consumer": "session aggregates / Grafana",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "Screen Task Frame Terminal",
+        "disposition": "move_after_parity",
+        "consumer": "screen-task aggregates / Grafana",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "desktop_health_event",
+        "disposition": "keep",
+        "consumer": "admin voice reader and fallback triage. Shadow voice/fallback now. Retire only after both consumers pass.",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "Device Disconnected Detailed",
+        "disposition": "keep",
+        "consumer": "mobile connection-balance PostHog consumer",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "Device Disconnected",
+        "disposition": "keep",
+        "consumer": "macOS connection-balance PostHog consumer. Deprecated as the mobile disconnect signal.",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "Device Connected",
+        "disposition": "keep",
+        "consumer": "product and connection balance, segmented by platform and vendor",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "Recording Requested",
+        "disposition": "keep",
+        "consumer": "PostHog capture-session preparation",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "Mobile Render Observation",
+        "disposition": "delete_routine_posthog",
+        "consumer": "bounded opt-in local debug only",
+        "legacy_required_until_parity": false
+      },
+      {
+        "wire_name": "wal_transcript_coverage",
+        "disposition": "delete_posthog_duplicate",
+        "consumer": "existing debug log",
+        "legacy_required_until_parity": false
+      },
+      {
+        "wire_name": "Suggestion Assistant Gate Outcome",
+        "disposition": "keep_eligible_consumed",
+        "consumer": "PostHog product evaluation outcomes. Suppress repeated skippedDwell and skippedCooldown.",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "Recording Started",
+        "disposition": "keep",
+        "consumer": "existing PostHog consumers",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "Recording Start Failed",
+        "disposition": "keep",
+        "consumer": "existing PostHog consumers",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "Memory Created",
+        "disposition": "keep",
+        "consumer": "existing PostHog consumers",
+        "legacy_required_until_parity": true
+      },
+      {
+        "wire_name": "onboarding/chat/purchases/product outcomes",
+        "disposition": "keep",
+        "consumer": "existing PostHog consumers",
+        "legacy_required_until_parity": true
+      }
     ]
   }
-
 }

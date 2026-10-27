@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 10,
+  "catalog_revision": 12,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",
@@ -245,7 +245,7 @@
         "pro"
       ],
       "wire_fallback_plan": null,
-      "lifecycle": "current",
+      "lifecycle": "deprecated",
       "is_paid": true,
       "storefronts": [
         "macos",
@@ -325,7 +325,7 @@
       "display_name": "Pro",
       "wire_aliases": [],
       "wire_fallback_plan": null,
-      "lifecycle": "current",
+      "lifecycle": "deprecated",
       "is_paid": true,
       "storefronts": [
         "macos",
@@ -403,7 +403,7 @@
       "display_name": "Plus",
       "wire_aliases": [],
       "wire_fallback_plan": "unlimited",
-      "lifecycle": "current",
+      "lifecycle": "deprecated",
       "is_paid": true,
       "storefronts": [
         "android",
@@ -489,7 +489,7 @@
         "ios",
         "web"
       ],
-      "desktop_profile": "desktop_free",
+      "desktop_profile": "desktop_full",
       "conditional_desktop_profiles": [],
       "fair_use_profile": "unlimited_transcription",
       "phone_calls_profile": "paid",
@@ -878,5 +878,31 @@
       "interval": "year",
       "env_var": "LADDER_V1_ARCHITECT_YEAR_PRICE_ID"
     }
-  }
+  },
+  "management_currency_prices": [
+    {
+      "price_id": "price_1ULq6b1F8wnoWYvwtchjjNqq",
+      "plan_id": "plus",
+      "interval": "month",
+      "currency": "jpy"
+    },
+    {
+      "price_id": "price_1ULq7H1F8wnoWYvwC1poOtd5",
+      "plan_id": "plus",
+      "interval": "year",
+      "currency": "jpy"
+    },
+    {
+      "price_id": "price_1ULq501F8wnoWYvwwN56CHzO",
+      "plan_id": "unlimited_v2",
+      "interval": "month",
+      "currency": "jpy"
+    },
+    {
+      "price_id": "price_1ULq5e1F8wnoWYvwQT8XQ4Uw",
+      "plan_id": "unlimited_v2",
+      "interval": "year",
+      "currency": "jpy"
+    }
+  ]
 }

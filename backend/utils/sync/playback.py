@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydub import AudioSegment
 
 from config.repeat_work import playback_on_demand
-from utils.other.playback_identity import validate_sources
+from utils.other.playback_identity import resolve_sources, validate_sources
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.executors import postprocess_executor, storage_executor, submit_with_context
 from utils.other.storage import (
@@ -555,16 +555,32 @@ def download_audio_file_response(
     )
 
 
+def _merge_playback_sources(
+    uid: str, conversation_id: str, timestamps: list[float], selected: list[dict[str, Any]] | None
+) -> bytes:
+    if selected is None:
+        return download_audio_chunks_and_merge(
+            uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
+        )
+    return download_audio_chunks_and_merge(
+        uid,
+        conversation_id,
+        [chunk['timestamp'] for chunk in selected],
+        fill_gaps=True,
+        sample_rate=AUDIO_SAMPLE_RATE,
+        listed_chunks=selected,
+    )
+
+
 def build_playback_artifact(
     uid: str, conversation_id: str, timestamps: list[float], *, source_fingerprint: str | None = None
 ) -> bytes:
     """Merge chunks (download -> decrypt -> decode -> gap-fill) and encode MP3 ~48kbps mono."""
     source = [{'chunk_timestamps': timestamps, 'source_fingerprint': source_fingerprint}]
+    selected = None
     if source_fingerprint:
-        validate_sources(source, list_audio_chunks(uid, conversation_id, source_identity=True))
-    pcm_data = download_audio_chunks_and_merge(
-        uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
-    )
+        selected = resolve_sources(source[0], list_audio_chunks(uid, conversation_id, source_identity=True))
+    pcm_data = _merge_playback_sources(uid, conversation_id, timestamps, selected)
     if source_fingerprint:
         validate_sources(source, list_audio_chunks(uid, conversation_id, source_identity=True))
     if not pcm_data:
@@ -603,16 +619,16 @@ def build_conversation_playback_artifact(
         key=lambda af: (min(af['chunk_timestamps']), str(af['id'])),
     )
     verified = (strict_sources or playback_on_demand()) and any(af.get('source_fingerprint') for af in parts)
+    resolved: list[list[dict[str, Any]] | None] = [None] * len(parts)
     if verified:
-        validate_sources(parts, list_audio_chunks(uid, conversation_id, source_identity=True))
+        listing = list_audio_chunks(uid, conversation_id, source_identity=True)
+        resolved = [resolve_sources(af, listing) if af.get('source_fingerprint') else None for af in parts]
     pcm_buf = bytearray()
     spans: list[dict] = []
-    for af in parts:
+    for af, selected in zip(parts, resolved):
         timestamps = sorted(af['chunk_timestamps'])
         try:
-            pcm = download_audio_chunks_and_merge(
-                uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
-            )
+            pcm = _merge_playback_sources(uid, conversation_id, timestamps, selected)
         except FileNotFoundError:
             if strict_sources or playback_on_demand():
                 raise
@@ -620,10 +636,20 @@ def build_conversation_playback_artifact(
             continue
         if not pcm:
             continue
+        # Chunk keys stay on the raw capture clock; a part whose chunks
+        # persisted their skew-normalized playback start carries the wall
+        # basis the conversation's server-clock started_at actually compares
+        # against (a +N s skewed capture yields wall_offset ~0, not ~N).
+        playback_start = af.get('playback_start')
+        wall_basis = (
+            float(playback_start)
+            if isinstance(playback_start, (int, float)) and not isinstance(playback_start, bool)
+            else timestamps[0]
+        )
         spans.append(
             {
                 'file_id': af['id'],
-                'wall_offset': round(timestamps[0] - started_at_ts, 3),
+                'wall_offset': round(wall_basis - started_at_ts, 3),
                 'artifact_offset': round(len(pcm_buf) / _PCM_BYTES_PER_SECOND, 3),
                 'len': round(len(pcm) / _PCM_BYTES_PER_SECOND, 3),
             }
