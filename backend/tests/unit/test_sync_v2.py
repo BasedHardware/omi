@@ -8,6 +8,7 @@ polls GET /v2/sync-local-files/{job_id} until the job reaches a terminal status.
 v1 remains completely unchanged.
 """
 
+from utils.sync import size_telemetry  # noqa: F401 - retain real scoped telemetry across legacy package stubs
 from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
 
 from models import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs

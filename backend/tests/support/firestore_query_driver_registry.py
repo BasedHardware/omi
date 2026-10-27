@@ -186,7 +186,7 @@ BODY_DIGEST = {
     # refresh a document read, while post-commit bridge logging adds no query.
     # Encoded-size preflight and the size backstop add no serving query; the
     # discarded-barrier scan is still covered by the same two driven callees.
-    'database.smart_merge.absorb_conversation': 'ef118ad61defc641b7ef87f8f4a240cf77f02ef25a61a3e0d96c868c9ad34600',
+    'database.smart_merge.absorb_conversation': 'fdf7e55e3f9795791e5abcf02752dcbe2c9d04d978ae22921cf5d35434fc6b23',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
     # Open-loop store: whole-subcollection stream by document id, filtered in Python.

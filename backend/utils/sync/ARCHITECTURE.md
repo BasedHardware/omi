@@ -193,7 +193,27 @@ Assignment and absorb logs carry content-free `projected_size_bucket` bands
 `900k_1m`). `size_cap_stop` is the closed cap-stop outcome/reason.
 `omi_sync_intake_total` also carries this bounded label after commit. A caller
 without a projection observation emits only the legacy intake log; it never
-invents a size band. No identifiers or content are added to these observations. Rollback: revert.
+invents a size band.
+
+The existing `sync_assignment_target` event uses `reason=size_rollover`,
+`size_rollover_unavailable` or `size_limit_retry` with closed
+`outcome=rolled_over|unavailable|rejected`. Size-backstop rollover success is
+emitted after commit (`stage=commit`); transaction-body-only callers explicitly
+report `stage=plan`. These events and size-related `sync_persistence_exception`
+lines carry `job_ref` and `attempt_ref` through `bounded_correlation_ref`:
+UUIDv4 inputs normalize then hash to 32 hexadecimal characters; absent or
+non-UUIDv4 inputs become `none`. This also keeps job/segment refs joinable;
+older releases emitted normalized UUIDs, so references change across this release.
+Raw conversation IDs and UIDs never enter these fields. Calls without sync-job
+context, including standalone smart merge, report `none` refs.
+`segments_bucket` and `speech_seconds_bucket` reuse the conversation-shape
+histogram upper bounds (plus `+Inf`, or `unknown` when no decoded payload is
+available). They describe the attempted document that hit the limit, before
+rollover, rather than the smaller destination. `rollover_target_kind` is
+`new_row|sibling_row|none`; a rejected write has `none`. A final size exception
+retains the last rejected document's buckets for the persistence log. This
+attribution is transient and never stored on conversation rows or metric labels.
+Rollback: revert.
 
 ## Assignment outcomes
 

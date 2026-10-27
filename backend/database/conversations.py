@@ -4305,6 +4305,9 @@ def assign_sync_conversation(
         # hand the blob to the logical encoder; the encode seam preserves it.
         result.pop(OPEN_LOOP_EXTRACTIONS_FIELD, None)
         result.pop(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, None)
+        from utils.sync.size_telemetry import remember_size_payload
+
+        remember_size_payload(result.get('id'), result)
         _reveal_match_scores_for_read(result, uid)
         return result
 

@@ -41,6 +41,7 @@ from utils.conversations.size_limit import (
     projected_size_bucket,
 )
 from utils.sync.assignment import run_with_size_limit_backstop
+from utils.sync.size_telemetry import log_size_rollover, remember_size_payload, size_fields
 from utils.observability.fallback import record_fallback
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD, OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD
 
@@ -381,6 +382,11 @@ def absorb_conversation(
                     survivor_raw[OPEN_LOOP_EXTRACTIONS_FIELD],
                     bool(survivor_raw.get(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD)),
                 )
+        remember_size_payload(
+            survivor_id,
+            dict(survivor_update, transcript_segments=survivor_update.get('transcript_segments', survivor_segments)),
+        )
+        remember_size_payload(donor_id, dict(donor, transcript_segments=donor_segments))
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
         conversations_db.guard_match_score_size(payload, survivor_raw)
         if (
@@ -449,6 +455,11 @@ def absorb_conversation(
         if full_ids:
             # The donor already is a durable row. Rolling over a rejected
             # absorb means leaving both rows untouched and finalizing it there.
+            log_size_rollover(
+                logger,
+                'event=sync_assignment_target reason=size_rollover outcome=rolled_over trigger=commit_limit '
+                + size_fields(cid=next(iter(full_ids)), target_kind='sibling_row'),
+            )
             return AbsorbResult('rejected', 'size_cap_stop', projected_size_bucket=size_bucket)
         try:
             return run_transactional(client, absorb)

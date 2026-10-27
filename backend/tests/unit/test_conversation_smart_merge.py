@@ -1079,7 +1079,17 @@ def test_smart_absorb_size_commit_rejection_rolls_over(world, monkeypatch, named
     assert not world.raw('n').get('deleted')
     assert not world.retracted and not world.processed
     assert world.raw('n')['smart_merge_decision']['reason'] == 'size_cap_stop'
-    assert 'outcome=size_limit_retry' in caplog.text
+    assert 'reason=size_limit_retry outcome=rejected' in caplog.text
+    rollover = next(r.message for r in caplog.records if 'reason=size_rollover ' in r.message)
+    assert 'outcome=rolled_over' in rollover and 'rollover_target_kind=sibling_row' in rollover
+    assert 'segments_bucket=unknown' not in rollover and 'stage=commit' in rollover
+    assert 'job_ref=none attempt_ref=none' in rollover
+    rejected = next(r.message for r in caplog.records if 'reason=size_limit_retry ' in r.message)
+    for field in ('segments_bucket', 'speech_seconds_bucket'):
+        assert (
+            dict(token.split('=', 1) for token in rejected.split())[field]
+            == dict(token.split('=', 1) for token in rollover.split())[field]
+        )
 
 
 def test_smart_absorb_cap_checks_retained_donor_patch(world, caplog):

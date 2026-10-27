@@ -4350,7 +4350,7 @@ would exceed `SYNC_CONVERSATION_BYTE_BUDGET` (900 KiB) it re-plans in the same
 transaction with that conversation excluded: it is never the chunk's target, donor or
 bridge, every retry, deletion, provenance, receipt and smart-merge fence re-runs, and
 only the speech the full plan found new moves on, to the next eligible conversation or
-a new one (`sync_assignment_target outcome=size_rollover trigger=estimate`, one event
+a new one (`sync_assignment_target reason=size_rollover outcome=rolled_over trigger=estimate`, one event
 per committed plan, with an `excluded` count). The decision comes only from the
 complete encoded plan, so a write that fits behaves exactly as before. Each accepted
 rollover is re-checked until it fits; a chain of full conversations costs one plan per
@@ -4358,9 +4358,9 @@ row, which only an account at the ceiling pays. An
 identical retry plans the same rollover and deduplicates into it. A dedupe-only retry
 still writes in place. When no safe home exists (the new row would overwrite a
 tombstone, be empty, or break a fence) the original write stands
-(`outcome=size_rollover_unavailable`). If a commit is still rejected for size, and the
+(`reason=size_rollover_unavailable outcome=unavailable`). If a commit is still rejected for size, and the
 message names a conversation (or no document), `assign_sync_conversation` retries once
-with it marked full (`outcome=size_limit_retry`, then `trigger=commit_limit`); a
+with it marked full (`reason=size_limit_retry outcome=rejected`, then `trigger=commit_limit`); a
 second rejection, or one naming an index document, fails as before and earns a strike.
 
 `models/conversation_continuity.py` owns the shared predicate. The remaining policy
@@ -4369,7 +4369,7 @@ do not carry this setting and sync uses the default. Job leases, persistence fen
 encryption codecs and revision fencing remain in force. Bridge effects use existing
 merge/delete helpers; original donor audio remains available for late uploads.
 Sync failure telemetry is fixed-shape: segment and job log events carry a closed
-pipeline-phase token and a bounded exception class, correlated by UUIDv4-only
+pipeline-phase token and a bounded exception class, correlated by hashed UUIDv4-only
 `job_ref`/`attempt_ref` fields — never metric labels and never exception text,
 audio, paths, or user identifiers.
 

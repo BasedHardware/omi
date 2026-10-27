@@ -187,8 +187,8 @@ def test_default_budget_write_just_over_the_budget_rolls_over(caplog):
     result, created, survivors = intake(store, chunk('b', 1060, text='One sentence too many.'))
     assert result['id'] == 'b' and created and len(survivors) == 1
     assert _row(store, 'a') == before
-    assert _events(caplog) == [
-        'event=sync_assignment_target outcome=size_rollover trigger=estimate created=true excluded=1 projected_size_bucket=lt_500k'
+    assert [line.split(" job_ref=")[0] for line in _events(caplog)] == [
+        'event=sync_assignment_target reason=size_rollover outcome=rolled_over trigger=estimate created=true excluded=1 projected_size_bucket=lt_500k'
     ]
 
 
@@ -202,8 +202,8 @@ def test_full_canonical_is_left_untouched_and_new_speech_starts_a_conversation(m
     assert not _row(store, 'b').get('sync_merged_from')
     assert len(conversations(store)) == 2
     events = _events(caplog)
-    assert events == [
-        'event=sync_assignment_target outcome=size_rollover trigger=estimate created=true excluded=1 projected_size_bucket=lt_500k'
+    assert [line.split(" job_ref=")[0] for line in events] == [
+        'event=sync_assignment_target reason=size_rollover outcome=rolled_over trigger=estimate created=true excluded=1 projected_size_bucket=lt_500k'
     ]
     fallback = _events(caplog, 'omi_fallback_event')
     assert fallback and 'from=canonical_append to=size_rollover' in fallback[0]
@@ -254,8 +254,8 @@ def test_a_long_chain_of_full_conversations_is_walked_to_a_safe_home(monkeypatch
     assert result['id'] == 'tail' and created and len(survivors) == 1
     assert {cid: _row(store, cid) for cid in ids} == frozen
     assert len(conversations(store)) == len(ids) + 1
-    assert _events(caplog) == [
-        f'event=sync_assignment_target outcome=size_rollover trigger=estimate created=true excluded={len(ids)} projected_size_bucket=lt_500k'
+    assert [line.split(" job_ref=")[0] for line in _events(caplog)] == [
+        f'event=sync_assignment_target reason=size_rollover outcome=rolled_over trigger=estimate created=true excluded={len(ids)} projected_size_bucket=lt_500k'
     ]
     assert len(_events(caplog, 'omi_fallback_event')) == 1
 
@@ -299,8 +299,8 @@ def test_redirected_anchor_with_no_safe_home_keeps_the_original_write(monkeypatc
     )
     result, created, _ = intake(store, chunk('x', 1060, text='Words for a redirected anchor.'))
     assert result['id'] == 'a' and not created
-    assert _events(caplog) == [
-        'event=sync_assignment_target outcome=size_rollover_unavailable trigger=estimate projected_size_bucket=lt_500k'
+    assert [line.split(" job_ref=")[0] for line in _events(caplog)] == [
+        'event=sync_assignment_target reason=size_rollover_unavailable outcome=unavailable trigger=estimate projected_size_bucket=lt_500k'
     ]
     assert _row(store, 'x')['sync_merged_into'] == 'a'
 
@@ -450,11 +450,14 @@ def test_one_size_limit_commit_retries_once_into_a_new_conversation(adapter, cap
     assert len(store.transactions) == 2
     assert _row(store, 'a') == before
     events = _events(caplog)
-    assert events[0] == 'event=sync_assignment_target outcome=size_limit_retry firestore_doc_kind=conversation'
     assert (
-        'event=sync_assignment_target outcome=size_rollover trigger=commit_limit created=true '
+        events[0].split(' job_ref=')[0]
+        == 'event=sync_assignment_target reason=size_limit_retry outcome=rejected firestore_doc_kind=conversation'
+    )
+    assert (
+        'event=sync_assignment_target reason=size_rollover outcome=rolled_over trigger=commit_limit created=true '
         'excluded=1 projected_size_bucket=lt_500k'
-    ) in events
+    ) in [line.split(" job_ref=")[0] for line in events]
     assert any('to=size_limit_retry' in message for message in _events(caplog, 'omi_fallback_event'))
     # An identical retry later deduplicates into the conversation the backstop
     # created; the original is still full, so its merge is rejected once more.
@@ -658,7 +661,9 @@ def test_absorption_cap_keeps_donor_intact_without_losing_speech(caplog):
     assert _row(store, 'c') == donor
     assert _texts(_row(store, 'a'))[-1] == 'One short bridging sentence.'
     assert len(conversations(store)) == 2
-    assert _events(caplog) == ['event=sync_assignment_target outcome=size_cap_stop projected_size_bucket=800_900k']
+    assert [line.split(" job_ref=")[0] for line in _events(caplog)] == [
+        'event=sync_assignment_target outcome=size_cap_stop projected_size_bucket=800_900k'
+    ]
     assert not result['sync_merged_from']
 
 
@@ -669,7 +674,7 @@ def test_over_budget_bridge_rolls_incoming_to_a_safe_neighbour(caplog):
     assert result['id'] == 'c' and not created and survivors
     assert _row(store, 'a') == before['a']
     assert _texts(_row(store, 'c')) == ['One short bridging sentence.', 'A separate later remark.']
-    assert any('outcome=size_rollover' in line for line in _events(caplog))
+    assert any('reason=size_rollover outcome=rolled_over' in line for line in _events(caplog))
 
 
 def test_donor_redirect_projection_is_capped_too(caplog):
@@ -790,3 +795,77 @@ def test_cap_stop_never_recreates_an_excluded_existing_anchor(new_speech):
     assert _texts(result) == ['Earlier durable speech.', 'Original tail speech.'] + ([text] if new_speech else [])
     assert not _row(store, 'c').get('deleted')
     assert not any(path[2] == 'conversations' for path, _ in store.transactions[-1].sets)
+
+
+@pytest.mark.parametrize('destination', ['new_row', 'sibling_row', 'none'])
+def test_rollover_attribution_describes_limited_payload(monkeypatch, caplog, destination):
+    from uuid import uuid4
+
+    from config.sync_telemetry import bounded_correlation_ref
+    from utils.sync.size_telemetry import with_size_attribution
+
+    store = _full_store(monkeypatch)
+    if destination == 'sibling_row':
+        intake(store, chunk('sibling', 1120, text='Speech already on the sibling.'))
+    elif destination == 'none':
+        store.rows[('users', 'u', 'conversations', 'incoming')] = dict(
+            chunk('incoming', 1060), deleted=True, discarded=True, sync_merged_into='a', sync_content_revision=1
+        )
+    caplog.clear()
+    job, attempt = str(uuid4()), str(uuid4())
+
+    @with_size_attribution
+    def invoke(*, job_id, attempt_ref):
+        return intake(store, chunk('incoming', 1060, text='Private speech that must never be logged.'))
+
+    result, created, _ = invoke(job_id=job, attempt_ref=attempt)
+    event = next(line for line in _events(caplog) if 'reason=size_rollover' in line)
+    assert f'job_ref={bounded_correlation_ref(job)} attempt_ref={bounded_correlation_ref(attempt)}' in event
+    assert f'rollover_target_kind={destination}' in event
+    assert f"outcome={'unavailable' if destination == 'none' else 'rolled_over'}" in event
+    # The destination has fewer segments. Report the plan that exceeded the limit.
+    assert f"segments_bucket={'3' if destination == 'sibling_row' else '2'}" in event
+    assert 'speech_seconds_bucket=30' in event
+    assert all(value not in event for value in [job, attempt, 'Private speech', 'incoming', 'pendant'])
+    assert created is (destination == 'new_row')
+    assert result['id'] == {'new_row': 'incoming', 'sibling_row': 'sibling', 'none': 'a'}[destination]
+
+
+def test_backstop_logs_rollover_only_after_successful_commit(adapter, caplog):
+    from uuid import uuid4
+
+    from utils.sync.size_telemetry import with_size_attribution
+
+    store = _RejectingStore(0)
+    _seed(adapter, store, 1)
+
+    @with_size_attribution
+    def invoke(*, job_id, attempt_ref):
+        return adapter.assign_sync_conversation(
+            'u', dict(chunk('b', 1060), data_protection_level='enhanced'), firestore_client=store
+        )
+
+    invoke(job_id=str(uuid4()), attempt_ref=str(uuid4()))
+    events = _events(caplog)
+    rejection = next(line for line in events if 'reason=size_limit_retry' in line)
+    rollover = next(line for line in events if 'reason=size_rollover ' in line)
+    assert 'segments_bucket=2' in rejection and 'speech_seconds_bucket=30' in rejection
+    assert 'outcome=rolled_over' in rollover and 'stage=commit' in rollover
+    assert 'rollover_target_kind=new_row' in rollover
+    assert 'stage=plan' not in caplog.text
+
+
+def test_abandoned_transaction_plan_never_claims_a_committed_rollover(monkeypatch, caplog):
+    store = _full_store(monkeypatch)
+    caplog.clear()
+
+    def retry_like_sdk(_full_ids):
+        intake(store, chunk('b', 1060, text='Words rolled over by the losing plan.'))
+        # The next snapshot observes a concurrent deletion of the old full row.
+        # It is now a dedupe-only plan and owes no rollover success event.
+        _row(store, 'a')['deleted'] = True
+        return intake(store, chunk('b', 1060, text='Words rolled over by the losing plan.'))
+
+    result, created, survivors = assignment.run_with_size_limit_backstop(retry_like_sdk, lambda: 'b')
+    assert result['id'] == 'b' and not created and not survivors
+    assert not [line for line in _events(caplog) if 'outcome=rolled_over' in line]

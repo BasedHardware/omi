@@ -23,6 +23,13 @@ from utils.conversations.size_limit import (
     projected_size_bucket,
 )
 from utils.observability.fallback import record_fallback
+from utils.sync.size_telemetry import (
+    finish_size_attempt,
+    log_size_rollover,
+    remember_size_payload,
+    size_backstop_scope,
+    size_fields,
+)
 from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
@@ -215,6 +222,8 @@ def assign_in_transaction(
     write is estimated above ``SYNC_CONVERSATION_BYTE_BUDGET`` are left
     untouched: the chunk's new speech goes to another conversation instead.
     """
+    # The SDK may retry this body after contention; only its winning plan may log success.
+    finish_size_attempt(logger, committed=False)
     if absorbed is not None:
         absorbed.clear()
     incoming = deepcopy(incoming)
@@ -943,6 +952,8 @@ def assign_in_transaction(
         raise SyncAssignmentConflict('size cap has no safe assignment', subtype=Reason.SIZE_CAP_ROLLOVER_UNAVAILABLE)
 
     trigger = None
+    limited_payload = None
+    limited_cid = None
     while True:
         drop = (set(chosen.matched) | {chosen.canonical}) & full_ids
         if chosen.grows and chosen.estimated_bytes > SYNC_CONVERSATION_BYTE_BUDGET:
@@ -954,6 +965,9 @@ def assign_in_transaction(
         if not drop:
             break
         trigger = trigger or ('commit_limit' if drop & full_ids else 'estimate')
+        if limited_payload is None:
+            limited_payload = chosen.result
+            limited_cid = next(iter(sorted(drop & full_ids)), None)
         try:
             # Only speech the full plan found new moves on, so text already in
             # the full conversation is not duplicated into the rollover.
@@ -969,9 +983,11 @@ def assign_in_transaction(
             # No safe home for the speech: keep the write unchanged, so the
             # commit and its size-limit backstop decide exactly as before.
             logger.warning(
-                'event=sync_assignment_target outcome=size_rollover_unavailable trigger=%s projected_size_bucket=%s',
+                'event=sync_assignment_target reason=size_rollover_unavailable outcome=unavailable '
+                'trigger=%s projected_size_bucket=%s %s',
                 trigger,
                 projected_size_bucket(chosen.estimated_bytes),
+                size_fields(limited_payload, cid=limited_cid),
             )
             trigger = 'unavailable'
             break
@@ -979,12 +995,19 @@ def assign_in_transaction(
         excluded, chosen = excluded | drop, rollover
     if trigger is not None and trigger != 'unavailable' and excluded:
         # One event per committed plan, however many full rows it stepped past.
-        logger.warning(
-            'event=sync_assignment_target outcome=size_rollover trigger=%s created=%s excluded=%d projected_size_bucket=%s',
-            trigger,
-            str(chosen.created).lower(),
-            len(excluded),
-            projected_size_bucket(chosen.estimated_bytes),
+        log_size_rollover(
+            logger,
+            'event=sync_assignment_target reason=size_rollover outcome=rolled_over '
+            'trigger=%s created=%s excluded=%d projected_size_bucket=%s %s'
+            % (
+                trigger,
+                str(chosen.created).lower(),
+                len(excluded),
+                projected_size_bucket(chosen.estimated_bytes),
+                size_fields(
+                    limited_payload, cid=limited_cid, target_kind='new_row' if chosen.created else 'sibling_row'
+                ),
+            ),
         )
         record_fallback(
             component='sync_dispatch',
@@ -1002,6 +1025,7 @@ def assign_in_transaction(
         chosen.created,
         chosen.survivors,
     )
+    remember_size_payload(canonical, result)
     payload = chosen.payload
     if created:
         # DELETE_FIELD is invalid in a Firestore set without merge. New anchors
@@ -1126,13 +1150,27 @@ def run_with_size_limit_backstop(
     by interval and deduplicates. A second rejection is raised unchanged and
     counts as a strike exactly as before.
     """
+    with size_backstop_scope():
+        return _run_size_backstop(run, attempted_canonical)
+
+
+def _run_size_backstop(run: Callable[[frozenset[str]], _T], attempted_canonical: Callable[[], Optional[str]]) -> _T:
     try:
-        return run(frozenset())
+        result = run(frozenset())
+        finish_size_attempt(logger, committed=True)
+        return result
     except Exception as error:
+        finish_size_attempt(logger, committed=False)
         full_id, kind = size_limited_conversation(error, attempted_canonical())
+        if is_document_size_limit_error(error):
+            setattr(error, 'sync_size_fields', size_fields(cid=full_id))
         if full_id is None:
             raise
-    logger.warning('event=sync_assignment_target outcome=size_limit_retry firestore_doc_kind=%s', kind)
+    logger.warning(
+        'event=sync_assignment_target reason=size_limit_retry outcome=rejected firestore_doc_kind=%s %s',
+        kind,
+        size_fields(cid=full_id),
+    )
     record_fallback(
         component='sync_dispatch',
         from_mode='canonical_append',
@@ -1142,7 +1180,12 @@ def run_with_size_limit_backstop(
         log=logger,
     )
     try:
-        return run(frozenset({full_id}))
+        result = run(frozenset({full_id}))
+        finish_size_attempt(logger, committed=True)
+        return result
     except Exception as error:
-        size_limited_conversation(error, attempted_canonical())
+        finish_size_attempt(logger, committed=False)
+        full_id, _ = size_limited_conversation(error, attempted_canonical())
+        if is_document_size_limit_error(error):
+            setattr(error, 'sync_size_fields', size_fields(cid=full_id))
         raise
