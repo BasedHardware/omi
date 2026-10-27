@@ -16,6 +16,7 @@ from typing import Any, Callable, Literal, Mapping
 from config.sync_telemetry import SyncFailureReason
 from models.conversation_enums import ConversationSource
 from utils.journey_metrics_contract import bounded_app_build
+from utils.conversations.size_limit import PROJECTED_SIZE_BUCKETS
 from utils.metrics import (
     OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL,
     OMI_LIVE_STT_ACCEPTED_TOTAL,
@@ -334,8 +335,6 @@ def record_sync_intake_outcome(*, created: bool, projected_size_bucket: str | No
     outcome = 'created' if created else 'merged'
     if outcome not in _SYNC_INTAKE_OUTCOMES:
         raise ValueError(f'unknown sync intake outcome: {outcome}')
-    from utils.conversations.size_limit import PROJECTED_SIZE_BUCKETS
-
     bucket = projected_size_bucket if projected_size_bucket in PROJECTED_SIZE_BUCKETS else None
     # A missing observation must not invent a size band. Production assignment
     # supplies one on every write/no-op path; legacy test adapters may not.

@@ -862,6 +862,13 @@ def assign_in_transaction(
         )
         return no_op, False, []
 
+    def available(candidate: _Plan, denied: frozenset[str]) -> bool:
+        # A plan that lost its last bridge can fall back to incoming['id'].
+        # That is not a create when the ID already owns durable speech.
+        return candidate.canonical not in denied and not (
+            candidate.created and (read.get(candidate.canonical) is not None or not candidate.survivors)
+        )
+
     def stop_absorption(chosen: _Plan) -> _Plan:
         nonlocal excluded, live_stats
         # Remove the last donor and re-run discovery without its bridge.
@@ -879,9 +886,19 @@ def assign_in_transaction(
             outcome='degraded',
             log=logger,
         )
-        excluded = excluded | {max(chosen.donor_updates)}
-        live_stats = None
-        return plan(excluded, segment_indices)
+        for drop in ({max(chosen.donor_updates)}, {chosen.canonical}):
+            denied = excluded | drop
+            live_stats = None
+            try:
+                candidate = plan(denied, segment_indices)
+            except (SyncAssignmentSuperseded, SyncAssignmentConflict):
+                continue
+            if available(candidate, denied):
+                # If removing a donor strands its own incoming anchor, leave
+                # the old survivor alone and append/dedupe at that donor.
+                excluded = denied
+                return candidate
+        raise SyncAssignmentConflict('size cap has no safe assignment', subtype=Reason.SIZE_CAP_ROLLOVER_UNAVAILABLE)
 
     trigger = None
     while True:
@@ -901,12 +918,7 @@ def assign_in_transaction(
             rollover: _Plan | None = plan(excluded | drop, chosen.kept)
         except (SyncAssignmentSuperseded, SyncAssignmentConflict):
             rollover = None
-        if (
-            rollover is None
-            or rollover.canonical in excluded | drop
-            # Never overwrite an existing (tombstone) document or create an empty row.
-            or (rollover.created and (read.get(rollover.canonical) is not None or not rollover.survivors))
-        ):
+        if rollover is None or not available(rollover, excluded | drop):
             if over_absorption_cap:
                 # The legacy unavailable path may retry an append, but may
                 # never fall through with an over-cap absorption plan.

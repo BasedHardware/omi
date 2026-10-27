@@ -771,3 +771,26 @@ def test_projection_counts_retained_fields_and_real_delete_sentinels():
     expected = {'retained': before['retained'], 'replaced': b'after'}
     assert projected_document_bytes(ref, patch, before) == estimate_firestore_document_bytes(expected, ref.path)
     assert 'removed' in before
+
+
+@pytest.mark.parametrize('new_speech', [False, True])
+def test_cap_stop_never_recreates_an_excluded_existing_anchor(new_speech):
+    store = _receipt_bridge_store(850 * 1024)
+    donor = _row(store, 'c')
+    donor['started_at'] = chunk('start', 1100)['started_at']
+    donor['finished_at'] = chunk('finish', 1500)['finished_at']
+    donor['transcript_segments'] = [
+        dict(chunk('early', 1100, text='Earlier durable speech.')['transcript_segments'][0]),
+        dict(chunk('tail', 1500, text='Original tail speech.')['transcript_segments'][0], start=400.0, end=409.5),
+    ]
+    before = {cid: deepcopy(_row(store, cid)) for cid in ('a', 'c')}
+    store.transactions.clear()
+    text = 'New tail speech.' if new_speech else 'Original tail speech.'
+    # The original anchor owns earlier speech and bridges the otherwise
+    # disconnected 850KiB survivor to this late/retried chunk.
+    result, created, _ = intake(store, chunk('c', 1520 if new_speech else 1500, text=text))
+    assert result['id'] == 'c' and not created
+    assert _row(store, 'a') == before['a']
+    assert _texts(result) == ['Earlier durable speech.', 'Original tail speech.'] + ([text] if new_speech else [])
+    assert not _row(store, 'c').get('deleted')
+    assert not any(path[2] == 'conversations' for path, _ in store.transactions[-1].sets)

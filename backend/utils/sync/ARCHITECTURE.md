@@ -158,7 +158,10 @@ transaction write. The 224 KiB below Firestore's 1 MiB ceiling includes the
 existing 124 KiB sync reserve plus 100 KiB for subsequent derived processing.
 
 Assignment stops adding donors and replans without them or their bridge
-intervals. Unabsorbed donors remain intact in their own rows. Ordinary appends
+intervals. Every replan rejects excluded/existing IDs as new creates; when
+removing a bridge strands its own incoming anchor, the old survivor stays
+separate and speech appends/deduplicates at the durable donor. Unabsorbed
+donors retain their earlier speech. Ordinary appends
 retain the **900 KiB** whole-document preflight and the size-limit commit
 backstop: speech that cannot fit goes to a new or neighbouring sync row,
 without truncation or dropping speech. Smart-merge absorption now uses that

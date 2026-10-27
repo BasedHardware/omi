@@ -1426,6 +1426,22 @@ any error keeps both. Every answered pair stores a server-only
 For a merge verdict, the decision is persisted before the absorb transaction
 so a retry reuses the same score.
 
+Before the absorption transaction stages survivor, donor or ancestor writes,
+sync assignment and smart merge bound the fully encoded projected documents at
+`CONVERSATION_ABSORPTION_BYTE_CAP` (800 KiB), including retained fields,
+compression/encryption and redirect patches. Over-cap donors remain separate;
+assignment rechecks every replan against excluded and already-existing anchors
+so a late/retried chunk cannot replace its donor's earlier speech. When removing
+a bridge strands that anchor, assignment keeps the old survivor separate and
+appends or deduplicates at the existing donor. The 900 KiB sync append preflight
+and size-limit backstop remain. Incoming speech that cannot fit uses the usual
+new/neighbouring-row rollover without truncation. Smart-merge absorption also
+uses the size-limit backstop: a rejected absorb leaves the durable donor intact
+and its normal finalization continues independently, producing a separate
+summary. Users can see adjacent conversations with separate summaries.
+`size_cap_stop` and content-free `projected_size_bucket` tokens expose this
+boundary; the sync architecture documents the size bands and counter label.
+
 The absorb transaction also refuses either parent when
 `has_transcript_corrections` is set. User and agent corrections live in an
 encrypted overlay anchored to captured segments; folding their source rows would
