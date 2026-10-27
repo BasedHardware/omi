@@ -19,7 +19,7 @@ from utils.conversations.search import conversation_matches_date_range
 from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 from utils.model_text import DisplayClock, UNTRUSTED_LEGEND, format_date, untrusted_block
 from utils.observability.fallback import record_fallback
-from utils.other.list_budget import ListReadBudget
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +58,13 @@ def search_saved_transcripts_text(
             owned = conversations_db.get_conversations_by_id(uid, [conversation_id], include_discarded=True)
             page = TranscriptScanPage([TranscriptScanRow(row, '') for row in owned], exhausted=True)
         else:
+            # Reserve time for matching/rendering after the database has decoded
+            # its page; otherwise a nearly spent read budget cannot make progress.
+            read_budget = ListReadBudget.for_request(
+                None, route='chat_transcript_search', seconds=4.0, max_documents=50
+            )
             page = read_transcript_search_page(
-                uid, query, cursor=cursor, start_date=start_date, end_date=end_date, budget=budget
+                uid, query, cursor=cursor, start_date=start_date, end_date=end_date, budget=read_budget
             )
     except InvalidTranscriptCursor:
         return 'Error: invalid or expired transcript cursor. Restart with the same transcript_query and no cursor.'
@@ -83,7 +88,26 @@ def search_saved_transcripts_text(
     examined = 0
     unreadable = page.unreadable
     complete_page = True
+
+    def within_deadline() -> bool:
+        try:
+            budget.check()
+            return True
+        except ListReadBudgetExhausted:
+            record_fallback(
+                component='firestore_read',
+                from_mode='transcript_search',
+                to_mode='partial_page',
+                reason='capacity_full',
+                outcome='degraded',
+                log=logger,
+            )
+            return False
+
     for entry in page.rows:
+        if not within_deadline():
+            complete_page = False
+            break
         row = entry.conversation
         if row and (
             conversations_db.is_visible_conversation(row)
@@ -106,6 +130,9 @@ def search_saved_transcripts_text(
                     unreadable += 1
                     logger.warning('transcript search skipped an invalid record (%s)', type(error).__name__)
                 else:
+                    if not within_deadline():
+                        complete_page = False
+                        break
                     excerpt = '\n\n'.join(snippet['text'] for snippet in snippets)
                     # Leave room for coverage, signed continuation and citation labels.
                     block = untrusted_block(
@@ -139,6 +166,8 @@ def search_saved_transcripts_text(
     if complete_page and page.exhausted:
         next_cursor = None
     more = not complete_page or not page.exhausted
+    if more and examined == 0:
+        return 'Error: transcript search made no progress before its deadline. Retry or narrow the dates; no absence conclusion is possible.'
     coverage = (
         f'Direct transcript search: examined {examined} records on this page; {len(blocks)} matching conversations. '
         'Matching is literal (phrase or all words in one segment), not semantic. '

@@ -869,6 +869,12 @@ async def test_transcript_recall_withholds_invented_follow_on_without_evidence(
     )
     assert result is None
     answer = ''.join(persisted)
+    streamed = []
+    while not callback.queue.empty():
+        event = callback.queue.get_nowait()
+        if isinstance(event, str) and event.startswith('data: '):
+            streamed.append(event[6:])
+    assert ''.join(streamed) == answer
     if found:
         assert answer == 'The invoice was 999 dollars[1].'
     else:

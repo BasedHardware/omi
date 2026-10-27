@@ -235,3 +235,29 @@ def test_budget_exhaustion_is_partial_and_does_not_skip_the_unexamined_row(data,
     monkeypatch.setattr(store, 'prepare_conversation_for_read', slow_decode)
     page = store.read_transcript_search_page('u1', 'invoice', budget=bounded)
     assert not page.rows and not page.exhausted
+
+
+def test_matching_deadline_resumes_before_unreturned_match(data, monkeypatch):
+    timer = [0.0]
+
+    def bounded(_request, **kwargs):
+        return ListReadBudget(deadline_monotonic=2, max_documents=50, clock=lambda: timer[0])
+
+    monkeypatch.setattr(service.ListReadBudget, 'for_request', bounded)
+    match = service.build_transcript_match_snippets
+
+    def slow_match(segments, *args, **kwargs):
+        result = match(segments, *args, **kwargs)
+        timer[0] += 1.5
+        return result
+
+    monkeypatch.setattr(service, 'build_transcript_match_snippets', slow_match)
+    sources = []
+    first = service.search_saved_transcripts_text('u1', 'invoice', source_sink=sources)
+    assert [s['source_id'] for s in sources] == ['c000']
+    timer[0] = 0
+    rest = []
+    service.search_saved_transcripts_text(
+        'u1', 'invoice', cursor=continuation(first)['transcript_cursor'], source_sink=rest
+    )
+    assert rest[0]['source_id'] == 'c001'

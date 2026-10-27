@@ -318,6 +318,7 @@ async def test_shaped_transcript_recall_keeps_the_same_no_evidence_gate(monkeypa
     monkeypatch.setattr(context_module, 'take_prepared', AsyncMock(return_value={'summary': '', 'digest': ''}))
     monkeypatch.setattr(context_module, 'schedule_refresh', lambda *a, **k: None)
     output = []
+    callback = agentic.AsyncStreamingCallback()
     await agentic._run_shaped_chat_stream(
         'remote base prompt',
         [{'role': 'user', 'content': 'Check the invoice again.'}],
@@ -332,13 +333,19 @@ async def test_shaped_transcript_recall_keeps_the_same_no_evidence_gate(monkeypa
             }
         ],
         {'search_conversations_tool': object()},
-        agentic.AsyncStreamingCallback(),
+        callback,
         output,
         agentic.AgentSafetyGuard(),
         {'user_id': 'u', 'chat_session_id': 's'},
     )
     assert '<transcript_recall>' in str(captures[0])
     assert ''.join(output) == ('It was 999 dollars[1].' if found else UNVERIFIED_TRANSCRIPT_ANSWER)
+    streamed = []
+    while not callback.queue.empty():
+        event = callback.queue.get_nowait()
+        if isinstance(event, str) and event.startswith('data: '):
+            streamed.append(event[6:])
+    assert ''.join(streamed) == ''.join(output)
 
 
 @pytest.mark.parametrize('channel', [None, 'telegram', 'imessage'])

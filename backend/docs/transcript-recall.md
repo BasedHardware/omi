@@ -59,7 +59,7 @@ a model has not attempted transcript retrieval or has returned some evidence.
       exclusions hold; failures retain honest coverage and no content leaks.
 - [x] Mobile citations remain stable across repeated searches; REST sources
       include the actual excerpt.
-- [ ] A two-turn tool/agent journey receives authoritative evidence, or keeps
+- [x] A two-turn tool/agent journey receives authoritative evidence, or keeps
       the no-evidence/incomplete outcome after pushback. Distinguish a scripted
       model from a live-provider evaluation in the PR evidence.
 - [ ] Existing search, query/index guards, typechecking and current-head CI pass.
