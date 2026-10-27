@@ -34,9 +34,12 @@ has a hard 600-second TTL, LRU maximum of 512 entries and maximum of 262,144
 scalar values (roughly 8 MiB of Python floats plus keys/containers). A hit never
 extends TTL. Batch output retains every original position; independently
 concurrent requests may race on a miss without sharing cancellation state.
-Errors, invalid vectors and cancelled attempts do not populate cache entries.
-Successfully completed items in an otherwise failed batch may be reused on a
-retry. Existing fan-out, deadlines, cancellation and wire-error behavior remain.
+Errors and invalid vectors do not populate cache entries. New successful
+vectors are staged until the batch outcome is known; cancellation and timeout
+discard that staging. Successfully completed items in a batch with an ordinary
+provider error may be reused on retry. Previously cached results from separate
+successful requests remain valid. Existing fan-out, deadlines, cancellation and
+wire-error behavior remain.
 
 ## Validation and measurement
 

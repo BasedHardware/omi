@@ -10,7 +10,7 @@ import pytest
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.credentials import build_byok_credential_context, build_omi_managed_credential_context
 from llm_gateway.gateway.providers import ProviderFailure, VertexGeminiProvider
-from llm_gateway.gateway.schemas import ProviderRef
+from llm_gateway.gateway.schemas import FailureClass, ProviderRef
 from llm_gateway.gateway.vertex_embedding_cache import EmbeddingVectorCache, embedding_key, INPUTS, CHARACTERS
 
 CORPUS = json.loads((Path(__file__).parent / 'fixtures/vertex_embedding_reuse.json').read_text())
@@ -201,6 +201,71 @@ async def test_cancelled_call_has_no_reusable_result_or_surviving_worker():
         assert active == 0
         await embed(provider, 'same')
         assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['cancel', 'deadline', 'provider_timeout', 'http'])
+async def test_completed_item_is_not_published_from_cancelled_or_timed_out_batch(failure):
+    succeeded = asyncio.Event()
+    sibling_started = asyncio.Event()
+    blocked = asyncio.Event()
+    calls = []
+    active = 0
+
+    # Observe actual wire validation completing; do not replace the adapter or
+    # fabricate a successful vector at the cache seam.
+    class ObservedProvider(VertexGeminiProvider):
+        async def _create_embedding_instance(self, endpoint, instance, **kwargs):
+            vector = await super()._create_embedding_instance(endpoint, instance, **kwargs)
+            if instance['content'] == 'a':
+                succeeded.set()
+            return vector
+
+    async def handler(request):
+        nonlocal active
+        text = json.loads(request.content)['instances'][0]['content']
+        calls.append(text)
+        active += 1
+        try:
+            if text == 'b':
+                sibling_started.set()
+                await succeeded.wait()
+                if failure == 'http':
+                    return httpx.Response(503)
+                if failure == 'provider_timeout':
+                    raise httpx.ReadTimeout('fixture timeout', request=request)
+                await blocked.wait()
+            return httpx.Response(200, json={'predictions': [{'embeddings': {'values': [0.25]}}]})
+        finally:
+            active -= 1
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = ObservedProvider(http_client=client, access_token_supplier=token)
+        task = asyncio.create_task(
+            provider.create_embedding(
+                {'input': ['a', 'b']},
+                provider_ref=MODEL,
+                credentials=credentials(),
+                timeout_ms=250 if failure == 'deadline' else 10_000,
+            )
+        )
+        await asyncio.wait_for(succeeded.wait(), timeout=1)
+        await asyncio.wait_for(sibling_started.wait(), timeout=1)
+        if failure == 'cancel':
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            with pytest.raises(ProviderFailure) as error:
+                await task
+            expected = FailureClass.PROVIDER_5XX_OMI_PAID if failure == 'http' else FailureClass.TIMEOUT_BEFORE_OUTPUT
+            assert error.value.failure_class == expected
+        assert active == 0
+        await embed(provider, 'a')
+        assert calls.count('a') == (1 if failure == 'http' else 2)
+        # A successful retry may populate the cache normally.
+        await embed(provider, 'a')
+        assert calls.count('a') == (1 if failure == 'http' else 2)
 
 
 @pytest.mark.asyncio

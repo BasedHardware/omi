@@ -151,6 +151,9 @@ class VertexEmbeddingRunner:
             else None
         )
         keys = [embedding_key(owner=owner, endpoint=endpoint, instance=instance) for instance in instances]
+        # Keep new results request-local until the outcome is known. A sibling
+        # cancellation/deadline must not publish part of an abandoned batch.
+        staged: dict[str, list[float]] = {}
         if len(instances) == 1:
             # A single predict keeps the existing per-request wire timeout.
             # Only batches need to share a shrinking budget across requests.
@@ -159,11 +162,13 @@ class VertexEmbeddingRunner:
                 endpoint,
                 instances[0],
                 cache_key=keys[0],
+                staged=staged,
                 headers=headers,
                 credentials=credentials,
                 model=model,
                 timeout_ms=timeout_ms,
             )
+            self._commit(staged)
             return ProviderResponse(
                 response={
                     'object': 'list',
@@ -198,6 +203,7 @@ class VertexEmbeddingRunner:
                     endpoint,
                     instance,
                     cache_key=key,
+                    staged=staged,
                     headers=headers,
                     credentials=credentials,
                     model=model,
@@ -226,7 +232,14 @@ class VertexEmbeddingRunner:
                     raise failures.exceptions[0] from None
         except TimeoutError as exc:
             raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+        except ProviderFailure as exc:
+            # Successful independent items remain reusable on an ordinary
+            # provider error; timeouts and caller cancellation discard staging.
+            if exc.failure_class != FailureClass.TIMEOUT_BEFORE_OUTPUT:
+                self._commit(staged)
+            raise
 
+        self._commit(staged)
         data = [{'object': 'embedding', 'embedding': vector, 'index': i} for i, vector in enumerate(vectors)]
         # Vertex reports billable characters rather than tokens. Keep usage
         # NOT_REPORTED rather than fabricating aggregate token counts.
@@ -241,6 +254,7 @@ class VertexEmbeddingRunner:
         instance: Mapping[str, Any],
         *,
         cache_key: str | None,
+        staged: dict[str, list[float]],
         headers: dict[str, str],
         credentials: CredentialContext,
         model: str,
@@ -256,8 +270,14 @@ class VertexEmbeddingRunner:
         vector = await self._create_instance(
             endpoint, instance, headers=headers, credentials=credentials, model=model, timeout_ms=timeout_ms
         )
-        # Only the successful, finite vector validated by the real adapter is
-        # reusable. A mid-request kill also prevents late cache insertion.
-        if cache_key is not None and vertex_embedding_dedupe_enabled():
-            self._embedding_cache.put(cache_key, vector)
+        # Only the successful, finite vector validated by the real adapter can
+        # be staged. Publication is deferred to the enclosing request outcome.
+        if cache_key is not None:
+            staged[cache_key] = vector
         return vector
+
+    def _commit(self, staged: Mapping[str, list[float]]) -> None:
+        # A mid-request kill prevents late insertion too.
+        if vertex_embedding_dedupe_enabled():
+            for key, vector in staged.items():
+                self._embedding_cache.put(key, vector)
