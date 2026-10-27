@@ -43,10 +43,12 @@ REPAIR_PROVIDER = 'modulate'
 
 
 def words_repair_eligible(job):
-    """Lead ruling 7fa3d2: a spent guarded intent whose Modulate words were rejected
-    only for zero strict CPU VAD, whose capped Soniox call answered empty, and whose
-    bound worker VAD receipt measured speech. Its operator repair buys exactly one
-    explicit Modulate call; the spent intent and both receipts stay untouched.
+    """Lead rulings 7fa3d2/a3af50: a spent guarded intent whose Modulate words were
+    rejected only for zero strict CPU VAD, whose capped Soniox call settled with a
+    validated answer (empty, or words that met the same rejection), and whose bound
+    worker VAD receipt measured speech. Its operator repair buys exactly one explicit
+    Modulate call; the spent intent and both receipts stay untouched. Neither
+    recognizer's words were persisted, so no zero-call re-settle exists.
     """
     from utils.batch_pipeline.contracts import worker_vad_speech
 
@@ -60,8 +62,10 @@ def words_repair_eligible(job):
         and modulate.get('outcome') == 'words'
         and type(modulate.get('word_count')) is int
         and modulate['word_count'] > 0
-        and soniox.get('outcome') == 'empty'
-        and soniox.get('word_count') == 0
+        and (
+            (soniox.get('outcome') == 'empty' and soniox.get('word_count') == 0)
+            or (soniox.get('outcome') == 'words' and type(soniox.get('word_count')) is int and soniox['word_count'] > 0)
+        )
         # Malformed jobs fail closed here, never inside a retention transaction.
         and isinstance(job.get('audio_uri'), str)
         and type(job.get('duration_seconds')) in {int, float}
