@@ -6,6 +6,13 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+Prerecorded Modulate STT/LID and Parakeet v1/v2 POST boundaries count attempted
+audio payload bytes in `omi_prerecorded_vendor_payload_bytes_total` with fixed
+provider/endpoint labels. Retries count each attempt; breaker refusals count none.
+No audio, URL, user or job identity enters the metric. The two routine STT
+`*_prerecorded_from_bytes bytes_len` breadcrumbs are DEBUG; errors and existing
+outcome metrics remain unchanged. See [sync egress attribution](./runbooks/sync-egress-attribution.md).
+
 ## Sync storage round trips
 
 Retained server-only `open_loop_extractions` never reach the conversation

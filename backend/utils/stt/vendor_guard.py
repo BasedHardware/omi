@@ -39,6 +39,11 @@ VENDOR_AUDIO_SECONDS = Counter(
     'Audio seconds sent to the prerecorded vendor per POST',
     ['provider', 'endpoint', 'outcome'],
 )
+VENDOR_PAYLOAD_BYTES = Counter(
+    'omi_prerecorded_vendor_payload_bytes_total',
+    'Audio payload bytes attempted per prerecorded POST, including retries; excludes HTTP/TLS overhead',
+    ['provider', 'endpoint'],
+)
 
 _clock = time.monotonic
 
@@ -185,6 +190,20 @@ def record_breaker_other_failure(endpoint: str) -> None:
 def record_vendor_burn(endpoint: str, outcome: str, seconds: float) -> None:
     try:
         VENDOR_AUDIO_SECONDS.labels(MODULATE_PROVIDER, endpoint, outcome).inc(max(0.0, float(seconds or 0.0)))
+    except Exception:
+        pass
+
+
+def record_vendor_payload(provider: str, endpoint: str, size: int) -> None:
+    """Count the unchanged audio body at the POST boundary, never content or identity.
+
+    This is attempted payload, not confirmed network delivery: a connection failure
+    can send fewer bytes. Fixed pairs bound cardinality independently of callers.
+    """
+    if (provider, endpoint) not in {('modulate', 'stt'), ('modulate', 'lid'), ('parakeet', 'v1'), ('parakeet', 'v2')}:
+        return
+    try:
+        VENDOR_PAYLOAD_BYTES.labels(provider, endpoint).inc(max(0, size))
     except Exception:
         pass
 
