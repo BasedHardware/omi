@@ -16,7 +16,12 @@ from config.sync_safety_wal import sync_safety_wal_enabled
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, STRUCTURAL_REASONS
-from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
+from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES
+from utils.conversations.size_limit import (
+    CONVERSATION_ABSORPTION_BYTE_CAP,
+    projected_document_bytes,
+    projected_size_bucket,
+)
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
@@ -162,6 +167,8 @@ class _Plan(NamedTuple):
     survivors: list[dict]
     # Indices into incoming['transcript_segments'] that this plan found new.
     kept: tuple[int, ...]
+    donor_updates: dict[str, dict]
+    absorption_bytes: int
     payload: dict
     ancestor_updates: dict[str, dict]
     estimated_bytes: int
@@ -285,6 +292,9 @@ def assign_in_transaction(
         invalidate(result)
         encoded = encode(result)
         transaction.update(collection.document(target_id), encoded)
+        result['_sync_projected_size_bucket'] = projected_size_bucket(
+            projected_document_bytes(collection.document(target_id), encoded, target)
+        )
         return result, False, survivors
     index = AssignmentIndex(transaction, user_ref)
     redirected = False
@@ -694,6 +704,15 @@ def assign_in_transaction(
         index.read(extent)
         payload = encode(result)
         payload.pop('photos', None)
+        donor_updates = {cid: _donor_redirect_patch(raw, canonical) for cid, raw in matched.items() if cid != canonical}
+        estimated_bytes = _stored_document_bytes(collection.document(canonical), payload, current, invalidate)
+        absorption_bytes = max(
+            [estimated_bytes]
+            + [
+                projected_document_bytes(collection.document(cid), patch, load(cid))
+                for cid, patch in {**donor_updates, **ancestor_updates}.items()
+            ]
+        )
         return _Plan(
             canonical,
             matched,
@@ -701,6 +720,8 @@ def assign_in_transaction(
             created,
             survivors,
             kept,
+            donor_updates,
+            absorption_bytes,
             payload,
             ancestor_updates,
             _stored_document_bytes(collection.document(canonical), payload, current, invalidate),
@@ -787,6 +808,9 @@ def assign_in_transaction(
             no_op['_sync_lineage_stamp_gap_refused'] = True
             if no_op['id'] == target_id and live_stats is not None and live_stats['sync_retry']:
                 no_op['_sync_lineage_completion_pending'] = True
+            no_op['_sync_projected_size_bucket'] = projected_size_bucket(
+                projected_document_bytes(collection.document(no_op['id']), {}, read.get(no_op['id']))
+            )
             return no_op, False, []
         if discover_on_stamp_gap:
             # No writes have happened. The adapter discovers outside this
@@ -802,7 +826,8 @@ def assign_in_transaction(
         # for contention and gate-3 classification, without adopting a live row.
         for cid in live_candidate_ids:
             load(cid)
-        chosen = plan(excluded, chosen.kept)
+        segment_indices = chosen.kept
+        chosen = plan(excluded, segment_indices)
         stamp_gap_refused = True
     if (
         live_stats is not None
@@ -830,12 +855,41 @@ def assign_in_transaction(
                 stamp_fallback_live, target_id, chosen.matched.get(chosen.canonical), no_op
             ),
         }
+        no_op['_sync_projected_size_bucket'] = projected_size_bucket(
+            projected_document_bytes(collection.document(chosen.canonical), {}, chosen.matched[chosen.canonical])
+        )
         return no_op, False, []
+
+    def stop_absorption(chosen: _Plan) -> _Plan:
+        nonlocal excluded, live_stats
+        # Remove the last donor and re-run discovery without its bridge.
+        # Reconsider input deduped against that donor: it no longer belongs
+        # to the survivor. No donor/ancestor patch has been staged.
+        logger.warning(
+            'event=sync_assignment_target outcome=size_cap_stop projected_size_bucket=%s',
+            projected_size_bucket(chosen.absorption_bytes),
+        )
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='canonical_append',
+            to_mode='size_rollover',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
+        excluded = excluded | {max(chosen.donor_updates)}
+        live_stats = None
+        return plan(excluded, segment_indices)
+
     trigger = None
     while True:
         drop = (set(chosen.matched) | {chosen.canonical}) & full_ids
         if chosen.grows and chosen.estimated_bytes > SYNC_CONVERSATION_BYTE_BUDGET:
             drop.add(chosen.canonical)
+        over_absorption_cap = bool(chosen.donor_updates and chosen.absorption_bytes > CONVERSATION_ABSORPTION_BYTE_CAP)
+        if not drop and over_absorption_cap:
+            chosen = stop_absorption(chosen)
+            continue
         if not drop:
             break
         trigger = trigger or ('commit_limit' if drop & full_ids else 'estimate')
@@ -851,19 +905,30 @@ def assign_in_transaction(
             # Never overwrite an existing (tombstone) document or create an empty row.
             or (rollover.created and (read.get(rollover.canonical) is not None or not rollover.survivors))
         ):
+            if over_absorption_cap:
+                # The legacy unavailable path may retry an append, but may
+                # never fall through with an over-cap absorption plan.
+                chosen = stop_absorption(chosen)
+                continue
             # No safe home for the speech: keep the write unchanged, so the
             # commit and its size-limit backstop decide exactly as before.
-            logger.warning('event=sync_assignment_target outcome=size_rollover_unavailable trigger=%s', trigger)
+            logger.warning(
+                'event=sync_assignment_target outcome=size_rollover_unavailable trigger=%s projected_size_bucket=%s',
+                trigger,
+                projected_size_bucket(chosen.estimated_bytes),
+            )
             trigger = 'unavailable'
             break
+        segment_indices = chosen.kept
         excluded, chosen = excluded | drop, rollover
     if trigger is not None and trigger != 'unavailable' and excluded:
         # One event per committed plan, however many full rows it stepped past.
         logger.warning(
-            'event=sync_assignment_target outcome=size_rollover trigger=%s created=%s excluded=%d',
+            'event=sync_assignment_target outcome=size_rollover trigger=%s created=%s excluded=%d projected_size_bucket=%s',
             trigger,
             str(chosen.created).lower(),
             len(excluded),
+            projected_size_bucket(chosen.estimated_bytes),
         )
         record_fallback(
             component='sync_dispatch',
@@ -893,20 +958,8 @@ def assign_in_transaction(
     else:
         invalidate(payload)
         transaction.update(collection.document(canonical), payload)
-    for cid, row in matched.items():
-        if cid != canonical:
-            transaction.update(
-                collection.document(cid),
-                {
-                    'deleted': True,
-                    # Hide the redirect from discarded==False list indexes. Distinct
-                    # from user discard: include_discarded=True readers still drop
-                    # these rows via is_soft_deleted, and restore must not revive them.
-                    'discarded': True,
-                    'sync_merged_into': canonical,
-                    'sync_content_revision': (row.get('sync_content_revision') or 0) + 1,
-                },
-            )
+    for cid, patch in chosen.donor_updates.items():
+        transaction.update(collection.document(cid), patch)
     for ancestor_id, patch in chosen.ancestor_updates.items():
         transaction.update(collection.document(ancestor_id), patch)
     index.write(result, set(matched) | {canonical})
@@ -944,7 +997,19 @@ def assign_in_transaction(
         result['_sync_lineage_stamp_gap_refused'] = True
     if temporal_live:
         logger.info('event=sync_live_overlap outcome=%s', 'merged' if canonical == target_id else 'published')
+    result['_sync_projected_size_bucket'] = projected_size_bucket(chosen.estimated_bytes)
     return result, created, survivors
+
+
+def _donor_redirect_patch(row: dict, canonical: str) -> dict:
+    # Hidden redirect, retained for late uploads and owner detail reads; never
+    # confuse it with a user discard that can be restored independently.
+    return {
+        'deleted': True,
+        'discarded': True,
+        'sync_merged_into': canonical,
+        'sync_content_revision': (row.get('sync_content_revision') or 0) + 1,
+    }
 
 
 def _stored_document_bytes(
@@ -955,13 +1020,14 @@ def _stored_document_bytes(
     A create stores the payload; an update replaces the named top-level fields
     of the stored (encoded) row and removes the invalidated projection fields.
     """
-    stored = dict(payload) if current is None else {**current, **payload}
+    stored = dict(current or {})
+    patch = dict(payload)
     clears: dict = {}
     invalidate(clears)
     for field in clears:
         stored.pop(field, None)
-    path = getattr(reference, 'path', None)
-    return estimate_firestore_document_bytes(stored, path if isinstance(path, str) else None)
+        patch.pop(field, None)
+    return projected_document_bytes(reference, patch, stored)
 
 
 def size_limited_conversation(error: BaseException, canonical: Optional[str]) -> tuple[Optional[str], str]:

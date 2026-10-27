@@ -146,6 +146,34 @@ The shared arithmetic does not unify the observed clocks: live finished_at is cu
 
 An operator-built Cloud Tasks payload with `redrive_mode: 'minimal'` (`utils/sync/minimal_redrive.py`; clients never set it) keeps the ledger, dedupe and receipts but pins Parakeet through `selected_service`, skips paid empty-segment recovery (a double empty is silence), and fails retryably with `sync_minimal_provider_unavailable` when Parakeet cannot serve the language. Before temporal assignment it passes the closest same-partition, non-deleted completed row within 10 minutes as the explicit `target_id`; normal traffic keeps the ±2 minute hint and 120-second continuity. Post-processing is replaced: appended rows get no enrichment, and each new row gets one `sync_redrive_title` (gpt-5-nano) title and overview through `persist_processed_conversation`, keeping the deterministic minimum if that call fails. `SYNC_MINIMAL_REDRIVE_ENABLED=false` refuses such tasks with a retryable 409 before any work.
 
+## Conversation size
+
+Before absorbing donors, assignment and smart merge size the fully encoded
+projected survivor and every donor/ancestor redirect patch against
+`CONVERSATION_ABSORPTION_BYTE_CAP` (`utils/conversations/size_limit.py`):
+**800 KiB**. The estimate uses the real conversation write encoder, including
+compression, encryption and protection upgrades, retained stored fields and
+projection removals. It reuses transactional snapshots and runs before any
+transaction write. The 224 KiB below Firestore's 1 MiB ceiling includes the
+existing 124 KiB sync reserve plus 100 KiB for subsequent derived processing.
+
+Assignment stops adding donors and replans without them or their bridge
+intervals. Unabsorbed donors remain intact in their own rows. Ordinary appends
+retain the **900 KiB** whole-document preflight and the size-limit commit
+backstop: speech that cannot fit goes to a new or neighbouring sync row,
+without truncation or dropping speech. Smart-merge absorption now uses that
+backstop too; a rejected absorb keeps its already durable donor separate, so
+normal finalization produces its own summary. No redirect, ancestry or audit
+write from the rejected absorb commits. Existing oversized rows are not migrated.
+Users can see long recordings as adjacent conversations with separate summaries.
+
+Assignment and absorb logs carry content-free `projected_size_bucket` bands
+`lt_500k|500_700k|700_800k|800_900k|900k_1m|gt_1m` (KiB; exactly 1 MiB is in
+`900k_1m`). `size_cap_stop` is the closed cap-stop outcome/reason.
+`omi_sync_intake_total` also carries this bounded label after commit. A caller
+without a projection observation emits only the legacy intake log; it never
+invents a size band. No identifiers or content are added to these observations. Rollback: revert.
+
 ## Assignment outcomes
 
 Labeled non-target donors are excluded before extending the capture interval. A labeled

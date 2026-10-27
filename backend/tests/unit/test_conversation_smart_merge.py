@@ -1009,3 +1009,84 @@ def test_transaction_never_rekeys_corrected_capture_anchors(world, protected):
     )
     assert result.outcome == 'rejected'
     assert world.store.rows == before
+
+
+@pytest.mark.parametrize('level', ['enhanced', 'standard'])
+def test_smart_absorb_encoded_cap_and_separate_finalization(world, monkeypatch, level, caplog):
+    from utils.conversations.size_limit import projected_document_bytes
+
+    world.add('p', 0, 10)
+    world.add('n', 13, 10)
+    if level == 'standard':
+        for cid in ('p', 'n'):
+            decoded = world.get(UID, cid)
+            decoded['data_protection_level'] = level
+            world.store.rows[_path(cid)] = conversations_db.encode_conversation_for_write(UID, decoded, level)
+    snapshot = deepcopy(world.store.rows)
+    measured = []
+
+    def observe(ref, payload, current=None):
+        size = projected_document_bytes(ref, payload, current)
+        measured.append((size, deepcopy(payload)))
+        return size
+
+    monkeypatch.setattr(smart_merge_db, 'projected_document_bytes', observe)
+    assert world.finish('n')
+    assert measured and isinstance(measured[0][1]['transcript_segments'], str if level == 'enhanced' else bytes)
+    assert measured[0][1]['data_protection_level'] == level
+    projected = max(size for size, _ in measured)
+    world.store.rows = deepcopy(snapshot)
+    monkeypatch.setattr(smart_merge_db, 'CONVERSATION_ABSORPTION_BYTE_CAP', projected - 1)
+    world.processed.clear()
+    world.retracted.clear()
+    assert not world.finish('n')
+    assert world.raw('p') == snapshot[_path('p')]
+    # The absorb committed no donor patch or redirect. Only the caller's kept
+    # decision metadata changes as normal finalization continues on this row.
+    after = deepcopy(world.raw('n'))
+    after.pop('smart_merge_decision', None)
+    assert after == snapshot[_path('n')]
+    assert not world.processed and not world.retracted
+    assert world.raw('n')['smart_merge_decision']['reason'] == 'size_cap_stop'
+    assert 'projected_size_bucket=lt_500k' in caplog.text
+
+
+@pytest.mark.parametrize('named', ['survivor', 'donor', 'unnamed'])
+def test_smart_absorb_size_commit_rejection_rolls_over(world, monkeypatch, named, caplog):
+    from tests.unit.test_sync_size_rollover import _RejectingStore
+
+    if named == 'unnamed':
+        store = _RejectingStore(0, name=lambda _: None)
+    else:
+        cid = 'p' if named == 'survivor' else 'n'
+        store = _RejectingStore(0, name=lambda _: f'users/{UID}/conversations/{cid}')
+    world.store = store
+    world.add('p', 0, 10)
+    world.add('n', 13, 10)
+    # Decision metadata is written before absorption; reject only the absorb.
+    original = smart_merge_db.absorb_conversation
+
+    def reject_once(*args, **kwargs):
+        store.failures[:] = [True]
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(smart_merge_db, 'absorb_conversation', reject_once)
+    before = deepcopy(store.rows)
+    assert not world.finish('n')
+    assert world.raw('p') == before[_path('p')]
+    assert world.transcript('n') == _segments('n', 10)
+    assert not world.raw('n').get('deleted')
+    assert not world.retracted and not world.processed
+    assert world.raw('n')['smart_merge_decision']['reason'] == 'size_cap_stop'
+    assert 'outcome=size_limit_retry' in caplog.text
+
+
+def test_smart_absorb_cap_checks_retained_donor_patch(world, caplog):
+    world.add('p', 0, 10)
+    world.add('n', 13, 10)
+    world.raw('n')['retained_metadata'] = 'x' * (801 * 1024)
+    before = deepcopy(world.raw('p'))
+    assert not world.finish('n')
+    assert world.raw('p') == before
+    assert not world.raw('n').get('deleted')
+    assert world.raw('n')['smart_merge_decision']['reason'] == 'size_cap_stop'

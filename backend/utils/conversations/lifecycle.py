@@ -176,7 +176,8 @@ def ingest_sync_conversation(
     assigned, created, survivors = conversations_db.assign_sync_conversation(
         uid, incoming, candidate_id=candidate_id, target_id=target_id, **checkpoint_hooks
     )
-    record_sync_intake_outcome(created=created)
+    size_bucket = assigned.pop('_sync_projected_size_bucket', None)
+    record_sync_intake_outcome(created=created, projected_size_bucket=size_bucket)
     if created:
         observe_completed_conversation_shape(uid, assigned)
     return assigned, created, survivors

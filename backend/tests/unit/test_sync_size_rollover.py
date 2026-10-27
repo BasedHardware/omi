@@ -154,12 +154,12 @@ def _receipt_bridge_store(stored_bytes):
 
 
 def test_default_budget_write_that_fits_is_exactly_the_unbounded_assignment(monkeypatch, caplog):
-    """850 KiB stored plus a small bridge stays under 900 KiB, so nothing changes.
+    """750 KiB stored plus a small bridge stays under the absorption cap, so nothing changes.
 
     The unbounded run (budget lifted far past any document) is the pre-PR
     assignment: same canonical, receipt owner, donor redirect, index and rows.
     """
-    stored = 850 * 1024
+    stored = 750 * 1024
     unbounded = _receipt_bridge_store(stored)
     with monkeypatch.context() as patch:
         patch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 10**12)
@@ -186,7 +186,7 @@ def test_default_budget_write_just_over_the_budget_rolls_over(caplog):
     assert result['id'] == 'b' and created and len(survivors) == 1
     assert _row(store, 'a') == before
     assert _events(caplog) == [
-        'event=sync_assignment_target outcome=size_rollover trigger=estimate created=true excluded=1'
+        'event=sync_assignment_target outcome=size_rollover trigger=estimate created=true excluded=1 projected_size_bucket=lt_500k'
     ]
 
 
@@ -200,7 +200,9 @@ def test_full_canonical_is_left_untouched_and_new_speech_starts_a_conversation(m
     assert not _row(store, 'b').get('sync_merged_from')
     assert len(conversations(store)) == 2
     events = _events(caplog)
-    assert events == ['event=sync_assignment_target outcome=size_rollover trigger=estimate created=true excluded=1']
+    assert events == [
+        'event=sync_assignment_target outcome=size_rollover trigger=estimate created=true excluded=1 projected_size_bucket=lt_500k'
+    ]
     fallback = _events(caplog, 'omi_fallback_event')
     assert fallback and 'from=canonical_append to=size_rollover' in fallback[0]
 
@@ -251,7 +253,7 @@ def test_a_long_chain_of_full_conversations_is_walked_to_a_safe_home(monkeypatch
     assert {cid: _row(store, cid) for cid in ids} == frozen
     assert len(conversations(store)) == len(ids) + 1
     assert _events(caplog) == [
-        f'event=sync_assignment_target outcome=size_rollover trigger=estimate created=true excluded={len(ids)}'
+        f'event=sync_assignment_target outcome=size_rollover trigger=estimate created=true excluded={len(ids)} projected_size_bucket=lt_500k'
     ]
     assert len(_events(caplog, 'omi_fallback_event')) == 1
 
@@ -295,7 +297,9 @@ def test_redirected_anchor_with_no_safe_home_keeps_the_original_write(monkeypatc
     )
     result, created, _ = intake(store, chunk('x', 1060, text='Words for a redirected anchor.'))
     assert result['id'] == 'a' and not created
-    assert _events(caplog) == ['event=sync_assignment_target outcome=size_rollover_unavailable trigger=estimate']
+    assert _events(caplog) == [
+        'event=sync_assignment_target outcome=size_rollover_unavailable trigger=estimate projected_size_bucket=lt_500k'
+    ]
     assert _row(store, 'x')['sync_merged_into'] == 'a'
 
 
@@ -446,7 +450,8 @@ def test_one_size_limit_commit_retries_once_into_a_new_conversation(adapter, cap
     events = _events(caplog)
     assert events[0] == 'event=sync_assignment_target outcome=size_limit_retry firestore_doc_kind=conversation'
     assert (
-        'event=sync_assignment_target outcome=size_rollover trigger=commit_limit created=true ' 'excluded=1'
+        'event=sync_assignment_target outcome=size_rollover trigger=commit_limit created=true '
+        'excluded=1 projected_size_bucket=lt_500k'
     ) in events
     assert any('to=size_limit_retry' in message for message in _events(caplog, 'omi_fallback_event'))
     # An identical retry later deduplicates into the conversation the backstop
@@ -638,3 +643,123 @@ def test_pipeline_doc_kind_prefers_the_bounded_stamp():
     assert _firestore_doc_kind(error) == 'donor'
     error.sync_firestore_doc_kind = 'users/u/conversations/c'
     assert _firestore_doc_kind(error) == 'conversation'
+
+
+# --------------------------------------------------------- pre-absorption cap
+
+
+def test_absorption_cap_keeps_donor_intact_without_losing_speech(caplog):
+    store = _receipt_bridge_store(850 * 1024)
+    donor = deepcopy(_row(store, 'c'))
+    result, created, survivors = intake(store, chunk('b', 1120, text='One short bridging sentence.'))
+    assert result['id'] == 'a' and not created and survivors
+    assert _row(store, 'c') == donor
+    assert _texts(_row(store, 'a'))[-1] == 'One short bridging sentence.'
+    assert len(conversations(store)) == 2
+    assert _events(caplog) == ['event=sync_assignment_target outcome=size_cap_stop projected_size_bucket=800_900k']
+    assert not result['sync_merged_from']
+
+
+def test_over_budget_bridge_rolls_incoming_to_a_safe_neighbour(caplog):
+    store = _receipt_bridge_store(950 * 1024)
+    before = {cid: deepcopy(_row(store, cid)) for cid in ('a', 'c')}
+    result, created, survivors = intake(store, chunk('b', 1120, text='One short bridging sentence.'))
+    assert result['id'] == 'c' and not created and survivors
+    assert _row(store, 'a') == before['a']
+    assert _texts(_row(store, 'c')) == ['One short bridging sentence.', 'A separate later remark.']
+    assert any('outcome=size_rollover' in line for line in _events(caplog))
+
+
+def test_donor_redirect_projection_is_capped_too(caplog):
+    store = _receipt_bridge_store(1000)
+    # Bulk retained only on the donor is not copied into the survivor.
+    _row(store, 'c')['retained_metadata'] = 'x' * (801 * 1024)
+    before = deepcopy(_row(store, 'c'))
+    intake(store, chunk('b', 1120))
+    assert _row(store, 'c') == before
+    assert 'outcome=size_cap_stop' in caplog.text
+
+
+@pytest.mark.parametrize('level', ['enhanced', 'standard'])
+def test_assignment_cap_measures_the_actual_encoder(adapter, monkeypatch, level):
+    # A compressible transcript is large in plaintext but small on disk.
+    store = StrictFirestore()
+
+    def assign(row):
+        return adapter.assign_sync_conversation('u', dict(row, data_protection_level=level), firestore_client=store)
+
+    assign(chunk('a', 1000, text='synthetic speech ' * 10000))
+    assign(chunk('c', 1240, text='separate synthetic speech ' * 10000))
+    before = deepcopy(store.rows)
+    observed = []
+    original = assignment.projected_document_bytes
+
+    def observe(reference, payload, current=None):
+        observed.append((deepcopy(payload), deepcopy(current)))
+        return original(reference, payload, current)
+
+    monkeypatch.setattr(assignment, 'projected_document_bytes', observe)
+    merged, _, _ = assign(chunk('b', 1120))
+    assert _row(store, 'c')['deleted']
+    assert len(merged['transcript_segments']) == 3
+    assert isinstance(_row(store, 'a')['transcript_segments'], str if level == 'enhanced' else bytes)
+    assert observed
+    # Replay the identical plan with the cap one byte below its actual encoded size.
+    actual = estimate_firestore_document_bytes(_row(store, 'a'), None)
+    store.rows = before
+    monkeypatch.setattr(assignment, 'CONVERSATION_ABSORPTION_BYTE_CAP', actual - 1)
+    assign(chunk('b', 1120))
+    assert _row(store, 'c') == before[('users', 'u', 'conversations', 'c')]
+
+
+@pytest.mark.parametrize(
+    'size, expected',
+    [
+        (0, 'lt_500k'),
+        (500 * 1024 - 1, 'lt_500k'),
+        (500 * 1024, '500_700k'),
+        (700 * 1024 - 1, '500_700k'),
+        (700 * 1024, '700_800k'),
+        (800 * 1024 - 1, '700_800k'),
+        (800 * 1024, '800_900k'),
+        (900 * 1024 - 1, '800_900k'),
+        (900 * 1024, '900k_1m'),
+        (1024 * 1024, '900k_1m'),
+        (1024 * 1024 + 1, 'gt_1m'),
+    ],
+)
+def test_projected_size_bucket_boundaries(size, expected):
+    from utils.conversations.size_limit import projected_size_bucket
+
+    assert projected_size_bucket(size) == expected
+
+
+def test_cap_accepts_a_donor_prefix_and_keeps_remaining_speech(caplog):
+    store = StrictFirestore()
+    _sized_row(store, 'a', 1000, 700 * 1024)
+    intake(store, chunk('c', 1240, text='First synthetic donor. ' * 2600))
+    intake(store, chunk('e', 1480, text='Second synthetic donor. ' * 2600))
+    before = deepcopy(_row(store, 'e'))
+    incoming = chunk('b', 1120, text='Synthetic bridging speech.')
+    incoming['finished_at'] = chunk('end', 1400)['finished_at']
+    result, _, _ = intake(store, incoming)
+    assert _row(store, 'c')['sync_merged_into'] == 'a'
+    assert _row(store, 'e') == before
+    assert len(result['transcript_segments']) == 3
+    assert _texts(result)[1] == 'Synthetic bridging speech.'
+    assert len(conversations(store)) == 2
+    assert estimate_firestore_document_bytes(_row(store, 'a'), None) <= 800 * 1024
+    assert any('outcome=size_cap_stop' in event for event in _events(caplog))
+
+
+def test_projection_counts_retained_fields_and_real_delete_sentinels():
+    from google.cloud.firestore_v1 import DELETE_FIELD
+    from types import SimpleNamespace
+    from utils.conversations.size_limit import projected_document_bytes
+
+    ref = SimpleNamespace(path='users/synthetic/conversations/projected')
+    before = {'retained': 'x' * 1000, 'removed': 'x' * 900000, 'replaced': 'before'}
+    patch = {'removed': DELETE_FIELD, 'replaced': b'after'}
+    expected = {'retained': before['retained'], 'replaced': b'after'}
+    assert projected_document_bytes(ref, patch, before) == estimate_firestore_document_bytes(expected, ref.path)
+    assert 'removed' in before
