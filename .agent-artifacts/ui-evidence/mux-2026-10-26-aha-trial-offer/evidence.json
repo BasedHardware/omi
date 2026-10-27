@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-aha-first-summary-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Free, trial-eligible Omi owner with one finished conversation. Left: the summary they read (same on main and this change). Middle: main, Back lands on Home with no offer. Right: this change, Back lands on Home and the trial page (the live trial arm) slides up.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
