@@ -237,9 +237,6 @@ def convert(source: str, destination: Optional[str] = None, force: bool = False)
         raw_text = sys.stdin.read().lstrip("\ufeff")
         source_name = "<stdin>"
     else:
-        raw_text = sys.stdin.read()
-        source_name = "<stdin>"
-    else:
         source_path = Path(source)
         if not source_path.is_file():
             raise FileNotFoundError(f"Input file not found: {source}")
@@ -263,24 +260,21 @@ def convert(source: str, destination: Optional[str] = None, force: bool = False)
         return tsv_content
 
     dest_path = validate_destination_path(destination, force=force)
-        # Write output atomically to avoid partial files on failure or interruption.
-        tmp_path = dest_path.with_name(f".{dest_path.name}.tmp.{os.getpid()}")
-        try:
-            tmp_path.write_text(tsv_content, encoding="utf-8")
-            os.replace(tmp_path, dest_path)
-        finally:
-            # Ensure the temporary file does not linger if something went wrong.
-            try:
-                if tmp_path.exists():
-                    tmp_path.unlink()
-            except Exception:
-                pass
     # Create parent directories if needed
     if dest_path.parent and not dest_path.parent.exists():
         dest_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Write output file
-    dest_path.write_text(tsv_content, encoding="utf-8")
+    # Write output atomically to avoid partial files on failure or interruption.
+    tmp_path = dest_path.with_name(f".{dest_path.name}.tmp.{os.getpid()}")
+    try:
+        tmp_path.write_text(tsv_content, encoding="utf-8")
+        os.replace(tmp_path, dest_path)
+    finally:
+        # Ensure the temporary file does not linger if something went wrong.
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except Exception:
+            pass
     return tsv_content
 
 
