@@ -4,7 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Omi Unlimited</title>
-<style>html,body{margin:0;background:#fff}</style>
+<style>
+  html,body{margin:0;height:100%;background:#fff}
+  /* Shown only while PostHog is slow to answer: fades in after 0.3 s, so a quick answer never flashes it. */
+  .wait{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;animation:in .3s ease .3s forwards}
+  .wait img{width:84px;height:auto}
+  @keyframes in{to{opacity:1}}
+</style>
 <script>window.omiTrack = function () {}; window.omiVersionFlag = function () { return Promise.resolve(null); };</script>
 <script src="/track.js"></script>
 <script>
@@ -64,5 +70,5 @@
 })();
 </script>
 </head>
-<body></body>
+<body><div class="wait"><img src="/omi-wordmark.png" alt="Omi"></div></body>
 </html>
