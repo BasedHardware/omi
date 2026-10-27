@@ -43,6 +43,6 @@ extension _CaptureTranscriptSnapshot on CaptureController {
 
     _segmentsPhotosVersion++; // Bump version so Selector rebuilds
     hasTranscripts = true;
-    notifyListeners();
+    _publishCaptureChange();
   }
 }

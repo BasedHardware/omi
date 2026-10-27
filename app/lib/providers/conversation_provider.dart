@@ -1639,6 +1639,8 @@ class ConversationProvider extends ChangeNotifier {
     if (!conversation.discarded) clearEmptyRecordingExplanation();
   }
 
+  void _publishConversationChange() => notifyListeners();
+
   void updateConversationInSortedList(ServerConversation conversation) => _updateConversationProjections(conversation);
 
   (int, DateTime) addConversationWithDateGrouped(ServerConversation conversation) {

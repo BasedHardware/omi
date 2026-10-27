@@ -45,7 +45,7 @@ extension _ConversationVisibility on ConversationProvider {
       }
     }
     SiriIntegration.current.queueUpsertConversations([conversation]);
-    notifyListeners();
+    _publishConversationChange();
   }
 
   void _replaceBridgedProjections(String donorId, ServerConversation survivor) {
@@ -77,6 +77,6 @@ extension _ConversationVisibility on ConversationProvider {
     } else {
       _groupConversationsByDateWithoutNotify();
     }
-    notifyListeners();
+    _publishConversationChange();
   }
 }
