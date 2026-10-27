@@ -1,7 +1,9 @@
 """Retry fingerprints retained when terminal sync jobs release their claim."""
 
+from typing import Any
 
-def terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
+
+def terminal_repeat_failure_kwargs(job: dict[str, Any]) -> dict[str, str | None]:
     """Carry a terminal job's strike through racing poll/task claim cleanup."""
     if job.get('status') not in {'failed', 'partial_failure'}:
         return {}

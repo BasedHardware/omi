@@ -2,7 +2,9 @@
 
 import os
 import logging
-from typing import BinaryIO
+from typing import BinaryIO, Iterable
+
+from fastapi import UploadFile
 
 
 def empty_framed_clip(stream: BinaryIO) -> bool:
@@ -20,7 +22,7 @@ class EmptySyncUpload(Exception):
     """No audio payload to admit; the route returns an empty success receipt."""
 
 
-def prepare_sync_uploads(files, uid):
+def prepare_sync_uploads(files: list[UploadFile], uid: str) -> list[UploadFile]:
     nonempty = [file for file in files if not empty_framed_clip(file.file)]
     if len(nonempty) != len(files):
         logging.getLogger(__name__).info(
@@ -31,7 +33,9 @@ def prepare_sync_uploads(files, uid):
     return nonempty
 
 
-def nonempty_manifest_claims(claims, filenames):
+def nonempty_manifest_claims(
+    claims: list[dict[str, str]] | None, filenames: Iterable[str]
+) -> list[dict[str, str]] | None:
     # Verify the full signed request before dropping no-audio members: omission
     # must not demote legitimate remaining capture to the legacy lane.
     names = {os.path.basename(name) for name in filenames}

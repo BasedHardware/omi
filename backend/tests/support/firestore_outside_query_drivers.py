@@ -25,8 +25,7 @@ BODY_DIGEST = {
     'parakeet.stream_handler._NemoRNNTStreamingDecoder.decode_pcm': '37cecadaf2adcc0650d318d4ac7adb316dade33610927e6ac663f9d386c9edd6',
     'utils.llm.desktop_proxy_lifetime.read_body': '2c4a2dc281f1af068e6d0da229683697afbdb29d97fc250628fc03e1955be2b9',
     'utils.multipart._size_limited_stream': '9d743f14fb64633072a7b3e213236643e3bd74825c4bc73221f1fdbd867fc7b6',
-    # Re-reviewed: HTTP multipart streams and spool cleanup only; no database access.
-    'utils.multipart.parse_multipart_form': 'e11d8680e33ed28a22c8eb97d6b7b457ffb19f691b24d0b4615b58fb431d7430',
+    'utils.multipart.parse_multipart_form': 'bf33b0fe208c6ed0fceb935908a2396c47596bc730543543b4c0bb3c10435495',
     'utils.memory.canonical_graph._build_canonical_graph_items_query': '55a8b4ccfc9b7e98d6482495590fdf15f04a6f325485b2345043419846862bbd',
 }
 LIMIT = (25, 'bounds the read window, not filters or ordering')

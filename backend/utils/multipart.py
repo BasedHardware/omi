@@ -113,6 +113,17 @@ class MultipartMaxPartSizeRoute(APIRoute):
 
 
 class FileSizeLimitedMultiPartParser(MultiPartParser):
+    async def parse(self) -> FormData:
+        try:
+            return await super().parse()
+        except MultipartParseError as error:
+            # Starlette closes spool files for MultiPartException only. Own
+            # the library error at the parser boundary so that cleanup also
+            # runs when python-multipart rejects a malformed small body.
+            for file in self._files_to_close_on_error:
+                file.close()
+            raise MultiPartException('Malformed multipart body') from error
+
     def on_part_begin(self) -> None:
         super().on_part_begin()
         self._current_file_part_size = 0
@@ -157,12 +168,6 @@ async def parse_multipart_form(
         form = await parser.parse()
     except MultiPartException as exc:
         raise HTTPException(status_code=400, detail=exc.message)
-    except MultipartParseError as exc:
-        # Starlette closes spool files for MultiPartException only. A malformed
-        # boundary can fail in python-multipart before its cleanup branch.
-        for file in parser._files_to_close_on_error:
-            file.close()
-        raise HTTPException(status_code=400, detail='Malformed multipart body') from exc
     _set_cached_form(request, form)
     return form
 

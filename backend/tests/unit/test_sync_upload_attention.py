@@ -5,6 +5,7 @@ from io import BytesIO
 import pytest
 from fastapi import FastAPI, File, UploadFile
 from fastapi.testclient import TestClient
+from starlette import formparsers as starlette_formparsers
 
 from utils.multipart import MultipartMaxPartSizeRoute, max_part_size
 from utils.sync.empty_upload import empty_framed_clip
@@ -59,3 +60,25 @@ def test_invalid_small_boundary_body_is_typed_400(client):
     )
     assert result.status_code == 400
     assert result.json()['code'] == 'malformed_multipart'
+
+
+def test_malformed_second_part_closes_already_open_spool(client, monkeypatch):
+    opened = []
+    original = starlette_formparsers.SpooledTemporaryFile
+
+    def tracked_file(*args, **kwargs):
+        spool = original(*args, **kwargs)
+        opened.append(spool)
+        return spool
+
+    monkeypatch.setattr(starlette_formparsers, 'SpooledTemporaryFile', tracked_file)
+    body = (
+        b'--clip\r\nContent-Disposition: form-data; name="files"; filename="audio.bin"\r\n\r\n'
+        b'12345\r\n--clip\r\nbroken header\r\n\r\ninvalid\r\n--clip--\r\n'
+    )
+    result = client.post(
+        '/v2/sync-local-files', content=body, headers={'Content-Type': 'multipart/form-data; boundary=clip'}
+    )
+    assert result.status_code == 400
+    assert result.json()['code'] == 'malformed_multipart'
+    assert opened and all(spool.closed for spool in opened)
