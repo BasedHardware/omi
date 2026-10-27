@@ -25,7 +25,10 @@ not unique failed sessions; caller and inner diagnostics can overlap.
 For a listen train carrying this fix, compare the new finalize/TypeError count,
 `send_failed` settlements, gate recovery stages, transcript availability and
 window POST latency against the previous release. Preserve the automatic gate;
-do not delete health keys or force an unbench. Deploy only in the approved
+do not delete health keys. For a confirmed false bench, an authorized operator
+can use the [audited per-target reset](../runbooks/live-stt-routing.md#audited-operator-cost-gate-reset)
+after the rolling deployment completes; it preserves automatic detection.
+Deploy only in the approved
 22:00–13:00Z window unless the lead rules otherwise.
 
 The September 2026 live-chain incident exposed three different contracts:
