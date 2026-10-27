@@ -1,0 +1,13 @@
+{
+  "scope": "one explicitly owned task attempt, 20 authorizations, same owner/source, 20 transactions",
+  "pure_privacy_checks": {"off": 100, "on": 24, "token_reads_on": 20},
+  "real_artifact_authorization_without_row_exports": {"off": 100, "on": 44, "token_reads_on": 20, "live_protection_level_reads_on": 20},
+  "real_artifact_authorization_with_full_row_exports": {"off": 100, "on": 100},
+  "real_sync_completed_status_under_explicit_attempt_scope": {"off": 120, "on": 44, "unchanged_ledger_reads": 20},
+  "pure_privacy_fraction_saved": 0.76,
+  "artifact_authorization_fraction_saved": 0.56,
+  "full_row_export_fraction_saved": 0,
+  "production_savings_measured": false,
+  "runtime_configuration_changed": false,
+  "evidence": "backend/tests/unit/test_bpp_generation_memo.py"
+}
