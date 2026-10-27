@@ -55,6 +55,21 @@ def fresh_gpu_priority_enabled() -> bool:
     )
 
 
+def language_eligibility_enabled() -> bool:
+    """Kill switch (unset is on; only ``false`` disables it).
+
+    While legacy sync is on, a new sync upload whose conversation-or-user language
+    is a named language the batch Parakeet model cannot serve stays on legacy sync
+    instead of entering batch custody, where the worker language guard would
+    quarantine it. Blank, ``multi`` and unknown languages are unaffected.
+    ``false`` restores admitting those uploads to batch.
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED',
+        os.getenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
     if lane == 'fresh':
         if (

@@ -8,7 +8,7 @@ import time
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from config.batch_pipeline import priority_for
+from config.batch_pipeline import language_eligibility_enabled, priority_for
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
 from config.prerecorded_language import language_guard_enabled, language_class
@@ -432,6 +432,15 @@ async def accept_upload(
             record_fallback(
                 component='stt_selection', from_mode='batch', to_mode='modulate', reason='other', outcome='recovered'
             )
+            return None
+        if mode is LegacySyncMode.ON and language_eligibility_enabled() and language_class(language) == 'unsupported':
+            # Batch eligibility (lead 41e13b, scope 304254): the conversation-or-user
+            # language names a language the batch Parakeet model cannot serve, so the
+            # worker guard would quarantine its speech. Keep it on legacy sync before
+            # any custody or probe spend. Blank, 'multi' and unknown languages are not
+            # 'unsupported' and stay admitted exactly as before.
+            record_route('intake', language, 'multilingual')
+            logger.info('event=batch_language_eligibility outcome=legacy reason=known_unsupported_language')
             return None
         route = resolve_route(language, byok=byok_enabled)
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
