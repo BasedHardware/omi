@@ -16,8 +16,9 @@ except ImportError:
 def _agent_config() -> Optional[Dict[str, Any]]:
     """Retrieve the agent config dict from the context var, or None if unset."""
     try:
-        return agent_config_context.get()
-    except LookupError:
+        val = agent_config_context.get()
+        return val if isinstance(val, dict) else None
+    except (LookupError, AttributeError):
         return None
 
 
@@ -65,6 +66,18 @@ def create_chart_tool(
     if len(labels) == 0:
         return "Error: at least one data point is required."
 
+    safe_data_points = []
+    for l, v in zip(labels, values):
+        label_str = str(l) if l is not None else ""
+        if v is None or isinstance(v, bool):
+            val_float = 0.0
+        else:
+            try:
+                val_float = float(v)
+            except (ValueError, TypeError):
+                val_float = 0.0
+        safe_data_points.append({"label": label_str, "value": val_float})
+
     chart_data = {
         "chart_type": chart_type,
         "title": title,
@@ -73,15 +86,18 @@ def create_chart_tool(
         "datasets": [
             {
                 "label": dataset_label,
-                "data_points": [{"label": l, "value": v} for l, v in zip(labels, values)],
+                "data_points": safe_data_points,
                 "color": color,
             }
         ],
     }
 
     config = _agent_config()
-    if config:
-        configurable = config.get('configurable', {})
+    if isinstance(config, dict):
+        configurable = config.get('configurable')
+        if not isinstance(configurable, dict):
+            configurable = {}
+            config['configurable'] = configurable
         configurable['chart_data'] = chart_data
 
     return f"Chart created: {title} ({chart_type} chart with {len(labels)} data points). The chart will be displayed inline in the chat."
