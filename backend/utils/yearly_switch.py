@@ -76,6 +76,15 @@ def _monthly_target(price_id: Optional[str]) -> Optional[tuple[str, str]]:
     return None
 
 
+def _target(sub: Any) -> tuple[str, str]:
+    """(plan_id, yearly price id) of a subscription that passed refusal()."""
+    price = _get(_get(_get(sub, 'items'), 'data')[0], 'price')
+    target = _monthly_target(_get(price, 'id'))
+    if target is None:
+        raise ValueError('not_offered')
+    return target
+
+
 def refusal(sub: Any, now: Optional[int] = None) -> Optional[str]:
     """Why this subscription cannot switch to yearly now; None when it can."""
     now = int(now if now is not None else time.time())
@@ -115,7 +124,7 @@ def evaluate(sub: Any, yearly_price: Any, now: Optional[int] = None) -> YearlySw
     if reason:
         return _ineligible(reason)
     price = _get(_get(_get(sub, 'items'), 'data')[0], 'price')
-    plan_id, yearly_price_id = _monthly_target(_get(price, 'id'))
+    plan_id, yearly_price_id = _target(sub)
     yearly_recurring = _get(yearly_price, 'recurring') or {}
     if (
         yearly_price is None
@@ -154,8 +163,7 @@ def switch_refusal(sub: Any, target_price_id: str, now: Optional[int] = None) ->
     reason = refusal(sub, now)
     if reason:
         return reason
-    price = _get(_get(_get(sub, 'items'), 'data')[0], 'price')
-    if _monthly_target(_get(price, 'id'))[1] != target_price_id:
+    if _target(sub)[1] != target_price_id:
         return 'not_yearly_of_plan'
     return None
 
@@ -187,15 +195,16 @@ def proration_date_refusal(sub: Any, proration_date: Optional[int], now: Optiona
 def _preview(sub: Any, offer: YearlySwitch, now: int) -> YearlySwitch:
     """Stripe's own invoice for the switch: what is charged today and when the yearly plan renews."""
     item_id = _get(_get(_get(sub, 'items'), 'data')[0], 'id')
-    invoice = stripe.Invoice.create_preview(
-        customer=_get(sub, 'customer'),
-        subscription=_get(sub, 'id'),
-        subscription_details={
+    params: dict[str, Any] = {
+        'customer': _get(sub, 'customer'),
+        'subscription': _get(sub, 'id'),
+        'subscription_details': {
             'items': [{'id': item_id, 'price': offer.price_id}],
             'proration_behavior': 'always_invoice',
             'proration_date': now,
         },
-    )
+    }
+    invoice = stripe.Invoice.create_preview(**params)
     if _get(invoice, 'currency') != offer.currency or _get(invoice, 'amount_due') is None:
         raise ValueError('preview_mismatch')
     ends = [
@@ -219,9 +228,7 @@ def get_offer(subscription_id: Optional[str], preview: bool = False, now: Option
         reason = refusal(sub, now)
         if reason:
             return _ineligible(reason)
-        price = _get(_get(_get(sub, 'items'), 'data')[0], 'price')
-        _, yearly_price_id = _monthly_target(_get(price, 'id'))
-        offer = evaluate(sub, stripe.Price.retrieve(yearly_price_id), now)
+        offer = evaluate(sub, stripe.Price.retrieve(_target(sub)[1]), now)
         if not offer.eligible or not preview:
             return offer
         return _preview(sub, offer, now)
