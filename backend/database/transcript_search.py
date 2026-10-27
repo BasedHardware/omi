@@ -79,7 +79,9 @@ def read_transcript_search_page(
             conversation = None
             if is_visible_conversation(raw) and not raw.get('is_locked') and not raw.get('processing_deferred'):
                 try:
-                    conversation = prepare_conversation_for_read({**raw, 'id': doc.id}, uid, firestore_client=client)
+                    conversation = prepare_conversation_for_read(
+                        {**raw, 'id': doc.id}, uid, firestore_client=client, read_budget=budget
+                    )
                     budget.check()
                 except ListReadBudgetExhausted:
                     raise

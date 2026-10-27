@@ -16,6 +16,89 @@ from fakes.firestore import seed_conversation
 from fakes.vector_search import install_vector_search_fakes
 
 
+@pytest.mark.parametrize('refuse', [False, True], ids=['corrected-quote', 'correction-timeout'])
+def test_direct_transcript_review_regressions_through_http_and_scoped_mobile(
+    client, auth_headers, sample_conversation_data, monkeypatch, refuse
+):
+    from fake_firestore.document import FakeDocumentReference
+    from google.api_core.exceptions import DeadlineExceeded
+
+    from database import conversations, review_store
+    from database.firestore_retry import FIRESTORE_NO_RETRY
+    from fakes.firestore import get_mock_firestore
+    from utils.retrieval.tools import conversation_tools as mobile
+
+    key = 'corrected-review'
+    captured = dict(
+        sample_conversation_data,
+        id=key,
+        data_protection_level='enhanced',
+        has_transcript_corrections=True,
+        transcript_segments=[
+            dict(id='s0', text='Invoice note. ' + 'Unrelated preface. ' * 300, start=0, end=100, is_user=False),
+            dict(id='s1', text='The invoice total was 47 dollars.', start=100, end=103, is_user=False),
+        ],
+    )
+    db = get_mock_firestore()
+    owner = db.collection('users').document('123')
+    seed_conversation('123', conversations.encode_conversation_for_write('123', captured, 'enhanced'))
+    owner.collection('transcript_corrections').document(key).set(
+        review_store.encode_doc(
+            '123',
+            {
+                'source': [
+                    dict(
+                        undone=False,
+                        segment_index=1,
+                        segment_id='s1',
+                        start=100,
+                        kind='transcript',
+                        before='The invoice total was 47 dollars.',
+                        after='The invoice total was 83 dollars.',
+                    )
+                ]
+            },
+        )
+    )
+    calls = []
+    real_get = FakeDocumentReference.get
+
+    def observed_get(ref, *args, **kwargs):
+        if ref.path == f'users/123/transcript_corrections/{key}':
+            calls.append(kwargs)
+            if refuse:
+                raise DeadlineExceeded('synthetic correction deadline')
+        return real_get(ref, *args, **kwargs)
+
+    monkeypatch.setattr(FakeDocumentReference, 'get', observed_get)
+    response = client.post(
+        '/v1/tools/conversations/search',
+        headers=auth_headers,
+        json={'query': 'invoice total', 'transcript_query': 'invoice total'},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    cfg = {
+        'configurable': dict(
+            user_id='123', user_timezone='UTC', conversations_collected=[], chat_scope={'conversation_id': key}
+        )
+    }
+    scoped = mobile.search_conversations_tool.invoke(
+        {'query': 'invoice total', 'transcript_query': 'invoice total'}, config=cfg
+    )
+    assert len(calls) == 2, scoped
+    assert all(0 < call['timeout'] <= 4 and call['retry'] is FIRESTORE_NO_RETRY for call in calls)
+    assert '47 dollars' not in payload['result_text'] and '47 dollars' not in scoped
+    if refuse:
+        assert payload['sources'] == [] and cfg['configurable']['conversations_collected'] == []
+        assert '83 dollars' not in payload['result_text'] and '83 dollars' not in scoped
+        assert 'unavailable' in scoped
+    else:
+        assert '83 dollars' in payload['result_text'] and '83 dollars' in scoped
+        assert '83 dollars' in payload['sources'][0]['preview']
+        assert [card['id'] for card in cfg['configurable']['conversations_collected']] == [key]
+
+
 @pytest.mark.parametrize('needle', ['Halvorsen invoice', '4d0254f4-6043-47b6-a347-a05ad152baab'])
 def test_direct_transcript_recall_finds_unindexed_history_and_new_recording_with_citations(
     client, auth_headers, sample_conversation_data, monkeypatch, needle

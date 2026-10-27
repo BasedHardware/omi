@@ -631,7 +631,11 @@ def get_open_loop_extractions(uid: str, conversation_data: Optional[Dict[str, An
 
 
 def prepare_conversation_for_read(
-    conversation_data: Optional[Dict[str, Any]], uid: str, *, firestore_client: Any = None
+    conversation_data: Optional[Dict[str, Any]],
+    uid: str,
+    *,
+    firestore_client: Any = None,
+    read_budget: Optional[ListReadBudget] = None,
 ) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None
@@ -655,7 +659,9 @@ def prepare_conversation_for_read(
     if level == 'enhanced':
         from utils.agent_capabilities.transcripts import project
 
-        return project(uid, _decrypt_conversation_data(data, uid), firestore_client=firestore_client)
+        return project(
+            uid, _decrypt_conversation_data(data, uid), firestore_client=firestore_client, read_budget=read_budget
+        )
 
     # Handle standard level with potential compression
     if data.get('transcript_segments_compressed'):
@@ -675,7 +681,7 @@ def prepare_conversation_for_read(
     _reveal_match_scores_for_read(data, uid)
     from utils.agent_capabilities.transcripts import project
 
-    return project(uid, data, firestore_client=firestore_client)
+    return project(uid, data, firestore_client=firestore_client, read_budget=read_budget)
 
 
 def document_data_with_revision(document) -> Optional[Dict[str, Any]]:
@@ -2468,7 +2474,7 @@ def get_conversations_by_id(
     return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
 
 
-@prepare_for_read(decrypt_func=prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read, read_budget_arg='read_budget')
 def get_conversations_by_id_without_photos(
     uid,
     conversation_ids,

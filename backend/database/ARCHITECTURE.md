@@ -14,7 +14,7 @@ Do not make a hard-delete primitive call back into conversation orchestration.
   and the document; user/source deletion orchestrators own external artifacts.
 - `transcript_search.py` pages saved transcript reads through those same codecs,
   visibility and correction projections. Query-bound signed bookmarks and fixed
-  document/deadline budgets provide recall over unindexed old and new recordings
+  document/deadline budgets (including correction projection in scan and exact reads) provide recall over unindexed old and new recordings
   without any new persistence or external index writes.
 - `recording_sessions.py` stores realtime recording bindings. `sync_jobs.py` and
   `sync_ledger.py` own job/run leases and durable upload completion. `sync_bridges.py`

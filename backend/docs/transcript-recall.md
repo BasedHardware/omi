@@ -22,6 +22,10 @@ transcript text is copied to an index or logs. No vector provider, feature flag,
 schema/index provisioning or account backfill is required for this path.
 Exact-conversation reads use the same deadline-aware shared read helper and
 omit photo loading; a database timeout returns an unavailable result, not a miss.
+The four-second IO allowance includes correction-overlay reads in both scan and
+exact-record projection. Each lookup receives only the remaining timeout and no
+automatic retries. A correction deadline stops the bounded read rather than
+falling back to captured speech and registering it as current evidence.
 
 The first ordering is `created_at DESC`, with document ID descending as its tie
 break. Signed bookmarks bind UID, literal query and date bounds, preserve timestamp
@@ -33,6 +37,9 @@ The result/character cap stops before the next unreturned match and resumes from
 the last examined document. Invisible rows advance it too. Direct excerpts carry
 the existing mobile conversation citation numbers and turn refs, or REST typed
 sources with a verbatim preview. Retrieved speech remains explicitly untrusted.
+Cropping anchors to the matching segment, preferring its complete phrase over
+partial query words in context. If the bounded quote no longer contains the
+match, it supplies no evidence or source citation.
 
 A page without matches is not proof that a fact was never recorded. Continue the
 same query with the returned cursor, try a different literal phrase or narrow
@@ -63,6 +70,11 @@ a model has not attempted transcript retrieval or has returned some evidence.
       include the actual excerpt.
 - [x] Exact-conversation storage reads receive the bounded RPC timeout; timeout
       failures disclose unavailable coverage without returning unsupported facts.
+- [x] Both compressed/encrypted correction projection paths share the remaining
+      IO deadline and preserve transaction ownership; real SDK emulator checks
+      exercise scan and exact reads. A timed-out correction supplies no evidence.
+- [x] Long context cannot displace the actual match. Crops that omit matching
+      words supply no citation, including the public HTTP and scoped mobile paths.
 - [x] A two-turn tool/agent journey receives authoritative evidence, or keeps
       the no-evidence/incomplete outcome after pushback. Distinguish a scripted
       model from a live-provider evaluation in the PR evidence.
