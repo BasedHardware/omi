@@ -15,7 +15,7 @@ from tests.unit.translation_test_support import (
     provider_error,
     translations,
 )
-from utils.translation import TranslationNeed, TranslationStatus
+from utils.translation import TranslationNeed, TranslationService, TranslationStatus
 from utils.translation_cache import ConversationLanguageState
 from utils.translation_coordinator import (
     STABILITY_IS_FINAL,
@@ -26,8 +26,11 @@ from utils.translation_coordinator import (
     _compute_stability_signals,
     _is_text_stable,
 )
-from utils.translation_core.cache import CachedTranslation
+from utils.translation_core.cache import CachedTranslation, TranslationCache
+from utils.translation_core.engine import TranslationEngine
+from utils.translation_core.metrics import NoopTranslationMetrics
 from utils.translation_core.planner import fingerprint_text
+from utils.translation_core.providers import TranslationProviderChain
 
 
 def _segment(segment_id: str, text: str) -> TranscriptSegment:
@@ -615,3 +618,20 @@ def test_luna_primary_lane_still_translates_targets_outside_the_nllb_table(monke
 
     assert provider.calls and provider.calls[0]['target_language'] == 'lt'
     assert callbacks and callbacks[0][1] == 'Hello world.'
+
+
+def test_primary_provider_reports_the_injected_engines_lane():
+    """Luna R1: the engine owns dispatch, so an engine-injected service must
+    report the engine's primary provider even when the constructor's default
+    resolver (env, NLLB-primary) would disagree."""
+    metrics = NoopTranslationMetrics()
+    engine = TranslationEngine(
+        cache=TranslationCache(persistent=DictTranslationStore(), metrics=metrics),
+        providers=TranslationProviderChain(
+            {TranslationProvider.luna: FakeProvider(TranslationProvider.luna, [])}, metrics
+        ),
+        profile_resolver=lambda: profile((TranslationProvider.luna,)),
+    )
+    service = TranslationService(engine=engine)
+
+    assert service.primary_provider() == TranslationProvider.luna
