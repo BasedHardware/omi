@@ -6018,6 +6018,18 @@ only after a fenced defer commits; no identities or dynamic reason labels.
 
 ## Durable live and desktop record admission (dark)
 
+New sync batch custody has a default-on language exclusion controlled by
+`BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED`. A non-single-language user needs
+a supported bound conversation language; a known unsupported effective language
+stays outside batch. Supported conversation context becomes explicit LID input.
+Existing batch receipts and durable batch conversation owners keep their route.
+The exclusion runs before re-home, decode, LID and staging in every legacy mode:
+ON uses legacy dispatch; draining/dark keeps the existing retry fence and client
+audio, with no legacy bypass (lead ruling 6a783e). Before legacy drain, the lead
+must qualify multilingual/unsupported batch provider routing through Soniox.
+Explicit false restores the former admission and LID input selection. This needs
+a lead-owned backend-sync Cloud Run release; existing units are never rewritten.
+
 Batch self-LID evidence is bound to the authenticated item's owner, segment and
 versioned intake context. The worker requires nonempty job, content and source
 provenance, a finite probability, and a probe duration matching the first 30

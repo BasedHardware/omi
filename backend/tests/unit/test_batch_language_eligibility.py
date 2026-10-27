@@ -34,6 +34,9 @@ def excluded_count() -> float:
 
 @pytest.fixture(autouse=True)
 def defaults(monkeypatch):
+    # This suite pins the former eligibility switch independently of the new
+    # all-mode admission exclusion (covered by test_batch_admission_language).
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
     monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', raising=False)
     monkeypatch.delenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', raising=False)
