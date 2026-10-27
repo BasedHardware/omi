@@ -34,7 +34,7 @@ from database.outbox import OutboxKind, outbox_for
 from utils.batch_pipeline.provider_stt import provider_enqueue, resolve_route
 from utils.sync import legacy_dark
 from utils.sync.legacy_dark import LegacySyncMode
-from utils.batch_pipeline.language_metrics import record_route
+from utils.batch_pipeline.language_metrics import record_admission_exclusion, record_route
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
@@ -407,21 +407,11 @@ async def accept_upload(
             if exclusion_reason:
                 # This is before re-home, decode, LID or custody. The caller's
                 # legacy-dark fence still refuses new legacy work outside ON.
-                legacy_available = mode is LegacySyncMode.ON
-                record_route(
-                    'intake',
+                record_admission_exclusion(
                     target.get('language') or user.get('language'),
-                    'multilingual' if legacy_available else 'blocked',
+                    exclusion_reason,
+                    legacy_available=mode is LegacySyncMode.ON,
                 )
-                if legacy_available:
-                    record_fallback(
-                        component='sync_dispatch',
-                        from_mode='batch',
-                        to_mode='legacy',
-                        reason='other',
-                        outcome='degraded',
-                    )
-                logger.info('event=batch_admission_language outcome=excluded reason=%s', exclusion_reason)
                 return None
         if isinstance(conversation_id, str) and target.get('record_lane_owner') == 'legacy_final_pass_v1':
             if mode is LegacySyncMode.ON:

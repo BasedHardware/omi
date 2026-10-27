@@ -6023,6 +6023,11 @@ New sync batch custody has a default-on language exclusion controlled by
 a supported bound conversation language; a known unsupported effective language
 stays outside batch. Supported conversation context becomes explicit LID input.
 Existing batch receipts and durable batch conversation owners keep their route.
+The router applies the same decision before claiming a new batch owner or
+re-homing a legacy owner. That transition reads the user's language preference;
+an excluded new claim checks for a prior batch content receipt before refusing.
+Switch-off adds neither read. Native owners and existing batch owners bypass
+these new reads; supported context can still claim or re-home to batch.
 The exclusion runs before re-home, decode, LID and staging in every legacy mode:
 ON uses legacy dispatch; draining/dark keeps the existing retry fence and client
 audio, with no legacy bypass (lead ruling 6a783e). Before legacy drain, the lead

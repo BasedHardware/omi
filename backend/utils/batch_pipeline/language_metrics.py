@@ -5,6 +5,7 @@ import logging
 from prometheus_client import Counter
 
 from config.prerecorded_language import language_class
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 ROUTES = Counter(
@@ -29,3 +30,13 @@ def record_route(surface: str, language: str | None, route: str, *, segment_id: 
             )
     except Exception:
         pass  # Routing quality must not depend on the telemetry exporter.
+
+
+def record_admission_exclusion(language, reason, *, legacy_available: bool) -> None:
+    """One bounded decision, whether intake or the earlier owner claim excludes it."""
+    record_route('intake', language, 'multilingual' if legacy_available else 'blocked')
+    if legacy_available:
+        record_fallback(
+            component='sync_dispatch', from_mode='batch', to_mode='legacy', reason='other', outcome='degraded'
+        )
+    logger.info('event=batch_admission_language outcome=excluded reason=%s', reason)
