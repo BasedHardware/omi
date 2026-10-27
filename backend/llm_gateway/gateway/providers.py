@@ -47,7 +47,6 @@ from llm_gateway.gateway.vertex_wire import (  # noqa: F401 — re-exported wire
     _openai_sse_done,  # pyright: ignore[reportPrivateUsage, reportUnusedImport]
     _text_content,  # pyright: ignore[reportPrivateUsage, reportUnusedImport]
     _validate_embeddings_response_shape,  # pyright: ignore[reportPrivateUsage]
-    _vertex_embedding_predict_request,  # pyright: ignore[reportPrivateUsage]
     _vertex_headers,  # pyright: ignore[reportPrivateUsage]
     _vertex_predict_to_openai_embeddings,  # pyright: ignore[reportPrivateUsage]
     _vertex_request,  # pyright: ignore[reportPrivateUsage]
