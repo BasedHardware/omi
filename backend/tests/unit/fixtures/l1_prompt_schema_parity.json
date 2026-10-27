@@ -1,0 +1,43 @@
+{
+  "cases": [
+    {
+      "name": "general-with-owner-and-evidence",
+      "item": {
+        "text": "Morgan chose the Friday launch.",
+        "archive_class": "general",
+        "evidence_quotes": ["I chose the Friday launch."],
+        "source_refs": [{"segment_id": "synthetic-1"}],
+        "speaker_label": "speaker_0",
+        "speaker_scope": "session-local",
+        "about": "the user",
+        "confidence": "high",
+        "risk_flags": []
+      },
+      "supplied_derived": {
+        "archive_id": "model-generated-id",
+        "allowed_use": "restricted_archive_only",
+        "normal_search_allowed": false,
+        "is_stable_profile_fact": true,
+        "search_result_label": "model-generated-label"
+      }
+    },
+    {
+      "name": "sensitive-alias-with-third-party-attribution",
+      "item": {
+        "text": "Maya mentioned a private family matter.",
+        "class": "sensitive",
+        "evidence_quotes": ["This is a private family matter."],
+        "speaker_label": "speaker_1",
+        "about": "Maya",
+        "confidence": "medium"
+      },
+      "supplied_derived": {
+        "archive_id": "another-model-generated-id",
+        "allowed_use": "archive_search",
+        "normal_search_allowed": true,
+        "is_stable_profile_fact": true,
+        "search_result_label": "stable_memory"
+      }
+    }
+  ]
+}
