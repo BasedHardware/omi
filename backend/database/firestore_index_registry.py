@@ -13,6 +13,7 @@ from database.mcp_read_queries import (
 )
 from database.review_queries import REVIEW_QUERY_SPECS
 from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
+from database.batch_pipeline_indexes import BATCH_PIPELINE_INDEX_REQUIREMENTS
 from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
 from .firestore_query_types import (
     FieldIndexRequirement,
@@ -38,40 +39,7 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_capacity_ready',
-            f'batch_pipeline_{stage}_jobs',
-            'COLLECTION',
-            (
-                _asc('priority'),
-                _asc('state'),
-                _asc('merge_pending'),
-                _asc('compute_decision.outcome'),
-                _asc('available_at'),
-                _asc('__name__'),
-            ),
-        )
-        for stage in ('prod', 'dev')
-    ),
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_ramp_owner_load',
-            f'batch_pipeline_{stage}_jobs',
-            'COLLECTION',
-            (_asc('owner_id'), _asc('enqueued_at'), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
-    ),
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_ready_predecessor',
-            f'batch_pipeline_{stage}_jobs',
-            'COLLECTION',
-            (_asc('owner_key'), _asc('priority'), _asc('state'), _asc('next'), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
-    ),
+    *BATCH_PIPELINE_INDEX_REQUIREMENTS,
     *SYNC_PIPELINE_INDEX_REQUIREMENTS,
     *MESSAGING_INDEX_REQUIREMENTS,
     FirestoreIndexRequirement(
