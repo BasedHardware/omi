@@ -273,7 +273,12 @@ class FirestoreStore:
                 return True
             return False
 
-        return cancel(self.client.transaction())
+        cancelled = cancel(self.client.transaction())
+        if cancelled:
+            from database.batch_pipeline_shadow_hook import mirror_refresh
+
+            mirror_refresh(self.namespace, [('jobs', segment_id)])  # A2 shadow: no-op unless shadow mode
+        return cancelled
 
     def longest_ready_pending(self, owner_key: str) -> dict | None:
         # A hint read outside any transaction; the bypass transaction re-verifies it.
