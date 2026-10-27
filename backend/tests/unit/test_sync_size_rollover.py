@@ -11,9 +11,10 @@ proved full. Every retry, deletion, provenance and receipt fence still holds.
 from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
+from types import SimpleNamespace
 
 from google.api_core.exceptions import InvalidArgument, ServiceUnavailable
-from google.cloud.firestore_v1 import _helpers
+from google.cloud.firestore_v1 import DELETE_FIELD, _helpers
 from google.cloud.firestore_v1.types import document as document_pb
 from google.cloud.firestore_v1.vector import Vector
 import pytest
@@ -21,6 +22,7 @@ import pytest
 from database._client import FIRESTORE_DOCUMENT_KINDS, firestore_document_kind, firestore_error_document_path
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreTransaction
 from tests.unit.test_sync_cross_job_assignment import _smart_merge_pair, chunk, conversations, intake
+from utils.conversations.size_limit import projected_document_bytes, projected_size_bucket
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.sync import assignment
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
@@ -737,8 +739,6 @@ def test_assignment_cap_measures_the_actual_encoder(adapter, monkeypatch, level)
     ],
 )
 def test_projected_size_bucket_boundaries(size, expected):
-    from utils.conversations.size_limit import projected_size_bucket
-
     assert projected_size_bucket(size) == expected
 
 
@@ -761,10 +761,6 @@ def test_cap_accepts_a_donor_prefix_and_keeps_remaining_speech(caplog):
 
 
 def test_projection_counts_retained_fields_and_real_delete_sentinels():
-    from google.cloud.firestore_v1 import DELETE_FIELD
-    from types import SimpleNamespace
-    from utils.conversations.size_limit import projected_document_bytes
-
     ref = SimpleNamespace(path='users/synthetic/conversations/projected')
     before = {'retained': 'x' * 1000, 'removed': 'x' * 900000, 'replaced': 'before'}
     patch = {'removed': DELETE_FIELD, 'replaced': b'after'}

@@ -13,6 +13,7 @@ from utils.other import owned_paths  # noqa: F401 - retain real scratch guard ac
 from models import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
 from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms across legacy package stubs
 from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
+from utils.conversations import size_limit as actual_size_limit
 from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
 from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
 from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
@@ -1395,8 +1396,6 @@ class TestAsyncCoordinatorBehavioral:
         from utils import capture_evidence as actual_capture_evidence
 
         prior_size_limit = sys.modules.get('utils.conversations.size_limit')
-        from utils.conversations import size_limit as actual_size_limit
-
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -3445,8 +3444,6 @@ class TestV2EndpointExecution:
         from utils import capture_evidence as actual_capture_evidence
 
         prior_size_limit = sys.modules.get('utils.conversations.size_limit')
-        from utils.conversations import size_limit as actual_size_limit
-
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 

@@ -23,6 +23,8 @@ from database import sync_bridges, action_item_refresh as refresh_db
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY, INDEX_ONLY_REQUIREMENTS
 from database.legal_holds import DestructiveOperationInProgress
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+from tests.unit.test_sync_size_rollover import _RejectingStore
+from utils.conversations.size_limit import projected_document_bytes
 from utils.conversations import finalizer
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import smart_merge
@@ -1013,8 +1015,6 @@ def test_transaction_never_rekeys_corrected_capture_anchors(world, protected):
 
 @pytest.mark.parametrize('level', ['enhanced', 'standard'])
 def test_smart_absorb_encoded_cap_and_separate_finalization(world, monkeypatch, level, caplog):
-    from utils.conversations.size_limit import projected_document_bytes
-
     world.add('p', 0, 10)
     world.add('n', 13, 10)
     if level == 'standard':
@@ -1056,8 +1056,6 @@ def test_smart_absorb_encoded_cap_and_separate_finalization(world, monkeypatch, 
 
 @pytest.mark.parametrize('named', ['survivor', 'donor', 'unnamed'])
 def test_smart_absorb_size_commit_rejection_rolls_over(world, monkeypatch, named, caplog):
-    from tests.unit.test_sync_size_rollover import _RejectingStore
-
     if named == 'unnamed':
         store = _RejectingStore(0, name=lambda _: None)
     else:
