@@ -13,19 +13,10 @@ import json
 import os
 import tempfile
 import threading
+import unittest
 
 
-def test_concurrent_read_modify_write_serialized_by_file_lock():
-    """Concurrent read-modify-write on a shared file must not lose either writer's data.
-
-    Regression test for #22972: without file locking, two concurrent writers that
-    load-modify-save a shared config file lose one writer's changes because the
-    last save() overwrites the other profile's credential.
-
-    This test mirrors the locking in omi_cli/auth/store.py (_config_lock using
-    fcntl.flock on POSIX, msvcrt.locking on Windows) but is self-contained so it
-    runs in the standalone harness with nothing but Python and pytest.
-    """
+def _acquire_release():
     if os.name == "nt":
         import msvcrt
 
@@ -42,51 +33,66 @@ def test_concurrent_read_modify_write_serialized_by_file_lock():
 
         def release(fd):
             fcntl.flock(fd, fcntl.LOCK_UN)
+    return acquire, release
 
-    path = os.path.join(tempfile.gettempdir(), f"test-config-lock-{os.getpid()}.json")
-    lock_path = path + ".lock"
-    try:
-        with open(path, "w") as fh:
-            json.dump({"alpha": None, "beta": None}, fh)
 
-        errors = []
+class TestConcurrentReadModifyWriteLocking(unittest.TestCase):
+    def test_concurrent_read_modify_write_serialized_by_file_lock(self):
+        """Concurrent read-modify-write on a shared file must not lose either writer's data.
 
-        def write_profile(name: str, key: str) -> None:
-            try:
-                for _ in range(20):
-                    with open(lock_path, "a+") as lock_file:
-                        acquire(lock_file.fileno())
-                        try:
-                            with open(path, "r") as fh:
-                                data = json.load(fh)
-                            data[name] = key
-                            with open(path, "w") as fh:
-                                json.dump(data, fh)
-                        finally:
-                            release(lock_file.fileno())
-            except Exception as exc:  # noqa: BLE001
-                errors.append(exc)
+        Regression test for #22972: without file locking, two concurrent writers
+        that load-modify-save a shared config file lose one writer's changes
+        because the last save() overwrites the other profile's credential.
+        """
+        acquire, release = _acquire_release()
 
-        threads = [
-            threading.Thread(target=write_profile, args=("alpha", "KEY-A")),
-            threading.Thread(target=write_profile, args=("beta", "KEY-B")),
-        ]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
+        path = os.path.join(tempfile.gettempdir(), f"test-config-lock-{os.getpid()}.json")
+        lock_path = path + ".lock"
+        try:
+            with open(path, "w") as fh:
+                json.dump({"alpha": None, "beta": None}, fh)
 
-        assert not errors, f"concurrent writes raised: {errors}"
+            errors = []
 
-        with open(path, "r") as fh:
-            data = json.load(fh)
+            def write_profile(name: str, key: str) -> None:
+                try:
+                    for _ in range(20):
+                        with open(lock_path, "a+") as lock_file:
+                            acquire(lock_file.fileno())
+                            try:
+                                with open(path, "r") as fh:
+                                    data = json.load(fh)
+                                data[name] = key
+                                with open(path, "w") as fh:
+                                    json.dump(data, fh)
+                            finally:
+                                release(lock_file.fileno())
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(exc)
 
-        # Without locking, one of these keys would be missing or overwritten.
-        assert data.get("alpha") == "KEY-A", f"alpha credential lost: {data}"
-        assert data.get("beta") == "KEY-B", f"beta credential lost: {data}"
-    finally:
-        for p in (path, lock_path):
-            try:
-                os.unlink(p)
-            except FileNotFoundError:
-                pass
+            threads = [
+                threading.Thread(target=write_profile, args=("alpha", "KEY-A")),
+                threading.Thread(target=write_profile, args=("beta", "KEY-B")),
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+            self.assertFalse(errors, f"concurrent writes raised: {errors}")
+
+            with open(path, "r") as fh:
+                data = json.load(fh)
+
+            self.assertEqual(data.get("alpha"), "KEY-A", f"alpha credential lost: {data}")
+            self.assertEqual(data.get("beta"), "KEY-B", f"beta credential lost: {data}")
+        finally:
+            for p in (path, lock_path):
+                try:
+                    os.unlink(p)
+                except FileNotFoundError:
+                    pass
+
+
+if __name__ == "__main__":
+    unittest.main()
