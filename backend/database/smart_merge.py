@@ -347,7 +347,8 @@ def absorb_conversation(
         if reason is not None or survivor_update is None or donor_update is None:
             return AbsorbResult('rejected', reason or 'survivor_changed')
         bridge_observations = []
-        if sync_live_dedupe_active_for(uid):
+        # Metadata-only plans do not transfer transcript content.
+        if 'transcript_segments' in survivor_update and sync_live_dedupe_active_for(uid):
             survivor_update['transcript_segments'] = rebase_donor_segments(
                 survivor,
                 survivor_segments,
