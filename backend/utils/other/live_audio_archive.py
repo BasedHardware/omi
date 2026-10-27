@@ -271,7 +271,12 @@ class LiveAudioArchive:
                 metadata,
                 frames,
             )
-            if getattr(self.host, 'server_batch_only', False) and pack.conversation_id and pack.end is not None:
+            if (
+                getattr(self.host, 'server_batch_only', False)
+                and pack.conversation_id
+                and pack.end is not None
+                and pack.end > pack.start
+            ):
                 if not await run_blocking(
                     db_executor, note_server_batch_audio, request.uid, pack.conversation_id, pack.start, pack.end
                 ):

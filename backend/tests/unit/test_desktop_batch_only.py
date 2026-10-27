@@ -310,6 +310,22 @@ async def test_original_commit_keeps_zero_live_conversation_and_exact_capture_bo
 
 
 @pytest.mark.asyncio
+async def test_zero_sample_original_keeps_custody_without_poisoning_later_capture(remote, monkeypatch):
+    h = archive_host()
+    h.request.codec = 'opus'
+    h.server_batch_only = True
+    note = Mock(side_effect=AssertionError('zero-sample bounds are unknowable'))
+    monkeypatch.setattr(live_audio_archive, 'note_server_batch_audio', note)
+    archive = LiveAudioArchive(h)
+    await archive.append(b'undecodable-original', 'conversation', 1000, 0)
+    await archive.close()
+    note.assert_not_called()
+    assert not archive.failed and not archive.uncommitted
+    assert remote.list_blobs('raw-live/') and remote.list_blobs('audio-outbox/')
+    assert h.events and h.events[0].receipt['samples'] == 0
+
+
+@pytest.mark.asyncio
 async def test_zero_preview_finalizer_registers_exact_language_bounds_before_completion(monkeypatch):
     row = capture()
     row.update(
