@@ -53,16 +53,16 @@ def search_saved_transcripts_text(
         return 'Error: a transcript cursor cannot be used with an exact conversation; start that search again.'
     limit = max(1, min(limit, 20))
     budget = ListReadBudget.for_request(None, route='chat_transcript_search', seconds=6.0, max_documents=50)
+    # Reserve matching/rendering time for both history and exact-record reads.
+    read_budget = ListReadBudget.for_request(None, route='chat_transcript_search', seconds=4.0, max_documents=50)
     try:
         if conversation_id:
-            owned = conversations_db.get_conversations_by_id(uid, [conversation_id], include_discarded=True)
+            owned = conversations_db.get_conversations_by_id_without_photos(
+                uid, [conversation_id], include_discarded=True, read_budget=read_budget
+            )
+            read_budget.check()
             page = TranscriptScanPage([TranscriptScanRow(row, '') for row in owned], exhausted=True)
         else:
-            # Reserve time for matching/rendering after the database has decoded
-            # its page; otherwise a nearly spent read budget cannot make progress.
-            read_budget = ListReadBudget.for_request(
-                None, route='chat_transcript_search', seconds=4.0, max_documents=50
-            )
             page = read_transcript_search_page(
                 uid, query, cursor=cursor, start_date=start_date, end_date=end_date, budget=read_budget
             )

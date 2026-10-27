@@ -20,6 +20,8 @@ the conversation decryption and correction projection. Deleted, discarded,
 Dream-folded, locked and processing-deferred records supply no excerpts. No
 transcript text is copied to an index or logs. No vector provider, feature flag,
 schema/index provisioning or account backfill is required for this path.
+Exact-conversation reads use the same deadline-aware shared read helper and
+omit photo loading; a database timeout returns an unavailable result, not a miss.
 
 The first ordering is `created_at DESC`, with document ID descending as its tie
 break. Signed bookmarks bind UID, literal query and date bounds, preserve timestamp
@@ -59,6 +61,8 @@ a model has not attempted transcript retrieval or has returned some evidence.
       exclusions hold; failures retain honest coverage and no content leaks.
 - [x] Mobile citations remain stable across repeated searches; REST sources
       include the actual excerpt.
+- [x] Exact-conversation storage reads receive the bounded RPC timeout; timeout
+      failures disclose unavailable coverage without returning unsupported facts.
 - [x] A two-turn tool/agent journey receives authoritative evidence, or keeps
       the no-evidence/incomplete outcome after pushback. Distinguish a scripted
       model from a live-provider evaluation in the PR evidence.

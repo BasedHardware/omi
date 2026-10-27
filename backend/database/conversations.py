@@ -72,6 +72,7 @@ from .read_boundary import parse_payload_strict
 from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
+    budgeted_get_all,
     budgeted_stream_iter,
     indexed_list_reads_enabled,
 )
@@ -2474,8 +2475,11 @@ def get_conversations_by_id_without_photos(
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    read_budget: Optional[ListReadBudget] = None,
 ):
-    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
+    return _get_conversations_by_id(
+        uid, conversation_ids, include_discarded=include_discarded, read_site=read_site, read_budget=read_budget
+    )
 
 
 def _get_conversations_by_id(
@@ -2484,12 +2488,13 @@ def _get_conversations_by_id(
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    read_budget: Optional[ListReadBudget] = None,
 ):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
 
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
-    docs = db.get_all(doc_refs)
+    docs = budgeted_get_all(db, doc_refs, read_budget)
 
     hits = 0
     misses = 0

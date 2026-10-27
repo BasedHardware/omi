@@ -156,9 +156,38 @@ def test_date_scope_and_exact_scope_never_escape_to_other_transcripts(data, monk
     rows, _ = data
     dated = service.search_saved_transcripts_text('u1', 'invoice', start_date=NOW, end_date=NOW)
     assert '47 dollars' in dated and '48 dollars' not in dated
-    monkeypatch.setattr(service.conversations_db, 'get_conversations_by_id', lambda uid, ids, **k: [rows[4]])
+    monkeypatch.setattr(
+        service.conversations_db, 'get_conversations_by_id_without_photos', lambda uid, ids, **k: [rows[4]]
+    )
     exact = service.search_saved_transcripts_text('u1', 'invoice', conversation_id='c004')
     assert '51 dollars' in exact and '47 dollars' not in exact
+
+
+def test_exact_transcript_read_uses_deadline_without_loading_photos(data, monkeypatch):
+    from google.api_core.exceptions import DeadlineExceeded
+
+    rows, _ = data
+    reads = []
+
+    class Client:
+        def collection(self, name):
+            assert name in ('users', 'conversations')
+            return self
+
+        def document(self, name):
+            reads.append(name)
+            return self
+
+        def get_all(self, refs, **kwargs):
+            assert len(refs) == 1 and 0 < kwargs['timeout'] <= 4
+            assert kwargs['retry'] is not None
+            raise DeadlineExceeded('synthetic timeout')
+
+    monkeypatch.setattr(service.conversations_db, 'db', Client())
+    result = service.search_saved_transcripts_text('u1', 'invoice', conversation_id=rows[4]['id'])
+    assert reads == ['u1', 'c004']
+    assert result.startswith('Error: transcript search unavailable')
+    assert '51 dollars' not in result and 'No absence conclusion' in result
 
 
 def test_transcript_decode_failure_discloses_partial_coverage(data, monkeypatch):
