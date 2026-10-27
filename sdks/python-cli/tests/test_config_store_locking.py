@@ -1,98 +1,59 @@
-"""Standalone tests for the config read-modify-write locking (stdlib only).
+"""Integration tests for the config read-modify-write locking.
 
-These tests verify the file-locking mechanism that fixes #22972. They are
-self-contained so they run in the standalone harness (no tomli_w, no omi_cli
-imports, no conftest fixtures).
-
-See omi_cli/auth/store.py::_config_lock for the production implementation.
+These tests verify that concurrent modifications to the OMI config file
+via the omi_cli.auth.store API are serialized and do not result in
+data loss.
 """
 
 from __future__ import annotations
 
-import json
-import os
-import tempfile
 import threading
 import unittest
+from pathlib import Path
+
+from omi_cli.auth.store import store_api_key
+from omi_cli.config import default_config_path
 
 
-def _acquire_release():
-    if os.name == "nt":
-        import msvcrt
+class TestConcurrentConfigStore(unittest.TestCase):
+    def test_concurrent_store_api_key_different_profiles_both_survive(self):
+        """Verify that concurrent calls to store_api_key do not lose data.
 
-        def acquire(fd):
-            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
-
-        def release(fd):
-            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-    else:
-        import fcntl
-
-        def acquire(fd):
-            fcntl.flock(fd, fcntl.LOCK_EX)
-
-        def release(fd):
-            fcntl.flock(fd, fcntl.LOCK_UN)
-    return acquire, release
-
-
-class TestConcurrentReadModifyWriteLocking(unittest.TestCase):
-    def test_concurrent_read_modify_write_serialized_by_file_lock(self):
-        """Concurrent read-modify-write on a shared file must not lose either writer's data.
-
-        Regression test for #22972: without file locking, two concurrent writers
-        that load-modify-save a shared config file lose one writer's changes
-        because the last save() overwrites the other profile's credential.
+        This test exercises the real locking mechanism by performing concurrent
+        credential writes to the config file (isolated via the OMI_CONFIG
+        environment variable provided by the test runner).
         """
-        acquire, release = _acquire_release()
+        config_path = Path(default_config_path())
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text("{}", encoding="utf-8")
 
-        path = os.path.join(tempfile.gettempdir(), f"test-config-lock-{os.getpid()}.json")
-        lock_path = path + ".lock"
-        try:
-            with open(path, "w") as fh:
-                json.dump({"alpha": None, "beta": None}, fh)
+        errors = []
 
-            errors = []
+        def worker(profile: str, key: str) -> None:
+            try:
+                # Perform multiple writes to increase the likelihood of race detection
+                for i in range(10):
+                    store_api_key(profile, f"{key}-{i}")
+            except Exception as exc:
+                errors.append(exc)
 
-            def write_profile(name: str, key: str) -> None:
-                try:
-                    for _ in range(20):
-                        with open(lock_path, "a+") as lock_file:
-                            acquire(lock_file.fileno())
-                            try:
-                                with open(path, "r") as fh:
-                                    data = json.load(fh)
-                                data[name] = key
-                                with open(path, "w") as fh:
-                                    json.dump(data, fh)
-                            finally:
-                                release(lock_file.fileno())
-                except Exception as exc:  # noqa: BLE001
-                    errors.append(exc)
+        threads = [
+            threading.Thread(target=worker, args=("alpha", "KEY-A")),
+            threading.Thread(target=worker, args=("beta", "KEY-B")),
+        ]
 
-            threads = [
-                threading.Thread(target=write_profile, args=("alpha", "KEY-A")),
-                threading.Thread(target=write_profile, args=("beta", "KEY-B")),
-            ]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join()
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
 
-            self.assertFalse(errors, f"concurrent writes raised: {errors}")
+        self.assertFalse(errors, f"Concurrent store_api_key raised: {errors}")
 
-            with open(path, "r") as fh:
-                data = json.load(fh)
-
-            self.assertEqual(data.get("alpha"), "KEY-A", f"alpha credential lost: {data}")
-            self.assertEqual(data.get("beta"), "KEY-B", f"beta credential lost: {data}")
-        finally:
-            for p in (path, lock_path):
-                try:
-                    os.unlink(p)
-                except FileNotFoundError:
-                    pass
-
-
-if __name__ == "__main__":
-    unittest.main()
+        # Verify the final state contains keys for both profiles
+        import json
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        
+        self.assertIn("alpha", data)
+        self.assertIn("beta", data)
+        self.assertEqual(data["alpha"], "KEY-A-9")
+        self.assertEqual(data["beta"], "KEY-B-9")
