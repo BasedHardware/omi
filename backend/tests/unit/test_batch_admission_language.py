@@ -23,11 +23,14 @@ def defaults(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('mode', ['on', 'draining', 'dark'])
 @pytest.mark.parametrize('language', [None, '', 'multi', 'auto', 'und', 'unknown', 'xx', 'ja', 'vi'])
-async def test_multilingual_unknown_or_unsupported_conversation_never_enters_custody(monkeypatch, mode, language):
+@pytest.mark.parametrize('user_language', ['multi', 'auto', 'en'])
+async def test_multilingual_unknown_or_unsupported_conversation_never_enters_custody(
+    monkeypatch, mode, language, user_language
+):
     writer = Mock(side_effect=AssertionError('excluded upload wrote batch custody'))
     monkeypatch.setattr(intake, 'admit', writer)
     response, staged, probe = await upload(
-        monkeypatch, user_language='multi', conversation_language=language, mode=mode
+        monkeypatch, user_language=user_language, conversation_language=language, mode=mode
     )
     assert response is None and not staged and not probe.called
     writer.assert_not_called()
@@ -36,7 +39,11 @@ async def test_multilingual_unknown_or_unsupported_conversation_never_enters_cus
 @pytest.mark.asyncio
 @pytest.mark.parametrize('mode', ['on', 'draining', 'dark'])
 @pytest.mark.parametrize('language,expected', [('en', 'en'), (' EN-us ', 'en'), ('mt', 'mt'), ('uk', 'uk')])
-async def test_multilingual_supported_conversation_pins_the_input_language(monkeypatch, mode, language, expected):
+@pytest.mark.parametrize('inherit', ['true', 'false'])
+async def test_multilingual_supported_conversation_pins_the_input_language(
+    monkeypatch, mode, language, expected, inherit
+):
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', inherit)
     response, staged, probe = await upload(
         monkeypatch, user_language='multi', conversation_language=language, mode=mode
     )
@@ -56,9 +63,11 @@ async def test_single_supported_language_is_unchanged(monkeypatch, mode):
 @pytest.mark.parametrize('mode', ['on', 'draining', 'dark'])
 @pytest.mark.parametrize('single', [False, True])
 @pytest.mark.parametrize('user,conversation', [('ja', None), ('en', 'vi'), ('multi', 'ko-KR')])
+@pytest.mark.parametrize('inherit', ['true', 'false'])
 async def test_effective_unsupported_code_excluded_even_when_old_eligibility_is_off(
-    monkeypatch, mode, single, user, conversation
+    monkeypatch, mode, single, user, conversation, inherit
 ):
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', inherit)
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'false')
     response, staged, probe = await upload(
         monkeypatch, user_language=user, conversation_language=conversation, single=single, mode=mode
