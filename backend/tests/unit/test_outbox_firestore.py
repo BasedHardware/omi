@@ -292,9 +292,39 @@ def test_claim_stamps_a_fallback_snapshot_on_a_batch_row_without_one(rows):
     assert claim.payload['first_summary_policy'] == state_rows[KEY]['first_summary_policy']
 
 
+def _bind_in_memory_firestore_query(state_rows, sweep_query):
+    """Wire document lookup and due_at<=cutoff filtering onto sweep_query for wake() and sweep()."""
+    from types import SimpleNamespace
+
+    cutoff = [float('inf')]
+
+    def where(field, op, value):
+        if field == 'due_at' and op == '<=':
+            cutoff[0] = value
+        return sweep_query
+
+    def document(doc_id):
+        return SimpleNamespace(
+            get=lambda **_: SimpleNamespace(
+                exists=doc_id in state_rows,
+                to_dict=lambda: dict(state_rows[doc_id]) if doc_id in state_rows else None,
+            )
+        )
+
+    sweep_query.where.side_effect = where
+    sweep_query.document = document
+    sweep_query.stream.side_effect = lambda: [
+        SimpleNamespace(id=k, to_dict=lambda r=dict(v): r)
+        for k, v in sorted(state_rows.items(), key=lambda item: (item[1].get('due_at') or 0, item[0]))
+        if (v.get('due_at') or 0) <= cutoff[0]
+    ]
+
+
 def test_enqueue_without_tx_moves_wake_on_max_coalesce_and_tolerates_failed_wake(rows, sweep_query):  # noqa: F811
     from database.outbox_firestore import FirestoreOutbox
 
+    state_rows, _ = rows
+    _bind_in_memory_firestore_query(state_rows, sweep_query)
     wakes, fail = [], [False]
 
     def create_wake(row_id, token, at):
@@ -321,4 +351,47 @@ def test_enqueue_without_tx_moves_wake_on_max_coalesce_and_tolerates_failed_wake
     fail[0] = False
     assert injected.sweep(now=7.0).rewoken == 1
     assert wakes[-1] == (other_key, pending.wake_token, 5.0)
+
+
+@pytest.mark.parametrize(
+    'conformance_fn_name',
+    [
+        'test_enqueue_without_tx_commits_then_creates_its_own_wake',
+        'test_a_failed_wake_leaves_the_row_pending_and_sweep_retries_it',
+        'test_blocked_owner_is_discarded_on_delivery_and_by_sweep',
+    ],
+)
+def test_emulator_conformance_cases_from_23559(rows, sweep_query, conformance_fn_name):  # noqa: F811
+    """Run the three #23559 conformance tests from tests/integration/test_outbox_conformance.py directly."""
+    from database.outbox_firestore import FirestoreOutbox
+    from testing.store_fixtures import OutboxHarness, _privacy_probe, make_sim
+    from tests.integration import test_outbox_conformance as conformance
+
+    state_rows, _ = rows
+    _bind_in_memory_firestore_query(state_rows, sweep_query)
+    store_harness = make_sim()
+    store_harness.seed_user('o')
+    wakes: list[tuple[str, str, float]] = []
+    fail_wakes = [False]
+
+    def create_wake(row_id: str, token: str, available_at: float) -> None:
+        if fail_wakes[0]:
+            raise RuntimeError('task create failed')
+        wakes.append((row_id, token, available_at))
+
+    ob = OutboxHarness(
+        'emulator',
+        FirestoreOutbox(
+            OutboxKind.ENRICHMENT,
+            privacy_blocked=_privacy_probe(store_harness),
+            create_wake=create_wake,
+        ),
+        store_harness,
+        wakes,
+        fail_wakes,
+        key=lambda owner, label: reprocess.key(owner, label),
+        payload=lambda label, **extra: {'conversation_id': label, 'language': 'en', **extra},
+    )
+    getattr(conformance, conformance_fn_name)(ob)
+
 

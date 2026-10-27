@@ -406,6 +406,10 @@ def mark_update(
         elif not valid_dispatch_binding(row.get('dispatch')):
             row['dispatch'] = None
         wake = old is None
+        # Contract decision (#23559): the contract-(b) outbox seam passes wake_on_move=True so any due_at
+        # shift ('max' or 'min') mints a fresh wake token to match Postgres/sim, whereas production
+        # reprocess.mark() keeps wake_on_move=False (1-task-per-quiet-window trailing-edge settling, where
+        # an early task delivery defers once at claim time to the settled due_at).
         moved = old is not None and (
             row['due_at'] != old.get('due_at') if wake_on_move else (row.get('task_due_at') or 0) > row['due_at']
         )
