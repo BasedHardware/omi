@@ -62,6 +62,9 @@ def append_query_params(url: str, params: dict[str, str]) -> str:
     Same rule as the backend: a key Omi owns wins over one already in the URL.
     """
     parts = urlsplit(url)
+    port = parts.port
+    if port == 0:
+        raise ValueError("Port must be between 1 and 65535.")
     kept = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True) if key not in params]
     kept.extend(params.items())
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(kept), parts.fragment))
@@ -273,11 +276,11 @@ def verify_receiver(
 
     for event in events:
         payload = event.builder(uid, datetime.now(timezone.utc))
-        url = append_query_params(to, events_mod.request_params(event, uid))
         headers = {"Content-Type": event.content_type}
         headers["Idempotency-Key"] = events_mod.idempotency_key(event, payload) or str(uuid.uuid4())
         started = time.monotonic()
         try:
+            url = append_query_params(to, events_mod.request_params(event, uid))
             if isinstance(payload, bytes):
                 response = httpx.post(
                     url, content=payload, headers=headers, timeout=_DELIVERY_TIMEOUT, follow_redirects=False
@@ -286,9 +289,10 @@ def verify_receiver(
                 response = httpx.post(
                     url, json=payload, headers=headers, timeout=_DELIVERY_TIMEOUT, follow_redirects=False
                 )
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
             rows.append({"check": event.name, "result": "fail", "detail": _sentences(f"No usable response: {exc}")})
-            unreachable = True
+            if isinstance(exc, httpx.HTTPError):
+                unreachable = True
             continue
         elapsed_ms = int((time.monotonic() - started) * 1000)
         latencies.append(elapsed_ms)

@@ -559,3 +559,47 @@ def test_target_fails_closed_on_an_address_it_cannot_read() -> None:
 
     assert not report.ok
     assert "cannot read" in report.summary
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "http://[",
+        "http://[::1",
+        "https://[::1/webhook",
+    ],
+)
+def test_target_rejects_malformed_ipv6_url_without_raising(bad_url: str) -> None:
+    report = webhook_target.inspect_target(bad_url, resolver=lambda _: PUBLIC_ADDRESS)
+
+    assert not report.ok
+    assert "malformed" in report.summary.lower()
+
+
+@pytest.mark.parametrize(
+    "bad_port_url",
+    [
+        "https://example.com:abc/webhook",
+        "https://example.com:65536/webhook",
+        "https://example.com:99999/webhook",
+        "https://example.com:0/webhook",
+    ],
+)
+def test_target_rejects_invalid_or_out_of_range_port(bad_port_url: str) -> None:
+    report = webhook_target.inspect_target(bad_port_url, resolver=lambda _: PUBLIC_ADDRESS)
+
+    assert not report.ok
+    assert "invalid port" in report.summary.lower()
+
+
+@pytest.mark.parametrize("bad_url", ["http://[", "https://example.com:99999/webhook"])
+def test_verify_reports_malformed_url_as_usage_error_without_traceback(
+    cli_runner: CliRunner, config_path: Path, monkeypatch: pytest.MonkeyPatch, bad_url: str
+) -> None:
+    _public_resolver(monkeypatch)
+    result = _run(cli_runner, "--json", "app", "verify", "--to", bad_url, "--event", "memory_created")
+
+    assert result.exit_code == EXIT_USAGE
+    rows = json.loads(result.stdout)
+    assert rows[0]["check"] == "delivery target"
+    assert rows[0]["result"] == "fail"
