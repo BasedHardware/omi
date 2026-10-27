@@ -17575,10 +17575,6 @@
     "@episodeNotesSoon": {
         "description": "Shown in the running notes card before the first notes exist."
     },
-    "episodeOpenAll": "Open All",
-    "@episodeOpenAll": {
-        "description": "Opens the full live transcript from its preview on a live episode."
-    },
     "episodeWrapUpNow": "Wrap up now",
     "@episodeWrapUpNow": {
         "description": "Button that ends a live episode now and makes its full notes."
@@ -17861,14 +17857,6 @@
         "description": "Pill under the live duration: this capture continues the previous episode.",
         "placeholders": {
             "title": {}
-        }
-    },
-    "episodeLivePreviewLine": "{duration} · “{line}”",
-    "@episodeLivePreviewLine": {
-        "description": "Home live row subtitle for a local-preview session: running length, then the newest preview line.",
-        "placeholders": {
-            "duration": {},
-            "line": {}
         }
     },
     "episodeLiveSince": "· since {time}",

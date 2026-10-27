@@ -14439,9 +14439,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get episodeNotesSoon => 'Notatene vises etter de første minuttene av samtalen.';
 
   @override
-  String get episodeOpenAll => 'Åpne alle';
-
-  @override
   String get episodeWrapUpNow => 'Avslutt nå';
 
   @override
@@ -14614,11 +14611,6 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Fortsetter «$title»';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

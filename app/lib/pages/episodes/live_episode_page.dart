@@ -9,13 +9,13 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/person.dart';
-import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_tabs.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/pages/episodes/previous_episode_link.dart';
+import 'package:omi/pages/episodes/start_trimmed_text.dart';
 import 'package:omi/pages/episodes/live_transcript_view.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
@@ -27,7 +27,6 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/capture_sources.dart';
-import 'package:omi/widgets/speaker_label.dart';
 
 /// Switch the home IndexedStack to Home (the conversation list) *before* popping the live route so
 /// the user lands there with no flash of the previous page.
@@ -41,8 +40,8 @@ enum LiveEpisodeTab { summary, transcript }
 /// capture deep link.
 ///
 /// With episodes on (the server's capability) it is the live episode: today's conversation page in a
-/// live state, Summary (running notes, captured tasks, a transcript preview, the moments) and the
-/// live Transcript, with "Wrap Up Now" at the bottom and Pause in the ⋯ menu. With episodes off it
+/// live state, Summary (running notes, the Live card, captured tasks, the moments) and the
+/// live Transcript, with "Wrap up now" at the bottom and Pause in the ⋯ menu. With episodes off it
 /// is today's live capture page, unchanged: the transcript with Pause and Finish.
 class LiveEpisodePage extends StatefulWidget {
   const LiveEpisodePage({
@@ -217,6 +216,11 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
       backgroundColor: OmiColors.surface0,
       appBar: AppBar(
         automaticallyImplyLeading: false,
+        // Pinned and opaque in the page's own colour: the tabs' content scrolls beneath the
+        // header, never visibly under it, and no scrolled-under tint sets the bar apart.
+        backgroundColor: OmiColors.surface0,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
         leading: const Center(child: OmiBackButton.circled()),
         titleSpacing: 0,
         actions: [
@@ -235,8 +239,22 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _header(context, episode, now, listening: listening),
-          ConversationDetailTabs(controller: _tabs, onTap: (_) {}, showVisibility: false),
+          ColoredBox(
+            key: const Key('live_episode_pinned_header'),
+            color: OmiColors.surface0,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Pinned above the tabs, so it scales only so far: at the largest sizes the
+                // title would otherwise leave the tab content a sliver of the screen.
+                MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 2,
+                  child: _header(context, episode, now, listening: listening),
+                ),
+                ConversationDetailTabs(controller: _tabs, onTap: (_) {}, showVisibility: false),
+              ],
+            ),
+          ),
           Expanded(
             child: TabBarView(
               controller: _tabs,
@@ -258,7 +276,6 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                     (c) => c.localPreviewAdmitted && c.livePreview?.admitted == true ? c.livePreview : null,
                   ),
                   conversationId: conversationId,
-                  speakerNamesOf: _speakerNames,
                   listening: listening && hasCapture,
                   onOpenTranscript: () => _tabs.animateTo(1),
                   onDismiss: (item) => _dismiss(context, episodes, item),
@@ -320,8 +337,11 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
         final participants = _participantsMemo(provider, people);
         final title = (episode?.title ?? '').trim().isEmpty ? l10n.episodeListeningNow : episode!.title;
         final namesOthers = participants.length > (provider.segments.any((s) => s.isUser) ? 1 : 0);
-        final moments = episode?.moments.length ?? 0;
         final meta = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
+        final names = namesOthers ? participants.join(', ') : '';
+        final rest = listening
+            ? [l10n.episodeLiveSince(dates.time(started)), if (names.isNotEmpty) names].join(' · ')
+            : (names.isEmpty ? '' : '· $names');
         return Padding(
           padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xxs, OmiSpacing.md, OmiSpacing.sm),
           child: Column(
@@ -329,54 +349,53 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
             children: [
               Text(title, style: OmiType.title1.copyWith(height: 1.15, letterSpacing: -0.4)),
               const SizedBox(height: OmiSpacing.xs),
-              Wrap(
-                spacing: OmiSpacing.sm,
-                runSpacing: OmiSpacing.xxs,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  CaptureStateAnnouncement(
-                    message: listening
-                        ? l10n.episodeListeningNow
-                        : captureStateLabel(l10n, EpisodePresentation.displayState(provider)),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        OmiLiveDot(live: listening, size: 7),
-                        const SizedBox(width: 6),
-                        LiveEpisodeClock(
-                          clock: context.read<EpisodeProvider>().now,
-                          builder: (context, time) => Text(
-                            listening
-                                ? (episode == null ? l10n.episodeCaptureFor : l10n.episodeLiveFor)(
-                                    EpisodePresentation.runningLength(
-                                      EpisodePresentation.elapsed(episode, provider, time, anchor: anchor),
-                                      l10n,
-                                    ),
-                                  )
-                                : captureStateLabel(l10n, EpisodePresentation.displayState(provider)),
-                            key: const Key('live_episode_status'),
-                            style: meta.copyWith(
-                              color: listening ? OmiColors.success : OmiColors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
+              // One calm line: the dot and the running length, then "· since 3:12 PM" and who
+              // is in it, ellipsized rather than wrapped. The moment count lives on the
+              // Moments section, where it has room.
+              CaptureStateAnnouncement(
+                message: listening
+                    ? l10n.episodeListeningNow
+                    : captureStateLabel(l10n, EpisodePresentation.displayState(provider)),
+                child: Row(
+                  children: [
+                    OmiLiveDot(live: listening, size: 7),
+                    const SizedBox(width: 6),
+                    LiveEpisodeClock(
+                      clock: context.read<EpisodeProvider>().now,
+                      builder: (context, time) {
+                        final length = EpisodePresentation.runningLength(
+                          EpisodePresentation.elapsed(episode, provider, time, anchor: anchor),
+                          l10n,
+                        );
+                        return Text(
+                          listening ? length : captureStateLabel(l10n, EpisodePresentation.displayState(provider)),
+                          key: const Key('live_episode_status'),
+                          semanticsLabel: listening
+                              ? (episode == null ? l10n.episodeCaptureFor : l10n.episodeLiveFor)(length)
+                              : null,
+                          maxLines: 1,
+                          style: meta.copyWith(
+                            color: listening ? OmiColors.success : OmiColors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                            fontFeatures: const [FontFeature.tabularFigures()],
                           ),
-                        ),
-                        // The session this duration counts, next to the count itself.
-                        if (listening)
-                          Flexible(
-                            child: Text(
-                              l10n.episodeLiveSince(dates.time(started)),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: meta,
-                            ),
-                          ),
-                      ],
+                        );
+                      },
                     ),
-                  ),
-                  if (namesOthers) Text(participants.join(', '), style: meta),
-                  if (moments > 1) Text(l10n.episodeMomentsCount(moments), style: meta),
-                ],
+                    if (rest.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          rest,
+                          key: const Key('live_episode_meta'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: meta,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
               const PreviousEpisodeLink(),
             ],
@@ -386,23 +405,10 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     );
   }
 
-  // Memoized per-transcript derivations, shared by the header and the summary preview: the
-  // speaker resolver and the participant names walk every line, so they are rebuilt only when
-  // the transcript version or the people list changes.
-  int _namesKey = -1;
-  SpeakerNames? _names;
+  // The participant names walk every line, so they are rebuilt only when the transcript
+  // version or the people list changes.
   int _participantsKey = -1;
   List<String>? _participantsCache;
-
-  SpeakerNames _speakerNames(CaptureProvider capture, List<Person>? people) {
-    final key = Object.hash(capture.segmentsPhotosVersion, identityHashCode(people));
-    if (_namesKey != key || _names == null) {
-      _namesKey = key;
-      _names = SpeakerNames.forSegments(capture.segments,
-          people: people ?? const <Person>[], l10n: context.l10n, deferShortVoices: true);
-    }
-    return _names!;
-  }
 
   List<String> _participantsMemo(CaptureProvider capture, List<Person> people) {
     final key = Object.hash(capture.segmentsPhotosVersion, identityHashCode(people));
@@ -467,8 +473,8 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   }
 }
 
-/// Summary of a live episode: the running notes, the tasks captured so far, a preview of the
-/// transcript and the moments, the current one marked Now.
+/// Summary of a live episode: the running notes, the Live card of the newest words, the tasks
+/// captured so far and the moments, the current one marked Now.
 class _LiveSummaryTab extends StatelessWidget {
   const _LiveSummaryTab({
     required this.episode,
@@ -476,7 +482,6 @@ class _LiveSummaryTab extends StatelessWidget {
     required this.conversationId,
     required this.unavailable,
     required this.preview,
-    required this.speakerNamesOf,
     required this.listening,
     required this.onOpenTranscript,
     required this.onDismiss,
@@ -487,7 +492,6 @@ class _LiveSummaryTab extends StatelessWidget {
   final String? conversationId;
   final bool unavailable;
   final LivePreviewController? preview;
-  final SpeakerNames Function(CaptureProvider capture, List<Person>? people) speakerNamesOf;
   final bool listening;
   final VoidCallback onOpenTranscript;
   final ValueChanged<EpisodeItem> onDismiss;
@@ -502,40 +506,15 @@ class _LiveSummaryTab extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.xl),
       children: [
         _SoFarCard(episode: episode, now: now, unavailable: unavailable, preview: preview),
-        if (preview != null) _LivePreviewCard(preview: preview!, onOpenTranscript: onOpenTranscript),
+        _LiveCard(preview: preview, onOpenTranscript: onOpenTranscript),
         if (items.isNotEmpty) ...[
           _SectionTitle(l10n.tasks, count: items.length),
           _Card(
             children: [for (final item in items) _ItemRow(item: item, now: now, onDismiss: onDismiss)],
           ),
         ],
-        // The preview follows the transcript itself: it selects the version so a metric or
-        // progress notify cannot rebuild the notes, tasks and moments above it.
-        Builder(
-          builder: (context) {
-            context.select<CaptureProvider, int>((c) => c.segmentsPhotosVersion);
-            final capture = context.read<CaptureProvider>();
-            if (capture.segments.isEmpty) return const SizedBox.shrink();
-            final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _SectionTitle(
-                  l10n.liveTranscript,
-                  trailing: OmiButton.tertiary(
-                    key: const Key('live_episode_open_transcript'),
-                    label: l10n.episodeOpenAll,
-                    size: OmiButtonSize.compact,
-                    onPressed: onOpenTranscript,
-                  ),
-                ),
-                _TranscriptPreview(segments: capture.segments, names: speakerNamesOf(capture, people)),
-              ],
-            );
-          },
-        ),
         if (moments.isNotEmpty) ...[
-          _SectionTitle(l10n.episodeMoments),
+          _SectionTitle(l10n.episodeMoments, count: moments.length > 1 ? moments.length : null),
           _Card(
             children: [
               for (var i = 0; i < moments.length; i++)
@@ -552,11 +531,10 @@ class _LiveSummaryTab extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title, {this.count, this.trailing});
+  const _SectionTitle(this.title, {this.count});
 
   final String title;
   final int? count;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -579,7 +557,6 @@ class _SectionTitle extends StatelessWidget {
               ),
             ),
           ),
-          if (trailing != null) trailing!,
         ],
       ),
     );
@@ -616,6 +593,9 @@ class _SoFarCard extends StatelessWidget {
   /// The admitted local-preview session, or null when this capture streams to the cloud.
   final LivePreviewController? preview;
 
+  /// The card stays a glance while the episode runs; the full notes arrive when it wraps up.
+  static const maxBullets = 4;
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -632,14 +612,17 @@ class _SoFarCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(l10n.episodeSoFar, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
-              if (preview != null && !serverNotes) ...[
-                const SizedBox(width: OmiSpacing.xs),
-                _OnThisPhoneTag(),
-              ],
-            ],
+          // Title and tag share a line, and stack at large text sizes rather than overflow.
+          _CardHeader(
+            title: l10n.episodeSoFar,
+            // The tag names where the bullets came from, so it shows only with bullets.
+            trailing: preview != null && !serverNotes
+                ? ListenableBuilder(
+                    listenable: preview!.notes,
+                    builder: (context, _) =>
+                        preview!.notes.bullets.isEmpty ? const SizedBox.shrink() : _OnThisPhoneTag(),
+                  )
+                : null,
           ),
           if (notesUnavailable) ...[
             const SizedBox(height: OmiSpacing.xs),
@@ -656,17 +639,8 @@ class _SoFarCard extends StatelessWidget {
               style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
             ),
             const SizedBox(height: OmiSpacing.sm),
-            for (final bullet in bullets)
-              Padding(
-                padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('•  ', style: OmiType.callout.copyWith(color: OmiColors.textTertiary, height: 1.4)),
-                    Expanded(child: Text(bullet, style: OmiType.callout.copyWith(height: 1.4))),
-                  ],
-                ),
-              ),
+            // The newest notes: a long episode's earlier ones return with the full notes.
+            _Bullets(bullets.length > maxBullets ? bullets.sublist(bullets.length - maxBullets) : bullets),
           ] else if (preview != null) ...[
             // Notes drafted on this phone from the preview text; the quiet line while
             // there is nothing to draft (no engine, Apple Intelligence off, or the
@@ -690,17 +664,7 @@ class _SoFarCard extends StatelessWidget {
                   key: const Key('episode_on_device_notes'),
                   children: [
                     const SizedBox(height: OmiSpacing.sm),
-                    for (final bullet in notes.bullets)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('•  ', style: OmiType.callout.copyWith(color: OmiColors.textTertiary, height: 1.4)),
-                            Expanded(child: Text(bullet, style: OmiType.callout.copyWith(height: 1.4))),
-                          ],
-                        ),
-                      ),
+                    _Bullets(notes.bullets.take(maxBullets).toList()),
                     const SizedBox(height: OmiSpacing.xxs),
                     Text(
                       l10n.episodeOnDeviceNotesFootnote,
@@ -720,76 +684,150 @@ class _SoFarCard extends StatelessWidget {
   }
 }
 
+class _Bullets extends StatelessWidget {
+  const _Bullets(this.bullets);
+
+  final List<String> bullets;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final bullet in bullets)
+          Padding(
+            padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('•  ', style: OmiType.callout.copyWith(color: OmiColors.textTertiary, height: 1.4)),
+                Expanded(child: Text(bullet, style: OmiType.callout.copyWith(height: 1.4))),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// A card's title with something small at its trailing edge; the two stack when a large text
+/// size leaves no room for both on one line.
+class _CardHeader extends StatelessWidget {
+  const _CardHeader({required this.title, this.trailing});
+
+  final String title;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final heading = Text(title, style: OmiType.headline);
+    if (trailing == null) return heading;
+    return SizedBox(
+      width: double.infinity,
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: OmiSpacing.xs,
+        children: [heading, trailing!],
+      ),
+    );
+  }
+}
+
 /// The small provenance tag on on-device notes: they were drafted on this phone.
 class _OnThisPhoneTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
       key: const Key('episode_on_this_phone_tag'),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 3),
+      decoration: BoxDecoration(color: OmiColors.surface0, borderRadius: OmiRadius.pillAll),
       child: Text(
         context.l10n.episodeOnThisPhone,
-        style: OmiType.caption.copyWith(color: OmiColors.textSecondary),
+        style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
       ),
     );
   }
 }
 
-/// The live preview text on the Summary tab: one card of at most three lines, the
-/// newest still-volatile words in lighter text, no speaker label (preview text has
-/// no speaker attribution) and an Open transcript link to the full tab.
-class _LivePreviewCard extends StatelessWidget {
-  const _LivePreviewCard({required this.preview, required this.onOpenTranscript});
+/// The Summary tab's Live card: the newest words in up to three lines, trimmed at the start so
+/// the latest stay visible, with no speaker label, and Open transcript for the full tab. A
+/// preview session reads its on-device lines (words the recognizer may still revise in lighter
+/// text); a cloud session reads its newest transcript lines.
+class _LiveCard extends StatelessWidget {
+  const _LiveCard({required this.preview, required this.onOpenTranscript});
 
-  final LivePreviewController preview;
+  final LivePreviewController? preview;
   final VoidCallback onOpenTranscript;
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: preview,
-      builder: (context, _) {
-        final lines = preview.lines;
-        if (lines.isEmpty) return const SizedBox.shrink();
-        final tail = lines.length > 3 ? lines.sublist(lines.length - 3) : lines;
-        final l10n = context.l10n;
-        return Column(
+    final preview = this.preview;
+    if (preview != null) {
+      return ListenableBuilder(
+        listenable: preview,
+        builder: (context, _) {
+          final lines = preview.lines;
+          final tail = lines.length > 6 ? lines.sublist(lines.length - 6) : lines;
+          final secondary = TextStyle(color: OmiColors.textSecondary);
+          return _card(context, [
+            for (var i = 0; i < tail.length; i++)
+              (text: i == 0 ? tail[i].text : ' ${tail[i].text}', style: tail[i].isFinal ? null : secondary),
+          ]);
+        },
+      );
+    }
+    // The card follows the transcript itself: it selects the version so a metric or progress
+    // notify cannot rebuild it.
+    return Builder(
+      builder: (context) {
+        context.select<CaptureProvider, int>((c) => c.segmentsPhotosVersion);
+        final segments = context.read<CaptureProvider>().segments;
+        final tail = segments.length > 6 ? segments.sublist(segments.length - 6) : segments;
+        return _card(context, [
+          for (var i = 0; i < tail.length; i++) (text: i == 0 ? tail[i].text : ' ${tail[i].text}', style: null),
+        ]);
+      },
+    );
+  }
+
+  Widget _card(BuildContext context, List<TrimmedRun> runs) {
+    if (runs.every((run) => run.text.trim().isEmpty)) return const SizedBox.shrink();
+    final l10n = context.l10n;
+    return Padding(
+      padding: const EdgeInsets.only(top: OmiSpacing.sm),
+      child: Container(
+        key: const Key('live_episode_preview_card'),
+        padding: const EdgeInsetsDirectional.fromSTEB(OmiSpacing.md, OmiSpacing.xxs, OmiSpacing.xxs, OmiSpacing.md),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _SectionTitle(
-              l10n.liveCardTitle,
-              trailing: OmiButton.tertiary(
+            _CardHeader(
+              title: l10n.liveCardTitle,
+              // A quiet link, not a second heading: secondary ink, regular weight.
+              trailing: OmiButton(
                 key: const Key('live_episode_open_transcript'),
                 label: l10n.episodeOpenTranscript,
+                variant: OmiButtonVariant.tertiary,
                 size: OmiButtonSize.compact,
+                colors: OmiButtonColors(background: Colors.transparent, foreground: OmiColors.textSecondary),
+                labelStyle: OmiType.subhead,
                 onPressed: onOpenTranscript,
               ),
             ),
-            Container(
-              key: const Key('live_episode_preview_card'),
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-              child: Text.rich(
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: OmiSpacing.sm),
+              child: StartTrimmedText(
                 key: const Key('live_episode_preview_card_text'),
-                TextSpan(
-                  children: [
-                    for (var i = 0; i < tail.length; i++)
-                      TextSpan(
-                        text: i == 0 ? tail[i].text : ' ${tail[i].text}',
-                        // Words the recognizer may still revise read lighter.
-                        style: tail[i].isFinal ? null : TextStyle(color: OmiColors.textSecondary),
-                      ),
-                  ],
-                ),
-                style: OmiType.subhead.copyWith(height: 1.4),
+                runs: runs,
+                style: OmiType.callout.copyWith(height: 1.45),
                 maxLines: 3,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 }
@@ -827,50 +865,6 @@ class _ItemRow extends StatelessWidget {
               icon: Icon(Icons.close_rounded, size: 18, color: OmiColors.textTertiary),
               label: context.l10n.undo,
               onPressed: () => onDismiss(item),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TranscriptPreview extends StatelessWidget {
-  const _TranscriptPreview({required this.segments, required this.names});
-
-  final List<TranscriptSegment> segments;
-  final SpeakerNames names;
-
-  @override
-  Widget build(BuildContext context) {
-    final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
-    final tail = segments.length > 3 ? segments.sublist(segments.length - 3) : segments;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < tail.length; i++)
-            Padding(
-              padding: EdgeInsets.only(top: i == 0 ? 0 : OmiSpacing.xs),
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: '${names.forSegment(tail[i], person: personById(people, tail[i].personId))}  ',
-                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    TextSpan(text: tail[i].text),
-                  ],
-                ),
-                style: OmiType.subhead.copyWith(
-                  height: 1.4,
-                  // The newest line reads brightest; older lines step back.
-                  color: i == tail.length - 1 ? OmiColors.textPrimary : OmiColors.textSecondary,
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
             ),
         ],
       ),

@@ -14448,9 +14448,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get episodeNotesSoon => 'Catatan muncul setelah beberapa menit pertama percakapan.';
 
   @override
-  String get episodeOpenAll => 'Buka Semua';
-
-  @override
   String get episodeWrapUpNow => 'Selesaikan Sekarang';
 
   @override
@@ -14623,11 +14620,6 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Melanjutkan “$title”';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

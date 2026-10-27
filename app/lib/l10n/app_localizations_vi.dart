@@ -14435,9 +14435,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get episodeNotesSoon => 'Ghi chú xuất hiện sau vài phút đầu trò chuyện.';
 
   @override
-  String get episodeOpenAll => 'Mở tất cả';
-
-  @override
   String get episodeWrapUpNow => 'Kết thúc ngay';
 
   @override
@@ -14611,11 +14608,6 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Tiếp tục “$title”';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

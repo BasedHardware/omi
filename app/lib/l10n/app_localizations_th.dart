@@ -14363,9 +14363,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get episodeNotesSoon => 'บันทึกจะแสดงหลังจากพูดคุยไปสองสามนาทีแรก';
 
   @override
-  String get episodeOpenAll => 'เปิดทั้งหมด';
-
-  @override
   String get episodeWrapUpNow => 'สรุปตอนนี้';
 
   @override
@@ -14538,11 +14535,6 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'ต่อจาก “$title”';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

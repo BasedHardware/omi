@@ -14448,9 +14448,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get episodeNotesSoon => 'گفتگو کے پہلے چند منٹ بعد نوٹس ظاہر ہوں گے۔';
 
   @override
-  String get episodeOpenAll => 'سب کھولیں';
-
-  @override
   String get episodeWrapUpNow => 'ابھی ختم کریں';
 
   @override
@@ -14623,11 +14620,6 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return '“$title” جاری ہے';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

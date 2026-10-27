@@ -14496,9 +14496,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get episodeNotesSoon => 'మాటల మొదటి కొన్ని నిమిషాల తర్వాత నోట్స్ కనిపిస్తాయి.';
 
   @override
-  String get episodeOpenAll => 'అన్నీ తెరవండి';
-
-  @override
   String get episodeWrapUpNow => 'ఇప్పుడే ముగించు';
 
   @override
@@ -14672,11 +14669,6 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return '“$title” కొనసాగుతోంది';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

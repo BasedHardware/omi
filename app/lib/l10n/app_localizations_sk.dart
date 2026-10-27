@@ -14430,9 +14430,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get episodeNotesSoon => 'Poznámky sa zobrazia po prvých minútach rozhovoru.';
 
   @override
-  String get episodeOpenAll => 'Otvoriť všetko';
-
-  @override
   String get episodeWrapUpNow => 'Uzavrieť teraz';
 
   @override
@@ -14605,11 +14602,6 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Pokračovanie „$title“';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

@@ -14549,9 +14549,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get episodeNotesSoon => 'Lalabas ang mga tala pagkatapos ng unang ilang minuto ng usapan.';
 
   @override
-  String get episodeOpenAll => 'Buksan Lahat';
-
-  @override
   String get episodeWrapUpNow => 'Tapusin Ngayon';
 
   @override
@@ -14726,11 +14723,6 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Nagpapatuloy sa “$title”';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

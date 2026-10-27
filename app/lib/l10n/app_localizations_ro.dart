@@ -14497,9 +14497,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get episodeNotesSoon => 'Notițele apar după primele minute de conversație.';
 
   @override
-  String get episodeOpenAll => 'Deschide tot';
-
-  @override
   String get episodeWrapUpNow => 'Încheie acum';
 
   @override
@@ -14672,11 +14669,6 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Continuă „$title”';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

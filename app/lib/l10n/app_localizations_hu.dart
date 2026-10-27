@@ -14493,9 +14493,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get episodeNotesSoon => 'A jegyzetek a beszélgetés első perceit követően jelennek meg.';
 
   @override
-  String get episodeOpenAll => 'Összes megnyitása';
-
-  @override
   String get episodeWrapUpNow => 'Lezárás most';
 
   @override
@@ -14668,11 +14665,6 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return '„$title” folytatása';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

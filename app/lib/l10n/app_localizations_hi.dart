@@ -14419,9 +14419,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get episodeNotesSoon => 'बातचीत के पहले कुछ मिनटों के बाद नोट्स दिखेंगे।';
 
   @override
-  String get episodeOpenAll => 'सब खोलें';
-
-  @override
   String get episodeWrapUpNow => 'अभी समाप्त करें';
 
   @override
@@ -14594,11 +14591,6 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return '“$title” जारी है';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

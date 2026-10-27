@@ -14230,9 +14230,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get episodeNotesSoon => '会話が数分続くとメモが表示されます。';
 
   @override
-  String get episodeOpenAll => 'すべて開く';
-
-  @override
   String get episodeWrapUpNow => '今すぐまとめる';
 
   @override
@@ -14405,11 +14402,6 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return '「$title」の続き';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

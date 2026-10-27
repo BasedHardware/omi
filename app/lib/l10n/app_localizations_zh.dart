@@ -14211,9 +14211,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get episodeNotesSoon => '交谈几分钟后会显示笔记。';
 
   @override
-  String get episodeOpenAll => '全部打开';
-
-  @override
   String get episodeWrapUpNow => '立即结束';
 
   @override
@@ -14386,11 +14383,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return '继续“$title”';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

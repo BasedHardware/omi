@@ -94,6 +94,9 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
             provider.activeCaptureSessionId ?? widget.topConversationId ?? 'pending-live-capture';
         final transcriptScrollState = _scrollStateFor(transcriptSessionId);
         final decorated = widget.episode != null;
+        // Under the transcript on the episode page, as the last thing read; the legacy page's
+        // floating controls cover its bottom, so there it stays on top.
+        final behind = _quietBehindLine(provider);
         return Column(
           children: [
             const CaptureRecoveryStatus(),
@@ -105,6 +108,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
                 onSetup: () => routeToPage(context, const TranscriptionSettingsPage()),
               ),
             _buildUnsyncedWalIndicator(provider),
+            if (behind != null && !decorated) behind,
             Expanded(
               child: _showsLivePreview(provider)
                   ? _previewBody(provider, transcriptSessionId, transcriptScrollState,
@@ -149,6 +153,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
                               editSegment: (segmentId, speakerId) => _nameSpeaker(segmentId, speakerId, provider),
                             ),
             ),
+            if (behind != null && decorated) behind,
           ],
         );
       },
@@ -662,47 +667,49 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     return context.l10n.waitingForTranscriptOrPhotos;
   }
 
+  /// A local-preview session has no uploading pill to watch: one quiet line under the
+  /// transcript says how far behind the final transcript is. Failures and retries keep
+  /// today's actionable pill above it (its retry is the point of it). Null when the pill applies.
+  Widget? _quietBehindLine(CaptureProvider provider) {
+    if (!_showsLivePreview(provider)) return null;
+    final unsyncedWals = provider.unsyncedSessionWals;
+    final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + provider.inFlightAudioSeconds;
+    if (totalSeconds <= 5) return null;
+    final worst = worstSessionSyncState(unsyncedWals);
+    if ((worst != null && _isTerminalWalState(worst)) || worst == WalSyncDisplayState.retrying) return null;
+    final l10n = context.l10n;
+    final behind = (totalSeconds / 10).round() * 10;
+    return SafeArea(
+      top: false,
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.sm),
+        child: Row(
+          key: const Key('live_preview_behind_line'),
+          children: [
+            Icon(Icons.schedule, size: 14, color: OmiColors.textTertiary),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                behind > 0 ? l10n.livePreviewBehind(OmiDuration.compact(behind, l10n)) : l10n.livePreviewCatchingUp,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildUnsyncedWalIndicator(CaptureProvider provider) {
     final unsyncedWals = provider.unsyncedSessionWals;
     final inFlightSeconds = provider.inFlightAudioSeconds;
     final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + inFlightSeconds;
     if (totalSeconds <= 5) return const SizedBox.shrink();
 
-    // A local-preview session has no uploading pill to watch: one quiet line
-    // says how far behind the final transcript is. Failures keep today's
-    // actionable pill (its retry is the point of it).
-    if (_showsLivePreview(provider)) {
-      final worst = worstSessionSyncState(unsyncedWals);
-      final failed = worst != null && _isTerminalWalState(worst);
-      final retrying = worst == WalSyncDisplayState.retrying;
-      if (!failed && !retrying) {
-        final l10n = context.l10n;
-        final behind = (totalSeconds / 10).round() * 10;
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-            child: Row(
-              key: const Key('live_preview_behind_line'),
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.schedule, size: 14, color: OmiColors.textTertiary),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    behind > 0 ? l10n.livePreviewBehind(OmiDuration.compact(behind, l10n)) : l10n.livePreviewCatchingUp,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-    }
+    if (_quietBehindLine(provider) != null) return const SizedBox.shrink();
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     final label = minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';

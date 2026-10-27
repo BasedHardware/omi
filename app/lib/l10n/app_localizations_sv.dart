@@ -14443,9 +14443,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get episodeNotesSoon => 'Anteckningarna visas efter de första minuterna av samtalet.';
 
   @override
-  String get episodeOpenAll => 'Öppna alla';
-
-  @override
   String get episodeWrapUpNow => 'Avsluta nu';
 
   @override
@@ -14618,11 +14615,6 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Fortsätter ”$title”';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

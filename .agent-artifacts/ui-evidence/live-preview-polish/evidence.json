@@ -2,86 +2,79 @@
   "version": 1,
   "images": [
     {
-      "file": "001-mobile-ios-live-preview-streaming-dark.png",
+      "file": "001-mobile-ios-home-title-preview.png",
       "platform": "mobile-ios",
-      "description": "Transcript tab of a local-preview session: preview lines with no header, settled words bright and the volatile tail lighter",
+      "description": "Home live row (option E): dot over \"8m\" in the tile, episode title, newest preview words trimmed at the start.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "002-mobile-ios-live-preview-starting-dark.png",
+      "file": "002-mobile-ios-home-before-title.png",
       "platform": "mobile-ios",
-      "description": "Transcript tab while the on-device engine is starting: quiet spinner line",
+      "description": "Home live row before a title exists: \"Listening now\" over the start-trimmed preview line.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "003-mobile-ios-live-preview-listening-dark.png",
+      "file": "003-mobile-ios-home-no-preview.png",
       "platform": "mobile-ios",
-      "description": "Engine running with no words yet: the listening line, no header",
+      "description": "Home live row with no preview text: today's subtitle without the duration (\"Live\").",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "004-mobile-ios-live-preview-no-engine-dark.png",
+      "file": "004-mobile-ios-home-largest-type.png",
       "platform": "mobile-ios",
-      "description": "No on-device engine: the Recording safely card (mic glyph, calm copy, no settings link when the platform cannot deep-link)",
+      "description": "Home live row at the largest accessibility text size: preview takes two lines, tile scales down, nothing clips.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "005-mobile-ios-live-preview-no-engine-permission-dark.png",
+      "file": "005-mobile-ios-summary-on-device-notes.png",
       "platform": "mobile-ios",
-      "description": "No-engine state with denied speech permission: the Turn on live text link appears (app settings deep-link)",
+      "description": "Summary: one-line header, So far with on-device bullets and the On this phone tag, Live card with Open transcript and a lighter volatile tail.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "006-mobile-ios-live-preview-hybrid-dark.png",
+      "file": "006-mobile-ios-summary-notes-unavailable.png",
       "platform": "mobile-ios",
-      "description": "Hybrid transcript: final segments with speakers, the Live on this phone divider, uncovered preview lines below, and the quiet Final transcript about 20s behind line instead of the uploading pill",
+      "description": "Summary when the on-device notes engine is unavailable: the quiet line, no tag.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "007-mobile-ios-cloud-transcript-unchanged-dark.png",
+      "file": "007-mobile-ios-summary-server-notes.png",
       "platform": "mobile-ios",
-      "description": "Not admitted: today's cloud transcript with speaker labels, unchanged",
+      "description": "Summary with six server running notes: the newest four only; the rest arrive with the wrap-up.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "008-mobile-ios-live-preview-summary-notes-dark.png",
+      "file": "008-mobile-ios-summary-on-device-notes-dark.png",
       "platform": "mobile-ios",
-      "description": "Summary tab: So far drafts on-device bullets with the On this phone tag and footnote; the Live card shows preview text with an Open transcript link and no speaker label",
+      "description": "Summary with on-device notes, dark mode.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "009-mobile-ios-live-preview-summary-server-notes-dark.png",
+      "file": "009-mobile-ios-transcript-mixed.png",
       "platform": "mobile-ios",
-      "description": "Summary tab once server running notes exist: today's card, on-device drafts and the On this phone tag hidden",
+      "description": "Transcript: final lines, the Live on this phone divider, the uncovered preview tail, and the quiet behind-line at the bottom.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "010-mobile-ios-live-preview-summary-quiet-dark.png",
+      "file": "010-mobile-ios-transcript-no-engine.png",
       "platform": "mobile-ios",
-      "description": "Summary tab with no notes engine available: the quiet Notes start when the final transcript arrives. line, no aren't-updating warning",
+      "description": "Transcript with no on-device engine: the Recording safely card.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "011-mobile-ios-home-row-preview-line-dark.png",
+      "file": "011-mobile-ios-summary-largest-type.png",
       "platform": "mobile-ios",
-      "description": "Home's Listening now row unchanged in size: subtitle reads 8m 24s and the newest preview line in one ellipsized line",
-      "captured_by": "agent",
-      "source": "visual-audit"
-    },
-    {
-      "file": "012-mobile-ios-home-card-preview-line-dark.png",
-      "platform": "mobile-ios",
-      "description": "Conversations-tab capture card: the newest preview line in its last-line slot",
+      "description": "Summary at the largest accessibility text size: header and tabs clamp, cards stack their title and tag.",
       "captured_by": "agent",
       "source": "visual-audit"
     }

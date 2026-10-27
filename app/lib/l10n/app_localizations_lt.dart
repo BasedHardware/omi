@@ -14458,9 +14458,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get episodeNotesSoon => 'Užrašai atsiranda po pirmųjų pokalbio minučių.';
 
   @override
-  String get episodeOpenAll => 'Atidaryti viską';
-
-  @override
   String get episodeWrapUpNow => 'Užbaigti dabar';
 
   @override
@@ -14633,11 +14630,6 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Tęsia „$title“';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

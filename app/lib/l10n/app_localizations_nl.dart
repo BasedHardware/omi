@@ -14474,9 +14474,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get episodeNotesSoon => 'Notities verschijnen na de eerste minuten van het gesprek.';
 
   @override
-  String get episodeOpenAll => 'Alles openen';
-
-  @override
   String get episodeWrapUpNow => 'Nu afronden';
 
   @override
@@ -14649,11 +14646,6 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Vervolgt “$title”';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

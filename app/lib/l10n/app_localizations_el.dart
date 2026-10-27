@@ -14530,9 +14530,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get episodeNotesSoon => 'Οι σημειώσεις εμφανίζονται μετά τα πρώτα λεπτά συζήτησης.';
 
   @override
-  String get episodeOpenAll => 'Άνοιγμα όλων';
-
-  @override
   String get episodeWrapUpNow => 'Ολοκλήρωση τώρα';
 
   @override
@@ -14706,11 +14703,6 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Συνέχεια «$title»';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

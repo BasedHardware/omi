@@ -14430,9 +14430,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get episodeNotesSoon => 'یادداشت‌ها پس از چند دقیقهٔ اول گفت‌وگو نمایش داده می‌شوند.';
 
   @override
-  String get episodeOpenAll => 'باز کردن همه';
-
-  @override
   String get episodeWrapUpNow => 'اکنون جمع‌بندی کن';
 
   @override
@@ -14605,11 +14602,6 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'ادامه «$title»';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

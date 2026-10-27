@@ -14434,9 +14434,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get episodeNotesSoon => 'Poznámky se objeví po prvních minutách hovoru.';
 
   @override
-  String get episodeOpenAll => 'Otevřít vše';
-
-  @override
   String get episodeWrapUpNow => 'Uzavřít teď';
 
   @override
@@ -14609,11 +14606,6 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Pokračování „$title”';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

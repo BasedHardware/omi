@@ -44,12 +44,16 @@ import 'package:omi/utils/enums.dart';
 import '../helpers/sfpro_font_fixtures.dart';
 import '../support/live_preview_fakes.dart';
 
-/// Every state of the local-preview surfaces, iOS look, light and dark: the
+/// Every state of the local-preview surfaces, iOS and Android, light and dark: the
 /// transcript (preview lines, hybrid final+preview, no-engine card), the
-/// Summary tab's Live card and on-device notes, and the Home capture card's
-/// last-line slot. `--dart-define=OMI_LIVE_PREVIEW_EVIDENCE_DIR=<dir>` writes
-/// the PNGs; without it this is a layout/overflow/copy check only.
+/// Summary tab's Live card and on-device notes, the Home live row and the Home
+/// capture card's last-line slot. `--dart-define=OMI_LIVE_PREVIEW_EVIDENCE_DIR=<dir>`
+/// writes the PR's evidence set (iOS light at 390×844, plus one dark Summary);
+/// without it this is a layout/overflow/copy check only.
 const _evidence = String.fromEnvironment('OMI_LIVE_PREVIEW_EVIDENCE_DIR');
+
+/// iOS's largest accessibility text size (AX5) scales body text about 3.1×.
+const _largestTextScale = 3.1;
 
 class _Device extends ChangeNotifier implements DeviceProvider {
   static final _pendant = BtDevice(id: 'omi', name: 'Omi', type: DeviceType.omi, rssi: -40);
@@ -154,14 +158,19 @@ void main() {
 
   final t0 = DateTime.utc(2026, 10, 22, 2, 18);
 
-  Episode episodeWith({List<String> bullets = const []}) => Episode(
+  Episode episodeWith({List<String> bullets = const [], String title = 'Meeting Prep'}) => Episode(
       id: 'ep1',
       live: true,
       startedAt: t0,
       lastActivityAt: t0,
-      title: 'Meeting Prep',
+      title: title,
       bullets: bullets,
       conversationIds: const ['c1']);
+
+  EpisodeProvider episodesWith(Episode episode, {DateTime? now}) => EpisodeProvider(
+        clock: () => now ?? DateTime.utc(2026, 10, 22, 2, 30),
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: episode)),
+      )..debugSetLive(episode);
 
   Future<(LivePreviewController?, FakeLivePreviewEngine)> previewIn(_State state,
       {LivePreviewNotesEngine? notesEngine, int inFlightSeconds = 0, LivePreviewStart? noEngineStart}) async {
@@ -193,11 +202,11 @@ void main() {
           startedAt: DateTime.utc(2026, 10, 27), endedAt: DateTime.utc(2026, 10, 27, 0, 0, 4));
       engine.emit('a1', 'Then we check the battery numbers with the team before the weekend.', true,
           startedAt: DateTime.utc(2026, 10, 27, 0, 0, 4), endedAt: DateTime.utc(2026, 10, 27, 0, 0, 9));
-      engine.emit('a2', 'and if the overnight run looks clean we can', false,
-          startedAt: DateTime.utc(2026, 10, 27, 0, 0, 9), endedAt: DateTime.utc(2026, 10, 27, 0, 0, 12));
       if (state == _State.notes || state == _State.notesUnavailable) {
         engine.emit('a3', 'The beta goes out to the pilot cohort on Friday morning.', true);
       }
+      engine.emit('a2', 'and if the overnight run looks clean we can', false,
+          startedAt: DateTime.utc(2026, 10, 27, 0, 0, 9), endedAt: DateTime.utc(2026, 10, 27, 0, 0, 12));
       await pumpEventQueue();
     }
     return (preview, engine);
@@ -232,10 +241,14 @@ void main() {
 
   var android = false;
 
-  Future<void> shoot(WidgetTester tester, String file,
-      {required bool light, required Widget home, required CaptureProvider capture, EpisodeProvider? episodes}) async {
+  Future<void> shoot(WidgetTester tester, String? file,
+      {required bool light,
+      required Widget home,
+      required CaptureProvider capture,
+      EpisodeProvider? episodes,
+      double textScale = 1}) async {
     debugDefaultTargetPlatformOverride = android ? TargetPlatform.android : TargetPlatform.iOS;
-    tester.view.physicalSize = const Size(393, 852);
+    tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final previous = OmiColors.active;
@@ -265,9 +278,12 @@ void main() {
           supportedLocales: AppLocalizations.supportedLocales,
           theme: buildOmiTheme(brightness: light ? Brightness.light : Brightness.dark)
               .copyWith(platform: android ? TargetPlatform.android : TargetPlatform.iOS),
-          builder: (context, child) => DefaultTextStyle.merge(
-            style: const TextStyle(fontFamily: 'SF Pro Display'),
-            child: child!,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: DefaultTextStyle.merge(
+              style: const TextStyle(fontFamily: 'SF Pro Display'),
+              child: child!,
+            ),
           ),
           home: home,
         ),
@@ -278,7 +294,7 @@ void main() {
     expect(tester.takeException(), isNull);
     final copy = tester.widgetList<Text>(find.byType(Text)).map((text) => text.data ?? '').join('\n');
     expect(copy.contains('...'), isFalse, reason: 'one-character ellipsis only');
-    if (_evidence.isNotEmpty) {
+    if (_evidence.isNotEmpty && file != null) {
       _paintProductFont(tester.renderObject<RenderRepaintBoundary>(find.byKey(boundary)));
       await tester.pump();
       await tester.runAsync(() async {
@@ -294,9 +310,27 @@ void main() {
   }
 
   final en = lookupAppLocalizations(const Locale('en'));
-  var index = 0;
-  String name(String slug, bool light) =>
-      '${(++index).toString().padLeft(3, '0')}-mobile-${android ? 'android' : 'ios'}-$slug-${light ? 'light' : 'dark'}.png';
+  // The PR's evidence set: iOS light, plus the on-device Summary in dark. Every other
+  // platform/theme pass is a layout check only.
+  const evidence = {
+    'home-title-preview': 1,
+    'home-before-title': 2,
+    'home-no-preview': 3,
+    'home-largest-type': 4,
+    'summary-on-device-notes': 5,
+    'summary-notes-unavailable': 6,
+    'summary-server-notes': 7,
+    'summary-on-device-notes-dark': 8,
+    'transcript-mixed': 9,
+    'transcript-no-engine': 10,
+    'summary-largest-type': 11,
+  };
+  String? name(String slug, bool light) {
+    if (android) return null;
+    final number = evidence[light ? slug : '$slug-dark'];
+    if (number == null) return null;
+    return '${number.toString().padLeft(3, '0')}-mobile-ios-${light ? slug : '$slug-dark'}.png';
+  }
 
   for (final (onAndroid, light) in [(false, false), (false, true), (true, false), (true, true)]) {
     final theme = '${onAndroid ? 'android' : 'ios'}, ${light ? 'light' : 'dark'}';
@@ -307,8 +341,7 @@ void main() {
       final (preview, _) = await tester.runAsync(() => previewIn(_State.streaming)) ?? (null, null);
       final capture = captureFor(_State.streaming, preview);
       addTearDown(capture.dispose);
-      await shoot(tester, name('live-preview-streaming', light),
-          light: light, home: const LiveEpisodePage(), capture: capture);
+      await shoot(tester, null, light: light, home: const LiveEpisodePage(), capture: capture);
       final volatile = tester.widget<Text>(find.text('and if the overnight run looks clean we can'));
       final settled = tester.widget<Text>(find.textContaining('Thursday'));
       expect(volatile.style?.color, OmiColors.textSecondary);
@@ -324,8 +357,7 @@ void main() {
       final (preview, _) = await tester.runAsync(() => previewIn(_State.starting)) ?? (null, null);
       final capture = captureFor(_State.starting, preview);
       addTearDown(capture.dispose);
-      await shoot(tester, name('live-preview-starting', light),
-          light: light, home: const LiveEpisodePage(), capture: capture);
+      await shoot(tester, null, light: light, home: const LiveEpisodePage(), capture: capture);
       expect(find.text(en.livePreviewStarting), findsOneWidget);
       expect(find.byType(OmiSpinner), findsOneWidget);
     });
@@ -335,8 +367,7 @@ void main() {
       final (preview, _) = await tester.runAsync(() => previewIn(_State.listening)) ?? (null, null);
       final capture = captureFor(_State.listening, preview);
       addTearDown(capture.dispose);
-      await shoot(tester, name('live-preview-listening', light),
-          light: light, home: const LiveEpisodePage(), capture: capture);
+      await shoot(tester, null, light: light, home: const LiveEpisodePage(), capture: capture);
       expect(find.text(en.livePreviewListening), findsOneWidget);
     });
 
@@ -346,13 +377,18 @@ void main() {
       final (preview, _) = await tester.runAsync(() => previewIn(_State.noEngine)) ?? (null, null);
       final capture = captureFor(_State.noEngine, preview);
       addTearDown(capture.dispose);
-      await shoot(tester, name('live-preview-no-engine', light),
-          light: light, home: const LiveEpisodePage(), capture: capture);
+      final episodes = episodesWith(episodeWith(title: ''));
+      addTearDown(episodes.dispose);
+      await shoot(tester, name('transcript-no-engine', light),
+          light: light,
+          home: const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
+          capture: capture,
+          episodes: episodes);
       expect(find.text(en.livePreviewNoEngineTitle), findsOneWidget);
       expect(find.text(en.livePreviewNoEngineBody), findsOneWidget);
       expect(find.byKey(const Key('live_preview_turn_on_live_text')), findsNothing,
           reason: 'locale_asset_missing has no settings deep-link');
-      expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.mic_none_rounded), findsOneWidget);
     });
 
     testWidgets('no engine with denied speech permission offers Turn on live text ($theme)', (tester) async {
@@ -362,89 +398,126 @@ void main() {
           (null, null);
       final capture = captureFor(_State.noEngine, preview);
       addTearDown(capture.dispose);
-      await shoot(tester, name('live-preview-no-engine-permission', light),
-          light: light, home: const LiveEpisodePage(), capture: capture);
+      await shoot(tester, null, light: light, home: const LiveEpisodePage(), capture: capture);
       expect(find.text(en.livePreviewNoEngineTitle), findsOneWidget);
       expect(find.text(en.livePreviewTurnOnLiveText), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('live_preview_turn_on_live_text'))).height,
+          greaterThanOrEqualTo(kOmiMinTapTarget));
     });
 
-    testWidgets('hybrid: final segments, the Live-on-this-phone divider, then uncovered preview lines ($theme)',
-        (tester) async {
-      android = onAndroid;
-      final (preview, _) = await tester.runAsync(() => previewIn(_State.hybrid)) ?? (null, null);
-      final capture = captureFor(_State.hybrid, preview, inFlightSeconds: 22);
-      capture.applyInProgressConversation(ServerConversation(
-          id: 'c1',
-          createdAt: DateTime.utc(2026, 10, 27),
-          structured: Structured('', ''),
-          transcriptSegments: capture.segments.reversed.toList()));
-      expect(capture.segments.map((s) => s.start), [0, 4]);
-      addTearDown(capture.dispose);
-      await shoot(tester, name('live-preview-hybrid', light),
-          light: light, home: const LiveEpisodePage(), capture: capture);
-      // Finals with their speakers come first.
-      expect(find.textContaining('Thursday', findRichText: true), findsWidgets);
-      // The divider names where the preview continues.
-      expect(find.byKey(const Key('live_preview_divider')), findsOneWidget);
-      expect(find.text(en.livePreviewOnPhoneDivider), findsOneWidget);
-      // Lines the finals already cover do not repeat under the divider.
-      expect(find.byKey(const Key('live_preview_tail_a0')), findsNothing);
-      expect(find.byKey(const Key('live_preview_tail_a1')), findsNothing);
-      // The uncovered volatile tail does, lighter than settled text.
-      final tail = tester.widget<Text>(
-          find.descendant(of: find.byKey(const Key('live_preview_tail_a2')), matching: find.byType(Text)));
-      expect(tail.style?.color, OmiColors.textSecondary);
-      // One quiet behind-line instead of the uploading pill and chunk count.
-      expect(find.byKey(const Key('live_preview_behind_line')), findsOneWidget);
-      expect(find.text(en.livePreviewBehind(en.timeCompactSecs(20))), findsOneWidget);
-      expect(find.text(en.uploadingAudioForTranscription(en.timeCompactSecs(22))), findsNothing);
-      expect(find.text(en.captureChunksPending(2)), findsNothing);
-    });
+    for (final onEpisodePage in [false, true]) {
+      testWidgets(
+          'hybrid: final segments, the Live-on-this-phone divider, then uncovered preview lines '
+          '(${onEpisodePage ? 'episode page' : 'capture page'}, $theme)', (tester) async {
+        android = onAndroid;
+        final (preview, _) = await tester.runAsync(() => previewIn(_State.hybrid)) ?? (null, null);
+        final capture = captureFor(_State.hybrid, preview, inFlightSeconds: 22);
+        capture.applyInProgressConversation(ServerConversation(
+            id: 'c1',
+            createdAt: DateTime.utc(2026, 10, 27),
+            structured: Structured('', ''),
+            transcriptSegments: capture.segments.reversed.toList()));
+        expect(capture.segments.map((s) => s.start), [0, 4]);
+        addTearDown(capture.dispose);
+        final episodes = onEpisodePage ? episodesWith(episodeWith()) : null;
+        if (episodes != null) addTearDown(episodes.dispose);
+        await shoot(tester, onEpisodePage ? name('transcript-mixed', light) : null,
+            light: light,
+            home: const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
+            capture: capture,
+            episodes: episodes);
+        // Finals with their speakers come first.
+        expect(find.textContaining('Thursday', findRichText: true), findsWidgets);
+        // The divider names where the preview continues.
+        expect(find.byKey(const Key('live_preview_divider')), findsOneWidget);
+        expect(find.text(en.livePreviewOnPhoneDivider), findsOneWidget);
+        // Lines the finals already cover do not repeat under the divider.
+        expect(find.byKey(const Key('live_preview_tail_a0')), findsNothing);
+        expect(find.byKey(const Key('live_preview_tail_a1')), findsNothing);
+        // The uncovered volatile tail does, lighter than settled text.
+        final tail = tester.widget<Text>(
+            find.descendant(of: find.byKey(const Key('live_preview_tail_a2')), matching: find.byType(Text)));
+        expect(tail.style?.color, OmiColors.textSecondary);
+        // One quiet behind-line instead of the uploading pill and chunk count; on the episode
+        // page it is the last line under the transcript.
+        final behind = find.byKey(const Key('live_preview_behind_line'));
+        expect(behind, findsOneWidget);
+        expect(find.text(en.livePreviewBehind(en.timeCompactSecs(20))), findsOneWidget);
+        expect(find.text(en.uploadingAudioForTranscription(en.timeCompactSecs(22))), findsNothing);
+        expect(find.text(en.captureChunksPending(2)), findsNothing);
+        if (onEpisodePage) {
+          expect(tester.getTopLeft(behind).dy,
+              greaterThan(tester.getBottomLeft(find.byKey(const Key('live_preview_divider'))).dy));
+        }
+      });
+    }
 
     testWidgets('not admitted: today\'s cloud transcript, unchanged ($theme)', (tester) async {
       android = onAndroid;
       final capture = captureFor(_State.cloud, null);
       addTearDown(capture.dispose);
-      await shoot(tester, name('cloud-transcript-unchanged', light),
-          light: light, home: const LiveEpisodePage(), capture: capture);
+      await shoot(tester, null, light: light, home: const LiveEpisodePage(), capture: capture);
       expect(find.textContaining('Thursday', findRichText: true), findsWidgets);
       expect(find.byKey(const Key('live_preview_divider')), findsNothing);
     });
 
-    testWidgets('summary: So far drafts on this phone, Live card without a speaker label ($theme)', (tester) async {
-      android = onAndroid;
-      final (preview, _) = await tester.runAsync(() => previewIn(_State.notes, notesEngine: (text, language) async {
-                return ['Ship the pendant update first', 'Check battery numbers before the weekend'];
-              })) ??
-          (null, null);
-      final capture = captureFor(_State.notes, preview);
-      addTearDown(capture.dispose);
-      final episodes = EpisodeProvider(
-        clock: () => DateTime.utc(2026, 10, 22, 2, 30),
-        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: episodeWith())),
-      )..debugSetLive(episodeWith());
-      addTearDown(episodes.dispose);
-      await shoot(tester, name('live-preview-summary-notes', light),
-          light: light, home: const LiveEpisodePage(), capture: capture, episodes: episodes);
-      // On-device bullets with their provenance tag and footnote.
-      expect(find.byKey(const Key('episode_on_device_notes')), findsOneWidget);
-      expect(find.text('Ship the pendant update first'), findsOneWidget);
-      expect(find.text(en.episodeOnThisPhone), findsOneWidget);
-      expect(find.text(en.episodeOnDeviceNotesFootnote), findsOneWidget);
-      // No server notes exist, so the "aren't updating" line is gone.
-      expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
-      expect(find.text(en.episodeNotesStartWithTranscript), findsNothing);
-      // The Live card: preview text, no "You" label, and the Open transcript link.
-      expect(find.byKey(const Key('live_episode_preview_card')), findsOneWidget);
-      expect(find.text(en.liveCardTitle), findsOneWidget);
-      expect(find.text(en.episodeOpenTranscript), findsOneWidget);
-      final richTexts = tester.widgetList<Text>(
-          find.descendant(of: find.byKey(const Key('live_episode_preview_card')), matching: find.byType(Text)));
-      expect(richTexts.any((text) => (text.data ?? '').startsWith('You')), isFalse,
-          reason: 'preview text has no speaker attribution');
-    });
+    for (final largest in [false, true]) {
+      testWidgets(
+          'summary: So far drafts on this phone, Live card without a speaker label'
+          '${largest ? ', largest text' : ''} ($theme)', (tester) async {
+        android = onAndroid;
+        final (preview, _) = await tester.runAsync(() => previewIn(_State.notes, notesEngine: (text, language) async {
+                  return ['Ship the pendant update first', 'Check battery numbers before the weekend'];
+                })) ??
+            (null, null);
+        final capture = captureFor(_State.notes, preview);
+        addTearDown(capture.dispose);
+        final episodes = episodesWith(episodeWith());
+        addTearDown(episodes.dispose);
+        await shoot(tester, name(largest ? 'summary-largest-type' : 'summary-on-device-notes', light),
+            light: light,
+            home: const LiveEpisodePage(),
+            capture: capture,
+            episodes: episodes,
+            textScale: largest ? _largestTextScale : 1);
+        // On-device bullets with their provenance tag and footnote.
+        expect(find.byKey(const Key('episode_on_device_notes')), findsOneWidget);
+        expect(find.text('Ship the pendant update first'), findsOneWidget);
+        expect(find.text(en.episodeOnThisPhone), findsOneWidget);
+        expect(find.text(en.episodeOnDeviceNotesFootnote), findsOneWidget);
+        // No server notes exist, so the "aren't updating" line is gone.
+        expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
+        expect(find.text(en.episodeNotesStartWithTranscript), findsNothing);
+        // One calm header line: the length, then "· since …"; no moment count, no wrap.
+        expect(find.byKey(const Key('live_episode_status')), findsOneWidget);
+        final meta = tester.widget<Text>(find.byKey(const Key('live_episode_meta')));
+        expect(meta.data, startsWith(en.episodeLiveSince('').trim()));
+        expect(meta.maxLines, 1);
+        // The pinned header is opaque in the page's colour.
+        final header = tester.widget<ColoredBox>(find.byKey(const Key('live_episode_pinned_header')));
+        expect(header.color, OmiColors.surface0);
+        if (largest) return;
+        // The Live card: preview text, no "You" label, and the Open transcript link; the old
+        // "Live Transcript" card with speaker labels is gone.
+        expect(find.byKey(const Key('live_episode_preview_card')), findsOneWidget);
+        expect(find.text(en.liveCardTitle), findsOneWidget);
+        expect(find.text(en.episodeOpenTranscript), findsOneWidget);
+        expect(find.text(en.liveTranscript), findsNothing);
+        expect(tester.getSize(find.byKey(const Key('live_episode_open_transcript'))).height,
+            greaterThanOrEqualTo(kOmiMinTapTarget));
+        final richTexts = tester.widgetList<Text>(
+            find.descendant(of: find.byKey(const Key('live_episode_preview_card')), matching: find.byType(Text)));
+        expect(richTexts.any((text) => (text.data ?? '').startsWith('You')), isFalse,
+            reason: 'preview text has no speaker attribution');
+        // The newest words stay visible: the card trims at the start, never the end.
+        final card = tester.widget<RichText>(find
+            .descendant(of: find.byKey(const Key('live_episode_preview_card_text')), matching: find.byType(RichText))
+            .first);
+        expect(card.text.toPlainText(), endsWith('and if the overnight run looks clean we can'));
+      });
+    }
 
-    testWidgets('summary with server running notes: today\'s card, on-device drafts hidden ($theme)', (tester) async {
+    testWidgets('summary with server running notes: at most four, the newest; drafts hidden ($theme)', (tester) async {
       android = onAndroid;
       final (preview, _) = await tester.runAsync(() => previewIn(_State.notes, notesEngine: (text, language) async {
                 return ['Drafted on the phone'];
@@ -452,15 +525,24 @@ void main() {
           (null, null);
       final capture = captureFor(_State.notes, preview);
       addTearDown(capture.dispose);
-      final episodes = EpisodeProvider(
-        clock: () => DateTime.utc(2026, 10, 22, 2, 30),
-        fetchLive: () async =>
-            ApiSuccess(EpisodeRead(enabled: true, episode: episodeWith(bullets: const ['Server running note']))),
-      )..debugSetLive(episodeWith(bullets: const ['Server running note']));
+      const bullets = [
+        'Pendant update ships before the app release',
+        'Battery numbers reviewed with the hardware team',
+        'Overnight soak run decides the beta date',
+        'Pilot cohort gets the beta on Friday morning',
+        'Support macros updated for the new pairing flow',
+        'Follow up on the charging case supplier quote',
+      ];
+      final episodes = episodesWith(episodeWith(bullets: bullets));
       addTearDown(episodes.dispose);
-      await shoot(tester, name('live-preview-summary-server-notes', light),
+      await shoot(tester, name('summary-server-notes', light),
           light: light, home: const LiveEpisodePage(), capture: capture, episodes: episodes);
-      expect(find.text('Server running note'), findsOneWidget);
+      for (final bullet in bullets.take(2)) {
+        expect(find.text(bullet), findsNothing);
+      }
+      for (final bullet in bullets.skip(2)) {
+        expect(find.text(bullet), findsOneWidget);
+      }
       expect(find.byKey(const Key('episode_on_device_notes')), findsNothing);
       expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
       expect(find.text(en.episodeOnThisPhone), findsNothing);
@@ -473,53 +555,73 @@ void main() {
           (null, null);
       final capture = captureFor(_State.notesUnavailable, preview);
       addTearDown(capture.dispose);
-      final episodes = EpisodeProvider(
-        clock: () => DateTime.utc(2026, 10, 22, 2, 30),
-        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: episodeWith())),
-      )..debugSetLive(episodeWith());
+      final episodes = episodesWith(episodeWith());
       addTearDown(episodes.dispose);
-      await shoot(tester, name('live-preview-summary-quiet', light),
+      await shoot(tester, name('summary-notes-unavailable', light),
           light: light, home: const LiveEpisodePage(), capture: capture, episodes: episodes);
       expect(find.text(en.episodeNotesStartWithTranscript), findsOneWidget);
+      expect(find.text(en.episodeOnThisPhone), findsNothing, reason: 'no bullets, no provenance tag');
       expect(find.byKey(const Key('episode_on_device_notes')), findsNothing);
       expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
     });
 
-    testWidgets('home live row: duration and the newest preview line in one subtitle ($theme)', (tester) async {
-      android = onAndroid;
-      final (preview, _) = await tester.runAsync(() => previewIn(_State.streaming)) ?? (null, null);
-      final capture = captureFor(_State.streaming, preview);
-      addTearDown(capture.dispose);
-      final episodes = EpisodeProvider(
-        clock: () => DateTime.utc(2026, 10, 22, 2, 26, 24),
-        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: episodeWith())),
-      )..debugSetLive(episodeWith());
-      addTearDown(episodes.dispose);
-      await shoot(tester, name('home-row-preview-line', light),
-          light: light,
-          home: Builder(
-            builder: (context) => Scaffold(
-              backgroundColor: OmiColors.surface0,
-              body: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(OmiSpacing.md),
-                  child: ListView(children: const [LiveEpisodeRow()]),
-                ),
+    Widget homeRow() => Builder(
+          builder: (context) => Scaffold(
+            backgroundColor: OmiColors.surface0,
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: OmiSpacing.md),
+                child: ListView(children: const [LiveEpisodeRow()]),
               ),
             ),
           ),
-          capture: capture,
-          episodes: episodes);
-      expect(find.byKey(const Key('home_live_episode_row')), findsOneWidget);
-      expect(find.text('8m 24s · “and if the overnight run looks clean we can”'), findsOneWidget);
-    });
+        );
+
+    for (final (slug, title, state, textScale) in [
+      ('home-title-preview', 'Meeting Prep', _State.streaming, 1.0),
+      ('home-before-title', '', _State.streaming, 1.0),
+      ('home-no-preview', 'Meeting Prep', _State.listening, 1.0),
+      ('home-largest-type', 'Meeting Prep', _State.streaming, _largestTextScale),
+    ]) {
+      testWidgets('home live row: $slug ($theme)', (tester) async {
+        android = onAndroid;
+        final (preview, _) = await tester.runAsync(() => previewIn(state)) ?? (null, null);
+        final capture = captureFor(state, preview);
+        addTearDown(capture.dispose);
+        final episodes = episodesWith(episodeWith(title: title), now: DateTime.utc(2026, 10, 22, 2, 26, 24));
+        addTearDown(episodes.dispose);
+        await shoot(tester, name(slug, light),
+            light: light, home: homeRow(), capture: capture, episodes: episodes, textScale: textScale);
+        expect(find.byKey(const Key('home_live_episode_row')), findsOneWidget);
+        // The tile carries the same session length the page counts, in whole minutes.
+        expect(find.text('8m'), findsOneWidget);
+        expect(find.text(title.isEmpty ? en.episodeListeningNow : title), findsOneWidget);
+        if (state == _State.streaming) {
+          // Line two is the preview, trimmed at the start so the newest words stay.
+          final line = tester.widget<Text>(
+              find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
+          final words = line.textSpan!.toPlainText();
+          expect(words, endsWith('we can'));
+          expect(words.startsWith('…') || words.startsWith('Okay'), isTrue,
+              reason: 'trimmed at the start, never the end');
+        } else {
+          // No preview text: today's subtitle without the duration.
+          expect(find.byKey(const Key('home_live_episode_preview')), findsNothing);
+          expect(find.text(en.live), findsOneWidget);
+        }
+        // The row keeps its size: the tile never outgrows it.
+        if (textScale == 1) {
+          expect(tester.getSize(find.byKey(const Key('home_live_episode_row'))).height, lessThan(80));
+        }
+      });
+    }
 
     testWidgets('home capture card shows the newest preview line in its last-line slot ($theme)', (tester) async {
       android = onAndroid;
       final (preview, _) = await tester.runAsync(() => previewIn(_State.streaming)) ?? (null, null);
       final capture = captureFor(_State.streaming, preview);
       addTearDown(capture.dispose);
-      await shoot(tester, name('home-card-preview-line', light),
+      await shoot(tester, null,
           light: light,
           // Read the palette at build time, after shoot() selects light or dark.
           home: Builder(

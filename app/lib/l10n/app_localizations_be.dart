@@ -14469,9 +14469,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get episodeNotesSoon => 'Нататкі з’явяцца пасля першых хвілін размовы.';
 
   @override
-  String get episodeOpenAll => 'Адкрыць усё';
-
-  @override
   String get episodeWrapUpNow => 'Завяршыць зараз';
 
   @override
@@ -14644,11 +14641,6 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Працяг «$title»';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

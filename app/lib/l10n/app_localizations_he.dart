@@ -14332,9 +14332,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get episodeNotesSoon => 'ההערות יופיעו אחרי הדקות הראשונות של השיחה.';
 
   @override
-  String get episodeOpenAll => 'פתח הכול';
-
-  @override
   String get episodeWrapUpNow => 'סכם עכשיו';
 
   @override
@@ -14507,11 +14504,6 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'ממשיך את “$title”';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

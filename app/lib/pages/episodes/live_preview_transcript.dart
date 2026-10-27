@@ -148,38 +148,40 @@ class _NoEngine extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final canOpenSpeechSettings = reason == LivePreviewReason.speechPermissionDenied;
-    return Center(
+    // A calm card at the top of the tab, where the transcript will start: not an error, not
+    // a setup prompt.
+    return Align(
       key: const Key('live_preview_no_engine'),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
-              child: Icon(Icons.mic_rounded, size: 28, color: OmiColors.textSecondary),
-            ),
-            const SizedBox(height: OmiSpacing.md),
-            Text(l10n.livePreviewNoEngineTitle, textAlign: TextAlign.center, style: OmiType.headline),
-            const SizedBox(height: OmiSpacing.xs),
-            Text(
-              l10n.livePreviewNoEngineBody,
-              textAlign: TextAlign.center,
-              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-            ),
-            if (canOpenSpeechSettings) ...[
+      alignment: Alignment.topCenter,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.md),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xl, OmiSpacing.lg, OmiSpacing.lg),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.mic_none_rounded, size: 32, color: OmiColors.textTertiary),
               const SizedBox(height: OmiSpacing.sm),
-              OmiButton.tertiary(
-                key: const Key('live_preview_turn_on_live_text'),
-                label: l10n.livePreviewTurnOnLiveText,
-                size: OmiButtonSize.compact,
-                onPressed: () => openAppSettings(),
+              Text(l10n.livePreviewNoEngineTitle, textAlign: TextAlign.center, style: OmiType.headline),
+              const SizedBox(height: OmiSpacing.xs),
+              Text(
+                l10n.livePreviewNoEngineBody,
+                textAlign: TextAlign.center,
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.45),
               ),
+              if (canOpenSpeechSettings) ...[
+                const SizedBox(height: OmiSpacing.xxs),
+                OmiButton.tertiary(
+                  key: const Key('live_preview_turn_on_live_text'),
+                  label: l10n.livePreviewTurnOnLiveText,
+                  size: OmiButtonSize.compact,
+                  onPressed: () => openAppSettings(),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

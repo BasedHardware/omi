@@ -124,11 +124,13 @@ creation). Lines clear on capture stop/account change, and after a silence as
 long as the conversation timeout; the conversation list's normal refresh shows
 the record. Home's listening row reads the running session duration (the same
 `LiveStartAnchor` start the live page counts from — local capture start is authoritative,
-with the server episode start used only until a local capture start is known) and, for an admitted preview, the
-newest preview line in its subtitle. The live page's duration line adds
+with the server episode start used only until a local capture start is known) in its tile, as whole
+minutes under the live dot, and, for an admitted preview, the newest preview words on line two,
+trimmed at the start so the latest stay visible. The live page's one-line header adds
 "· since <time>" and a small Continues pill for the previous episode. The
-Summary tab shows the on-device notes (above) and a "Live" card of the newest
-preview text (no speaker label) with an Open transcript link. The Transcript
+Summary tab shows at most four notes (on-device, above, or the newest server notes) and a
+"Live" card of the newest preview text (no speaker label, trimmed at the start) with an Open
+transcript link. The Transcript
 tab shows final segments first, then a "Live on this phone" divider, then the
 preview lines the finals do not already cover (union of final audio-time intervals; timed words allow partial hand-off; the
 volatile tail reads lighter), with one quiet "Final transcript about <N>s

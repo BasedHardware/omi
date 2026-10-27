@@ -14478,9 +14478,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get episodeNotesSoon => 'Notatki pojawią się po pierwszych minutach rozmowy.';
 
   @override
-  String get episodeOpenAll => 'Otwórz wszystko';
-
-  @override
   String get episodeWrapUpNow => 'Zakończ teraz';
 
   @override
@@ -14653,11 +14650,6 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Kontynuacja „$title”';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

@@ -14439,9 +14439,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get episodeNotesSoon => 'Muistiinpanot näkyvät ensimmäisten puheminuuttien jälkeen.';
 
   @override
-  String get episodeOpenAll => 'Avaa kaikki';
-
-  @override
   String get episodeWrapUpNow => 'Päätä nyt';
 
   @override
@@ -14614,11 +14611,6 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Jatkoa: “$title”';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

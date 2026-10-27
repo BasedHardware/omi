@@ -14428,9 +14428,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get episodeNotesSoon => 'Märkmed ilmuvad pärast esimesi vestlusminuteid.';
 
   @override
-  String get episodeOpenAll => 'Ava kõik';
-
-  @override
   String get episodeWrapUpNow => 'Lõpeta kohe';
 
   @override
@@ -14603,11 +14600,6 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return 'Jätkab “$title”';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override

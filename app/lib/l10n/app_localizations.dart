@@ -25551,12 +25551,6 @@ abstract class AppLocalizations {
   /// **'Running notes appear after the first few minutes of talk.'**
   String get episodeNotesSoon;
 
-  /// Opens the full live transcript from its preview on a live episode.
-  ///
-  /// In en, this message translates to:
-  /// **'Open All'**
-  String get episodeOpenAll;
-
   /// Button that ends a live episode now and makes its full notes.
   ///
   /// In en, this message translates to:
@@ -25838,12 +25832,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continues “{title}”'**
   String episodeContinues(Object title);
-
-  /// Home live row subtitle for a local-preview session: running length, then the newest preview line.
-  ///
-  /// In en, this message translates to:
-  /// **'{duration} · “{line}”'**
-  String episodeLivePreviewLine(Object duration, Object line);
 
   /// The wall-clock start of the live session, after its running length.
   ///

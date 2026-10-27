@@ -14236,9 +14236,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get episodeNotesSoon => '대화가 몇 분 지나면 노트가 나타납니다.';
 
   @override
-  String get episodeOpenAll => '모두 열기';
-
-  @override
   String get episodeWrapUpNow => '지금 마무리';
 
   @override
@@ -14411,11 +14408,6 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String episodeContinues(Object title) {
     return '“$title” 이어서';
-  }
-
-  @override
-  String episodeLivePreviewLine(Object duration, Object line) {
-    return '$duration · “$line”';
   }
 
   @override
