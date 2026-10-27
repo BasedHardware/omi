@@ -1954,6 +1954,45 @@ class AnalyticsManager {
         ),
       );
 
+  /// The last cancel step displayed the stay offer.
+  void subscriptionRetentionOfferShown({String? reason, required int percentOff}) => const TypedEvents().emit(
+        SubscriptionRetentionOfferShown(
+          reason: _closedEnum(
+            SubscriptionRetentionOfferShownReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionRetentionOfferShownReason.unknown,
+            (value) => value.wireName,
+          ),
+          percentOff: percentOff,
+        ),
+      );
+
+  /// The backend applied the stay offer (a tap that failed is not counted).
+  void subscriptionRetentionOfferAccepted({String? reason, required int percentOff}) => const TypedEvents().emit(
+        SubscriptionRetentionOfferAccepted(
+          reason: _closedEnum(
+            SubscriptionRetentionOfferAcceptedReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionRetentionOfferAcceptedReason.unknown,
+            (value) => value.wireName,
+          ),
+          percentOff: percentOff,
+        ),
+      );
+
+  /// A cancellation chosen with the stay offer on screen went through.
+  void subscriptionRetentionOfferDeclined({String? reason, required int percentOff}) => const TypedEvents().emit(
+        SubscriptionRetentionOfferDeclined(
+          reason: _closedEnum(
+            SubscriptionRetentionOfferDeclinedReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionRetentionOfferDeclinedReason.unknown,
+            (value) => value.wireName,
+          ),
+          percentOff: percentOff,
+        ),
+      );
+
   void connectFriendClicked() => const TypedEvents().emit(const ConnectFriendClicked());
 
   void disconnectFriendClicked() => const TypedEvents().emit(const DisconnectFriendClicked());

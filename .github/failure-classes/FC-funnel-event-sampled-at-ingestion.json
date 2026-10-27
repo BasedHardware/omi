@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-funnel-event-sampled-at-ingestion",
+  "violated_contract": "An event a product decision is read from must reach PostHog at 100%. PostHog's ingestion transformations keep only names on the keep-list or matching its keep substrings (web/admin/docs/posthog-events.md, \"Ingestion sampling\"); every other name is sampled at 2% by distinct_id with no error anywhere. The cancel flow's stay offer emitted raw \"Retention Offer Shown\" and \"Retention Offer Accepted\": the offer rendered for eligible subscribers, yet PostHog held 0 rows, so the feature read as never shown and its save rate could not be measured.",
+  "canonical_prevention": "Emit decision events through the typed registry (contracts/analytics/events.json) with a consumer, under a wire name a keep rule passes, for example the \"subscri\" substring for subscription events, or add the name to the keep-list before any count is read from it. The behavioral test drives the real cancel flow through the API client and asserts the offer events it records are ones the keep rule passes. It does not check other features' events, the live PostHog transformation, or readers that forget to reweight sampled events.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/cancel_subscription_flow_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/utils/analytics/",
+    "contracts/analytics/"
+  ],
+  "status": "open"
+}

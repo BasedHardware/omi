@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-cancel-offer-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Last cancel step for an eligible monthly subscriber ($29.99, offline Stripe at 0.8 s). Left: main 0.55 s after the step opens, no offer and Keep Subscription. Middle: main once the offer lands, list shifted and the button swapped. Right: this change 0.55 s after the step opens, offer already there.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-cancel-offer-before-after-dark.png",
+      "platform": "mobile-ios",
+      "description": "Same three moments in dark mode: main on arrival, main after the offer lands, this change on arrival.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-cancel-offer-outcomes.png",
+      "platform": "mobile-ios",
+      "description": "This change: the outcome toast after Cancel Subscription (plan set to cancel at period end) and after Stay for 50% off (discount applied, plan kept), against the local backend with Stripe stubbed for a fake subscription.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

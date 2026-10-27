@@ -2694,6 +2694,78 @@ final class SubscriptionCancelAbandoned extends RegisteredEvent {
   Map<String, Object> get properties => {"step": step, "reason": reason.wireName};
 }
 
+enum SubscriptionRetentionOfferShownReason {
+  tooExpensive("too_expensive"),
+  notUsingEnough("not_using_enough"),
+  missingFeatures("missing_features"),
+  audioQuality("audio_quality"),
+  batteryDrain("battery_drain"),
+  foundAlternative("found_alternative"),
+  other("other"),
+  none("none"),
+  unknown("unknown");
+  const SubscriptionRetentionOfferShownReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionRetentionOfferShown extends RegisteredEvent {
+  const SubscriptionRetentionOfferShown({required this.reason, required this.percentOff});
+  final SubscriptionRetentionOfferShownReason reason;
+  final int percentOff;
+  @override
+  String get wireName => "Subscription Retention Offer Shown";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "percent_off": percentOff};
+}
+
+enum SubscriptionRetentionOfferAcceptedReason {
+  tooExpensive("too_expensive"),
+  notUsingEnough("not_using_enough"),
+  missingFeatures("missing_features"),
+  audioQuality("audio_quality"),
+  batteryDrain("battery_drain"),
+  foundAlternative("found_alternative"),
+  other("other"),
+  none("none"),
+  unknown("unknown");
+  const SubscriptionRetentionOfferAcceptedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionRetentionOfferAccepted extends RegisteredEvent {
+  const SubscriptionRetentionOfferAccepted({required this.reason, required this.percentOff});
+  final SubscriptionRetentionOfferAcceptedReason reason;
+  final int percentOff;
+  @override
+  String get wireName => "Subscription Retention Offer Accepted";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "percent_off": percentOff};
+}
+
+enum SubscriptionRetentionOfferDeclinedReason {
+  tooExpensive("too_expensive"),
+  notUsingEnough("not_using_enough"),
+  missingFeatures("missing_features"),
+  audioQuality("audio_quality"),
+  batteryDrain("battery_drain"),
+  foundAlternative("found_alternative"),
+  other("other"),
+  none("none"),
+  unknown("unknown");
+  const SubscriptionRetentionOfferDeclinedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionRetentionOfferDeclined extends RegisteredEvent {
+  const SubscriptionRetentionOfferDeclined({required this.reason, required this.percentOff});
+  final SubscriptionRetentionOfferDeclinedReason reason;
+  final int percentOff;
+  @override
+  String get wireName => "Subscription Retention Offer Declined";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "percent_off": percentOff};
+}
+
 enum GuidedIntroPayoffShownAnswerSource {
   chat("chat"),
   fallback("fallback");

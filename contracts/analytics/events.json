@@ -4012,6 +4012,105 @@
       "correlation": null
     },
     {
+      "id": "subscriptionRetentionOfferShown",
+      "wire_name": "Subscription Retention Offer Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "too_expensive",
+            "not_using_enough",
+            "missing_features",
+            "audio_quality",
+            "battery_drain",
+            "found_alternative",
+            "other",
+            "none",
+            "unknown"
+          ]
+        },
+        "percentOff": {
+          "type": "int",
+          "wire_name": "percent_off"
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionRetentionOfferAccepted",
+      "wire_name": "Subscription Retention Offer Accepted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "too_expensive",
+            "not_using_enough",
+            "missing_features",
+            "audio_quality",
+            "battery_drain",
+            "found_alternative",
+            "other",
+            "none",
+            "unknown"
+          ]
+        },
+        "percentOff": {
+          "type": "int",
+          "wire_name": "percent_off"
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionRetentionOfferDeclined",
+      "wire_name": "Subscription Retention Offer Declined",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "too_expensive",
+            "not_using_enough",
+            "missing_features",
+            "audio_quality",
+            "battery_drain",
+            "found_alternative",
+            "other",
+            "none",
+            "unknown"
+          ]
+        },
+        "percentOff": {
+          "type": "int",
+          "wire_name": "percent_off"
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
       "id": "guidedIntroPayoffShown",
       "wire_name": "Guided Intro Payoff Shown",
       "status": "active",
