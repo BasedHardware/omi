@@ -1439,15 +1439,10 @@ OMI_SUBSCRIPTION_EVENTS = Counter(
 
 OMI_NEW_BUYER_CHECKOUT_REJECTED = Counter(
     'omi_new_buyer_checkout_rejected_total',
-    'Single-plan guard outcomes on checkout-session for a buyer with no '
-    'current paid subscription posting a price outside the Omi Pro '
-    "(unlimited_v2) catalog, by reason and the target price's plan. Reasons: "
-    "`non_omi_pro_price` counts rejections on explicitly non-desktop platforms "
-    '(mobile/web); `unknown_platform_allowed` counts legacy prices ALLOWED '
-    'because the platform header is missing/unknown (pre-ruling behaviour '
-    'retained for those callers — an allowance count, not a rejection; do not '
-    'sum reasons blindly). The closed label surfaces and zero-initialization '
-    'live next to the recorder in utils.subscription.',
+    'Checkout-session rejections for a retired-plan price (Omi Pro, '
+    "unlimited_v2, is the only plan sold), by reason and the target price's "
+    'plan. Reason `non_omi_pro_price`. The closed label surfaces and '
+    'zero-initialization live next to the recorder in utils.subscription.',
     ['reason', 'plan'],
 )
 

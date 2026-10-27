@@ -16,7 +16,7 @@ REFERRAL_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 REFERRAL_TRIAL_DAYS = 30
 REFERRAL_SIGNUP_URL = 'https://app.omi.me/login'
 REFERRAL_NEW_USER_WINDOW_SECONDS = 15 * 60
-REFERRAL_PROGRAM = 'desktop_operator_month_v1'
+REFERRAL_PROGRAM = 'omi_pro_month_v1'
 
 _CODE_PREFIX = 'ref1'
 _UID_PATTERN = re.compile(r'^[A-Za-z0-9:_-]{1,128}$')
@@ -142,7 +142,7 @@ def referral_claim_patch(
     ends_epoch = int((started_at + timedelta(days=REFERRAL_TRIAL_DAYS)).timestamp())
     return {
         'subscription': {
-            'plan': PlanType.operator.value,
+            'plan': PlanType.unlimited_v2.value,
             'status': 'active',
             'current_period_start': started_epoch,
             'current_period_end': ends_epoch,

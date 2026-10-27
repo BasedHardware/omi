@@ -512,9 +512,9 @@ def test_flag_off_cold_import_never_resolves_database(monkeypatch):
 @pytest.mark.parametrize(
     'plan,key,upgrade',
     [
-        ('basic', None, 'plus'),
-        ('plus', 'ladder_v1_plus_month', 'operator'),
-        ('operator', 'ladder_v1_pro_month', 'architect'),
+        ('basic', None, 'unlimited_v2'),
+        ('plus', 'ladder_v1_plus_month', 'unlimited_v2'),
+        ('operator', 'ladder_v1_pro_month', 'unlimited_v2'),
         ('architect', 'ladder_v1_architect_month', None),
     ],
 )
@@ -574,7 +574,8 @@ def test_chat_dark_path_and_legacy_do_not_read_ledger(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    'plan,upgrade', [('basic', 'plus'), ('plus', 'operator'), ('operator', 'architect'), ('architect', None)]
+    'plan,upgrade',
+    [('basic', 'unlimited_v2'), ('plus', 'unlimited_v2'), ('operator', 'unlimited_v2'), ('architect', None)],
 )
 def test_chat_pause_payload_is_only_flagged_exhausted_ladder(monkeypatch, cap_presentation, plan, upgrade):
     sheet_for, ladder_catalog = cap_presentation
