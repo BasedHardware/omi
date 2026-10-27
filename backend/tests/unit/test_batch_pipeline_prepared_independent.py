@@ -424,6 +424,11 @@ def test_prepared_budget_enforces_the_granted_cap():
     assert estimated == pytest.approx(241.04 / 3600 * 0.10)
     with pytest.raises(module.held.Refused):
         module.prepared_budget([181.02] * 18, 0.04)
+    # An infinite "cap" is not a cap; NaN never satisfies the estimate either.
+    with pytest.raises(module.held.Refused):
+        module.prepared_budget([75.0], float('inf'))
+    with pytest.raises(module.held.Refused):
+        module.prepared_budget([75.0], float('nan'))
 
 
 def test_paid_digest_binds_prepared_scope_and_keeps_legacy_digests_stable():

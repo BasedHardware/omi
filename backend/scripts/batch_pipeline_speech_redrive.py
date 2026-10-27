@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import sys
@@ -170,7 +171,7 @@ def prepared_budget(durations, usd_cap):
     """Refuse a sealed plan whose closed cost estimate exceeds the granted cap."""
     total = sum(durations)
     estimated = total / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
-    require(estimated <= usd_cap, 'spend_cap_exceeded')
+    require(math.isfinite(usd_cap) and estimated <= usd_cap, 'spend_cap_exceeded')
     return total, estimated
 
 
@@ -319,8 +320,12 @@ def main():
         require(args.paid_epoch == 1, 'provider_epoch_mismatch')
         require(bool(args.unit_ids_file), 'exact_prepared_units_required')
         require(not args.silent, 'silent_mode_unsupported')
-        require(args.max_seconds is not None and args.max_seconds > MAX_AUDIO_SECONDS, 'scoped_bound_required')
-        require(args.usd_cap is not None and args.usd_cap > 0, 'usd_cap_required')
+        # Infinite bounds are not bounds: only finite values may scope the plan.
+        require(
+            args.max_seconds is not None and math.isfinite(args.max_seconds) and args.max_seconds > MAX_AUDIO_SECONDS,
+            'scoped_bound_required',
+        )
+        require(args.usd_cap is not None and math.isfinite(args.usd_cap) and args.usd_cap > 0, 'usd_cap_required')
     else:
         require(
             args.paid_epoch == (REPAIR_EPOCH if repair else 3 if args.independent_language else 2),
