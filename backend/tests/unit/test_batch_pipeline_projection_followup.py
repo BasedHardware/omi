@@ -452,3 +452,26 @@ async def test_slow_followup_keeps_unlaunched_page_before_advancing(followup, mo
         await asyncio.gather(*list(f.runner.tasks.values()))
         await asyncio.sleep(0)
     assert launched == ['head', 'later', 'next-page']
+
+
+@pytest.mark.asyncio
+async def test_split_rollover_followup_stores_playback_for_every_part(followup):
+    from dataclasses import replace
+
+    f = followup
+    binding = replace(f.binding, native_record=False, record_origin=True, private_cloud_sync_enabled=True)
+    receipt = {
+        **f.receipts['head'],
+        'audio_required': True,
+        'size_rollover_outputs': [{'conversation_id': cid, 'created': True} for cid in ['head', 'extra']],
+    }
+    calls = []
+    f.projector.playback = lambda _, cid: calls.append(('playback', cid))
+    f.projector.store.mark_enrichment.side_effect = lambda *args, **kwargs: calls.append(('enrich', args[3]))
+    await f.runner.finish_part(
+        WorkItem(**{k: v for k, v in f.jobs['head'].items() if k in WorkItem.__dataclass_fields__}),
+        binding,
+        receipt,
+        None,
+    )
+    assert calls == [('playback', 'head'), ('playback', 'extra'), ('enrich', 'head')]

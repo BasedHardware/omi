@@ -49,6 +49,8 @@ class AssignmentIndex:
             rows = [row for row in rows if row['id'] not in replaced]
             if day in occupied:
                 rows.append(entry)
+            self.buckets[day] = rows
             self.transaction.set(self.collection.document(day), {'entries': sorted(rows, key=lambda row: row['id'])})
         recent = [row for row in self.recent if row['id'] not in replaced] + [entry]
+        self.recent = recent[-128:]
         self.transaction.set(self.recent_ref, {'entries': recent[-128:]})

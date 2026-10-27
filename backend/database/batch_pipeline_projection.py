@@ -260,36 +260,48 @@ class ProjectionStore:
         if not reprocess.owns_runtime():
             raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
         policy = policy or self.policy(segment_id)
-        document_id = reprocess.key(binding.owner_id, canonical)
         outbox = FirestoreEnrichmentOutbox(self.client)
 
         def commit(transaction):
             session = self.session(segment_id, binding, now, part_index=part_index, policy=policy)
             session.prepare(transaction, replay=False)
-            session.guard(transaction, [canonical])
             receipt = dict(session.receipt())
+            output_ids = [r['conversation_id'] for r in receipt.get('size_rollover_outputs', [])] or [canonical]
+            session.guard(transaction, output_ids)
             if receipt.get('state') == 'ready':
                 return None
             backfill = session.job.get('priority') != 0
             # The enrichment obligation and its exactly-once projection
             # receipt commit together, fenced against account deletion.
+            completed = receipt.get('size_rollover_enriched', [])
+            output_id = next(cid for cid in output_ids if cid not in completed)
             result = outbox.enqueue(
-                document_id,
+                reprocess.key(binding.owner_id, output_id),
                 binding.owner_id,
-                {'conversation_id': canonical, 'language': language},
+                {'conversation_id': output_id, 'language': language},
                 now + settle_seconds(),
                 tx=_ClientTransaction(self.client, transaction),
                 now=now,
                 new_dispatch=self._backfill_dispatch if backfill else None,
-                snapshot_summary=True,  # E1: the first-summary policy is snapshotted on the obligation
+                snapshot_summary=True,
             )
-            receipt.update(state='ready', conversation_id=canonical)
+            completed = [*completed, output_id]
+            finished = len(completed) == len(output_ids)
+            if len(output_ids) > 1:
+                receipt['size_rollover_enriched'] = completed
+            receipt.update(state='ready' if finished else 'persisted', conversation_id=canonical)
             session.write_receipt(transaction, receipt)
-            return result
+            return result, finished
 
-        result = self.run(firestore.transactional(commit), policy=policy)
-        if result is not None and result.wake_token:
-            outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
+        while True:
+            committed = self.run(firestore.transactional(commit), policy=policy)
+            if committed is None:
+                break
+            result, finished = committed
+            if result.wake_token:
+                outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
+            if finished:
+                break
         self._mirror(binding)  # after the wake: the first-summary dispatch path never waits on the shadow
 
     @staticmethod
@@ -571,7 +583,8 @@ class ProjectionStore:
         """Earlier receipt IDs can have become bridge donors. Follow the same
         server redirects, retaining only visible canonical IDs."""
         mapped = []
-        for receipt in receipts:
+        outputs = [output for receipt in receipts for output in (receipt.get('size_rollover_outputs') or [receipt])]
+        for receipt in outputs:
             cid = receipt.get('conversation_id')
             original_id = cid
             seen = set()

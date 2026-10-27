@@ -41,7 +41,10 @@ direction and stores transcript offsets relative to the earliest capture.
 Chunks within an upload assign chronologically; a later-arriving earlier chunk
 can still join the same conversation across uploads. Device/source boundaries,
 user-managed records, explicit live targets and conversation size limits remain
-separate constraints on automatic merging.
+separate constraints on automatic merging. When a conversation cannot accept
+more speech within its document budget, incoming speech continues in a separate
+conversation. Large inputs split at transcript-segment boundaries in order,
+without truncation. Each resulting conversation can have its own summary.
 
 ## On-device summaries in desktop reads
 

@@ -184,7 +184,9 @@ BODY_DIGEST = {
     # re-encryption on protection upgrade adds no query or document read.
     # Donor dedupe uses the decoded transaction snapshot; its cohort gate can
     # refresh a document read, while post-commit bridge logging adds no query.
-    'database.smart_merge.absorb_conversation': 'd2f4c29d3d2b15062fe20bc40cf90f038fcd4ce14ab620249d293da1d7b22f1d',
+    # Encoded-size preflight and the size backstop add no serving query; the
+    # discarded-barrier scan is still covered by the same two driven callees.
+    'database.smart_merge.absorb_conversation': 'fdf7e55e3f9795791e5abcf02752dcbe2c9d04d978ae22921cf5d35434fc6b23',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
     # Open-loop store: whole-subcollection stream by document id, filtered in Python.

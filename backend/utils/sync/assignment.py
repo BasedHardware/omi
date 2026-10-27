@@ -6,6 +6,8 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 """
 
 from copy import deepcopy
+from dataclasses import dataclass
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 from uuid import NAMESPACE_URL, uuid5
@@ -16,8 +18,20 @@ from config.sync_safety_wal import sync_safety_wal_enabled
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, STRUCTURAL_REASONS
-from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
+from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES
+from utils.conversations.size_limit import (
+    CONVERSATION_ABSORPTION_BYTE_CAP,
+    projected_document_bytes,
+    projected_size_bucket,
+)
 from utils.observability.fallback import record_fallback
+from utils.sync.size_telemetry import (
+    finish_size_attempt,
+    log_size_rollover,
+    remember_size_payload,
+    size_backstop_scope,
+    size_fields,
+)
 from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
@@ -155,6 +169,13 @@ def _smart_merge_lineage(row: dict | None) -> bool:
     return bool(row and (row.get('smart_merge') or {}).get('role') in ('donor', 'survivor'))
 
 
+@dataclass
+class _SizeRollover:
+    trigger: str | None = None
+    payload: dict | None = None
+    cid: str | None = None
+
+
 class _Plan(NamedTuple):
     """One complete, unwritten assignment: what the transaction would commit."""
 
@@ -165,6 +186,8 @@ class _Plan(NamedTuple):
     survivors: list[dict]
     # Indices into incoming['transcript_segments'] that this plan found new.
     kept: tuple[int, ...]
+    donor_updates: dict[str, dict]
+    absorption_bytes: int
     payload: dict
     ancestor_updates: dict[str, dict]
     estimated_bytes: int
@@ -208,6 +231,8 @@ def assign_in_transaction(
     write is estimated above ``SYNC_CONVERSATION_BYTE_BUDGET`` are left
     untouched: the chunk's new speech goes to another conversation instead.
     """
+    # The SDK may retry this body after contention; only its winning plan may log success.
+    finish_size_attempt(logger, committed=False)
     if absorbed is not None:
         absorbed.clear()
     incoming = deepcopy(incoming)
@@ -282,14 +307,33 @@ def assign_in_transaction(
         # timestamp anchor here becomes a twin when listen later persists. The
         # already-read target document fences concurrent create on replay.
         raise SyncAssignmentConflict('batch live target not persisted', subtype=Reason.LIVE_TARGET_NOT_PERSISTED)
+    replacement = None
     if record_span is not None:
         if not target or not target_id:
             raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
         result, survivors = replace_record(decode(target), incoming, record_span)
         invalidate(result)
         encoded = encode(result)
-        transaction.update(collection.document(target_id), encoded)
-        return result, False, survivors
+        estimated = _stored_document_bytes(collection.document(target_id), encoded, target, invalidate)
+        remember_size_payload(target_id, result)
+        if target_id not in full_ids and estimated <= SYNC_CONVERSATION_BYTE_BUDGET:
+            transaction.update(collection.document(target_id), encoded)
+            result['_sync_projected_size_bucket'] = projected_size_bucket(estimated)
+            return result, False, survivors
+        replacement = _Plan(
+            target_id,
+            {target_id: target},
+            result,
+            False,
+            survivors,
+            tuple(range(len(incoming['transcript_segments']))),
+            {},
+            estimated,
+            encoded,
+            {},
+            estimated,
+            None,
+        )
     index = AssignmentIndex(transaction, user_ref)
     redirected = False
     if flatten:
@@ -380,7 +424,13 @@ def assign_in_transaction(
     live_stats: Optional[dict] = None
     privacy_excluded: frozenset[str] = frozenset()
 
-    def plan(excluded: frozenset[str], segment_indices: tuple[int, ...], *, isolated_id: str | None = None) -> _Plan:
+    def plan(
+        excluded: frozenset[str],
+        segment_indices: tuple[int, ...],
+        *,
+        isolated_id: str | None = None,
+        speech_interval: bool = False,
+    ) -> _Plan:
         """Choose, merge and encode without writing; ``excluded`` rows stay untouched.
 
         An excluded conversation is never this chunk's target, donor or bridge,
@@ -400,6 +450,11 @@ def assign_in_transaction(
         )
         matched = {}
         extent = deepcopy(incoming)
+        if speech_interval and segment_indices:
+            # Fresh size rows own only this part's speech interval.
+            selected = [incoming['transcript_segments'][i] for i in segment_indices]
+            extent['started_at'] = incoming['started_at'] + timedelta(seconds=min(s['start'] for s in selected))
+            extent['finished_at'] = incoming['started_at'] + timedelta(seconds=max(s['end'] for s in selected))
         if plan_target_id and plan_target:
             matched[plan_target_id] = plan_target
             extent['started_at'] = min(extent['started_at'], plan_target['started_at'])
@@ -734,6 +789,15 @@ def assign_in_transaction(
         index.read(extent)
         payload = encode(result)
         payload.pop('photos', None)
+        donor_updates = {cid: _donor_redirect_patch(raw, canonical) for cid, raw in matched.items() if cid != canonical}
+        estimated_bytes = _stored_document_bytes(collection.document(canonical), payload, current, invalidate)
+        absorption_bytes = max(
+            [estimated_bytes]
+            + [
+                projected_document_bytes(collection.document(cid), patch, load(cid))
+                for cid, patch in {**donor_updates, **ancestor_updates}.items()
+            ]
+        )
         return _Plan(
             canonical,
             matched,
@@ -741,6 +805,8 @@ def assign_in_transaction(
             created,
             survivors,
             kept,
+            donor_updates,
+            absorption_bytes,
             payload,
             ancestor_updates,
             _stored_document_bytes(collection.document(canonical), payload, current, invalidate),
@@ -768,7 +834,7 @@ def assign_in_transaction(
         return result
 
     try:
-        chosen = plan(excluded, segment_indices)
+        chosen = replacement or plan(excluded, segment_indices)
     except BatchPrivacyBlocked as error:
         if error.reason in STRUCTURAL_REASONS:
             # An unrelated donor graph/budget must not withhold this live
@@ -828,6 +894,11 @@ def assign_in_transaction(
             no_op['_sync_lineage_stamp_gap_refused'] = True
             if no_op['id'] == target_id and live_stats is not None and live_stats['sync_retry']:
                 no_op['_sync_lineage_completion_pending'] = True
+            no_op['_sync_projected_size_bucket'] = projected_size_bucket(
+                projected_document_bytes(
+                    collection.document(no_op['id']), {}, own_anchor if own_anchor is not None else target
+                )
+            )
             return no_op, False, []
         if discover_on_stamp_gap:
             # No writes have happened. The adapter discovers outside this
@@ -843,7 +914,8 @@ def assign_in_transaction(
         # for contention and gate-3 classification, without adopting a live row.
         for cid in live_candidate_ids:
             load(cid)
-        chosen = plan(excluded, chosen.kept)
+        segment_indices = chosen.kept
+        chosen = plan(excluded, segment_indices)
         stamp_gap_refused = True
     if (
         live_stats is not None
@@ -872,40 +944,150 @@ def assign_in_transaction(
                 stamp_fallback_live, target_id, chosen.matched.get(chosen.canonical), no_op
             ),
         }
+        no_op['_sync_projected_size_bucket'] = projected_size_bucket(
+            projected_document_bytes(collection.document(chosen.canonical), {}, chosen.matched[chosen.canonical])
+        )
         return no_op, False, []
-    trigger = None
+
+    def available(candidate: _Plan, denied: frozenset[str]) -> bool:
+        # A plan that lost its last bridge can fall back to incoming['id'].
+        # That is not a create when the ID already owns durable speech.
+        return candidate.canonical not in denied and not (
+            candidate.created and (read.get(candidate.canonical) is not None or not candidate.survivors)
+        )
+
+    extra_plans: list[_Plan] = []
+    rollover_state = _SizeRollover()
+
+    def fresh_size_plans(indices: tuple[int, ...]) -> _Plan:
+        """Read/encode every ordered part before any write; never inherit old speech.
+
+        Stable IDs make an interrupted reply replayable. A commit-proven full
+        part gets another deterministic slot, without overwriting its contents.
+        """
+        nonlocal live_stats
+        live_stats = None
+
+        def split(part: tuple[int, ...]) -> list[_Plan]:
+            slot = 0
+            while True:
+                cid = str(uuid5(NAMESPACE_URL, f'sync-size-rollover:{incoming["id"]}:{part[0] if part else 0}:{slot}'))
+                if cid not in full_ids:
+                    break
+                slot += 1
+            candidate = plan(frozenset(read) - {cid}, part, isolated_id=cid, speech_interval=True)
+            if candidate.estimated_bytes <= SYNC_CONVERSATION_BYTE_BUDGET:
+                return [candidate]
+            if len(part) <= 1:
+                logger.warning(
+                    'event=sync_assignment_target reason=size_rollover_unavailable outcome=rejected '
+                    'trigger=%s projected_size_bucket=%s %s',
+                    rollover_state.trigger,
+                    projected_size_bucket(candidate.estimated_bytes),
+                    size_fields(candidate.result),
+                )
+                raise SyncAssignmentConflict(
+                    'incoming segment exceeds sync size budget', subtype=Reason.SIZE_CAP_ROLLOVER_UNAVAILABLE
+                )
+            middle = len(part) // 2
+            return split(part[:middle]) + split(part[middle:])
+
+        parts = split(indices)
+        extra_plans[:] = parts[1:]
+        return parts[0]
+
+    def stop_absorption(chosen: _Plan) -> _Plan:
+        nonlocal excluded, live_stats
+        # Remove the last donor and re-run discovery without its bridge.
+        # Reconsider input deduped against that donor: it no longer belongs
+        # to the survivor. No donor/ancestor patch has been staged.
+        logger.warning(
+            'event=sync_assignment_target outcome=size_cap_stop projected_size_bucket=%s',
+            projected_size_bucket(chosen.absorption_bytes),
+        )
+        rollover_state.trigger = rollover_state.trigger or 'size_cap'
+        if rollover_state.payload is None:
+            rollover_state.payload = chosen.result
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='canonical_append',
+            to_mode='size_rollover',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
+        for drop in ({max(chosen.donor_updates)}, {chosen.canonical}):
+            denied = excluded | drop
+            live_stats = None
+            try:
+                candidate = plan(denied, segment_indices)
+            except (SyncAssignmentSuperseded, SyncAssignmentConflict):
+                continue
+            if available(candidate, denied):
+                # If removing a donor strands its own incoming anchor, leave
+                # the old survivor alone and append/dedupe at that donor.
+                excluded = denied
+                return candidate
+        excluded |= set(chosen.matched) | {chosen.canonical}
+        return fresh_size_plans(segment_indices)
+
     while True:
         drop = (set(chosen.matched) | {chosen.canonical}) & full_ids
-        if chosen.grows and chosen.estimated_bytes > SYNC_CONVERSATION_BYTE_BUDGET:
+        if (chosen.grows or replacement is chosen) and chosen.estimated_bytes > SYNC_CONVERSATION_BYTE_BUDGET:
             drop.add(chosen.canonical)
+        over_absorption_cap = bool(chosen.donor_updates and chosen.absorption_bytes > CONVERSATION_ABSORPTION_BYTE_CAP)
+        if not drop and over_absorption_cap:
+            chosen = stop_absorption(chosen)
+            continue
         if not drop:
+            if chosen.estimated_bytes > SYNC_CONVERSATION_BYTE_BUDGET and not chosen.grows:
+                # Every word is already durable. Acknowledge it without even
+                # staging a metadata-only update to an oversized document.
+                no_op = decode(chosen.matched[chosen.canonical])
+                no_op['sync_live_target'] = chosen.result['sync_live_target']
+                no_op.setdefault('sync_relevance', 'keep')
+                no_op['_sync_projected_size_bucket'] = projected_size_bucket(chosen.estimated_bytes)
+                return no_op, False, []
             break
-        trigger = trigger or ('commit_limit' if drop & full_ids else 'estimate')
+        rollover_state.trigger = rollover_state.trigger or ('commit_limit' if drop & full_ids else 'estimate')
+        if rollover_state.payload is None:
+            rollover_state.payload = chosen.result
+            rollover_state.cid = next(iter(sorted(drop & full_ids)), None)
         try:
             # Only speech the full plan found new moves on, so text already in
             # the full conversation is not duplicated into the rollover.
             rollover: _Plan | None = plan(excluded | drop, chosen.kept)
         except (SyncAssignmentSuperseded, SyncAssignmentConflict):
             rollover = None
-        if (
-            rollover is None
-            or rollover.canonical in excluded | drop
-            # Never overwrite an existing (tombstone) document or create an empty row.
-            or (rollover.created and (read.get(rollover.canonical) is not None or not rollover.survivors))
-        ):
-            # No safe home for the speech: keep the write unchanged, so the
-            # commit and its size-limit backstop decide exactly as before.
-            logger.warning('event=sync_assignment_target outcome=size_rollover_unavailable trigger=%s', trigger)
-            trigger = 'unavailable'
+        if rollover is None or not available(rollover, excluded | drop):
+            if over_absorption_cap:
+                # Stop donor absorption before choosing an alternate home.
+                chosen = stop_absorption(chosen)
+                continue
+            excluded |= drop
+            chosen = fresh_size_plans(chosen.kept)
             break
+        segment_indices = chosen.kept
         excluded, chosen = excluded | drop, rollover
-    if trigger is not None and trigger != 'unavailable' and excluded:
+    if (
+        rollover_state.trigger is not None
+        and excluded
+        and (rollover_state.trigger != 'size_cap' or chosen.canonical != (rollover_state.payload or {}).get('id'))
+    ):
         # One event per committed plan, however many full rows it stepped past.
-        logger.warning(
-            'event=sync_assignment_target outcome=size_rollover trigger=%s created=%s excluded=%d',
-            trigger,
+        log_size_rollover(
+            logger,
+            'event=sync_assignment_target reason=size_rollover outcome=rolled_over '
+            'trigger=%s created=%s excluded=%d projected_size_bucket=%s %s',
+            rollover_state.trigger,
             str(chosen.created).lower(),
             len(excluded),
+            projected_size_bucket(chosen.estimated_bytes),
+            size_fields(
+                rollover_state.payload,
+                cid=rollover_state.cid,
+                target_kind='new_row' if chosen.created else 'sibling_row',
+            ),
         )
         record_fallback(
             component='sync_dispatch',
@@ -923,35 +1105,28 @@ def assign_in_transaction(
         chosen.created,
         chosen.survivors,
     )
-    payload = chosen.payload
-    if created:
-        # DELETE_FIELD is invalid in a Firestore set without merge. New anchors
-        # inherit content, never a donor's client processing projection.
-        clears: dict = {}
-        invalidate(clears)
-        for field in clears:
-            payload.pop(field, None)
-        transaction.set(collection.document(canonical), payload)
-    else:
-        invalidate(payload)
-        transaction.update(collection.document(canonical), payload)
-    for cid, row in matched.items():
-        if cid != canonical:
-            transaction.update(
-                collection.document(cid),
-                {
-                    'deleted': True,
-                    # Hide the redirect from discarded==False list indexes. Distinct
-                    # from user discard: include_discarded=True readers still drop
-                    # these rows via is_soft_deleted, and restore must not revive them.
-                    'discarded': True,
-                    'sync_merged_into': canonical,
-                    'sync_content_revision': (row.get('sync_content_revision') or 0) + 1,
-                },
-            )
-    for ancestor_id, patch in chosen.ancestor_updates.items():
-        transaction.update(collection.document(ancestor_id), patch)
-    index.write(result, set(matched) | {canonical})
+    remember_size_payload(canonical, result)
+    for accepted in [chosen, *extra_plans]:
+        remember_size_payload(accepted.canonical, accepted.result)
+        payload = accepted.payload
+        if accepted.created:
+            # DELETE_FIELD is invalid in a Firestore set without merge.
+            clears: dict = {}
+            invalidate(clears)
+            for field in clears:
+                payload.pop(field, None)
+            transaction.set(collection.document(accepted.canonical), payload)
+        else:
+            invalidate(payload)
+            transaction.update(collection.document(accepted.canonical), payload)
+        for cid, patch in accepted.donor_updates.items():
+            transaction.update(collection.document(cid), patch)
+        for ancestor_id, patch in accepted.ancestor_updates.items():
+            transaction.update(collection.document(ancestor_id), patch)
+        index.write(accepted.result, set(accepted.matched) | {accepted.canonical})
+    if extra_plans:
+        result['_sync_size_rollover_rows'] = [(p.result, p.created) for p in extra_plans]
+        survivors = [s for p in [chosen, *extra_plans] for s in p.survivors]
     if absorbed is not None:
         absorbed[:] = sorted(cid for cid in matched if cid != canonical)
     if chosen.bridge is not None:
@@ -989,7 +1164,19 @@ def assign_in_transaction(
         result['_sync_lineage_stamp_gap_refused'] = True
     if temporal_live:
         logger.info('event=sync_live_overlap outcome=%s', 'merged' if canonical == target_id else 'published')
+    result['_sync_projected_size_bucket'] = projected_size_bucket(chosen.estimated_bytes)
     return result, created, survivors
+
+
+def _donor_redirect_patch(row: dict, canonical: str) -> dict:
+    # Hidden redirect, retained for late uploads and owner detail reads; never
+    # confuse it with a user discard that can be restored independently.
+    return {
+        'deleted': True,
+        'discarded': True,
+        'sync_merged_into': canonical,
+        'sync_content_revision': (row.get('sync_content_revision') or 0) + 1,
+    }
 
 
 def _stored_document_bytes(
@@ -1000,13 +1187,14 @@ def _stored_document_bytes(
     A create stores the payload; an update replaces the named top-level fields
     of the stored (encoded) row and removes the invalidated projection fields.
     """
-    stored = dict(payload) if current is None else {**current, **payload}
+    stored = dict(current or {})
+    patch = dict(payload)
     clears: dict = {}
     invalidate(clears)
     for field in clears:
         stored.pop(field, None)
-    path = getattr(reference, 'path', None)
-    return estimate_firestore_document_bytes(stored, path if isinstance(path, str) else None)
+        patch.pop(field, None)
+    return projected_document_bytes(reference, patch, stored)
 
 
 def size_limited_conversation(error: BaseException, canonical: Optional[str]) -> tuple[Optional[str], str]:
@@ -1046,13 +1234,27 @@ def run_with_size_limit_backstop(
     by interval and deduplicates. A second rejection is raised unchanged and
     counts as a strike exactly as before.
     """
+    with size_backstop_scope():
+        return _run_size_backstop(run, attempted_canonical)
+
+
+def _run_size_backstop(run: Callable[[frozenset[str]], _T], attempted_canonical: Callable[[], Optional[str]]) -> _T:
     try:
-        return run(frozenset())
+        result = run(frozenset())
+        finish_size_attempt(logger, committed=True)
+        return result
     except Exception as error:
+        finish_size_attempt(logger, committed=False)
         full_id, kind = size_limited_conversation(error, attempted_canonical())
+        if is_document_size_limit_error(error):
+            setattr(error, 'sync_size_fields', size_fields(cid=full_id))
         if full_id is None:
             raise
-    logger.warning('event=sync_assignment_target outcome=size_limit_retry firestore_doc_kind=%s', kind)
+    logger.warning(
+        'event=sync_assignment_target reason=size_limit_retry outcome=rejected firestore_doc_kind=%s %s',
+        kind,
+        size_fields(cid=full_id),
+    )
     record_fallback(
         component='sync_dispatch',
         from_mode='canonical_append',
@@ -1062,7 +1264,12 @@ def run_with_size_limit_backstop(
         log=logger,
     )
     try:
-        return run(frozenset({full_id}))
+        result = run(frozenset({full_id}))
+        finish_size_attempt(logger, committed=True)
+        return result
     except Exception as error:
-        size_limited_conversation(error, attempted_canonical())
+        finish_size_attempt(logger, committed=False)
+        full_id, _ = size_limited_conversation(error, attempted_canonical())
+        if is_document_size_limit_error(error):
+            setattr(error, 'sync_size_fields', size_fields(cid=full_id))
         raise
