@@ -142,11 +142,22 @@ def test_staged_audio_reads_the_intake_language():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('user_language,expected', [('vi', 'vi'), ('pt-BR', 'pt'), (None, '')])
-async def test_intake_freezes_the_resolved_stt_language(monkeypatch, user_language, expected):
+@pytest.mark.parametrize(
+    'inherit,user_language,expected',
+    [
+        (True, 'vi', 'vi'),
+        (True, 'pt-BR', 'pt'),
+        (True, None, 'multi'),
+        (False, 'vi', 'vi'),
+        (False, 'pt-BR', 'pt'),
+        (False, None, ''),
+    ],
+)
+async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, user_language, expected):
     from utils.batch_pipeline.artifacts import ProtectionContext
     from utils.batch_pipeline.audio import read_context
 
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'true' if inherit else 'false')
     store = MemoryStore()
     frozen = []
 
