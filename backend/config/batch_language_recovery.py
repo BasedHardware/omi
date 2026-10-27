@@ -38,6 +38,35 @@ def independent_attempted(job):
     return receipt.get('outcome') in {'started', 'words', 'empty', 'error'}
 
 
+REPAIR_EPOCH = 4
+REPAIR_PROVIDER = 'modulate'
+
+
+def words_repair_eligible(job):
+    """Lead ruling 7fa3d2: a spent guarded intent whose Modulate words were rejected
+    only for zero strict CPU VAD, whose capped Soniox call answered empty, and whose
+    bound worker VAD receipt measured speech. Its operator repair buys exactly one
+    explicit Modulate call; the spent intent and both receipts stay untouched.
+    """
+    from utils.batch_pipeline.contracts import worker_vad_speech
+
+    recovery = job.get('recovery') or {}
+    receipts = recovery.get('recognizers') or {}
+    modulate, soniox = receipts.get('modulate') or {}, receipts.get(PROVIDER) or {}
+    return (
+        language_guarded(job)
+        and recovery.get('provider') == 'modulate'
+        and recovery.get('failure') == {'stage': 'payload_validation', 'reason': 'invalid_payload'}
+        and modulate.get('outcome') == 'words'
+        and type(modulate.get('word_count')) is int
+        and modulate['word_count'] > 0
+        and soniox.get('outcome') == 'empty'
+        and soniox.get('word_count') == 0
+        and 0 < job.get('duration_seconds', 0) <= MAX_AUDIO_SECONDS
+        and worker_vad_speech(job) is not None
+    )
+
+
 def prior_modulate_empty(job):
     paid = job.get('speech_redrive') or {}
     if paid.get('provider') == PROVIDER:
