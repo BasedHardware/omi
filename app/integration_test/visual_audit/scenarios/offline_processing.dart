@@ -289,9 +289,10 @@ final offlineProcessingScenarios = <AuditScenario>[
             _wal(_at(0, 15, 0), 70, WalStatus.miss, storage: WalStorage.sdcard),
             _wal(_at(0, 11, 0), 110, WalStatus.miss, storage: WalStorage.sdcard),
           ]));
-      expect(find.byKey(const Key('device_stat_catching_up')), findsOneWidget);
+      final tile = find.byKey(const Key('device_stat_catching_up'));
+      expect(tile, findsOneWidget);
       expect(find.byType(LinearProgressIndicator), findsNothing);
-      expect(find.text('3h'), findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.text('3h')), findsOneWidget);
       await a.shot('Large backlog is the Catching up tile: a duration, no stage or span');
     },
   ),
@@ -311,8 +312,8 @@ final offlineProcessingScenarios = <AuditScenario>[
               startedAt: _at(0, 11, 0),
               durationSeconds: 720),
         ]);
-        expect(find.byKey(const Key('device_stat_catching_up')), findsOneWidget);
-        expect(find.text('12m'), findsOneWidget);
+        expect(find.descendant(of: find.byKey(const Key('device_stat_catching_up')), matching: find.text('12m')),
+            findsOneWidget);
         await a.shot('Server work stays on the Catching up tile until it finishes');
         await a.tester.tap(find.byKey(const Key('device_stat_catching_up')));
         await a.settle();
