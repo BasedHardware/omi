@@ -55,6 +55,10 @@ def get_folders(uid: str = Depends(auth.get_current_user_uid)):
 @router.post('/v1/folders', response_model=Folder, tags=['folders'])
 def create_folder(request: CreateFolderRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Create a new custom folder."""
+    clean_name = request.name.strip()
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Folder name cannot be empty")
+
     # Check folder limit (50 custom folders)
     existing = folders_db.get_folders(uid)
     custom_count = len([f for f in existing if not f.get('is_system')])
@@ -63,8 +67,8 @@ def create_folder(request: CreateFolderRequest, uid: str = Depends(auth.get_curr
 
     folder = folders_db.create_folder(
         uid,
-        name=request.name,
-        description=request.description,
+        name=clean_name,
+        description=request.description.strip() if request.description else None,
         color=request.color,
         icon=request.icon,
     )
@@ -95,6 +99,11 @@ def update_folder(folder_id: str, request: UpdateFolderRequest, uid: str = Depen
     for field in ('name', 'color', 'icon', 'order'):
         if update_data.get(field) is None and field in update_data:
             update_data.pop(field)
+
+    if 'name' in update_data:
+        if not isinstance(update_data['name'], str) or not update_data['name'].strip():
+            raise HTTPException(status_code=400, detail="Folder name cannot be empty")
+        update_data['name'] = update_data['name'].strip()
 
     if update_data:
         folders_db.update_folder(uid, folder_id, update_data)
@@ -128,6 +137,8 @@ def delete_folder(
 @router.post('/v1/folders/reorder', response_model=FolderMutationResponse, tags=['folders'])
 def reorder_folders(request: ReorderFoldersRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Reorder folders by providing an ordered list of folder IDs."""
+    if len(request.folder_ids) != len(set(request.folder_ids)):
+        raise HTTPException(status_code=400, detail="Duplicate folder IDs in reorder request")
     existing_ids = {folder['id'] for folder in folders_db.get_folders(uid)}
     unknown_ids = [folder_id for folder_id in request.folder_ids if folder_id not in existing_ids]
     if unknown_ids:
@@ -198,17 +209,26 @@ def bulk_move_conversations(
     folder_id: str, request: BulkMoveConversationsRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     """Move multiple conversations to a folder."""
-    folder = folders_db.get_folder(uid, folder_id)
+    if not folder_id or not folder_id.strip():
+        raise HTTPException(status_code=400, detail="Invalid folder ID")
+    clean_folder_id = folder_id.strip()
+
+    folder = folders_db.get_folder(uid, clean_folder_id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
 
+    # Deduplicate IDs to prevent redundant DB reads and batch collisions
+    deduped_ids = list(dict.fromkeys([cid.strip() for cid in request.conversation_ids if cid and cid.strip()]))
+    if not deduped_ids:
+        return {"status": "ok", "moved_count": 0}
+
     # Validate none of the conversations are locked or deleted
-    for conv_id in request.conversation_ids:
+    for conv_id in deduped_ids:
         conv = conversations_db.get_conversation(uid, conv_id)
         if not conv or conv.get('deleted', False):
             raise HTTPException(status_code=404, detail=f"Conversation {conv_id} not found")
         if conv.get('is_locked', False):
             raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    moved = folders_db.bulk_move_conversations_to_folder(uid, request.conversation_ids, folder_id)
+    moved = folders_db.bulk_move_conversations_to_folder(uid, deduped_ids, clean_folder_id)
     return {"status": "ok", "moved_count": moved}

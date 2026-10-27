@@ -38,6 +38,13 @@ class CreateFolderRequest(BaseModel):
     color: Optional[str] = None
     icon: Optional[str] = None
 
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('Folder name cannot be empty or whitespace')
+        return v.strip()
+
 
 class UpdateFolderRequest(BaseModel):
     """Request model for updating folder metadata."""
@@ -47,6 +54,15 @@ class UpdateFolderRequest(BaseModel):
     color: Optional[str] = None
     icon: Optional[str] = None
     order: Optional[int] = None
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            if not v.strip():
+                raise ValueError('Folder name cannot be empty or whitespace')
+            return v.strip()
+        return v
 
 
 class MoveConversationRequest(BaseModel):
@@ -58,7 +74,23 @@ class MoveConversationRequest(BaseModel):
 class BulkMoveConversationsRequest(BaseModel):
     """Request model for moving multiple conversations to a folder."""
 
-    conversation_ids: List[str]
+    conversation_ids: List[str] = Field(..., min_length=1)
+
+    @field_validator('conversation_ids')
+    @classmethod
+    def validate_and_deduplicate_conversation_ids(cls, v: List[str]) -> List[str]:
+        cleaned: List[str] = []
+        seen = set()
+        for item in v:
+            if not item or not isinstance(item, str) or not item.strip():
+                raise ValueError('conversation_ids must contain non-empty strings')
+            stripped = item.strip()
+            if stripped not in seen:
+                seen.add(stripped)
+                cleaned.append(stripped)
+        if not cleaned:
+            raise ValueError('conversation_ids must contain at least one valid ID')
+        return cleaned
 
 
 class ReorderFoldersRequest(BaseModel):
