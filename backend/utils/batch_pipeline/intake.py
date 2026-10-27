@@ -407,10 +407,20 @@ async def accept_upload(
             if exclusion_reason:
                 # This is before re-home, decode, LID or custody. The caller's
                 # legacy-dark fence still refuses new legacy work outside ON.
-                record_route('intake', target.get('language') or user.get('language'), 'multilingual')
-                record_fallback(
-                    component='sync_dispatch', from_mode='batch', to_mode='legacy', reason='other', outcome='degraded'
+                legacy_available = mode is LegacySyncMode.ON
+                record_route(
+                    'intake',
+                    target.get('language') or user.get('language'),
+                    'multilingual' if legacy_available else 'blocked',
                 )
+                if legacy_available:
+                    record_fallback(
+                        component='sync_dispatch',
+                        from_mode='batch',
+                        to_mode='legacy',
+                        reason='other',
+                        outcome='degraded',
+                    )
                 logger.info('event=batch_admission_language outcome=excluded reason=%s', exclusion_reason)
                 return None
         if isinstance(conversation_id, str) and target.get('record_lane_owner') == 'legacy_final_pass_v1':
