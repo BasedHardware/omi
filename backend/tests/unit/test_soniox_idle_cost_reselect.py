@@ -13,6 +13,9 @@ from utils.stt.live_gate import GateState
 from utils.stt.soniox_idle import IdleSonioxSocket
 from utils.stt.recovery_state import MAX_RECOVERY_EPISODES
 from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+from routers.listen.receiver import ListenReceiver
+from tests.unit.test_live_replay_provider_pairs import Transport
+from utils.stt.soniox import SafeSonioxSocket
 
 
 async def idle_receiver(monkeypatch, *, language='en', enabled=True, benched=False, modulate=False):
@@ -240,3 +243,45 @@ def test_wire_and_connected_origin_is_pinned_and_bounded(monkeypatch, origin):
     finally:
         telemetry.current_transport_origin.reset(token)
         telemetry.current_demand.reset(demand_token)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', ['success', 'error', 'cancel'])
+async def test_legacy_failover_pins_replacement_meters_and_restores_context(outcome):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    raws, wires = [], []
+
+    async def rebuild():
+        raw = SafeSonioxSocket(Transport(), lambda _: None, asyncio.get_running_loop())
+        raws.append(raw)
+        wires.append(telemetry.create_wire_meter('deepgram', 16000))
+        if outcome == 'error':
+            raise RuntimeError('synthetic dial failure')
+        if outcome == 'cancel':
+            raise asyncio.CancelledError()
+        return True
+
+    receiver = SimpleNamespace(
+        recovery=None,
+        _stt_failover_lock=asyncio.Lock(),
+        _stt_recovery_exhausted=False,
+        stt_socket=SimpleNamespace(is_connection_dead=True, _finishing=False),
+        _reconnect_stt_socket_locked=AsyncMock(return_value=False),
+        _rebuild_stt_socket_locked=rebuild,
+    )
+    token = telemetry.current_transport_origin.set('initial')
+    try:
+        if outcome == 'success':
+            assert await ListenReceiver._failover_stt_socket(receiver)
+        else:
+            with pytest.raises(RuntimeError if outcome == 'error' else asyncio.CancelledError):
+                await ListenReceiver._failover_stt_socket(receiver)
+        assert telemetry.current_transport_origin.get() == 'initial'
+        assert wires[0].origin == 'replacement'
+        assert raws[0]._demand_wire.origin == 'replacement'
+        assert raws[0]._connected_meter.origin == 'replacement'
+    finally:
+        telemetry.current_transport_origin.reset(token)
+        await stop(raws)

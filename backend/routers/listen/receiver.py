@@ -1501,7 +1501,11 @@ class ListenReceiver(ReplayFilterMixin):
     async def _failover_stt_socket(self) -> bool:
         """Serialize monitor/send-path failover so only one replacement is adopted."""
         if getattr(self, 'recovery', None) is None:
-            return await legacy_recovery.failover_stt_socket(self)
+            origin_token = current_transport_origin.set('replacement')
+            try:
+                return await legacy_recovery.failover_stt_socket(self)
+            finally:
+                current_transport_origin.reset(origin_token)
         async with self._stt_failover_lock:
             if self.recovery.state in (RecoveryState.exhausted, RecoveryState.client_leaving):
                 return False
