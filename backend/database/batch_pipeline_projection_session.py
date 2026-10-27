@@ -312,6 +312,8 @@ class ProjectionSession:
             raise ProjectionBlocked('quarantine cannot assign content')
         held = quarantined
         assigned, created, survivors = planned if planned is not None else ({}, False, [])
+        outputs = [(assigned, created), *assigned.get('_sync_size_rollover_rows', [])]
+        output_ids = [row['id'] for row, _ in outputs if row.get('id')]
         repeat_only = assigned.get('_sync_lineage_repeat_only', False)
         silent = (self.job.get('speech_redrive') or {}).get('silent') is True
         if silent and assigned.get('id') and not superseded:
@@ -322,7 +324,10 @@ class ProjectionSession:
             if type(revision) is not int or revision <= 0:
                 raise ProjectionBlocked('silent redrive requires a content revision')
             conversation = self.client.collection('users').document(self.binding.owner_id).collection('conversations')
-            transaction.update(conversation.document(assigned['id']), {'sync_silent_redrive_revision': revision})
+            for row, _ in outputs:
+                transaction.update(
+                    conversation.document(row['id']), {'sync_silent_redrive_revision': row['sync_content_revision']}
+                )
         receipt: dict[str, Any] = {
             'state': 'ready' if superseded else 'persisted',
             'conversation_id': assigned.get('id'),
@@ -337,6 +342,10 @@ class ProjectionSession:
                 assigned.get('id') and (not repeat_only or assigned.get('_sync_lineage_completion_pending'))
             ),
         }
+        if len(outputs) > 1:
+            receipt['size_rollover_outputs'] = [
+                {'conversation_id': row['id'], 'created': row_created} for row, row_created in outputs
+            ]
         if superseded:
             receipt.update(disposition='superseded', superseded_speech_seconds=self.speech_seconds)
         if privacy_deleted:
@@ -366,10 +375,10 @@ class ProjectionSession:
                 # before they can turn an unknown held receipt into ready.
                 changes.update(protocol_version=2, lineage_quarantine_version=1)
             if assigned.get('id'):
-                changes['conversation_ids'] = firestore.ArrayUnion([assigned['id']])
+                changes['conversation_ids'] = firestore.ArrayUnion(output_ids)
                 transaction.update(
                     self.store.ref('jobs', self.segment_id),
-                    {'conversation_ids': firestore.ArrayUnion([assigned['id']])},
+                    {'conversation_ids': firestore.ArrayUnion(output_ids)},
                 )
             if self.part_index != self.part_count - 1:
                 transaction.update(self.result_ref, changes)

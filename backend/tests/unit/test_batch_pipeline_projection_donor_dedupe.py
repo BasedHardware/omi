@@ -222,3 +222,36 @@ def test_batch_admission_switches_still_bound_projection_cohort(monkeypatch, gat
     else:
         assert admit(store, works, binding, 0, namespace='batch_pipeline_test_donor')['outcome'] == 'batch'
         assert store.rows['jobs', 'segment']['projection_binding'] == asdict(binding)
+
+
+def test_record_projection_replacement_rolls_over_before_staging_oversized_live_write(batch_projection, monkeypatch):
+    from dataclasses import replace
+    from utils.sync import assignment
+
+    lane = batch_projection
+    binding = replace(lane.binding, record_origin=True, native_record=True)
+    lane.client.rows[(f'{lane.namespace}_jobs', 'segment')]['projection_binding'] = asdict(binding)
+    live = lane.client.rows[('users', 'u', 'conversations', 'live')]
+    live.update(
+        record_lane_owner='batch_live_v1',
+        status='completed',
+        private_cloud_sync_enabled=True,
+        structured={'overview': 'x' * 20000},
+    )
+    lane.client.rows[('users', 'u')]['private_cloud_sync_enabled'] = True
+    for index, segment in enumerate(live['transcript_segments']):
+        segment['id'] = f'live-{index}'
+    before = deepcopy(live)
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 6000)
+    lane.projector.project('segment')
+    receipt = lane.client.rows[(f'{lane.namespace}_results', 'segment')]['projection']
+    assert receipt['conversation_id'] != 'live'
+    assert lane.client.rows[('users', 'u', 'conversations', 'live')] == before
+    assert all(
+        path != ('users', 'u', 'conversations', 'live') for tx in lane.client.transactions for path, _ in tx.updates
+    )
+    stored = lane.client.rows[('users', 'u', 'conversations', receipt['conversation_id'])]
+    segments = db.decode_transcript_segments_verified(
+        'u', stored['transcript_segments'], stored.get('transcript_segments_compressed', False)
+    )
+    assert any(s['text'] == 'Fresh projected speech is also preserved.' for s in segments)

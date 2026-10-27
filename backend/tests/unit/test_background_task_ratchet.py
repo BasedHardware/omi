@@ -36,7 +36,8 @@ Inventoried call kinds and when a call counts as un-awaited:
 - when the returned handle is not *consumed* in the enclosing function:
   ``asyncio.create_task(`` / ``create_task(``, ``asyncio.ensure_future(``,
   ``<loop>.create_task(`` (receiver named ``*loop`` or ``get_*loop()``),
-  ``submit_with_context(``, ``<executor>.submit(``. "Consumed" means the
+  ``submit_with_context(``, ``submit_with_context_retry(``,
+  ``<executor>.submit(`` / ``.submit_when_available(``. "Consumed" means the
   completion is actually observed: the handle is awaited (incl. inside
   ``asyncio.gather/wait/wait_for/as_completed/shield``), ``.result()`` is
   called on it, or it is returned to the caller. Merely reading the name --
@@ -103,6 +104,7 @@ def call_kind(call: ast.Call) -> str | None:
         return {
             'start_background_task': 'start_background_task',
             'submit_with_context': 'submit_with_context',
+            'submit_with_context_retry': 'submit_with_context_retry',
             'create_task': 'asyncio.create_task',
             'ensure_future': 'asyncio.ensure_future',
             'Thread': 'threading.Thread',
@@ -116,10 +118,12 @@ def call_kind(call: ast.Call) -> str | None:
         return 'loop.create_task' if _is_loop_receiver(func.value) else None
     if func.attr == 'ensure_future':
         return 'asyncio.ensure_future'
-    if func.attr in {'start_background_task', 'submit_with_context'}:
+    if func.attr in {'start_background_task', 'submit_with_context', 'submit_with_context_retry'}:
         return func.attr
     if func.attr == 'submit':
         return 'executor.submit'
+    if func.attr == 'submit_when_available':
+        return 'executor.submit_when_available'
     if func.attr == 'add_task':
         return 'BackgroundTasks.add_task'
     if func.attr == 'Thread' and isinstance(func.value, ast.Name) and func.value.id == 'threading':
@@ -240,6 +244,16 @@ class _SiteVisitor(ast.NodeVisitor):
             if self._completion_helper(parent):
                 return True  # e.g. ``await asyncio.gather(asyncio.create_task(...))``.
             func = parent.func
+            is_cast = (isinstance(func, ast.Name) and func.id == 'cast') or (
+                isinstance(func, ast.Attribute)
+                and isinstance(func.value, ast.Name)
+                and func.value.id == 'typing'
+                and func.attr == 'cast'
+            )
+            if is_cast and len(parent.args) == 2 and parent.args[1] is call:
+                # A typing cast returns this same handle; completion ownership
+                # follows the wrapper rather than the type-only call itself.
+                return self._handle_consumed(parent)
             if (
                 isinstance(func, ast.Attribute)
                 and func.attr in {'append', 'add', 'insert'}
@@ -382,6 +396,36 @@ async def handler(executor, loop, background_tasks):
         ('handler', 'start_background_task'): 1,
         ('handler', 'BackgroundTasks.add_task'): 1,
         ('handler', 'threading.Thread'): 1,
+    }
+
+
+def test_scanner_covers_retry_admission_and_observes_cast_wrapped_handles():
+    source = '''
+import typing
+def discarded(executor):
+    submit_with_context_retry(executor, fn)
+    executors.submit_with_context_retry(executor, fn)
+    executor.submit_when_available(fn)
+    cast(Future, executor.submit_when_available(fn))
+def returned(executor):
+    future = cast(Future, executor.submit_when_available(fn))
+    future.add_done_callback(log_failure)
+    return future
+def directly_returned(executor):
+    return typing.cast(Future, submit_with_context_retry(executor, fn))
+def callback_only(executor):
+    future = cast(Future, executor.submit_when_available(fn))
+    future.add_done_callback(log_failure)
+def waited(executor):
+    future = submit_with_context_retry(executor, fn)
+    future.result()
+'''
+    visitor = _SiteVisitor()
+    visitor.visit(ast.parse(source))
+    assert dict(visitor.sites) == {
+        ('discarded', 'submit_with_context_retry'): 2,
+        ('discarded', 'executor.submit_when_available'): 2,
+        ('callback_only', 'executor.submit_when_available'): 1,
     }
 
 

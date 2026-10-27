@@ -17,7 +17,7 @@ transaction.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 
@@ -41,6 +41,13 @@ from config import merge_ancestry
 from config.conversation_smart_merge import smart_merge_flatten_enabled
 from config.firestore_quick_reads import smart_merge_partition_enabled, indexed_string_value_safe
 from database.firestore_read_origin import read_origin
+from utils.conversations.size_limit import (
+    CONVERSATION_ABSORPTION_BYTE_CAP,
+    projected_document_bytes,
+    projected_size_bucket,
+)
+from utils.sync.assignment import run_with_size_limit_backstop
+from utils.sync.size_telemetry import log_size_rollover, remember_size_payload, size_fields
 from utils.observability.fallback import record_fallback
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD, OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD
 
@@ -97,6 +104,7 @@ class AbsorbResult:
     outcome: str  # 'absorbed' | 'already_absorbed' | 'rejected'
     reason: str
     audit: str = 'none'  # audit sibling outcome of a committed absorb (database/smart_merge_audit.py)
+    projected_size_bucket: str | None = None
     flattened_ancestor_count: int = 0
     bridge: dict | None = None
 
@@ -340,8 +348,11 @@ def absorb_conversation(
     donor_ref = collection.document(donor_id)
 
     audit_io_failed = False
+    size_bucket = None
 
     def absorb_attempt(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
+        nonlocal size_bucket
+        size_bucket = None
         survivor_raw = survivor_ref.get(transaction=transaction).to_dict()
         donor_raw = donor_ref.get(transaction=transaction).to_dict()
         if not donor_raw:
@@ -425,6 +436,11 @@ def absorb_conversation(
                     survivor_raw[OPEN_LOOP_EXTRACTIONS_FIELD],
                     bool(survivor_raw.get(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD)),
                 )
+        remember_size_payload(
+            survivor_id,
+            dict(survivor_update, transcript_segments=survivor_update.get('transcript_segments', survivor_segments)),
+        )
+        remember_size_payload(donor_id, dict(donor, transcript_segments=donor_segments))
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
         conversations_db.guard_match_score_size(payload, survivor_raw)
         if (
@@ -442,6 +458,19 @@ def absorb_conversation(
             marker = dict(donor_update.get(SMART_MERGE_FIELD) or {})
             marker['flattened_ancestor_count'] = len(ancestor_updates)
             donor_update[SMART_MERGE_FIELD] = marker
+        projected_bytes = max(
+            [
+                projected_document_bytes(survivor_ref, payload, survivor_raw),
+                projected_document_bytes(donor_ref, donor_update, donor_raw),
+            ]
+            + [
+                projected_document_bytes(collection.document(cid), patch, ancestor_rows[cid])
+                for cid, patch in ancestor_updates.items()
+            ]
+        )
+        size_bucket = projected_size_bucket(projected_bytes)
+        if projected_bytes > CONVERSATION_ABSORPTION_BYTE_CAP:
+            return AbsorbResult('rejected', 'size_cap_stop', projected_size_bucket=size_bucket)
         transaction.update(survivor_ref, payload)
         transaction.update(donor_ref, donor_update)
         for ancestor_id, patch in ancestor_updates.items():
@@ -468,22 +497,50 @@ def absorb_conversation(
     def absorb(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
         nonlocal audit_io_failed
         try:
-            return absorb_attempt(transaction, audit_unavailable=audit_unavailable)
+            result = absorb_attempt(transaction, audit_unavailable=audit_unavailable)
+            return replace(result, projected_size_bucket=size_bucket)
         except audit_db.AuditUnavailable:
             # The SDK's rollback RPC can mask this exception. Remember that
             # the callback failed before commit even if rollback also fails.
             audit_io_failed = True
             raise
 
-    try:
-        result = run_transactional(client, absorb)
-    except Exception:
-        if not audit_io_failed:
-            raise
-        # No commit was attempted. Never continue writing on a transaction whose
-        # optional read/staging failed; re-read and re-plan on a fresh transaction.
-        logger.warning('event=smart_merge_audit_restart reason=io_failed uid=%s', uid)
-        result = run_transactional(client, absorb, audit_unavailable=True)
+    def run_absorb(full_ids: frozenset[str]) -> AbsorbResult:
+        if full_ids:
+            # The donor already is a durable row. Rolling over a rejected
+            # absorb means leaving both rows untouched and finalizing it there.
+            log_size_rollover(
+                logger,
+                'event=sync_assignment_target reason=size_rollover outcome=rolled_over trigger=commit_limit '
+                + size_fields(cid=next(iter(full_ids)), target_kind='sibling_row'),
+            )
+            return AbsorbResult('rejected', 'size_cap_stop', projected_size_bucket=size_bucket)
+        try:
+            return run_transactional(client, absorb)
+        except Exception:
+            if not audit_io_failed:
+                raise
+            # Restart all reads on a fresh transaction after optional audit IO.
+            logger.warning('event=smart_merge_audit_restart reason=io_failed uid=%s', uid)
+            return run_transactional(client, absorb, audit_unavailable=True)
+
+    result = run_with_size_limit_backstop(run_absorb, lambda: survivor_id)
+    if result.projected_size_bucket is not None:
+        logger.log(
+            logging.WARNING if result.reason == 'size_cap_stop' else logging.INFO,
+            'event=smart_merge_absorb outcome=%s projected_size_bucket=%s',
+            'size_cap_stop' if result.reason == 'size_cap_stop' else result.outcome,
+            result.projected_size_bucket,
+        )
+    if result.reason == 'size_cap_stop':
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='canonical_append',
+            to_mode='size_rollover',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
     if result.outcome == 'absorbed':
         if result.bridge is not None:
             log_bridge_observation(result.bridge)
