@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Klaar",
     "openLoopAnswerRemind": "Herinner me later",
-    "openLoopAnswerDrop": "Negeren"
+    "openLoopAnswerDrop": "Negeren",
+    "yearlySwitchTitle": "Overstappen naar jaarlijks",
+    "yearlySwitchRowSavings": "Bespaar {amount} per jaar",
+    "yearlySwitchHomeTitle": "Bespaar {amount} per jaar met jaarlijks betalen",
+    "yearlySwitchHomeSubtitle": "Hetzelfde abonnement, één keer per jaar betaald",
+    "yearlySwitchPlanLabel": "Abonnement",
+    "yearlySwitchPlanValue": "{plan}, {price} per jaar",
+    "yearlySwitchDueToday": "Vandaag te betalen",
+    "yearlySwitchRenews": "Verlengt",
+    "yearlySwitchCreditNote": "Inclusief tegoed voor de rest van deze maand.",
+    "yearlySwitchDeclined": "De betaling is niet gelukt. Je betaalt nog steeds maandelijks.",
+    "yearlySwitchFailed": "Overstappen is niet gelukt. Je betaalt nog steeds maandelijks.",
+    "yearlySwitchPreviewFailed": "Je prijs kon niet worden geladen.",
+    "yearlySwitchUnavailable": "Jaarlijks betalen is nu niet beschikbaar voor je abonnement.",
+    "yearlySwitchDoneTitle": "Je betaalt nu jaarlijks",
+    "yearlySwitchDoneBody": "Vandaag {amount} afgeschreven. Verlengt op {date}."
 }

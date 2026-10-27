@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Ολοκληρώθηκε",
     "openLoopAnswerRemind": "Υπενθύμιση αργότερα",
-    "openLoopAnswerDrop": "Απόρριψη"
+    "openLoopAnswerDrop": "Απόρριψη",
+    "yearlySwitchTitle": "Μετάβαση σε ετήσιο",
+    "yearlySwitchRowSavings": "Εξοικονομήστε {amount} τον χρόνο",
+    "yearlySwitchHomeTitle": "Εξοικονομήστε {amount} τον χρόνο με ετήσια χρέωση",
+    "yearlySwitchHomeSubtitle": "Ίδιο πρόγραμμα, μία πληρωμή τον χρόνο",
+    "yearlySwitchPlanLabel": "Πρόγραμμα",
+    "yearlySwitchPlanValue": "{plan}, {price} τον χρόνο",
+    "yearlySwitchDueToday": "Πληρωτέο σήμερα",
+    "yearlySwitchRenews": "Ανανέωση",
+    "yearlySwitchCreditNote": "Περιλαμβάνει πίστωση για το υπόλοιπο του μήνα.",
+    "yearlySwitchDeclined": "Η πληρωμή δεν ολοκληρώθηκε. Παραμένετε σε μηνιαία χρέωση.",
+    "yearlySwitchFailed": "Η αλλαγή δεν ήταν δυνατή. Παραμένετε σε μηνιαία χρέωση.",
+    "yearlySwitchPreviewFailed": "Δεν ήταν δυνατή η φόρτωση της τιμής.",
+    "yearlySwitchUnavailable": "Η ετήσια χρέωση δεν είναι διαθέσιμη για το πρόγραμμά σας αυτή τη στιγμή.",
+    "yearlySwitchDoneTitle": "Είστε πλέον σε ετήσια χρέωση",
+    "yearlySwitchDoneBody": "Χρεώθηκαν σήμερα {amount}. Ανανέωση στις {date}."
 }

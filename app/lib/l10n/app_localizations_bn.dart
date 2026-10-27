@@ -14597,4 +14597,57 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'বাদ দিন';
+
+  @override
+  String get yearlySwitchTitle => 'বার্ষিকে যান';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'বছরে $amount সাশ্রয় করুন';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'বার্ষিক পেমেন্টে বছরে $amount সাশ্রয় করুন';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'একই প্ল্যান, বছরে একবার বিল';
+
+  @override
+  String get yearlySwitchPlanLabel => 'প্ল্যান';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, বছরে $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'আজ দেয়';
+
+  @override
+  String get yearlySwitchRenews => 'নবায়ন';
+
+  @override
+  String get yearlySwitchCreditNote => 'এই মাসের বাকি সময়ের ক্রেডিট অন্তর্ভুক্ত।';
+
+  @override
+  String get yearlySwitchDeclined => 'পেমেন্ট সম্পন্ন হয়নি। আপনি এখনও মাসিক প্ল্যানে আছেন।';
+
+  @override
+  String get yearlySwitchFailed => 'পরিবর্তন করা যায়নি। আপনি এখনও মাসিক প্ল্যানে আছেন।';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'আপনার মূল্য লোড করা যায়নি।';
+
+  @override
+  String get yearlySwitchUnavailable => 'এই মুহূর্তে আপনার প্ল্যানের জন্য বার্ষিক বিলিং উপলব্ধ নয়।';
+
+  @override
+  String get yearlySwitchDoneTitle => 'আপনি এখন বার্ষিক প্ল্যানে';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'আজ $amount চার্জ করা হয়েছে। নবায়ন $date।';
+  }
 }

@@ -11865,5 +11865,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "पूर्ण",
     "openLoopAnswerRemind": "नंतर लक्षात आणून द्या",
-    "openLoopAnswerDrop": "टाकून द्या"
+    "openLoopAnswerDrop": "टाकून द्या",
+    "yearlySwitchTitle": "वार्षिकवर स्विच करा",
+    "yearlySwitchRowSavings": "वर्षाला {amount} वाचवा",
+    "yearlySwitchHomeTitle": "वार्षिक पेमेंटने वर्षाला {amount} वाचवा",
+    "yearlySwitchHomeSubtitle": "तोच प्लॅन, वर्षातून एकदा पेमेंट",
+    "yearlySwitchPlanLabel": "प्लॅन",
+    "yearlySwitchPlanValue": "{plan}, वर्षाला {price}",
+    "yearlySwitchDueToday": "आज देय",
+    "yearlySwitchRenews": "नूतनीकरण",
+    "yearlySwitchCreditNote": "या महिन्याच्या उरलेल्या कालावधीचे क्रेडिट समाविष्ट आहे.",
+    "yearlySwitchDeclined": "पेमेंट पूर्ण झाले नाही. तुम्ही अजूनही मासिक प्लॅनवर आहात.",
+    "yearlySwitchFailed": "स्विच करता आले नाही. तुम्ही अजूनही मासिक प्लॅनवर आहात.",
+    "yearlySwitchPreviewFailed": "तुमची किंमत लोड करता आली नाही.",
+    "yearlySwitchUnavailable": "सध्या तुमच्या प्लॅनसाठी वार्षिक बिलिंग उपलब्ध नाही.",
+    "yearlySwitchDoneTitle": "तुम्ही आता वार्षिक प्लॅनवर आहात",
+    "yearlySwitchDoneBody": "आज {amount} आकारले. नूतनीकरण {date} रोजी."
 }

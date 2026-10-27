@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Valmis",
     "openLoopAnswerRemind": "Muistuta myöhemmin",
-    "openLoopAnswerDrop": "Ohita"
+    "openLoopAnswerDrop": "Ohita",
+    "yearlySwitchTitle": "Vaihda vuosimaksuun",
+    "yearlySwitchRowSavings": "Säästä {amount} vuodessa",
+    "yearlySwitchHomeTitle": "Säästä {amount} vuodessa vuosimaksulla",
+    "yearlySwitchHomeSubtitle": "Sama tilaus, maksu kerran vuodessa",
+    "yearlySwitchPlanLabel": "Tilaus",
+    "yearlySwitchPlanValue": "{plan}, {price} vuodessa",
+    "yearlySwitchDueToday": "Maksettava tänään",
+    "yearlySwitchRenews": "Uusiutuu",
+    "yearlySwitchCreditNote": "Sisältää hyvityksen tämän kuun jäljellä olevasta ajasta.",
+    "yearlySwitchDeclined": "Maksu ei mennyt läpi. Maksat edelleen kuukausittain.",
+    "yearlySwitchFailed": "Vaihto epäonnistui. Maksat edelleen kuukausittain.",
+    "yearlySwitchPreviewFailed": "Hintaa ei voitu ladata.",
+    "yearlySwitchUnavailable": "Vuosimaksu ei ole juuri nyt saatavilla tilauksellesi.",
+    "yearlySwitchDoneTitle": "Maksat nyt vuosittain",
+    "yearlySwitchDoneBody": "Tänään veloitettiin {amount}. Uusiutuu {date}."
 }

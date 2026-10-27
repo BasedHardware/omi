@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Fet",
     "openLoopAnswerRemind": "Recorda-m'ho més tard",
-    "openLoopAnswerDrop": "Descarta-ho"
+    "openLoopAnswerDrop": "Descarta-ho",
+    "yearlySwitchTitle": "Canvia a anual",
+    "yearlySwitchRowSavings": "Estalvia {amount} l'any",
+    "yearlySwitchHomeTitle": "Estalvia {amount} l'any amb el pagament anual",
+    "yearlySwitchHomeSubtitle": "El mateix pla, un sol pagament l'any",
+    "yearlySwitchPlanLabel": "Pla",
+    "yearlySwitchPlanValue": "{plan}, {price} l'any",
+    "yearlySwitchDueToday": "A pagar avui",
+    "yearlySwitchRenews": "Es renova",
+    "yearlySwitchCreditNote": "Inclou crèdit per a la resta d'aquest mes.",
+    "yearlySwitchDeclined": "El pagament no s'ha completat. Continues amb el pagament mensual.",
+    "yearlySwitchFailed": "No s'ha pogut canviar. Continues amb el pagament mensual.",
+    "yearlySwitchPreviewFailed": "No s'ha pogut carregar el preu.",
+    "yearlySwitchUnavailable": "El pagament anual no està disponible per al teu pla ara mateix.",
+    "yearlySwitchDoneTitle": "Ara pagues anualment",
+    "yearlySwitchDoneBody": "Avui s'han cobrat {amount}. Es renova el {date}."
 }

@@ -14644,4 +14644,57 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Odrzuć';
+
+  @override
+  String get yearlySwitchTitle => 'Przejdź na roczny';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Oszczędź $amount rocznie';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Oszczędź $amount rocznie, płacąc za rok';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Ten sam plan, płatność raz w roku';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price rocznie';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Do zapłaty dziś';
+
+  @override
+  String get yearlySwitchRenews => 'Odnowienie';
+
+  @override
+  String get yearlySwitchCreditNote => 'Zawiera kredyt za resztę tego miesiąca.';
+
+  @override
+  String get yearlySwitchDeclined => 'Płatność nie przeszła. Nadal płacisz co miesiąc.';
+
+  @override
+  String get yearlySwitchFailed => 'Nie udało się zmienić. Nadal płacisz co miesiąc.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Nie udało się wczytać ceny.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Płatność roczna nie jest teraz dostępna dla Twojego planu.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Płacisz teraz rocznie';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Dziś pobrano $amount. Odnowienie $date.';
+  }
 }

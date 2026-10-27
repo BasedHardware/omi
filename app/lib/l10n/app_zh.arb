@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "完成",
     "openLoopAnswerRemind": "稍后提醒",
-    "openLoopAnswerDrop": "放弃"
+    "openLoopAnswerDrop": "放弃",
+    "yearlySwitchTitle": "改为按年付费",
+    "yearlySwitchRowSavings": "每年节省 {amount}",
+    "yearlySwitchHomeTitle": "按年付费，每年节省 {amount}",
+    "yearlySwitchHomeSubtitle": "同一计划，每年付费一次",
+    "yearlySwitchPlanLabel": "计划",
+    "yearlySwitchPlanValue": "{plan}，每年 {price}",
+    "yearlySwitchDueToday": "今日应付",
+    "yearlySwitchRenews": "续订日期",
+    "yearlySwitchCreditNote": "已包含本月剩余天数的抵扣。",
+    "yearlySwitchDeclined": "付款未成功。你仍按月付费。",
+    "yearlySwitchFailed": "无法切换。你仍按月付费。",
+    "yearlySwitchPreviewFailed": "无法加载价格。",
+    "yearlySwitchUnavailable": "你的计划目前不支持按年付费。",
+    "yearlySwitchDoneTitle": "已改为按年付费",
+    "yearlySwitchDoneBody": "今日已扣款 {amount}。续订日期：{date}。"
 }

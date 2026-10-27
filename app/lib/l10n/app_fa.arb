@@ -11865,5 +11865,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "انجام شد",
     "openLoopAnswerRemind": "بعدً یادآوری کن",
-    "openLoopAnswerDrop": "رهاش کن"
+    "openLoopAnswerDrop": "رهاش کن",
+    "yearlySwitchTitle": "تغییر به سالانه",
+    "yearlySwitchRowSavings": "سالانه {amount} صرفه‌جویی کنید",
+    "yearlySwitchHomeTitle": "با پرداخت سالانه، {amount} در سال صرفه‌جویی کنید",
+    "yearlySwitchHomeSubtitle": "همان طرح، سالی یک بار پرداخت",
+    "yearlySwitchPlanLabel": "طرح",
+    "yearlySwitchPlanValue": "{plan}، سالانه {price}",
+    "yearlySwitchDueToday": "قابل پرداخت امروز",
+    "yearlySwitchRenews": "تمدید",
+    "yearlySwitchCreditNote": "شامل اعتبار باقی‌ماندهٔ این ماه است.",
+    "yearlySwitchDeclined": "پرداخت انجام نشد. همچنان ماهانه پرداخت می‌کنید.",
+    "yearlySwitchFailed": "تغییر انجام نشد. همچنان ماهانه پرداخت می‌کنید.",
+    "yearlySwitchPreviewFailed": "قیمت بارگیری نشد.",
+    "yearlySwitchUnavailable": "پرداخت سالانه اکنون برای طرح شما در دسترس نیست.",
+    "yearlySwitchDoneTitle": "اکنون سالانه پرداخت می‌کنید",
+    "yearlySwitchDoneBody": "امروز {amount} کسر شد. تمدید در {date}."
 }

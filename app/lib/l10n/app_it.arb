@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Fatto",
     "openLoopAnswerRemind": "Ricordamelo più tardi",
-    "openLoopAnswerDrop": "Ignora"
+    "openLoopAnswerDrop": "Ignora",
+    "yearlySwitchTitle": "Passa all'annuale",
+    "yearlySwitchRowSavings": "Risparmia {amount} all'anno",
+    "yearlySwitchHomeTitle": "Risparmia {amount} all'anno con l'annuale",
+    "yearlySwitchHomeSubtitle": "Stesso piano, pagato una volta all'anno",
+    "yearlySwitchPlanLabel": "Piano",
+    "yearlySwitchPlanValue": "{plan}, {price} all'anno",
+    "yearlySwitchDueToday": "Da pagare oggi",
+    "yearlySwitchRenews": "Rinnovo",
+    "yearlySwitchCreditNote": "Include un credito per il resto di questo mese.",
+    "yearlySwitchDeclined": "Il pagamento non è andato a buon fine. Resti sul mensile.",
+    "yearlySwitchFailed": "Impossibile cambiare. Resti sul mensile.",
+    "yearlySwitchPreviewFailed": "Impossibile caricare il prezzo.",
+    "yearlySwitchUnavailable": "La fatturazione annuale non è disponibile per il tuo piano in questo momento.",
+    "yearlySwitchDoneTitle": "Ora sei sull'annuale",
+    "yearlySwitchDoneBody": "Addebitati {amount} oggi. Rinnovo il {date}."
 }

@@ -14592,4 +14592,57 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Drop det';
+
+  @override
+  String get yearlySwitchTitle => 'Skift til årlig';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Spar $amount om året';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Spar $amount om året med årlig betaling';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Samme abonnement, betalt én gang om året';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Abonnement';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price om året';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Betales i dag';
+
+  @override
+  String get yearlySwitchRenews => 'Fornyes';
+
+  @override
+  String get yearlySwitchCreditNote => 'Inkluderer kredit for resten af denne måned.';
+
+  @override
+  String get yearlySwitchDeclined => 'Betalingen gik ikke igennem. Du betaler stadig månedligt.';
+
+  @override
+  String get yearlySwitchFailed => 'Kunne ikke skifte. Du betaler stadig månedligt.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Kunne ikke indlæse din pris.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Årlig betaling er ikke tilgængelig for dit abonnement lige nu.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Du betaler nu årligt';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount trukket i dag. Fornyes $date.';
+  }
 }

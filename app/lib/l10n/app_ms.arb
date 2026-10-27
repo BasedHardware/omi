@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Selesai",
     "openLoopAnswerRemind": "Ingatkan saya nanti",
-    "openLoopAnswerDrop": "Buang"
+    "openLoopAnswerDrop": "Buang",
+    "yearlySwitchTitle": "Tukar ke Tahunan",
+    "yearlySwitchRowSavings": "Jimat {amount} setahun",
+    "yearlySwitchHomeTitle": "Jimat {amount} setahun dengan bayaran tahunan",
+    "yearlySwitchHomeSubtitle": "Pelan yang sama, dibayar setahun sekali",
+    "yearlySwitchPlanLabel": "Pelan",
+    "yearlySwitchPlanValue": "{plan}, {price} setahun",
+    "yearlySwitchDueToday": "Perlu dibayar hari ini",
+    "yearlySwitchRenews": "Diperbaharui",
+    "yearlySwitchCreditNote": "Termasuk kredit untuk baki bulan ini.",
+    "yearlySwitchDeclined": "Pembayaran tidak berjaya. Anda masih membayar bulanan.",
+    "yearlySwitchFailed": "Tidak dapat menukar. Anda masih membayar bulanan.",
+    "yearlySwitchPreviewFailed": "Tidak dapat memuatkan harga anda.",
+    "yearlySwitchUnavailable": "Pengebilan tahunan tidak tersedia untuk pelan anda sekarang.",
+    "yearlySwitchDoneTitle": "Anda kini membayar tahunan",
+    "yearlySwitchDoneBody": "{amount} dicaj hari ini. Diperbaharui pada {date}."
 }

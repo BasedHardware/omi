@@ -36921,6 +36921,22 @@
               }
             ],
             "title": "Promotion Code"
+          },
+          "proration_date": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proration Date"
+          },
+          "switch_now": {
+            "default": false,
+            "title": "Switch Now",
+            "type": "boolean"
           }
         },
         "required": [
@@ -38637,6 +38653,134 @@
           "status"
         ],
         "title": "WrappedStatusResponse",
+        "type": "object"
+      },
+      "YearlySwitchResponse": {
+        "properties": {
+          "amount_due_today": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Due Today"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "first_billing_period": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Billing Period"
+          },
+          "monthly_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Amount"
+          },
+          "plan_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Id"
+          },
+          "price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Id"
+          },
+          "proration_date": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proration Date"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "renews_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renews At"
+          },
+          "savings_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Savings Amount"
+          },
+          "yearly_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yearly Amount"
+          }
+        },
+        "required": [
+          "eligible",
+          "reason"
+        ],
+        "title": "YearlySwitchResponse",
         "type": "object"
       },
       "routers__desktop_tts_updates__TtsSynthesizeRequest": {
@@ -66119,6 +66263,93 @@
           }
         ],
         "summary": "Upgrade Subscription Endpoint"
+      }
+    },
+    "/v1/payments/yearly-switch": {
+      "get": {
+        "description": "Whether this monthly payer can switch to yearly now, and (with preview) exactly what it costs.",
+        "operationId": "get_yearly_switch_endpoint_v1_payments_yearly_switch_get",
+        "parameters": [
+          {
+            "description": "Include Stripe's invoice preview: the charge today and the renewal date.",
+            "in": "query",
+            "name": "preview",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include Stripe's invoice preview: the charge today and the renewal date.",
+              "title": "Preview",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YearlySwitchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Yearly Switch Endpoint"
       }
     },
     "/v1/paypal/payment-details": {

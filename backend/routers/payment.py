@@ -82,6 +82,7 @@ from utils.overage import (
 )
 from utils.executors import db_executor, stripe_executor, run_blocking
 from utils.log_sanitizer import sanitize
+from utils import yearly_switch
 import os
 import logging
 
@@ -113,6 +114,11 @@ class CreateCheckoutRequest(BaseModel):
 class UpgradeSubscriptionRequest(BaseModel):
     price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
+    # Monthly to yearly on the same plan, charged now with proration instead of scheduled for the end
+    # of the month (utils/yearly_switch.py). proration_date is the one GET /v1/payments/yearly-switch
+    # previewed, so the charge matches what the reader confirmed.
+    switch_now: bool = False
+    proration_date: Optional[int] = None
 
 
 class PaymentMutationResponse(BaseModel):
@@ -895,6 +901,22 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         if desktop_change_error:
             raise HTTPException(status_code=400, detail=desktop_change_error)
 
+        if request.switch_now:
+            # The yearly switch offer's own rules: no trial (#23298), past_due, scheduled cancel or
+            # change, or discount, and no promotion code (no new discounts).
+            refusal = (
+                'promotion_code'
+                if request.promotion_code
+                else yearly_switch.switch_refusal(stripe_sub, request.price_id)
+                or yearly_switch.proration_date_refusal(stripe_sub, request.proration_date)
+            )
+            if refusal:
+                logger.info(f"Yearly switch refused for user {uid}: {refusal}")
+                raise HTTPException(
+                    status_code=409,
+                    detail="Switching to yearly is not available for this subscription right now.",
+                )
+
         # Validate and resolve promotion code if provided
         resolved_promo_id = None
         if request.promotion_code:
@@ -908,8 +930,8 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         # re-schedule. Release it first so the user can switch plans again.
         _release_attached_schedules(stripe_sub)
 
-        # Cross-plan change (e.g. Unlimited→Architect): immediate swap with proration
-        if current_plan != target_plan:
+        # Cross-plan change (e.g. Unlimited→Architect), or the yearly switch: immediate swap with proration
+        if current_plan != target_plan or request.switch_now:
             modify_params = {
                 'items': [{'id': current_item_id, 'price': request.price_id}],
                 'proration_behavior': 'always_invoice',
@@ -918,6 +940,10 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             }
             if resolved_promo_id:
                 modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
+            if request.switch_now:
+                modify_params['metadata']['omi_yearly_switch'] = 'in_app'
+                if request.proration_date is not None:
+                    modify_params['proration_date'] = request.proration_date
 
             updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
             updated_sub_dict = updated_sub.to_dict()
@@ -956,7 +982,11 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
             return {
                 "status": "success",
-                "message": f"You've been upgraded to {target_plan.value.title()}! Your new plan is active now.",
+                "message": (
+                    "You're on yearly billing now."
+                    if request.switch_now
+                    else f"You've been upgraded to {target_plan.value.title()}! Your new plan is active now."
+                ),
                 "subscription": (
                     new_subscription.model_dump() if new_subscription else current_subscription.model_dump()
                 ),

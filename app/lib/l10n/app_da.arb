@@ -4481,5 +4481,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Færdig",
     "openLoopAnswerRemind": "Mind mig senere",
-    "openLoopAnswerDrop": "Drop det"
+    "openLoopAnswerDrop": "Drop det",
+    "yearlySwitchTitle": "Skift til årlig",
+    "yearlySwitchRowSavings": "Spar {amount} om året",
+    "yearlySwitchHomeTitle": "Spar {amount} om året med årlig betaling",
+    "yearlySwitchHomeSubtitle": "Samme abonnement, betalt én gang om året",
+    "yearlySwitchPlanLabel": "Abonnement",
+    "yearlySwitchPlanValue": "{plan}, {price} om året",
+    "yearlySwitchDueToday": "Betales i dag",
+    "yearlySwitchRenews": "Fornyes",
+    "yearlySwitchCreditNote": "Inkluderer kredit for resten af denne måned.",
+    "yearlySwitchDeclined": "Betalingen gik ikke igennem. Du betaler stadig månedligt.",
+    "yearlySwitchFailed": "Kunne ikke skifte. Du betaler stadig månedligt.",
+    "yearlySwitchPreviewFailed": "Kunne ikke indlæse din pris.",
+    "yearlySwitchUnavailable": "Årlig betaling er ikke tilgængelig for dit abonnement lige nu.",
+    "yearlySwitchDoneTitle": "Du betaler nu årligt",
+    "yearlySwitchDoneBody": "{amount} trukket i dag. Fornyes {date}."
 }

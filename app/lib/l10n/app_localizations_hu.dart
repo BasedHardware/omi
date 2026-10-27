@@ -14659,4 +14659,57 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Eldobás';
+
+  @override
+  String get yearlySwitchTitle => 'Váltás éves fizetésre';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Évi $amount megtakarítás';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Évi $amount megtakarítás éves fizetéssel';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Ugyanaz a csomag, évente egyszer fizetve';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Csomag';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, évi $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Ma fizetendő';
+
+  @override
+  String get yearlySwitchRenews => 'Megújul';
+
+  @override
+  String get yearlySwitchCreditNote => 'Tartalmazza a hónap hátralévő részének jóváírását.';
+
+  @override
+  String get yearlySwitchDeclined => 'A fizetés nem sikerült. Továbbra is havonta fizet.';
+
+  @override
+  String get yearlySwitchFailed => 'A váltás nem sikerült. Továbbra is havonta fizet.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Nem sikerült betölteni az árat.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Az éves fizetés jelenleg nem érhető el az Ön csomagjához.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Mostantól évente fizet';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Ma terhelve: $amount. Megújul: $date.';
+  }
 }

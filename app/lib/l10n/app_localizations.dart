@@ -25826,6 +25826,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Drop it'**
   String get openLoopAnswerDrop;
+
+  /// Title of the sheet, row and button that switch a monthly subscription to the same plan billed yearly
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Yearly'**
+  String get yearlySwitchTitle;
+
+  /// Plans & Billing row subtitle: what switching to yearly saves; amount is a price like $89.97
+  ///
+  /// In en, this message translates to:
+  /// **'Save {amount} a year'**
+  String yearlySwitchRowSavings(String amount);
+
+  /// Home row for a monthly subscriber: yearly billing of the same plan saves this much; amount is a rounded price like $90
+  ///
+  /// In en, this message translates to:
+  /// **'Save {amount} a year with yearly'**
+  String yearlySwitchHomeTitle(String amount);
+
+  /// Second line of the Home row: nothing about the plan changes except billing once a year
+  ///
+  /// In en, this message translates to:
+  /// **'Same plan, billed once a year'**
+  String get yearlySwitchHomeSubtitle;
+
+  /// Label of the row naming the plan in the switch-to-yearly preview
+  ///
+  /// In en, this message translates to:
+  /// **'Plan'**
+  String get yearlySwitchPlanLabel;
+
+  /// Value of the Plan row in the switch-to-yearly preview, e.g. "Unlimited, $269.91 a year"
+  ///
+  /// In en, this message translates to:
+  /// **'{plan}, {price} a year'**
+  String yearlySwitchPlanValue(String plan, String price);
+
+  /// Label of the amount charged today when switching to yearly
+  ///
+  /// In en, this message translates to:
+  /// **'Due today'**
+  String get yearlySwitchDueToday;
+
+  /// Label of the date the yearly plan renews, in the switch-to-yearly preview
+  ///
+  /// In en, this message translates to:
+  /// **'Renews'**
+  String get yearlySwitchRenews;
+
+  /// Under the switch-to-yearly preview: today’s charge is lower because the unused part of the current month is credited
+  ///
+  /// In en, this message translates to:
+  /// **'Includes credit for the rest of this month.'**
+  String get yearlySwitchCreditNote;
+
+  /// Shown when the card is declined while switching to yearly; nothing changed and the subscription stays monthly
+  ///
+  /// In en, this message translates to:
+  /// **'The payment didn\'t go through. You\'re still on monthly.'**
+  String get yearlySwitchDeclined;
+
+  /// Shown when switching to yearly fails for another reason; nothing changed
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t switch. You\'re still on monthly.'**
+  String get yearlySwitchFailed;
+
+  /// Shown in the switch-to-yearly sheet when the price preview cannot be loaded; a Try Again button follows
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your price.'**
+  String get yearlySwitchPreviewFailed;
+
+  /// Shown in the switch-to-yearly sheet when the subscription can no longer switch (for example it was cancelled meanwhile)
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly billing isn\'t available for your plan right now.'**
+  String get yearlySwitchUnavailable;
+
+  /// Success title after switching to yearly billing
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on yearly'**
+  String get yearlySwitchDoneTitle;
+
+  /// Success line after switching to yearly: what was charged today and when the yearly plan renews
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} charged today. Renews {date}.'**
+  String yearlySwitchDoneBody(String amount, String date);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

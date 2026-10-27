@@ -14630,4 +14630,57 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Odbaci';
+
+  @override
+  String get yearlySwitchTitle => 'Pređi na godišnje';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Uštedite $amount godišnje';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Uštedite $amount godišnje uz godišnje plaćanje';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Isti plan, plaćanje jednom godišnje';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price godišnje';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Za plaćanje danas';
+
+  @override
+  String get yearlySwitchRenews => 'Obnavlja se';
+
+  @override
+  String get yearlySwitchCreditNote => 'Uključuje kredit za ostatak ovog mjeseca.';
+
+  @override
+  String get yearlySwitchDeclined => 'Plaćanje nije prošlo. I dalje plaćate mjesečno.';
+
+  @override
+  String get yearlySwitchFailed => 'Prelazak nije uspio. I dalje plaćate mjesečno.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Cijena se nije mogla učitati.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Godišnje plaćanje trenutno nije dostupno za vaš plan.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Sada plaćate godišnje';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Danas naplaćeno $amount. Obnavlja se $date.';
+  }
 }

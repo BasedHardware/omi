@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "完了",
     "openLoopAnswerRemind": "後でリマインド",
-    "openLoopAnswerDrop": "破棄"
+    "openLoopAnswerDrop": "破棄",
+    "yearlySwitchTitle": "年払いに切り替える",
+    "yearlySwitchRowSavings": "年間{amount}お得",
+    "yearlySwitchHomeTitle": "年払いで年間{amount}お得",
+    "yearlySwitchHomeSubtitle": "同じプランを年1回のお支払いで",
+    "yearlySwitchPlanLabel": "プラン",
+    "yearlySwitchPlanValue": "{plan}、年額{price}",
+    "yearlySwitchDueToday": "本日のお支払い",
+    "yearlySwitchRenews": "次回更新",
+    "yearlySwitchCreditNote": "今月の残り期間分のクレジットを含みます。",
+    "yearlySwitchDeclined": "お支払いが完了しませんでした。月払いのままです。",
+    "yearlySwitchFailed": "切り替えられませんでした。月払いのままです。",
+    "yearlySwitchPreviewFailed": "料金を読み込めませんでした。",
+    "yearlySwitchUnavailable": "現在、お使いのプランでは年払いをご利用いただけません。",
+    "yearlySwitchDoneTitle": "年払いに切り替わりました",
+    "yearlySwitchDoneBody": "本日{amount}を請求しました。次回更新は{date}です。"
 }

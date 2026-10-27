@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Готово",
     "openLoopAnswerRemind": "Напомни по-късно",
-    "openLoopAnswerDrop": "Изостави го"
+    "openLoopAnswerDrop": "Изостави го",
+    "yearlySwitchTitle": "Преминете към годишен",
+    "yearlySwitchRowSavings": "Спестете {amount} годишно",
+    "yearlySwitchHomeTitle": "Спестете {amount} годишно с годишно плащане",
+    "yearlySwitchHomeSubtitle": "Същият план, плащане веднъж годишно",
+    "yearlySwitchPlanLabel": "План",
+    "yearlySwitchPlanValue": "{plan}, {price} годишно",
+    "yearlySwitchDueToday": "Дължимо днес",
+    "yearlySwitchRenews": "Подновяване",
+    "yearlySwitchCreditNote": "Включва кредит за остатъка от този месец.",
+    "yearlySwitchDeclined": "Плащането не премина. Оставате на месечно плащане.",
+    "yearlySwitchFailed": "Превключването не успя. Оставате на месечно плащане.",
+    "yearlySwitchPreviewFailed": "Цената не можа да се зареди.",
+    "yearlySwitchUnavailable": "Годишното плащане в момента не е достъпно за вашия план.",
+    "yearlySwitchDoneTitle": "Вече плащате годишно",
+    "yearlySwitchDoneBody": "Днес са таксувани {amount}. Подновяване на {date}."
 }

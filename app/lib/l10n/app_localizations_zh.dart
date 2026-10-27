@@ -14377,4 +14377,57 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => '放弃';
+
+  @override
+  String get yearlySwitchTitle => '改为按年付费';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return '每年节省 $amount';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return '按年付费，每年节省 $amount';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => '同一计划，每年付费一次';
+
+  @override
+  String get yearlySwitchPlanLabel => '计划';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan，每年 $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => '今日应付';
+
+  @override
+  String get yearlySwitchRenews => '续订日期';
+
+  @override
+  String get yearlySwitchCreditNote => '已包含本月剩余天数的抵扣。';
+
+  @override
+  String get yearlySwitchDeclined => '付款未成功。你仍按月付费。';
+
+  @override
+  String get yearlySwitchFailed => '无法切换。你仍按月付费。';
+
+  @override
+  String get yearlySwitchPreviewFailed => '无法加载价格。';
+
+  @override
+  String get yearlySwitchUnavailable => '你的计划目前不支持按年付费。';
+
+  @override
+  String get yearlySwitchDoneTitle => '已改为按年付费';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '今日已扣款 $amount。续订日期：$date。';
+  }
 }

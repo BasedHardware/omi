@@ -4474,5 +4474,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Готово",
     "openLoopAnswerRemind": "Напомнить позже",
-    "openLoopAnswerDrop": "Отклонить"
+    "openLoopAnswerDrop": "Отклонить",
+    "yearlySwitchTitle": "Перейти на годовой",
+    "yearlySwitchRowSavings": "Экономьте {amount} в год",
+    "yearlySwitchHomeTitle": "Экономьте {amount} в год с годовой оплатой",
+    "yearlySwitchHomeSubtitle": "Тот же план, оплата раз в год",
+    "yearlySwitchPlanLabel": "План",
+    "yearlySwitchPlanValue": "{plan}, {price} в год",
+    "yearlySwitchDueToday": "К оплате сегодня",
+    "yearlySwitchRenews": "Продление",
+    "yearlySwitchCreditNote": "Включает кредит за остаток этого месяца.",
+    "yearlySwitchDeclined": "Платёж не прошёл. Вы по-прежнему платите ежемесячно.",
+    "yearlySwitchFailed": "Не удалось перейти. Вы по-прежнему платите ежемесячно.",
+    "yearlySwitchPreviewFailed": "Не удалось загрузить цену.",
+    "yearlySwitchUnavailable": "Годовая оплата сейчас недоступна для вашего плана.",
+    "yearlySwitchDoneTitle": "Теперь вы платите раз в год",
+    "yearlySwitchDoneBody": "Сегодня списано {amount}. Продление {date}."
 }

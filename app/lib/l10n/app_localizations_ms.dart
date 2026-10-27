@@ -14638,4 +14638,57 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Buang';
+
+  @override
+  String get yearlySwitchTitle => 'Tukar ke Tahunan';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Jimat $amount setahun';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Jimat $amount setahun dengan bayaran tahunan';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Pelan yang sama, dibayar setahun sekali';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Pelan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price setahun';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Perlu dibayar hari ini';
+
+  @override
+  String get yearlySwitchRenews => 'Diperbaharui';
+
+  @override
+  String get yearlySwitchCreditNote => 'Termasuk kredit untuk baki bulan ini.';
+
+  @override
+  String get yearlySwitchDeclined => 'Pembayaran tidak berjaya. Anda masih membayar bulanan.';
+
+  @override
+  String get yearlySwitchFailed => 'Tidak dapat menukar. Anda masih membayar bulanan.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Tidak dapat memuatkan harga anda.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Pengebilan tahunan tidak tersedia untuk pelan anda sekarang.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Anda kini membayar tahunan';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount dicaj hari ini. Diperbaharui pada $date.';
+  }
 }

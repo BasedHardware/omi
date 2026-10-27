@@ -11865,5 +11865,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "সম্পন্ন",
     "openLoopAnswerRemind": "পরে মনে করিয়ে দিন",
-    "openLoopAnswerDrop": "বাদ দিন"
+    "openLoopAnswerDrop": "বাদ দিন",
+    "yearlySwitchTitle": "বার্ষিকে যান",
+    "yearlySwitchRowSavings": "বছরে {amount} সাশ্রয় করুন",
+    "yearlySwitchHomeTitle": "বার্ষিক পেমেন্টে বছরে {amount} সাশ্রয় করুন",
+    "yearlySwitchHomeSubtitle": "একই প্ল্যান, বছরে একবার বিল",
+    "yearlySwitchPlanLabel": "প্ল্যান",
+    "yearlySwitchPlanValue": "{plan}, বছরে {price}",
+    "yearlySwitchDueToday": "আজ দেয়",
+    "yearlySwitchRenews": "নবায়ন",
+    "yearlySwitchCreditNote": "এই মাসের বাকি সময়ের ক্রেডিট অন্তর্ভুক্ত।",
+    "yearlySwitchDeclined": "পেমেন্ট সম্পন্ন হয়নি। আপনি এখনও মাসিক প্ল্যানে আছেন।",
+    "yearlySwitchFailed": "পরিবর্তন করা যায়নি। আপনি এখনও মাসিক প্ল্যানে আছেন।",
+    "yearlySwitchPreviewFailed": "আপনার মূল্য লোড করা যায়নি।",
+    "yearlySwitchUnavailable": "এই মুহূর্তে আপনার প্ল্যানের জন্য বার্ষিক বিলিং উপলব্ধ নয়।",
+    "yearlySwitchDoneTitle": "আপনি এখন বার্ষিক প্ল্যানে",
+    "yearlySwitchDoneBody": "আজ {amount} চার্জ করা হয়েছে। নবায়ন {date}।"
 }

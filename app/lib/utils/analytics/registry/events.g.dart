@@ -2694,6 +2694,112 @@ final class SubscriptionCancelAbandoned extends RegisteredEvent {
   Map<String, Object> get properties => {"step": step, "reason": reason.wireName};
 }
 
+enum SubscriptionYearlySwitchShownSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchShownSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchShown extends RegisteredEvent {
+  const SubscriptionYearlySwitchShown({required this.surface});
+  final SubscriptionYearlySwitchShownSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Shown";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
+enum SubscriptionYearlySwitchOpenedSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchOpenedSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchOpened extends RegisteredEvent {
+  const SubscriptionYearlySwitchOpened({required this.surface});
+  final SubscriptionYearlySwitchOpenedSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Opened";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
+enum SubscriptionYearlySwitchConfirmedSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchConfirmedSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchConfirmed extends RegisteredEvent {
+  const SubscriptionYearlySwitchConfirmed({required this.surface});
+  final SubscriptionYearlySwitchConfirmedSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Confirmed";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
+enum SubscriptionYearlySwitchSucceededSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchSucceededSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchSucceeded extends RegisteredEvent {
+  const SubscriptionYearlySwitchSucceeded({required this.surface});
+  final SubscriptionYearlySwitchSucceededSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Succeeded";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
+enum SubscriptionYearlySwitchFailedSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchFailedSurface(this.wireName);
+  final String wireName;
+}
+
+enum SubscriptionYearlySwitchFailedReason {
+  declined("declined"),
+  refused("refused"),
+  previewUnavailable("preview_unavailable"),
+  error("error");
+  const SubscriptionYearlySwitchFailedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchFailed extends RegisteredEvent {
+  const SubscriptionYearlySwitchFailed({required this.surface, required this.reason});
+  final SubscriptionYearlySwitchFailedSurface surface;
+  final SubscriptionYearlySwitchFailedReason reason;
+  @override
+  String get wireName => "Subscription Yearly Switch Failed";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName, "reason": reason.wireName};
+}
+
+enum SubscriptionYearlySwitchDismissedSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchDismissedSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchDismissed extends RegisteredEvent {
+  const SubscriptionYearlySwitchDismissed({required this.surface});
+  final SubscriptionYearlySwitchDismissedSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Dismissed";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
 enum GuidedIntroPayoffShownAnswerSource {
   chat("chat"),
   fallback("fallback");

@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Hotovo",
     "openLoopAnswerRemind": "Připomenout později",
-    "openLoopAnswerDrop": "Zahodit"
+    "openLoopAnswerDrop": "Zahodit",
+    "yearlySwitchTitle": "Přejít na roční",
+    "yearlySwitchRowSavings": "Ušetřete {amount} ročně",
+    "yearlySwitchHomeTitle": "Ušetřete {amount} ročně s roční platbou",
+    "yearlySwitchHomeSubtitle": "Stejný plán, platba jednou ročně",
+    "yearlySwitchPlanLabel": "Plán",
+    "yearlySwitchPlanValue": "{plan}, {price} ročně",
+    "yearlySwitchDueToday": "K úhradě dnes",
+    "yearlySwitchRenews": "Obnovení",
+    "yearlySwitchCreditNote": "Zahrnuje kredit za zbytek tohoto měsíce.",
+    "yearlySwitchDeclined": "Platba neproběhla. Dál platíte měsíčně.",
+    "yearlySwitchFailed": "Přechod se nezdařil. Dál platíte měsíčně.",
+    "yearlySwitchPreviewFailed": "Cenu se nepodařilo načíst.",
+    "yearlySwitchUnavailable": "Roční platba teď pro váš plán není dostupná.",
+    "yearlySwitchDoneTitle": "Teď platíte ročně",
+    "yearlySwitchDoneBody": "Dnes účtováno {amount}. Obnovení {date}."
 }

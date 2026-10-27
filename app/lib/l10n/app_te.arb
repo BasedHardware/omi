@@ -11865,5 +11865,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "పూర్తయింది",
     "openLoopAnswerRemind": "తర్వాత గుర్తు చేయి",
-    "openLoopAnswerDrop": "వదిలేయి"
+    "openLoopAnswerDrop": "వదిలేయి",
+    "yearlySwitchTitle": "వార్షికానికి మారండి",
+    "yearlySwitchRowSavings": "ఏడాదికి {amount} ఆదా చేయండి",
+    "yearlySwitchHomeTitle": "వార్షిక చెల్లింపుతో ఏడాదికి {amount} ఆదా చేయండి",
+    "yearlySwitchHomeSubtitle": "అదే ప్లాన్, ఏడాదికి ఒకసారి చెల్లింపు",
+    "yearlySwitchPlanLabel": "ప్లాన్",
+    "yearlySwitchPlanValue": "{plan}, ఏడాదికి {price}",
+    "yearlySwitchDueToday": "ఈరోజు చెల్లించాల్సినది",
+    "yearlySwitchRenews": "పునరుద్ధరణ",
+    "yearlySwitchCreditNote": "ఈ నెలలో మిగిలిన రోజులకు క్రెడిట్ ఉంటుంది.",
+    "yearlySwitchDeclined": "చెల్లింపు పూర్తి కాలేదు. మీరు ఇంకా నెలవారీ ప్లాన్‌లోనే ఉన్నారు.",
+    "yearlySwitchFailed": "మారడం సాధ్యం కాలేదు. మీరు ఇంకా నెలవారీ ప్లాన్‌లోనే ఉన్నారు.",
+    "yearlySwitchPreviewFailed": "మీ ధరను లోడ్ చేయలేకపోయాం.",
+    "yearlySwitchUnavailable": "ప్రస్తుతం మీ ప్లాన్‌కు వార్షిక బిల్లింగ్ అందుబాటులో లేదు.",
+    "yearlySwitchDoneTitle": "మీరు ఇప్పుడు వార్షిక ప్లాన్‌లో ఉన్నారు",
+    "yearlySwitchDoneBody": "ఈరోజు {amount} వసూలు చేశాం. పునరుద్ధరణ {date}."
 }

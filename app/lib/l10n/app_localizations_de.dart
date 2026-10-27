@@ -14710,4 +14710,57 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Verwerfen';
+
+  @override
+  String get yearlySwitchTitle => 'Zu jährlich wechseln';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Sparen Sie $amount pro Jahr';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Sparen Sie $amount pro Jahr mit jährlicher Zahlung';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Gleicher Plan, einmal im Jahr bezahlt';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price pro Jahr';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Heute fällig';
+
+  @override
+  String get yearlySwitchRenews => 'Verlängerung';
+
+  @override
+  String get yearlySwitchCreditNote => 'Enthält eine Gutschrift für den Rest dieses Monats.';
+
+  @override
+  String get yearlySwitchDeclined => 'Die Zahlung ist nicht durchgegangen. Sie zahlen weiterhin monatlich.';
+
+  @override
+  String get yearlySwitchFailed => 'Wechsel nicht möglich. Sie zahlen weiterhin monatlich.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Preis konnte nicht geladen werden.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Jährliche Zahlung ist für Ihren Plan gerade nicht verfügbar.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Sie zahlen jetzt jährlich';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Heute $amount abgebucht. Verlängerung am $date.';
+  }
 }

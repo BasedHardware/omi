@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Gata",
     "openLoopAnswerRemind": "Amintește-mi mai târziu",
-    "openLoopAnswerDrop": "Renunță"
+    "openLoopAnswerDrop": "Renunță",
+    "yearlySwitchTitle": "Treci la anual",
+    "yearlySwitchRowSavings": "Economisește {amount} pe an",
+    "yearlySwitchHomeTitle": "Economisește {amount} pe an cu plata anuală",
+    "yearlySwitchHomeSubtitle": "Același plan, plătit o dată pe an",
+    "yearlySwitchPlanLabel": "Plan",
+    "yearlySwitchPlanValue": "{plan}, {price} pe an",
+    "yearlySwitchDueToday": "De plată azi",
+    "yearlySwitchRenews": "Se reînnoiește",
+    "yearlySwitchCreditNote": "Include credit pentru restul acestei luni.",
+    "yearlySwitchDeclined": "Plata nu a trecut. Rămâi la plata lunară.",
+    "yearlySwitchFailed": "Nu s-a putut schimba. Rămâi la plata lunară.",
+    "yearlySwitchPreviewFailed": "Prețul nu a putut fi încărcat.",
+    "yearlySwitchUnavailable": "Plata anuală nu este disponibilă acum pentru planul tău.",
+    "yearlySwitchDoneTitle": "Acum plătești anual",
+    "yearlySwitchDoneBody": "Azi s-au încasat {amount}. Se reînnoiește pe {date}."
 }

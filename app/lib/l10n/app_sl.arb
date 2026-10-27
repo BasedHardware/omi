@@ -11865,5 +11865,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Končano",
     "openLoopAnswerRemind": "Spomni me pozneje",
-    "openLoopAnswerDrop": "Opusti"
+    "openLoopAnswerDrop": "Opusti",
+    "yearlySwitchTitle": "Preklopi na letno",
+    "yearlySwitchRowSavings": "Prihranite {amount} na leto",
+    "yearlySwitchHomeTitle": "Prihranite {amount} na leto z letnim plačilom",
+    "yearlySwitchHomeSubtitle": "Isti paket, plačilo enkrat na leto",
+    "yearlySwitchPlanLabel": "Paket",
+    "yearlySwitchPlanValue": "{plan}, {price} na leto",
+    "yearlySwitchDueToday": "Za plačilo danes",
+    "yearlySwitchRenews": "Podaljšanje",
+    "yearlySwitchCreditNote": "Vključuje dobropis za preostanek tega meseca.",
+    "yearlySwitchDeclined": "Plačilo ni uspelo. Še vedno plačujete mesečno.",
+    "yearlySwitchFailed": "Preklop ni uspel. Še vedno plačujete mesečno.",
+    "yearlySwitchPreviewFailed": "Cene ni bilo mogoče naložiti.",
+    "yearlySwitchUnavailable": "Letno plačilo za vaš paket trenutno ni na voljo.",
+    "yearlySwitchDoneTitle": "Zdaj plačujete letno",
+    "yearlySwitchDoneBody": "Danes zaračunano {amount}. Podaljšanje {date}."
 }

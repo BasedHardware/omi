@@ -100,10 +100,38 @@ Future<bool> acceptRetentionOffer() async {
   return response != null && response.statusCode == 200;
 }
 
-Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, String? promotionCode}) async {
+/// The monthly-to-yearly switch for this reader; with [preview], Stripe's charge today and renewal
+/// date. Null when it cannot be read.
+Future<wire.GeneratedYearlySwitchResponse?> getYearlySwitch({bool preview = false}) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/payments/yearly-switch${preview ? '?preview=true' : ''}',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) return null;
+  try {
+    return wire.GeneratedYearlySwitchResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// [switchNow] charges a monthly-to-yearly change today (prorated) instead of scheduling it, at the
+/// [prorationDate] the yearly-switch preview returned.
+Future<Map<String, dynamic>?> upgradeSubscription({
+  required String priceId,
+  String? promotionCode,
+  bool switchNow = false,
+  int? prorationDate,
+}) async {
   final body = <String, dynamic>{'price_id': priceId};
   if (promotionCode != null && promotionCode.trim().isNotEmpty) {
     body['promotion_code'] = promotionCode.trim();
+  }
+  if (switchNow) {
+    body['switch_now'] = true;
+    if (prorationDate != null) body['proration_date'] = prorationDate;
   }
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/upgrade-subscription',

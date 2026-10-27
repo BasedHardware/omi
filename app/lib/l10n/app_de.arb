@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Erledigt",
     "openLoopAnswerRemind": "Später erinnern",
-    "openLoopAnswerDrop": "Verwerfen"
+    "openLoopAnswerDrop": "Verwerfen",
+    "yearlySwitchTitle": "Zu jährlich wechseln",
+    "yearlySwitchRowSavings": "Sparen Sie {amount} pro Jahr",
+    "yearlySwitchHomeTitle": "Sparen Sie {amount} pro Jahr mit jährlicher Zahlung",
+    "yearlySwitchHomeSubtitle": "Gleicher Plan, einmal im Jahr bezahlt",
+    "yearlySwitchPlanLabel": "Plan",
+    "yearlySwitchPlanValue": "{plan}, {price} pro Jahr",
+    "yearlySwitchDueToday": "Heute fällig",
+    "yearlySwitchRenews": "Verlängerung",
+    "yearlySwitchCreditNote": "Enthält eine Gutschrift für den Rest dieses Monats.",
+    "yearlySwitchDeclined": "Die Zahlung ist nicht durchgegangen. Sie zahlen weiterhin monatlich.",
+    "yearlySwitchFailed": "Wechsel nicht möglich. Sie zahlen weiterhin monatlich.",
+    "yearlySwitchPreviewFailed": "Preis konnte nicht geladen werden.",
+    "yearlySwitchUnavailable": "Jährliche Zahlung ist für Ihren Plan gerade nicht verfügbar.",
+    "yearlySwitchDoneTitle": "Sie zahlen jetzt jährlich",
+    "yearlySwitchDoneBody": "Heute {amount} abgebucht. Verlängerung am {date}."
 }

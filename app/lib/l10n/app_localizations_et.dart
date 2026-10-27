@@ -14594,4 +14594,57 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Jäta ära';
+
+  @override
+  String get yearlySwitchTitle => 'Mine üle aastasele';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Säästa $amount aastas';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Säästa aastamaksega $amount aastas';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Sama pakett, makse kord aastas';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Pakett';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price aastas';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Tasuda täna';
+
+  @override
+  String get yearlySwitchRenews => 'Uueneb';
+
+  @override
+  String get yearlySwitchCreditNote => 'Sisaldab krediiti selle kuu ülejäänud aja eest.';
+
+  @override
+  String get yearlySwitchDeclined => 'Makse ei õnnestunud. Maksad endiselt igakuiselt.';
+
+  @override
+  String get yearlySwitchFailed => 'Üleminek ebaõnnestus. Maksad endiselt igakuiselt.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Hinda ei õnnestunud laadida.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Aastamaks pole sinu paketile praegu saadaval.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Maksad nüüd kord aastas';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Täna võeti $amount. Uueneb $date.';
+  }
 }

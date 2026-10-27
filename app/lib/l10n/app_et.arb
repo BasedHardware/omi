@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Tehtud",
     "openLoopAnswerRemind": "Meenuta hiljem",
-    "openLoopAnswerDrop": "Jäta ära"
+    "openLoopAnswerDrop": "Jäta ära",
+    "yearlySwitchTitle": "Mine üle aastasele",
+    "yearlySwitchRowSavings": "Säästa {amount} aastas",
+    "yearlySwitchHomeTitle": "Säästa aastamaksega {amount} aastas",
+    "yearlySwitchHomeSubtitle": "Sama pakett, makse kord aastas",
+    "yearlySwitchPlanLabel": "Pakett",
+    "yearlySwitchPlanValue": "{plan}, {price} aastas",
+    "yearlySwitchDueToday": "Tasuda täna",
+    "yearlySwitchRenews": "Uueneb",
+    "yearlySwitchCreditNote": "Sisaldab krediiti selle kuu ülejäänud aja eest.",
+    "yearlySwitchDeclined": "Makse ei õnnestunud. Maksad endiselt igakuiselt.",
+    "yearlySwitchFailed": "Üleminek ebaõnnestus. Maksad endiselt igakuiselt.",
+    "yearlySwitchPreviewFailed": "Hinda ei õnnestunud laadida.",
+    "yearlySwitchUnavailable": "Aastamaks pole sinu paketile praegu saadaval.",
+    "yearlySwitchDoneTitle": "Maksad nüüd kord aastas",
+    "yearlySwitchDoneBody": "Täna võeti {amount}. Uueneb {date}."
 }

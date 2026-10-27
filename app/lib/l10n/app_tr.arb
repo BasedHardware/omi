@@ -4474,5 +4474,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Tamamlandı",
     "openLoopAnswerRemind": "Daha sonra hatırlat",
-    "openLoopAnswerDrop": "Yoksay"
+    "openLoopAnswerDrop": "Yoksay",
+    "yearlySwitchTitle": "Yıllığa geçin",
+    "yearlySwitchRowSavings": "Yılda {amount} tasarruf edin",
+    "yearlySwitchHomeTitle": "Yıllık ödemeyle yılda {amount} tasarruf edin",
+    "yearlySwitchHomeSubtitle": "Aynı plan, yılda bir kez ödenir",
+    "yearlySwitchPlanLabel": "Plan",
+    "yearlySwitchPlanValue": "{plan}, yıllık {price}",
+    "yearlySwitchDueToday": "Bugün ödenecek",
+    "yearlySwitchRenews": "Yenilenme",
+    "yearlySwitchCreditNote": "Bu ayın kalan kısmı için kredi içerir.",
+    "yearlySwitchDeclined": "Ödeme gerçekleşmedi. Aylık ödemeye devam ediyorsunuz.",
+    "yearlySwitchFailed": "Geçiş yapılamadı. Aylık ödemeye devam ediyorsunuz.",
+    "yearlySwitchPreviewFailed": "Fiyatınız yüklenemedi.",
+    "yearlySwitchUnavailable": "Yıllık ödeme şu anda planınız için kullanılamıyor.",
+    "yearlySwitchDoneTitle": "Artık yıllık ödüyorsunuz",
+    "yearlySwitchDoneBody": "Bugün {amount} tahsil edildi. Yenilenme: {date}."
 }

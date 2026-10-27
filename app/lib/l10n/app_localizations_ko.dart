@@ -14402,4 +14402,57 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => '버리기';
+
+  @override
+  String get yearlySwitchTitle => '연간 결제로 전환';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return '연간 $amount 절약';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return '연간 결제로 1년에 $amount 절약';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => '같은 플랜, 1년에 한 번 결제';
+
+  @override
+  String get yearlySwitchPlanLabel => '플랜';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, 연 $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => '오늘 결제 금액';
+
+  @override
+  String get yearlySwitchRenews => '갱신일';
+
+  @override
+  String get yearlySwitchCreditNote => '이번 달 남은 기간의 크레딧이 포함됩니다.';
+
+  @override
+  String get yearlySwitchDeclined => '결제가 완료되지 않았습니다. 월간 결제가 유지됩니다.';
+
+  @override
+  String get yearlySwitchFailed => '전환하지 못했습니다. 월간 결제가 유지됩니다.';
+
+  @override
+  String get yearlySwitchPreviewFailed => '가격을 불러오지 못했습니다.';
+
+  @override
+  String get yearlySwitchUnavailable => '지금은 사용 중인 플랜에서 연간 결제를 이용할 수 없습니다.';
+
+  @override
+  String get yearlySwitchDoneTitle => '연간 결제로 전환되었습니다';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '오늘 $amount이 결제되었습니다. 갱신일은 $date입니다.';
+  }
 }

@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Atlikta",
     "openLoopAnswerRemind": "Priminti vėliau",
-    "openLoopAnswerDrop": "Atmesti"
+    "openLoopAnswerDrop": "Atmesti",
+    "yearlySwitchTitle": "Pereiti prie metinio",
+    "yearlySwitchRowSavings": "Sutaupykite {amount} per metus",
+    "yearlySwitchHomeTitle": "Sutaupykite {amount} per metus mokėdami kas metus",
+    "yearlySwitchHomeSubtitle": "Tas pats planas, mokama kartą per metus",
+    "yearlySwitchPlanLabel": "Planas",
+    "yearlySwitchPlanValue": "{plan}, {price} per metus",
+    "yearlySwitchDueToday": "Mokėti šiandien",
+    "yearlySwitchRenews": "Atnaujinama",
+    "yearlySwitchCreditNote": "Įskaičiuotas kreditas už likusią šio mėnesio dalį.",
+    "yearlySwitchDeclined": "Mokėjimas nepavyko. Toliau mokate kas mėnesį.",
+    "yearlySwitchFailed": "Nepavyko pereiti. Toliau mokate kas mėnesį.",
+    "yearlySwitchPreviewFailed": "Nepavyko įkelti kainos.",
+    "yearlySwitchUnavailable": "Metinis mokėjimas jūsų planui šiuo metu negalimas.",
+    "yearlySwitchDoneTitle": "Dabar mokate kas metus",
+    "yearlySwitchDoneBody": "Šiandien nuskaičiuota {amount}. Atnaujinama {date}."
 }

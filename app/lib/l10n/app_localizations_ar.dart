@@ -14520,4 +14520,57 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'استبعدها';
+
+  @override
+  String get yearlySwitchTitle => 'التبديل إلى الاشتراك السنوي';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'وفّر $amount سنويًا';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'وفّر $amount سنويًا مع الدفع السنوي';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'الخطة نفسها، بدفعة واحدة في السنة';
+
+  @override
+  String get yearlySwitchPlanLabel => 'الخطة';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan، $price سنويًا';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'المستحق اليوم';
+
+  @override
+  String get yearlySwitchRenews => 'يتجدد في';
+
+  @override
+  String get yearlySwitchCreditNote => 'يشمل رصيدًا عن بقية هذا الشهر.';
+
+  @override
+  String get yearlySwitchDeclined => 'لم تكتمل عملية الدفع. ما زلت على الدفع الشهري.';
+
+  @override
+  String get yearlySwitchFailed => 'تعذّر التبديل. ما زلت على الدفع الشهري.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'تعذّر تحميل السعر.';
+
+  @override
+  String get yearlySwitchUnavailable => 'الدفع السنوي غير متاح لخطتك حاليًا.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'أصبحت على الدفع السنوي';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'تم خصم $amount اليوم. يتجدد في $date.';
+  }
 }

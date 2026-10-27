@@ -14596,4 +14596,57 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Zahodiť';
+
+  @override
+  String get yearlySwitchTitle => 'Prejsť na ročné';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Ušetrite $amount ročne';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Ušetrite $amount ročne s ročnou platbou';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Rovnaký plán, platba raz ročne';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plán';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price ročne';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Na úhradu dnes';
+
+  @override
+  String get yearlySwitchRenews => 'Obnovenie';
+
+  @override
+  String get yearlySwitchCreditNote => 'Zahŕňa kredit za zvyšok tohto mesiaca.';
+
+  @override
+  String get yearlySwitchDeclined => 'Platba neprešla. Naďalej platíte mesačne.';
+
+  @override
+  String get yearlySwitchFailed => 'Prechod sa nepodaril. Naďalej platíte mesačne.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Cenu sa nepodarilo načítať.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Ročná platba teraz nie je pre váš plán dostupná.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Teraz platíte ročne';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Dnes účtované $amount. Obnovenie $date.';
+  }
 }

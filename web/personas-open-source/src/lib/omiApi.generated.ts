@@ -5984,6 +5984,8 @@ export interface UpdateSummaryRequest {
 export interface UpgradeSubscriptionRequest {
   price_id: string;
   promotion_code?: string | null;
+  proration_date?: number | null;
+  switch_now?: boolean;
 }
 
 export interface UsageHistoryPoint {
@@ -6270,6 +6272,21 @@ export interface WrappedStatusResponse {
   result?: Record<string, unknown> | null;
   status: string;
   year?: number;
+}
+
+export interface YearlySwitchResponse {
+  amount_due_today?: number | null;
+  currency?: string | null;
+  eligible: boolean;
+  first_billing_period?: boolean | null;
+  monthly_amount?: number | null;
+  plan_id?: string | null;
+  price_id?: string | null;
+  proration_date?: number | null;
+  reason: string;
+  renews_at?: number | null;
+  savings_amount?: number | null;
+  yearly_amount?: number | null;
 }
 
 export interface routers__desktop_tts_updates__TtsSynthesizeRequest {
@@ -7150,6 +7167,7 @@ export interface OmiApiSchemas {
   "WorkstreamStatus": WorkstreamStatus;
   "WorkstreamUpdate": WorkstreamUpdate;
   "WrappedStatusResponse": WrappedStatusResponse;
+  "YearlySwitchResponse": YearlySwitchResponse;
   "routers__desktop_tts_updates__TtsSynthesizeRequest": routers__desktop_tts_updates__TtsSynthesizeRequest;
   "routers__focus_sessions__ScreenActivityRow": routers__focus_sessions__ScreenActivityRow;
   "routers__mcp__TranscriptMatchSnippet": routers__mcp__TranscriptMatchSnippet;
@@ -10286,6 +10304,16 @@ export interface OmiApiPaths {
       operationId: "upgrade_subscription_endpoint_v1_payments_upgrade_subscription_post";
       responses: {
         "200": PaymentUpgradeSubscriptionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/payments/yearly-switch": {
+    get: {
+      operationId: "get_yearly_switch_endpoint_v1_payments_yearly_switch_get";
+      responses: {
+        "200": YearlySwitchResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -18558,6 +18586,28 @@ export async function upgrade_subscription_endpoint_v1_payments_upgrade_subscrip
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_yearly_switch_endpoint_v1_payments_yearly_switch_get(query: { preview?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<YearlySwitchResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/payments/yearly-switch`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_paypal_payment_details_endpoint_v1_paypal_payment_details_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<PayPalPaymentDetailsResponse | null> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/paypal/payment-details`;
@@ -23044,4 +23094,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 530 client methods generated.
+// Total: 531 client methods generated.

@@ -14649,4 +14649,57 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'ಬಿಡು';
+
+  @override
+  String get yearlySwitchTitle => 'ವಾರ್ಷಿಕಕ್ಕೆ ಬದಲಿಸಿ';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'ವರ್ಷಕ್ಕೆ $amount ಉಳಿಸಿ';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'ವಾರ್ಷಿಕ ಪಾವತಿಯಿಂದ ವರ್ಷಕ್ಕೆ $amount ಉಳಿಸಿ';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'ಅದೇ ಯೋಜನೆ, ವರ್ಷಕ್ಕೊಮ್ಮೆ ಪಾವತಿ';
+
+  @override
+  String get yearlySwitchPlanLabel => 'ಯೋಜನೆ';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, ವರ್ಷಕ್ಕೆ $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'ಇಂದು ಪಾವತಿ';
+
+  @override
+  String get yearlySwitchRenews => 'ನವೀಕರಣ';
+
+  @override
+  String get yearlySwitchCreditNote => 'ಈ ತಿಂಗಳ ಉಳಿದ ಅವಧಿಯ ಕ್ರೆಡಿಟ್ ಒಳಗೊಂಡಿದೆ.';
+
+  @override
+  String get yearlySwitchDeclined => 'ಪಾವತಿ ಆಗಲಿಲ್ಲ. ನೀವು ಇನ್ನೂ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ.';
+
+  @override
+  String get yearlySwitchFailed => 'ಬದಲಿಸಲು ಆಗಲಿಲ್ಲ. ನೀವು ಇನ್ನೂ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'ನಿಮ್ಮ ಬೆಲೆಯನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ.';
+
+  @override
+  String get yearlySwitchUnavailable => 'ಈಗ ನಿಮ್ಮ ಯೋಜನೆಗೆ ವಾರ್ಷಿಕ ಪಾವತಿ ಲಭ್ಯವಿಲ್ಲ.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'ನೀವು ಈಗ ವಾರ್ಷಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'ಇಂದು $amount ಶುಲ್ಕ ವಿಧಿಸಲಾಗಿದೆ. ನವೀಕರಣ $date.';
+  }
 }

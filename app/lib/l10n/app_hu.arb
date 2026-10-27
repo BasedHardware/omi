@@ -4535,5 +4535,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Kész",
     "openLoopAnswerRemind": "Emlékeztessen később",
-    "openLoopAnswerDrop": "Eldobás"
+    "openLoopAnswerDrop": "Eldobás",
+    "yearlySwitchTitle": "Váltás éves fizetésre",
+    "yearlySwitchRowSavings": "Évi {amount} megtakarítás",
+    "yearlySwitchHomeTitle": "Évi {amount} megtakarítás éves fizetéssel",
+    "yearlySwitchHomeSubtitle": "Ugyanaz a csomag, évente egyszer fizetve",
+    "yearlySwitchPlanLabel": "Csomag",
+    "yearlySwitchPlanValue": "{plan}, évi {price}",
+    "yearlySwitchDueToday": "Ma fizetendő",
+    "yearlySwitchRenews": "Megújul",
+    "yearlySwitchCreditNote": "Tartalmazza a hónap hátralévő részének jóváírását.",
+    "yearlySwitchDeclined": "A fizetés nem sikerült. Továbbra is havonta fizet.",
+    "yearlySwitchFailed": "A váltás nem sikerült. Továbbra is havonta fizet.",
+    "yearlySwitchPreviewFailed": "Nem sikerült betölteni az árat.",
+    "yearlySwitchUnavailable": "Az éves fizetés jelenleg nem érhető el az Ön csomagjához.",
+    "yearlySwitchDoneTitle": "Mostantól évente fizet",
+    "yearlySwitchDoneBody": "Ma terhelve: {amount}. Megújul: {date}."
 }

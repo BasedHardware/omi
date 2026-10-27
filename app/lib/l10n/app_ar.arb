@@ -4439,5 +4439,20 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "تم",
     "openLoopAnswerRemind": "ذكّرني لاحقًا",
-    "openLoopAnswerDrop": "استبعدها"
+    "openLoopAnswerDrop": "استبعدها",
+    "yearlySwitchTitle": "التبديل إلى الاشتراك السنوي",
+    "yearlySwitchRowSavings": "وفّر {amount} سنويًا",
+    "yearlySwitchHomeTitle": "وفّر {amount} سنويًا مع الدفع السنوي",
+    "yearlySwitchHomeSubtitle": "الخطة نفسها، بدفعة واحدة في السنة",
+    "yearlySwitchPlanLabel": "الخطة",
+    "yearlySwitchPlanValue": "{plan}، {price} سنويًا",
+    "yearlySwitchDueToday": "المستحق اليوم",
+    "yearlySwitchRenews": "يتجدد في",
+    "yearlySwitchCreditNote": "يشمل رصيدًا عن بقية هذا الشهر.",
+    "yearlySwitchDeclined": "لم تكتمل عملية الدفع. ما زلت على الدفع الشهري.",
+    "yearlySwitchFailed": "تعذّر التبديل. ما زلت على الدفع الشهري.",
+    "yearlySwitchPreviewFailed": "تعذّر تحميل السعر.",
+    "yearlySwitchUnavailable": "الدفع السنوي غير متاح لخطتك حاليًا.",
+    "yearlySwitchDoneTitle": "أصبحت على الدفع السنوي",
+    "yearlySwitchDoneBody": "تم خصم {amount} اليوم. يتجدد في {date}."
 }
