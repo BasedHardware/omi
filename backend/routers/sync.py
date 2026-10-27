@@ -191,7 +191,8 @@ from utils.sync.pipeline import (
     retrieve_vad_segments,
     SyncConversationPersistenceFenced,
 )
-from utils.sync.empty_upload import nonempty_sync_uploads
+from utils.sync.empty_upload import EmptySyncUpload, prepare_sync_uploads, nonempty_manifest_claims
+from utils.sync.job_retry_policy import terminal_repeat_failure_kwargs
 from utils.sync.capture_clock import (
     INVALID_CAPTURE_TIME_CODE,
     INVALID_CAPTURE_TIME_DETAIL,
@@ -1064,14 +1065,10 @@ async def sync_local_files_v2(
     # Empty/torn-header clips contain no audio frames. Acknowledge them before
     # clock/age admission; a bogus date on zero audio has nothing to recover.
     upload_filenames = [f.filename or '' for f in files]
-    nonempty_files = await run_blocking(sync_executor, nonempty_sync_uploads, files)
-    if len(nonempty_files) != len(files):
-        logger.info(
-            'sync_empty_clip uid=%s count=%s status=200 reason=empty_clip', uid, len(files) - len(nonempty_files)
-        )
-    if not nonempty_files:
+    try:
+        files = await run_blocking(sync_executor, prepare_sync_uploads, files, uid)
+    except EmptySyncUpload:
         return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
-    files = nonempty_files
     if isinstance(recording_session_id, str):
         recording_session_id = recording_session_id.strip() or None
     else:
@@ -1110,11 +1107,7 @@ async def sync_local_files_v2(
         conversation_id,
         upload_filenames,
     )
-    if manifest_claims is not None:
-        # Verify the signed request before dropping no-audio members. Their
-        # omission must not demote the remaining legitimate capture to legacy.
-        nonempty_names = {os.path.basename(name) for name in filenames}
-        manifest_claims = [claim for claim in manifest_claims if claim['name'] in nonempty_names]
+    manifest_claims = nonempty_manifest_claims(manifest_claims, filenames)
     record_snapshot = {}
     has_server_capture_proof = manifest_claims is not None and await run_blocking(
         db_executor,
@@ -1952,21 +1945,6 @@ async def sync_local_files_v2(
         _cleanup_files(paths)
 
 
-def _terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
-    """Carry a terminal job's strike through racing poll/task claim cleanup."""
-    if job.get('status') not in {'failed', 'partial_failure'}:
-        return {}
-    if job.get('status') == 'failed' and job.get('reason_code') == 'sync_invalid_audio':
-        return {'failure_key': 'invalid_audio'}
-    result = job.get('result')
-    if isinstance(result, dict) and result.get('repeat_failure_key') == 'persistent_persistence':
-        return {
-            'failure_key': 'persistent_persistence',
-            'failure_fingerprint': result.get('repeat_failure_fingerprint'),
-        }
-    return {}
-
-
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
 def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid), surface_open: bool = False):
     """Poll for the status of an async sync job."""
@@ -2086,7 +2064,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         # the ledger stale window and looks permanently stuck to the client.
         try:
             release_sync_content_claim_after_job_retired(
-                uid, job['content_id'], job_id, **_terminal_repeat_failure_kwargs(job)
+                uid, job['content_id'], job_id, **terminal_repeat_failure_kwargs(job)
             )
         except Exception as error:
             logger.error('event=sync_terminal_cleanup outcome=retrying exception_type=%s', type(error).__name__)
@@ -3375,7 +3353,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     release_sync_content_claim_after_job_retired if ledger_fence_active else release_sync_content_claim
                 )
                 await run_blocking(
-                    db_executor, release_claim, uid, content_id, job_id, **_terminal_repeat_failure_kwargs(job)
+                    db_executor, release_claim, uid, content_id, job_id, **terminal_repeat_failure_kwargs(job)
                 )
             if ledger_fence_active:
                 await run_blocking(db_executor, delete_sync_job_run_lock_epoch, job_id)

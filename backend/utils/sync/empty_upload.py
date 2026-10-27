@@ -1,6 +1,7 @@
 """Empty framed WALs have no audio payload; byte size alone never proves silence."""
 
 import os
+import logging
 from typing import BinaryIO
 
 
@@ -15,5 +16,23 @@ def empty_framed_clip(stream: BinaryIO) -> bool:
         stream.seek(position)
 
 
-def nonempty_sync_uploads(files):
-    return [file for file in files if not empty_framed_clip(file.file)]
+class EmptySyncUpload(Exception):
+    """No audio payload to admit; the route returns an empty success receipt."""
+
+
+def prepare_sync_uploads(files, uid):
+    nonempty = [file for file in files if not empty_framed_clip(file.file)]
+    if len(nonempty) != len(files):
+        logging.getLogger(__name__).info(
+            'sync_empty_clip uid=%s count=%s reason=empty_clip', uid, len(files) - len(nonempty)
+        )
+    if not nonempty:
+        raise EmptySyncUpload()
+    return nonempty
+
+
+def nonempty_manifest_claims(claims, filenames):
+    # Verify the full signed request before dropping no-audio members: omission
+    # must not demote legitimate remaining capture to the legacy lane.
+    names = {os.path.basename(name) for name in filenames}
+    return None if claims is None else [claim for claim in claims if claim['name'] in names]

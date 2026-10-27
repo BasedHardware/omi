@@ -59,7 +59,6 @@ bool canClaimLiveCapture(List<Wal> batch, List<Wal> pendingForConversation, int 
 /// failure still stops within one connectivity epoch rather than re-uploading
 /// the same bytes forever. The per-recording manual Retry
 /// ([LocalWalSyncImpl.syncWal]) deliberately ignores this budget.
-@visibleForTesting
 bool isAutoUploadEligible(Wal wal, {int? nowSeconds}) =>
     !wal.onDeviceOnly &&
     wal.storage == WalStorage.disk &&
@@ -206,6 +205,29 @@ extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
     });
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
+  }
+
+  Future<bool> reserveRefusalRetries(List<Wal> wals, int generation, int nowSeconds) async {
+    var changed = false;
+    for (final wal in wals) {
+      if (wal.status != WalStatus.uploadRejected) continue;
+      if (wal.uploadRejectedAt == 0) wal.uploadRejectedAt = nowSeconds;
+      wal.uploadRefusalLastAttemptAt = nowSeconds;
+      changed = true;
+    }
+    if (changed && !await _saveWalsToFile(generation)) return false;
+    return _isCurrent(generation);
+  }
+
+  Future<void> applyUploadRefusals(List<Wal> wals, int generation, SyncUploadHttpException error) async {
+    final reason = WalUploadRejection.bounded(error.reasonCode ?? uploadRejectionTokenForStatus(error.statusCode));
+    for (final wal in wals) {
+      await applyUploadRefusal(wal, generation, reason: reason, statusCode: error.statusCode);
+    }
+    DebugLogManager.logEvent('local_upload_terminal_http_refusal', {
+      'statusCode': error.statusCode,
+      'walCount': wals.length,
+    });
   }
 
   Future<void> applyUploadRefusal(Wal wal, int generation, {required String reason, required int statusCode}) async {

@@ -2156,15 +2156,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         // wait for server-side processing here; the reconciler resolves the
         // job_id later. Only WALs that actually became files (batchWals) are
         // mutated — corrupted ones already short-circuited above.
-        var reservedRefusal = false;
-        for (final wal in batchWals) {
-          if (wal.status != WalStatus.uploadRejected) continue;
-          if (wal.uploadRejectedAt == 0) wal.uploadRejectedAt = batchNowSeconds;
-          wal.uploadRefusalLastAttemptAt = batchNowSeconds;
-          reservedRefusal = true;
-        }
-        if (reservedRefusal) await _saveWalsToFile(generation);
-        if (!_isCurrent(generation)) return resp;
+        if (!await reserveRefusalRetries(batchWals, generation, batchNowSeconds)) return resp;
         final audioBounds = syncUploadAudioBounds(batchWals);
         final result = await _uploadGate.upload(
           files,
@@ -2290,14 +2282,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         if (!definitive) batchesFailed++;
         final authenticationFailed = e.statusCode == 401 || e.statusCode == 403;
         if (definitive) {
-          final reasonCode = WalUploadRejection.bounded(e.reasonCode ?? uploadRejectionTokenForStatus(e.statusCode));
-          for (final wal in batchWals) {
-            await applyUploadRefusal(wal, generation, reason: reasonCode, statusCode: e.statusCode);
-          }
-          DebugLogManager.logEvent('local_upload_terminal_http_refusal', {
-            'statusCode': e.statusCode,
-            'walCount': batchWals.length,
-          });
+          await applyUploadRefusals(batchWals, generation, e);
         } else {
           for (final wal in batchWals) {
             if (authenticationFailed) {
