@@ -1,6 +1,7 @@
 """Real recap routes/auth/serialization/storage, with hermetic Firestore/Redis and LLM seams."""
 
 from copy import deepcopy
+from datetime import datetime, timezone
 
 import pytest
 
@@ -17,6 +18,21 @@ def _seed(db, record, uid='123'):
 
 def _corrupt(summary_id='bad', day='2026-10-02'):
     return _summary(summary_id, day, memories_learned=[{'content': 'private memory without its id'}])
+
+
+def _seed_source_day(db, fixtures):
+    from fakes.firestore import seed_conversation
+
+    conversation = deepcopy(fixtures['with_segments'])
+    conversation.update(
+        created_at=datetime(2026, 10, 1, 11, tzinfo=timezone.utc),
+        started_at=datetime(2026, 10, 1, 11, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 10, 1, 11, 5, tzinfo=timezone.utc),
+        status='completed',
+    )
+    conversation['structured']['overview'] = 'We agreed on the project plan and proposal.'
+    seed_conversation('123', conversation)
+    return db.collection('users').document('123').collection('conversations').document(conversation['id'])
 
 
 @pytest.fixture(params=['user', 'developer'])
@@ -161,17 +177,153 @@ def test_create_existing_corruption_does_not_rewrite_or_generate(
     assert ref.get().to_dict() == record
 
 
-def test_create_invalid_provider_result_is_explicit_and_retry_can_succeed(
-    client, auth_headers, generation_seams, monkeypatch
+@pytest.mark.parametrize('recap_mode', ['off', 'serve'], ids=['legacy', 'v4'])
+@pytest.mark.parametrize('invalid_kind', ['schema', 'json', 'root'])
+def test_create_invalid_candidate_is_not_saved_and_real_storage_retry_generates(
+    client,
+    auth_headers,
+    fake_firestore,
+    fake_redis,
+    generation_seams,
+    monkeypatch,
+    conversation_fixture,
+    live_user,
+    recap_mode,
+    invalid_kind,
 ):
-    results = iter([(_corrupt(), None), (_summary('created'), None)])
-    monkeypatch.setattr(generation_seams, 'generate_daily_summary_on_demand', lambda *a: next(results))
+    import utils.other.notifications as notifications
+    from database.redis_db import get_generic_cache
+
+    monkeypatch.setenv('CALLS_RECAP_MODE', recap_mode)
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    monkeypatch.setenv('MEDIA_NOISE_MODE', 'off')
+    monkeypatch.setattr(notifications, 'require_generated_compute', lambda *a, **k: None)
+    monkeypatch.setattr(notifications, 'generated_compute_allowed', lambda *a, **k: True)
+    monkeypatch.setattr(notifications, 'memories_learned_payload', lambda *a, **k: [])
+    source_ref = _seed_source_day(fake_firestore, conversation_fixture)
+    source_before = source_ref.get().to_dict()
+    calls = []
+    bad = {
+        'schema': _corrupt(day='2026-10-01'),
+        'json': _summary('bad', extra=b'\xff'),
+        'root': ['not a recap'],
+    }[invalid_kind]
+    results = iter([bad, _summary('created')])
+
+    def model_result(*args, **kwargs):
+        calls.append(args[2])
+        return next(results)
+
+    # Replace only the model boundary: run the actual producer, eligibility checks,
+    # day locks, state markers, Firestore create/update and subsequent route reads.
+    monkeypatch.setattr(notifications, 'generate_comprehensive_daily_summary', model_result)
+    collection = fake_firestore.collection('users').document('123').collection('daily_summaries')
     path = '/v1/users/daily-summaries'
     first = client.post(path, json={'date': '2026-10-01'}, headers=auth_headers)
     assert first.status_code == 502, first.text
+    assert calls == ['2026-10-01']
+    after_failure = [doc.to_dict() for doc in collection.stream()]
+    assert all('memories_learned' not in row for row in after_failure)
+    assert all(row.get('status') == 'failed' for row in after_failure)
+    assert not fake_redis.exists('users:123:daily_summary_lock:2026-10-01')
+    assert get_generic_cache('daily_summary_create:123:2026-10-01') is None
+    failed_id = after_failure[0]['id'] if after_failure else None
     second = client.post(path, json={'date': '2026-10-01'}, headers=auth_headers)
     assert second.status_code == 200, second.text
-    assert second.json()['id'] == 'created'
+    assert calls == ['2026-10-01', '2026-10-01']
+    saved = [doc.to_dict() for doc in collection.stream()]
+    assert len(saved) == 1
+    assert saved[0]['id'] == second.json()['id']
+    assert saved[0]['headline'] == 'Productive day'
+    assert saved[0].get('status') in (None, 'generated')
+    if failed_id:
+        assert saved[0]['id'] == failed_id
+    # Durable idempotency still returns the same stored recap without a third model call.
+    third = client.post(path, json={'date': '2026-10-01'}, headers=auth_headers)
+    assert third.status_code == 200, third.text
+    assert third.json()['id'] == second.json()['id']
+    assert len(calls) == 2
+    assert source_ref.get().to_dict() == source_before
+
+
+def test_pending_creation_with_an_active_day_lock_returns_conflict_without_overwrite(
+    client, auth_headers, fake_firestore, fake_redis, generation_seams, monkeypatch
+):
+    import utils.other.notifications as notifications
+
+    pending = _summary('pending', status='pending')
+    ref = _seed(fake_firestore, pending)
+    fake_redis.set('users:123:daily_summary_lock:2026-10-01', 'another-writer', ex=60)
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
+    monkeypatch.setattr(notifications, 'require_generated_compute', lambda *a, **k: None)
+    monkeypatch.setattr(notifications, 'generated_compute_allowed', lambda *a, **k: True)
+
+    def unexpected(*args, **kwargs):
+        pytest.fail('A contended request must not invoke the model')
+
+    monkeypatch.setattr(notifications, 'generate_comprehensive_daily_summary', unexpected)
+    response = client.post('/v1/users/daily-summaries', json={'date': '2026-10-01'}, headers=auth_headers)
+    assert response.status_code == 409, response.text
+    assert ref.get().to_dict() == pending
+    assert fake_redis.get('users:123:daily_summary_lock:2026-10-01') == b'another-writer'
+
+
+@pytest.mark.parametrize('recap_mode', ['off', 'serve'], ids=['legacy', 'v4'])
+def test_refresh_rejects_invalid_candidate_before_replacing_previous_content_and_retry_succeeds(
+    client, auth_headers, fake_firestore, generation_seams, monkeypatch, conversation_fixture, live_user, recap_mode
+):
+    import utils.other.notifications as notifications
+    from database.daily_summaries import get_daily_summary_by_date
+    from utils.daily_summary_validation import DailySummaryUnavailable
+
+    monkeypatch.setenv('CALLS_RECAP_MODE', recap_mode)
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    monkeypatch.setenv('MEDIA_NOISE_MODE', 'off')
+    monkeypatch.setattr(notifications, 'require_generated_compute', lambda *a, **k: None)
+    monkeypatch.setattr(notifications, 'generated_compute_allowed', lambda *a, **k: True)
+    monkeypatch.setattr(notifications, 'memories_learned_payload', lambda *a, **k: [])
+    source_ref = _seed_source_day(fake_firestore, conversation_fixture)
+    outputs = iter([_summary('original'), _corrupt(day='2026-10-01'), _summary('new-model-id', headline='Updated')])
+    monkeypatch.setattr(notifications, 'generate_comprehensive_daily_summary', lambda *a, **k: next(outputs))
+    created = client.post('/v1/users/daily-summaries', json={'date': '2026-10-01'}, headers=auth_headers)
+    assert created.status_code == 200, created.text
+    record_id = created.json()['id']
+    ref = fake_firestore.collection('users').document('123').collection('daily_summaries').document(record_id)
+    ref.update({'visibility': 'shared', 'notification_delivery_completed': True})
+    previous = ref.get().to_dict()
+    source_ref.update({'structured.overview': 'Revised project decision adds new information.'})
+    # Legacy success deliberately retains its lease. Model the next admitted tick
+    # after expiry without changing the actual lock implementation or sleeping.
+    notifications.release_daily_summary_lock('123', '2026-10-01')
+    # Admit an explicit revision in both writers; the model and persistence stay real.
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'serve')
+    start, end = notifications.local_day_bounds_utc(datetime(2026, 10, 1).date(), 'UTC')
+    with pytest.raises(DailySummaryUnavailable):
+        notifications._generate_and_store_daily_summary('123', '2026-10-01', start, end, user_initiated=True)
+    failed = ref.get().to_dict()
+    assert failed['headline'] == previous['headline']
+    assert failed.get('memories_learned') == previous.get('memories_learned')
+    assert failed['visibility'] == 'shared'
+    assert failed['notification_delivery_completed'] is True
+    retried, created, reason = notifications._generate_and_store_daily_summary(
+        '123', '2026-10-01', start, end, user_initiated=True
+    )
+    assert created is True and reason is None
+    assert retried['id'] == record_id
+    assert retried['headline'] == 'Updated'
+    assert get_daily_summary_by_date('123', '2026-10-01')['id'] == record_id
+
+
+def test_manual_notification_preview_rejects_invalid_candidate_without_storage_or_delivery(
+    client, auth_headers, fake_firestore, generation_seams, monkeypatch, conversation_fixture, live_user
+):
+    _seed_source_day(fake_firestore, conversation_fixture)
+    monkeypatch.setattr(generation_seams.notification_db, 'get_all_tokens', lambda uid: ['synthetic-token'])
+    monkeypatch.setattr(generation_seams, '_memories_learned_payload', lambda *a, **k: [])
+    monkeypatch.setattr(generation_seams, 'generate_comprehensive_daily_summary', lambda *a, **k: _corrupt())
+    response = client.post('/v1/users/daily-summary-settings/test', json={'date': '2026-10-01'}, headers=auth_headers)
+    assert response.status_code == 502, response.text
+    assert list(fake_firestore.collection('users').document('123').collection('daily_summaries').stream()) == []
 
 
 def test_regenerate_invalid_output_preserves_stored_recap_then_retry_replaces_in_place(

@@ -1,4 +1,4 @@
-"""Read-time recap projection. Stored documents and source conversations are never rewritten."""
+"""Recap read/candidate validation without mutating stored data or source conversations."""
 
 import json
 import logging
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class DailySummaryUnavailable(Exception):
-    """Stored recap data exists but cannot be represented by the released response schema."""
+    """Stored or generated recap data cannot be represented by the released response schema."""
 
 
 def _parse(record: Any, uid: str) -> DailySummaryResponse:

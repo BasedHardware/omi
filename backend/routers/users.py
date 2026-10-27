@@ -153,6 +153,7 @@ from utils.daily_summary_validation import (
     require_daily_summary,
     validate_daily_summaries,
 )
+from utils.other.daily_recap import delivery_allowed as daily_summary_delivery_allowed
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.other import endpoints as auth
 from utils.other.list_budget import finish_list_budget
@@ -1908,6 +1909,11 @@ def test_daily_summary(
         memories_learned=_memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
     )
 
+    # Validate before storing or sending anything, as in the shared scheduled/on-demand producer.
+    try:
+        require_daily_summary(summary_data, uid=uid, operation='test_generation_candidate')
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
     # Store in database
     summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
 
@@ -2095,7 +2101,7 @@ def create_user_daily_summary(
 
     date_str = target_date.strftime('%Y-%m-%d')
     existing = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
-    if existing:
+    if existing and daily_summary_delivery_allowed(uid, existing):
         try:
             return require_daily_summary(existing, uid=uid, operation='create_existing').model_dump(exclude_unset=True)
         except DailySummaryUnavailable:
@@ -2110,7 +2116,10 @@ def create_user_daily_summary(
         )
 
     start_date_utc, end_date_utc = local_day_bounds_utc(target_date, time_zone_name)
-    record, declined = generate_daily_summary_on_demand(uid, date_str, start_date_utc, end_date_utc)
+    try:
+        record, declined = generate_daily_summary_on_demand(uid, date_str, start_date_utc, end_date_utc)
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
     if record:
         try:
             validated = require_daily_summary(record, uid=uid, operation='create_result')
