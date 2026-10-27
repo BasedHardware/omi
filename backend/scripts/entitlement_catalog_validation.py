@@ -98,6 +98,13 @@ def validate_entitlement_versions(catalog: Mapping[str, Any]) -> list[str]:
     return errors
 
 
+_DESKTOP_PROFILE_RANK = ('desktop_free', 'desktop_full', 'desktop_architect')
+
+
+def _desktop_rank(profile: Any) -> int:
+    return _DESKTOP_PROFILE_RANK.index(profile) if profile in _DESKTOP_PROFILE_RANK else -1
+
+
 def validate_entitlement_compatibility(previous: Mapping[str, Any], current: Mapping[str, Any]) -> list[str]:
     errors = []
 
@@ -149,7 +156,13 @@ def validate_entitlement_compatibility(previous: Mapping[str, Any], current: Map
         if missing:
             errors.append(f"compatibility: {plan_id} missing legacy entitlement key {missing[0]}")
             continue
-        if any(plan[key] != replacement[key] for key in policy_keys):
+        changed = [key for key in policy_keys if plan[key] != replacement[key]]
+        # Desktop access may widen (a retired catalog folds into the remaining plan) but never narrow.
+        if changed == ['desktop_profile'] and _desktop_rank(replacement['desktop_profile']) > _desktop_rank(
+            plan['desktop_profile']
+        ):
+            continue
+        if changed:
             errors.append(f"compatibility: {plan_id} legacy entitlements cannot change")
     if previous.get('allocation_profiles') != current.get('allocation_profiles'):
         errors.append('compatibility: legacy allocation profiles cannot change')

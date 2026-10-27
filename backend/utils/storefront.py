@@ -549,14 +549,11 @@ def build_single_plan_storefront(
     trigger: str | None = None,
     locale: str | None = None,
 ) -> StorefrontResponse:
-    """Omi Pro (`unlimited_v2`) offer sheet for a new buyer on a non-desktop platform.
+    """Omi Pro (`unlimited_v2`) offer sheet for a buyer with no current paid plan.
 
-    2026-10-24 ruling: a buyer with no current paid subscription gets only Omi
-    Pro. The ladder sheet has no Omi Pro card and the web plans panel has no
-    catalog fallback, so this single-tier v2 sheet replaces the earlier 404 —
-    the caller gets exactly one purchasable offer instead of a dead "Couldn't
-    load plans" panel. Desktop platforms and current subscribers keep the
-    ladder sheet via `build_storefront`.
+    Omi Pro is the only plan sold, on every platform. The ladder sheet has no
+    Omi Pro card, so this single-tier v2 sheet is served instead; current
+    subscribers keep the ladder sheet via `build_storefront`.
     """
     ladder = load_ladder()
     current_plan = subscription.plan.value
