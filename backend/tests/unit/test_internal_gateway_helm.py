@@ -131,7 +131,18 @@ def test_batch_has_an_isolated_route_and_preserves_900_second_timeout(environmen
         assert 'cloud.google.com/gke-nodepool' not in pod['nodeSelector']
     else:
         assert pod['nodeSelector']['cloud.google.com/gke-nodepool'] == 'diarizer-batch-pool'
-    assert 'affinity' not in pod
+    if environment == 'prod':
+        preference = pod['affinity']['nodeAffinity']['preferredDuringSchedulingIgnoredDuringExecution']
+        assert preference == [
+            {
+                'weight': 100,
+                'preference': {
+                    'matchExpressions': [{'key': 'cloud.google.com/gke-spot', 'operator': 'In', 'values': ['true']}]
+                },
+            }
+        ]
+    else:
+        assert 'affinity' not in pod
     assert (
         object_for(objects, 'HealthCheckPolicy')['spec']['default']['config']['httpHealthCheck']['requestPath']
         == '/health'
@@ -154,3 +165,63 @@ def test_gateway_requires_reserved_address():
     )
     assert result.returncode != 0
     assert 'addressName must name a reserved regional internal address' in result.stderr
+
+
+def test_batch_warm_fallback_is_a_distinct_on_demand_release_in_both_serving_services():
+    directory = CHARTS / 'diarizer'
+    output = subprocess.check_output(
+        [
+            'helm',
+            'template',
+            'prod-omi-diarizer-batch-fallback',
+            str(directory),
+            '--namespace',
+            'prod-omi-backend',
+            '-f',
+            str(directory / 'prod_omi_diarizer_values.yaml'),
+            '-f',
+            str(directory / 'prod_omi_diarizer_batch_values.yaml'),
+            '-f',
+            str(directory / 'prod_omi_diarizer_batch_fallback_values.yaml'),
+            '--set-string',
+            'image.digest=sha256:' + 'a' * 64,
+        ],
+        text=True,
+    )
+    fallback = {(obj['kind'], obj['metadata']['name']): (obj, '') for obj in yaml.safe_load_all(output) if obj}
+    burst = render('prod', 'diarizer', batch=True)
+    warm_deploy = object_for(fallback, 'Deployment')
+    warm = warm_deploy['spec']['template']
+    primary = object_for(burst, 'Deployment')
+    assert warm_deploy['spec']['replicas'] == 1
+    assert not any(kind in {'HorizontalPodAutoscaler', 'HTTPRoute', 'Ingress'} for kind, _ in fallback)
+    assert warm['spec']['nodeSelector'] == {
+        'service': 'diarizer-batch',
+        'env': 'prod',
+        'cloud.google.com/gke-nodepool': 'diarizer-batch-pool',
+        'cloud.google.com/gke-provisioning': 'standard',
+    }
+    assert 'affinity' not in warm['spec']
+    # No Helm ownership collisions or overlapping Deployment controllers.
+    assert not (set(fallback) & set(burst))
+    for deploy, other in [(warm_deploy, primary), (primary, warm_deploy)]:
+        selector = deploy['spec']['selector']['matchLabels']
+        assert not all(other['spec']['template']['metadata']['labels'].get(k) == v for k, v in selector.items())
+    warm_container = warm['spec']['containers'][0]
+    primary_pod = primary['spec']['template']
+    for key in ('command', 'resources', 'tolerations', 'startupProbe', 'readinessProbe'):
+        if key == 'tolerations':
+            assert warm['spec'][key] == primary_pod['spec'][key]
+        else:
+            assert warm_container[key] == primary_pod['spec']['containers'][0][key]
+    assert warm_container['image'].endswith('@sha256:' + 'a' * 64)
+    for (kind, _), (service, _) in burst.items():
+        if kind != 'Service':
+            continue
+        selector = service['spec']['selector']
+        assert selector == {'app.kubernetes.io/name': 'diarizer', 'omi.ai/diarizer-batch-route': 'prod'}
+        for template in (warm, primary_pod):
+            assert all(template['metadata']['labels'].get(k) == v for k, v in selector.items())
+        embedding = object_for(render('prod', 'diarizer'), 'Deployment')['spec']['template']
+        assert not all(embedding['metadata']['labels'].get(k) == v for k, v in selector.items())
+    assert object_for(burst, 'HorizontalPodAutoscaler')['spec']['maxReplicas'] + warm_deploy['spec']['replicas'] == 18

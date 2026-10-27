@@ -1,4 +1,5 @@
-# David-only floor 1; lift to 6 after cohort qualification (max 18).
+# Autoscaled burst release; a separate on-demand release supplies one warm pod.
+# Combined serving ceiling is 18 (17 here + 1 fallback).
 # Separate release only: -f prod_omi_diarizer_values.yaml -f this file.
 # Lead-owned opt-in deployment; never install over prod-omi-diarizer.
 fullnameOverride: prod-omi-diarizer-batch
@@ -14,13 +15,31 @@ gateway:
   timeoutSeconds: 900
 # Replace the inherited embedding affinity entirely. Both label and taint
 # isolate batch capacity from existing embedding and other GPU workloads.
-affinity: null
+affinity:
+  nodeAffinity:
+    # Helm merges maps with prod values: remove the embedding-only requirement.
+    requiredDuringSchedulingIgnoredDuringExecution: null
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: cloud.google.com/gke-spot
+              operator: In
+              values: ["true"]
 # No cloud.google.com/gke-nodepool pin: diarizer-batch-pool and its Spot
 # sibling share the service/env labels and omi.ai taints, so the autoscaler
 # can place replicas on Spot first while the on-demand pool stays the fallback.
 nodeSelector:
   service: diarizer-batch
   env: prod
+# Both batch releases serve through the existing ClusterIP and Gateway Service.
+# Deployment selectors retain their release instance, so controllers cannot overlap.
+podLabels:
+  omi.ai/diarizer-batch-route: prod
+service:
+  selectorLabels:
+    app.kubernetes.io/name: diarizer
+    omi.ai/diarizer-batch-route: prod
 tolerations:
   - key: omi.ai/diarizer-batch
     operator: Equal
@@ -43,7 +62,7 @@ podMonitoring:
 autoscaling:
   enabled: true
   minReplicas: 1
-  maxReplicas: 18
+  maxReplicas: 17
   requestLatencyP99: null
   queueDepthAverageValue: 1
   behavior:

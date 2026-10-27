@@ -1,0 +1,19 @@
+# Install as prod-omi-diarizer-batch-fallback, AFTER prod + batch values.
+# Pin the same immutable image digest as the burst release. Install this first;
+# verify it is Ready on an on-demand node before updating the serving selector.
+fullnameOverride: prod-omi-diarizer-batch-fallback
+backendConfig:
+  name: prod-omi-diarizer-batch-fallback-backend-config
+replicaCount: 1
+autoscaling:
+  enabled: false
+gateway:
+  enabled: false
+ingress:
+  enabled: false
+affinity: null
+nodeSelector:
+  service: diarizer-batch
+  env: prod
+  cloud.google.com/gke-nodepool: diarizer-batch-pool
+  cloud.google.com/gke-provisioning: standard

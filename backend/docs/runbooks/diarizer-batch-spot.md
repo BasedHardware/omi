@@ -1,0 +1,200 @@
+# Batch diarizer: Spot T4 burst, warm on-demand fallback
+
+Owner: rollout lead. This is an apply packet, **not an applied change**. The
+author used `ro-prod` for infrastructure, aggregate metrics, catalog and billing
+reads. Node-pool creation and both Helm releases require the lead's approved
+fleet-change window and GKE write identity. Do not change `batch-pipeline-pool`,
+its Spot sibling, Parakeet, embedding, IAM, or cohort admission.
+
+## Measured baseline (2026-10-27 04:35–04:42 UTC)
+
+`prod-omi-gke` is regional in `us-central1`. `diarizer-batch-pool` is
+`n1-standard-8`, 30 GiB, one T4, 100 GiB `pd-balanced`, `COS_CONTAINERD`,
+`GKE_METADATA`, autorepair/autoupgrade, a/b/c/f locations and `ANY` allocation.
+Autoscaler bounds are **total min 1 / max 18**, not per-zone. Three Ready batch
+replicas each request 2 CPU / 6 GiB / one GPU; HPA bounds are 1–18. A fourth
+registered node with no allocatable GPU disappeared during inspection. This is
+not a reason to change the already-approved node shape or throughput target.
+
+The preceding 24-hour GPU duty-cycle query returned 146 hourly observations
+across 75 churned pod series: sample-weighted mean 7.43%, largest hourly mean
+32.5%. These are utilization samples, not concurrency or spare-throughput proof.
+CPU allocatable-utilization averaged 5.92% across 133 hourly node observations;
+the instantaneous node CPU sample was 2–4%. T4 is offered in a/b/c/f and regional
+preemptible-T4 quota was 16, usage 0. **Neither quota nor an accelerator listing
+proves Spot stock.** Only a Ready Spot node and warmed served image do that.
+
+Three settled billing-export days attributed by node resource name or
+`goog-k8s-node-pool-name=diarizer-batch-pool`:
+
+| UTC day | Gross USD | Credits USD | Net USD | T4 hours |
+| --- | ---: | ---: | ---: | ---: |
+| 2026-10-23 | 72.63 | -1.45 | 71.18 | 101.59 |
+| 2026-10-24 | 60.11 | -1.72 | 58.39 | 83.83 |
+| 2026-10-25 | 44.60 | -1.26 | 43.34 | 62.21 |
+
+This averages 3.44 T4 nodes and $57.64/day net (about $1,753/month at 730 hours).
+It is a declining, variable baseline. Resource-attributed credits do not prove
+that a project-wide commitment payment can be avoided.
+
+Cloud Billing Catalog API, Compute Engine `6F81-5844-456A`, USD, `us-central1`:
+
+| Component | On-demand hourly USD | Spot hourly USD | SKU (on-demand / Spot) |
+| --- | ---: | ---: | --- |
+| T4 | 0.35 | 0.2085 | `88B8-C3ED-03F0` / `1A25-07A3-AB6D` |
+| N1 CPU, per vCPU | 0.031611 | 0.01544 | `2E27-4F75-95CD` / `D498-1ECA-87C1` |
+| N1 RAM, per GiB | 0.004237 | 0.002069 | `6C71-E844-38BC` / `5451-0A15-0123` |
+
+The node is $0.729998/h on-demand vs $0.39409/h Spot, plus the same $10/month
+disk. One displaced node saves **$245/month list-equivalent**; 3 nodes →
+1 on-demand + 2 Spot is about **$490/month**, not an assured $800. At the
+three-day average and unchanged total node-hours, retaining one on-demand node
+projects about $598/month list-equivalent. Billing rates/credits differ; confirm
+net savings after apply. No vendor changes occur, so STT/LLM/API spend is unchanged.
+Raw receipts and query: workspace `data/run-2026-10-27-spotdiar/`.
+
+## Scheduling and availability contract
+
+1. Keep `diarizer-batch-pool` on-demand, total min 1 / max 18. Do not replace it
+   in place or shrink its fallback ceiling during this rollout.
+2. Add `diarizer-batch-pool-spot`, same T4/node shape, zones, service/env labels,
+   GPU and batch taints; total min 0 / max 16, `ANY`. This cap fits the observed
+   Spot T4 quota. No autoscaler or priority changes to other pools.
+3. First install **`prod-omi-diarizer-batch-fallback`**, fixed one replica, pinned
+   to the on-demand pool and `gke-provisioning=standard`. It uses the same batch
+   command, probes, resources, secrets references and exact immutable image as
+   the existing release. It has its own Deployment selector and resource names,
+   no HPA, no Ingress and no competing HTTPRoute.
+4. Upgrade `prod-omi-diarizer-batch`: min 1 / max 17, prefer existing Spot nodes
+   but allow on-demand spillover. Both Services select the batch-specific route
+   label shared by the two releases. Embedding and dev lack that label. The
+   shared Gateway path remains `/diarizer-batch`, timeout 900s, and balances over
+   individual Ready endpoints from both releases (no fixed per-release weight).
+5. Include the fallback instance in the existing Prometheus scrape job. Its
+   queue is observable, while HPA continues to select only its own burst pods.
+
+The warm replica preserves a serving endpoint through **Spot-only loss**; it
+does not preserve requests already executing on a preempted GPU or guarantee
+full throughput during a stockout. GKE gives Spot Pods at most 15s to terminate;
+the batch timeout is 900s. Retry/custody behavior must be qualified before
+apply. Do not claim a PDB or PriorityClass can prevent provider preemption.
+
+The two-release design raises the minimum from one GPU pod to two. At sustained
+one-pod demand this costs an extra Spot node (~$298/month list + disk), so the
+lead must compare **total** before/after node-hours. Do not book savings just
+because Spot nodes exist. Preferred affinity does not drive autoscaler decisions
+or migrate existing pods; GKE normally expands the cheaper eligible pool, but
+stockouts and already-running on-demand pods can prevent the expected saving.
+Use normal safe scale-down, never force an eviction to manufacture savings.
+
+## Lead apply sequence
+
+Re-fetch main, confirm the reviewed PR SHA is included, and capture current
+Helm revisions, digest, replicas/HPA, Ready endpoints, node bounds and billing
+baseline. Preserve all live tuning overrides in private local values files;
+do not print workload YAML/env or check those files into Git. Use the exact
+served digest, never a tag or a newer application build for this infra change.
+This repository manages these pools with gcloud/runbooks, not Terraform.
+
+After the lead approves the fleet window, refresh quota, node identity/scopes,
+zones and GKE version; compare to the baseline. With that GKE-write identity:
+
+```bash
+SPOTDIAR_PROJECT=based-hardware
+SPOTDIAR_CLUSTER=prod-omi-gke
+SPOTDIAR_REGION=us-central1
+SPOTDIAR_CONTEXT=gke_based-hardware_us-central1_prod-omi-gke
+SPOTDIAR_NAMESPACE=prod-omi-backend
+SPOTDIAR_NODE_SA=$(gcloud container node-pools describe diarizer-batch-pool \
+  --project="$SPOTDIAR_PROJECT" --cluster="$SPOTDIAR_CLUSTER" \
+  --region="$SPOTDIAR_REGION" --format='value(config.serviceAccount)')
+test -n "$SPOTDIAR_NODE_SA"
+gcloud container node-pools create diarizer-batch-pool-spot \
+  --project="$SPOTDIAR_PROJECT" --cluster="$SPOTDIAR_CLUSTER" \
+  --region="$SPOTDIAR_REGION" \
+  --node-locations=us-central1-a,us-central1-b,us-central1-c,us-central1-f \
+  --spot --location-policy=ANY --enable-autoscaling \
+  --num-nodes=0 --total-min-nodes=0 --total-max-nodes=16 \
+  --machine-type=n1-standard-8 \
+  --accelerator=type=nvidia-tesla-t4,count=1,gpu-driver-version=default \
+  --image-type=COS_CONTAINERD --disk-type=pd-balanced --disk-size=100 \
+  --service-account="$SPOTDIAR_NODE_SA" --scopes=cloud-platform,userinfo-email \
+  --workload-metadata=GKE_METADATA --enable-autorepair --enable-autoupgrade \
+  --node-labels=service=diarizer-batch,env=prod \
+  --node-taints=nvidia.com/gpu=present:NoSchedule,omi.ai/diarizer-batch=true:NoSchedule
+```
+
+Pool status RUNNING at size zero is not capacity acceptance. Before changing the
+serving release, qualify at least one real Ready Spot T4 with the exact image and
+public synthetic PCM using an isolated, bounded probe. Confirm driver/GPU
+allocatable, scheduling, model warmup and successful diarization; remove only
+that probe after recording receipts. A failed stock or image probe stops here.
+Prove Spot-loss retries and the shared-endpoint behavior in a non-serving
+qualification release first; this author has no authority to run that experiment.
+
+Install the warm replica **before** changing the primary Service selectors:
+
+```bash
+: "${SPOTDIAR_IMAGE_DIGEST:?exact currently served sha256 digest}"
+helm --kube-context "$SPOTDIAR_CONTEXT" -n "$SPOTDIAR_NAMESPACE" \
+  upgrade --install prod-omi-diarizer-batch-fallback backend/charts/diarizer \
+  -f backend/charts/diarizer/prod_omi_diarizer_values.yaml \
+  -f backend/charts/diarizer/prod_omi_diarizer_batch_values.yaml \
+  -f backend/charts/diarizer/prod_omi_diarizer_batch_fallback_values.yaml \
+  --set-string image.digest="$SPOTDIAR_IMAGE_DIGEST" --atomic --wait --timeout 15m
+kubectl --context "$SPOTDIAR_CONTEXT" -n "$SPOTDIAR_NAMESPACE" \
+  rollout status deployment/prod-omi-diarizer-batch-fallback --timeout=900s
+# Inspect only scheduling/Ready/image fields; verify standard provisioning and
+# probe this replica directly with /health and synthetic audio before proceeding.
+helm --kube-context "$SPOTDIAR_CONTEXT" -n "$SPOTDIAR_NAMESPACE" \
+  upgrade prod-omi-diarizer-batch backend/charts/diarizer \
+  -f backend/charts/diarizer/prod_omi_diarizer_values.yaml \
+  -f backend/charts/diarizer/prod_omi_diarizer_batch_values.yaml \
+  --set-string image.digest="$SPOTDIAR_IMAGE_DIGEST" --atomic --wait --timeout 15m
+```
+
+Apply any captured tuning overrides to both commands after the checked-in
+values; explicitly retain the reviewed scheduling, route labels and unique
+fallback BackendConfig name. Verify the rendered fallback and primary image,
+command, resources and env references match before applying either release.
+Apply the monitoring scrape delta through the lead's existing monitoring Helm
+release (see [batch installation](../../scripts/diarization_eval/batch_install.md));
+preserve unrelated monitoring values and chart version.
+
+Before moving more work, require: warm on-demand Ready replica; primary and
+fallback Pod IPs both in the existing Gateway Service's Ready EndpointSlices;
+accepted/resolved HTTPRoute and healthy backend; fresh queue samples for both
+instances; healthy HPA metrics; synthetic success via the actual GKE and Cloud
+Run Gateway route. Record primary/fallback image IDs and actual Spot node count.
+Run the existing per-pod/route synthetic contract, then watch queue age/depth,
+diarization error/timeout rate, endpoint readiness and total node-hours for a
+full hour. Stop on lost warm readiness, unavailable endpoints, failed HPA
+metrics, request failures or a rising queue that cannot drain on fallback.
+Do not resize other GPU pools to pass this gate. A one-pod fallback is an
+availability floor; if stockout demand exceeds it, retain on-demand scale-out.
+Record billable net costs after export settles before claiming savings.
+
+## Rollback (lead-owned; no node or data deletion)
+
+Retain the fallback release while restoring primary capacity. Upgrade the
+primary with the same reviewed values/digest **plus** a nodepool selector for
+`diarizer-batch-pool`, and `--set autoscaling.maxReplicas=18`. Keep the shared
+route selector until primary replicas are Ready and requests/queues recover.
+Use `--atomic --wait --timeout 15m`; verify on-demand endpoints before removing
+any Spot capacity. Existing on-demand min 1 / max 18 is unchanged and can grow.
+
+Once primary capacity and endpoint health are proven, `helm rollback` the
+primary to its recorded pre-change revision (restores its instance-only Service
+selectors, 1–18 HPA and old placement). Keep the warm release running until its
+in-flight requests drain, then scale **only** its Deployment to zero. Keep the
+empty Spot pool with min 0; no pool/release/data deletion is needed for recovery.
+Revert the fallback scrape inclusion in the next normal monitoring roll if
+desired. Verify final replicas, node placement, exact served digest, Gateway
+health, queue recovery and costs. No Cloud Run/backend/listen/pusher deploy is
+part of this change. Every subsequent manual batch-image roll must update both
+batch releases together while preserving one Ready on-demand endpoint.
+
+References: [GKE Spot behavior](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/spot-vms),
+[autoscaler choice](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/cluster-autoscaler),
+[Spot pricing](https://cloud.google.com/spot-vms/pricing),
+[Billing Catalog API](https://cloud.google.com/billing/v1/how-tos/catalog-api).

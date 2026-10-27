@@ -1,6 +1,7 @@
 """Batch capacity cannot share live GPUs; HPA and imports use real delivery paths."""
 
 import subprocess
+import re
 import sys
 from pathlib import Path
 
@@ -35,12 +36,12 @@ def test_batch_scheduling_and_resources_are_disjoint_from_embedding():
     # service/env labels and omi.ai taints; the autoscaler prefers Spot first.
     assert 'cloud.google.com/gke-nodepool' not in pod['nodeSelector']
     assert pod['nodeSelector'] == {'service': 'diarizer-batch', 'env': 'prod'}
-    assert 'affinity' not in pod
+    assert not pod['affinity']['nodeAffinity'].get('requiredDuringSchedulingIgnoredDuringExecution')
     assert {t['key']: t['value'] for t in pod['tolerations']}['omi.ai/diarizer-batch'] == 'true'
     assert live['Deployment']['spec']['template']['spec']['affinity']['nodeAffinity']
     assert all(batch[k]['metadata']['name'] != live[k]['metadata']['name'] for k in batch if k in live)
     assert batch['HorizontalPodAutoscaler']['spec']['minReplicas'] == 1
-    assert batch['HorizontalPodAutoscaler']['spec']['maxReplicas'] == 18
+    assert batch['HorizontalPodAutoscaler']['spec']['maxReplicas'] == 17  # +1 fixed on-demand replica
     assert live['BackendConfig']['spec']['timeoutSec'] == 30
     assert batch['BackendConfig']['spec']['timeoutSec'] == 900
     assert 'Ingress' not in batch
@@ -60,7 +61,14 @@ def test_hpa_metric_has_scrape_resource_labels_and_per_pod_adapter_mapping():
     )
     labels = {r['target_label']: r['source_labels'] for r in scrape['relabel_configs'] if 'target_label' in r}
     assert labels == {'namespace': ['__meta_kubernetes_namespace'], 'pod': ['__meta_kubernetes_pod_name']}
-    assert any(r.get('regex') == 'prod-omi-diarizer-batch' and r['action'] == 'keep' for r in scrape['relabel_configs'])
+    instance_filter = next(
+        r['regex']
+        for r in scrape['relabel_configs']
+        if r.get('source_labels') == ['__meta_kubernetes_pod_label_app_kubernetes_io_instance']
+    )
+    assert re.fullmatch(instance_filter, 'prod-omi-diarizer-batch')
+    assert re.fullmatch(instance_filter, 'prod-omi-diarizer-batch-fallback')
+    assert not re.fullmatch(instance_filter, 'prod-omi-diarizer')
     hpa_metric = rendered(True)['HorizontalPodAutoscaler']['spec']['metrics'][0]
     assert hpa_metric['type'] == 'Pods'
     rules = yaml.safe_load((monitoring / 'prometheus-adapter/prod_omi_prometheus_adapter.yaml').read_text())['rules'][
