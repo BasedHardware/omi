@@ -560,6 +560,7 @@ def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(bind
     monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda *_, **kw: 'synthetic-conversation')
     playback = Mock(side_effect=ValueError('private-error-must-never-be-logged'))
     projector = projection.Projector(Mock(), Mock(), playback=playback)
+    monkeypatch.setattr(projector.store, 'settle_deleted_output', Mock())
     receipt = {
         'state': 'persisted',
         'conversation_id': 'synthetic-conversation',
@@ -651,7 +652,9 @@ def test_supersession_cannot_bypass_privacy_fence(binding):
         projector.supersede(session)
 
 
-@pytest.mark.parametrize('source', ['live', 'donor_only', 'direct_deleted', 'redirect_deleted', 'soft_deleted'])
+@pytest.mark.parametrize(
+    'source', ['live', 'donor_only', 'output_only', 'direct_deleted', 'redirect_deleted', 'soft_deleted']
+)
 def test_privacy_disposition_requires_transactional_input_tombstone_proof(binding, source, monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
     client = StrictFirestore()
@@ -666,7 +669,7 @@ def test_privacy_disposition_requires_transactional_input_tombstone_proof(bindin
         user.collection('deleted_conversations').document('deleted-survivor').create({'deleted': True})
     elif source == 'soft_deleted':
         user.collection('conversations').document(cid).create({'deleted': True})
-    elif source == 'donor_only':
+    elif source in {'donor_only', 'output_only'}:
         user.collection('deleted_conversations').document('unrelated-donor').create({'deleted': True})
     result = {'outcome': 'success', 'result_uri': 'gs://synthetic/result'}
     store.ref('jobs', 'segment').create(
@@ -676,6 +679,7 @@ def test_privacy_disposition_requires_transactional_input_tombstone_proof(bindin
             'capture_at': 1000,
             'privacy_generation': 0,
             'result': result,
+            **({'conversation_ids': ['unrelated-donor']} if source == 'output_only' else {}),
         }
     )
     store.ref('results', 'segment').create(
@@ -700,6 +704,10 @@ def test_privacy_disposition_requires_transactional_input_tombstone_proof(bindin
     session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
     transaction = client.transaction()
     before = deepcopy(client.rows)
+    if source == 'output_only':
+        session.prepare(transaction)
+        assert client.rows == before
+        transaction = client.transaction()
     if source in {'direct_deleted', 'redirect_deleted'}:
         session.prepare(transaction, privacy_deleted=True)
         receipt = session.persist(transaction, superseded=True, privacy_deleted=True)

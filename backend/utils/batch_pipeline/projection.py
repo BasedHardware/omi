@@ -930,6 +930,10 @@ class Projector:
 
     def finish_part(self, item, binding, receipt, index, *, policy=None):
         policy = policy or self.store.policy(item.segment_id)
+        if receipt.get('conversation_id'):
+            self.store.settle_deleted_output(
+                item.segment_id, binding, self.clock(), receipt, part_index=index, policy=policy
+            )
         if receipt['state'] in {'ready', 'quarantined'}:
             return
         if receipt.get('conversation_id'):

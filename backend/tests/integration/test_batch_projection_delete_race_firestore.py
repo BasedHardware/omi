@@ -12,7 +12,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_k
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_projection_session import ProjectionSession
 from database.legal_holds import acquire_destructive_operation, finish_destructive_operation
-from tests.integration.test_batch_pipeline_projection_firestore import lane, active_rows
+from tests.integration.test_batch_pipeline_projection_firestore import lane, active_rows, multipart
 from utils.batch_pipeline import projection
 from utils.batch_pipeline.scheduler import owner_key
 
@@ -184,3 +184,50 @@ def test_donor_refusal_alone_cannot_authorize_terminal_input_disposition(lane):
         session.persist_empty(superseded=True, privacy_deleted=True)
     assert not lane.projector.store.ref('results', head.ids[0]).get().to_dict().get('projection')
     assert head.ledger.get().to_dict()['status'] == 'processing'
+
+
+@pytest.mark.parametrize('deleted_output', ['live_tombstone', 'hard_deleted', 'redirect'])
+def test_deleted_earlier_multipart_output_never_deletes_later_input(lane, monkeypatch, deleted_output):
+    batch = multipart(lane, 2)
+    # The first output is distinct from the capture's input anchor.
+    lane.payload['speech_spans'][0] = {'start': 10, 'end': 11}
+    lane.payload['words'][0]['timestamp'] = [10, 11]
+    original = projection.build_incoming
+
+    def pause(item, *args, **kwargs):
+        if item.capture_at > 1100:
+            raise RuntimeError('synthetic pause before later input')
+        return original(item, *args, **kwargs)
+
+    monkeypatch.setattr(projection, 'build_incoming', pause)
+    with pytest.raises(RuntimeError, match='pause before later input'):
+        lane.projector.project(batch.ids[0])
+    first = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()['projection_parts']['0']
+    assert first['conversation_id'] != batch.items[0].conversation_id
+    prior = lane.user.collection('conversations').document(first['conversation_id'])
+    if deleted_output == 'redirect':
+        survivor = lane.user.collection('conversations').document('synthetic-output-survivor')
+        survivor.set({**prior.get().to_dict(), 'id': survivor.id})
+        prior.update({'deleted': True, 'sync_merged_into': survivor.id})
+        lane.user.collection('deleted_conversations').document(survivor.id).set({'deleted': True})
+    else:
+        lane.user.collection('deleted_conversations').document(prior.id).set({'deleted': True})
+        if deleted_output == 'hard_deleted':
+            prior.delete()
+    before = prior.get().to_dict()
+    monkeypatch.setattr(projection, 'build_incoming', original)
+    result = lane.projector.project(batch.ids[0])
+    assert 'reason_code' not in result and 'superseded_segments' not in result
+    assert result['deleted_output_segments'] == 1 and len(result['new_memories']) == 1
+    rows = [row for row in active_rows(lane) if row['id'] in result['new_memories']]
+    assert len(rows) == 1 and rows[0]['transcript_segments'][0]['text'] == 'Group 1.'
+    assert prior.get().to_dict() == before
+    entry = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert entry['projection_parts']['0']['disposition'] == 'output_deleted'
+    assert entry['projection_parts']['0']['speech_seconds'] == 1
+    assert entry['projection_parts']['1']['speech_seconds'] == 1
+    assert entry['projection']['speech_seconds'] == 2
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert batch.ledger.get().to_dict()['usage_committed_seconds'] == 2
+    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) == batch.ids[0]
+    assert lane.projector.project(batch.ids[0]) == result

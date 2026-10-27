@@ -147,6 +147,64 @@ class ProjectionStore:
 
         self.run(read, policy=session.policy)
 
+    def settle_deleted_output(self, segment_id, binding, now, receipt, *, part_index=None, policy=None):
+        """Retire only an already-assigned output, preserving all input speech accounting."""
+        output = receipt.get('conversation_id')
+        if not output:
+            return
+        user = self.client.collection('users').document(binding.owner_id)
+        candidate = output
+        seen = set()
+        # Cheap read hint; the mutation below rechecks the complete fence in
+        # its transaction. Follow server redirects exactly as the privacy guard.
+        while candidate and candidate not in seen and len(seen) < 256:
+            seen.add(candidate)
+            if user.collection('deleted_conversations').document(candidate).get().exists:
+                break
+            row = user.collection('conversations').document(candidate).get().to_dict() or {}
+            candidate = row.get('sync_merged_into') if row.get('deleted') else None
+        else:
+            return
+        if not candidate or not user.collection('deleted_conversations').document(candidate).get().exists:
+            return
+        policy = policy or self.policy(segment_id)
+
+        @firestore.transactional
+        def commit(transaction):
+            session = self.session(segment_id, binding, now, part_index=part_index, policy=policy)
+            session.prepare(transaction, replay=False)
+            current = session.receipt()
+            if current.get('conversation_id') != output:
+                return current
+            try:
+                session.guard(transaction, [output])
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED or not error.conversation_id:
+                    raise
+                if (
+                    not user.collection('deleted_conversations')
+                    .document(error.conversation_id)
+                    .get(transaction=transaction)
+                    .exists
+                ):
+                    raise
+            else:
+                return current
+            settled = {
+                **current,
+                'state': 'ready',
+                'conversation_id': None,
+                'audio_required': False,
+                'enrichment_required': False,
+                'disposition': 'output_deleted',
+            }
+            session.write_receipt(transaction, settled)
+            return settled
+
+        settled = self.run(commit, policy=policy)
+        receipt.update(settled)
+        self._mirror(binding)
+
     def acknowledge(self, segment_id: str, binding: ProjectionBinding, now: float, *, policy=None):
 
         policy = policy or self.policy(segment_id)
@@ -420,6 +478,7 @@ class ProjectionStore:
                 receipts.extend(parts.values() if parts else [receipt])
             new, updated = self._visible(transaction, binding, receipts)
             superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
+            deleted_output_count = sum(receipt.get('disposition') == 'output_deleted' for receipt in receipts)
             # Re-read canonical deletion fences before publishing any visible IDs.
             session.guard(transaction, (*new, *updated))
             result = {
@@ -430,7 +489,12 @@ class ProjectionStore:
                 'errors': [],
                 'outcome': (
                     'success'
-                    if new or updated or erased_count or terminal_empty_count or superseded_count
+                    if new
+                    or updated
+                    or erased_count
+                    or terminal_empty_count
+                    or superseded_count
+                    or deleted_output_count
                     else 'expected_silence'
                 ),
             }
@@ -438,6 +502,8 @@ class ProjectionStore:
                 result['no_recoverable_speech_segments'] = terminal_empty_count
             if superseded_count:
                 result['superseded_segments'] = superseded_count
+            if deleted_output_count:
+                result['deleted_output_segments'] = deleted_output_count
             if (
                 not new
                 and not updated
@@ -448,6 +514,15 @@ class ProjectionStore:
                 old = session.ledger.get('result')
                 if not is_valid_completed_sync_content_result(old):
                     raise ProjectionBlocked('invalid existing ledger completion')
+                if deleted_output_count:
+                    # Preserve historical usage; publish only destinations that
+                    # remain visible after the user's output deletion.
+                    old = {
+                        **old,
+                        'new_memories': new,
+                        'updated_memories': updated,
+                        'deleted_output_segments': deleted_output_count,
+                    }
                 return old, False, 0
             # Part-level attribution need not sum to the worker's speech union
             # for older receipts. The immutable result summary owns metering.

@@ -248,6 +248,8 @@ def assign_in_transaction(
         seen = set()
         has_smart_state = False
         while row and row.get('sync_merged_into'):
+            if tombstoned(row['id']):
+                raise SyncAssignmentSuperseded('sync capture lineage was deleted')
             if row['id'] in seen:
                 raise SyncAssignmentConflict('sync redirect cycle', subtype=Reason.REDIRECT_CYCLE)
             has_smart_state = has_smart_state or (one_hop and _smart_merge_lineage(row))
@@ -259,6 +261,8 @@ def assign_in_transaction(
                 raise SyncAssignmentConflict(
                     'sync redirect chain exceeds one hop', subtype=Reason.REDIRECT_CHAIN_TOO_LONG
                 )
+        if cid and tombstoned(cid):
+            raise SyncAssignmentSuperseded('sync capture lineage was deleted')
         if seen and (not row or row.get('deleted') or (has_smart_state and row.get('discarded'))):
             raise SyncAssignmentSuperseded('sync capture lineage was deleted')
         return cid, row
@@ -316,11 +320,15 @@ def assign_in_transaction(
     # transaction as the append, so deletion, lifecycle and provenance win.
     temporal_live = False
     if not target_id and live_candidate_ids and live_overlap_enabled():
-        live_rows = [row for cid in live_candidate_ids if (row := load(cid)) and cid not in full_ids]
+        live_rows = [
+            row for cid in live_candidate_ids if (row := load(cid)) and cid not in full_ids and not tombstoned(cid)
+        ]
         live_id = choose_live_overlap(live_rows, incoming, uid=user_ref.id)
         if live_id:
             target_id, target = live_id, load(live_id)
             temporal_live = True
+    if target_id and tombstoned(target_id):
+        raise SyncAssignmentSuperseded('sync target survivor was deleted')
     target_hint = target_id
     if target and not target.get('deleted'):
         # Explicit capture proof is authoritative even before live STT produced

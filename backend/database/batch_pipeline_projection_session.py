@@ -149,7 +149,9 @@ class ProjectionSession:
             ids.append(self.binding.target_conversation_id)
         if self.job.get('conversation_id'):
             ids.append(self.job['conversation_id'])
-        ids.extend(self.job.get('conversation_ids') or [])
+        # Assigned destinations are outputs, not proof that another part's
+        # original input was deleted. They get independent fences below.
+        outputs = set(self.job.get('conversation_ids') or []) - set(ids)
         settling_deletion = privacy_deleted or self.receipt().get('privacy_reason') == 'conversation_deleted'
 
         def source_tombstoned(error):
@@ -191,6 +193,17 @@ class ProjectionSession:
         else:
             if settling_deletion:
                 raise ProjectionBlocked('privacy disposition requires a source deletion tombstone')
+        for output in sorted(outputs):
+            try:
+                self.guard(transaction, [output])
+            except BatchPrivacyBlocked as output_error:
+                if output_error.reason != BatchPrivacyReason.CONVERSATION_DELETED or not source_tombstoned(
+                    output_error
+                ):
+                    raise
+                # A prior output was already assigned before the user deleted
+                # it. Reconcile its receipt, while later input parts still owe
+                # their own assignments. Never authorize input deletion here.
         durable = self.ledger.get('batch_pipeline') or {}
         if (
             self.ledger.get('dispatch_protocol') != 'batch_v1'
