@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
+import 'package:omi/pages/conversations/sync_pending_work.dart' show walAttentionLabel;
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -60,7 +61,9 @@ class WalListItem extends StatelessWidget {
     if (state == WalSyncDisplayState.syncing) {
       return (Colors.grey.shade300, l.syncStatusBackingUp);
     }
-    if (hasError) return (Colors.redAccent, l.failedStatus);
+    // A stored refusal token outranks the generic failed-sync banner: the row
+    // says which refusal it was even when this WAL is the last failed sync.
+    if (hasError && state != WalSyncDisplayState.uploadRejected) return (Colors.redAccent, l.failedStatus);
     switch (state) {
       case WalSyncDisplayState.synced:
         return (Colors.grey.shade500, l.statusProcessed);
@@ -77,7 +80,8 @@ class WalListItem extends StatelessWidget {
       case WalSyncDisplayState.unsupportedAudio:
         return (Colors.redAccent, l.syncStatusUnsupportedAudio);
       case WalSyncDisplayState.uploadRejected:
-        return (Colors.redAccent, l.failedStatus);
+        // Which refusal it was, in On the Way's words.
+        return (Colors.redAccent, walAttentionLabel(state, l, rejectionReason: wal.uploadRejectionReason));
       case WalSyncDisplayState.waiting:
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade500, l.syncStatusWaiting);
@@ -89,7 +93,12 @@ class WalListItem extends StatelessWidget {
     if (state == WalSyncDisplayState.syncing) {
       return const OmiSpinner(size: OmiSpinnerSize.small);
     }
-    if (!wal.onDeviceOnly && (hasError || isRetryableSyncState(state) || state == WalSyncDisplayState.retrying)) {
+    // A too_large refusal is deterministic — the same bytes are the same size —
+    // so it offers Delete even while the failed-sync banner (hasError) points
+    // at this row: never a Retry that is guaranteed to fail again.
+    final tooLargeRefusal =
+        state == WalSyncDisplayState.uploadRejected && wal.uploadRejectionReason == WalUploadRejection.tooLarge;
+    if (!tooLargeRefusal && (hasError || walRetryCanHelp(wal) || state == WalSyncDisplayState.retrying)) {
       return OmiButton.secondary(
         label: context.l10n.tryAgain,
         size: OmiButtonSize.compact,
@@ -100,7 +109,8 @@ class WalListItem extends StatelessWidget {
     // leads to a detail page with nothing actionable on it.
     if (state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
-        state == WalSyncDisplayState.unsupportedAudio) {
+        state == WalSyncDisplayState.unsupportedAudio ||
+        tooLargeRefusal) {
       return OmiButton.destructive(
         label: context.l10n.delete,
         size: OmiButtonSize.compact,

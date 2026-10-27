@@ -72,6 +72,7 @@ from .read_boundary import parse_payload_strict
 from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
+    budgeted_get_all,
     budgeted_stream_iter,
     indexed_list_reads_enabled,
 )
@@ -630,7 +631,11 @@ def get_open_loop_extractions(uid: str, conversation_data: Optional[Dict[str, An
 
 
 def prepare_conversation_for_read(
-    conversation_data: Optional[Dict[str, Any]], uid: str, *, firestore_client: Any = None
+    conversation_data: Optional[Dict[str, Any]],
+    uid: str,
+    *,
+    firestore_client: Any = None,
+    read_budget: Optional[ListReadBudget] = None,
 ) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None
@@ -654,7 +659,9 @@ def prepare_conversation_for_read(
     if level == 'enhanced':
         from utils.agent_capabilities.transcripts import project
 
-        return project(uid, _decrypt_conversation_data(data, uid), firestore_client=firestore_client)
+        return project(
+            uid, _decrypt_conversation_data(data, uid), firestore_client=firestore_client, read_budget=read_budget
+        )
 
     # Handle standard level with potential compression
     if data.get('transcript_segments_compressed'):
@@ -674,7 +681,7 @@ def prepare_conversation_for_read(
     _reveal_match_scores_for_read(data, uid)
     from utils.agent_capabilities.transcripts import project
 
-    return project(uid, data, firestore_client=firestore_client)
+    return project(uid, data, firestore_client=firestore_client, read_budget=read_budget)
 
 
 def document_data_with_revision(document) -> Optional[Dict[str, Any]]:
@@ -2227,6 +2234,7 @@ def _finalize_audio_file_group(
     # v2 groups carry validated contiguous coverage spans from blob metadata;
     # duration is the authoritative span extent, never an encoded-size guess.
     spans: List[Tuple[float, float]] = []
+    playback_starts: List[float] = []
     for chunk in chunk_group:
         span = chunk.get('span')
         if not isinstance(span, dict):
@@ -2243,6 +2251,9 @@ def _finalize_audio_file_group(
             spans = []
             break
         spans.append((start, start + samples / rate))
+        playback_start = span.get('playback_start')
+        if isinstance(playback_start, (int, float)):
+            playback_starts.append(float(playback_start))
 
     if spans:
         started_at = datetime.fromtimestamp(spans[0][0], tz=timezone.utc)
@@ -2257,6 +2268,10 @@ def _finalize_audio_file_group(
             started_at=started_at,
             duration=duration,
             chunk_spans=[ChunkSpan(start=round(start, 3), end=round(end, 3)) for start, end in spans],
+            # The normalized wall basis holds only when every chunk in the
+            # group carries its persisted playback start; one legacy chunk
+            # leaves the part on the raw capture clock.
+            playback_start=(min(playback_starts) if len(playback_starts) == len(spans) else None),
         )
 
     # Calculate started_at and duration from timestamps and blob sizes
@@ -2459,15 +2474,18 @@ def get_conversations_by_id(
     return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
 
 
-@prepare_for_read(decrypt_func=prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read, read_budget_arg='read_budget')
 def get_conversations_by_id_without_photos(
     uid,
     conversation_ids,
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    read_budget: Optional[ListReadBudget] = None,
 ):
-    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
+    return _get_conversations_by_id(
+        uid, conversation_ids, include_discarded=include_discarded, read_site=read_site, read_budget=read_budget
+    )
 
 
 def _get_conversations_by_id(
@@ -2476,12 +2494,13 @@ def _get_conversations_by_id(
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    read_budget: Optional[ListReadBudget] = None,
 ):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
 
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
-    docs = db.get_all(doc_refs)
+    docs = budgeted_get_all(db, doc_refs, read_budget)
 
     hits = 0
     misses = 0

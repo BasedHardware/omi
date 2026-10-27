@@ -712,7 +712,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get remembering => 'Atceras';
 
   @override
-  String get unlimitedPlan => 'Neierobežots plāns';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Pārvaldīt plānu';
@@ -734,7 +734,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get upgrade => 'Jaunināt';
 
   @override
-  String get upgradeToUnlimited => 'Jauniniet uz neierobežotu';
+  String get upgradeToUnlimited => 'Jaunināt uz Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3162,7 +3162,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Jaunināt uz Pro';
+  String get upgradeToPro => 'Jaunināt uz Omi Pro';
 
   @override
   String get getOmiDevice => 'Iegūt Omi ierīci';
@@ -4286,7 +4286,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get trainingDataProgram => 'Apmācības datu programma';
 
   @override
-  String get getOmiUnlimitedFree => 'Iegūstiet Omi Unlimited bez maksas, sniedzot savus datus AI modeļu apmācībai.';
+  String get getOmiUnlimitedFree => 'Iegūstiet Omi Pro bez maksas, sniedzot savus datus AI modeļu apmācībai.';
 
   @override
   String get trainingDataBullets => '• Jūsu dati palīdz uzlabot AI modeļus\n• Tiek kopīgoti tikai nejutīgi dati';
@@ -9686,7 +9686,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Pāriet uz bezmaksas versiju';
 
   @override
-  String get getFreeUnlimitedAccess => 'Iegūstiet bezmaksas neierobežotu piekļuvi';
+  String get getFreeUnlimitedAccess => 'Iegūstiet Omi Pro bez maksas';
 
   @override
   String get shareDataForTraining => 'Kopīgot datus apmācībai';
@@ -12884,7 +12884,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Nosūtiet balss ziņu, un Omi uz to atbildēs.';
 
   @override
-  String get chatAppsPartOfPro => 'Tērzēšanas lietotnes ir daļa no Pro';
+  String get chatAppsPartOfPro => 'Tērzēšanas lietotnes ir daļa no Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Ziņas';
@@ -13519,7 +13519,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncDetailsCopy => 'Kopēt informāciju atbalstam';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Pieejams ar Operator un Architect';
+  String get chatAppsChannelPlanRequired => 'Pieejams ar Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14032,7 +14032,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Darbojas, kamēr tālrunis uzlādējas.';
 
   @override
-  String get onDeviceUpgradeBody => 'Pārejiet uz Pro runātāju nošķiršanai un augstākai precizitātei';
+  String get onDeviceUpgradeBody => 'Pārejiet uz Omi Pro runātāju nošķiršanai un augstākai precizitātei';
 
   @override
   String get onDeviceAtCapFooter => 'Nekas netiek zaudēts. To var mainīt sadaļā Iestatījumi › Transkripcija.';
@@ -14215,7 +14215,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Pārtaisīt ar Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Pārejiet uz Pro runātāju nošķiršanai un augstākai precizitātei';
+  String get onDeviceRedoHint => 'Pārejiet uz Omi Pro runātāju nošķiršanai un augstākai precizitātei';
 
   @override
   String get onDeviceKeepEverything => 'Glabāt visu šajā tālrunī';
@@ -14633,4 +14633,24 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Atmest';
+
+  @override
+  String get syncRejectionInvalidDate => 'Nederīgs ieraksta datums';
+
+  @override
+  String get syncDeleteKeptUploading => 'Dažas daļas joprojām augšupielādē un tika paturētas';
+
+  @override
+  String get syncRejectionServer => 'Serveris noraidīja';
+
+  @override
+  String get syncRejectionTooLarge => 'Pārāk liels';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration telefonā';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Augšupielādes īsu brīdi ir pauzētas — tās automātiski atsāksies';
 }

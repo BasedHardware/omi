@@ -39,6 +39,14 @@ defaults on; false disables publication and reuse of this pool. Private-cloud
 sync retention and `save_other_voice_profiles` are required at execution and
 transactional publication. Sync-off tags do not create a durable roster.
 Corrections, deletion and privacy opt-out still retract with the switch off.
+Batch sync assignment also excludes user-deletion tombstones on still-live
+rows. An input source proven user-deleted settles without text; otherwise a
+refused donor re-plan preserves speech in a new conversation. Both advance
+the owner's projection chain; account and generation fences remain
+authoritative. Cascade DELETE takes its account gate before writing intent, so
+a busy-gate 409 leaves no partial deletion. See
+[batch projection ordering](batch-pipeline-serving.md#bounded-merge-head-wait)
+for the transactional settlement contract.
 See [quality, privacy and release contract](runbooks/speaker-auto-enroll.md).
 
 ## Durable audio outbox (default on)
@@ -2867,6 +2875,37 @@ Verification and rollout checklist:
 - [ ] Merge/release and privately verify the affected account before closing
   #20590. Local fixtures do not establish production entitlement or recovery.
 
+### Attempt-scoped People spelling hints
+
+`people_scan_dedupe` (default 0) permits only opted-in spelling-hint readers to reuse raw
+People within one locked sync task attempt. `routers/sync.py` opens `people_scan_attempt()`
+beside the historical-memory scope; retry, cancellation and scope exit discard the memo.
+`known_spellings._people_spellings` opts in with its existing 200-document cap.
+`vocabulary._sources` remains live: it belongs to listen, outside the sync attempt.
+`get_people` and `find_person_by_name` remain live authority reads.
+
+Every People mutation atomically increments `users/{uid}/people_meta/generation.generation`
+with `Increment(1)` and `merge=True`, even with the reader lever off. This includes creation,
+rename/dismiss/delete, speech samples and profiles, pinning, speaker learning and its job
+ledger, auto-enrollment publication/retraction/privacy/revocation, manual-assignment evidence,
+chat edits/undo, Review edits/undo/redo, evidence backfill and recursive account-wipe batches.
+Account wipe removes the content-free generation head after all source deletions.
+
+A fill captures the generation before scanning. Each memo hit performs exactly one generation
+lookup; only an unchanged `(counter, document update_time)` permits reuse. A changed or
+unavailable generation reads People live. Missing/malformed metadata never admits a memo,
+so existing users first become eligible after a People write; deletion/recreation of metadata
+cannot revive an old snapshot. Generation-read errors emit the shared fallback telemetry.
+Existing in-process write, live-authority-read, client-identity, memory-size and scope fences
+remain in place. The single generation read has the ordinary write-then-read race bound;
+there is no TTL-based cross-request staleness window.
+
+The counter costs one extra atomic write per People mutation (one per recursive delete batch).
+For N repeated scans of P documents, unchanged-generation reads are P + N instead of N × P;
+this does not claim the 11–16M/day authority-scan pool, which remains live. Enablement requires
+all writer processes/operator tools to serve this protocol first; mixed old-writer releases
+are unsafe for memo reuse. This change leaves the lever at 0 for a separate serve/soak/ramp review.
+
 ### People-stats aggregate cache
 
 `GET /v1/users/people?include_stats=true` aggregates the newest conversations (locked/discarded excluded, `started_at` else `created_at`, per-segment `person_id`/`start`/`end`/`speaker_match_source`) into one `person_id -> {conversation_count, last_heard_at, talk_seconds, auto_conversation_count}` map per call. `database.people_stats_cache` caches only that map — Person rows and signed speech-sample URLs stay fresh reads. Entries live at `users/{uid}/people_stats/v1/{generation}/{scan_cap}` in the generic Redis cache (60 s TTL, 262144-byte serialized cap on read and write; oversize/corrupt/nonfinite payloads are misses). A per-uid generation token at `people_stats:v1:{uid}:generation` (86400 s TTL, fetch-or-create via `SET NX`) namespaces every entry: a writer-side bump retires all outstanding entries at once, so the 60 s entry TTL is only a safety cap for a failed invalidation — normal writes invalidate immediately. `collect_people_stats` resolves generation and entry before consuming the scan iterator, so a hit performs zero Firestore reads; it re-checks the generation before writing. If invalidation happens after that check, a fill may still be written under the retired key, which is unreachable. A `ListReadBudget`-truncated scan is never stored — only a full capped pass is cached. For N repeat loads within one unchanged 60 s generation, one capped scan serves all N: a fully populated first scan means a hit avoids all 1000 conversation reads (raw reads can reach 2000 because tombstones and invisible rows consume the document budget without yielding). Every operation fails open to the uncached scan; generation and invalidation failures log uid + error type and count `other`/`cached`->`uncached`/`connection_lost`/`recovered`.
@@ -4408,8 +4447,24 @@ neither a provider death nor a recovery episode or router health observation.
 
 On the next onset, VAD returns its retained original PCM pre-roll followed by the
 onset chunk. The serving send boundary holds that packet until the old receive
-loop has finished, opens the same captured endpoint/config, then admits those
-bytes once in that order. Dial time adds transcript onset latency; capture keeps
+loop has finished. With default-on `STT_IDLE_REOPEN_COST_RESELECT_ENABLED`, a
+managed recovery-enabled leg requests a planned `normal_close` handoff instead
+of invoking its stored Soniox factory. The ordinary configured chain rechecks
+cost stages/bench, user allocation, language capability, account health and cap
+admission, so recovered Parakeet or Modulate can serve the next leg. Session-local
+failed-provider exclusions are cleared for this fresh selection; fleet benches
+remain authoritative. The handoff uses the existing capture replay/adoption pump
+and bounded budgets without charging a failure episode or voting Soniox unhealthy.
+The old VAD's exact admitted pre-roll/onset is retained across direct sends and
+ordered tails; only capture proven accepted by successor replay is removed.
+Admission validates the buffered onset but defers its debit on the suspended
+vendor; the selected successor owns the one funded dispatch. The decision is
+pinned with that onset, so an in-flight switch change cannot leave a deferred
+charge on the stored-factory path. The exact remaining allowance still delivers
+its last admitted chunk, and switch-off keeps the existing debit boundary.
+`false`, `0` or `off` restores the same captured Soniox endpoint/config. Legacy
+unmanaged and recovery-disabled legs retain their existing raw reopen.
+Dial time adds transcript onset latency; capture keeps
 its original positions. Provider timestamps restart at zero on the new socket;
 its callback rebases onto the next accepted provider position in the existing
 capture send ledger (including the elapsed-axis mode), or cumulative admitted
@@ -4426,13 +4481,20 @@ Shutdown while closed never opens a socket just to finalize the session.
 The `omi_soniox_idle_*` close/reopen/failure counters (including
 `omi_soniox_idle_closes_by_trigger_total{trigger="vad"|"no_frames"}`), reopen latency
 histogram and estimated connected-seconds avoided counter register only for
-flag-on Soniox transports. `omi_soniox_connected_seconds_total{demand_cohort}`
+flag-on Soniox transports. `omi_soniox_connected_seconds_total{demand_cohort,origin}`
 counts the wall time every Soniox websocket is actually open, flag on or off,
 flushed by the writer about every 10 s and once at close. That is the billed
 quantity: compare Soniox by connected hour, and divide
 `omi_stt_provider_wire_audio_seconds_total{provider="soniox"}` by it for the
 share of billed time that carried audio. Avoided seconds measure the actual closed interval, excluding
 the close drain. These are estimated connection savings, not vendor invoices.
+Connected and provider wire meters (including the batch-cohort wire mirror) pin
+`origin` at raw transport construction: `initial`, `idle_reopened`, or
+`replacement`. A raw Soniox reopen is `idle_reopened` even with cost reselection
+disabled; managed idle handoffs label every newly constructed candidate the same
+way. Ordinary subsequent managed legs use `replacement`. Sum across origins for
+the former aggregate. Existing pre-deploy series have no origin and cannot be
+used to infer historical reopen share.
 The fake-mode local soak establishes byte preservation and lifecycle behavior;
 it does not measure real provider handshake latency or acoustic quality.
 
@@ -5501,14 +5563,49 @@ changes cannot reset the account budget. The budget bounds work admission,
 not billed speech. A fresh-only hard restriction or daily ceiling demotes a
 promoted LEGACY batch to backfill before persistence and final admission metrics,
 so optional promotion never introduces a fair-use 429. DEVICE_BOUND fresh keeps
-its existing 429 response. Trusted manifests retain their existing route. Future,
-invalid/missing timestamps, mixed historical batches and lookback rejection
-keep their existing semantics. Deprecated V1 stays unchanged.
+its existing 429 response. Trusted manifests retain their existing route.
+Capture times ahead of the server clock within the shared
+`SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS` window (default 600s; phone clocks drift
+minutes and app files are named after the audio START, so ahead-of-server stamps
+are clock skew, not future audio) stay admissible without untrusted-backfill
+demotion. The capture-time window is an admission check only: staging boundaries
+enforce it once per upload, while internal WAL/VAD clock reads accept derived
+segment names (source capture time plus speech offset) that may sit past the
+window. Every accepted request computes one server-clock offset from admitted
+data only — `max(0, admitted audio end − server now)`: the router's staging
+seam uses the staged filename starts alone (decode has not run, so durations
+are not yet known) and the pipeline recomputes from the furthest segment end
+(start plus decoded duration) after VAD. A claimed `audio_end_seconds` past the
+admitted span plus one live-capture chunk of trailing slack is clipped to it,
+so an inflated client claim can neither grow the claimed span nor move the
+session matching interval. The offset is used everywhere a capture time meets
+server-clock rows: the recording-session audio bounds the router passes into
+intake, the minimal-redrive attach lookup, the recording-lineage planner's
+comparison spans and `started_before`/`finished_after` query bounds, and the
+±120s closest-conversation lookup. Stored conversation
+`started_at`/`finished_at` shift by that same offset as a pair (duration
+preserved, finish ≤ server now, one captured `now` for both ends), while
+identity, chunk and lineage keys keep raw filename times so retry anchors stay
+stable. Retained private-cloud chunks persist their skew-normalized playback
+start beside the raw capture-clock chunk key (`v2_playback_start` blob metadata
+→ `audio_files[].playback_start`, present only when every chunk in the part
+carries one), and conversation playback `wall_offset` values are computed from
+that normalized basis. Beyond the window, before 2024-01-01, or malformed
+timestamps are refused with 400 plus a typed `code: 'invalid_capture_time'`
+body on V2 (released clients see the same status and `detail` text and ignore
+the body). Mixed historical batches and lookback rejection keep their existing
+semantics. Deprecated V1 keeps the pre-existing zero future tolerance — any
+future stamp stays the legacy 400 — because its inline pipeline runs at
+capture-time offset 0; V2 owns skew admission.
 
 `omi_sync_lane_admissions_total{lane,trust,reason}` and `sync_lane_admission`
 record the final budget and fresh-gate decision. New reasons: `recent_legacy_capture`,
 `legacy_fresh_budget_exceeded`, `legacy_fresh_budget_unavailable`,
-`legacy_fresh_hard_restricted`, `legacy_fresh_daily_ceiling`. No account
+`legacy_fresh_hard_restricted`, `legacy_fresh_daily_ceiling`. Per-file
+capture-time admission dispositions (accepted, `accepted_future_skew`,
+`rejected_future`, `rejected_early`, `rejected_malformed`) are counted in
+`omi_sync_capture_time_total{outcome}` with an `event=sync_capture_time` log for
+every non-plain-accepted outcome. No account
 labels are added. Optional final-pass logs now include `lane` and
 `duration_seconds`, covering decoding, embedding triage, diarization and naming
 inside the adapter. These times exclude the preceding WAV download and are

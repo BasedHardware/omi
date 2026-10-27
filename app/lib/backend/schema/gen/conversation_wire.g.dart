@@ -636,6 +636,7 @@ class GeneratedAudioFile {
   final String conversationId;
   final double duration;
   final String id;
+  final double? playbackStart;
   final String provider;
   final String? sourceFingerprint;
   final DateTime? startedAt;
@@ -647,6 +648,7 @@ class GeneratedAudioFile {
     required this.conversationId,
     required this.duration,
     required this.id,
+    this.playbackStart,
     this.provider = "gcp",
     this.sourceFingerprint,
     this.startedAt,
@@ -660,6 +662,7 @@ class GeneratedAudioFile {
       conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
       duration: _required(_readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: true, nullable: false), "duration"),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      playbackStart: _readFieldValue<double>(_readField(json, const ["playback_start"]), "playback_start", _readDouble, requiredField: false, nullable: true),
       provider: _required(_readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString, requiredField: false, nullable: false, defaultValue: "gcp"), "provider"),
       sourceFingerprint: _readFieldValue<String>(_readField(json, const ["source_fingerprint"]), "source_fingerprint", _readString, requiredField: false, nullable: true),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: false, nullable: true),
@@ -674,6 +677,7 @@ class GeneratedAudioFile {
       'conversation_id': conversationId,
       'duration': duration,
       'id': id,
+      'playback_start': playbackStart,
       'provider': provider,
       'source_fingerprint': sourceFingerprint,
       'started_at': startedAt?.toUtc().toIso8601String(),

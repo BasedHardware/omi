@@ -47,6 +47,7 @@ class ReasonFamily(StrEnum):
     NOTES_AGENT_FORCE = 'notes_agent_force'
     NOTES_AGENT_TRANSPORT = 'notes_agent_transport'
     SYNC_DISPATCH = 'sync_dispatch'
+    SYNC_CAPTURE_TIME = 'sync_capture_time'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -146,6 +147,23 @@ class SyncDispatchFailureReason(StrEnum):
     UNKNOWN = 'unknown'
     DISPATCH_HOLD = 'dispatch_hold'
     STAGING_FAILED = 'staging_failed'
+
+
+class SyncCaptureTimeReason(StrEnum):
+    """Disposition of one sync upload capture time against the shared window.
+
+    Owner: `utils/sync/capture_clock.py`. `accepted_future_skew` is a real
+    capture whose phone clock runs ahead of the server within tolerance;
+    `rejected_future`/`rejected_early` are implausible stamps (bogus device
+    clock marker, pre-2024 fragment) that stay refused.
+    """
+
+    UNKNOWN = 'unknown'
+    ACCEPTED = 'accepted'
+    ACCEPTED_FUTURE_SKEW = 'accepted_future_skew'
+    REJECTED_FUTURE = 'rejected_future'
+    REJECTED_EARLY = 'rejected_early'
+    REJECTED_MALFORMED = 'rejected_malformed'
 
 
 class WorkOutcome(StrEnum):

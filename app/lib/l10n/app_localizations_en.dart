@@ -709,7 +709,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get remembering => 'Remembering';
 
   @override
-  String get unlimitedPlan => 'Unlimited Plan';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Manage Plan';
@@ -731,7 +731,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get upgrade => 'Upgrade';
 
   @override
-  String get upgradeToUnlimited => 'Upgrade to Unlimited';
+  String get upgradeToUnlimited => 'Upgrade to Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3157,7 +3157,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Upgrade to Pro';
+  String get upgradeToPro => 'Upgrade to Omi Pro';
 
   @override
   String get getOmiDevice => 'Get Omi Device';
@@ -4278,7 +4278,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trainingDataProgram => 'Training Data Program';
 
   @override
-  String get getOmiUnlimitedFree => 'Get Omi Unlimited for free by contributing your data to train AI models.';
+  String get getOmiUnlimitedFree => 'Get Omi Pro for free by contributing your data to train AI models.';
 
   @override
   String get trainingDataBullets => '• Your data helps improve AI models\n• Only non-sensitive data is shared';
@@ -9652,7 +9652,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Downgrade to Freemium';
 
   @override
-  String get getFreeUnlimitedAccess => 'Get Free Unlimited Access';
+  String get getFreeUnlimitedAccess => 'Get Omi Pro Free';
 
   @override
   String get shareDataForTraining => 'Share data for training';
@@ -12841,7 +12841,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Send a voice note and Omi will answer it.';
 
   @override
-  String get chatAppsPartOfPro => 'Chat apps are part of Pro';
+  String get chatAppsPartOfPro => 'Chat apps are part of Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Messages';
@@ -13473,7 +13473,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncDetailsCopy => 'Copy details for support';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Available on Operator and Architect';
+  String get chatAppsChannelPlanRequired => 'Available on Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13985,7 +13985,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Runs while your phone charges.';
 
   @override
-  String get onDeviceUpgradeBody => 'Upgrade to Pro for speaker separation and higher accuracy';
+  String get onDeviceUpgradeBody => 'Upgrade to Omi Pro for speaker separation and higher accuracy';
 
   @override
   String get onDeviceAtCapFooter => 'Nothing is lost either way. You can change this in Settings › Transcription.';
@@ -14168,7 +14168,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Redo with Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Upgrade to Pro for speaker separation and higher accuracy';
+  String get onDeviceRedoHint => 'Upgrade to Omi Pro for speaker separation and higher accuracy';
 
   @override
   String get onDeviceKeepEverything => 'Keep everything on this phone';
@@ -14587,4 +14587,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Drop it';
+
+  @override
+  String get syncRejectionInvalidDate => 'Invalid recording date';
+
+  @override
+  String get syncDeleteKeptUploading => 'Some parts are still uploading and were kept';
+
+  @override
+  String get syncRejectionServer => 'Rejected by server';
+
+  @override
+  String get syncRejectionTooLarge => 'Too large';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration on phone';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Uploads paused for a moment — they\'ll resume automatically';
 }

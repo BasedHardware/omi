@@ -234,7 +234,7 @@ void main() {
     final usage = await _pump(tester);
     final l10n = AppLocalizations.of(tester.element(find.byType(PlansSheet)));
 
-    await _tap(tester, find.widgetWithText(PlanOptionCard, 'Unlimited'));
+    await _tap(tester, find.widgetWithText(PlanOptionCard, 'Omi Pro'));
 
     expect(find.text(l10n.resubscribeFirstToChangePlans), findsOneWidget);
     expect(usage.sessions, isEmpty);

@@ -542,6 +542,8 @@ def get_available_plans_endpoint(
         # with only their expired desktop SKU instead of the Omi Pro offer.
         valid_subscription = users_db.get_user_valid_subscription(uid)
         current_plan = valid_subscription.plan if valid_subscription else PlanType.basic
+        if not new_plans_enabled and current_plan == PlanType.operator:  # old clients: remapped Unlimited price
+            current_plan = PlanType.unlimited
         pricing_options: List[PricingOption] = []
         active_price_ids = {current_price_id, scheduled_price_id}
         if current_subscription and current_subscription.cancel_at_period_end:
@@ -733,12 +735,8 @@ def create_checkout_session_endpoint(
     if reactivation_result:
         return reactivation_result
 
-    # New-buyer single-plan rule (2026-10-24), after every subscriber escape
-    # (a stale Firestore record can make a current subscriber look basic): a
-    # first-time buyer on a non-desktop platform — mobile, web, or a missing/
-    # unknown platform header — may only start on Omi Pro (`unlimited_v2`).
-    # Desktop checkout is unchanged.
-    single_plan_error = subscription_utils.new_buyer_single_plan_violation(uid, request.price_id, x_app_platform)
+    # Omi Pro only; runs after every subscriber escape (stale records can look basic).
+    single_plan_error = subscription_utils.new_buyer_single_plan_violation(uid, request.price_id)
     if single_plan_error:
         raise HTTPException(status_code=400, detail=single_plan_error)
 
@@ -891,9 +889,11 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
         current_plan = get_plan_type_from_price_id(current_price_id)
 
-        desktop_change_error = desktop_to_consumer_plan_change_error(current_plan, target_plan)
-        if desktop_change_error:
-            raise HTTPException(status_code=400, detail=desktop_change_error)
+        change_error = desktop_to_consumer_plan_change_error(
+            current_plan, target_plan
+        ) or subscription_utils.retired_plan_change_error(current_plan, target_plan)
+        if change_error:
+            raise HTTPException(status_code=400, detail=change_error)
 
         # Validate and resolve promotion code if provided
         resolved_promo_id = None

@@ -180,13 +180,15 @@ class SyncUploadGate {
         allowed = await reconcileFairUseStatus();
       }
       if (!allowed) {
+        final reason = _limiter.reason;
         throw SyncRateLimitedException(
-          kind: switch (_limiter.reason) {
-            RateLimitReason.backendBusy => SyncRateLimitKind.backendCapacity,
+          kind: switch (reason) {
+            RateLimitReason.backendBusy || RateLimitReason.dispatchHold => SyncRateLimitKind.backendCapacity,
             RateLimitReason.edgeThrottle => SyncRateLimitKind.edgeThrottle,
             _ => SyncRateLimitKind.fairUse,
           },
           retryAfterSeconds: _limiter.activeRetryAfterSeconds,
+          reasonCode: reason == RateLimitReason.dispatchHold ? 'dispatch_hold' : null,
         );
       }
 

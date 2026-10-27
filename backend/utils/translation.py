@@ -84,6 +84,10 @@ class TranslationService:
             profile_resolver=profile_resolver,
         )
 
+    def primary_provider(self) -> TranslationProvider:
+        """Primary provider the engine will dispatch to (the viewed policy is Luna-only)."""
+        return self._engine.primary_provider()
+
     def translate_outcomes(
         self,
         dest_language: str,
