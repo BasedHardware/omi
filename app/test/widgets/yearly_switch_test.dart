@@ -78,7 +78,15 @@ class _Usage extends UsageProvider {
   Future<void> loadAvailablePlans() async {}
 }
 
-Future<_Usage> _pump(WidgetTester tester, Widget child, {SubscriptionStatus status = SubscriptionStatus.active}) async {
+/// A monthly subscriber 5 days into the month.
+final int _monthlyPeriodEnd = _now.add(const Duration(days: 25)).millisecondsSinceEpoch ~/ 1000;
+
+Future<_Usage> _pump(
+  WidgetTester tester,
+  Widget child, {
+  SubscriptionStatus status = SubscriptionStatus.active,
+  int? periodEnd,
+}) async {
   tester.view.physicalSize = const Size(430, 932);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -92,7 +100,7 @@ Future<_Usage> _pump(WidgetTester tester, Widget child, {SubscriptionStatus stat
         status: status,
         stripeSubscriptionId: 'sub_monthly',
         currentPriceId: 'price_unlimited_month',
-        currentPeriodEnd: _renewsAt,
+        currentPeriodEnd: periodEnd ?? _monthlyPeriodEnd,
       ),
       transcriptionSecondsUsed: 0,
       transcriptionSecondsLimit: 0,
@@ -290,6 +298,17 @@ void main() {
         ),
       );
       expect(find.byKey(const Key('yearly_switch_home_row')), findsOneWidget);
+    });
+
+    testWidgets('a yearly subscriber is never looked up', (tester) async {
+      final backend = _Backend(offer: _offer(eligible: false, reason: 'not_monthly'));
+      await _pump(
+        tester,
+        YearlySwitchHomeRow(load: backend.load, apply: backend.apply, now: () => _now),
+        periodEnd: _renewsAt,
+      );
+      expect(backend.loads, isEmpty);
+      expect(find.byKey(const Key('yearly_switch_home_row')), findsNothing);
     });
 
     testWidgets('the first paid month gets no Home row', (tester) async {

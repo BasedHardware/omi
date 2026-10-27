@@ -487,6 +487,7 @@ class YearlySwitchHomeRow extends StatefulWidget {
 }
 
 class _YearlySwitchHomeRowState extends State<YearlySwitchHomeRow> {
+  static const _monthAhead = Duration(days: 32);
   wire.GeneratedYearlySwitchResponse? _offer;
   String? _loadedFor;
   bool _hidden = false;
@@ -494,6 +495,11 @@ class _YearlySwitchHomeRowState extends State<YearlySwitchHomeRow> {
   Future<void> _load(String candidate) async {
     final prefs = SharedPreferencesUtil();
     final now = (widget.now ?? DateTime.now)();
+    // A yearly plan renews months from now: no lookup (it would only answer not_monthly on every launch).
+    final periodEnd = context.read<UsageProvider>().subscription?.subscription.currentPeriodEnd;
+    if (periodEnd != null && DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000).isAfter(now.add(_monthAhead))) {
+      return;
+    }
     final lastShown = prefs.yearlySwitchHomeShownAt;
     if (lastShown > 0 &&
         now.difference(DateTime.fromMillisecondsSinceEpoch(lastShown)) < YearlySwitchHomeRow.quietPeriod) {
