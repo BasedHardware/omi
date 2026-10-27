@@ -226,6 +226,7 @@ def _bounded_reason(value: str) -> str:
         in {
             'empty',
             'target_language',
+            'unsupported_target',
             'cached',
             'unchanged',
             'near_copy',
