@@ -248,6 +248,28 @@ def test_shards_partition_the_sorted_selection_exactly(tmp_path, mode, total):
     assert len(flattened) == len(set(flattened)) == len(SORTED_PATHS)
 
 
+def test_shards_deal_measured_heavy_files_first_to_the_least_loaded_shard(tmp_path):
+    # PR #23767: round-robin slices left shard walls 433-754s; dealing by
+    # measured weight keeps heavy files from stacking on one shard.
+    backend, runner = _sharded_fixture(tmp_path)
+    heavy = {SORTED_PATHS[0]: 30.0, SORTED_PATHS[3]: 30.0, SORTED_PATHS[6]: 12.5}  # round-robin: all in shard 1 of 3
+    (backend / 'scripts/backend_unit_shard_weights.tsv').write_text(
+        '# comment\n' + ''.join(f'{path}\t{seconds}\n' for path, seconds in heavy.items()), encoding='utf-8'
+    )
+
+    shard_selections = []
+    for index in range(1, 4):
+        result, _, tests_out = _run_shard(tmp_path, backend, runner, ['--all', '--shard', f'3/{index}'], f'w-{index}')
+        assert result.returncode == 0, result.stderr
+        shard_selections.append(tests_out.read_text(encoding='utf-8').splitlines())
+
+    for paths in shard_selections:
+        assert len(set(paths) & set(heavy)) == 1  # one heavy file per shard
+        assert paths == sorted(paths)  # each shard keeps the selection order
+    flattened = [path for paths in shard_selections for path in paths]
+    assert sorted(flattened) == SORTED_PATHS and len(flattened) == len(set(flattened))
+
+
 @pytest.mark.parametrize('spec', ['0/1', '6/0', '6/7', 'six/1', '6'])
 def test_malformed_shard_specs_fail_usage_before_any_work(tmp_path, spec):
     backend, runner = _sharded_fixture(tmp_path)
