@@ -24,9 +24,11 @@ void main() {
     final token = owned.uri.pathSegments.where((s) => s.isNotEmpty).last;
     final opusInput = File('${docs.path}/${token}_opus.bin');
     final pcmInput = File('${docs.path}/${token}_pcm.bin');
+    final zeroInput = File('${docs.path}/${token}_zero.bin');
     addTearDown(() async {
       if (await opusInput.exists()) await opusInput.delete();
       if (await pcmInput.exists()) await pcmInput.delete();
+      if (await zeroInput.exists()) await zeroInput.delete();
       await owned.delete(recursive: true);
     });
 
@@ -78,6 +80,13 @@ void main() {
     final playback = (await player.ensureAudioFileExists(short))!;
     expect(await File(playback).length(), 44 + 640);
     await File(playback).delete();
+    // A zero-length WAL packet must not ask native Opus for packet-loss concealment.
+    await zeroInput.writeAsBytes([0, 0, 0, 0]);
+    final emptyDisk = Wal(
+        timerStart: 6100, codec: BleAudioCodec.opus, seconds: 1, filePath: zeroInput.path, storage: WalStorage.disk);
+    final emptyMemory =
+        Wal(timerStart: 6101, codec: BleAudioCodec.opus, seconds: 1, data: [[]], storage: WalStorage.mem);
+    expect(await player.writeRecordingWav([emptyDisk, emptyMemory], outputPath: '${owned.path}/empty.wav'), isNull);
     expect(await opusInput.exists(), isTrue);
     expect(await pcmInput.exists(), isTrue);
     expect(await owned.list().map((e) => e.path).toList(), [output.path]);

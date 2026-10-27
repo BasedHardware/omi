@@ -150,6 +150,9 @@ Future<String?> _decodeToWav(WalWavWorkItem item, String outputPath) async {
   final pending = BytesBuilder(copy: false);
   try {
     await for (final frame in frames) {
+      // libopus interprets a zero-byte packet as packet loss and synthesizes audio.
+      // Empty WAL payloads contain no recording; never turn them into concealment samples.
+      if (frame.isEmpty) continue;
       Uint8List pcm;
       if (item.isOpus) {
         if (item.opusFrameDecoder == null && nativeDecoder == null) {

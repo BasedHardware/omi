@@ -21,6 +21,11 @@ Int16List _decodeTestOpusFrame(Uint8List frame, int sampleRate, int channels) {
   throw const FormatException('Corrupt Opus frame');
 }
 
+Int16List _decodeView(Uint8List frame, int sampleRate, int channels) {
+  final backing = Int16List.fromList([0x1111, 0x0201, 0x0403, 0x5555]);
+  return Int16List.sublistView(backing, 1, 3);
+}
+
 // Captures only sendable state. The CPU-bound interval must not block UI timers.
 OpusFrameDecoder _busyDecoder(SendPort events) {
   return (frame, sampleRate, channels) {
@@ -450,6 +455,30 @@ void main() {
       expect(shares.toSet(), hasLength(2));
       final sizes = await Future.wait(shares.map((p) => File(p).length()));
       expect(sizes, unorderedEquals([46, 48]));
+    });
+
+    test('zero-length Opus payloads never become synthesized audio', () async {
+      player.debugOpusFrameDecoder = _decodeView;
+      await File('${dir.path}/zero.bin').writeAsBytes([0, 0, 0, 0]);
+      final disk =
+          Wal(timerStart: 2992, codec: BleAudioCodec.opus, seconds: 1, filePath: 'zero.bin', storage: WalStorage.disk);
+      final memory = Wal(timerStart: 2993, codec: BleAudioCodec.opus, seconds: 1, data: [[]], storage: WalStorage.mem);
+      expect(await player.writeRecordingWav([disk, memory], outputPath: '${dir.path}/zero.wav'), isNull);
+      expect(await dir.list().map((e) => e.path).toList(), ['${dir.path}/zero.bin']);
+    });
+
+    test('decoder typed-list view excludes unrelated backing samples', () async {
+      player.debugOpusFrameDecoder = _decodeView;
+      final memory = Wal(
+          timerStart: 2994,
+          codec: BleAudioCodec.opus,
+          seconds: 1,
+          data: [
+            [1]
+          ],
+          storage: WalStorage.mem);
+      final out = await player.writeRecordingWav([memory], outputPath: '${dir.path}/view.wav');
+      expect((await out!.readAsBytes()).sublist(44), [1, 2, 3, 4]);
     });
 
     test('empty Opus disk file needs no native decoder and creates no output', () async {

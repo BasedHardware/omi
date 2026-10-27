@@ -11,6 +11,8 @@ output is buffered to 256 KiB, so decoded memory does not grow with recording du
 may cross read chunks; complete frames before a truncated tail retain the existing behavior.
 Missing local files, corrupt Opus packets and unreadable WAV artifacts retain the established
 skip behavior. Native-library, file-read/write and incompatible-format failures propagate.
+Zero-byte payloads contain no audio and are skipped before native Opus can synthesize concealment
+samples; decoder typed-list views retain only their selected sample range.
 
 Each job owns a unique scratch directory. Whole-recording jobs delete decoded scratch parts on
 success and failure, without deleting input WALs or reused playback caches. `WavCombiner` reads
