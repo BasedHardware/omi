@@ -1,3 +1,4 @@
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/sync_upload_refusal.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -139,10 +140,24 @@ void main() {
   });
 
   test('known legacy refusal reasons become closed tokens without retaining prose', () {
-    expect(syncUploadRefusalCode(http.Response('{"detail":"Missing boundary in multipart."}', 400)),
+    expect(
+        (decodeSyncUploadRefusal(http.Response('{"detail":"Missing boundary in multipart."}', 400))
+                as ApiSuccess<SyncUploadRefusalBody>)
+            .data
+            .reasonCode,
         'malformed_multipart');
-    expect(syncUploadRefusalCode(http.Response('{"code":"private-unbounded-text"}', 400)), 'server_refused');
-    expect(syncUploadRefusalCode(http.Response('{"detail":{"code":"invalid_file"}}', 400)), 'invalid_file');
+    expect(
+        (decodeSyncUploadRefusal(http.Response('{"code":"private-unbounded-text"}', 400))
+                as ApiSuccess<SyncUploadRefusalBody>)
+            .data
+            .reasonCode,
+        'server_refused');
+    expect(
+        (decodeSyncUploadRefusal(http.Response('{"detail":{"code":"invalid_file"}}', 400))
+                as ApiSuccess<SyncUploadRefusalBody>)
+            .data
+            .reasonCode,
+        'invalid_file');
   });
 
   test('only closed tokens persist and refusal retry obeys custody', () {

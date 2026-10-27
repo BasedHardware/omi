@@ -1059,15 +1059,19 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     return UploadFilesResult.queued(start.jobId, pollAfterMs: start.pollAfterMs);
   }
   if (response.statusCode == 400) {
-    if (isInvalidCaptureTimeResponse(response)) {
-      throw SyncInvalidCaptureTimeException(serverReason: syncUploadErrorReason(response));
+    final refusal = switch (decodeSyncUploadRefusal(response)) {
+      ApiSuccess(:final data) => data,
+      ApiFailure() => const SyncUploadRefusalBody(),
+    };
+    if (refusal.invalidCaptureTime) {
+      throw const SyncInvalidCaptureTimeException(serverReason: 'invalid_capture_time');
     }
     // Other 400s stay terminal, but the server's own reason travels with the
     // refusal instead of being dropped at the HTTP boundary.
     throw SyncUploadHttpException(
       response.statusCode,
       'Audio file could not be processed by server',
-      reasonCode: syncUploadRefusalCode(response),
+      reasonCode: refusal.reasonCode,
     );
   } else if (response.statusCode == 401 || response.statusCode == 403) {
     throw SyncUploadHttpException(response.statusCode, 'Upload authentication failed');
