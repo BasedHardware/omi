@@ -19,12 +19,17 @@ revision is serving and one complete measurement window has elapsed:
 ```promql
 sum by (namespace, provider, endpoint) (
   increase(omi_prerecorded_vendor_payload_bytes_total{
-    cluster="__run__",namespace=~"backend-sync|backend-sync-backfill"
+    cluster="__run__",namespace=~"backend-sync|backend-sync-backfill|backend-integration"
   }[24h])
 ) / 1073741824
 ```
 
 Use the same UTC window for all three measurements:
+
+Include `backend-integration` in fleet totals: its recovery loop can POST audio
+through these same provider functions. Preserve the per-service grouping so a
+two-service subset is compared only with those same two services' billing and
+network bytes.
 
 1. Billing export: net Cloud Run internet transfer SKUs, grouped by service.
 2. `run.googleapis.com/container/network/sent_bytes_count`, grouped by service
