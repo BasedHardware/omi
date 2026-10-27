@@ -30,6 +30,8 @@ STEPS = {
 
 
 def timestamp(value):
+    if not isinstance(value, str):
+        raise ValueError('timestamps must be strings')
     parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
     if parsed.tzinfo is None:
         raise ValueError('timestamps must include a timezone')
@@ -57,13 +59,41 @@ def check(step, receipt, now=None):
     applied = timestamp(receipt['applied_at'])
     prior_applied = timestamp(receipt['previous_applied_at'])
     now = now or datetime.now(timezone.utc)
+    baseline_start, baseline_end = timestamp(before['start']), timestamp(before['end'])
     require(timestamp(before['end']) <= applied, 'baseline must precede apply')
+    require((applied - baseline_end).total_seconds() <= 3600, 'baseline must end within 1h before apply')
     require((timestamp(before['end']) - timestamp(before['start'])).total_seconds() >= 3600, 'baseline needs >=1h')
+    require(
+        (baseline_start - timestamp(receipt['custody_roll_completed_at'])).total_seconds() >= 3600,
+        'baseline must begin after custody roll DONE +1h',
+    )
+    accepted = receipt['accepted_baseline']
+    require(
+        accepted['start'] == before['start']
+        and accepted['end'] == before['end']
+        and accepted['evidence_ref'] == before['evidence_ref']
+        and bool(before['evidence_ref']),
+        'baseline window must match the accepted aggregate evidence',
+    )
     require(start >= applied and (end - start).total_seconds() >= 3600, 'after needs a full >=1h new-state window')
     require(end <= now and (now - end).total_seconds() <= 3600, 'after evidence must end within the last hour')
     require((applied - prior_applied).total_seconds() >= hold * 3600, f'previous step needs >={hold}h soak')
     require(bool(receipt['lead_apply_ref']), 'lead apply ruling is required')
     require(bool(receipt['baseline_acceptance_ref']), 'lead acceptance of custody baseline is required')
+    if previous != 'baseline':
+        prior = receipt['previous_receipt']
+        prior_end = timestamp(prior['after']['end'])
+        require(not check(previous, prior, now=prior_end), 'previous step receipt must pass all gates')
+        require(prior['applied_at'] == receipt['previous_applied_at'], 'previous apply identity differs from receipt')
+        require(
+            (prior_end - timestamp(prior['after']['start'])).total_seconds() >= hold * 3600,
+            f'previous successful receipt must cover the full >={hold}h soak',
+        )
+        require(
+            prior_end <= applied and (applied - prior_end).total_seconds() <= 3600,
+            'previous successful receipt must end within 1h before apply',
+        )
+        require(baseline_start >= prior_applied, 'baseline must measure the previous step state')
     expected = {
         'AUDIO_ARCHIVE_STOP_PCM_ENABLED': 'true',
         'AUDIO_ARCHIVE_STOP_PCM_PERCENT': str(stop),
@@ -97,10 +127,46 @@ def check(step, receipt, now=None):
     for surface in ('listen', 'pusher'):
         custody = after['custody'][surface]
         require(number(custody, 'commits') > 0, f'{surface}: custody commits must be observed')
-        require(
-            number(custody, 'failures') == 0 and number(custody, 'would_drop') == 0, f'{surface}: custody risk observed'
-        )
+        if surface == 'listen':
+            require(
+                number(custody, 'failures') == 0 and number(custody, 'would_drop') == 0, 'listen: custody risk observed'
+            )
         require(bool(custody['evidence_ref']), f'{surface}: custody evidence required')
+    before_hours = (baseline_end - baseline_start).total_seconds() / 3600
+    after_hours = (end - start).total_seconds() / 3600
+    if before_hours <= 0 or after_hours <= 0:
+        raise ValueError('observation windows must have positive duration')
+    # Existing, recoverable pusher projection/queue pressure is compared to a
+    # post-roll matched-hour baseline (lead 6418ac), never normalized to zero.
+    # Separate commit/other failures so projection improvement cannot hide a
+    # raw custody regression. Reset-aware counts become rates across long soaks.
+    fields = ('projection_transient', 'queue_would_drop', 'commit_failures', 'other_failures', 'other_would_drop')
+    for window in (before, after):
+        custody = window['custody']['pusher']
+        require(number(custody, 'commits') > 0, 'pusher: baseline and after commits must be observed')
+        require(bool(custody['evidence_ref']), 'pusher: baseline and after evidence required')
+        require(
+            math.isclose(
+                number(custody, 'failures'),
+                sum(number(custody, key) for key in ('projection_transient', 'commit_failures', 'other_failures')),
+                abs_tol=0.000001,
+            ),
+            'pusher: failure categories must account for all failures',
+        )
+        require(
+            math.isclose(
+                number(custody, 'would_drop'),
+                number(custody, 'queue_would_drop') + number(custody, 'other_would_drop'),
+                abs_tol=0.000001,
+            ),
+            'pusher: drop categories must account for all would_drop',
+        )
+    for field in fields:
+        require(
+            number(after['custody']['pusher'], field) / after_hours
+            <= number(before['custody']['pusher'], field) / before_hours,
+            f'pusher: {field}/hour rose above the matched baseline',
+        )
     write_before = number(before, 'private_write_per_hour')
     write_after = number(after, 'private_write_per_hour')
     require(write_after < write_before, 'private WriteObject/h must fall in comparable windows')
