@@ -71,6 +71,11 @@ stackdriver:
     interval: '10m'
     offset: '1m'
 
+# Cache descriptor discovery only. Each scrape still fetches fresh time series;
+# the 10m metrics.interval above is a lookback window, not a polling cadence.
+extraArgs:
+  monitoring.descriptor-cache-ttl: 1h
+
 serviceAccount:
   create: false
   name: "prod-omi-prometheus-stackdriver-exporter"

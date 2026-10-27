@@ -56,6 +56,10 @@ stackdriver:
     interval: '10m'
     offset: '1m'
 
+# Descriptor discovery is stable; sample collection remains inline on every scrape.
+extraArgs:
+  monitoring.descriptor-cache-ttl: 1h
+
 serviceAccount:
   create: false
   name: "prod-omi-prometheus-stackdriver-exporter"

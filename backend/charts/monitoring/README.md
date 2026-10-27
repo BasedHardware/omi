@@ -256,6 +256,17 @@ Note: Stackdriver exporter is scraped by Prometheus (job `prometheus-stackdriver
 
 Cloud Run application metrics take a push-then-pull bridge because a public URL scrape reaches only one random autoscaled instance. Each `backend` and `desktop-backend` instance exposes its registry on loopback port 9090 to Google's Managed Service for Prometheus sidecar. The sidecar writes `prometheus.googleapis.com/omi_*` to Cloud Monitoring. A separate, rate-limited Stackdriver exporter imports Cloud Run backend, desktop-backend, sync services, and notifications-job, and Prometheus scrapes it as `cloud-run-application-metrics`. The checked-in namespace allowlist includes those services and `notifications-job`; deployed ingestion still requires each sidecar and the matching metrics-egress release (see below). Sync intake and sync conversation shape are readable today through Cloud Logging of `omi_sync_intake` and `omi_conversation_shape`. See [`../../docs/runbooks/cloud-run-metrics-ingestion.md`](../../docs/runbooks/cloud-run-metrics-ingestion.md).
 
+The Cloud Run exporter `metrics.interval: 10m` is the query lookback, not the
+polling cadence. Prometheus scrapes these exporters every 120s in prod, once per
+replica. Their one-hour `monitoring.descriptor-cache-ttl` caches descriptor
+discovery only; time series are still read inline on every scrape. New metric
+descriptors can take up to one hour to appear (restart the exporter to discover
+them immediately). This reduces descriptor API traffic and collection work,
+not the billed `ListTimeSeries` units. Verify `up`, scrape errors, family
+coverage and alert inputs after the metrics-egress release; keep the existing
+scrape interval, lookback, filters and family lists. Revert the extra argument
+to roll back descriptor caching.
+
 ## Components
 
 | Component | Chart | Purpose | Namespace |
