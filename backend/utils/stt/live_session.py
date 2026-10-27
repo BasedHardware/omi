@@ -15,6 +15,8 @@ from starlette.websockets import WebSocketState
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.observability.routing_cohort import current_routing_cohort
+from utils.observability.demand_cohort import current_transport_origin
+from config.live_stt_idle import idle_reopen_cost_reselect_enabled
 from utils.stt_cap_dispatch import CapSocket, session_admission, suppress_socket_audio, set_cap_capture
 from utils.stt import streaming as st
 from utils.stt.edge_shadow import attach_tap as attach_edge_tap
@@ -334,6 +336,10 @@ class LiveChainSession:
                     self.receiver._enqueue_stt_segments(retained, provider=service.value, speaker_epoch=stream_epoch)
 
             raw = None
+            origin = current_transport_origin.get()
+            origin_token = current_transport_origin.set(
+                'idle_reopened' if origin == 'idle_reopened' else ('replacement' if self.generation else 'initial')
+            )
             try:
                 if is_window:
                     from utils.stt.parakeet_window import connect_window
@@ -403,6 +409,8 @@ class LiveChainSession:
                 if raw is not None:
                     raw.finish()
                 raise
+            finally:
+                current_transport_origin.reset(origin_token)
 
         callbacks: dict[st.STTService, Callable[[], Awaitable[STTSocket]] | None] = {
             st.STTService.parakeet: (lambda: build(st.STTService.parakeet)) if parakeet_allowed else None,
@@ -1258,7 +1266,18 @@ class LiveLegSocket(STTSocket):
     def idle_close_enabled(self) -> bool:
         return getattr(self.raw, 'idle_close_enabled', False) is True
 
+    @property
+    def idle_cost_reselect_requested(self) -> bool:
+        return getattr(self.raw, 'idle_cost_reselect_requested', False) is True
+
     async def complete_send(self) -> bool:
+        if (
+            self.session.recovery_enabled
+            and getattr(self.session.receiver, 'recovery', None) is not None
+            and idle_reopen_cost_reselect_enabled()
+            and getattr(self.raw, 'idle_reopen_pending', False) is True
+        ):
+            return await self.raw.request_cost_reselect()
         offset = getattr(self.raw, 'set_resume_provider_offset', None)
         if self._send_tracker is not None and callable(offset):
             offset(

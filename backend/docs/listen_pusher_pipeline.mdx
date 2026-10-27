@@ -4439,8 +4439,19 @@ neither a provider death nor a recovery episode or router health observation.
 
 On the next onset, VAD returns its retained original PCM pre-roll followed by the
 onset chunk. The serving send boundary holds that packet until the old receive
-loop has finished, opens the same captured endpoint/config, then admits those
-bytes once in that order. Dial time adds transcript onset latency; capture keeps
+loop has finished. With default-on `STT_IDLE_REOPEN_COST_RESELECT_ENABLED`, a
+managed recovery-enabled leg requests a planned `normal_close` handoff instead
+of invoking its stored Soniox factory. The ordinary configured chain rechecks
+cost stages/bench, user allocation, language capability, account health and cap
+admission, so recovered Parakeet or Modulate can serve the next leg. Session-local
+failed-provider exclusions are cleared for this fresh selection; fleet benches
+remain authoritative. The handoff uses the existing capture replay/adoption pump
+and bounded budgets without charging a failure episode or voting Soniox unhealthy.
+The old VAD's exact admitted pre-roll/onset is retained across direct sends and
+ordered tails; only capture proven accepted by successor replay is removed.
+`false`, `0` or `off` restores the same captured Soniox endpoint/config. Legacy
+unmanaged and recovery-disabled legs retain their existing raw reopen.
+Dial time adds transcript onset latency; capture keeps
 its original positions. Provider timestamps restart at zero on the new socket;
 its callback rebases onto the next accepted provider position in the existing
 capture send ledger (including the elapsed-axis mode), or cumulative admitted
@@ -4457,13 +4468,20 @@ Shutdown while closed never opens a socket just to finalize the session.
 The `omi_soniox_idle_*` close/reopen/failure counters (including
 `omi_soniox_idle_closes_by_trigger_total{trigger="vad"|"no_frames"}`), reopen latency
 histogram and estimated connected-seconds avoided counter register only for
-flag-on Soniox transports. `omi_soniox_connected_seconds_total{demand_cohort}`
+flag-on Soniox transports. `omi_soniox_connected_seconds_total{demand_cohort,origin}`
 counts the wall time every Soniox websocket is actually open, flag on or off,
 flushed by the writer about every 10 s and once at close. That is the billed
 quantity: compare Soniox by connected hour, and divide
 `omi_stt_provider_wire_audio_seconds_total{provider="soniox"}` by it for the
 share of billed time that carried audio. Avoided seconds measure the actual closed interval, excluding
 the close drain. These are estimated connection savings, not vendor invoices.
+Connected and provider wire meters (including the batch-cohort wire mirror) pin
+`origin` at raw transport construction: `initial`, `idle_reopened`, or
+`replacement`. A raw Soniox reopen is `idle_reopened` even with cost reselection
+disabled; managed idle handoffs label every newly constructed candidate the same
+way. Ordinary subsequent managed legs use `replacement`. Sum across origins for
+the former aggregate. Existing pre-deploy series have no origin and cannot be
+used to infer historical reopen share.
 The fake-mode local soak establishes byte preservation and lifecycle behavior;
 it does not measure real provider handshake latency or acoustic quality.
 

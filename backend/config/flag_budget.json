@@ -20,7 +20,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 173,
+  "count": 174,
   "names": {
     "BATCH_PIPELINE_API_URL": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS": {"seeded": "2026-10-25"},
@@ -142,6 +142,7 @@
     "SPEAKER_CLUSTERING_MAX_SPEAKERS": {"seeded": "2026-10-25"},
     "STT_CIRCUIT_GAUGE_REFRESH_SECONDS": {"seeded": "2026-10-25"},
     "STT_FAILOVER_RECOVERY_ENABLED": {"seeded": "2026-10-25"},
+    "STT_IDLE_REOPEN_COST_RESELECT_ENABLED": {"owner": "idlereopen / two-lane lead", "review_by": "2026-11-26"},
     "STT_FALLBACK_LIVENESS_GRACE_SECONDS": {"seeded": "2026-10-25"},
     "STT_MULTI_LANGUAGE_HINTS": {"seeded": "2026-10-25"},
     "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT": {"seeded": "2026-10-25"},
