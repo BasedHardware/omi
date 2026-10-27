@@ -7,6 +7,7 @@ import pytest
 
 from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from config.policy import BatchUnitPolicy
+from database.batch_pipeline_intake import admit
 from tests.unit.test_batch_language_eligibility import admitted, upload
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import intake
@@ -49,6 +50,30 @@ async def test_multilingual_supported_conversation_pins_the_input_language(
     )
     assert admitted(response, staged)
     assert probe.call_args.args[0] == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['on', 'draining', 'dark'])
+async def test_supported_multilingual_upload_commits_real_batch_admission(monkeypatch, mode):
+    store = MemoryStore()
+    store.namespace = 'batch_pipeline_dev'
+    # Synthetic staging has no GCS artifact reservation. Exercise the real
+    # ownership, sibling, binding and scheduler transaction after that seam.
+    monkeypatch.setattr(intake, 'admit', lambda *a, **k: admit(*a, **{**k, 'require_artifacts': False}))
+    response, staged, probe = await upload(
+        monkeypatch,
+        user_language='multi',
+        conversation_language='en',
+        mode=mode,
+        stop_after_staging=False,
+        store=store,
+    )
+    assert response.status_code == 202 and len(staged) == 1
+    assert probe.call_args.args[0] == 'en'
+    assert store.rows['content', 'synthetic-owner/new']['dispatch_protocol'] == 'batch_v1'
+    job = store.rows['jobs', staged[0].segment_id]
+    assert job['projection_binding']['language'] == 'en'
+    assert job['policy']['stt_route'] == 'parakeet'
 
 
 @pytest.mark.asyncio

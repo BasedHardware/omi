@@ -52,6 +52,8 @@ async def upload(
     owner=None,
     real_language=False,
     seconds=1,
+    stop_after_staging=True,
+    store=None,
 ):
     """Run a new sync upload through intake; staging raises so admission stops at custody."""
     staged = []
@@ -79,13 +81,15 @@ async def upload(
     def stage(work, body):
         staged.append(work)
         probe.staged_context = read_context(body)
-        raise RuntimeError('stop after synthetic staging')
+        if stop_after_staging:
+            raise RuntimeError('stop after synthetic staging')
+        return 'synthetic://staged-audio'
 
     def units(*args, **kwargs):
         yield audio_unit(100, b'\x01\x00' * int(seconds * 16000))
 
     monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: LegacySyncMode(mode))
-    monkeypatch.setattr(intake, 'FirestoreStore', lambda _: MemoryStore())
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda _: store if store is not None else MemoryStore())
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
     monkeypatch.setattr(intake, 'decode_units', units)
