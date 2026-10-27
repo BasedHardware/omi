@@ -19,6 +19,11 @@ SECRET = "test-zapier-webhook-secret"
 
 
 def _load_fastapi_stub():
+    try:
+        import fastapi
+        return
+    except ImportError:
+        pass
     fa = types.ModuleType("fastapi")
 
     class HTTPException(Exception):
@@ -172,6 +177,63 @@ class TestRouteWiring(unittest.TestCase):
             m = re.search(rf"def {name}\([^)]*\)", self.src)
             self.assertIsNotNone(m, f"Function {name} not found")
             self.assertNotIn("require_zapier_webhook_auth", m.group(0), name)
+
+
+class TestFastAPIDependencyInjectionIntegration(unittest.TestCase):
+    """End-to-end FastAPI dependency injection integration test.
+
+    Verifies TestClient hitting /zapier/me with and without authentication token,
+    proving FastAPI's real dependency injection mechanics enforce the guard.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from fastapi import FastAPI, Depends, Request
+            from fastapi.testclient import TestClient
+        except ImportError:
+            raise unittest.SkipTest("fastapi or httpx not installed in test environment")
+
+        app = FastAPI()
+
+        @app.get("/zapier/me")
+        async def mock_zapier_me(request: Request, uid: str = Depends(auth.require_zapier_webhook_auth)):
+            return {"status": "ok", "uid": uid}
+
+        cls.client = TestClient(app)
+
+    def setUp(self):
+        self._old = os.environ.get("ZAPIER_WEBHOOK_SECRET")
+        os.environ["ZAPIER_WEBHOOK_SECRET"] = SECRET
+
+    def tearDown(self):
+        if self._old is None:
+            os.environ.pop("ZAPIER_WEBHOOK_SECRET", None)
+        else:
+            os.environ["ZAPIER_WEBHOOK_SECRET"] = self._old
+
+    def test_zapier_me_fails_closed_when_unconfigured(self):
+        os.environ.pop("ZAPIER_WEBHOOK_SECRET", None)
+        res = self.client.get("/zapier/me?uid=u123")
+        self.assertEqual(res.status_code, 503)
+
+    def test_zapier_me_rejects_missing_credentials(self):
+        res = self.client.get("/zapier/me?uid=u123")
+        self.assertEqual(res.status_code, 401)
+
+    def test_zapier_me_rejects_invalid_token(self):
+        res = self.client.get("/zapier/me?uid=u123", headers={"Authorization": "Bearer wrong-token"})
+        self.assertEqual(res.status_code, 401)
+
+    def test_zapier_me_accepts_valid_bearer_token(self):
+        res = self.client.get("/zapier/me?uid=u123", headers={"Authorization": f"Bearer {SECRET}"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json(), {"status": "ok", "uid": "u123"})
+
+    def test_zapier_me_accepts_valid_query_token(self):
+        res = self.client.get(f"/zapier/me?uid=u123&zapier_webhook_token={SECRET}")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json(), {"status": "ok", "uid": "u123"})
 
 
 if __name__ == "__main__":
