@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from config.batch_pipeline import known_unsupported_batch_language, language_inheritance_enabled, priority_for
 from config.batch_language_recovery import inherited_language
+from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
 from config.prerecorded_language import language_guard_enabled, language_class
@@ -33,7 +34,7 @@ from database.outbox import OutboxKind, outbox_for
 from utils.batch_pipeline.provider_stt import provider_enqueue, resolve_route
 from utils.sync import legacy_dark
 from utils.sync.legacy_dark import LegacySyncMode
-from utils.batch_pipeline.language_metrics import record_route
+from utils.batch_pipeline.language_metrics import record_admission_exclusion, record_route
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
@@ -400,6 +401,18 @@ async def accept_upload(
                 loaded_conversation=target,
                 policy=policy,
             )
+        admission_language = None
+        if admission_language_exclusion_enabled() and target.get('record_lane_owner') != 'batch_sync_v1':
+            admission_language, exclusion_reason = batch_admission_language(user, target)
+            if exclusion_reason:
+                # This is before re-home, decode, LID or custody. The caller's
+                # legacy-dark fence still refuses new legacy work outside ON.
+                record_admission_exclusion(
+                    target.get('language') or user.get('language'),
+                    exclusion_reason,
+                    legacy_available=mode is LegacySyncMode.ON,
+                )
+                return None
         if isinstance(conversation_id, str) and target.get('record_lane_owner') == 'legacy_final_pass_v1':
             if mode is LegacySyncMode.ON:
                 return None
@@ -437,6 +450,8 @@ async def accept_upload(
             # Unknown declarations are classification inputs, not capability
             # proof, even if single-language mode was selected.
             language = input_language = 'multi'
+        if admission_language is not None:
+            language = input_language = admission_language
         if mode is LegacySyncMode.ON and language_guard_enabled() and language_class(input_language) == 'unsupported':
             # Main's prerecorded language guard; with legacy draining or dark the C8
             # provider-STT route below serves unsupported speech instead of legacy.

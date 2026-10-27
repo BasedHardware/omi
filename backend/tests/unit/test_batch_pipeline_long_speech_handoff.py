@@ -25,6 +25,7 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
 @pytest.fixture(autouse=True)
 def _recovery_route(monkeypatch):
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
     # Rollback must still retain unsafe admitted audio before a model call.
     monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', 'false')
     # This suite pins the legacy GPU route; batch language eligibility is covered in its own suite.
