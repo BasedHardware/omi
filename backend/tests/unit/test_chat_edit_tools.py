@@ -267,8 +267,10 @@ def test_update_action_item_tool_rejects_soft_deleted(monkeypatch):
 
 def test_create_action_item_tool_rejects_missing_conversation(monkeypatch):
     from unittest.mock import MagicMock
+    from database import conversations as conversations_db
 
-    monkeypatch.setattr(action_item_tools.conversations_db, 'get_conversation', lambda uid, conv_id: None)
+    monkeypatch.setattr(action_item_tools, 'conversations_db', conversations_db)
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, conv_id: None)
     create_mock = MagicMock()
     monkeypatch.setattr(action_item_tools.action_items_db, 'create_action_item', create_mock)
 
@@ -279,10 +281,12 @@ def test_create_action_item_tool_rejects_missing_conversation(monkeypatch):
 
 def test_create_action_item_tool_rejects_soft_deleted_conversation(monkeypatch):
     from unittest.mock import MagicMock
+    from database import conversations as conversations_db
 
+    monkeypatch.setattr(action_item_tools, 'conversations_db', conversations_db)
     conv = {'id': 'conv-1', 'deleted': True}
-    monkeypatch.setattr(action_item_tools.conversations_db, 'get_conversation', lambda uid, conv_id: conv)
-    monkeypatch.setattr(action_item_tools.conversations_db, 'is_soft_deleted', lambda c: bool(c and c.get('deleted')))
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, conv_id: conv)
+    monkeypatch.setattr(conversations_db, 'is_soft_deleted', lambda c: bool(c and c.get('deleted')))
     create_mock = MagicMock()
     monkeypatch.setattr(action_item_tools.action_items_db, 'create_action_item', create_mock)
 
@@ -293,10 +297,12 @@ def test_create_action_item_tool_rejects_soft_deleted_conversation(monkeypatch):
 
 def test_create_action_item_tool_accepts_valid_conversation(monkeypatch):
     from unittest.mock import MagicMock
+    from database import conversations as conversations_db
 
+    monkeypatch.setattr(action_item_tools, 'conversations_db', conversations_db)
     conv = {'id': 'conv-1', 'deleted': False}
-    monkeypatch.setattr(action_item_tools.conversations_db, 'get_conversation', lambda uid, conv_id: conv)
-    monkeypatch.setattr(action_item_tools.conversations_db, 'is_soft_deleted', lambda c: bool(c and c.get('deleted')))
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, conv_id: conv)
+    monkeypatch.setattr(conversations_db, 'is_soft_deleted', lambda c: bool(c and c.get('deleted')))
     create_mock = MagicMock(return_value='item-1')
     monkeypatch.setattr(action_item_tools.action_items_db, 'create_action_item', create_mock)
     monkeypatch.setattr(

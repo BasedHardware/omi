@@ -466,6 +466,7 @@ action_items_svc = _load_module_from_file(
     "utils.retrieval.tool_services.action_items",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "action_items.py",
 )
+action_items_svc.conversations_db = conversations_db
 router_mod = _load_module_from_file(
     "routers.tools",
     BACKEND_DIR / "routers" / "tools.py",
