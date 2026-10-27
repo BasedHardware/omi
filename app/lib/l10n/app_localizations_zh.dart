@@ -4824,7 +4824,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '继续即表示您的对话、录音和个人信息将安全存储在我们的服务器上。您的音频录音和转录由第三方AI服务处理（包括用于转录的Deepgram和用于分析的OpenAI），以为您提供AI驱动的洞察并启用所有应用功能。';
 
   @override
-  String get tasksEmptyStateMessage => '开始对话以创建任务。';
+  String get tasksEmptyStateMessage => '对话中的待办事项会显示在这里。';
 
   @override
   String get clearChatAction => '清除聊天';

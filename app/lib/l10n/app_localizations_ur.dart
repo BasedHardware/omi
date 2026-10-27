@@ -4917,7 +4917,7 @@ class AppLocalizationsUr extends AppLocalizations {
       'جاری رکھ کر، آپ کی بات چیت، ریکارڈنگز اور ذاتی معلومات ہمارے سرورز پر محفوظ طریقے سے ذخیرہ کی جائیں گی۔ آپ کی آڈیو ریکارڈنگز اور ٹرانسکرپٹس تھرڈ پارٹی AI سروسز کے ذریعے پراسیس کی جاتی ہیں (بشمول ٹرانسکرپشن کے لیے Deepgram اور تجزیے کے لیے OpenAI) تاکہ آپ کو AI سے چلنے والی بصیرتیں فراہم کی جا سکیں اور ایپ کی تمام خصوصیات کو فعال کیا جا سکے۔';
 
   @override
-  String get tasksEmptyStateMessage => 'ٹاسک بنانے کے لیے گفتگو شروع کریں۔';
+  String get tasksEmptyStateMessage => 'آپ کی گفتگو سے کام یہاں ظاہر ہوں گے۔';
 
   @override
   String get clearChatAction => 'بات کو صاف کریں';

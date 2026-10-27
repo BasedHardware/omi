@@ -1506,7 +1506,7 @@
     "durationSeconds": "Durată: {seconds} secunde",
     "additionalSpeechSampleRemoved": "Mostră vocală suplimentară eliminată",
     "consentDataMessage": "Continuând, conversațiile, înregistrările și informațiile dvs. personale vor fi stocate în siguranță pe serverele noastre. Înregistrările audio și transcrierile dvs. sunt procesate de servicii AI terțe (inclusiv Deepgram pentru transcriere și OpenAI pentru analiză) pentru a vă oferi informații bazate pe AI și a activa toate funcțiile aplicației.",
-    "tasksEmptyStateMessage": "Începe o conversație pentru a crea o sarcină.",
+    "tasksEmptyStateMessage": "Sarcinile din conversațiile tale vor apărea aici.",
     "clearChatAction": "Șterge conversația",
     "enableApps": "Activează aplicațiile",
     "omiAppName": "Omi",

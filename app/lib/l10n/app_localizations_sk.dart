@@ -4904,7 +4904,7 @@ class AppLocalizationsSk extends AppLocalizations {
       'Pokračovaním budú vaše konverzácie, nahrávky a osobné údaje bezpečne uložené na našich serveroch. Vaše audio nahrávky a prepisy sú spracovávané AI službami tretích strán (vrátane Deepgram na prepis a OpenAI na analýzu), aby vám poskytli poznatky založené na AI a umožnili všetky funkcie aplikácie.';
 
   @override
-  String get tasksEmptyStateMessage => 'Začnite konverzáciu a vytvorte úlohu.';
+  String get tasksEmptyStateMessage => 'Úlohy z vašich rozhovorov sa zobrazia tu.';
 
   @override
   String get clearChatAction => 'Vymazať chat';

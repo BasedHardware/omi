@@ -4935,7 +4935,7 @@ class AppLocalizationsHu extends AppLocalizations {
       'A folytatással beszélgetéseit, felvételeit és személyes adatait biztonságosan tároljuk szervereinken. Hangfelvételeit és átiratait harmadik féltől származó AI szolgáltatások dolgozzák fel (beleértve a Deepgramot az átíráshoz és az OpenAI-t az elemzéshez), hogy AI-alapú betekintéseket nyújtsunk Önnek és az alkalmazás összes funkcióját biztosítsuk.';
 
   @override
-  String get tasksEmptyStateMessage => 'Feladat létrehozásához kezdj beszélgetést.';
+  String get tasksEmptyStateMessage => 'A beszélgetéseidből származó teendők itt jelennek meg.';
 
   @override
   String get clearChatAction => 'Chat törlése';

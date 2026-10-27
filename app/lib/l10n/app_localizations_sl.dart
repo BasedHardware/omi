@@ -4917,7 +4917,7 @@ class AppLocalizationsSl extends AppLocalizations {
       'Z nadaljevanjem bodo vaši pogovori, posnetki in osebni podatki varno shranjeni na naših strežnikih. Vaši zvočni posnetki in prepisi se obdelujejo s storitvami umetne inteligence tretjih oseb (vključno z Deepgram za prepis in OpenAI za analizo), da vam zagotovimo vpoglede, ki jih poganja umetna inteligenca, in omogočimo vse funkcije aplikacije.';
 
   @override
-  String get tasksEmptyStateMessage => 'Začnite pogovor, da ustvarite nalogo.';
+  String get tasksEmptyStateMessage => 'Opravila iz vaših pogovorov se bodo prikazala tukaj.';
 
   @override
   String get clearChatAction => 'Počistite klepet';

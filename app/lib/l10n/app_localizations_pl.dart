@@ -4918,7 +4918,7 @@ class AppLocalizationsPl extends AppLocalizations {
       'Kontynuując, Twoje rozmowy, nagrania i dane osobowe będą bezpiecznie przechowywane na naszych serwerach. Twoje nagrania audio i transkrypcje są przetwarzane przez zewnętrzne usługi AI (w tym Deepgram do transkrypcji i OpenAI do analizy), aby dostarczyć Ci wglądy oparte na AI i umożliwić wszystkie funkcje aplikacji.';
 
   @override
-  String get tasksEmptyStateMessage => 'Rozpocznij rozmowę, aby utworzyć zadanie.';
+  String get tasksEmptyStateMessage => 'Zadania z Twoich rozmów pojawią się tutaj.';
 
   @override
   String get clearChatAction => 'Wyczyść czat';

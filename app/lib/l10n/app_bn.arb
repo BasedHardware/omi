@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "একটি কাজ তৈরি করতে কথোপকথন শুরু করুন।",
+    "tasksEmptyStateMessage": "আপনার কথোপকথনের করণীয়গুলো এখানে দেখা যাবে।",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },

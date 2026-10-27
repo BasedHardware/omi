@@ -4869,7 +4869,7 @@ class AppLocalizationsHe extends AppLocalizations {
       'בהמשך, השיחות, ההקלטות והמידע האישי שלך יאוחסנו בצורה מאובטחת בשרתים שלנו. הקלטות האודיו והתמלולים שלך מעובדים על ידי שירותי AI של צד שלישי (כולל Deepgram לתמלול ו-OpenAI לניתוח) כדי לספק לך תובנות מבוססות AI ולאפשר את כל תכונות האפליקציה.';
 
   @override
-  String get tasksEmptyStateMessage => 'התחילו שיחה כדי ליצור משימה.';
+  String get tasksEmptyStateMessage => 'משימות מהשיחות שלך יופיעו כאן.';
 
   @override
   String get clearChatAction => 'נקה שיחה';

@@ -4828,7 +4828,7 @@ class AppLocalizationsJa extends AppLocalizations {
       '続行することで、会話、録音、個人情報は安全に当社のサーバーに保存されます。音声録音と文字起こしは、サードパーティのAIサービス（文字起こし用のDeepgramと分析用のOpenAIを含む）によって処理され、AI駆動のインサイトを提供し、すべてのアプリ機能を有効にします。';
 
   @override
-  String get tasksEmptyStateMessage => '会話を始めてタスクを作成しましょう。';
+  String get tasksEmptyStateMessage => '会話から見つかったToDoがここに表示されます。';
 
   @override
   String get clearChatAction => 'チャットを消去';

@@ -4917,7 +4917,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Devam ederek, konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz sunucularımızda güvenli bir şekilde saklanacaktır. Ses kayıtlarınız ve transkriptleriniz, size yapay zeka destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için üçüncü taraf yapay zeka hizmetleri (transkripsiyon için Deepgram ve analiz için OpenAI dahil) tarafından işlenir.';
 
   @override
-  String get tasksEmptyStateMessage => 'Görev oluşturmak için bir konuşma başlatın.';
+  String get tasksEmptyStateMessage => 'Konuşmalarındaki yapılacaklar burada görünecek.';
 
   @override
   String get clearChatAction => 'Sohbeti temizle';
