@@ -1563,6 +1563,13 @@ _add(
     )
 )
 _add(
+    CoveredByEntry(
+        'database.knowledge_graph._citation_nodes',
+        covered_by=('database.knowledge_graph.prune_memory_citations_from_kg',),
+        reason='The prune driver exercises the native reverse-citation query before global orphan cleanup.',
+    )
+)
+_add(
     DriverEntry(
         'database.knowledge_graph.upsert_knowledge_node', base={'uid': UID, 'node_data': {'label': 'shape-node'}}
     )
@@ -2246,7 +2253,11 @@ _add(
     DriverEntry(
         'database.smart_merge.find_preceding_conversations',
         base={'uid': UID, 'source': 'omi', 'created_before': T0},
-        domains={'discarded': [False, True], 'transaction': [None, ref_transaction()]},
+        domains={
+            'discarded': [False, True],
+            'transaction': [None, ref_transaction()],
+            'client_device_id': [None, 'pendant-1'],
+        },
         neutrals={'limit': _LIMIT_OPT},
     )
 )

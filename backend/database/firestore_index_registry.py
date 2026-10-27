@@ -1919,6 +1919,24 @@ CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('discarded'), _asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
 )
 
+CONVERSATIONS_SMART_MERGE_PARTITION_QUERY = FirestoreQuerySpec(
+    identifier='conversations_smart_merge_device_preceding',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        *CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY.filters,
+        FirestoreQueryFilter('client_device_id', '==', 'client_device_id'),
+    ),
+    index_fields=(
+        _asc('discarded'),
+        _asc('source'),
+        _asc('status'),
+        _asc('client_device_id'),
+        _desc('created_at'),
+        _desc('__name__'),
+    ),
+)
+
 
 CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
     identifier='conversation_photos_name_range_export',
@@ -2012,6 +2030,7 @@ QUERY_SPECS = (
     DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY,
     DAILY_SUMMARY_RECIPIENTS_QUERY,
     CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
+    CONVERSATIONS_SMART_MERGE_PARTITION_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

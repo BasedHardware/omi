@@ -131,7 +131,16 @@ class World:
         return row
 
     def preceding(
-        self, uid, *, source, created_before, limit=None, discarded=False, transaction=None, firestore_client=None
+        self,
+        uid,
+        *,
+        source,
+        created_before,
+        limit=None,
+        discarded=False,
+        transaction=None,
+        firestore_client=None,
+        client_device_id=None,
     ):
         if transaction is not None:
             assert_read_allowed = getattr(transaction, '_assert_read_allowed', None)
@@ -148,6 +157,7 @@ class World:
             and value.get('source') == source
             and value.get('status') in smart_merge_db._ALL_STATUSES
             and value['created_at'] < created_before
+            and (not client_device_id or limit is not None or value.get('client_device_id') == client_device_id)
         ]
         rows.sort(key=lambda row: row['created_at'], reverse=True)
         projected = [{k: v for k, v in row.items() if k != 'transcript_segments'} for row in rows]
