@@ -383,3 +383,43 @@ def test_sibling_admin_and_metrics_verifiers_reject_non_ascii_without_type_error
             data={"uid": "u1", "title": "t", "body": "b"}, secret_key="expected-admin-key"
         ) == {"status": "Ok"}
         spy.assert_called_once_with(b"expected-admin-key", b"expected-admin-key")
+
+
+def test_http_layer_fastapi_testclient_non_ascii_returns_403_not_500(routers_bundle, monkeypatch):
+    fastapi = pytest.importorskip("fastapi")
+    testclient_mod = pytest.importorskip("fastapi.testclient")
+    apps = routers_bundle["apps"]
+    memory_admin = routers_bundle["memory_admin"]
+
+    monkeypatch.setenv("ADMIN_KEY", "s3cr3t-admin-key")
+
+    app = fastapi.FastAPI()
+
+    @app.get("/v1/summary-app-ids")
+    def summary_ids(secret_key: str = fastapi.Header(..., alias="secret-key")):
+        try:
+            return apps.get_summary_app_ids(secret_key=secret_key)
+        except _HTTPException as exc:
+            raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+    @app.get("/v1/admin/memory-probe")
+    def memory_probe(secret_key: str = fastapi.Header(..., alias="secret-key")):
+        try:
+            memory_admin._require_admin_key(secret_key)
+            return {"ok": True}
+        except _HTTPException as exc:
+            raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+    client = testclient_mod.TestClient(app, raise_server_exceptions=False)
+
+    resp_summary = client.get("/v1/summary-app-ids", headers={"secret-key": "wrong-\xe9"})
+    assert resp_summary.status_code == 403
+    assert resp_summary.json() == {"detail": "Forbidden"}
+
+    resp_mem = client.get("/v1/admin/memory-probe", headers={"secret-key": "wrong-\xe9"})
+    assert resp_mem.status_code == 403
+    assert resp_mem.json() == {"detail": "You are not authorized to perform this action"}
+
+    resp_ok = client.get("/v1/admin/memory-probe", headers={"secret-key": "s3cr3t-admin-key"})
+    assert resp_ok.status_code == 200
+    assert resp_ok.json() == {"ok": True}
