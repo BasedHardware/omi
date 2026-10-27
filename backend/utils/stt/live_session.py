@@ -16,7 +16,6 @@ from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLag
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.observability.demand_cohort import current_transport_origin
-from config.live_stt_idle import idle_reopen_cost_reselect_enabled
 from utils.stt_cap_dispatch import CapSocket, session_admission, suppress_socket_audio, set_cap_capture
 from utils.stt import streaming as st
 from utils.stt.edge_shadow import attach_tap as attach_edge_tap
@@ -1135,6 +1134,7 @@ class LiveLegSocket(STTSocket):
                     send_phase = 'capture_mapping'
                     token = capture_spans.set(sent_spans) if self._soniox_wire_ledger else None
                     try:
+                        self._configure_idle_cost_reselect()
                         set_cap_capture(self.raw, audio, sent_spans)
                         send_phase = 'raw_send'
                         sent = self.raw.send(audio)
@@ -1270,13 +1270,13 @@ class LiveLegSocket(STTSocket):
     def idle_cost_reselect_requested(self) -> bool:
         return getattr(self.raw, 'idle_cost_reselect_requested', False) is True
 
+    def _configure_idle_cost_reselect(self) -> None:
+        configure = getattr(self.raw, 'set_cost_reselect_managed', None)
+        if callable(configure):
+            configure(self.session.recovery_enabled and getattr(self.session.receiver, 'recovery', None) is not None)
+
     async def complete_send(self) -> bool:
-        if (
-            self.session.recovery_enabled
-            and getattr(self.session.receiver, 'recovery', None) is not None
-            and idle_reopen_cost_reselect_enabled()
-            and getattr(self.raw, 'idle_reopen_pending', False) is True
-        ):
+        if getattr(self.raw, 'idle_reopen_cost_reselect_pending', False) is True:
             return await self.raw.request_cost_reselect()
         offset = getattr(self.raw, 'set_resume_provider_offset', None)
         if self._send_tracker is not None and callable(offset):
@@ -1309,6 +1309,7 @@ class LiveLegSocket(STTSocket):
         self._idle_send_spans = spans
         token = capture_spans.set(tuple(spans)) if self._soniox_wire_ledger else None
         try:
+            self._configure_idle_cost_reselect()
             set_cap_capture(self.raw, data, spans)
             accepted = self.raw.send(data)
         finally:

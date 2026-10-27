@@ -269,7 +269,11 @@ class LiveAdmission:
         accepted = raw.send(data, *args, **kwargs)
         if accepted is not False:
             self.observe_capture(True)
-        if accepted is not False and not customer_funded(provider):
+        if (
+            accepted is not False
+            and not customer_funded(provider)
+            and getattr(raw, 'defer_admission_charge', False) is not True
+        ):
             seconds = len(data) / (2 * rate)
             record_audio('live', 'accepted', provider, seconds, self.reason == 'plan_allowance_exhausted')
             if self.remaining_units is not None:

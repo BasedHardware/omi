@@ -4449,6 +4449,11 @@ remain authoritative. The handoff uses the existing capture replay/adoption pump
 and bounded budgets without charging a failure episode or voting Soniox unhealthy.
 The old VAD's exact admitted pre-roll/onset is retained across direct sends and
 ordered tails; only capture proven accepted by successor replay is removed.
+Admission validates the buffered onset but defers its debit on the suspended
+vendor; the selected successor owns the one funded dispatch. The decision is
+pinned with that onset, so an in-flight switch change cannot leave a deferred
+charge on the stored-factory path. The exact remaining allowance still delivers
+its last admitted chunk, and switch-off keeps the existing debit boundary.
 `false`, `0` or `off` restores the same captured Soniox endpoint/config. Legacy
 unmanaged and recovery-disabled legs retain their existing raw reopen.
 Dial time adds transcript onset latency; capture keeps

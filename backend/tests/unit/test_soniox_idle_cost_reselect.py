@@ -12,6 +12,7 @@ from utils.stt import live_chain, live_session, parakeet_window as window, repla
 from utils.stt.live_gate import GateState
 from utils.stt.soniox_idle import IdleSonioxSocket
 from utils.stt.recovery_state import MAX_RECOVERY_EPISODES
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
 
 
 async def idle_receiver(monkeypatch, *, language='en', enabled=True, benched=False, modulate=False):
@@ -170,6 +171,47 @@ async def test_recovered_parakeet_still_requires_user_allocation(monkeypatch):
         assert actual.host.stt_service == st.STTService.soniox
         await until(lambda: raws[-1]._ws.byte_count == len(data))
         assert raws[-1]._ws.pcm == data
+    finally:
+        await actual._drain_stt_sockets()
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('enabled', [True, False])
+@pytest.mark.parametrize('unit_budget', [True, False])
+async def test_last_funded_idle_onset_is_charged_once_and_reaches_successor(monkeypatch, enabled, unit_budget):
+    from utils import stt_cap_dispatch as cap
+    from unittest.mock import AsyncMock, Mock
+
+    actual, _, raws, _, _, old, idle, _ = await idle_receiver(monkeypatch, benched=True, enabled=enabled)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    admission = cap.LiveAdmission('synthetic')
+    admission.managed, admission.remaining = True, 0.1
+    if unit_budget:
+        admission.remaining_units = 0.1 * cap._units_per_second('soniox')
+    admission.reason = 'plan_within_allowance'
+    recorded = Mock()
+    monkeypatch.setattr(cap, 'record_audio', recorded)
+    actual.cap_admission = admission
+    old.raw = cap.CapSocket(admission, 'soniox', 16000, AsyncMock(), idle)
+    monkeypatch.setattr(st, 'process_audio_soniox', cap.live_provider('soniox', 1)(st.process_audio_soniox))
+    data = b'\x31\x01' * 1600
+    try:
+        await close_idle(idle)
+        await onset(actual, data)
+        await until(lambda: idle.idle_cost_reselect_requested or len(raws) == 2)
+        if enabled:
+            # The suspended vendor has not received this PCM. Its admission
+            # cannot consume the final allowance before the successor opens.
+            assert admission.remaining == pytest.approx(0.1)
+            assert await actual._failover_stt_socket()
+        await until(lambda: raws[-1]._ws.byte_count == len(data))
+        assert raws[-1]._ws.pcm == data
+        assert admission.remaining == 0
+        if unit_budget:
+            assert admission.remaining_units == 0
+        assert len([call for call in recorded.call_args_list if call.args[:2] == ('live', 'accepted')]) == 1
+        assert not actual.host.state.stt_terminal_failure
     finally:
         await actual._drain_stt_sockets()
         await stop(raws)
