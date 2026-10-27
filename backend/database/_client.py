@@ -153,6 +153,21 @@ def _install_list_projection_writer() -> None:
 _install_list_projection_writer()
 
 
+def _install_batch_privacy_write_fence() -> None:
+    # Legacy bare-Python hygiene runners replace Firestore with a file-less
+    # ModuleType stub (there is no real SDK/write surface to fence there).
+    if not getattr(firestore, '__file__', None):
+        return
+    # This fence is mandatory for memo-enabled readers. Do not silently skip an
+    # ImportError and leave a process capable of unfenced customer-data writes.
+    from database.batch_privacy_write_fence import install_write_fence
+
+    install_write_fence()
+
+
+_install_batch_privacy_write_fence()
+
+
 _firestore_client = None
 _firestore_client_lock = Lock()
 _customer_firestore_client = None

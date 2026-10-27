@@ -5,12 +5,15 @@ hashed generation survives recursive account wipes and contains no content.
 """
 
 from collections.abc import Iterable
+from datetime import datetime
 import hashlib
 from enum import Enum
 from typing import Any
+import re
 
 from config.firestore_read_levers import lever_enabled
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from database.batch_privacy_attempt import current_attempt, TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
 
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
 
@@ -92,6 +95,84 @@ def assert_batch_write_allowed(
     snapshots: dict | None = None,
     memo: BatchPrivacyMemo | None = None,
 ) -> int:
+    # Keep the disabled path's read order, counts and WQ12 behavior unchanged.
+    # Full-row exports always stay live: the token certifies authorization, not
+    # arbitrary metadata returned to a snapshots= consumer.
+    attempt = current_attempt()
+    if attempt is None or transaction is None or snapshots is not None or not lever_enabled('bpp_generation_memo', uid):
+        return _assert_batch_write_allowed_live(
+            client,
+            transaction,
+            uid,
+            conversation_ids=conversation_ids,
+            expected_generation=expected_generation,
+            snapshots=snapshots,
+            memo=memo,
+        )
+    ids = frozenset(conversation_ids)
+    if memo is not None and lever_enabled('batch_privacy_memoize', uid):
+        if memo.client is not client or memo.transaction is not transaction:
+            raise ValueError('privacy memo belongs to another transaction attempt')
+    # Retain the client object itself, preventing id reuse and cross-plane hits.
+    key = (client, uid, ids)
+    reference = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
+    try:
+        # Never use the transaction-scoped WQ12 snapshot memo for this read.
+        # Every authorizing transaction enrolls the token in its conflict set.
+        snapshot = reference.get(transaction=transaction)
+        privacy = snapshot.to_dict() or {}
+        token = privacy.get(TOKEN_FIELD)
+        revision = getattr(snapshot, 'update_time', None)
+        eligible = (
+            isinstance(revision, datetime)
+            and revision.tzinfo is not None
+            and snapshot.exists
+            and type(privacy.get(SCHEMA_FIELD)) is int
+            and privacy[SCHEMA_FIELD] == TOKEN_SCHEMA
+            and isinstance(token, str)
+            and re.fullmatch('[0-9a-f]{32}', token) is not None
+            and not privacy.get('blocked')
+            and not privacy.get('purging')
+            and not privacy.get('memo_blocked')
+        )
+        # GAPIC transport retries may replay an already-prepared random token
+        # after another writer. The server revision prevents that ABA: replay
+        # commits get a new update_time, including deletion/recreation. Keep
+        # nanoseconds too rather than relying on datetime's microsecond equality.
+        version = (token, revision.isoformat(), getattr(revision, 'nanosecond', 0)) if eligible else None
+        generation = attempt.get(key, version) if eligible else None
+        if generation is not None and (expected_generation is None or generation == expected_generation):
+            return generation
+        attempt.forget(key)
+        generation = _assert_batch_write_allowed_live(
+            client,
+            transaction,
+            uid,
+            conversation_ids=ids,
+            expected_generation=expected_generation,
+            memo=memo,
+            privacy_snapshot=snapshot,
+        )
+        if eligible:
+            attempt.put(key, version, generation)
+        return generation
+    except BaseException:
+        # Neither a partial authority walk nor a failed token read is reusable.
+        attempt.forget(key)
+        raise
+
+
+def _assert_batch_write_allowed_live(
+    client: Any,
+    transaction: Any,
+    uid: str,
+    *,
+    conversation_ids: Iterable[str] = (),
+    expected_generation: int | None = None,
+    snapshots: dict | None = None,
+    memo: BatchPrivacyMemo | None = None,
+    privacy_snapshot: Any = None,
+) -> int:
     """Fence a mutation. Admission records the returned generation for replay.
 
     Check all source IDs and assigned targets inside the mutation transaction:
@@ -125,7 +206,9 @@ def assert_batch_write_allowed(
         or data.get('migration_status') is not None
     ):
         raise BatchPrivacyBlocked('data_protection_changed')
-    privacy = read(client.collection(PRIVACY_COLLECTION).document(key)).to_dict() or {}
+    privacy = (
+        privacy_snapshot if privacy_snapshot is not None else read(client.collection(PRIVACY_COLLECTION).document(key))
+    ).to_dict() or {}
     generation = int(privacy.get('generation', 0))
     if (
         privacy.get('blocked')
