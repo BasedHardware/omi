@@ -194,38 +194,24 @@ def _omi_pro_env(monkeypatch):
 
 
 def test_new_buyer_single_plan_rule_serves_omi_pro_sheet(client, monkeypatch):
-    """2026-10-24 ruling at the v2 route: a basic buyer on an explicit
-    non-desktop platform (mobile/web) gets a single-tier Omi Pro sheet — never
-    a 404, which the web plans panel renders as a dead "Couldn't load plans"
-    state. Missing/unknown platform headers, desktop platforms, existing
-    subscribers, and the kill switch keep the ladder sheet."""
+    """Omi Pro is the only plan sold: a basic buyer on every platform (desktop,
+    missing and unknown headers included) gets a single-tier Omi Pro sheet.
+    Existing subscribers and the kill switch keep the ladder sheet."""
     monkeypatch.delenv('NEW_BUYER_SINGLE_PLAN_ENABLED', raising=False)
     _omi_pro_env(monkeypatch)
 
-    for platform in ('ios', 'android', 'web'):
-        response = client.get('/v2/payments/plans', headers={'X-App-Platform': platform})
-        assert response.status_code == 200, platform
+    callers = [{'X-App-Platform': p} for p in ('ios', 'android', 'web', 'macos', 'windows', 'not-a-platform')] + [{}]
+    for headers in callers:
+        response = client.get('/v2/payments/plans', headers=headers)
+        assert response.status_code == 200, headers
         payload = response.json()
-        assert [tier['plan_id'] for tier in payload['tiers']] == ['unlimited_v2', 'basic'], platform
+        assert [tier['plan_id'] for tier in payload['tiers']] == ['unlimited_v2', 'basic'], headers
         assert [item['price_id'] for item in payload['tiers'][0]['prices']] == [
             'price_omi_pro_month',
             'price_omi_pro_year',
-        ], platform
+        ], headers
         assert payload['tiers'][0]['action'] == 'checkout'
         assert payload['current']['plan_id'] == 'basic'
-
-    # Desktop, missing header, unknown value, and current subscribers keep the
-    # ladder sheet (this fixture's ladder has no Omi Pro card).
-    ladder_callers = [
-        {'X-App-Platform': 'macos'},
-        {'X-App-Platform': 'windows'},
-        {},
-        {'X-App-Platform': 'not-a-platform'},
-    ]
-    for headers in ladder_callers:
-        response = client.get('/v2/payments/plans', headers=headers)
-        assert response.status_code == 200, headers
-        assert all(tier['plan_id'] != 'unlimited_v2' for tier in response.json()['tiers']), headers
 
     monkeypatch.setattr(
         route.users_db, 'get_user_valid_subscription', lambda uid, **kwargs: Subscription(plan=PlanType.plus)
