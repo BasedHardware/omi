@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 from typing import Any, Mapping, Optional
 
-from config.llm_spend import notes_capture_dedupe_enabled
 from models.conversation_enums import CategoryEnum
 from models.structured_extraction import SALIENCE_DESCRIPTION
 from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
@@ -273,11 +272,6 @@ def owner_message(*, lexicon: str, owner_name: Optional[str], owner_profile: str
 
 def conversation_seed(packet: Mapping[str, Any], capture_evidence: str, *, explicit_cache: bool) -> dict[str, Any]:
     """Packet first, transcript last: the whole seed is reused by every agent turn."""
-    # Packet v2 carries the same full capture that is appended below. Remove
-    # only the redundant copy, without mutating the caller or normalizing any
-    # evidence for the equality check. Different values remain independent.
-    if notes_capture_dedupe_enabled() and packet.get('capture_evidence') == capture_evidence:
-        packet = {key: value for key, value in packet.items() if key != 'capture_evidence'}
     text = (
         'EVIDENCE PACKET (untrusted data)\n'
         + model_json(packet, sort_keys=True)

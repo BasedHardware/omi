@@ -1,14 +1,13 @@
 # Exact-input LLM cost cuts
 
-Three independent kill switches default on. The rollout lead owns deployment
-and runtime settings. Deploy the backend processing hosts for the first two
-changes and `llm-gateway` for the third. No client release or stored-data
+Two independent kill switches default on. The rollout lead owns deployment
+and runtime settings. Deploy the backend processing hosts for L1
+and `llm-gateway` for embedding reuse. No client release or stored-data
 migration is required.
 
 | Switch | On | Set `false`, `off`, `0` or `no` to restore |
 | --- | --- | --- |
 | `MEMORY_L1_PROMPT_SCHEMA_TRIM_ENABLED` | Generation schema omits `archive_id`, `allowed_use`, `normal_search_allowed`, `is_stable_profile_fact`, `search_result_label` | The original full generation schema |
-| `CONVERSATION_NOTES_CAPTURE_DEDUPE_ENABLED` | Notes agent serializes one complete capture when the packet copy is exactly equal | Original packet serialization, including its capture copy |
 | `VERTEX_EMBEDDING_DEDUPE_ENABLED` | Reuse successful same-owner vectors for identical Vertex inputs | Every provider call, including duplicates in a batch; clears the local cache |
 
 These switches are read on each call. Use the deployment's existing runtime-env
@@ -23,12 +22,6 @@ L1 still uses `WorkingObservationBatch` to parse responses and the existing
 validators and deterministic ID derivation. Only the private prompt schema is
 projected; provenance, evidence, speaker identity, policy and public models
 are unchanged. Older/full-shaped responses remain accepted.
-
-Notes removes only the top-level duplicate `capture_evidence` key from a copy
-of the serialized packet. Equality is exact before whitespace normalization.
-The full terminal CAPTURE block, all segment IDs, speaker evidence, language,
-tasks, other packet keys, tool schema and original caller packet remain intact.
-One-shot notes and differing packet capture evidence keep their prior bytes.
 
 Vertex reuse is limited to company-managed `gemini-embedding-001` with a known
 authenticated owner. The hash includes tenant and user, the complete endpoint
@@ -51,10 +44,6 @@ Synthetic corpus tests (no production user content):
 
 - `test_l1_prompt_schema_parity.py`: complete parsed objects match with and
   without the derived fields, plus exact legacy-schema rollback.
-- `test_notes_capture_dedupe.py`: reconstruct the original packet from the
-  retained evidence, including Unicode, segment IDs and distinct nested data.
-  `test_notes_agent.py` replays the invented weekly-sync tool responses through
-  the real notes writer with dedupe off and on.
 - `test_vertex_embedding_reuse.py`: the real Vertex adapter returns identical
   vectors, order and wire shape on the fixed corpus while provider calls fall
   from nine to three. Covers scope, changed input, kill, failure, cancellation,
@@ -74,8 +63,6 @@ sum by (lane,model) (increase(llm_gateway_cache_eligible_attempts_total{lane=~"o
 sum by (lane_id,model,outcome) (increase(llm_gateway_requests_total{lane_id=~"omi:auto:(conv-structure|memory-l1|gemini-embeddings)"}[24h]))
 sum by (outcome) (increase(llm_gateway_vertex_embedding_inputs_total[24h]))
 sum by (outcome) (increase(llm_gateway_vertex_embedding_input_characters_total[24h]))
-sum by (outcome) (increase(omi_notes_agent_capture_seeds_total[24h]))
-sum(increase(omi_notes_agent_capture_characters_removed_total[24h]))
 ```
 
 Embedding outcomes are `submitted`, `cache_hit`, `batch_reuse`. Character
@@ -89,10 +76,9 @@ Initial schema/prompt changes invalidate conservative successful-input
 fingerprints and content-derived prefix keys, so cold caches may increase
 spend temporarily. A gateway restart clears all vector entries.
 
-Notes seed counters distinguish `removed`, `retained` (kill switch) and
-`no_duplicate`, so the exposed agent population is measurable without looking
-at user content. The character counter counts a seed once, not every repeated
-agent turn, and is not a token or dollar estimate.
-
 Do not book the planning estimate as realized savings. OCR truncation, C6
 owner-neutral prefix activation, model changes and new capacity are excluded.
+
+Notes duplicate-capture removal is a separate draft and requires synthetic
+live-model parity on the dev gateway before promotion (lead ruling 4f6613,
+2026-10-27). It is not part of this release.
