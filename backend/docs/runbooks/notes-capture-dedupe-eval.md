@@ -53,16 +53,30 @@ PR stays draft until this gate is accepted.
    unlisted people/memories; screenshots are absent. Reject any attempt to call
    a production data tool. Do not replace generation with recorded responses.
 4. Apply the existing notes output/identity/source/task validators, then score
-   against the fixed expected facts and forbidden claims. Compare wording
+   against the fixed expected facts and forbidden claims. For every sample in
+   **both** arms, require `salience == expected_salience` and semantic one-to-one
+   equality with `expected_action_items`: correct owner, exactly the stated
+   count, supported source IDs, and the specified due-date rule. An empty
+   expected list requires an empty `action_items` list. Reject every forbidden
+   action item, including existing-task duplicates and another speaker's
+   commitment. Merely mentioning a required commitment in prose does not pass.
+   Use the corpus's `weekly_sync_expectations` for the existing replay fixture;
+   its recorded tool responses are not the model-generation oracle. Pin the
+   same synthetic capture date/timezone in both arms to resolve "tomorrow".
+   Compare wording
    blind to arm where possible. Equivalent wording is allowed; decisions vs
    proposals, tense, numbers, dates, owner/unknown speaker distinctions,
-   open-task suppression and segment provenance must remain correct. A
+   open-task suppression and segment provenance must remain correct. Check each
+   cited claim against `expected_fact_sources`, not just membership in the
+   transcript's ID set. Map each original ID to its deterministic repeated IDs;
+   citations to any supporting repetition are acceptable. A
    missing required fact, invented commitment, false named-speaker binding or
    ungrounded source claim fails the candidate. The baseline must pass too;
    a baseline failure makes that case inconclusive rather than a candidate win.
 5. Save synthetic prompts/outputs separately from an aggregate receipt with
    fixture digest, source/release/route identity, arm, sample, tool trace,
-   validator results, expected-fact checks, adjudication, token/cache usage,
+   validator results, per-fact/source checks, per-action expected/forbidden
+   checks, expected/actual salience, adjudication, token/cache usage,
    finish reason, latency and actual vendor cost when reported. No provider
    result or price should be invented. Stop on truncation, budget overflow or
    a new correctness regression; keep this draft off.
@@ -71,6 +85,10 @@ The fixed corpus covers proposals vs decisions, unresolved voices, multilingual
 evidence, existing tasks and explicit owner commitments, past-vs-future tense,
 and long multi-topic capture. `repeat` changes length only; do not summarize or
 truncate the capture. Add uncovered failures to the corpus before rerunning.
+All cases use the conservative owner-only task policy explicitly; all contain
+owner-engaged back-and-forth and therefore require `highlight`. Production
+transcript construction strips capture edges before this seed helper; the
+helper's edge-whitespace unit cases verify its stricter exact-equality contract.
 The lead owns the bounded dev-call spend and identity for this run; this lane
 has neither an injected LLM API credential nor a grant to read secret payloads.
 

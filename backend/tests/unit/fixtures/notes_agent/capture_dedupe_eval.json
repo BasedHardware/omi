@@ -1,6 +1,6 @@
 {
   "synthetic": true,
-  "version": 1,
+  "version": 2,
   "description": "Invented qualification corpus. No production user content. Each arm must generate via the dev gateway; expected facts are fixed before generation.",
   "cases": [
     {
@@ -37,6 +37,27 @@
       "forbidden_claims": [
         "Pricing was approved",
         "Riley committed to send a pricing model"
+      ],
+      "task_intelligence_capture": false,
+      "expected_salience": "highlight",
+      "salience_reason": "The owner engages in substantive back-and-forth with another speaker.",
+      "expected_fact_sources": {
+        "Pricing is undecided": [
+          "s002"
+        ],
+        "Forty dollars per seat was a proposal": [
+          "s001"
+        ],
+        "Pilot capacity is agreed at fifty seats": [
+          "s003"
+        ]
+      },
+      "expected_action_items": [],
+      "forbidden_action_items": [
+        "Any commitment not explicitly made by Riley",
+        "Any task owned by another speaker",
+        "Any invented due date",
+        "Any action item: this case contains no new explicit owner commitment"
       ]
     },
     {
@@ -78,6 +99,24 @@
         "Maya said the factory estimate",
         "A shipping date is confirmed",
         "The unknown speaker is named from a People record"
+      ],
+      "task_intelligence_capture": false,
+      "expected_salience": "highlight",
+      "salience_reason": "The owner engages in substantive back-and-forth with another speaker.",
+      "expected_fact_sources": {
+        "Factory estimate is one week after the board fix": [
+          "s002"
+        ],
+        "No shipping date was promised": [
+          "s003"
+        ]
+      },
+      "expected_action_items": [],
+      "forbidden_action_items": [
+        "Any commitment not explicitly made by Riley",
+        "Any task owned by another speaker",
+        "Any invented due date",
+        "Any action item: this case contains no new explicit owner commitment"
       ]
     },
     {
@@ -114,6 +153,31 @@
       "forbidden_claims": [
         "Budget approved",
         "Budget is 3000 dollars"
+      ],
+      "task_intelligence_capture": false,
+      "expected_salience": "highlight",
+      "salience_reason": "The owner engages in substantive back-and-forth with another speaker.",
+      "expected_fact_sources": {
+        "Budget proposal is 300 dollars": [
+          "s001",
+          "s002",
+          "s003"
+        ],
+        "The budget is not approved": [
+          "s001",
+          "s002",
+          "s003"
+        ],
+        "Output language is English": [
+          "s003"
+        ]
+      },
+      "expected_action_items": [],
+      "forbidden_action_items": [
+        "Any commitment not explicitly made by Riley",
+        "Any task owned by another speaker",
+        "Any invented due date",
+        "Any action item: this case contains no new explicit owner commitment"
       ]
     },
     {
@@ -155,6 +219,35 @@
       "forbidden_claims": [
         "Create a duplicate send-pilot-notes task",
         "Create Maya's modeling commitment as Riley's task"
+      ],
+      "expected_salience": "highlight",
+      "salience_reason": "The owner engages in substantive back-and-forth with another speaker.",
+      "expected_fact_sources": {
+        "Riley has a new explicit commitment to check board fix status": [
+          "s003"
+        ],
+        "Maya intends to model both pricing options": [
+          "s002"
+        ]
+      },
+      "expected_action_items": [
+        {
+          "description_equivalent": "Check the board fix status with the team",
+          "owner_name": "Riley Tan",
+          "source_segment_ids": [
+            "s003"
+          ],
+          "due_at": "",
+          "count": 1
+        }
+      ],
+      "forbidden_action_items": [
+        "Any commitment not explicitly made by Riley",
+        "Any task owned by another speaker",
+        "Any invented due date",
+        "Duplicate instances of the repeated board-fix commitment",
+        "Send the pilot notes (already an open task)",
+        "Model pricing options (Maya made this commitment)"
       ]
     },
     {
@@ -192,6 +285,27 @@
         "Review is next Friday",
         "Connector fix is complete",
         "Confirmed calendar event or completion date"
+      ],
+      "task_intelligence_capture": false,
+      "expected_salience": "highlight",
+      "salience_reason": "The owner engages in substantive back-and-forth with another speaker.",
+      "expected_fact_sources": {
+        "Review already happened": [
+          "s001"
+        ],
+        "Loose connector remains unfixed": [
+          "s002"
+        ],
+        "Retest is unscheduled": [
+          "s003"
+        ]
+      },
+      "expected_action_items": [],
+      "forbidden_action_items": [
+        "Any commitment not explicitly made by Riley",
+        "Any task owned by another speaker",
+        "Any invented due date",
+        "Any action item: this case contains no new explicit owner commitment"
       ]
     },
     {
@@ -244,7 +358,76 @@
         "Estimated dates become confirmed",
         "A proposal becomes a decision",
         "A substantive thread disappears only in the candidate"
+      ],
+      "task_intelligence_capture": false,
+      "expected_salience": "highlight",
+      "salience_reason": "The owner engages in substantive back-and-forth with another speaker.",
+      "expected_fact_sources": {
+        "All five substantive threads are covered": [
+          "s001",
+          "s002",
+          "s003",
+          "s004",
+          "s005"
+        ],
+        "Fifty-seat cap": [
+          "s001"
+        ],
+        "Pricing undecided": [
+          "s001"
+        ],
+        "Conditional factory estimate": [
+          "s002"
+        ],
+        "300-dollar unapproved support budget": [
+          "s003"
+        ],
+        "Existing help page chosen": [
+          "s004"
+        ],
+        "Owner commitment to check board fix": [
+          "s005"
+        ]
+      },
+      "expected_action_items": [
+        {
+          "description_equivalent": "Check the board fix status with the team",
+          "owner_name": "Riley Tan",
+          "source_segment_ids": [
+            "s005"
+          ],
+          "due_at": "",
+          "count": 1
+        }
+      ],
+      "forbidden_action_items": [
+        "Any commitment not explicitly made by Riley",
+        "Any task owned by another speaker",
+        "Any invented due date",
+        "Duplicate instances of the repeated board-fix commitment"
       ]
     }
-  ]
+  ],
+  "weekly_sync_expectations": {
+    "task_intelligence_capture": false,
+    "expected_salience": "highlight",
+    "salience_reason": "The owner engages in a weekly sync with Maya.",
+    "expected_action_items": [
+      {
+        "description_equivalent": "Check the firmware fix status with the team",
+        "owner_name": "Riley Tan",
+        "source_segment_ids": [
+          "s007"
+        ],
+        "due_date_offset_days": 1,
+        "count": 1
+      }
+    ],
+    "forbidden_action_items": [
+      "Model/send pricing options (Maya made this commitment)",
+      "Follow up on pilot pricing (no explicit owner commitment)",
+      "Duplicate instances of the repeated firmware-fix commitment",
+      "Any due date other than tomorrow relative to the pinned capture date"
+    ]
+  }
 }
