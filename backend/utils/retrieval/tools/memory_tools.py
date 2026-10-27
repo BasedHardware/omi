@@ -3,7 +3,7 @@ Tools for accessing user memories and facts.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 import contextvars
 
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -28,6 +28,35 @@ from utils.messaging.projection import surface_runtime
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_int(val: Any, default: int) -> int:
+    """Safely coerce int or numeric string, rejecting booleans, None, and invalid types."""
+    if val is None or isinstance(val, bool):
+        return default
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _get_config_and_uid(config: RunnableConfig) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any], Optional[str]]:
+    """Extract config dict, non-None configurable dict, and user ID with top-level fallbacks."""
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        cfg = _agent_config()
+    if cfg is None:
+        return None, {}, None
+
+    configurable = cfg.get('configurable') if isinstance(cfg, dict) else None
+    configurable = configurable if isinstance(configurable, dict) else {}
+    uid = (
+        configurable.get('user_id')
+        or (cfg.get('user_id') if isinstance(cfg, dict) else None)
+        or (cfg.get('uid') if isinstance(cfg, dict) else None)
+    )
+    return cfg, configurable, str(uid) if uid else None
+
 
 # A broad question ("what do you know about me") can match every memory a user has. Formatting
 # all of them floods the chat model's context, so it freezes or refuses (#4927). Bound how many
@@ -122,8 +151,8 @@ def _memory_read_date(memory: object) -> Optional[datetime]:
 
 @tool
 def get_memories_tool(
-    limit: int = 50,
-    offset: int = 0,
+    limit: Any = 50,
+    offset: Any = 0,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
@@ -176,29 +205,24 @@ def get_memories_tool(
         f"🔧 get_memories_tool called - limit: {limit}, offset: {offset}, start_date: {start_date}, end_date: {end_date}"
     )
 
-    # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        cfg = _agent_config()
-        if cfg:
-            logger.info(f"🔧 get_memories_tool - got config from context variable")
+    limit = _safe_int(limit, 50)
+    offset = _safe_int(offset, 0)
+    if limit > 5000:
+        logger.info(f"⚠️ get_memories_tool - limit capped from {limit} to 5000")
+        limit = 5000
+    if limit < 1:
+        limit = 1
+    if offset < 0:
+        offset = 0
 
+    cfg, configurable, uid = _get_config_and_uid(config)
     if cfg is None:
         logger.info(f"❌ get_memories_tool - config is None")
         return "Error: Configuration not available"
-
-    memories: List[MemoryDB] = []
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ get_memories_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
     if not uid:
         logger.info(f"❌ get_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    clock = clock_for_config(config or _agent_config(), uid)
+    clock = clock_for_config(cfg, uid)
     logger.info(f"✅ get_memories_tool - uid: {uid}, limit: {limit}")
 
     blocked = _memory_tools_blocked_by_chat_scope(configurable)
@@ -209,16 +233,15 @@ def get_memories_tool(
     if scope_err:
         return f"Error: {scope_err}"
 
-    # Cap at 5000 per call to prevent overloading context
-    if limit > 5000:
-        logger.info(f"⚠️ get_memories_tool - limit capped from {limit} to 5000")
-        limit = 5000
-
     # Parse dates if provided (must be ISO format with timezone)
     start_dt = None
     end_dt = None
 
     if start_date:
+        if not isinstance(start_date, str):
+            return (
+                f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
+            )
         try:
             # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
             start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
@@ -229,6 +252,8 @@ def get_memories_tool(
             return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
 
     if end_date:
+        if not isinstance(end_date, str):
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date}"
         try:
             # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
             end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
@@ -332,8 +357,8 @@ def get_memories_tool(
 
 @tool
 def search_memories_tool(
-    query: str,
-    limit: int = 5,
+    query: Optional[str] = None,
+    limit: Any = 5,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
@@ -364,28 +389,21 @@ def search_memories_tool(
     Returns:
         Formatted string with semantically matching memories ranked by relevance.
     """
-    # Get config from parameter or context variable
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        cfg = _agent_config()
-        if cfg:
-            logger.info(f"🔧 search_memories_tool - got config from context variable")
+    if not isinstance(query, str) or not query.strip():
+        return "Error: Search query cannot be empty"
+    query = query.strip()
 
+    limit = _safe_int(limit, 5)
+    limit = max(1, min(limit, 20))
+
+    cfg, configurable, uid = _get_config_and_uid(config)
     if cfg is None:
         logger.info(f"❌ search_memories_tool - config is None")
         return "Error: Configuration not available"
-
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ search_memories_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
     if not uid:
         logger.info(f"❌ search_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    clock = clock_for_config(config or _agent_config(), uid)
+    clock = clock_for_config(cfg, uid)
     logger.info('search_memories_tool uid=%s limit=%s', uid, limit)
 
     blocked = _memory_tools_blocked_by_chat_scope(configurable)
@@ -398,9 +416,6 @@ def search_memories_tool(
         return f"Error: {scope_err}"
     scope_start_dt = _parse_date_from_chat_scope(scope.get("start_date"))
     scope_end_dt = _parse_date_from_chat_scope(scope.get("end_date"))
-
-    # Cap limit at 20
-    limit = min(limit, 20)
 
     try:
         if not (scope_start_dt or scope_end_dt):
