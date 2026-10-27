@@ -17,7 +17,7 @@ from config.policy import ProjectionPolicy
 from database.fsr_read_cache import writing
 from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
-from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, BatchPrivacyReason
 from database.sync_ledger import (
     BATCH_PARTIAL_STATUS,
     batch_projection_ledger_owner_matches,
@@ -88,7 +88,20 @@ class ProjectionStore:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.
         job = self.ref('jobs', segment_id).get().to_dict() or {}
         if job.get('projection_binding') and (job.get('policy_parts') or {}).get('projection') is None:
-            job, _ = load_stage_policy(self.store, segment_id, 'projection')
+            try:
+                job, _ = load_stage_policy(self.store, segment_id, 'projection')
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                    raise
+                # Deletion may win before the projection policy was first
+                # pinned. No policy or source mutation is allowed then. These
+                # local code defaults only drive no-text settlement/replay;
+                # Projector must never assign a job carrying this hint.
+                job = {
+                    **job,
+                    '_projection_privacy_deleted': True,
+                    'policy_parts': {**(job.get('policy_parts') or {}), 'projection': ProjectionPolicy().to_dict()},
+                }
         entry = self.ref('results', segment_id).get().to_dict() or {}
         if not entry or not job.get('projection_binding'):
             raise ProjectionBlocked('committed result and durable intake binding required')
@@ -425,6 +438,12 @@ class ProjectionStore:
                 result['no_recoverable_speech_segments'] = terminal_empty_count
             if superseded_count:
                 result['superseded_segments'] = superseded_count
+            if (
+                not new
+                and not updated
+                and any(receipt.get('privacy_reason') == 'conversation_deleted' for receipt in receipts)
+            ):
+                result['reason_code'] = 'conversation_deleted'
             if session.ledger.get('status') == 'completed':
                 old = session.ledger.get('result')
                 if not is_valid_completed_sync_content_result(old):

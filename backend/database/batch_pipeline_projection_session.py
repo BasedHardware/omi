@@ -8,7 +8,12 @@ from typing import TYPE_CHECKING, Any
 from google.cloud import firestore
 
 from config.firestore_read_levers import lever_enabled
-from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
+from database.batch_pipeline_privacy import (
+    assert_batch_write_allowed,
+    BatchPrivacyMemo,
+    BatchPrivacyBlocked,
+    BatchPrivacyReason,
+)
 from database.batch_pipeline_projection_protocol import (
     ProjectionBlocked,
     ProjectionPredecessorPending,
@@ -94,7 +99,7 @@ class ProjectionSession:
             **options,
         )
 
-    def prepare(self, transaction, *, replay=True):
+    def prepare(self, transaction, *, replay=True, privacy_deleted=False):
         if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
             # A session may survive the pre-check and assignment retries. Only
             # prepare and validate_plan within this attempt may share snapshots.
@@ -143,7 +148,23 @@ class ProjectionSession:
         if self.job.get('conversation_id'):
             ids.append(self.job['conversation_id'])
         ids.extend(self.job.get('conversation_ids') or [])
-        self.guard(transaction, ids)
+        try:
+            self.guard(transaction, ids)
+        except BatchPrivacyBlocked as error:
+            if error.reason != BatchPrivacyReason.CONVERSATION_DELETED or not (
+                privacy_deleted or self.receipt().get('privacy_reason') == 'conversation_deleted'
+            ):
+                raise
+            # A no-text deletion receipt may advance the owner chain, but must
+            # still pass the account/protection/generation fence. Ordinary
+            # assignment never enters this branch or skips a source fence.
+            self.guard(transaction)
+            for conversation_id in sorted(set(ids)):
+                try:
+                    self.guard(transaction, [conversation_id])
+                except BatchPrivacyBlocked as source_error:
+                    if source_error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                        raise
         durable = self.ledger.get('batch_pipeline') or {}
         if (
             self.ledger.get('dispatch_protocol') != 'batch_v1'
@@ -191,7 +212,9 @@ class ProjectionSession:
         # encode is still in assignment's read-only planning phase.
         self.guard(transaction, [planned['id'], *(planned.get('sync_merged_from') or [])])
 
-    def persist(self, transaction, planned=None, *, superseded=False, quarantined=False):
+    def persist(self, transaction, planned=None, *, superseded=False, quarantined=False, privacy_deleted=False):
+        if privacy_deleted and (planned is not None or not superseded or quarantined):
+            raise ProjectionBlocked('privacy disposition cannot assign content')
         if quarantined and (planned is not None or superseded):
             raise ProjectionBlocked('quarantine cannot assign content')
         held = quarantined
@@ -223,6 +246,8 @@ class ProjectionSession:
         }
         if superseded:
             receipt.update(disposition='superseded', superseded_speech_seconds=self.speech_seconds)
+        if privacy_deleted:
+            receipt['privacy_reason'] = 'conversation_deleted'
         if quarantined:
             receipt.update(
                 state='quarantined',
@@ -267,6 +292,8 @@ class ProjectionSession:
             # The summary describes the whole result, not merely its last part.
             summary.pop('disposition', None)
             summary.pop('superseded_speech_seconds', None)
+            if any(part.get('privacy_reason') == 'conversation_deleted' for part in parts.values()):
+                summary['privacy_reason'] = 'conversation_deleted'
             if any(part.get('state') == 'quarantined' for part in parts.values()):
                 held = True
                 summary.update(state='quarantined', disposition='ambiguous_generation', quarantine_version=1)
@@ -316,11 +343,13 @@ class ProjectionSession:
         )
         return receipt
 
-    def persist_empty(self, *, superseded=False, quarantined=False):
+    def persist_empty(self, *, superseded=False, quarantined=False, privacy_deleted=False):
         @firestore.transactional
         def commit(transaction):
-            self.prepare(transaction)
-            return self.persist(transaction, superseded=superseded, quarantined=quarantined)
+            self.prepare(transaction, privacy_deleted=privacy_deleted)
+            return self.persist(
+                transaction, superseded=superseded, quarantined=quarantined, privacy_deleted=privacy_deleted
+            )
 
         try:
             return self.store.run(commit, policy=self.policy)

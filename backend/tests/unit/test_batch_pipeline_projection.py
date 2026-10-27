@@ -674,15 +674,26 @@ def test_assignment_privacy_fence_logs_bounded_reason(binding, monkeypatch, capl
     monkeypatch.setattr(
         projection.conversations_db, 'assign_sync_conversation', Mock(side_effect=BatchPrivacyBlocked(reason))
     )
-    with caplog.at_level(logging.INFO, logger=projection.__name__):
-        with pytest.raises(BatchPrivacyBlocked):
-            with projection.projection_phase('assignment', policy):
-                projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, policy=policy)
+    session = projector.store.session.return_value
+    session.persist_empty.return_value = {'state': 'ready', 'privacy_reason': 'conversation_deleted'}
+    with caplog.at_level(logging.INFO):
+        if reason == 'conversation_deleted':
+            projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, policy=policy)
+            session.persist_empty.assert_called_once_with(superseded=True, privacy_deleted=True)
+        else:
+            with pytest.raises(BatchPrivacyBlocked):
+                with projection.projection_phase('assignment', policy):
+                    projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, policy=policy)
     expected = reason if reason != 'private-text-not-a-reason' else 'unknown'
     text = caplog.text
-    assert f'action=assignment outcome=error exception_type=BatchPrivacyBlocked fence_reason={expected}' in text
-    assert f'phase=assignment outcome=error' in text
-    assert text.count(f'fence_reason={expected}') == 2
+    if reason == 'conversation_deleted':
+        assert 'action=assignment outcome=privacy_terminal fence_reason=conversation_deleted' in text
+        assert 'phase=assignment outcome=error' not in text
+        assert text.count(f'fence_reason={expected}') == 1
+    else:
+        assert f'action=assignment outcome=error exception_type=BatchPrivacyBlocked fence_reason={expected}' in text
+        assert 'phase=assignment outcome=error' in text
+        assert text.count(f'fence_reason={expected}') == 2
     assert 'private-text' not in text
     assert binding.owner_id not in text
 
