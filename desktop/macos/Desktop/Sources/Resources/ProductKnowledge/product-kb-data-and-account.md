@@ -1,7 +1,7 @@
 ---
 id: data-and-account
 title: Data and account
-keywords: where data lives, local database, application support, sync, account, subscription, operator, architect, private cloud, sign out
+keywords: where data lives, local database, application support, sync, account, subscription, omi pro, private cloud, sign out
 sources:
   - Desktop/Sources/Rewind/Core/RewindDatabase.swift
   - Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
@@ -18,4 +18,4 @@ Omi stores this Mac's data locally first. For the signed-in user the database is
 
 Conversations, memories, and tasks are cached in that local database and sync with the signed-in account. Screen history is written on this Mac. Settings → Alerts & Privacy → Data Controls has Store Recordings (whether audio recordings of conversations are stored) and Private Cloud Sync. That page also says account data is encrypted and stored with Google Cloud infrastructure. Export All Data downloads a JSON copy of the account.
 
-Account and subscription are Settings → Account & Plan. That page shows the current plan and upgrades. Plan names it offers include Operator and Architect. Sign Out is on Account.
+Account and subscription are Settings → Account & Plan. That page shows the current plan and upgrades. The only plan it offers is Omi Pro. Sign Out is on Account.

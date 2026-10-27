@@ -4,9 +4,13 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
-/// Single edit point for the Operator price quoted in the deprecation-banner
+/// Omi Pro (`unlimited_v2`) is the only plan sold. Retired plans render only as
+/// the subscriber's own current plan.
+let omiProPlanId = "unlimited_v2"
+
+/// Single edit point for the Omi Pro price quoted in the deprecation-banner
 /// fallback (used only when the backend omits `deprecationMessage`).
-let operatorDeprecationFallbackPrice = "$49/mo"
+let omiProDeprecationFallbackPrice = "$29.99/mo"
 
 enum SubscriptionPlanPresentation {
   static let resubscribeFirst = "Resubscribe first to change plans."
@@ -128,14 +132,21 @@ extension SettingsContentView {
     !subscriptionPlansForDisplay.isEmpty
   }
 
+  static let retiredPlanIds: Set<String> = ["plus", "operator", "architect", "pro", "unlimited"]
+
   var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
-    // Operator (mass-market, green) on the left, Architect (premium, white accent)
-    // on the right. Hide the user's current plan — they already see it above.
-    // Neo ($20) | Operator ($49) | Architect ($200) — cheapest to premium
-    let order = ["unlimited": 0, "operator": 1, "architect": 2]
+    Self.purchasablePlans(mergedPlanCatalog, isCurrent: isCurrentSubscriptionPlan)
+  }
+
+  /// Omi Pro first. Retired plans are never offered; the user's own current plan
+  /// is already shown in the current-plan card above, so it is hidden here too.
+  static func purchasablePlans(
+    _ catalog: [SubscriptionPlanOption], isCurrent: (SubscriptionPlanOption) -> Bool
+  ) -> [SubscriptionPlanOption] {
+    let order = [omiProPlanId: 0]
     return
-      mergedPlanCatalog
-      .filter { !isCurrentSubscriptionPlan($0) }
+      catalog
+      .filter { !retiredPlanIds.contains($0.id) && !isCurrent($0) }
       .sorted { lhs, rhs in
         let lhsOrder = order[lhs.id, default: Int.max]
         let rhsOrder = order[rhs.id, default: Int.max]
@@ -166,15 +177,15 @@ extension SettingsContentView {
       // `operator` enum. Distinguish by matching current_price_id against
       // an Operator-titled plan in the catalog.
       if isCurrentSubscriptionOperator() {
-        return "Pro"
+        return "Operator"
       }
       return "Neo"
     case .unlimitedV2:
-      return "Unlimited"
+      return "Omi Pro"
     case .architect, .pro:
       return "Architect"
     case .operator:
-      return "Pro"
+      return "Operator"
     case .unknown:
       return subscription.plan.displayName
     }
@@ -252,6 +263,8 @@ extension SettingsContentView {
 
   static func planSubtitle(for planId: String) -> String? {
     switch planId {
+    case omiProPlanId:
+      return "1,000 questions per month"
     case "unlimited":
       return "200 questions per month"
     case "operator":
@@ -264,8 +277,7 @@ extension SettingsContentView {
   }
 
   func planAccentColor(for planId: String) -> Color {
-    // Architect is the premium white-accent tier; Operator + legacy Unlimited
-    // are the mass-market green tier.
+    // Retired Architect keeps its white accent; Omi Pro and the rest are green.
     planId == "architect" ? Ink.accent : Ink.listeningGreen
   }
 
@@ -293,6 +305,8 @@ extension SettingsContentView {
 
   static func planEyebrow(for planId: String) -> String {
     switch planId {
+    case omiProPlanId:
+      return "Mac + mobile + web"
     case "unlimited":
       return "Starter"
     case "operator":
@@ -306,6 +320,8 @@ extension SettingsContentView {
 
   static func planDescription(for planId: String) -> String {
     switch planId {
+    case omiProPlanId:
+      return "1,000 chat questions per month. Works on Mac, mobile, and web."
     case "unlimited":
       return "200 chat questions per month. Shared with mobile and web."
     case "operator":
@@ -354,6 +370,13 @@ extension SettingsContentView {
 
   static func fallbackFeatures(for planId: String) -> [String] {
     switch planId {
+    case omiProPlanId:
+      return [
+        "Unlimited listening and transcription",
+        "1,000 chat questions per month",
+        "Unlimited memories and insights",
+        "Works on Mac, mobile, and web",
+      ]
     case "architect":
       return [
         "Automations and vibe coding",
@@ -386,7 +409,7 @@ extension SettingsContentView {
 
   func planCatalog(from prices: [AvailablePlanPriceOption]) -> [SubscriptionPlanOption] {
     let groupedPrices = Dictionary(grouping: prices) { price in
-      normalizedPlanId(from: price.title) ?? "unknown"
+      price.planId ?? normalizedPlanId(from: price.title) ?? "unknown"
     }
 
     return groupedPrices.compactMap { planId, options in
@@ -397,13 +420,13 @@ extension SettingsContentView {
       case "unlimited":
         title = "Neo"
       case "operator":
-        title = "Pro"
+        title = "Operator"
       case "architect":
         title = "Architect"
       case "plus":
         title = "Plus"
-      case "unlimited_v2":
-        title = "Unlimited"
+      case omiProPlanId:
+        title = "Omi Pro"
       default:
         title = options.first?.title ?? "Plan"
       }
