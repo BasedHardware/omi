@@ -190,13 +190,17 @@ def prepare_for_write(
     return decorator
 
 
-def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Optional[Dict[str, Any]]]) -> Callable[[F], F]:
+def prepare_for_read(
+    decrypt_func: Callable[..., Optional[Dict[str, Any]]], *, read_budget_arg: Optional[str] = None
+) -> Callable[[F], F]:
     """
     Decorator to decrypt data after reading from the database.
     It processes the return value of the decorated function. If the return value is a dict or
     list of dicts, it applies the decrypt_func based on the 'data_protection_level' field.
 
     Assumes 'uid' is an argument to the decorated function to be used for decryption.
+    An explicit read_budget_arg forwards that getter argument into its decoder;
+    existing unbudgeted read contracts retain their two-argument decoder call.
     """
 
     def decorator(func: F) -> F:
@@ -217,6 +221,9 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Optional[Dict
             def _process(item: Any) -> Any:
                 if isinstance(item, dict):
                     # The decrypt_func is responsible for checking the level and acting accordingly
+                    read_budget = bound_args.arguments.get(read_budget_arg) if read_budget_arg else None
+                    if read_budget is not None:
+                        return decrypt_func(cast(Dict[str, Any], item), uid, read_budget=read_budget)
                     return decrypt_func(cast(Dict[str, Any], item), uid)
                 return item
 
