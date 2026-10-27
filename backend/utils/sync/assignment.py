@@ -630,7 +630,7 @@ def assign_in_transaction(
             conversation_rows=records,
             proof=capture_covered_indices,
         )
-        if live_dedupe and live_stats is not None:
+        if live_dedupe and live_stats is not None and live_row is not None and plan_target is not None:
             live_stats['appended_seconds_overlapping_live'] = speech_overlap_seconds(
                 survivors,
                 live_row.get('transcript_segments') or [],
