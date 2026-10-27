@@ -25,7 +25,9 @@ only supported expected languages; missing or mixed unsupported profiles stay li
 A fresh admitted conversation reserves
 `record_lane_owner=batch_live_v1` and the server-owned
 `external_data.server_batch_only` marker before STT initialization. Reconnects
-read that reservation. Initial connect, deferred opens, reconnect and idle reopen
+read that reservation and require its language to match the request; an
+incompatible language starts a fresh generation without rebinding the original.
+Initial connect, deferred opens, reconnect and idle reopen
 cannot dial any provider for a batch-only session. The live-STT buffer is cleared
 independently of original-byte archiving and PCM forwarding to pusher.
 The socket's mode stays pinned across conversation generations: a batch-owned
@@ -48,9 +50,29 @@ language and retains ordinary privacy, compute/funding and language guardrails.
 Live transcription usage and live-transcript success metrics exclude intentional
 batch-only capture; batch projection owns the actual transcription usage.
 
+After the archive-close barrier, a capture with no committed nonempty audio span
+uses the existing atomic empty cleanup instead of registering batch work. The
+transaction still refuses content, audio bounds, locks and tombstones; an open
+capture cannot use this exception. Zero-sample original receipts remain durable
+but do not invent a batch input or time span.
+Fresh reservations explicitly record no received audio. The first buffered frame
+durably flips that marker once per conversation, after retaining its bytes in the
+pack so a metadata failure still allows shutdown custody. Recovery may reclaim a
+never-received reservation only under the existing expired lease, quiet cutoff,
+identity and content fences. Missing/unknown markers and buffered audio stay
+protected until archive closure.
+
+Server-only native records carry their marker into the immutable intake. The
+batch projector uses its existing idempotent hourly/monthly usage and fair-use
+charge chain for these captures; ordinary native live-preview records keep the
+legacy skip that avoids double billing. The ProjectionBinding wire shape stays
+unchanged. Compatible batch projection/driver code must be serving before listen
+admission is enabled.
+
 Existing reservations and jobs remain batch-owned after a kill-switch change;
-the switch restores provider initialization for subsequent sessions and prevents
-new reservations. No archived media or batch obligation is removed. Custody
+already-reserved reconnects stay provider-free. The switch restores provider
+initialization for new captures and prevents new reservations. No archived media
+or batch obligation is removed. Custody
 windows retain their existing commit boundaries: an uncommitted tail on a
 desktop without a device WAL is not crash-safe. This policy does not claim a
 new client replay guarantee. Deploy compatible listen/pusher and finalizer

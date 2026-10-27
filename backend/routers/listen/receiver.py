@@ -1007,7 +1007,7 @@ class ListenReceiver(ReplayFilterMixin):
         same_provider: bool = False,
         replay_start_sample: int = 0,
     ) -> Any:
-        if getattr(self.host, 'server_batch_only', False):
+        if getattr(self.host, 'server_batch_only', False) is True:
             return None  # Includes failover, reconnect and idle-reopen callers.
         if managed_chain_enabled(self.host):
             from utils.stt.live_session import LiveChainSession
@@ -1498,7 +1498,7 @@ class ListenReceiver(ReplayFilterMixin):
     async def _open_deferred_stream(self) -> bool:
         """Audio reached a deferred session: open the provider stream it would have had."""
 
-        if getattr(self.host, 'server_batch_only', False):
+        if getattr(self.host, 'server_batch_only', False) is True:
             return True
         self._cloud_live_opening = True
         self.cloud_live_suppressed = False
@@ -2061,7 +2061,7 @@ class ListenReceiver(ReplayFilterMixin):
             await hold.notice()
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
-        if getattr(getattr(self, 'host', None), 'server_batch_only', False):
+        if getattr(getattr(self, 'host', None), 'server_batch_only', False) is True:
             buffer.clear()  # PCM forwarding and raw custody run independently below.
             self._stt_buffer_start_sample = None
             return
@@ -2575,7 +2575,7 @@ class ListenReceiver(ReplayFilterMixin):
             else None
         )
         frame_timer = FrameTimer(request.codec, multi_channel=self.host.is_multi_channel)
-        shadow = None if getattr(self.host, 'server_batch_only', False) else edge_shadow.session_mirror(self)
+        shadow = None if getattr(self.host, 'server_batch_only', False) is True else edge_shadow.session_mirror(self)
         try:
             while self.host.state.active:
                 frame_timer.stop()

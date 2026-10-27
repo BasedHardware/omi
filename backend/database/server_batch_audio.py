@@ -43,8 +43,52 @@ def note_server_batch_audio(uid: str, conversation_id: str, start: float, end: f
                 'started_at': datetime.fromtimestamp(first, timezone.utc),
                 'finished_at': datetime.fromtimestamp(last, timezone.utc),
                 'has_content': True,
+                'server_batch_audio_received': True,
             },
         )
         return True
 
     return run_transactional(client, note)
+
+
+def close_server_batch_audio(uid: str, conversation_id: str, *, firestore_client=None) -> bool:
+    """Publish the archive-close barrier before empty cleanup or batch handoff."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+
+    @firestore.transactional
+    def close(transaction):
+        snapshot = ref.get(transaction=transaction)
+        row = snapshot.to_dict() or {}
+        if (
+            not snapshot.exists
+            or not server_batch_owned(row)
+            or any(row.get(key) for key in ('deleted', 'discarded', 'is_locked'))
+        ):
+            return False
+        transaction.update(ref, {'server_batch_audio_closed': True})
+        return True
+
+    return run_transactional(client, close)
+
+
+def note_server_batch_audio_received(uid: str, conversation_id: str, *, firestore_client=None) -> bool:
+    """Fence lease cleanup once the first frame is buffered, even before commit."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+
+    @firestore.transactional
+    def received(transaction):
+        snapshot = ref.get(transaction=transaction)
+        row = snapshot.to_dict() or {}
+        if (
+            not snapshot.exists
+            or not server_batch_owned(row)
+            or any(row.get(key) for key in ('deleted', 'discarded', 'is_locked'))
+        ):
+            return False
+        if row.get('server_batch_audio_received') is not True:
+            transaction.update(ref, {'server_batch_audio_received': True})
+        return True
+
+    return run_transactional(client, received)

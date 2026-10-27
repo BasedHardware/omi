@@ -124,6 +124,7 @@ def _reserve_batch_live_capture(
         conversation_data, uid, batch_admitted=policy.batch_enabled or server_batch_continuation
     ):
         conversation_data['record_lane_owner'] = 'batch_live_v1'
+        conversation_data['server_batch_audio_received'] = False
         conversation_data['external_data'] = {
             **(conversation_data.get('external_data') or {}),
             server_batch.MARKER: True,
@@ -774,6 +775,7 @@ def delete_empty_recording_conversation(
     recovery_cutoff: datetime | None = None,
     require_expired_recording_lease: bool = False,
     firestore_client: Any = None,
+    allow_empty_server_batch: bool = False,
 ) -> bool:
     """Delete only a still-empty listen generation and tombstone it atomically."""
     deleted_conversation: dict[str, Any] = {}
@@ -782,6 +784,8 @@ def delete_empty_recording_conversation(
         recovery_guards = dict(recovery_cutoff=recovery_cutoff, require_expired_recording_lease=True)
     if firestore_client is not None:
         recovery_guards['firestore_client'] = firestore_client
+    if allow_empty_server_batch:
+        recovery_guards['allow_empty_server_batch'] = True
     deleted = recording_sessions_db.tombstone_and_delete_empty_conversation(
         uid,
         conversation_id,
@@ -823,6 +827,10 @@ def _discard_unreferenced_audio(
     still be reprocessed or restored. Only a generation that never registered any
     audio can be leaving chunks nothing will ever reference again (#11742).
     """
+    if server_batch.owned(deleted_conversation):
+        # Empty/zero-sample captures can still have immutable original receipts.
+        # Removing the display row must never sweep their only retained bytes.
+        return
     if deleted_conversation.get('audio_files'):
         logger.info(
             'Retained registered audio for empty conversation uid=%s conversation_id=%s',

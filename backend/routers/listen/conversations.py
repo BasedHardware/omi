@@ -11,6 +11,9 @@ from typing import Any, Awaitable, Callable, Optional
 
 from config.batch_live_preview import capture_snapshot
 from config.server_batch import owned as server_batch_owned
+from config.server_batch import capture_compatible as server_batch_capture_compatible
+from config.server_batch import has_audio as server_batch_has_audio
+from database.server_batch_audio import close_server_batch_audio
 from config.server_batch import request_eligible as server_batch_request_eligible
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database.firestore_read_metrics import FirestoreReadSite
@@ -142,6 +145,8 @@ class LiveConversationController:
             now=self.clock(),
             timeout=self.host.conversation_creation_timeout,
             proposed=proposed,
+            **({'language': self.host.language} if isinstance(getattr(self.host, 'language', None), str) else {}),
+            allow_server_batch=server_batch_request_eligible(self.host, existing_capture=True),
         )
 
     async def _resume_continuation(self, pointer: dict[str, str]) -> bool:
@@ -163,12 +168,15 @@ class LiveConversationController:
             )
         if existing:
             existing = await self._continuity_row(existing)
+        if existing and not server_batch_capture_compatible(self.host, existing):
+            return False
         if not existing or not resumable_continuation(
             existing,
             source=normalize_listen_source(self.host.request.source),
             device_id=self.host.client_device_context.client_device_id,
             now=self.clock(),
             timeout=self.host.conversation_creation_timeout,
+            language=getattr(self.host, 'language', None),
         ):
             return False
         self.host.recording_session_id = pointer['recording_session_id']
@@ -390,7 +398,20 @@ class LiveConversationController:
             raw_archive = getattr(receiver, 'raw_archive', None)
             if conversation_id == self.host.state.current_conversation_id and raw_archive is not None:
                 await raw_archive.close()
-            return await self.schedule_finalization(conversation_id)
+                if not await self.host.persistence.call(
+                    close_server_batch_audio, self.host.request.uid, conversation_id
+                ):
+                    return False
+                data = await self.host.persistence.call(
+                    conversations_db.get_conversation,
+                    self.host.request.uid,
+                    conversation_id,
+                    read_site=FirestoreReadSite.LISTEN_PROCESS_CONVERSATION,
+                )
+                if not data:
+                    return False
+            if server_batch_has_audio(data):
+                return await self.schedule_finalization(conversation_id)
         if data.get('transcript_segments') or data.get('photos'):
             return await self.schedule_finalization(conversation_id)
         recording_session_id = recording_session_id_for_lifecycle_event(
@@ -404,6 +425,7 @@ class LiveConversationController:
             self.host.request.uid,
             conversation_id,
             recording_session_id,
+            **({'allow_empty_server_batch': True} if server_batch_owned(data) else {}),
         )
         if deleted:
             if was_no_audio_session:
@@ -542,6 +564,9 @@ class LiveConversationController:
                 in_progress_status=ConversationStatus.in_progress,
             )
             if action == RecordingSessionReconnectAction.resume_current and not existing.get('deleted'):
+                if not server_batch_capture_compatible(self.host, existing):
+                    await self.create_new_in_progress_conversation(rollover=True)
+                    return
                 if not self.host.is_multi_channel and not resumable_continuation(
                     existing,
                     source=normalize_listen_source(request.source),
@@ -705,6 +730,9 @@ class LiveConversationController:
             self.host.state.active = False
             await request.websocket.close(code=1013, reason='Capture policy changed; reconnect')
             return
+        if not server_batch_capture_compatible(self.host, self.host.batch_record_capture or {}):
+            await self.create_new_in_progress_conversation(rollover=True)
+            return
         if rollover:
             proposed = {'conversation_id': conversation_id, 'recording_session_id': self.host.recording_session_id}
             adopted = await self._continuation(proposed)
@@ -770,6 +798,9 @@ class LiveConversationController:
         if not existing:
             await self.create_new_in_progress_conversation()
             return None
+        if not server_batch_capture_compatible(self.host, existing):
+            await self.create_new_in_progress_conversation(rollover=True)
+            return None
         existing_source = existing.get('source')
         if hasattr(existing_source, 'value'):
             existing_source = existing_source.value
@@ -821,6 +852,9 @@ class LiveConversationController:
                 await self.create_new_in_progress_conversation(rollover=True)
                 return None
             existing = current
+        if not server_batch_capture_compatible(self.host, existing):
+            await self.create_new_in_progress_conversation(rollover=True)
+            return None
         self.host.batch_record_capture = capture_snapshot(existing)
         await self._persist_policy_and_arm_quiet_check(existing['id'])
         self.host.state.current_conversation_id = existing['id']

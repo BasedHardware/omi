@@ -1,5 +1,6 @@
 """Platform-scoped, consented server batch capture. Desktop on, mobile dark."""
 
+import math
 import os
 from collections.abc import Mapping
 
@@ -55,29 +56,51 @@ def owned(capture: Mapping) -> bool:
     )
 
 
+def has_audio(capture: Mapping) -> bool:
+    start, end = capture.get('server_batch_audio_start'), capture.get('server_batch_audio_end')
+    return bool(
+        capture.get('has_content')
+        and isinstance(start, (int, float))
+        and isinstance(end, (int, float))
+        and math.isfinite(start)
+        and math.isfinite(end)
+        and start < end
+    )
+
+
+def language_compatible(capture: Mapping, language: str | None) -> bool:
+    return not owned(capture) or normalized_stt_language(capture.get('language')) == normalized_stt_language(language)
+
+
+def capture_compatible(host, capture: Mapping) -> bool:
+    return not owned(capture) or bool(
+        language_compatible(capture, host.request.language) and request_eligible(host, existing_capture=True)
+    )
+
+
 def suppress_live(host) -> bool:
     capture = getattr(host, 'batch_record_capture', None) or {}
     return bool(
-        enabled()
-        and audio_outbox_enabled()
+        audio_outbox_enabled()
         and owned(capture)
+        and language_compatible(capture, host.request.language)
         and getattr(host, 'private_cloud_sync_enabled', False)
         and not getattr(host, 'use_custom_stt', False)
         and not getattr(host, 'is_multi_channel', False)
         and not getattr(host.request, 'onboarding_mode', False)
         and getattr(host, 'pusher_enabled', False)
-        and request_eligible(host)
+        and request_eligible(host, existing_capture=True)
     )
 
 
-def request_eligible(host) -> bool:
+def request_eligible(host, *, existing_capture: bool = False) -> bool:
     """No inferred English admission for multi/auto/unknown request languages."""
     language = normalized_stt_language(getattr(host.request, 'language', None))
     profile = getattr(host, 'language_profile', None)
     expected = getattr(profile, 'expected', ())
     supported = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
     return bool(
-        enabled()
+        (enabled() or existing_capture)
         and (not getattr(host, 'server_batch_initialized', False) or getattr(host, 'server_batch_only', False))
         and audio_outbox_enabled()
         and getattr(host, 'private_cloud_sync_enabled', False)
@@ -86,11 +109,15 @@ def request_eligible(host) -> bool:
         and not host.use_custom_stt
         and not getattr(host, 'server_batch_byok', False)
         and not host.is_multi_channel
+        and host.request.source != 'phone_call'
         and not host.request.onboarding_mode
-        and selected(
-            host.request.uid,
-            getattr(getattr(host, 'client_device_context', None), 'platform', None),
-            host.request.source,
+        and (
+            existing_capture
+            or selected(
+                host.request.uid,
+                getattr(getattr(host, 'client_device_context', None), 'platform', None),
+                host.request.source,
+            )
         )
         and language == normalized_stt_language(host.language)
         and language in supported

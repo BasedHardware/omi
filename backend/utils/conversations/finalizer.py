@@ -15,6 +15,7 @@ from enum import Enum
 from fastapi import HTTPException
 from config.batch_pipeline import RecordOwnerContention
 from config.server_batch import owned as server_batch_owned
+from config.server_batch import has_audio as server_batch_has_audio
 from config.episodes import episodes_enabled_for
 from config.rollout_cohorts import warm_rollout_cohorts
 
@@ -222,7 +223,24 @@ async def finalize_persisted_conversation(
     )
     if fenced is not None:
         return fenced
-    if server_batch_owned(conversation_data) and not conversation.transcript_segments:
+    if (
+        server_batch_owned(conversation_data)
+        and not conversation.transcript_segments
+        and not getattr(conversation, 'photos', None)
+    ):
+        if not server_batch_has_audio(conversation_data):
+            if not conversation_data.get('server_batch_audio_closed'):
+                raise RuntimeError('server batch archive is not closed')
+            if not await run_blocking(
+                db_executor,
+                lifecycle_service.delete_empty_recording_conversation,
+                uid,
+                conversation_id,
+                (conversation_data.get('external_data') or {}).get('recording_session_id'),
+                allow_empty_server_batch=True,
+            ):
+                raise RuntimeError('server batch empty cleanup fenced')
+            return ConversationFinalizationDisposition.fenced
         # No preview to enrich. Reserve batch before terminalizing this generation;
         # its upload barrier still prevents work until pusher has committed the tail.
         if not await run_blocking(db_executor, register_recording, uid, conversation_data):

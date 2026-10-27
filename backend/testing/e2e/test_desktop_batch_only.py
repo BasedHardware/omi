@@ -1,34 +1,54 @@
 """Native desktop listen -> production PCM relay -> immutable original custody."""
 
-from config.server_batch import owned
-from database.conversations import prepare_conversation_for_read
 from fakes.firestore import get_mock_firestore
 from fakes.listen_pusher_wire import ScriptedPusherPeer, install_fake_firestore_transactions
 from fakes.stt import install_streaming_stt_fake
 from listen_test_helpers import is_conversation_session_event, is_ready_event, receive_until, seed_listen_user
-from tests.unit.test_audio_durable_outbox import remote, Blob
-from utils.other.raw_audio import decode_capture
 
+from contextlib import nullcontext
 import json
+from types import SimpleNamespace
 import pytest
 
 
-@pytest.mark.parametrize('consent,disabled', [(True, True), (False, True), (True, False)])
+@pytest.fixture
+def remote(client, monkeypatch):
+    # Import backend-bound helpers only after client installs fake constructors.
+    # Collection-time imports otherwise leave sibling tests with real Redis aliases.
+    from tests.unit.test_audio_durable_outbox import Bucket
+    from utils.other import storage
+
+    bucket = Bucket()
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: bucket))
+    monkeypatch.setattr(storage, 'private_cloud_sync_bucket', bucket.name)
+    monkeypatch.setattr(storage.users_db, 'get_data_protection_level', lambda uid: 'standard')
+    monkeypatch.setattr(storage, 'owner_storage_write_gate', lambda *a: nullcontext())
+    monkeypatch.setattr(storage.conversation_tombstones, 'is_deleted', lambda *a: False)
+    return bucket
+
+
 @pytest.mark.parametrize(
-    'platform,source,mobile_percent,byok',
+    'platform,source,mobile_percent,byok,consent,disabled',
     [
-        ('macos', 'desktop', '0', False),
-        ('windows', 'desktop', '0', False),
-        ('ios', 'phone', '0', False),
-        ('android', 'omi', '0', False),
-        ('ios', 'phone', '100', False),
-        ('android', 'omi', '100', False),
-        ('macos', 'desktop', '0', True),
+        ('macos', 'desktop', '0', False, True, True),
+        ('windows', 'desktop', '0', False, True, True),
+        ('ios', 'phone', '0', False, True, True),
+        ('android', 'omi', '0', False, True, True),
+        ('ios', 'phone', '100', False, True, True),
+        ('android', 'omi', '100', False, True, True),
+        ('macos', 'desktop', '0', True, True, True),
+        ('macos', 'desktop', '0', False, False, True),
+        ('macos', 'desktop', '0', False, True, False),
     ],
 )
 def test_native_desktop_custody_or_exact_live_rollback(
     client, test_uid, monkeypatch, remote, consent, disabled, platform, source, mobile_percent, byok
 ):
+    from config.server_batch import owned
+    from database.conversations import prepare_conversation_for_read
+    from tests.unit.test_audio_durable_outbox import Blob
+    from utils.other.raw_audio import decode_capture
     import routers.listen.runtime as runtime
     import utils.pusher as pusher_client
 
@@ -37,6 +57,18 @@ def test_native_desktop_custody_or_exact_live_rollback(
 
     peer = ScriptedPusherPeer(finalization).start()
     try:
+        # TestClient cancels its portal transports at context exit. Bound only
+        # this loopback peer's dead-transport close handshake, preserving every
+        # production send, custody commit and finalization admission operation.
+        connect = pusher_client.websockets.connect
+        target = peer.api_url.replace('http://', 'ws://') + '/'
+
+        def loopback_connect(uri, *args, **kwargs):
+            if str(uri).startswith(target):
+                kwargs['close_timeout'] = 0.01
+            return connect(uri, *args, **kwargs)
+
+        monkeypatch.setattr(pusher_client.websockets, 'connect', loopback_connect)
         monkeypatch.setattr(Blob, 'exists', lambda self: self.data is not None, raising=False)
         install_fake_firestore_transactions(monkeypatch, get_mock_firestore())
         monkeypatch.setenv('SERVER_BATCH_ONLY_ENABLED', 'true' if disabled else 'false')

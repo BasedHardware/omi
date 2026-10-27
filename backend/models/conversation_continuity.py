@@ -97,10 +97,27 @@ def continuation_timeout(row: Mapping[str, Any], timeout: float = DEFAULT_GAP_SE
 
 
 def resumable_continuation(
-    row: Mapping[str, Any], *, source: str, device_id: str | None, now: datetime, timeout: int
+    row: Mapping[str, Any],
+    *,
+    source: str,
+    device_id: str | None,
+    now: datetime,
+    timeout: int,
+    language: str | None = None,
+    allow_server_batch: bool = True,
 ) -> bool:
     """Unknown device is a partition, not permission to join another device."""
     finish = row.get('finished_at')
+    if not allow_server_batch:
+        from config.server_batch import owned
+
+        if owned(row):
+            return False
+    if language is not None:
+        from config.server_batch import language_compatible
+
+        if not language_compatible(row, language):
+            return False
     return (
         row.get('status') == 'in_progress'
         and not any(row.get(key) for key in ('deleted', 'discarded', 'is_locked'))
