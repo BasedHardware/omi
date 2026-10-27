@@ -61,6 +61,14 @@ def fresh_gpu_priority_enabled() -> bool:
     )
 
 
+def language_inheritance_enabled() -> bool:
+    """Default-on context inheritance; false restores per-piece detection input."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED',
+        os.getenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def language_eligibility_enabled() -> bool:
     """Kill switch (unset is on; only ``false`` disables it).
 

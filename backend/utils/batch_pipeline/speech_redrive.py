@@ -13,7 +13,13 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive
 from database.batch_pipeline_recognizer_receipts import record_recognizer
-from config.batch_language_recovery import allowed as independent_allowed, below_silence_threshold, prior_modulate_empty
+from config.batch_language_recovery import (
+    allowed as independent_allowed,
+    MAX_AUDIO_SECONDS,
+    below_silence_threshold,
+    prior_modulate_empty,
+    words_repair_eligible,
+)
 from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_result_allowed, worker_vad_speech
 from utils.batch_pipeline.quarantine_recovery import log_failure, log_terminal_empty
 from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe
@@ -51,8 +57,13 @@ def redrive_one(
     gpu_padded_retry_empty=False,
     independent_stt=second_transcribe,
     independent_language=False,
+    repair=False,
 ):
     """No automatic retry after dispatch, even on uncertain network/process loss.
+
+    `repair` is the explicit lead-7fa3d2 language-guard words repair: one
+    Modulate call per unit (paid epoch 4) under bound worker VAD evidence. It
+    never consults or bypasses the spent independent (Soniox) attempt.
 
     `server_flags` is required: the serving role's live settings for a unit with
     no stored recovery part, or None to refuse that unit ('policy_unpinned').
@@ -64,18 +75,28 @@ def redrive_one(
         return 'policy_unpinned'
     if policy is None or not policy.recovery_enabled:
         return 'disabled'
-    if not policy.speech_empty_multilingual and not independent_redrive(original_job):
+    if repair:
+        if independent_language or not words_repair_eligible(original_job):
+            return 'repair_not_eligible'
+    elif not policy.speech_empty_multilingual and not independent_redrive(original_job):
         return 'disabled'
-    if independent_redrive(original_job) != independent_language:
+    elif independent_redrive(original_job) != independent_language:
         return 'independent_plan_required'
     protocol = SpeechRedriveStore(store, server_flags=server_flags)
     job = protocol.prepare(
-        sid, uid, plan_digest, expected_recovery, clock(), gpu_padded_retry_empty=gpu_padded_retry_empty, silent=silent
+        sid,
+        uid,
+        plan_digest,
+        expected_recovery,
+        clock(),
+        gpu_padded_retry_empty=gpu_padded_retry_empty,
+        silent=silent,
+        repair=repair,
     )
     marker = job['speech_redrive']
     token = marker['token']
     item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
-    independent = independent_redrive(job)
+    independent = not repair and independent_redrive(job)
     provider = 'soniox' if independent else 'modulate'
     if marker['state'] == 'completed':
         return 'already_applied'
@@ -125,16 +146,25 @@ def redrive_one(
     _, duration, spans = inspect_audio(item, audio)
     measured = sum(span['end'] - span['start'] for span in spans)
     # Bound worker VAD may locate guarded words that strict CPU VAD missed.
-    worker = worker_vad_speech(job) if independent else None
+    worker = worker_vad_speech(job) if independent or repair else None
     if independent and not protocol.observe_vad(sid, token, plan_digest, measured):
         return 'fenced'
-    if not spans and not independent:
+    if not spans and not independent and worker is None:
         raise RecoveryFailure('strict_vad', 'no_speech')
     if independent and not independent_allowed(duration):
         return 'independent_budget_held'
-    if admitted_as_byok(job) and not independent:
+    # The decoded audio (up to 0.1 s past the declared duration) bounds the repair call.
+    if repair and duration > MAX_AUDIO_SECONDS:
+        return 'repair_budget_held'
+    if admitted_as_byok(job) and not independent and not repair:
         record_decision(DispatchPath.SPEECH_REDRIVE, True, DispatchReason.BYOK)
-    elif not sync_allowed(uid, item.duration_seconds, provider, lane='batch', path=DispatchPath.SPEECH_REDRIVE):
+    elif not sync_allowed(
+        uid,
+        max(duration, item.duration_seconds) if repair else item.duration_seconds,
+        provider,
+        lane='batch',
+        path=DispatchPath.SPEECH_REDRIVE,
+    ):
         return 'allowance_held'
     # Check deployment dependencies before spending the sole intent. No fallback
     # to Parakeet is permitted if the alternate provider is unconfigured.
@@ -160,11 +190,21 @@ def redrive_one(
         )
         if not record_recognizer(store, sid, token, 'speech_redrive', provider, 'started', None, measured, claim=True):
             return 'running_held'
+    if repair and not record_recognizer(
+        store, sid, token, 'speech_redrive', provider, 'started', None, measured, claim=True
+    ):
+        return 'running_held'
     try:
         payload = (
             independent_stt(item, audio, MultilingualEmpty(duration, spans, worker))
             if independent
-            else stt(item, normalized_binding(job['projection_binding']), audio, multilingual=True)
+            else stt(
+                item,
+                normalized_binding(job['projection_binding']),
+                audio,
+                multilingual=True,
+                **({'force_recognition': True, 'worker_speech': worker} if repair else {}),
+            )
         )
         if result_outcome(payload) != 'success' or not payload.get('words'):
             raise RecoveryFailure('payload_validation', 'invalid_payload')
@@ -176,7 +216,7 @@ def redrive_one(
             if isinstance(error, RecoveryFailure)
             else {'stage': 'provider', 'reason': 'operation_failed'}
         )
-        if independent:
+        if independent or repair:
             empty = isinstance(error, MultilingualEmpty)
             billable_independent = isinstance(error, (MultilingualEmpty, WordsWithoutVad))
             count = error.word_count if isinstance(error, WordsWithoutVad) else 0 if empty else None
@@ -190,11 +230,12 @@ def redrive_one(
                 count,
                 measured,
             )
-            if empty and first_empty and below_silence_threshold(held_vad_census(job, measured)):
+            if independent and empty and first_empty and below_silence_threshold(held_vad_census(job, measured)):
                 payload = independent_silence_payload(duration, spans)
                 failure = None
         if (
             not independent
+            and not repair
             and policy.terminal_empty_disposition
             and isinstance(error, MultilingualEmpty)
             and terminal_empty_allowed(error.spans)
@@ -205,8 +246,8 @@ def redrive_one(
             failure = None
     else:
         failure = None
-        if independent:
-            billable_independent = True
+        if independent or repair:
+            billable_independent = independent
             record_recognizer(store, sid, token, 'speech_redrive', provider, 'words', len(payload['words']), measured)
     if independent and billable_independent and cap_enabled(uid, 'batch'):
         # Valid empty responses also consume vendor spend.

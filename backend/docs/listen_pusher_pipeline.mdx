@@ -475,6 +475,23 @@ results. Sync retains its existing chunk-merge language behavior: persisted
 `TranscriptSegment` records have no per-segment language for a conversation-wide
 weighted recomputation.
 
+New batch sync pieces inherit the bound conversation's recognized language,
+then the user's configured language, before unit-level routing. Recognized
+codes come from the Modulate and prerecorded Parakeet policies; auto, multi,
+unknown and invalid values do not count as declarations. Only when both are
+unknown does per-piece self/vendor LID run, including in single-language mode.
+Short ambient-dominated clips cannot override known context. The authenticated
+audio context and projection binding freeze the inherited language; the worker's
+unsupported-language barrier still applies. The default-on kill switch is
+`BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED=false` on intake hosts; it restores
+the former input selection for new units without rewriting existing work.
+
+For v1 live persistence, delayed first words and reconnects retain the earlier
+capture start and project their offsets against it. Missing or invalid stored
+starts use the session's first-audio clock. The v2 origin pin remains unchanged.
+Language inheritance needs a backend-sync release; the origin fix needs a
+backend-listen release. See [batch serving operations](batch-pipeline-serving.md#language-inheritance-for-sync-pieces).
+
 The live calendar stamp includes the meeting title (an empty string when absent)
 so it is a valid `CalendarMeetingContext` for finalization and summarization even
 when its scheduled window makes continuity hydration unnecessary.
@@ -6001,6 +6018,23 @@ only after a fenced defer commits; no identities or dynamic reason labels.
 
 ## Durable live and desktop record admission (dark)
 
+New sync batch custody has a default-on language exclusion controlled by
+`BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED`. A non-single-language user needs
+a supported bound conversation language; a known unsupported effective language
+stays outside batch. Supported conversation context becomes explicit LID input.
+Existing batch receipts and durable batch conversation owners keep their route.
+The router applies the same decision before claiming a new batch owner or
+re-homing a legacy owner. That transition reads the user's language preference;
+an excluded new claim checks for a prior batch content receipt before refusing.
+Switch-off adds neither read. Native owners and existing batch owners bypass
+these new reads; supported context can still claim or re-home to batch.
+The exclusion runs before re-home, decode, LID and staging in every legacy mode:
+ON uses legacy dispatch; draining/dark keeps the existing retry fence and client
+audio, with no legacy bypass (lead ruling 6a783e). Before legacy drain, the lead
+must qualify multilingual/unsupported batch provider routing through Soniox.
+Explicit false restores the former admission and LID input selection. This needs
+a lead-owned backend-sync Cloud Run release; existing units are never rewritten.
+
 Batch self-LID evidence is bound to the authenticated item's owner, segment and
 versioned intake context. The worker requires nonempty job, content and source
 provenance, a finite probability, and a probe duration matching the first 30
@@ -6377,6 +6411,22 @@ for the language-guarded Modulate recovery route. Legacy multilingual redrive
 retains its epoch-2 contract. Both paths require the current privacy generation,
 owner and exact intent token; enabling independent recovery does not require the
 legacy multilingual flag.
+
+When strict CPU VAD finds no spans in a guarded window longer than the fixed
+60-second independent limit, recovery records an `independent_duration_limit`
+refusal and enters `failed_held` before any paid start. This stops repeated
+downloads and inspections of an impossible prepared intent. Encrypted audio,
+worker VAD evidence and the maximum held speech census remain intact; no words,
+silence or no-recoverable-speech result is invented. Successful upload siblings
+may complete as partial while this audio remains retained for a separately
+reviewed recovery plan. The existing paid-redrive tool requires a previously
+started intent and cannot adopt this no-spend refusal; the independent duration
+limit still applies. This custody change does not transcribe those longer units.
+The refusal records the validated WAV duration, checks the same immutable audio
+URI, and rechecks the inspector's 0.1-second job-duration tolerance transactionally.
+A disabled recovery setting, lower runtime cap or temporary allowance refusal
+for an otherwise eligible window keeps its existing retry behavior.
+
 The Soniox incremental public-rate estimate is $0.000556/20 s or $0.001667/60 s; actual
 token-based vendor billing is authoritative. Temporary vendor resources have
 best-effort cleanup and may persist to documented 30-day expiry after a crash.
@@ -7311,6 +7361,17 @@ and its mean (`_sum/_count`) should fall while rotations per session
 holds — ordinals falling with rotations flat means the deferral is working, not
 that conversations gained fewer speakers.
 # Batch empty-ASR custody
+
+Batch projection also isolates recognized non-deletion privacy refusals in a
+versioned held ordering receipt. Account/protection/generation/recording fences
+and redirect/budget failures cannot strand unrelated later captures. Settlement
+reproduces the refusal transactionally and keeps binding, ledger ownership and
+predecessor checks; it writes batch control metadata only. Worker results,
+audio and part progress stay retained, follow-ups are fenced, and no user
+ledger, usage, conversation or derived content is written through a refusal.
+Holds remain in the unfinished-obligation age metric. Repair uses the ordinary
+fully fenced projector, retains once-only accounting, and never rewinds later
+ordering. See [serving](batch-pipeline-serving.md) for the protocol/repair rules.
 
 `BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED` ships on (set `false` on the
 batch worker and CPU recovery roles to roll back). Parakeet output with no

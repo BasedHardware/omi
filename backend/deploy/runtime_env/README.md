@@ -58,3 +58,45 @@ the customer-realm subscription-read-only key and runtime access are separately
 provisioned. Source-only rendering cannot inspect omitted live values; it enforces
 the precondition on supplied prices and runtime authority remains unavailable if
 mixed identity cannot be established. No actual resource is configured here.
+
+## Firestore read train (#23797, 2026-10-27)
+
+`FIRESTORE_READ_LEVERS` is a **replacement JSON literal**, not a patch. All
+surfaces explicitly declare all 19 current keys. The three train changes are
+`memory_list_index_window:0`, `batch_privacy_memoize:0`, and
+`people_scan_dedupe:5`; `finjob_candidate_queries` stays at 5.
+
+Monthly-total enablement and epoch deliberately remain split:
+
+| Surface | `usage_month_total` | `FSR_USAGE_MONTH_TOTAL_EPOCH` |
+| --- | --- | --- |
+| Four prod Cloud Run services: backend, backend-sync, backend-sync-backfill, backend-integration | 100 | `c2fs_20261026_r1` |
+| Base, both GKE charts/environments, jobs, desktop backend, all dev services | 0 | `v1` |
+
+The Cloud Run overrides preserve the previously qualified serving scope. An off
+reader never seeds a total, so the inactive `v1` declarations cannot overwrite
+Cloud Run's ready epoch. This train does not qualify or enable additional
+monthly-total readers. Never copy the Cloud Run literal into the base or charts.
+
+The rollout lead ships **listen → pusher → Cloud Run** after the batch soak.
+Read back each serving artifact and its complete literal/epoch before advancing.
+Start the people 5% clock only once the last relevant service serves this config;
+hold at least three hours and two clean evaluator ticks. Require no deletion or
+privacy violations, speaker/transcript/Free-plan changes, 5xx or live-p95
+regression. The lead then expands people to 100 with a complete-literal change
+across the same surfaces, targeted by **2026-10-28 12:00Z**; report a failed gate
+instead of expanding. Kill switch: change only `people_scan_dedupe` to 0 in every
+applicable full literal, retaining all other keys and the monthly-total split.
+
+Additional monthly-total reader scope is gated separately by
+[the writer/epoch qualification contract](../../docs/monthly-usage-totals.md).
+By **2026-10-28 12:00Z**, the lead must either attest every serving writer and
+operator path, align new readers to `c2fs_20261026_r1` while still off, and admit
+5%, or record the qualification blocker. After zero synthetic equivalence
+mismatches, no accounting/Free allowance, contention, 5xx or p95 regressions for
+two hours, the lead may expand that scope to 100 by **2026-10-29 12:00Z**.
+Never enable a `v1` reader against the shared production totals. Rollback readers
+with `usage_month_total:0` while leaving maintenance on; after any old writer,
+keep readers off until all writers qualify and a new common epoch is selected.
+Count net reads plus writes and seed scans in D+1 billing; this config alone
+establishes no realized savings.

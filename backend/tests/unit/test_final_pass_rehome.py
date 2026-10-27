@@ -35,6 +35,9 @@ def forbidden(*args, **kwargs):
 
 @pytest.fixture(autouse=True)
 def revision_from_row(monkeypatch):
+    # Pin the original re-home/owner policy; new language admission ordering
+    # is covered through the real router in test_batch_admission_language_router.
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setattr(
         StrictFirestoreSnapshot,
