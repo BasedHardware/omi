@@ -7,11 +7,14 @@ scenario depends on them.
 
 import os
 import socket
+import subprocess
+import sys
+import time
 
 import dotenv
 import pytest
 
-from conftest import _set_e2e_env
+from conftest import HERMETIC_SHUTDOWN_BUDGET_SECONDS, E2E_DIR, _set_e2e_env
 
 
 def test_dotenv_loading_is_disabled(tmp_path):
@@ -133,3 +136,62 @@ def test_firestore_root_delete_preserves_children_without_recreating_root(fake_f
     assert child.get().to_dict() == {'status': 'completed'}
     child.delete()
     user.delete()
+
+
+def test_process_exit_is_prompt_after_hermetic_shutdown(tmp_path):
+    """A process that used the hermetic pub/sub machinery must exit promptly.
+
+    The CI wrapper (E2E_PYTEST_TIMEOUT) budgets python startup + suite +
+    interpreter shutdown together; green run 40513231489 (job 122220618067,
+    PR #23807) spent ~3s exiting after its report and was SIGTERMed at 120s.
+    Replay the harness's session-end shutdown recipe in a child interpreter
+    and bound the wall time from "shutdown done" to process exit, so a
+    reintroduced slow atexit hook or leaked non-daemon thread fails here
+    instead of silently eating the wrapper budget.
+    """
+    child = tmp_path / "child_shutdown_probe.py"
+    child.write_text(
+        "import sys\n"
+        f"sys.path.insert(0, {str(E2E_DIR)!r})\n"
+        "import conftest  # hermetic env + socket guard, no pytest involved\n"
+        "from fakes.redis import setup_fake_redis, patch_redis_client\n"
+        "setup_fake_redis()\n"
+        "patch_redis_client()\n"
+        "import database.cache as cache\n"
+        "cache.get_memory_cache()  # starts the Redis pub/sub subscriber thread\n"
+        "import utils.executors as executors\n"
+        "executors.db_executor.submit(int).result()  # spawn one idle pool worker\n"
+        "from conftest import _teardown_hermetic_process_state\n"
+        f"elapsed = _teardown_hermetic_process_state()  # asserts its own {HERMETIC_SHUTDOWN_BUDGET_SECONDS}s budget\n"
+        "print(f'TEARDOWN {elapsed:.3f}', flush=True)\n"
+    )
+    proc = subprocess.Popen(
+        [sys.executable, "-I", str(child)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        teardown_line = None
+        for line in proc.stdout:
+            if line.startswith("TEARDOWN"):
+                teardown_line = line.strip()
+                break
+        assert teardown_line is not None, "child never reported teardown completion"
+        shutdown_done = time.monotonic()
+        stderr_tail = proc.stderr.read()
+        returncode = proc.wait(timeout=30)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+    assert returncode == 0, f"child failed after hermetic shutdown:\n{stderr_tail}"
+    exit_seconds = time.monotonic() - shutdown_done
+    # Healthy interpreter exit for this import set measures well under 2s;
+    # 8s leaves CI-variance headroom while still catching a single 5s atexit
+    # join, sentinel hang, or non-daemon thread park.
+    assert exit_seconds < 8.0, (
+        f"process took {exit_seconds:.2f}s to exit after hermetic teardown "
+        f"({teardown_line}); a slow atexit hook or lingering thread is eating "
+        "the E2E_PYTEST_TIMEOUT wrapper budget"
+    )

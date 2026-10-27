@@ -10,6 +10,8 @@ import json
 import os
 import socket
 import sys
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator
@@ -243,6 +245,88 @@ def fake_storage():
     s = setup_fake_storage()
     yield s
     teardown_fake_storage()
+
+
+# ─── Deterministic process teardown ─────────────────────────────────────
+
+# Measured on a green suite (2026-10-27, run 40513231489 job 122220618067):
+# the atexit chain itself completes in ~12ms, but pytest's own exit path
+# (~1.7s) plus C-level interpreter teardown of the fully imported backend
+# (~1.75s) both have to fit inside the wrapper's E2E_PYTEST_TIMEOUT budget
+# after a 112.74s session, and the wrapper SIGTERMed green runs. Leaving the
+# pub/sub manager and shared executors to atexit also ran their cleanup after
+# pytest closed capture streams, producing `--- Logging error --- ...
+# ValueError: I/O operation on closed file` noise. Stop that machinery
+# explicitly at session end, while streams are open and with a hard budget,
+# so a slow-teardown regression fails loudly here instead of silently eating
+# the wrapper budget at process exit.
+HERMETIC_SHUTDOWN_BUDGET_SECONDS = 5.0
+
+
+def _teardown_hermetic_process_state() -> float:
+    """Stop process-global background machinery the e2e session started.
+
+    Must stay prompt and idempotent: the session fixture calls it at session
+    end, and test_harness_guards.py replays it in a fresh interpreter to
+    bound process exit. Returns elapsed seconds.
+    """
+    started = time.monotonic()
+
+    # The Redis pub/sub manager is normally stopped by database.cache's
+    # atexit hook — after pytest closed its capture streams. Stop it here and
+    # clear the module state so the atexit hook becomes a no-op.
+    import database.cache as cache_module
+
+    manager = getattr(cache_module, "_pubsub_manager", None)
+    if manager is not None:
+        manager.stop()
+    cache_module._pubsub_manager = None
+    cache_module._initialized = False
+
+    # Shared executors are likewise shut down by an atexit hook; cancel
+    # queued work now instead of after the report is printed.
+    import utils.executors as executors_module
+
+    executors_module.shutdown_executors()
+
+    # threading._shutdown joins non-daemon threads before atexit runs, so any
+    # leaked non-daemon thread silently extends process exit past the wrapper
+    # budget. Idle shared-executor workers are expected here: they block on
+    # their work queue and exit once concurrent.futures' atexit hook delivers
+    # the None sentinels.
+    pool_workers: set = set()
+    for executor in executors_module._ALL_EXECUTORS:
+        pool_workers.update(getattr(executor, "_threads", None) or ())
+    deadline = started + HERMETIC_SHUTDOWN_BUDGET_SECONDS
+    strays: list = []
+    while True:
+        strays = [
+            t
+            for t in threading.enumerate()
+            if t is not threading.main_thread() and not t.daemon and t.is_alive() and t not in pool_workers
+        ]
+        if not strays or time.monotonic() >= deadline:
+            break
+        time.sleep(0.05)
+    elapsed = time.monotonic() - started
+    if strays:
+        names = ", ".join(sorted(t.name for t in strays))
+        raise AssertionError(
+            f"Hermetic e2e teardown left non-daemon thread(s) alive after {elapsed:.2f}s: {names}. "
+            "They would stall process exit past the E2E_PYTEST_TIMEOUT wrapper budget."
+        )
+    if elapsed > HERMETIC_SHUTDOWN_BUDGET_SECONDS:
+        raise AssertionError(
+            f"Hermetic e2e teardown took {elapsed:.2f}s, over the {HERMETIC_SHUTDOWN_BUDGET_SECONDS:.1f}s budget."
+        )
+    return elapsed
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _hermetic_process_shutdown():
+    """Tear down process-global machinery deterministically at session end."""
+    yield
+    _teardown_hermetic_process_state()
 
 
 # ─── Backend app factory (cached per-session) ───────────────────────────

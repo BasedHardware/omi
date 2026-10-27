@@ -74,7 +74,14 @@ fi
 
 # WebSocket/provider-seam regressions should fail instead of hanging forever.
 # Override with E2E_PYTEST_TIMEOUT=300s when deliberately debugging a slow run.
-PYTEST_TIMEOUT="${E2E_PYTEST_TIMEOUT:-120s}"
+# The default must budget the whole pytest process lifetime: interpreter start
+# + backend import during collection (~5s), the test session (112.74s on CI
+# runners, 127.9s on a loaded dev Mac for run 40513231489's 140-test suite),
+# pytest's own exit path (~1.7s), and C-level interpreter teardown (~1.75s).
+# 120s no longer covers that sum, so green runs were SIGTERMed mid-exit; the
+# .github/workflows/backend-hermetic-e2e.yml job pins its own value and must
+# stay >= this default.
+PYTEST_TIMEOUT="${E2E_PYTEST_TIMEOUT:-150s}"
 TIMEOUT_BIN=""
 if command -v timeout >/dev/null 2>&1; then
     TIMEOUT_BIN="$(command -v timeout)"

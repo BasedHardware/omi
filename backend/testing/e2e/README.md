@@ -5,10 +5,10 @@ A manually runnable integration test suite that imports the **real omi FastAPI b
 Current dogfood status:
 
 ```text
-113 passed, 3 skipped, 24 warnings
+140 passed, 3 skipped, 2 xfailed
 ```
 
-The run installs a local-only socket guard before importing backend code. Any non-local DNS/socket attempt raises an assertion, so real API calls fail the harness instead of silently leaking. The runner also wraps pytest in a process-level timeout (`E2E_PYTEST_TIMEOUT`, default `120s`) so websocket/provider-seam regressions fail instead of hanging indefinitely.
+The run installs a local-only socket guard before importing backend code. Any non-local DNS/socket attempt raises an assertion, so real API calls fail the harness instead of silently leaking. The runner also wraps pytest in a process-level timeout (`E2E_PYTEST_TIMEOUT`, default `150s`) so websocket/provider-seam regressions fail instead of hanging indefinitely; that budget covers interpreter start, collection, the test session, and interpreter exit together. At session end the conftest stops the Redis pub/sub manager and shared executors explicitly (see `_teardown_hermetic_process_state`) with a hard budget, so slow teardown or leaked non-daemon threads fail the run by name instead of silently consuming the wrapper budget at process exit.
 
 Run it with:
 
