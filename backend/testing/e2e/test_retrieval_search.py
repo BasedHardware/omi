@@ -10,13 +10,15 @@ hydration run through production code.
 
 from datetime import datetime, timedelta, timezone
 import json
+import pytest
 
 from fakes.firestore import seed_conversation
 from fakes.vector_search import install_vector_search_fakes
 
 
+@pytest.mark.parametrize('needle', ['Halvorsen invoice', '4d0254f4-6043-47b6-a347-a05ad152baab'])
 def test_direct_transcript_recall_finds_unindexed_history_and_new_recording_with_citations(
-    client, auth_headers, sample_conversation_data, monkeypatch
+    client, auth_headers, sample_conversation_data, monkeypatch, needle
 ):
     """Real auth/HTTP, saved rows, bounded cursor, decryption and mobile citation path; no vector hits."""
     from database import vector_db
@@ -38,7 +40,7 @@ def test_direct_transcript_recall_finds_unindexed_history_and_new_recording_with
             structured={**sample_conversation_data['structured'], 'title': 'Weekly sync', 'overview': 'Team catch-up.'},
             transcript_segments=[
                 {
-                    'text': 'The Halvorsen invoice total was 47 dollars.' if i == 52 else 'Weather and lunch.',
+                    'text': f'The {needle} total was 47 dollars.' if i == 52 else 'Weather and lunch.',
                     'start': 0.0,
                     'end': 4.0,
                     'is_user': True,
@@ -47,14 +49,14 @@ def test_direct_transcript_recall_finds_unindexed_history_and_new_recording_with
         )
         seed_conversation('123', data)
 
-    summary = client.post('/v1/tools/conversations/search', headers=auth_headers, json={'query': 'Halvorsen invoice'})
+    summary = client.post('/v1/tools/conversations/search', headers=auth_headers, json={'query': f'Find {needle}'})
     assert summary.status_code == 200
     assert '47 dollars' not in summary.json()['result_text']
 
     first = client.post(
         '/v1/tools/conversations/search',
         headers=auth_headers,
-        json={'query': 'Halvorsen invoice', 'transcript_query': 'Halvorsen invoice'},
+        json={'query': f'Find {needle}', 'transcript_query': needle},
     )
     assert first.status_code == 200, first.text
     assert not first.json()['sources']

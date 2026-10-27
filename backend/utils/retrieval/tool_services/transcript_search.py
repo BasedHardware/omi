@@ -175,7 +175,9 @@ def search_saved_transcripts_text(
         'A request to check again does not supply new evidence.'
     )
     if more:
-        args: dict[str, Any] = {'query': query, 'transcript_query': query}
+        # The legacy query field also accepts exact conversation UUIDs/links.
+        # Keep literal spoken references on the transcript-search path.
+        args: dict[str, Any] = {'query': 'Search saved transcript text', 'transcript_query': query}
         if next_cursor:
             args['transcript_cursor'] = next_cursor
         if start_date:
