@@ -1,8 +1,9 @@
 """Tests for the API-key auth flow."""
 
-import threading
+from __future__ import annotations
 
 import json
+import threading
 
 import pytest
 
@@ -264,83 +265,26 @@ def test_narrow_key_login_displays_scopes(authed_profile, respx_mock, cli_runner
     assert "Scopes: action_items:read" in result.stderr
 
 
-def test_concurrent_read_modify_write_serialized_by_file_lock():
-    """Concurrent read-modify-write on a shared file must not lose either writer's data.
+def test_concurrent_store_api_key_different_profiles_both_survive(config_path):
+    """Verifies that concurrent calls to store_api_key preserve both profiles."""
+    errors = []
 
-    Regression test for #22972: without file locking, two concurrent writers that
-    load-modify-save a shared config file lose one writer's changes because the
-    last save() overwrites the other profile's credential.
+    def run_store(profile, key):
+        try:
+            store_api_key(profile, key)
+        except Exception as exc:
+            errors.append(exc)
 
-    This test mirrors the locking in omi_cli/auth/store.py (_config_lock using
-    fcntl.flock on POSIX, msvcrt.locking on Windows) but is self-contained so it
-    runs in the standalone harness with nothing but Python and pytest.
-    """
-    import json
-    import os
-    import tempfile
-    import threading
+    t1 = threading.Thread(target=run_store, args=("alpha", "KEY-A"))
+    t2 = threading.Thread(target=run_store, args=("beta", "KEY-B"))
 
-    if os.name == "nt":
-        import msvcrt
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
 
-        def acquire(fd):
-            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
-
-        def release(fd):
-            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-    else:
-        import fcntl
-
-        def acquire(fd):
-            fcntl.flock(fd, fcntl.LOCK_EX)
-
-        def release(fd):
-            fcntl.flock(fd, fcntl.LOCK_UN)
-
-    path = os.path.join(tempfile.gettempdir(), f"test-config-lock-{os.getpid()}.json")
-    lock_path = path + ".lock"
-    try:
-        with open(path, "w") as fh:
-            json.dump({"alpha": None, "beta": None}, fh)
-
-        errors = []
-
-        def write_profile(name: str, key: str) -> None:
-            try:
-                for _ in range(20):
-                    with open(lock_path, "a+") as lock_file:
-                        acquire(lock_file.fileno())
-                        try:
-                            with open(path, "r") as fh:
-                                data = json.load(fh)
-                            data[name] = key
-                            with open(path, "w") as fh:
-                                json.dump(data, fh)
-                        finally:
-                            release(lock_file.fileno())
-            except Exception as exc:  # noqa: BLE001
-                errors.append(exc)
-
-        threads = [
-            threading.Thread(target=write_profile, args=("alpha", "KEY-A")),
-            threading.Thread(target=write_profile, args=("beta", "KEY-B")),
-        ]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
-
-        assert not errors, f"concurrent writes raised: {errors}"
-
-        with open(path, "r") as fh:
-            data = json.load(fh)
-
-        # Without locking, one of these keys would be missing or overwritten.
-        assert data.get("alpha") == "KEY-A", f"alpha credential lost: {data}"
-        assert data.get("beta") == "KEY-B", f"beta credential lost: {data}"
-    finally:
-        for p in (path, lock_path):
-            try:
-                os.unlink(p)
-            except FileNotFoundError:
-                pass
+    assert not errors, f"Concurrent store_api_key raised: {errors}"
+    
+    config = cfg.load()
+    assert config.get_profile("alpha").api_key == "KEY-A"
+    assert config.get_profile("beta").api_key == "KEY-B"
