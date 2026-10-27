@@ -115,14 +115,14 @@ def _reserve_batch_live_capture(
     # The downstream DB decorator sees the resolved value and performs no second lookup.
     if conversation_data.get('record_lane_owner'):
         return
-    if server_batch_requested and server_batch.eligible(conversation_data, uid):
+    policy = resolve_batch_policy(uid)
+    if server_batch_requested and server_batch.eligible(conversation_data, uid, batch_admitted=policy.batch_enabled):
         conversation_data['record_lane_owner'] = 'batch_live_v1'
         conversation_data['external_data'] = {
             **(conversation_data.get('external_data') or {}),
             server_batch.MARKER: True,
         }
         return
-    policy = resolve_batch_policy(uid)
     if (
         record_capture_eligible(uid, conversation_data, policy=policy)
         and ramp_admission_policy(uid, policy).live_record_enabled

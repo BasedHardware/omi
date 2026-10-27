@@ -4,7 +4,6 @@ import os
 from collections.abc import Mapping
 
 from config.audio_outbox import enabled as audio_outbox_enabled
-from config.batch_pipeline import enabled_for as batch_enabled_for
 from config.policy import cohort_bucket
 from config.policy.batch import parse_percent
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
@@ -22,14 +21,14 @@ def selected(owner_id: str, platform: str | None, source: str | None) -> bool:
     platform = platform or ('macos' if source == 'desktop' else None)
     if platform in {'ios', 'android'}:
         percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '0'))
-        return bool(owner_id and percent > 0 and cohort_bucket(owner_id, '') < percent and batch_enabled_for(owner_id))
+        return bool(owner_id and percent > 0 and cohort_bucket(owner_id, '') < percent)
     platforms = {
         value.strip().lower() for value in os.getenv('SERVER_BATCH_ONLY_PLATFORMS', 'macos,windows').split(',')
     }
     return platform in {'macos', 'windows', 'linux'} and platform in platforms and source == 'desktop'
 
 
-def eligible(capture: Mapping, owner_id: str) -> bool:
+def eligible(capture: Mapping, owner_id: str, *, batch_admitted: bool = False) -> bool:
     """Desktop bypasses mobile cohorts; mobile admission stays nested in batch."""
     external = capture.get('external_data') or {}
     return bool(
@@ -37,6 +36,7 @@ def eligible(capture: Mapping, owner_id: str) -> bool:
         and audio_outbox_enabled()
         and os.getenv('HOSTED_PUSHER_API_URL')
         and selected(owner_id, capture.get('client_platform'), capture.get('source'))
+        and (capture.get('client_platform') not in {'ios', 'android'} or batch_admitted)
         and capture.get('private_cloud_sync_enabled')
         and not capture.get('uses_custom_stt')
         and not any(capture.get(key) for key in ('deleted', 'discarded', 'is_locked'))

@@ -10,8 +10,9 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from config import server_batch
+from config.policy import resolve_batch_policy
 from config.batch_live_preview import capture_snapshot
-from database import recording_sessions, server_batch_audio
+from database import conversations, recording_sessions, server_batch_audio
 from models.conversation_enums import ConversationStatus
 from routers.listen import receiver as receiver_module
 from routers.listen.receiver import ListenReceiver
@@ -63,6 +64,8 @@ def policy_env(monkeypatch):
     monkeypatch.setenv('HOSTED_PUSHER_API_URL', 'http://pusher.invalid')
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', '')
     monkeypatch.delenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', raising=False)
     monkeypatch.delenv('SERVER_BATCH_ONLY_PLATFORMS', raising=False)
 
@@ -137,20 +140,48 @@ def test_validated_provider_byok_keeps_live_even_on_reserved_reconnect():
 
 @pytest.mark.parametrize('platform', ['ios', 'android'])
 def test_mobile_percent_is_nested_in_actual_batch_admission(monkeypatch, platform):
+    row = capture()
+    row.update(client_platform=platform, source='omi')
+
+    def admitted(owner):
+        return server_batch.eligible(row, owner, batch_admitted=resolve_batch_policy(owner).batch_enabled)
+
     monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '100')
-    assert not server_batch.selected('owner', platform, 'omi')
+    assert not admitted('owner')
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
-    assert server_batch.selected('owner', platform, 'omi')
+    assert admitted('owner')
     monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', 'bad')
-    assert not server_batch.selected('owner', platform, 'omi')
+    assert not admitted('owner')
     monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '50')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '25')
-    from config.policy import resolve_batch_policy
-
     for index in range(100):
         owner = f'synthetic-{index}'
-        assert not server_batch.selected(owner, platform, 'omi') or resolve_batch_policy(owner).batch_enabled
+        assert not admitted(owner) or resolve_batch_policy(owner).batch_enabled
+
+
+@pytest.mark.parametrize(
+    'change,expected',
+    [
+        ({}, True),
+        ({'private_cloud_sync_enabled': False}, False),
+        ({'uses_custom_stt': True}, False),
+        ({'deleted': True}, False),
+        ({'record_lane_owner': 'legacy_final_pass_v1'}, False),
+    ],
+)
+def test_completion_cas_retains_empty_transcript_and_fences_privacy_races(monkeypatch, change, expected):
+    admitted = capture()
+    admitted['status'] = 'processing'
+    current = {**admitted, **change}
+    db = StrictFirestore({ROW: current})
+    monkeypatch.setattr(conversations, 'db', db)
+    monkeypatch.setattr(conversations, 'stop_quiet_check_for_conversation', Mock())
+    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', Mock())
+    monkeypatch.setattr(conversations, 'serving_for', lambda *args: False)
+    assert lifecycle.complete_server_batch_capture('owner', 'conversation', admitted) is expected
+    assert db.rows[ROW]['status'] == ('completed' if expected else 'processing')
+    assert db.rows[ROW]['transcript_segments'] == []
 
 
 @pytest.mark.asyncio
