@@ -42,8 +42,11 @@ from utils.sync.live_speech_dedupe import (
     drop_covered_repeats,
     drop_proven_exact_retries,
     pinned_audio_timeline,
+    speech_overlap_seconds,
 )
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
+from utils.sync.donor_dedupe import DonorDedupe, dedupe_donor, live_reference
+from utils.sync.bridge_observation import bridge_observation
 from utils.sync.assignment_telemetry import lineage_span_delta_bucket as _lineage_span_delta_bucket
 from utils.sync.assignment_telemetry import created_sync_row_observation
 from utils.capture.dedupe import choose_segments
@@ -172,6 +175,7 @@ class _Plan(NamedTuple):
     payload: dict
     ancestor_updates: dict[str, dict]
     estimated_bytes: int
+    bridge: dict | None
 
     @property
     def grows(self) -> bool:
@@ -498,6 +502,13 @@ def assign_in_transaction(
             # its exact (possibly negative) relative offset instead.
             capture_start = plan_target['started_at']
         origin = capture_start.timestamp()
+        # Freeze the independently decoded live transcript/evidence before any
+        # donor or fresh-intake receipts can enter the survivor.
+        live_row = next((row for row in records if row['id'] == canonical), None)
+        observe_bridge = sync_live_dedupe_active_for(user_ref.id)
+        donor_policy = bool(live_row is not None and live_reference(live_row) and observe_bridge)
+        reference = deepcopy(live_row or result) if observe_bridge else {}
+        transfers = []
         existing = []
         allocator = ConversationSpeakerIdAllocator()
         allocator.hydrate(result.get('transcript_segments', []) if current else [])
@@ -513,23 +524,42 @@ def assign_in_transaction(
                 duration = segment['end'] - segment['start']
                 segment['start'] = segment['timestamp'] - origin
                 segment['end'] = segment['start'] + duration
-            # refactor: superseded by utils.capture.dedupe when CAPTURE_COVERAGE_MODE=serve
-            retained = dedupe_segments_for_merge(origin, existing, new, text_match_slop_seconds=0)
-            retained = choose_segments(
-                user_ref.id,
-                'bridge',
-                existing,
-                new,
-                retained,
-                incoming_row=row,
-                reference_row=result,
-            )
+            if donor_policy and row['id'] != canonical:
+                # Do not run legacy range-only suppression or capture-refactor
+                # overrides over retained, unproven speech in this cohort.
+                report = dedupe_donor(new, row, reference)
+                retained = report.kept
+            else:
+                # refactor: superseded by utils.capture.dedupe when CAPTURE_COVERAGE_MODE=serve
+                retained = dedupe_segments_for_merge(origin, existing, new, text_match_slop_seconds=0)
+                retained = choose_segments(
+                    user_ref.id,
+                    'bridge',
+                    existing,
+                    new,
+                    retained,
+                    incoming_row=row,
+                    reference_row=result,
+                )
+                report = DonorDedupe(retained)
+            if observe_bridge and row['id'] != canonical:
+                transfers.append((new, report))
             if row['id'] != canonical:
                 for segment in retained:
                     if not segment.get('speaker_id_scope'):
                         segment['speaker_id_scope'] = f"legacy-conversation:{row['id']}:{segment.get('speaker_id')}"
                     allocator.assign(segment)
             existing += retained
+        bridge = (
+            bridge_observation(
+                reference,
+                transfers,
+                operation='assignment',
+                target_kind='live' if live_reference(reference) else 'sync',
+            )
+            if transfers
+            else None
+        )
         new = [deepcopy(incoming['transcript_segments'][i]) for i in segment_indices]
         for segment in new:
             segment['timestamp'] = incoming['started_at'].timestamp() + segment['start']
@@ -610,6 +640,13 @@ def assign_in_transaction(
             conversation_rows=records,
             proof=capture_covered_indices,
         )
+        if live_dedupe and live_stats is not None and live_row is not None and plan_target is not None:
+            live_stats['appended_seconds_overlapping_live'] = speech_overlap_seconds(
+                survivors,
+                live_row.get('transcript_segments') or [],
+                live_origin=plan_target['started_at'].timestamp(),
+                live_pinned=pinned_audio_timeline(plan_target.get('audio_timeline')),
+            )
         surviving = {id(segment) for segment in survivors}
         kept = tuple(i for i, segment in indexed_new if id(segment) in surviving)
         for segment in survivors:
@@ -644,6 +681,9 @@ def assign_in_transaction(
                 result['capture_evidence'] = bounded_envelope(combined)
             else:
                 result['capture_evidence'] = incoming['capture_evidence']
+        if donor_policy and transfers and (reference.get('capture_evidence') or {}).get('origin') == 'live':
+            # Sync receipt aggregation must not replace live's committed runs.
+            result['capture_evidence'] = deepcopy(reference['capture_evidence'])
         persist_identity(user_ref.id, result, incoming, live_row)
         result['has_content'] = bool(segments)
         result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
@@ -725,6 +765,7 @@ def assign_in_transaction(
             payload,
             ancestor_updates,
             _stored_document_bytes(collection.document(canonical), payload, current, invalidate),
+            bridge,
         )
 
     # Every plan is read-only, so a full canonical can be dropped and the
@@ -850,6 +891,7 @@ def assign_in_transaction(
             no_op['_sync_lineage_completion_pending'] = True
         no_op['_sync_lineage_dedupe'] = {
             'appended_seconds': 0.0,
+            'appended_seconds_overlapping_live': 0.0,
             'dropped_as_repeat_seconds': bounded_span_seconds(incoming['transcript_segments']),
             'alignment_method': append_alignment_method(live_stats['report'], live_stats['exact_retries']),
             'repeat_only': True,
@@ -979,6 +1021,8 @@ def assign_in_transaction(
     index.write(result, set(matched) | {canonical})
     if absorbed is not None:
         absorbed[:] = sorted(cid for cid in matched if cid != canonical)
+    if chosen.bridge is not None:
+        result['_sync_lineage_bridge'] = chosen.bridge
     if created and lineage_eligible and sync_lineage_resolve_enabled():
         # The adapter emits only the final successful transaction's observation,
         # after commit. Neither this marker nor eligibility enters the write codec.
@@ -996,6 +1040,7 @@ def assign_in_transaction(
         appended = bounded_span_seconds(survivors)
         result['_sync_lineage_dedupe'] = {
             'appended_seconds': appended,
+            'appended_seconds_overlapping_live': live_stats['appended_seconds_overlapping_live'],
             'dropped_as_repeat_seconds': max(0.0, bounded_span_seconds(incoming['transcript_segments']) - appended),
             'alignment_method': append_alignment_method(live_stats['report'], live_stats['exact_retries']),
             'repeat_only': False,

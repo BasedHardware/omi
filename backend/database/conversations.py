@@ -4272,7 +4272,7 @@ def assign_sync_conversation(
     """
     from utils.sync.assignment import assign_in_transaction
     from config.sync_lineage import sync_lineage_resolve_enabled
-    from utils.sync.intake_completion import log_sync_lineage_created
+    from utils.sync.intake_completion import log_assignment_observations
 
     # The coordinator/projection already validated S1 and cohort admission.
     # Rechecking membership here can refresh its Firestore cache on the hot path.
@@ -4366,11 +4366,9 @@ def assign_sync_conversation(
                 discover_live_candidates,
             )
         conversation = result[0]
+        log_assignment_observations(conversation, lineage_eligible=lineage_eligible)
         for retired_id in sorted({conversation['id'], *absorbed}):
             stop_quiet_check_for_conversation(uid, retired_id, firestore_client=client)
-        observation = conversation.pop('_sync_lineage_created', None)
-        if lineage_eligible and observation is not None:
-            log_sync_lineage_created(observation)
         if defer_index is not None:
             # Coalesce the lineage's retryable donor deletes once per flush.
             clock.donors = len(absorbed)

@@ -6,6 +6,84 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Server batch-only capture by platform
+
+`SERVER_BATCH_ONLY_ENABLED` defaults true; set false to restore live STT on
+new sessions. `SERVER_BATCH_ONLY_PLATFORMS` defaults `macos,windows` and may
+also name `linux`. An empty list disables desktop admission. Mobile uses
+`SERVER_BATCH_ONLY_MOBILE_PERCENT` (default 0); its unsalted owner hash is
+nested in the existing batch cohort, so selecting 50% while batch admits 25%
+can suppress at most the batch-admitted 25%. This knob does not expand batch
+admission itself. The rollout lead owns mobile cohort expansion and deployment.
+
+Admission requires cloud-storage consent, durable outbox and pusher availability,
+a named Parakeet-supported language matching the request, server STT, and
+single-channel capture outside onboarding/phone calls. Storage-disabled,
+multi/auto/unsupported-language, BYOK/custom-STT, and excluded-platform
+sessions retain their live behavior. The session's language profile must agree with that named primary and contain
+only supported expected languages; missing or mixed unsupported profiles stay live.
+A fresh admitted conversation reserves
+`record_lane_owner=batch_live_v1` and the server-owned
+`external_data.server_batch_only` marker before STT initialization. Reconnects
+read that reservation and require its language to match the request; an
+incompatible language starts a fresh generation without rebinding the original.
+Initial connect, deferred opens, reconnect and idle reopen
+cannot dial any provider for a batch-only session. The live-STT buffer is cleared
+independently of original-byte archiving and PCM forwarding to pusher.
+The socket's mode stays pinned across conversation generations: a batch-owned
+continuation retains its admission after mobile cohort rollback; a live control
+does not convert mid-socket. If a new generation loses privacy/ownership
+eligibility, the socket closes with 1013 so reconnect re-reads admission rather
+than accepting provider-free audio without a batch owner.
+
+Original audio commits through `LiveAudioArchive` -> `commit_capture` (immutable
+media plus manifest). Only after that commit does a transaction record monotonic
+capture bounds and `has_content`; empty cleanup also fences the reservation so
+zero live segments cannot delete it. Positive-sample frame intervals alone set batch bounds; zero-sample originals
+remain in custody without expanding or shrinking the decoded-audio obligation.
+Pusher opcode 101 still commits PCM through
+`_commit_durable_audio_window` -> `commit_pcm_window`, including silent frames.
+The lifecycle loop uses accepted local audio activity while capture continues,
+then flushes original custody before finalization. The raw-only finalizer writes
+an idempotent `record_pending` job before completing the capture and its no-effects
+fanout receipt. Batch waits for `record_audio_closed`, verifies source generations,
+and derives work-unit bounds from persisted sample spans. It inherits the named
+language and retains ordinary privacy, compute/funding and language guardrails.
+Live transcription usage and live-transcript success metrics exclude intentional
+batch-only capture; batch projection owns the actual transcription usage.
+
+After capture stops and the archive-close barrier completes, a capture with no
+committed nonempty audio span and explicit never-received proof uses atomic empty
+cleanup instead of registering batch work. Active rollover publishes no close
+marker and defers empty deletion to the existing expired-lease recovery path;
+another first frame can still arrive while that generation is active. The
+transaction refuses received or unknown audio, content, audio bounds, locks and
+tombstones. Zero-sample original receipts and their display rows remain protected
+but do not invent a batch input or time span.
+Fresh reservations explicitly record no received audio. The first buffered frame
+durably flips that marker once per conversation, after retaining its bytes in the
+pack so a metadata failure still allows shutdown custody. Recovery may reclaim a
+never-received reservation only under the existing expired lease, quiet cutoff,
+identity and content fences. Missing/unknown markers and buffered audio stay
+protected even after archive closure when no committed span exists.
+
+Server-only native records carry their marker into the immutable intake. The
+batch projector uses its existing idempotent hourly/monthly usage and fair-use
+charge chain for these captures; ordinary native live-preview records keep the
+legacy skip that avoids double billing. The ProjectionBinding wire shape stays
+unchanged. Compatible batch projection/driver code must be serving before listen
+admission is enabled.
+
+Existing reservations and jobs remain batch-owned after a kill-switch change;
+already-reserved reconnects stay provider-free. The switch restores provider
+initialization for new captures and prevents new reservations. No archived media
+or batch obligation is removed. Custody
+windows retain their existing commit boundaries: an uncommitted tail on a
+desktop without a device WAL is not crash-safe. This policy does not claim a
+new client replay guarantee. Deploy compatible listen/pusher and finalizer
+artifacts together through the lead's release train; local hermetic receipts
+prove code behavior, not production or installed-client acceptance.
+
 ## Sync storage round trips
 
 Retained server-only `open_loop_extractions` never reach the conversation
@@ -619,6 +697,31 @@ before VAD. Each refusal emits one bounded `s1_refused` outcome with a closed
 reason and no ids, names or claim content. The former S1 requirement flag was
 graduated on 2026-10-20; lineage admission and its kill switch remain authoritative.
 Widen only after the 48 h log gates in `ARCHITECTURE.md`, then watch 24 h.
+Stored sync donors consolidated into live rows now use the same lineage uid
+allowlist and `SYNC_LINEAGE_LIVE_DEDUPE_ENABLED` switch. Assignment and smart
+absorb freeze the transactionally read live transcript/evidence, then apply
+committed frame coverage with the documented residual lexical safety checks,
+lexical repeat proof without WAL context, and proven exact retry. Novel or uncertain speech stays;
+time overlap alone cannot drop it. Live committed evidence survives sync
+receipt aggregation. Rollback: `SYNC_LINEAGE_LIVE_DEDUPE_ENABLED=false` or revert.
+
+Each committed admitted donor consolidation attempts at most one content-free
+`event=sync_lineage_resolve stage=bridge outcome=bridge_clear|bridge_overlap|bridge_unknown`
+after commit, with bounded operation, target-kind, donor/proof counts, retained,
+dropped and overlapping seconds buckets, four numeric donor duration fields rounded
+to 0.1 s, and a closed incomplete reason. Post-commit emission is at-most-once;
+a lost line is unknown. Reconcile short counts with conversation revision metadata.
+Retries and receipt-only cleanup emit none. `created_clear` certifies creation
+time only; retained bridge overlap requires triage and incomplete measurement
+is unknown. Both block widening. Include transferred donor speech in both the
+doubled-speech numerator and denominator, counted once per source segment. Sum
+`appended_seconds_overlapping_live` plus `donor_seconds_retained_overlapping_live`
+for the numerator, and `appended_seconds` plus `donor_seconds_retained` for the
+denominator. Incomplete or missing measurements block widening;
+bridge observations have a separate denominator from resolver decisions and
+new-row observations. Field values and caps live in
+[`utils/sync/ARCHITECTURE.md`](../utils/sync/ARCHITECTURE.md).
+
 Gate 3 uses the id-free `event=sync_lineage_resolve stage=assignment` creation
 outcomes `created_clear|created_overlap|created_unknown`. Only lineage-admitted,
 S1-validated creates emit; unknown includes a closed `incomplete_reason` field,

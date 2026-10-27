@@ -408,7 +408,8 @@ class ProjectionStore:
             return None
         charged = ledger.get('usage_committed_seconds', 0.0) if ledger.get('status') == BATCH_PARTIAL_STATUS else 0.0
         steps, step_times = charge_chain(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else ([0.0], [])
-        if binding.native_record:
+        intake = self.ref('intakes', binding.job_id).get().to_dict() or {}
+        if binding.native_record and intake.get('server_batch_only') is not True:
             return {
                 'seconds': seconds,
                 'source': 'realtime',
@@ -423,7 +424,6 @@ class ProjectionStore:
         updates = {}
         if int(seconds) - int(charged) > 0 and ledger.get('status') != 'completed':
             # Lane 6 ruling B(a): bill a cap-hold unit to its funded month across a rollover.
-            intake = self.ref('intakes', binding.job_id).get().to_dict() or {}
             stamp = usage_stamp(stamp, intake.get('usage_period'))
             from database.llm_usage import resolve_usage_plan_id
             from database.hourly_usage_updates import prepare_hourly_usage_updates

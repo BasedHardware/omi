@@ -35,6 +35,7 @@ class RecoveryStore:
         allow_completed_silence=False,
         allow_completed_speech_redrive=False,
         allow_completed_terminal=False,
+        allow_completed_recovery=False,
     ):
         job = tx.get('jobs', segment_id)
         if not job or not job.get('projection_binding'):
@@ -74,6 +75,13 @@ class RecoveryStore:
                     and ledger.get('job_id') == binding.job_id
                     and job.get('speech_redrive', {}).get('state') == 'completed'
                     and job.get('result', {}).get('outcome') in {'success', 'no_recoverable_speech', 'silence'}
+                )
+                or (
+                    allow_completed_recovery
+                    and ledger.get('status') == 'completed'
+                    and ledger.get('job_id') == binding.job_id
+                    and job.get('recovery_state') == 'recovered'
+                    and bool(job.get('result'))
                 )
                 or (
                     allow_completed_terminal
@@ -280,6 +288,56 @@ class RecoveryStore:
                     'audio_seconds': audio_seconds,
                 },
             )
+            tx.put('jobs', segment_id, job)
+            return True
+
+        return self.store.run(commit)
+
+    def start_duration_limited(self, segment_id, token, now, *, audio_uri, audio_seconds):
+        """Operator take-over of a duration-limited intent: refusal -> running.
+
+        The exact mirror of hold_duration_limit: only the never-started guarded
+        intent that refusal settled, with no provider call, receipt or failure
+        spent. One fenced transition straight into the running take-over, so a
+        concurrent sweep cannot re-settle the refusal between reopen and start.
+        A spent intent never reopens."""
+        if not math.isfinite(audio_seconds) or not MAX_AUDIO_SECONDS < audio_seconds <= 7200:
+            return False
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            existing = tx.get('results', segment_id)
+            recovery = job.get('recovery') or {}
+            if (
+                job.get('state') != 'quarantined'
+                or job.get('quarantine_reason') != 'worker_failed'
+                or job.get('recovery_state') != 'failed_held'
+                or recovery.get('token') != token
+                or recovery.get('started_at') is not None
+                or recovery.get('provider') is not None
+                or recovery.get('recognizers')
+                or recovery.get('failure') is not None
+                or recovery.get('refusal')
+                != {
+                    'reason': 'independent_duration_limit',
+                    'max_audio_seconds': MAX_AUDIO_SECONDS,
+                    'audio_seconds': audio_seconds,
+                }
+                or not language_guarded(job)
+                or job.get('audio_uri') != audio_uri
+                or not math.isfinite(job['duration_seconds'])
+                or abs(job['duration_seconds'] - audio_seconds) > 0.1
+                or job.get('result')
+                or existing
+                or job.get('token')
+                or job.get('lease_until', 0) > now
+                or job.get('merge_pending') is not False
+            ):
+                return False
+            recovery.pop('refusal', None)
+            recovery.pop('settled_at', None)
+            recovery.update(provider='modulate', started_at=now)
+            job['recovery_state'] = 'running'
             tx.put('jobs', segment_id, job)
             return True
 
