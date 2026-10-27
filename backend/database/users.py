@@ -5,7 +5,7 @@ from typing import Any, Literal, Optional, TypedDict
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
-from ._client import get_data_plane_firestore_client
+from ._client import get_data_plane_firestore_client, run_transactional
 from database.account_deletion_marker import (
     account_deletion_collection,
     account_deletion_document,
@@ -338,7 +338,7 @@ def _set_byok_active_transaction(transaction, user_ref, fingerprints: dict):
 def set_byok_active(uid: str, fingerprints: dict):
     client = get_data_plane_firestore_client()
     user_ref = client.collection('users').document(uid)
-    _set_byok_active_transaction(client.transaction(), user_ref, fingerprints)
+    run_transactional(client, _set_byok_active_transaction, user_ref, fingerprints)
 
 
 def clear_byok_active(uid: str):
@@ -399,7 +399,9 @@ def _heartbeat_user_deletion_wipe_txn(transaction, doc_ref) -> None:
 def heartbeat_user_deletion_wipe(uid: str) -> None:
     """Refresh a live wipe without resurrecting a failed/completed marker."""
     client = account_deletion_firestore_client()
-    _heartbeat_user_deletion_wipe_txn(client.transaction(), account_deletion_document(uid, firestore_client=client))
+    run_transactional(
+        client, _heartbeat_user_deletion_wipe_txn, account_deletion_document(uid, firestore_client=client)
+    )
 
 
 def mark_user_deletion_auth_deleted(uid: str) -> None:
@@ -454,8 +456,7 @@ def mark_user_deletion_wipe_intent(uid: str) -> DeletionWipeIntent:
     wipe_job_id = uuid.uuid4().hex
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
-    transaction = client.transaction()
-    return _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id)
+    return run_transactional(client, _mark_user_deletion_wipe_intent_txn, doc_ref, wipe_job_id)
 
 
 @transactional
@@ -483,15 +484,14 @@ def mark_user_deletion_wipe_started(uid: str, wipe_job_id: str) -> bool:
     """Atomically promote one newly-created wipe intent to queue-pending."""
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
-    transaction = client.transaction()
-    return _mark_user_deletion_wipe_started_txn(transaction, doc_ref, wipe_job_id)
+    return run_transactional(client, _mark_user_deletion_wipe_started_txn, doc_ref, wipe_job_id)
 
 
 def mark_user_deletion_wipe_completed(uid: str) -> bool:
     """Complete the wipe only if no provider cleanup remains outstanding."""
     client = account_deletion_firestore_client()
-    return _mark_user_deletion_wipe_completed_txn(
-        client.transaction(), account_deletion_document(uid, firestore_client=client)
+    return run_transactional(
+        client, _mark_user_deletion_wipe_completed_txn, account_deletion_document(uid, firestore_client=client)
     )
 
 
@@ -516,8 +516,9 @@ def record_late_agent_vm_cleanup(
     """Persist a late VM only when an admitted deletion owns its cleanup."""
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
-    return _record_late_agent_vm_cleanup_txn(
-        client.transaction(),
+    return run_transactional(
+        client,
+        _record_late_agent_vm_cleanup_txn,
         doc_ref,
         vm_name,
         zone,
@@ -553,7 +554,9 @@ def adopt_legacy_late_agent_vm_cleanup(uid: str, vm_name: str, zone: str, expect
     """CAS-upgrade a pre-instance-ID cleanup record before provider deletion."""
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
-    return _adopt_legacy_late_agent_vm_cleanup_txn(client.transaction(), doc_ref, vm_name, zone, expected_instance_id)
+    return run_transactional(
+        client, _adopt_legacy_late_agent_vm_cleanup_txn, doc_ref, vm_name, zone, expected_instance_id
+    )
 
 
 def clear_late_agent_vm_cleanup(uid: str, vm_name: str) -> None:
@@ -586,8 +589,7 @@ def ensure_deletion_wipe_job_id(uid: str) -> str | None:
     """
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
-    transaction = client.transaction()
-    return _ensure_deletion_wipe_job_id_txn(transaction, doc_ref, uuid.uuid4().hex)
+    return run_transactional(client, _ensure_deletion_wipe_job_id_txn, doc_ref, uuid.uuid4().hex)
 
 
 def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution:
@@ -636,8 +638,7 @@ def mark_user_deletion_billing_failed(uid: str, subscription_id: str | None, err
     """
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
-    transaction = client.transaction()
-    return _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid, subscription_id, error)
+    return run_transactional(client, _mark_user_deletion_billing_failed_txn, doc_ref, uid, subscription_id, error)
 
 
 def cancel_user_deletion_wipe(uid: str):
@@ -872,8 +873,7 @@ def claim_deletion_wipe(
     """
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
-    transaction = client.transaction()
-    return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after)
+    return run_transactional(client, _claim_deletion_wipe_txn, doc_ref, stale_after, running_stale_after)
 
 
 @transactional
@@ -919,8 +919,7 @@ def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELE
     """
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
-    transaction = client.transaction()
-    return _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after)
+    return run_transactional(client, _claim_deletion_wipe_task_txn, doc_ref, running_stale_after)
 
 
 def create_person(uid: str, data: dict):
@@ -1053,8 +1052,7 @@ def add_person_speech_sample(
 ) -> bool:
     """Atomically append a sample; return False for a missing person or a full sample list."""
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    transaction = db.transaction()
-    return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples)
+    return run_transactional(db, _add_sample_transaction, person_ref, sample_path, transcript, max_samples)
 
 
 def get_person_speech_samples_count(uid: str, person_id: str) -> int:
@@ -1114,8 +1112,9 @@ def replace_person_speech_profile(
         'speech_sample_source': speech_sample_source(conversation_id, segment_ids, expected_receipt_generation),
         **voice_learning_fields('learned', 'stored', speech_seconds),
     }
-    return _replace_speech_profile_transaction(
-        db.transaction(),
+    return run_transactional(
+        db,
+        _replace_speech_profile_transaction,
         ref,
         expected_updated_at,
         profile,
@@ -1148,7 +1147,7 @@ def invalidate_person_speech_profile(
 ) -> list[str]:
     """A corrected teaching label must stop identifying that voice as the old person."""
     ref = db.collection('users').document(uid).collection('people').document(person_id)
-    return _invalidate_speech_profile_transaction(db.transaction(), ref, conversation_id, segment_ids)
+    return run_transactional(db, _invalidate_speech_profile_transaction, ref, conversation_id, segment_ids)
 
 
 @transactional
@@ -1200,8 +1199,7 @@ def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> b
         True if removed, False if person or sample not found
     """
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    transaction = db.transaction()
-    return _remove_sample_transaction(transaction, person_ref, sample_path)
+    return run_transactional(db, _remove_sample_transaction, person_ref, sample_path)
 
 
 def set_user_speaker_embedding(uid: str, embedding: list) -> bool:
@@ -1231,8 +1229,13 @@ def set_person_speaker_embedding(uid: str, person_id: str, embedding: list, *, e
     user_ref = db.collection('users').document(uid)
     ref = user_ref.collection('people').document(person_id)
     return (
-        _replace_speech_profile_transaction(
-            db.transaction(), ref, expected_updated_at, {'speaker_embedding': embedding}, user_ref=user_ref
+        run_transactional(
+            db,
+            _replace_speech_profile_transaction,
+            ref,
+            expected_updated_at,
+            {'speaker_embedding': embedding},
+            user_ref=user_ref,
         )
         is not None
     )
@@ -1744,7 +1747,7 @@ def ensure_backend_onboarding_admission(uid: str, *, firestore_client: Any = Non
         )
         return True
 
-    return bool(admit(client.transaction()))
+    return bool(run_transactional(client, admit))
 
 
 def get_backend_onboarding_admission(uid: str, *, firestore_client: Any = None) -> Optional[str]:

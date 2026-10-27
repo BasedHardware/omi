@@ -152,6 +152,11 @@ client_stub.get_firestore_client = MagicMock(return_value=mock_db)
 # import site (see database/_client.py's get_data_plane_firestore_client()).
 client_stub.data_plane_db = mock_db
 client_stub.get_data_plane_firestore_client = MagicMock(return_value=mock_db)
+# database.users runs its writers through the expired-transaction restart
+# helper (database/_client.run_transactional); the migration flows here drive
+# the @transactional bodies directly, so a pass-through keeps the import honest.
+client_stub.run_transactional = lambda client, fn, *args, **kwargs: fn(client.transaction(), *args, **kwargs)
+client_stub.is_expired_transaction_error = lambda error: False
 
 # Stub database.helpers (used by chat.py)
 helpers_stub = _stub_module("database.helpers")

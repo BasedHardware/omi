@@ -48,6 +48,17 @@ setattr(_fake_client_mod, 'document_id_from_seed', MagicMock())
 setattr(_fake_client_mod, 'get_firestore_client', MagicMock())
 setattr(_fake_client_mod, 'get_data_plane_firestore_client', MagicMock())
 setattr(_fake_client_mod, 'data_plane_db', getattr(_fake_client_mod, 'db'))
+
+
+# database.users runs its writers through the expired-transaction restart
+# helper. These tests drive the @transactional bodies directly, so the stub
+# only needs a pass-through wrapper for the import to stay honest.
+def _passthrough_run_transactional(client, transactional_callable, *args, **kwargs):
+    return transactional_callable(client.transaction(), *args, **kwargs)
+
+
+setattr(_fake_client_mod, 'run_transactional', _passthrough_run_transactional)
+setattr(_fake_client_mod, 'is_expired_transaction_error', lambda error: False)
 _install_stub('database._client', _fake_client_mod)
 
 # Stub database.firestore_cache and database.redis_db since database/users.py

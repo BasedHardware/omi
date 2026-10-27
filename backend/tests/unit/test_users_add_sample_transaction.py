@@ -55,6 +55,15 @@ def users_db():
     fv1_stub.FieldFilter = MagicMock()
     fv1_stub.transactional = lambda func: func
 
+    # database.users imports the expired-transaction restart helper. These
+    # tests drive the @transactional bodies directly, so a pass-through
+    # wrapper keeps the import honest without emulating the SDK here.
+    def _passthrough_run_transactional(client, transactional_callable, *args, **kwargs):
+        return transactional_callable(client.transaction(), *args, **kwargs)
+
+    client_stub.run_transactional = _passthrough_run_transactional
+    client_stub.is_expired_transaction_error = lambda error: False
+
     fakes = {
         "database._client": client_stub,
         "google": google_pkg,

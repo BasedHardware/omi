@@ -37,6 +37,20 @@ around a member of the availability trio is the same bounded transient:
   recording-session boundaries plus the live-open probe consume it.
 - the rotation loop catches `RetryError`, unwraps one cause level, and
   replays the same transient shapes it always replayed.
+- the `database/users.py` transactional writers (speech-sample
+  add/remove, speech-profile teaching and invalidation, speaker-embedding
+  recovery, BYOK enrollment, onboarding admission, and the
+  account-deletion wipe state machine) run every single-minted
+  transaction through `run_transactional` as of 2026-10-27. Before
+  that, one retired id on any of them surfaced as a failed write on the
+  listen hot path (prod backend-listen 2026-10-27: terminal
+  `InvalidArgument` commit escapes from person/profile writers inside
+  the uvicorn `run_asgi` traceback bucket, ×80/30m) — the same class
+  the conversation and recording-session boundaries had already
+  drained. The restart re-runs the transactional body on a fresh id, so
+  every fence inside those bodies (version fences, deletion-state
+  fences, teaching authorization) is re-evaluated by the replay, never
+  bypassed; expiry cannot launder a denial into a write.
 
 ## What stays loud
 
@@ -56,6 +70,8 @@ scan, not restart its budget.
 Guards: `tests/unit/test_firestore_retry_error_envelope_transient.py`
 (recording sessions, incl. controller cadence end-to-end) and
 `tests/unit/test_mcp_oauth_retry_error_rotation.py` (MCP rotation budget).
+The users-writer side of the fresh-transaction restart lives in
+`tests/unit/test_users_transaction_expiry_restart.py`.
 The SDK-truth tests drain a real `api_core.retry.retry_target` budget on the
 transport's own predicate, so a pinned-SDK predicate change that alters the
 envelope shape fails loudly here first. The recording-session side of this

@@ -50,6 +50,11 @@ def users():
             get_data_plane_firestore_client=MagicMock(),
             get_customer_firestore_client=MagicMock(),
             data_plane_db=MagicMock(),
+            # database.users runs its writers through the expired-transaction
+            # restart helper; the guarded reads here never enter it, so a
+            # pass-through wrapper keeps the import honest.
+            run_transactional=lambda client, fn, *args, **kwargs: fn(client.transaction(), *args, **kwargs),
+            is_expired_transaction_error=lambda error: False,
         ),
         "database.firestore_cache": _module(
             "database.firestore_cache", CachePolicy=MagicMock(), get_or_fetch=MagicMock(), invalidate=MagicMock()
