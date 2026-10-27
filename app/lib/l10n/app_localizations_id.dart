@@ -14445,9 +14445,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Buka Episode Sebelumnya';
-
-  @override
   String get episodeNotesSoon => 'Catatan muncul setelah beberapa menit pertama percakapan.';
 
   @override
@@ -14589,22 +14586,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get othersSpeakerLabel => 'Lainnya';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Selesai';
@@ -14634,4 +14619,55 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Unggahan dijeda sejenak — akan dilanjutkan otomatis';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Melanjutkan “$title”';
+  }
+
+  @override
+  String episodeLivePreviewLine(Object duration, Object line) {
+    return '$duration · “$line”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· sejak $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Catatan dimulai saat transkrip final tiba.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Disusun di ponselmu sementara kamu bicara. Catatan lengkap tiba bersama transkrip final.';
+
+  @override
+  String get episodeOnThisPhone => 'Di ponsel ini';
+
+  @override
+  String get episodeOpenTranscript => 'Buka transkrip';
+
+  @override
+  String get liveCardTitle => 'Langsung';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Transkrip final tertunda sekitar $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Transkrip final sedang menyusul';
+
+  @override
+  String get livePreviewNoEngineBody => 'Kata-katamu muncul di sini satu hingga dua menit setelah kamu mengucapkannya.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Merekam dengan aman';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Langsung di ponsel ini';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Aktifkan teks langsung';
 }

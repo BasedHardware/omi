@@ -14208,9 +14208,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => '打开上一段记录';
-
-  @override
   String get episodeNotesSoon => '交谈几分钟后会显示笔记。';
 
   @override
@@ -14352,22 +14349,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get othersSpeakerLabel => '其他人';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => '完成';
@@ -14397,4 +14382,54 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => '上传已暂停片刻 — 将自动恢复';
+
+  @override
+  String episodeContinues(Object title) {
+    return '继续“$title”';
+  }
+
+  @override
+  String episodeLivePreviewLine(Object duration, Object line) {
+    return '$duration · “$line”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· 始于$time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => '最终转写到达后即开始生成笔记。';
+
+  @override
+  String get episodeOnDeviceNotesFootnote => '在你说话时于本机起草。完整笔记将随最终转写一同生成。';
+
+  @override
+  String get episodeOnThisPhone => '在本机';
+
+  @override
+  String get episodeOpenTranscript => '打开转写';
+
+  @override
+  String get liveCardTitle => '实时';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return '最终转写滞后约$duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => '最终转写正在补齐';
+
+  @override
+  String get livePreviewNoEngineBody => '你说的话会在一到两分钟后显示在这里。';
+
+  @override
+  String get livePreviewNoEngineTitle => '正在安全录制';
+
+  @override
+  String get livePreviewOnPhoneDivider => '在本机实时显示';
+
+  @override
+  String get livePreviewTurnOnLiveText => '打开实况文本';
 }

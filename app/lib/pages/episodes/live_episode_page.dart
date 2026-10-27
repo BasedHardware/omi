@@ -21,6 +21,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -251,6 +252,11 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                       (c) => c.liveCaptureSource == 'phone' ? c.activeRecordingId : null,
                     ),
                   ),
+                  // The admitted preview session, when this capture has one: its text
+                  // (Live card) and its on-device notes (So far) hang off it.
+                  preview: context.select<CaptureProvider, LivePreviewController?>(
+                    (c) => c.localPreviewAdmitted && c.livePreview?.admitted == true ? c.livePreview : null,
+                  ),
                   conversationId: conversationId,
                   speakerNamesOf: _speakerNames,
                   listening: listening && hasCapture,
@@ -355,14 +361,24 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                             ),
                           ),
                         ),
+                        // The session this duration counts, next to the count itself.
+                        if (listening)
+                          Flexible(
+                            child: Text(
+                              l10n.episodeLiveSince(dates.time(started)),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: meta,
+                            ),
+                          ),
                       ],
                     ),
                   ),
-                  Text('${dates.dayHeader(started)} · ${dates.time(started)}', style: meta),
                   if (namesOthers) Text(participants.join(', '), style: meta),
                   if (moments > 1) Text(l10n.episodeMomentsCount(moments), style: meta),
                 ],
               ),
+              const PreviousEpisodeLink(),
             ],
           ),
         );
@@ -459,6 +475,7 @@ class _LiveSummaryTab extends StatelessWidget {
     required this.now,
     required this.conversationId,
     required this.unavailable,
+    required this.preview,
     required this.speakerNamesOf,
     required this.listening,
     required this.onOpenTranscript,
@@ -469,6 +486,7 @@ class _LiveSummaryTab extends StatelessWidget {
   final DateTime now;
   final String? conversationId;
   final bool unavailable;
+  final LivePreviewController? preview;
   final SpeakerNames Function(CaptureProvider capture, List<Person>? people) speakerNamesOf;
   final bool listening;
   final VoidCallback onOpenTranscript;
@@ -483,8 +501,8 @@ class _LiveSummaryTab extends StatelessWidget {
       key: const Key('live_episode_summary'),
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.xl),
       children: [
-        _SoFarCard(episode: episode, now: now, unavailable: unavailable),
-        const PreviousEpisodeLink(),
+        _SoFarCard(episode: episode, now: now, unavailable: unavailable, preview: preview),
+        if (preview != null) _LivePreviewCard(preview: preview!, onOpenTranscript: onOpenTranscript),
         if (items.isNotEmpty) ...[
           _SectionTitle(l10n.tasks, count: items.length),
           _Card(
@@ -589,16 +607,24 @@ class _Card extends StatelessWidget {
 }
 
 class _SoFarCard extends StatelessWidget {
-  const _SoFarCard({required this.episode, required this.now, required this.unavailable});
+  const _SoFarCard({required this.episode, required this.now, required this.unavailable, required this.preview});
 
   final Episode? episode;
   final DateTime now;
   final bool unavailable;
 
+  /// The admitted local-preview session, or null when this capture streams to the cloud.
+  final LivePreviewController? preview;
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final bullets = episode?.bullets ?? const <String>[];
+    final serverNotes = episode != null && bullets.isNotEmpty;
+    // A preview session has no server running notes by design — the batch record
+    // arrives at the end — so "aren't updating" would name a failure of something
+    // that was never supposed to run.
+    final notesUnavailable = unavailable && preview == null;
     return Container(
       key: const Key('live_episode_so_far'),
       padding: const EdgeInsets.all(OmiSpacing.md),
@@ -606,8 +632,16 @@ class _SoFarCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(l10n.episodeSoFar, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
-          if (unavailable) ...[
+          Row(
+            children: [
+              Text(l10n.episodeSoFar, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+              if (preview != null && !serverNotes) ...[
+                const SizedBox(width: OmiSpacing.xs),
+                _OnThisPhoneTag(),
+              ],
+            ],
+          ),
+          if (notesUnavailable) ...[
             const SizedBox(height: OmiSpacing.xs),
             Text(
               l10n.episodeNotesUnavailable,
@@ -615,7 +649,7 @@ class _SoFarCard extends StatelessWidget {
               style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
             ),
           ],
-          if (episode != null && bullets.isNotEmpty) ...[
+          if (serverNotes) ...[
             const SizedBox(height: 2),
             Text(
               EpisodePresentation.updatedLabel(episode!, now, l10n),
@@ -633,12 +667,129 @@ class _SoFarCard extends StatelessWidget {
                   ],
                 ),
               ),
+          ] else if (preview != null) ...[
+            // Notes drafted on this phone from the preview text; the quiet line while
+            // there is nothing to draft (no engine, Apple Intelligence off, or the
+            // first words not summarized yet). There is no cloud fallback.
+            ListenableBuilder(
+              listenable: preview!.notes,
+              builder: (context, _) {
+                final notes = preview!.notes;
+                if (notes.bullets.isEmpty) {
+                  return Padding(
+                    key: const Key('episode_notes_start_with_transcript'),
+                    padding: const EdgeInsets.only(top: OmiSpacing.xs),
+                    child: Text(
+                      l10n.episodeNotesStartWithTranscript,
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                    ),
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  key: const Key('episode_on_device_notes'),
+                  children: [
+                    const SizedBox(height: OmiSpacing.sm),
+                    for (final bullet in notes.bullets)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('•  ', style: OmiType.callout.copyWith(color: OmiColors.textTertiary, height: 1.4)),
+                            Expanded(child: Text(bullet, style: OmiType.callout.copyWith(height: 1.4))),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: OmiSpacing.xxs),
+                    Text(
+                      l10n.episodeOnDeviceNotesFootnote,
+                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                    ),
+                  ],
+                );
+              },
+            ),
           ] else if (!unavailable) ...[
             const SizedBox(height: OmiSpacing.xs),
             Text(l10n.episodeNotesSoon, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The small provenance tag on on-device notes: they were drafted on this phone.
+class _OnThisPhoneTag extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('episode_on_this_phone_tag'),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+      child: Text(
+        context.l10n.episodeOnThisPhone,
+        style: OmiType.caption.copyWith(color: OmiColors.textSecondary),
+      ),
+    );
+  }
+}
+
+/// The live preview text on the Summary tab: one card of at most three lines, the
+/// newest still-volatile words in lighter text, no speaker label (preview text has
+/// no speaker attribution) and an Open transcript link to the full tab.
+class _LivePreviewCard extends StatelessWidget {
+  const _LivePreviewCard({required this.preview, required this.onOpenTranscript});
+
+  final LivePreviewController preview;
+  final VoidCallback onOpenTranscript;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: preview,
+      builder: (context, _) {
+        final lines = preview.lines;
+        if (lines.isEmpty) return const SizedBox.shrink();
+        final tail = lines.length > 3 ? lines.sublist(lines.length - 3) : lines;
+        final l10n = context.l10n;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SectionTitle(
+              l10n.liveCardTitle,
+              trailing: OmiButton.tertiary(
+                key: const Key('live_episode_open_transcript'),
+                label: l10n.episodeOpenTranscript,
+                size: OmiButtonSize.compact,
+                onPressed: onOpenTranscript,
+              ),
+            ),
+            Container(
+              key: const Key('live_episode_preview_card'),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+              child: Text.rich(
+                key: const Key('live_episode_preview_card_text'),
+                TextSpan(
+                  children: [
+                    for (var i = 0; i < tail.length; i++)
+                      TextSpan(
+                        text: i == 0 ? tail[i].text : ' ${tail[i].text}',
+                        // Words the recognizer may still revise read lighter.
+                        style: tail[i].isFinal ? null : TextStyle(color: OmiColors.textSecondary),
+                      ),
+                  ],
+                ),
+                style: OmiType.subhead.copyWith(height: 1.4),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

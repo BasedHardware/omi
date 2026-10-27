@@ -14477,9 +14477,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Abrir episodio anterior';
-
-  @override
   String get episodeNotesSoon => 'Las notas aparecen tras los primeros minutos de conversación.';
 
   @override
@@ -14621,22 +14618,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get othersSpeakerLabel => 'Otros';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Hecho';
@@ -14666,4 +14651,55 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Subidas en pausa un momento — se reanudarán automáticamente';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Continuación de «$title»';
+  }
+
+  @override
+  String episodeLivePreviewLine(Object duration, Object line) {
+    return '$duration · “$line”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· desde $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Las notas comienzan cuando llega la transcripción final.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Se redactan en tu teléfono mientras hablas. Las notas completas llegan con la transcripción final.';
+
+  @override
+  String get episodeOnThisPhone => 'En este teléfono';
+
+  @override
+  String get episodeOpenTranscript => 'Abrir transcripción';
+
+  @override
+  String get liveCardTitle => 'En vivo';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Transcripción final con unos $duration de retraso';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'La transcripción final se está poniendo al día';
+
+  @override
+  String get livePreviewNoEngineBody => 'Tus palabras aparecen aquí uno o dos minutos después de decirlas.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Grabando de forma segura';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'En vivo en este teléfono';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Activar texto en vivo';
 }

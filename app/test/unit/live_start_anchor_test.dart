@@ -40,6 +40,27 @@ void main() {
       expect(anchor.resolve(episode: null, captureStart: next, streaming: true, now: next), next);
     });
 
+    test('an episode rotating mid-capture keeps the session start', () {
+      // The server closed the episode at an idle gap and opened the next at the
+      // following words; the capture never stopped. Home's row and the live page
+      // keep counting this session's duration instead of restarting at every
+      // rotation (the row once read 29s while the session read 8m 24s).
+      final anchor = LiveStartAnchor();
+      final sessionStart = _t0;
+      final later = _t0.add(const Duration(minutes: 8, seconds: 24));
+      expect(anchor.resolve(episode: _episode(sessionStart), captureStart: sessionStart, streaming: true, now: later),
+          sessionStart);
+      final rotated = _episode(later, id: 'ep2');
+      expect(anchor.resolve(episode: rotated, captureStart: sessionStart, streaming: true, now: later), sessionStart);
+      expect(
+          anchor.resolve(
+              episode: rotated,
+              captureStart: sessionStart,
+              streaming: true,
+              now: later.add(const Duration(minutes: 2))),
+          sessionStart);
+    });
+
     test('an idle close during a lapsed lease keeps the old start instead of 0s', () {
       final anchor = LiveStartAnchor();
       final now = _t0.add(const Duration(minutes: 40));

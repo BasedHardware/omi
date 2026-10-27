@@ -3168,3 +3168,31 @@ final class LivePreviewVerdict extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"verdict": verdict.wireName, "platform": platform.wireName, "verdict_latency_ms": verdictLatencyMs, "hold_duration_ms": holdDurationMs, "held_frames": heldFrames, "hold_timeout_replayed": holdTimeoutReplayed};
 }
+
+enum LivePreviewNotesEngine {
+  appleFoundationModels("apple_foundation_models"),
+  none("none");
+  const LivePreviewNotesEngine(this.wireName);
+  final String wireName;
+}
+
+enum LivePreviewNotesOutcome {
+  ok("ok"),
+  unavailable("unavailable"),
+  error("error"),
+  droppedBusy("dropped_busy");
+  const LivePreviewNotesOutcome(this.wireName);
+  final String wireName;
+}
+
+final class LivePreviewNotes extends RegisteredEvent {
+  const LivePreviewNotes({required this.engine, required this.outcome, required this.latencyMs, required this.bulletCount});
+  final LivePreviewNotesEngine engine;
+  final LivePreviewNotesOutcome outcome;
+  final int latencyMs;
+  final int bulletCount;
+  @override
+  String get wireName => "Live Preview Notes";
+  @override
+  Map<String, Object> get properties => {"engine": engine.wireName, "outcome": outcome.wireName, "latency_ms": latencyMs, "bullet_count": bulletCount};
+}

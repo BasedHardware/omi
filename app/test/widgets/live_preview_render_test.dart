@@ -11,17 +11,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
+import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -29,6 +33,7 @@ import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/live_preview/live_preview_engine.dart';
+import 'package:omi/services/live_preview/live_preview_notes.dart';
 import 'package:omi/services/live_preview/live_preview_telemetry.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/ui/ui.dart';
@@ -37,9 +42,11 @@ import 'package:omi/utils/enums.dart';
 import '../helpers/sfpro_font_fixtures.dart';
 import '../support/live_preview_fakes.dart';
 
-/// Every state of the local-preview live transcript surface, iOS look, light and dark.
-/// `--dart-define=OMI_LIVE_PREVIEW_EVIDENCE_DIR=<dir>` writes the PNGs; without it this is a
-/// layout/overflow/copy check only.
+/// Every state of the local-preview surfaces, iOS look, light and dark: the
+/// transcript (preview lines, hybrid final+preview, no-engine card), the
+/// Summary tab's Live card and on-device notes, and the Home capture card's
+/// last-line slot. `--dart-define=OMI_LIVE_PREVIEW_EVIDENCE_DIR=<dir>` writes
+/// the PNGs; without it this is a layout/overflow/copy check only.
 const _evidence = String.fromEnvironment('OMI_LIVE_PREVIEW_EVIDENCE_DIR');
 
 class _Device extends ChangeNotifier implements DeviceProvider {
@@ -82,7 +89,8 @@ class _Ble implements CaptureBleListeners {
 }
 
 class _PhoneSync {
-  int getInFlightSeconds() => 0;
+  int inFlightSeconds = 0;
+  int getInFlightSeconds() => inFlightSeconds;
   List<dynamic> getSessionUnsyncedWals(int start) => const [];
   List<dynamic> getSessionWals(int start) => const [];
 }
@@ -92,8 +100,10 @@ class _Syncs {
 }
 
 class _Wal implements IWalService {
+  _Wal(this.syncs);
+  final _Syncs syncs;
   @override
-  dynamic getSyncs() => _Syncs();
+  dynamic getSyncs() => syncs;
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
 }
@@ -101,9 +111,9 @@ class _Wal implements IWalService {
 /// A real CaptureProvider recording from the pendant, with the admission and
 /// the preview model injected (the socket path is covered by the routing tests).
 class _Capture extends CaptureProvider {
-  _Capture({this.preview, this.admitted = false})
+  _Capture({this.preview, this.admitted = false, int inFlightSeconds = 0})
       : super(
-          walService: _Wal(),
+          walService: _Wal(_Syncs()..phone.inFlightSeconds = inFlightSeconds),
           connectivity: CaptureConnectivityBoundary(
               initiallyConnected: true, changes: const Stream.empty(), isConnected: () => true),
           bleListeners: _Ble(),
@@ -130,7 +140,7 @@ class _Capture extends CaptureProvider {
   bool get havingRecordingDevice => true;
 }
 
-enum _State { streaming, starting, listening, transcribing, cloud }
+enum _State { streaming, starting, listening, noEngine, hybrid, cloud, notes, notesUnavailable }
 
 void main() {
   setUp(() async {
@@ -138,7 +148,19 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  Future<(LivePreviewController?, FakeLivePreviewEngine)> previewIn(_State state) async {
+  final t0 = DateTime.utc(2026, 10, 22, 2, 18);
+
+  Episode episodeWith({List<String> bullets = const []}) => Episode(
+      id: 'ep1',
+      live: true,
+      startedAt: t0,
+      lastActivityAt: t0,
+      title: 'Meeting Prep',
+      bullets: bullets,
+      conversationIds: const ['c1']);
+
+  Future<(LivePreviewController?, FakeLivePreviewEngine)> previewIn(_State state,
+      {LivePreviewNotesEngine? notesEngine, int inFlightSeconds = 0, LivePreviewStart? noEngineStart}) async {
     final engine = FakeLivePreviewEngine();
     if (state == _State.cloud) return (null, engine);
     final preview = LivePreviewController(
@@ -146,29 +168,37 @@ void main() {
       telemetry: LivePreviewTelemetry(emit: (_) {}),
       platform: LivePreviewPlatform.ios,
       osMajor: 26,
+      notesEngine: notesEngine,
     );
     switch (state) {
       case _State.starting:
         engine.startGate = Completer();
-      case _State.transcribing:
-        engine.nextStart = const LivePreviewStart.none(LivePreviewReason.localeAssetMissing);
+      case _State.noEngine:
+        engine.nextStart = noEngineStart ?? const LivePreviewStart.none(LivePreviewReason.localeAssetMissing);
       default:
         break;
     }
+    addTearDown(preview.dispose);
     preview.admit(language: 'en');
     await pumpEventQueue();
-    if (state == _State.streaming) {
+    if (state == _State.streaming ||
+        state == _State.hybrid ||
+        state == _State.notes ||
+        state == _State.notesUnavailable) {
       engine.emit('a0', 'Okay, so the plan for Thursday is to ship the pendant update first.', true);
       engine.emit('a1', 'Then we check the battery numbers with the team before the weekend.', true);
       engine.emit('a2', 'and if the overnight run looks clean we can', false);
+      if (state == _State.notes || state == _State.notesUnavailable) {
+        engine.emit('a3', 'The beta goes out to the pilot cohort on Friday morning.', true);
+      }
       await pumpEventQueue();
     }
     return (preview, engine);
   }
 
-  _Capture captureFor(_State state, LivePreviewController? preview) {
-    final capture = _Capture(preview: preview, admitted: state != _State.cloud);
-    if (state == _State.cloud) {
+  _Capture captureFor(_State state, LivePreviewController? preview, {int inFlightSeconds = 0}) {
+    final capture = _Capture(preview: preview, admitted: state != _State.cloud, inFlightSeconds: inFlightSeconds);
+    if (state == _State.cloud || state == _State.hybrid) {
       capture.segments = [
         TranscriptSegment(
             id: 'c1',
@@ -196,7 +226,7 @@ void main() {
   var android = false;
 
   Future<void> shoot(WidgetTester tester, String file,
-      {required bool light, required Widget home, required CaptureProvider capture}) async {
+      {required bool light, required Widget home, required CaptureProvider capture, EpisodeProvider? episodes}) async {
     debugDefaultTargetPlatformOverride = android ? TargetPlatform.android : TargetPlatform.iOS;
     tester.view.physicalSize = const Size(393, 852);
     tester.view.devicePixelRatio = 1;
@@ -217,6 +247,7 @@ void main() {
           ChangeNotifierProvider<ConnectivityProvider>.value(value: _Connectivity()),
           ChangeNotifierProvider<UsageProvider>.value(value: usage),
           ChangeNotifierProvider<PhoneCallProvider>.value(value: _Call()),
+          if (episodes != null) ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
           ChangeNotifierProvider(
               create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))),
         ],
@@ -257,25 +288,27 @@ void main() {
 
   final en = lookupAppLocalizations(const Locale('en'));
   var index = 0;
-  String name(String slug, bool light) => '${(++index).toString().padLeft(3, '0')}-mobile-'
-      '${android ? 'android' : 'ios'}-$slug-${light ? 'light' : 'dark'}.png';
+  String name(String slug, bool light) =>
+      '${(++index).toString().padLeft(3, '0')}-mobile-${android ? 'android' : 'ios'}-$slug-${light ? 'light' : 'dark'}.png';
 
   for (final (onAndroid, light) in [(false, false), (false, true), (true, false), (true, true)]) {
     final theme = '${onAndroid ? 'android' : 'ios'}, ${light ? 'light' : 'dark'}';
 
-    testWidgets('streaming preview: provisional words secondary, settled words primary ($theme)', (tester) async {
+    testWidgets('streaming preview: provisional words secondary, settled words primary, no header ($theme)',
+        (tester) async {
       android = onAndroid;
       final (preview, _) = await tester.runAsync(() => previewIn(_State.streaming)) ?? (null, null);
       final capture = captureFor(_State.streaming, preview);
       addTearDown(capture.dispose);
       await shoot(tester, name('live-preview-streaming', light),
           light: light, home: const LiveEpisodePage(), capture: capture);
-      expect(find.text(en.livePreviewLabel), findsOneWidget);
-      expect(find.text(en.livePreviewExplanation), findsOneWidget);
       final volatile = tester.widget<Text>(find.text('and if the overnight run looks clean we can'));
       final settled = tester.widget<Text>(find.textContaining('Thursday'));
       expect(volatile.style?.color, OmiColors.textSecondary);
       expect(settled.style?.color, OmiColors.textPrimary);
+      // The old "Live preview / On-device preview…" header is gone.
+      expect(find.text('Live preview'), findsNothing);
+      expect(find.text('On-device preview. The final transcript replaces it shortly.'), findsNothing);
       expect(capture.segments, isEmpty, reason: 'preview never enters capture segments');
     });
 
@@ -298,21 +331,61 @@ void main() {
       await shoot(tester, name('live-preview-listening', light),
           light: light, home: const LiveEpisodePage(), capture: capture);
       expect(find.text(en.livePreviewListening), findsOneWidget);
-      expect(find.text(en.livePreviewLabel), findsOneWidget);
     });
 
-    testWidgets('no on-device engine: calm Transcribing, no error, no setup action ($theme)', (tester) async {
+    testWidgets('no on-device engine: Recording safely card, settings link only when it can land ($theme)',
+        (tester) async {
       android = onAndroid;
-      final (preview, _) = await tester.runAsync(() => previewIn(_State.transcribing)) ?? (null, null);
-      final capture = captureFor(_State.transcribing, preview);
+      final (preview, _) = await tester.runAsync(() => previewIn(_State.noEngine)) ?? (null, null);
+      final capture = captureFor(_State.noEngine, preview);
       addTearDown(capture.dispose);
       await shoot(tester, name('live-preview-no-engine', light),
           light: light, home: const LiveEpisodePage(), capture: capture);
-      expect(find.text(en.livePreviewTranscribingTitle), findsOneWidget);
-      expect(find.text(en.livePreviewTranscribingMessage), findsOneWidget);
-      expect(find.descendant(of: find.byKey(const Key('live_preview_transcribing')), matching: find.byType(OmiButton)),
-          findsNothing);
-      expect(find.text(en.livePreviewLabel), findsNothing);
+      expect(find.text(en.livePreviewNoEngineTitle), findsOneWidget);
+      expect(find.text(en.livePreviewNoEngineBody), findsOneWidget);
+      expect(find.byKey(const Key('live_preview_turn_on_live_text')), findsNothing,
+          reason: 'locale_asset_missing has no settings deep-link');
+      expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
+    });
+
+    testWidgets('no engine with denied speech permission offers Turn on live text ($theme)', (tester) async {
+      android = onAndroid;
+      final (preview, _) = await tester.runAsync(() => previewIn(_State.noEngine,
+              noEngineStart: const LivePreviewStart.none(LivePreviewReason.speechPermissionDenied))) ??
+          (null, null);
+      final capture = captureFor(_State.noEngine, preview);
+      addTearDown(capture.dispose);
+      await shoot(tester, name('live-preview-no-engine-permission', light),
+          light: light, home: const LiveEpisodePage(), capture: capture);
+      expect(find.text(en.livePreviewNoEngineTitle), findsOneWidget);
+      expect(find.text(en.livePreviewTurnOnLiveText), findsOneWidget);
+    });
+
+    testWidgets('hybrid: final segments, the Live-on-this-phone divider, then uncovered preview lines ($theme)',
+        (tester) async {
+      android = onAndroid;
+      final (preview, _) = await tester.runAsync(() => previewIn(_State.hybrid)) ?? (null, null);
+      final capture = captureFor(_State.hybrid, preview, inFlightSeconds: 22);
+      addTearDown(capture.dispose);
+      await shoot(tester, name('live-preview-hybrid', light),
+          light: light, home: const LiveEpisodePage(), capture: capture);
+      // Finals with their speakers come first.
+      expect(find.textContaining('Thursday', findRichText: true), findsWidgets);
+      // The divider names where the preview continues.
+      expect(find.byKey(const Key('live_preview_divider')), findsOneWidget);
+      expect(find.text(en.livePreviewOnPhoneDivider), findsOneWidget);
+      // Lines the finals already cover do not repeat under the divider.
+      expect(find.byKey(const Key('live_preview_tail_a0')), findsNothing);
+      expect(find.byKey(const Key('live_preview_tail_a1')), findsNothing);
+      // The uncovered volatile tail does, lighter than settled text.
+      final tail = tester.widget<Text>(
+          find.descendant(of: find.byKey(const Key('live_preview_tail_a2')), matching: find.byType(Text)));
+      expect(tail.style?.color, OmiColors.textSecondary);
+      // One quiet behind-line instead of the uploading pill and chunk count.
+      expect(find.byKey(const Key('live_preview_behind_line')), findsOneWidget);
+      expect(find.text(en.livePreviewBehind(en.timeCompactSecs(20))), findsOneWidget);
+      expect(find.text(en.uploadingAudioForTranscription(en.timeCompactSecs(22))), findsNothing);
+      expect(find.text(en.captureChunksPending(2)), findsNothing);
     });
 
     testWidgets('not admitted: today\'s cloud transcript, unchanged ($theme)', (tester) async {
@@ -321,8 +394,111 @@ void main() {
       addTearDown(capture.dispose);
       await shoot(tester, name('cloud-transcript-unchanged', light),
           light: light, home: const LiveEpisodePage(), capture: capture);
-      expect(find.text(en.livePreviewLabel), findsNothing);
       expect(find.textContaining('Thursday', findRichText: true), findsWidgets);
+      expect(find.byKey(const Key('live_preview_divider')), findsNothing);
+    });
+
+    testWidgets('summary: So far drafts on this phone, Live card without a speaker label ($theme)', (tester) async {
+      android = onAndroid;
+      final (preview, _) = await tester.runAsync(() => previewIn(_State.notes, notesEngine: (text, language) async {
+                return ['Ship the pendant update first', 'Check battery numbers before the weekend'];
+              })) ??
+          (null, null);
+      final capture = captureFor(_State.notes, preview);
+      addTearDown(capture.dispose);
+      final episodes = EpisodeProvider(
+        clock: () => DateTime.utc(2026, 10, 22, 2, 30),
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: episodeWith())),
+      )..debugSetLive(episodeWith());
+      addTearDown(episodes.dispose);
+      await shoot(tester, name('live-preview-summary-notes', light),
+          light: light, home: const LiveEpisodePage(), capture: capture, episodes: episodes);
+      // On-device bullets with their provenance tag and footnote.
+      expect(find.byKey(const Key('episode_on_device_notes')), findsOneWidget);
+      expect(find.text('Ship the pendant update first'), findsOneWidget);
+      expect(find.text(en.episodeOnThisPhone), findsOneWidget);
+      expect(find.text(en.episodeOnDeviceNotesFootnote), findsOneWidget);
+      // No server notes exist, so the "aren't updating" line is gone.
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
+      expect(find.text(en.episodeNotesStartWithTranscript), findsNothing);
+      // The Live card: preview text, no "You" label, and the Open transcript link.
+      expect(find.byKey(const Key('live_episode_preview_card')), findsOneWidget);
+      expect(find.text(en.liveCardTitle), findsOneWidget);
+      expect(find.text(en.episodeOpenTranscript), findsOneWidget);
+      final richTexts = tester.widgetList<Text>(
+          find.descendant(of: find.byKey(const Key('live_episode_preview_card')), matching: find.byType(Text)));
+      expect(richTexts.any((text) => (text.data ?? '').startsWith('You')), isFalse,
+          reason: 'preview text has no speaker attribution');
+    });
+
+    testWidgets('summary with server running notes: today\'s card, on-device drafts hidden ($theme)', (tester) async {
+      android = onAndroid;
+      final (preview, _) = await tester.runAsync(() => previewIn(_State.notes, notesEngine: (text, language) async {
+                return ['Drafted on the phone'];
+              })) ??
+          (null, null);
+      final capture = captureFor(_State.notes, preview);
+      addTearDown(capture.dispose);
+      final episodes = EpisodeProvider(
+        clock: () => DateTime.utc(2026, 10, 22, 2, 30),
+        fetchLive: () async =>
+            ApiSuccess(EpisodeRead(enabled: true, episode: episodeWith(bullets: const ['Server running note']))),
+      )..debugSetLive(episodeWith(bullets: const ['Server running note']));
+      addTearDown(episodes.dispose);
+      await shoot(tester, name('live-preview-summary-server-notes', light),
+          light: light, home: const LiveEpisodePage(), capture: capture, episodes: episodes);
+      expect(find.text('Server running note'), findsOneWidget);
+      expect(find.byKey(const Key('episode_on_device_notes')), findsNothing);
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
+      expect(find.text(en.episodeOnThisPhone), findsNothing);
+    });
+
+    testWidgets('summary with no engine on the phone: the quiet line ($theme)', (tester) async {
+      android = onAndroid;
+      final (preview, _) = await tester
+              .runAsync(() => previewIn(_State.notesUnavailable, notesEngine: (text, language) async => null)) ??
+          (null, null);
+      final capture = captureFor(_State.notesUnavailable, preview);
+      addTearDown(capture.dispose);
+      final episodes = EpisodeProvider(
+        clock: () => DateTime.utc(2026, 10, 22, 2, 30),
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: episodeWith())),
+      )..debugSetLive(episodeWith());
+      addTearDown(episodes.dispose);
+      await shoot(tester, name('live-preview-summary-quiet', light),
+          light: light, home: const LiveEpisodePage(), capture: capture, episodes: episodes);
+      expect(find.text(en.episodeNotesStartWithTranscript), findsOneWidget);
+      expect(find.byKey(const Key('episode_on_device_notes')), findsNothing);
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
+    });
+
+    testWidgets('home live row: duration and the newest preview line in one subtitle ($theme)', (tester) async {
+      android = onAndroid;
+      final (preview, _) = await tester.runAsync(() => previewIn(_State.streaming)) ?? (null, null);
+      final capture = captureFor(_State.streaming, preview);
+      addTearDown(capture.dispose);
+      final episodes = EpisodeProvider(
+        clock: () => DateTime.utc(2026, 10, 22, 2, 26, 24),
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: episodeWith())),
+      )..debugSetLive(episodeWith());
+      addTearDown(episodes.dispose);
+      await shoot(tester, name('home-row-preview-line', light),
+          light: light,
+          home: Builder(
+            builder: (context) => Scaffold(
+              backgroundColor: OmiColors.surface0,
+              body: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(OmiSpacing.md),
+                  child: ListView(children: const [LiveEpisodeRow()]),
+                ),
+              ),
+            ),
+          ),
+          capture: capture,
+          episodes: episodes);
+      expect(find.byKey(const Key('home_live_episode_row')), findsOneWidget);
+      expect(find.text('8m 24s · “and if the overnight run looks clean we can”'), findsOneWidget);
     });
 
     testWidgets('home capture card shows the newest preview line in its last-line slot ($theme)', (tester) async {

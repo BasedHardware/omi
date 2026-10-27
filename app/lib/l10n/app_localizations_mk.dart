@@ -14496,9 +14496,6 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Отвори ја претходната епизода';
-
-  @override
   String get episodeNotesSoon => 'Белешките се појавуваат по првите минути разговор.';
 
   @override
@@ -14640,22 +14637,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get othersSpeakerLabel => 'Други';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Завршено';
@@ -14685,4 +14670,55 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Качувањата се привремено паузирани — ќе продолжат автоматски';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Продолжува „$title“';
+  }
+
+  @override
+  String episodeLivePreviewLine(Object duration, Object line) {
+    return '$duration · “$line”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· од $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Белешките започнуваат кога ќе пристигне конечната транскрипција.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Се создаваат на твојот телефон додека зборуваш. Целосните белешки доаѓаат со конечната транскрипција.';
+
+  @override
+  String get episodeOnThisPhone => 'На овој телефон';
+
+  @override
+  String get episodeOpenTranscript => 'Отвори транскрипција';
+
+  @override
+  String get liveCardTitle => 'Во живо';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Конечната транскрипција доцни околу $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Конечната транскрипција стигнува';
+
+  @override
+  String get livePreviewNoEngineBody => 'Твоите зборови се појавуваат тука минута-две откако ќе ги изговориш.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Безбедно снима';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Во живо на овој телефон';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Вклучи текст во живо';
 }

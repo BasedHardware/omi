@@ -92,10 +92,9 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     final episode = episodes.live;
     final listening = EpisodePresentation.isListening(state);
     final running = EpisodePresentation.elapsed(episode, capture, now, anchor: episodes.liveAnchor);
-    // Seconds only while the first minute runs; after that whole minutes, as the rows below read.
-    final elapsed = running.inSeconds < 60
-        ? EpisodePresentation.runningLength(running, l10n)
-        : OmiDuration.compact(running.inMinutes * 60, l10n);
+    // The same live length the episode page shows (seconds retained), never a coarser
+    // whole-minute style: the row and the page must agree on one session duration.
+    final elapsed = EpisodePresentation.runningLength(running, l10n);
     final named = (episode?.title ?? '').trim();
     // A pendant whose recovery was exhausted owes audio: the row names the failure
     // and offers the one action that can fix it — never Listening, and no topic of
@@ -104,17 +103,23 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     final title = noAudio ? l10n.captureNoAudioFromPendant : (named.isEmpty ? l10n.episodeListeningNow : named);
     final topics = noAudio || named.isNotEmpty ? '' : EpisodePresentation.topics(episode);
     final peopleNamed = noAudio ? 0 : _peopleCount(capture);
-    // Paused (or waiting) shows no clock: a time that keeps counting while nothing listens misleads.
+    // A local-preview session reads its newest on-device line where the cloud row
+    // reads its status details: one line, "8m 24s · “…"". Nothing else about the
+    // row changes.
+    final previewLine =
+        listening && capture.segments.isEmpty && capture.localPreviewAdmitted ? capture.livePreview?.latestLine : null;
     final status = noAudio
         ? l10n.captureNoAudioDetail
         : listening
             ? (episode == null ? l10n.episodeCaptureFor : l10n.episodeLiveFor)(elapsed)
             : captureStateLabel(l10n, state);
-    final rest = [
-      status,
-      if (peopleNamed >= 2) l10n.peopleCount(peopleNamed),
-      if (topics.isNotEmpty) topics,
-    ].join(' · ');
+    final rest = previewLine != null && previewLine.trim().isNotEmpty
+        ? l10n.episodeLivePreviewLine(elapsed, previewLine.trim())
+        : [
+            status,
+            if (peopleNamed >= 2) l10n.peopleCount(peopleNamed),
+            if (topics.isNotEmpty) topics,
+          ].join(' · ');
     void open() {
       OmiHaptics.selection();
       PlatformManager.instance.analytics.liveTranscriptCardClicked(

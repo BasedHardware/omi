@@ -14546,9 +14546,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Buksan ang Nakaraang Episode';
-
-  @override
   String get episodeNotesSoon => 'Lalabas ang mga tala pagkatapos ng unang ilang minuto ng usapan.';
 
   @override
@@ -14691,22 +14688,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get othersSpeakerLabel => 'Iba pa';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Tapos';
@@ -14737,4 +14722,56 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get syncCardUploadsPaused =>
       'Pansamantalang naka-pause ang mga upload — awtomatikong magpapatuloy ang mga ito';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Nagpapatuloy sa “$title”';
+  }
+
+  @override
+  String episodeLivePreviewLine(Object duration, Object line) {
+    return '$duration · “$line”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· mula $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Nagsisimula ang tala kapag dumarating ang panghuling transcript.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Nakasulat sa phone mo habang nagsasalita ka. Dumarating ang kumpletong tala kasama ng panghuling transcript.';
+
+  @override
+  String get episodeOnThisPhone => 'Sa phone na ito';
+
+  @override
+  String get episodeOpenTranscript => 'Buksan ang transcript';
+
+  @override
+  String get liveCardTitle => 'Live';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Naiwan ng mga $duration ang panghuling transcript';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Sumusunod na ang panghuling transcript';
+
+  @override
+  String get livePreviewNoEngineBody =>
+      'Lalabas ang mga salita mo dito isa hanggang dalawang minuto pagkatapos mong sabihin.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Ligtas na nagre-record';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Live sa phone na ito';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'I-on ang live text';
 }

@@ -14464,9 +14464,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Atvērt iepriekšējo epizodi';
-
-  @override
   String get episodeNotesSoon => 'Piezīmes parādās pēc pirmajām sarunas minūtēm.';
 
   @override
@@ -14608,22 +14605,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get othersSpeakerLabel => 'Citi';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Pabeigts';
@@ -14653,4 +14638,55 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Augšupielādes īsu brīdi ir pauzētas — tās automātiski atsāksies';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Turpina „$title“';
+  }
+
+  @override
+  String episodeLivePreviewLine(Object duration, Object line) {
+    return '$duration · “$line”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· kopš $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Piezīmes sāksies, kad ieradīsies galīgā transkripcija.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Tapat jūsu tālrunī, kamēr runājat. Pilnās piezīmes ieradīsies kopā ar galīgo transkripciju.';
+
+  @override
+  String get episodeOnThisPhone => 'Šajā tālrunī';
+
+  @override
+  String get episodeOpenTranscript => 'Atvērt transkripciju';
+
+  @override
+  String get liveCardTitle => 'Tiešraide';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Galīgā transkripcija atpaliek aptuveni $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Galīgā transkripcija panāks';
+
+  @override
+  String get livePreviewNoEngineBody => 'Tavi vārdi šeit parādās vienu līdz divas minūtes pēc to izteikšanas.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Droši ieraksta';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Tiešraide šajā tālrunī';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Ieslēgt tiešraides tekstu';
 }

@@ -14417,16 +14417,13 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Open Previous Episode';
-
-  @override
   String get episodeNotesSoon => 'Running notes appear after the first few minutes of talk.';
 
   @override
   String get episodeOpenAll => 'Open All';
 
   @override
-  String get episodeWrapUpNow => 'Wrap Up Now';
+  String get episodeWrapUpNow => 'Wrap up now';
 
   @override
   String get episodeWrapsUpHint => 'Omi wraps this up when you move on';
@@ -14562,22 +14559,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get othersSpeakerLabel => 'Others';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Done';
@@ -14607,4 +14592,55 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Uploads paused for a moment — they\'ll resume automatically';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Continues “$title”';
+  }
+
+  @override
+  String episodeLivePreviewLine(Object duration, Object line) {
+    return '$duration · “$line”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· since $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Notes start when the final transcript arrives.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Drafted on your phone as you talk. The full notes arrive with the final transcript.';
+
+  @override
+  String get episodeOnThisPhone => 'On this phone';
+
+  @override
+  String get episodeOpenTranscript => 'Open transcript';
+
+  @override
+  String get liveCardTitle => 'Live';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Final transcript about $duration behind';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Final transcript catching up';
+
+  @override
+  String get livePreviewNoEngineBody => 'Your words show up here a minute or two after you say them.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Recording safely';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Live on this phone';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Turn on live text';
 }

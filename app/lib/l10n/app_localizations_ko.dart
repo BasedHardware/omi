@@ -14233,9 +14233,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => '이전 에피소드 열기';
-
-  @override
   String get episodeNotesSoon => '대화가 몇 분 지나면 노트가 나타납니다.';
 
   @override
@@ -14377,22 +14374,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get othersSpeakerLabel => '기타';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => '완료';
@@ -14422,4 +14407,54 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => '업로드가 잠시 일시중지되었습니다 — 자동으로 다시 시작됩니다';
+
+  @override
+  String episodeContinues(Object title) {
+    return '“$title” 이어서';
+  }
+
+  @override
+  String episodeLivePreviewLine(Object duration, Object line) {
+    return '$duration · “$line”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· $time부터';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => '최종 스크립트가 도착하면 노트가 시작됩니다.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote => '말하는 동안 휴대전화에서 초안이 작성됩니다. 전체 노트는 최종 스크립트와 함께 도착합니다.';
+
+  @override
+  String get episodeOnThisPhone => '이 휴대전화에서';
+
+  @override
+  String get episodeOpenTranscript => '스크립트 열기';
+
+  @override
+  String get liveCardTitle => '라이브';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return '최종 스크립트가 약 $duration 뒤처져 있습니다';
+  }
+
+  @override
+  String get livePreviewCatchingUp => '최종 스크립트가 곧 도착합니다';
+
+  @override
+  String get livePreviewNoEngineBody => '말한 내용은 1~2분 후 이곳에 나타납니다.';
+
+  @override
+  String get livePreviewNoEngineTitle => '안전하게 기록 중입니다';
+
+  @override
+  String get livePreviewOnPhoneDivider => '이 휴대전화에서 실시간';
+
+  @override
+  String get livePreviewTurnOnLiveText => '실시간 텍스트 켜기';
 }

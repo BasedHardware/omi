@@ -17571,7 +17571,6 @@
             }
         }
     },
-    "episodeOpenPrevious": "Open Previous Episode",
     "episodeNotesSoon": "Running notes appear after the first few minutes of talk.",
     "@episodeNotesSoon": {
         "description": "Shown in the running notes card before the first notes exist."
@@ -17580,7 +17579,7 @@
     "@episodeOpenAll": {
         "description": "Opens the full live transcript from its preview on a live episode."
     },
-    "episodeWrapUpNow": "Wrap Up Now",
+    "episodeWrapUpNow": "Wrap up now",
     "@episodeWrapUpNow": {
         "description": "Button that ends a live episode now and makes its full notes."
     },
@@ -17810,14 +17809,6 @@
     "@othersSpeakerLabel": {
         "description": "Collective label for unidentified voices with too little evidence in an over-split transcript; not a participant count."
     },
-    "livePreviewLabel": "Live preview",
-    "@livePreviewLabel": {
-        "description": "Small caption above the on-device live transcript preview while recording"
-    },
-    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
-    "@livePreviewExplanation": {
-        "description": "One-line explanation under the Live preview caption: the provisional text is made on the phone and replaced by the final transcript"
-    },
     "livePreviewListening": "Listening… words appear here as you speak.",
     "@livePreviewListening": {
         "description": "Live preview is running on the phone but no words have been recognized yet"
@@ -17825,14 +17816,6 @@
     "livePreviewStarting": "Starting live preview…",
     "@livePreviewStarting": {
         "description": "The on-device live preview engine is starting"
-    },
-    "livePreviewTranscribingTitle": "Transcribing…",
-    "@livePreviewTranscribingTitle": {
-        "description": "Calm state when this phone has no on-device preview: the recording is being transcribed after capture"
-    },
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
-    "@livePreviewTranscribingMessage": {
-        "description": "Explains, under Transcribing…, where and when the transcript appears; not an error"
     },
     "openLoopAnswerDone": "Done",
     "@openLoopAnswerDone": {
@@ -17872,5 +17855,74 @@
     "syncCardUploadsPaused": "Uploads paused for a moment — they'll resume automatically",
     "@syncCardUploadsPaused": {
         "description": "Upload cooldown copy for a per-account dispatch hold, not server capacity"
+    },
+    "episodeContinues": "Continues “{title}”",
+    "@episodeContinues": {
+        "description": "Pill under the live duration: this capture continues the previous episode.",
+        "placeholders": {
+            "title": {}
+        }
+    },
+    "episodeLivePreviewLine": "{duration} · “{line}”",
+    "@episodeLivePreviewLine": {
+        "description": "Home live row subtitle for a local-preview session: running length, then the newest preview line.",
+        "placeholders": {
+            "duration": {},
+            "line": {}
+        }
+    },
+    "episodeLiveSince": "· since {time}",
+    "@episodeLiveSince": {
+        "description": "The wall-clock start of the live session, after its running length.",
+        "placeholders": {
+            "time": {}
+        }
+    },
+    "episodeNotesStartWithTranscript": "Notes start when the final transcript arrives.",
+    "@episodeNotesStartWithTranscript": {
+        "description": "Quiet line when no on-device notes can be drafted."
+    },
+    "episodeOnDeviceNotesFootnote": "Drafted on your phone as you talk. The full notes arrive with the final transcript.",
+    "@episodeOnDeviceNotesFootnote": {
+        "description": "Footnote under on-device live notes."
+    },
+    "episodeOnThisPhone": "On this phone",
+    "@episodeOnThisPhone": {
+        "description": "Tag on notes drafted on-device from the live preview."
+    },
+    "episodeOpenTranscript": "Open transcript",
+    "@episodeOpenTranscript": {
+        "description": "Link from the Summary live card to the Transcript tab."
+    },
+    "liveCardTitle": "Live",
+    "@liveCardTitle": {
+        "description": "Title of the live preview card on the Summary tab."
+    },
+    "livePreviewBehind": "Final transcript about {duration} behind",
+    "@livePreviewBehind": {
+        "description": "Quiet line: how far the final transcript lags the live preview.",
+        "placeholders": {
+            "duration": {}
+        }
+    },
+    "livePreviewCatchingUp": "Final transcript catching up",
+    "@livePreviewCatchingUp": {
+        "description": "Quiet line when the final-transcript lag is unknown."
+    },
+    "livePreviewNoEngineBody": "Your words show up here a minute or two after you say them.",
+    "@livePreviewNoEngineBody": {
+        "description": "No-engine preview card body."
+    },
+    "livePreviewNoEngineTitle": "Recording safely",
+    "@livePreviewNoEngineTitle": {
+        "description": "No-engine preview card title."
+    },
+    "livePreviewOnPhoneDivider": "Live on this phone",
+    "@livePreviewOnPhoneDivider": {
+        "description": "Divider between the final transcript and the on-device preview lines."
+    },
+    "livePreviewTurnOnLiveText": "Turn on live text",
+    "@livePreviewTurnOnLiveText": {
+        "description": "Link to the speech settings where the platform can deep-link to them."
     }
 }

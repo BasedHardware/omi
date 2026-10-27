@@ -14493,9 +14493,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'మునుపటి ఎపిసోడ్‌ను తెరవండి';
-
-  @override
   String get episodeNotesSoon => 'మాటల మొదటి కొన్ని నిమిషాల తర్వాత నోట్స్ కనిపిస్తాయి.';
 
   @override
@@ -14638,22 +14635,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get othersSpeakerLabel => 'ఇతరులు';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'పూర్తయింది';
@@ -14683,4 +14668,55 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'అప్‌లోడ్‌లు కొద్దిసేపు నిలిచిపోయాయి — అవి స్వయంచాలకంగా కొనసాగుతాయి';
+
+  @override
+  String episodeContinues(Object title) {
+    return '“$title” కొనసాగుతోంది';
+  }
+
+  @override
+  String episodeLivePreviewLine(Object duration, Object line) {
+    return '$duration · “$line”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· $time నుండి';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'చివరి ట్రాన్స్‌క్రిప్ట్ వచ్చినప్పుడు నోట్స్ ప్రారంభమవుతాయి.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'మీరు మాట్లాడుతున్నప్పుడు మీ ఫోన్‌లోనే రూపొందుతాయి. పూర్తి నోట్స్ చివరి ట్రాన్స్‌క్రిప్ట్‌తో వస్తాయి.';
+
+  @override
+  String get episodeOnThisPhone => 'ఈ ఫోన్‌లో';
+
+  @override
+  String get episodeOpenTranscript => 'ట్రాన్స్‌క్రిప్ట్ తెరవండి';
+
+  @override
+  String get liveCardTitle => 'లైవ్';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'చివరి ట్రాన్స్‌క్రిప్ట్ సుమారు $duration వెనుకబడి ఉంది';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'చివరి ట్రాన్స్‌క్రిప్ట్ అప్‌డేట్ అవుతోంది';
+
+  @override
+  String get livePreviewNoEngineBody => 'మీరు చెప్పిన ఒకటి రెణ्टు నిమిషాల్లో మీ మాటలు ఇక్కడ కనిపిస్తాయి.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'సురక్షితంగా రికార్డ్ అవుతోంది';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'ఈ ఫోన్‌లో లైవ్';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'లైవ్ టెక్స్ట్ ఆన్ చేయండి';
 }

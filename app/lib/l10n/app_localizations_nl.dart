@@ -14471,9 +14471,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Vorige aflevering openen';
-
-  @override
   String get episodeNotesSoon => 'Notities verschijnen na de eerste minuten van het gesprek.';
 
   @override
@@ -14615,22 +14612,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get othersSpeakerLabel => 'Anderen';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Klaar';
@@ -14660,4 +14645,55 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Uploads zijn even gepauzeerd — ze worden automatisch hervat';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Vervolgt “$title”';
+  }
+
+  @override
+  String episodeLivePreviewLine(Object duration, Object line) {
+    return '$duration · “$line”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· sinds $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Notities beginnen wanneer de definitieve transcriptie binnenkomt.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Opgesteld op je telefoon terwijl je praat. De volledige notities komen met de definitieve transcriptie.';
+
+  @override
+  String get episodeOnThisPhone => 'Op deze telefoon';
+
+  @override
+  String get episodeOpenTranscript => 'Transcriptie openen';
+
+  @override
+  String get liveCardTitle => 'Live';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Definitieve transcriptie ongeveer $duration achter';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Definitieve transcriptie loopt bij';
+
+  @override
+  String get livePreviewNoEngineBody => 'Je woorden verschijnen hier een à twee minuten nadat je ze hebt gezegd.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Neemt veilig op';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Live op deze telefoon';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Live-tekst inschakelen';
 }

@@ -14428,9 +14428,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'আগের পর্ব খুলুন';
-
-  @override
   String get episodeNotesSoon => 'কথার প্রথম কয়েক মিনিট পরে নোট দেখা যাবে।';
 
   @override
@@ -14572,22 +14569,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get othersSpeakerLabel => 'অন্যরা';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'সম্পন্ন';
@@ -14617,4 +14602,55 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'আপলোড কিছুক্ষণের জন্য বিরত — স্বয়ংক্রিয়ভাবে আবার শুরু হবে';
+
+  @override
+  String episodeContinues(Object title) {
+    return '“$title” চলছে';
+  }
+
+  @override
+  String episodeLivePreviewLine(Object duration, Object line) {
+    return '$duration · “$line”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· $time থেকে';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'চূড়ান্ত ট্রান্সক্রিপ্ট এলে নোট শুরু হবে।';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'আপনি বলার সময় এগুলো আপনার ফোনেই তৈরি হয়। সম্পূর্ণ নোটগুলো চূড়ান্ত ট্রান্সক্রিপ্টের সাথে আসবে।';
+
+  @override
+  String get episodeOnThisPhone => 'এই ফোনে';
+
+  @override
+  String get episodeOpenTranscript => 'ট্রান্সক্রিপ্ট খুলুন';
+
+  @override
+  String get liveCardTitle => 'লাইভ';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'চূড়ান্ত ট্রান্সক্রিপ্ট প্রায় $duration পিছিয়ে';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'চূড়ান্ত ট্রান্সক্রিপ্ট ধরার চেষ্টা করছে';
+
+  @override
+  String get livePreviewNoEngineBody => 'বলার এক-দুই মিনিট পরে আপনার কথাগুলো এখানে দেখা যাবে।';
+
+  @override
+  String get livePreviewNoEngineTitle => 'নিরাপদে রেকর্ড হচ্ছে';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'এই ফোনে লাইভ';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'লাইভ টেক্সট চালু করুন';
 }

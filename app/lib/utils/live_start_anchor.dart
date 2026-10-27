@@ -54,11 +54,14 @@ class LiveStartAnchor {
     if (episode != null) {
       if (_episodeId != episode.id) {
         // Adopted once per episode: the server's start is when the occasion's first words arrived.
-        // A server clock ahead of the phone keeps the capture start instead, so a later read of the
-        // same episode can never move the start forward (and the label back down).
+        // A server clock ahead of the phone keeps the capture start instead, so a later read of
+        // the same episode can never move the start forward (and the label back down). A new
+        // episode opened mid-capture (an idle close, then the next words) may only move the start
+        // earlier: the surfaces count this session's duration, they do not restart at every
+        // rotation. A real end counts fresh through restart().
         _episodeId = episode.id;
         if (!episode.startedAt.isAfter(now)) {
-          _start = episode.startedAt;
+          if (_start == null || episode.startedAt.isBefore(_start!)) _start = episode.startedAt;
         } else if (captureStart != null && !captureStart.isAfter(now)) {
           _start = _start == null || captureStart.isBefore(_start!) ? captureStart : _start;
         }

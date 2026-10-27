@@ -14490,9 +14490,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Előző epizód megnyitása';
-
-  @override
   String get episodeNotesSoon => 'A jegyzetek a beszélgetés első perceit követően jelennek meg.';
 
   @override
@@ -14634,22 +14631,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get othersSpeakerLabel => 'Mások';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Kész';
@@ -14679,4 +14664,55 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'A feltöltések rövid szünetben vannak — automatikusan folytatódnak';
+
+  @override
+  String episodeContinues(Object title) {
+    return '„$title” folytatása';
+  }
+
+  @override
+  String episodeLivePreviewLine(Object duration, Object line) {
+    return '$duration · “$line”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· $time óta';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'A jegyzetek a végleges átirat megérkezésekor indulnak.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'A telefonodon készülnek, miközben beszélsz. A teljes jegyzetek a végleges átirattal együtt érkeznek.';
+
+  @override
+  String get episodeOnThisPhone => 'Ezen a telefonon';
+
+  @override
+  String get episodeOpenTranscript => 'Átirat megnyitása';
+
+  @override
+  String get liveCardTitle => 'Élő';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'A végleges átirat kb. $duration késésben van';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'A végleges átirat felzárkózik';
+
+  @override
+  String get livePreviewNoEngineBody => 'A szavaid egy-két perccel azután jelennek meg itt, hogy kimondtad őket.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Biztonságosan rögzít';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Élő ezen a telefonon';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Élő szöveg bekapcsolása';
 }

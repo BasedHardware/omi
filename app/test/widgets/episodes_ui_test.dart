@@ -34,7 +34,11 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
+
+import '../support/live_preview_fakes.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_preview_telemetry.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/widgets/transcript.dart';
 
@@ -98,6 +102,15 @@ class _LiveCapture extends CaptureProvider {
         );
 
   String source = 'omi';
+
+  LivePreviewController? preview;
+  bool previewAdmitted = false;
+
+  @override
+  LivePreviewController? get livePreview => preview;
+
+  @override
+  bool get localPreviewAdmitted => previewAdmitted;
 
   @override
   String? get liveCaptureSource => source;
@@ -375,11 +388,12 @@ void main() {
       addTearDown(capture.dispose);
       addTearDown(episodes.dispose);
       await _pump(tester, const Scaffold(body: PreviousEpisodeLink()), capture: capture, episodes: episodes);
-      await tester.tap(find.byKey(const Key('previous_episode_link')));
+      await tester.tap(find.text('Continues “Lunch plans with Maya”'));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       expect(find.text('Picking a place near the office'), findsOneWidget);
       pending.complete(ApiSuccess(EpisodeRead(enabled: true, episode: closed)));
+      await tester.pump();
       await tester.pump();
       expect(find.text('Recovered note'), findsOneWidget);
       expect(find.text('Picking a place near the office'), findsNothing);
@@ -481,9 +495,9 @@ void main() {
       await tester.pump();
       expect(episodes.live, isNull);
       expect(find.byKey(const Key('episode_notes_unavailable')), findsOneWidget);
-      expect(find.text('Open Previous Episode: Lunch plans with Maya'), findsOneWidget);
+      expect(find.text('Continues “Lunch plans with Maya”'), findsOneWidget);
       expect(tester.widget<Text>(find.byKey(const Key('live_episode_status'))).data, 'Capturing · 10m 0s');
-      await tester.tap(find.byKey(const Key('previous_episode_link')));
+      await tester.tap(find.text('Continues “Lunch plans with Maya”'));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       expect(find.byKey(const Key('previous_episode_page')), findsOneWidget);
@@ -694,9 +708,9 @@ void main() {
       live = null;
       await episodes.refreshLive();
       await tester.pump();
-      expect(find.byKey(const Key('previous_episode_link')), findsOneWidget);
+      expect(find.byKey(const Key('previous_episode_pill')), findsOneWidget);
       expect(episodes.previous?.live, isFalse);
-      await tester.tap(find.byKey(const Key('previous_episode_link')));
+      await tester.tap(find.text('Continues “Lunch plans with Maya”'));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       await tester.tap(find.byKey(const ValueKey('previous_episode_conversation_c1')));
@@ -704,7 +718,7 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('elapsed time counts seconds through the first minute, then whole minutes', (tester) async {
+    testWidgets('the row shows the same live length the episode page shows', (tester) async {
       final capture = _LiveCapture();
       addTearDown(capture.dispose);
       final clock = tester.binding.clock;
@@ -727,9 +741,98 @@ void main() {
       );
       expect(find.textContaining('Live · 59s', findRichText: true), findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
-      expect(find.textContaining('Live · 1m', findRichText: true), findsOneWidget);
+      // Seconds stay: one session duration, formatted exactly as the live page
+      // formats it, never a coarser whole-minute style that disagrees with it.
+      expect(find.text('Live · 1m', findRichText: true), findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
-      expect(find.textContaining('Live · 1m', findRichText: true), findsOneWidget);
+      expect(find.text('Live · 1m 1s', findRichText: true), findsOneWidget);
+      await _unmount(tester);
+    });
+
+    testWidgets('the row and the open episode page read one duration', (tester) async {
+      final capture = _LiveCapture();
+      addTearDown(capture.dispose);
+      final clock = tester.binding.clock;
+      final start = clock.now();
+      final episodes = _episodes(
+        live: Episode(
+          id: 'timer',
+          live: true,
+          startedAt: start.subtract(const Duration(minutes: 8, seconds: 24)),
+          lastActivityAt: start,
+        ),
+        clock: clock.now,
+      );
+      addTearDown(episodes.dispose);
+      await _pump(tester, const LiveEpisodePage(), capture: capture, episodes: episodes);
+      final page = tester.widget<Text>(find.byKey(const Key('live_episode_status'))).data;
+      await _unmount(tester);
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      // The same wall-clock session: the row's duration is the page's duration.
+      expect(find.textContaining(page!, findRichText: true), findsOneWidget);
+      await _unmount(tester);
+    });
+
+    testWidgets('a local-preview row reads its newest preview line in the subtitle', (tester) async {
+      final engine = FakeLivePreviewEngine();
+      final preview = LivePreviewController(
+        engine: engine,
+        telemetry: LivePreviewTelemetry(emit: (_) {}),
+        platform: LivePreviewPlatform.ios,
+        osMajor: 26,
+      );
+      preview.admit(language: 'en');
+      final clock = tester.binding.clock;
+      var disposed = false;
+      await tester.runAsync(() async {
+        await pumpEventQueue();
+        engine.emit('a0', 'Okay, so the plan for Thursday is to ship the pendant update first.', true);
+        engine.emit('a1', 'and if the overnight run looks clean we can', false);
+        await pumpEventQueue();
+      });
+      addTearDown(() {
+        if (!disposed) preview.dispose();
+      });
+      final capture = _LiveCapture()
+        ..preview = preview
+        ..previewAdmitted = true
+        ..startedAt = clock.now().subtract(const Duration(minutes: 8, seconds: 24));
+      addTearDown(capture.dispose);
+      final episodes = _episodes(live: null, clock: clock.now);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      expect(find.text('8m 24s · “and if the overnight run looks clean we can”', findRichText: true), findsOneWidget,
+          reason: 'duration, then the newest preview line, one line');
+      // The cadence timer lives in runAsync's real zone; dispose it there.
+      await tester.runAsync(() async {
+        preview.dispose();
+        disposed = true;
+      });
+      await _unmount(tester);
+    });
+
+    testWidgets('a preview row with no words yet keeps today\'s subtitle', (tester) async {
+      final engine = FakeLivePreviewEngine();
+      final preview = LivePreviewController(
+        engine: engine,
+        telemetry: LivePreviewTelemetry(emit: (_) {}),
+        platform: LivePreviewPlatform.ios,
+        osMajor: 26,
+      );
+      addTearDown(preview.dispose);
+      preview.admit(language: 'en');
+      await tester.runAsync(pumpEventQueue);
+      final clock = tester.binding.clock;
+      final capture = _LiveCapture()
+        ..preview = preview
+        ..previewAdmitted = true
+        ..startedAt = clock.now().subtract(const Duration(seconds: 29));
+      addTearDown(capture.dispose);
+      final episodes = _episodes(live: null, clock: clock.now);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      expect(find.textContaining('Capturing · 29s', findRichText: true), findsOneWidget);
+      expect(find.textContaining('“', findRichText: true), findsNothing);
       await _unmount(tester);
     });
     testWidgets('a pendant lease lapsing mid-stream keeps the running length (no 0s)', (tester) async {

@@ -14445,9 +14445,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'پچھلی قسط کھولیں';
-
-  @override
   String get episodeNotesSoon => 'گفتگو کے پہلے چند منٹ بعد نوٹس ظاہر ہوں گے۔';
 
   @override
@@ -14589,22 +14586,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get othersSpeakerLabel => 'دیگر';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'مکمل';
@@ -14634,4 +14619,55 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'اپلوڈز چند لمحے کے لیے روک دیے گئے ہیں — یہ خودکار طور پر دوبارہ شروع ہوں گے';
+
+  @override
+  String episodeContinues(Object title) {
+    return '“$title” جاری ہے';
+  }
+
+  @override
+  String episodeLivePreviewLine(Object duration, Object line) {
+    return '$duration · “$line”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· $time سے';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'نوٹس حتمی نقل کے پہنچنے پر شروع ہوں گے۔';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'آپ بولتے وقت آپ کے فون پر تیار ہوتی ہیں۔ مکمل نوٹس حتمی نقل کے ساتھ آئیں گے۔';
+
+  @override
+  String get episodeOnThisPhone => 'اس فون پر';
+
+  @override
+  String get episodeOpenTranscript => 'نقل کھولیں';
+
+  @override
+  String get liveCardTitle => 'براہِ راست';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'حتمی نقل تقریباً $duration پیچھے ہے';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'حتمی نقل پہنچ رہا ہے';
+
+  @override
+  String get livePreviewNoEngineBody => 'آپ کے الفاظ کہنے کے ایک دو منٹ بعد یہاں ظاہر ہوتے ہیں۔';
+
+  @override
+  String get livePreviewNoEngineTitle => 'محفوظ طریقے سے ریکارڈ ہو رہا ہے';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'اس فون پر براہِ راست';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'براہِ راست متن آن کریں';
 }

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/live_preview/live_preview_engine.dart';
+import 'package:omi/services/live_preview/live_preview_notes.dart';
 import 'package:omi/services/live_preview/live_preview_telemetry.dart';
 import 'package:omi/services/live_preview/local_preview_admission.dart';
 
@@ -49,6 +50,7 @@ class LivePreviewController extends ChangeNotifier {
     required this.telemetry,
     required this.platform,
     required this.osMajor,
+    LivePreviewNotesEngine? notesEngine,
     DateTime Function()? now,
     Duration Function()? conversationGap,
     List<int> Function(Uint8List opus)? decodeOpus,
@@ -62,11 +64,21 @@ class LivePreviewController extends ChangeNotifier {
         _now = now ?? DateTime.now,
         _conversationGap = conversationGap ?? (() => const Duration(minutes: 2)),
         _decodeOpus = decodeOpus,
-        _requestAllowed = requestAllowed ?? (() async => true);
+        _requestAllowed = requestAllowed ?? (() async => true) {
+    // Notes draft from the preview text on this phone; they clear with it.
+    notes = LivePreviewNotes(
+      engine: notesEngine ?? noLivePreviewNotesEngine,
+      telemetry: telemetry,
+      platform: platform,
+      now: _now,
+    )..attach(this);
+  }
 
   final LivePreviewEngine _engine;
   final LivePreviewTelemetry telemetry;
   final LivePreviewPlatform platform;
+
+  late final LivePreviewNotes notes;
 
   /// OS major version for telemetry; Android resolves it after composition.
   int osMajor;
@@ -152,6 +164,9 @@ class LivePreviewController extends ChangeNotifier {
   }
 
   String _language = 'multi';
+
+  /// The language the preview was admitted for (the notes draft in it).
+  String get language => _language;
 
   /// Engines that failed at runtime in this admitted session. One fallback to
   /// the next engine is allowed; a second failure is the no-engine state.
@@ -393,6 +408,7 @@ class LivePreviewController extends ChangeNotifier {
   @override
   void dispose() {
     endCapture();
+    notes.dispose();
     super.dispose();
   }
 }
