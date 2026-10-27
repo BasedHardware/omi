@@ -48,7 +48,11 @@ void main() {
       FlutterError.onError = previousFlutter;
       PlatformDispatcher.instance.onError = previousPlatform;
       PathProviderPlatform.instance = previousProvider;
-      await directory.delete(recursive: true);
+      if (await directory.exists()) {
+        try {
+          await directory.delete(recursive: true);
+        } catch (_) {}
+      }
     }
   }, skip: PhysicalQualification.enabled);
 }

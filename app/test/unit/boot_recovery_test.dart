@@ -53,7 +53,11 @@ void main() {
       expect(upgrades, hasLength(2));
       expect(upgrades.every((row) => row['state'] == 'needed'), isTrue);
     } finally {
-      await directory.delete(recursive: true);
+      if (await directory.exists()) {
+        try {
+          await directory.delete(recursive: true);
+        } catch (_) {}
+      }
     }
   });
 
@@ -83,7 +87,11 @@ void main() {
       await recovery.countInterruptedBoot(journal);
       expect(recovery.count, 1);
     } finally {
-      await directory.delete(recursive: true);
+      if (await directory.exists()) {
+        try {
+          await directory.delete(recursive: true);
+        } catch (_) {}
+      }
     }
   });
 
@@ -97,7 +105,11 @@ void main() {
       await recovery.countInterruptedBoot(journal);
       expect(recovery.count, 0);
     } finally {
-      await directory.delete(recursive: true);
+      if (await directory.exists()) {
+        try {
+          await directory.delete(recursive: true);
+        } catch (_) {}
+      }
     }
   });
 
@@ -110,7 +122,11 @@ void main() {
       await recovery.countInterruptedBoot(journal);
       expect(recovery.failingStage, 'resolve_auth');
     } finally {
-      await directory.delete(recursive: true);
+      if (await directory.exists()) {
+        try {
+          await directory.delete(recursive: true);
+        } catch (_) {}
+      }
     }
   });
 
@@ -127,7 +143,11 @@ void main() {
       expect(recovery.count, 3);
       expect(recovery.shouldRecover, isTrue);
     } finally {
-      await directory.delete(recursive: true);
+      if (await directory.exists()) {
+        try {
+          await directory.delete(recursive: true);
+        } catch (_) {}
+      }
     }
   });
 
