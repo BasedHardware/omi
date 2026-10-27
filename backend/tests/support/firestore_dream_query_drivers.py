@@ -47,8 +47,18 @@ def admission_state(client, args, trial):
     client.documents['dream_users/' + UID] = {'score': 1}
 
 
+def required_retry_cursor(client, args, trial):
+    client.documents['dream_scheduler/required_intake'] = {'after': 'one'} if trial else {}
+
+
 def entries():
     return (
+        DriverEntry(
+            'database.dream_scheduler.required_retry_page',
+            domains={'limit': [1, 4990]},
+            setup=required_retry_cursor,
+            trials=2,
+        ),
         DriverEntry(
             'utils.dream_seed.load',
             base={'uid': UID},

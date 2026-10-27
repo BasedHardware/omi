@@ -68,7 +68,7 @@ zones still needs Ready probes and the existing load/health qualification. Use
 fallback only for the N4 shortfall; floors are fleet totals, not additive floors
 for primary and fallback. Capacity planning uses requests and allocatable nodes:
 listen requests 1 CPU/1.5Gi (about three pods/N4 node before other workloads),
-pusher 0.7 CPU/4.5Gi (about two pods/node). Include the LLM gateway sharing listen
+pusher 0.45 CPU/2Gi (about three pods/node after DaemonSet requests; memory limits must keep co-located limit sums under allocatable). Include the LLM gateway sharing listen
 labels, kube/system overhead, HPA maxima (listen 60), and one-node loss. Confirm
 actual bin-packing with Pending events before evacuation.
 

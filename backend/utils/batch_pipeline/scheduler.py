@@ -10,9 +10,10 @@ from database.batch_pipeline_store import Store, Transaction
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS, scheduler_control_key
 from config.policy import resolve_batch_policy
+from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
-from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
+from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
 from utils.batch_pipeline.errors import validate_worker_failure
@@ -25,6 +26,15 @@ MAX_ACTIVE_OWNERS = 1024
 MAX_VISITS = 128
 HEAD_OWNER_BUDGET = 64
 logger = logging.getLogger(__name__)
+
+
+def _admission_retry_delay(value: object, streak: int) -> float:
+    minimum = min(300, 30 * 2 ** (streak - 1))
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return minimum
+    if isinstance(value, float) and not math.isfinite(value):
+        return minimum
+    return max(minimum, min(86400, value))
 
 
 def owner_key(owner_id: str) -> str:
@@ -376,6 +386,10 @@ class Scheduler:
                     lease_until=now + LEASE_SECONDS,
                     shared_gpu_key=gpu_key,
                 )
+                if not job.get('requires_compute_admission') and not cap_dispatch_enabled(job['owner_id'], 'batch'):
+                    # The pump dispatches this lease without admission, so it
+                    # is a real commitment: a parked hold must not hide it.
+                    job.pop('last_policy_hold', None)
                 if gpu_key:
                     tx.put(
                         'gpus',
@@ -444,6 +458,7 @@ class Scheduler:
                 return False, False
             job.update(state='result_ready', result=asdict(result), ready_at=now)
             job.pop('retry_started_at', None)
+            job.pop('admission_refusals', None)
             tx.put('jobs', result.segment_id, job)
             return True, True
 
@@ -462,6 +477,8 @@ class Scheduler:
         padded_retry_empty: bool = False,
         padded_retry: str | None = None,
         worker_failure: dict | None = None,
+        measured_held_vad_speech_seconds: float | None = None,
+        worker_vad_receipt: dict | None = None,
     ) -> bool:
         if worker_failure is not None:
             validate_worker_failure(worker_failure)
@@ -483,6 +500,7 @@ class Scheduler:
             if not owns_lease(job, token, now):
                 return None
             policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates, observations=observations)
+            attach_held_vad(job, measured_held_vad_speech_seconds, worker_vad_receipt)
             if quarantine or worker_failure is not None or job['attempt'] >= policy.max_attempts:
                 quarantine_job(tx, job, now, 'worker_failed')
                 if quarantine and padded_retry in {'empty', 'skipped_oversize', 'skipped_long_speech'}:
@@ -522,24 +540,64 @@ class Scheduler:
                     pass
         return bool(outcome)
 
-    def defer(self, segment_id: str, token: str, now: float, retry_after: float = 30) -> bool:
-        """Policy/capacity refusal is waiting, not a provider failure attempt."""
+    def defer(
+        self,
+        segment_id: str,
+        token: str,
+        now: float,
+        retry_after: float = 30,
+        *,
+        held_reason: str | None = None,
+        admission_refused: bool = False,
+    ) -> bool:
+        """Policy/capacity refusal is waiting, not a provider failure attempt.
+
+        ``held_reason`` carries the bounded machine reason from the admission
+        decision that caused the defer; it records the latest decision in the
+        same transaction, so an outside reader can classify the wait without
+        a second round-trip. Refund defers (shutdown, GPU abort) pass none and
+        preserve the previously recorded decision. ``last_policy_hold`` keeps
+        the latest hold across an unevaluated re-evaluation (which clears the
+        decision to BLIND) until an allow is sealed or another hold replaces
+        it, so the uncommitted-age proxy does not flap on a parked job.
+        """
 
         def commit(tx):
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
                 return False
+            delay = retry_after
+            if admission_refused:
+                previous = job.get('admission_refusals', 0)
+                previous = previous if type(previous) is int and 0 <= previous <= 5 else 0
+                streak = min(previous + 1, 5)
+                job['admission_refusals'] = streak
+                # Bad/missing authority stays deferred; it never grants compute.
+                delay = _admission_retry_delay(delay, streak)
+                if not held_reason:
+                    # A prior allow is not the latest decision when this RPC
+                    # was unevaluated. Preserve BLIND instead of a false hold.
+                    job.pop('compute_decision', None)
             job.update(
                 state='retry',
-                available_at=now + max(1, min(86400, retry_after)),
+                available_at=now + max(1, min(86400, delay)),
                 attempt=max(0, job['attempt'] - 1),
                 token='',
                 lease_until=0.0,
             )
+            if held_reason:
+                job['compute_decision'] = {'reason': held_reason, 'outcome': 'held', 'at': now}
+                job['last_policy_hold'] = {'reason': held_reason, 'at': now}
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        deferred = self.store.run(commit)
+        if deferred and admission_refused and self.metrics:
+            try:
+                self.metrics.record('admission_policy_deferred' if held_reason else 'admission_unevaluated_deferred')
+            except Exception:
+                pass  # Metrics cannot turn a committed defer into a retry.
+        return deferred
 
     def release(self, segment_id: str, token: str, now: float) -> bool:
         """Expire a held lease now: the lease-expiry transition without the wait.

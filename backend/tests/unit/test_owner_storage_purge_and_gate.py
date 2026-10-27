@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from utils.other import storage as storage_mod
+from database import account_deletion_operational_holds
 from utils.retrieval import frame_request_storage
 
 
@@ -104,6 +105,43 @@ def test_owner_prefix_purge_removes_diagnostic_ticket_lookup(monkeypatch):
 
     assert storage_mod.delete_all_user_storage_objects('uid1') == 2
     assert bucket.names == {'diagnostics/other/keep.json'}
+
+
+def test_account_purge_releases_approved_hold_before_generation_bound_delete(monkeypatch):
+    calls = []
+    blob = SimpleNamespace(temporary_hold=True, generation=123, metageneration=2)
+    bucket = SimpleNamespace(name='syncing-local')
+    bucket.list_blobs = MagicMock(side_effect=[[blob], []])
+    monkeypatch.setattr(storage_mod, '_uses_real_gcs_bucket', lambda value: True)
+
+    def release(uid, held_blob):
+        assert uid == 'uid1' and held_blob is blob
+        calls.append('release')
+        blob.temporary_hold = False
+        blob.metageneration = 3
+
+    def delete(**kwargs):
+        assert blob.temporary_hold is False
+        assert kwargs == {'if_generation_match': 123, 'if_metageneration_match': 3}
+        calls.append('delete')
+
+    blob.delete = delete
+    monkeypatch.setattr(account_deletion_operational_holds, 'release_operational_hold_for_account_deletion', release)
+    assert storage_mod._delete_owner_bucket_prefix(bucket, 'syncing/uid1/', account_deletion_uid='uid1') == 1
+    assert calls == ['release', 'delete']
+
+
+def test_account_purge_keeps_required_failure_when_hold_is_unapproved(monkeypatch):
+    blob = SimpleNamespace(temporary_hold=True, delete=MagicMock())
+    bucket = SimpleNamespace(name='syncing-local', list_blobs=MagicMock(return_value=[blob]))
+    monkeypatch.setattr(
+        account_deletion_operational_holds,
+        'release_operational_hold_for_account_deletion',
+        MagicMock(side_effect=RuntimeError('unapproved hold')),
+    )
+    with pytest.raises(RuntimeError, match='unapproved hold'):
+        storage_mod._delete_owner_bucket_prefix(bucket, 'syncing/uid1/', account_deletion_uid='uid1')
+    blob.delete.assert_not_called()
 
 
 def test_frame_prefix_purge_covers_both_tiers(monkeypatch):

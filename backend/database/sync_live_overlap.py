@@ -20,6 +20,7 @@ def find_sync_live_overlap_candidates(user_ref, incoming: dict, *, diagnostics: 
     """
     if diagnostics is not None:
         diagnostics['lookup_complete'] = False
+        diagnostics.pop('incomplete_reason', None)
     fields = [
         'id',
         'started_at',
@@ -49,6 +50,10 @@ def find_sync_live_overlap_candidates(user_ref, incoming: dict, *, diagnostics: 
             # A full page may omit further rows. Missing-device discovery only
             # admits explicit capture keys, not the whole unknown-device partition.
             diagnostics['lookup_complete'] = len(rows) < 128 and bool(incoming.get('client_device_id'))
+            if len(rows) == 128:
+                diagnostics['incomplete_reason'] = 'page_cap'
+            elif not incoming.get('client_device_id'):
+                diagnostics['incomplete_reason'] = 'no_device'
         # Keep every same-partition overlapping live hint — including a stub
         # whose first transcript write has not landed yet — so the assignment
         # transaction reads that document and Firestore commit contention can
@@ -58,6 +63,7 @@ def find_sync_live_overlap_candidates(user_ref, incoming: dict, *, diagnostics: 
     except Exception:
         if diagnostics is not None:
             diagnostics['lookup_complete'] = False
+            diagnostics['incomplete_reason'] = 'lookup_failed'
         logger.warning('event=sync_live_overlap outcome=lookup_failed')
         record_fallback(
             component='sync_dispatch',

@@ -1,0 +1,86 @@
+{
+  "schema_version": 2,
+  "catalog_revision": 6,
+  "show_subscription_ui": true,
+  "header": "Choose your plan",
+  "current": {
+    "plan_id": "basic",
+    "name": "Free",
+    "price_id": null,
+    "interval": null,
+    "legacy": false,
+    "cancel_at_period_end": false,
+    "line": "You're on Free",
+    "legacy_note": null
+  },
+  "usage": {
+    "kind": "unavailable",
+    "percent": null,
+    "period_id": null,
+    "reset_label": null,
+    "meter_line": null,
+    "nudge_line": null,
+    "pro_gates": []
+  },
+  "tiers": [
+    {
+      "tier_id": "unlimited_v2:single_plan",
+      "plan_id": "unlimited_v2",
+      "name": "Unlimited",
+      "recommended": true,
+      "is_current": false,
+      "hours_line": "",
+      "bullets": [],
+      "action": "checkout",
+      "cta_label": "Get Unlimited",
+      "blocked_line": null,
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_omi_pro_month",
+          "interval": "month",
+          "amount_minor": 2999,
+          "currency": "usd",
+          "headline": "$29.99/month",
+          "subline": null,
+          "renewal_line": "Renews monthly until you cancel. Cancel anytime in settings."
+        },
+        {
+          "price_id": "price_omi_pro_year",
+          "interval": "year",
+          "amount_minor": 26991,
+          "currency": "usd",
+          "headline": "$22.49/month",
+          "subline": "$269.91 billed yearly · 3 months free",
+          "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
+          "months_free": 3
+        }
+      ]
+    },
+    {
+      "tier_id": "basic:single_plan",
+      "plan_id": "basic",
+      "name": "Free",
+      "recommended": false,
+      "is_current": true,
+      "hours_line": "About 15 hours of recording a month",
+      "bullets": [],
+      "action": "current",
+      "cta_label": null,
+      "blocked_line": null,
+      "compact": true,
+      "prices": [
+        {
+          "price_id": null,
+          "interval": "month",
+          "amount_minor": 0,
+          "currency": "usd",
+          "headline": "$0",
+          "subline": null,
+          "renewal_line": null
+        }
+      ]
+    }
+  ],
+  "yearly_toggle_label": "Yearly · 3 months free"
+}

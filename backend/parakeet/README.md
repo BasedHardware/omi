@@ -18,7 +18,7 @@ Same as v1 plus server-side speaker diarization and language detection.
 ### `POST /v2/language` — Spoken-language gate
 Multipart audio file → `{"route": "parakeet"|"multilingual", "p_supported", "language", "language_probability", "audio_seconds", "threshold", "model"}`.
 - Model: Whisper-base language-token head (fp16, Apache-2.0), first 30 s, resampled to 16 kHz mono. No text decode.
-- `p_supported` sums the 25 TDT v3 languages; Parakeet needs ≥0.95 (≥6 s) or ≥0.985 (1–6 s).
+- `p_supported` sums the 25 TDT v3 languages; Parakeet needs ≥0.985 for all measured clips ≥1 s.
 - 503 `lid_unavailable` / `lid_busy` / `lid_error`: callers keep their vendor path.
 - `/v2/transcribe` also counts transcript text language in `parakeet_output_language_total{bucket}` (wrong-language alarm).
 

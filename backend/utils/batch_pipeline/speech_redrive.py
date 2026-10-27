@@ -8,20 +8,27 @@ import time
 from database.batch_pipeline_policy import load_stage_policy, UnpinnedPolicyRefused
 from config.prerecorded_stt import require_provider_environment, PrerecordedSTTService
 from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
+from config.batch_pipeline_empty_asr import terminal_empty_allowed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import normalized_binding
-from database.batch_pipeline_speech_redrive import SpeechRedriveStore
-from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.quarantine_recovery import transcribe, log_failure, log_terminal_empty
+from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive
+from database.batch_pipeline_recognizer_receipts import record_recognizer
+from config.batch_language_recovery import allowed as independent_allowed, below_silence_threshold, prior_modulate_empty
+from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_result_allowed, worker_vad_speech
+from utils.batch_pipeline.quarantine_recovery import log_failure, log_terminal_empty
+from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     result_outcome,
+    result_vad_evidence,
     RecoveryFailure,
     MultilingualEmpty,
     terminal_empty_payload,
     padded_empty,
     padded_skipped,
+    independent_silence_payload,
+    WordsWithoutVad,
 )
 from utils.batch_pipeline.admission import admitted_as_byok
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
@@ -41,7 +48,9 @@ def redrive_one(
     silent=False,
     clock=time.time,
     stt=transcribe,
-    gpu_padded_retry_empty=False
+    gpu_padded_retry_empty=False,
+    independent_stt=second_transcribe,
+    independent_language=False,
 ):
     """No automatic retry after dispatch, even on uncertain network/process loss.
 
@@ -50,11 +59,15 @@ def redrive_one(
     This operator process's own environment is never pinned.
     """
     try:
-        _, policy = load_stage_policy(store, sid, 'recovery', server_flags=server_flags)
+        original_job, policy = load_stage_policy(store, sid, 'recovery', server_flags=server_flags)
     except UnpinnedPolicyRefused:
         return 'policy_unpinned'
-    if policy is None or not policy.speech_empty_multilingual or not policy.recovery_enabled:
+    if policy is None or not policy.recovery_enabled:
         return 'disabled'
+    if not policy.speech_empty_multilingual and not independent_redrive(original_job):
+        return 'disabled'
+    if independent_redrive(original_job) != independent_language:
+        return 'independent_plan_required'
     protocol = SpeechRedriveStore(store, server_flags=server_flags)
     job = protocol.prepare(
         sid, uid, plan_digest, expected_recovery, clock(), gpu_padded_retry_empty=gpu_padded_retry_empty, silent=silent
@@ -62,6 +75,8 @@ def redrive_one(
     marker = job['speech_redrive']
     token = marker['token']
     item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
+    independent = independent_redrive(job)
+    provider = 'soniox' if independent else 'modulate'
     if marker['state'] == 'completed':
         return 'already_applied'
     if marker['state'] == 'failed_held':
@@ -71,13 +86,33 @@ def redrive_one(
         if uri:
             payload = artifacts.load_result(item, uri)
             outcome = result_outcome(payload)
-            if outcome not in {'success', 'no_recoverable_speech'} or (
+            if outcome not in {'success', 'no_recoverable_speech', 'silence'} or (
                 outcome == 'success' and not payload.get('words')
             ):
                 raise RecoveryFailure('payload_validation', 'invalid_payload')
+            measured = result_vad_evidence(payload)
+            independent_silence = payload.get('words_provider') == 'independent_empty_strict_vad'
+            if not held_result_allowed(job, outcome, measured, independent=independent_silence):
+                failure = {'stage': 'payload_validation', 'reason': 'invalid_payload'}
+                return (
+                    'failed_held'
+                    if protocol.settle(
+                        sid, token, plan_digest, clock(), failure=failure, measured_held_vad_speech_seconds=measured
+                    )
+                    else 'fenced'
+                )
             return (
                 'reconciled'
-                if protocol.settle(sid, token, plan_digest, clock(), uri, outcome=result_outcome(payload))
+                if protocol.settle(
+                    sid,
+                    token,
+                    plan_digest,
+                    clock(),
+                    uri,
+                    outcome=outcome,
+                    measured_held_vad_speech_seconds=measured,
+                    independent_silence=independent_silence,
+                )
                 else 'fenced'
             )
         if clock() - marker['started_at'] > 900:
@@ -87,24 +122,50 @@ def redrive_one(
                 return 'failed_held'
         return 'running_held'
     audio = artifacts.fetch_audio(item)
-    _, _, spans = inspect_audio(item, audio)
-    if not spans:
+    _, duration, spans = inspect_audio(item, audio)
+    measured = sum(span['end'] - span['start'] for span in spans)
+    # Bound worker VAD may locate guarded words that strict CPU VAD missed.
+    worker = worker_vad_speech(job) if independent else None
+    if independent and not protocol.observe_vad(sid, token, plan_digest, measured):
+        return 'fenced'
+    if not spans and not independent:
         raise RecoveryFailure('strict_vad', 'no_speech')
-    if admitted_as_byok(job):
+    if independent and not independent_allowed(duration):
+        return 'independent_budget_held'
+    if admitted_as_byok(job) and not independent:
         record_decision(DispatchPath.SPEECH_REDRIVE, True, DispatchReason.BYOK)
-    elif not sync_allowed(uid, item.duration_seconds, 'modulate', lane='batch', path=DispatchPath.SPEECH_REDRIVE):
+    elif not sync_allowed(uid, item.duration_seconds, provider, lane='batch', path=DispatchPath.SPEECH_REDRIVE):
         return 'allowance_held'
     # Check deployment dependencies before spending the sole intent. No fallback
     # to Parakeet is permitted if the alternate provider is unconfigured.
-    require_provider_environment(PrerecordedSTTService.MODULATE)
+    if independent:
+        require_provider_environment(PrerecordedSTTService.SONIOX)
+    else:
+        require_provider_environment(PrerecordedSTTService.MODULATE)
     if not protocol.start(sid, token, plan_digest, clock()):
         return 'fenced'
-    record_fallback(
-        component='stt_selection', from_mode='batch', to_mode='modulate', reason='other', outcome='degraded'
-    )
-    payload = None
+    record_fallback(component='stt_selection', from_mode='batch', to_mode=provider, reason='other', outcome='degraded')
+    payload, billable_independent = None, False
+    first_empty = prior_modulate_empty(job)
+    if independent:
+        record_recognizer(
+            store,
+            sid,
+            token,
+            'speech_redrive',
+            'modulate',
+            'empty' if first_empty else 'error',
+            0 if first_empty else None,
+            measured,
+        )
+        if not record_recognizer(store, sid, token, 'speech_redrive', provider, 'started', None, measured, claim=True):
+            return 'running_held'
     try:
-        payload = stt(item, normalized_binding(job['projection_binding']), audio, multilingual=True)
+        payload = (
+            independent_stt(item, audio, MultilingualEmpty(duration, spans, worker))
+            if independent
+            else stt(item, normalized_binding(job['projection_binding']), audio, multilingual=True)
+        )
         if result_outcome(payload) != 'success' or not payload.get('words'):
             raise RecoveryFailure('payload_validation', 'invalid_payload')
     except BatchPrivacyBlocked:
@@ -115,9 +176,28 @@ def redrive_one(
             if isinstance(error, RecoveryFailure)
             else {'stage': 'provider', 'reason': 'operation_failed'}
         )
+        if independent:
+            empty = isinstance(error, MultilingualEmpty)
+            billable_independent = isinstance(error, (MultilingualEmpty, WordsWithoutVad))
+            count = error.word_count if isinstance(error, WordsWithoutVad) else 0 if empty else None
+            record_recognizer(
+                store,
+                sid,
+                token,
+                'speech_redrive',
+                provider,
+                'words' if count else 'empty' if empty else 'error',
+                count,
+                measured,
+            )
+            if empty and first_empty and below_silence_threshold(held_vad_census(job, measured)):
+                payload = independent_silence_payload(duration, spans)
+                failure = None
         if (
-            policy.terminal_empty_disposition
+            not independent
+            and policy.terminal_empty_disposition
             and isinstance(error, MultilingualEmpty)
+            and terminal_empty_allowed(error.spans)
             and not padded_skipped(job)
             and (padded_empty(job) or marker.get('gpu_padded_retry_empty') is True)
         ):
@@ -125,15 +205,34 @@ def redrive_one(
             failure = None
     else:
         failure = None
+        if independent:
+            billable_independent = True
+            record_recognizer(store, sid, token, 'speech_redrive', provider, 'words', len(payload['words']), measured)
+    if independent and billable_independent and cap_enabled(uid, 'batch'):
+        # Valid empty responses also consume vendor spend.
+        record_audio(
+            'sync',
+            'accepted',
+            provider,
+            item.duration_seconds,
+            funded_allowance(uid, lane='batch').reason == 'plan_allowance_exhausted',
+        )
     if failure:
-        if protocol.settle(sid, token, plan_digest, clock(), failure=failure):
+        if protocol.settle(
+            sid,
+            token,
+            plan_digest,
+            clock(),
+            failure=failure,
+            measured_held_vad_speech_seconds=measured,
+        ):
             log_failure(failure)
         return 'failed_held'
     if payload is None:
         raise RecoveryFailure('payload_validation', 'invalid_payload')
     # The operator path meters only answers with words. The automatic recovery
     # path also meters valid-empty Modulate answers as accepted provider audio.
-    if cap_enabled(uid, 'batch') and result_outcome(payload) != 'no_recoverable_speech':
+    if not independent and cap_enabled(uid, 'batch') and result_outcome(payload) != 'no_recoverable_speech':
         record_audio(
             'sync',
             'accepted',
@@ -145,7 +244,16 @@ def redrive_one(
     # invocation may reconcile the object, but can never call the provider again.
     uri = artifacts.persist_recovery_result(item, payload, token)
     outcome = result_outcome(payload)
-    changed = protocol.settle(sid, token, plan_digest, clock(), uri, outcome=outcome)
+    changed = protocol.settle(
+        sid,
+        token,
+        plan_digest,
+        clock(),
+        uri,
+        outcome=outcome,
+        measured_held_vad_speech_seconds=result_vad_evidence(payload),
+        independent_silence=payload.get('words_provider') == 'independent_empty_strict_vad',
+    )
     if changed and outcome == 'no_recoverable_speech':
         record_correctness('no_recoverable_speech', seconds=item.duration_seconds)
         log_terminal_empty()

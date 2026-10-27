@@ -76,7 +76,6 @@ Also binding, though not expressible as a glob: the deleted UID-cohort selectors
 - `backend/docs/runbooks/*memory*`
 - `docs/rollout/*memory*`
 - `backend/deploy/runtime_env*`
-- `.github/workflows/gcp_memory_maintenance_job*.yml`
 
 ## PR rule
 

@@ -51,6 +51,14 @@ enum WalStorage { mem, disk, sdcard, flashPage }
 
 enum SyncMethod { ble }
 
+/// Bounded reasons an upload was refused, persisted so the row can say which
+/// refusal it was instead of a bare "Failed". Tokens, never server prose.
+class WalUploadRejection {
+  static const invalidCaptureTime = 'invalid_capture_time';
+  static const tooLarge = 'too_large';
+  static const serverRefused = 'server_refused';
+}
+
 /// User-facing sync state for a single recording, derived from [Wal.status],
 /// [Wal.isSyncing] and [Wal.retryCount]. This is what the sync UI renders so a
 /// recording is never shown as an indistinct row — every state is explicit.
@@ -105,6 +113,34 @@ WalSyncDisplayState? worstSessionSyncState(Iterable<Wal> wals) {
 bool isRetryableSyncState(WalSyncDisplayState state) =>
     state == WalSyncDisplayState.failed || state == WalSyncDisplayState.uploadRejected;
 
+/// Whether the state is one the sync pages file under needs attention: the
+/// server refused it, retries are exhausted, or audio is unreadable/too old.
+/// Terminal for automatic uploads; SyncPendingWork.needsAttention and every
+/// row/bulk action read this one set so they cannot drift apart.
+bool isAttentionSyncState(WalSyncDisplayState state) =>
+    state == WalSyncDisplayState.failed ||
+    state == WalSyncDisplayState.corrupted ||
+    state == WalSyncDisplayState.outsideRecoveryWindow ||
+    state == WalSyncDisplayState.unsupportedAudio ||
+    state == WalSyncDisplayState.uploadRejected;
+
+/// Whether a recording may be deleted where a block action found it: only a
+/// member that is idle (not mid-upload) and already in a terminal,
+/// needs-attention state. A block can mix a refused member with one still
+/// uploading — the refusal label belongs to the former, so the latter's audio
+/// is never deleted under it.
+bool walDeletionAllowed(Wal wal) => !wal.isSyncing && isAttentionSyncState(wal.syncDisplayState);
+
+/// Whether a deliberate retry of this recording can change its outcome. A
+/// `too_large` refusal (413) is deterministic — the same bytes are the same
+/// size — so its row offers Delete only, never a Retry that is guaranteed to
+/// fail. A local-only recording never joins a cloud drain. Every other
+/// retryable state keeps its Retry.
+bool walRetryCanHelp(Wal wal) =>
+    !wal.onDeviceOnly &&
+    isRetryableSyncState(wal.syncDisplayState) &&
+    wal.uploadRejectionReason != WalUploadRejection.tooLarge;
+
 int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
       WalSyncDisplayState.failed => 4,
       WalSyncDisplayState.corrupted => 4,
@@ -124,6 +160,12 @@ int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
 /// has spent it from every automatic drain, so the label and the behaviour
 /// cannot drift apart. Only the per-recording manual Retry ignores it.
 const int walMaxAutoRetries = 3;
+
+/// A recording young enough to still attach to a live conversation (matches
+/// the backend's fresh-lane cutoff, `SYNC_FRESH_MAX_AGE_SECONDS`).
+const int liveCaptureMaxAgeSeconds = 6 * 60 * 60;
+
+bool isLiveCaptureWal(Wal wal, int nowSeconds) => nowSeconds - wal.timerStart <= liveCaptureMaxAgeSeconds;
 
 class WalStats {
   final int totalFiles;
@@ -283,6 +325,10 @@ class Wal {
   /// never merges it with audio outside that run by invented adjacency.
   String? clockRun;
 
+  /// Why the server refused the last upload attempt, as a bounded
+  /// [WalUploadRejection] token; null when the row was never refused.
+  String? uploadRejectionReason;
+
   String get id => '${device}_$timerStart';
 
   /// Single source of truth for how this recording's sync state is shown to the
@@ -355,8 +401,11 @@ class Wal {
   /// Marks a definitive upload-endpoint refusal. The bytes stay available for
   /// review/deletion and automatic connectivity wakes do not re-offer them;
   /// an explicit manual retry may still re-submit after user intervention.
-  void markUploadRejected() {
+  /// [reasonCode] is a bounded [WalUploadRejection] token naming which
+  /// refusal it was, so rows can say "Too large" instead of a bare "Failed".
+  void markUploadRejected({String? reasonCode}) {
     status = WalStatus.uploadRejected;
+    uploadRejectionReason = reasonCode;
     jobId = null;
     isSyncing = false;
     syncStartedAt = null;
@@ -414,6 +463,7 @@ class Wal {
     this.syncedAt = 0,
     this.keptForTranscriptRecovery = false,
     this.clockRun,
+    this.uploadRejectionReason,
   }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
@@ -466,6 +516,7 @@ class Wal {
       syncedAt: json['synced_at'] ?? 0,
       keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
       clockRun: json['clock_run'] as String?,
+      uploadRejectionReason: json['upload_rejection_reason'] as String?,
     )
       ..frameSize = json['frame_size'] ?? mapNameToCodec(json['codec']).getFrameSize()
       ..repairLegacyImportedCustody();
@@ -514,10 +565,78 @@ class Wal {
       'synced_at': syncedAt,
       if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
       if (clockRun != null) 'clock_run': clockRun,
+      if (uploadRejectionReason != null) 'upload_rejection_reason': uploadRejectionReason,
     };
   }
 
   static List<Wal> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Wal.fromJson(e)).toList();
+
+  /// Cheap change signal over exactly the fields [toJson] persists, so a save
+  /// whose snapshot did not change can skip re-encoding the whole index. Every
+  /// scalar and enum field mixes its value; string fields mix their content
+  /// hash; the three replaced-never-mutated object fields
+  /// ([onDeviceConversation], [onDevicePreparedUpload], [geolocation]) mix
+  /// instance identity. Runtime-only fields (isSyncing, transfer progress) are
+  /// deliberately absent, like [toJson] itself. A new persisted field must be
+  /// added here together with toJson, or its changes could be skipped.
+  int get persistentFingerprint {
+    var h = timerStart;
+    h = _mixFingerprint(h, codec.index);
+    h = _mixFingerprint(h, channel);
+    h = _mixFingerprint(h, sampleRate);
+    h = _mixFingerprint(h, status.index);
+    h = _mixFingerprint(h, storage.index);
+    h = _mixFingerprint(h, onDeviceOnly ? 1 : 0);
+    h = _mixFingerprint(h, holdForUser ? 1 : 0);
+    h = _mixFingerprint(h, deviceType?.index ?? -1);
+    h = _mixFingerprint(h, identityHashCode(onDeviceConversation));
+    h = _mixFingerprint(h, identityHashCode(onDevicePreparedUpload));
+    h = _mixFingerprint(h, onDeviceUploadFailure?.hashCode ?? 0);
+    h = _mixFingerprint(h, capturedOnDeviceOnly == null ? -1 : (capturedOnDeviceOnly! ? 1 : 0));
+    h = _mixFingerprint(h, filePath?.hashCode ?? 0);
+    h = _mixFingerprint(h, seconds);
+    h = _mixFingerprint(h, device.hashCode);
+    h = _mixFingerprint(h, deviceModel?.hashCode ?? 0);
+    h = _mixFingerprint(h, storageOffset);
+    h = _mixFingerprint(h, storageTotalBytes);
+    h = _mixFingerprint(h, fileNum);
+    h = _mixFingerprint(h, totalFrames);
+    h = _mixFingerprint(h, frameSize);
+    h = _mixFingerprint(h, syncedFrameOffset);
+    h = _mixFingerprint(h, originalStorage?.index ?? -1);
+    h = _mixFingerprint(h, conversationId?.hashCode ?? 0);
+    h = _mixFingerprint(h, recordingSessionId?.hashCode ?? 0);
+    h = _mixFingerprint(h, ownerUid?.hashCode ?? 0);
+    h = _mixFingerprint(h, captureRoot?.hashCode ?? 0);
+    h = _mixFingerprint(h, sourceFrameStart ?? -1);
+    h = _mixFingerprint(h, sourceClockEpoch ?? -1);
+    h = _mixFingerprint(h, liveRingId ?? -1);
+    h = _mixFingerprint(h, liveOrdinalStart ?? -1);
+    h = _mixFingerprint(h, liveOrdinalEnd ?? -1);
+    h = _mixFingerprint(h, identityHashCode(geolocation));
+    h = _mixFingerprint(h, retryCount);
+    h = _mixFingerprint(h, lastRetryAt);
+    h = _mixFingerprint(h, jobId?.hashCode ?? 0);
+    h = _mixFingerprint(h, uploadedAt);
+    h = _mixFingerprint(h, syncedAt);
+    h = _mixFingerprint(h, keptForTranscriptRecovery ? 1 : 0);
+    h = _mixFingerprint(h, clockRun?.hashCode ?? 0);
+    h = _mixFingerprint(h, uploadRejectionReason?.hashCode ?? 0);
+    return h;
+  }
+
+  /// Order-sensitive fingerprint of a persisted index snapshot, so a caller
+  /// that rewrites the index can tell an unchanged snapshot from a changed one
+  /// without re-encoding it.
+  static int persistedIndexFingerprint(List<Wal> wals) {
+    var h = wals.length;
+    for (final wal in wals) {
+      h = _mixFingerprint(h, wal.persistentFingerprint);
+    }
+    return h;
+  }
+
+  static int _mixFingerprint(int h, int v) => (h * 31 + v) & 0x3FFFFFFF;
 
   getFileName() {
     return getFileNameByTimeStarts(timerStart, clockRun: clockRun);

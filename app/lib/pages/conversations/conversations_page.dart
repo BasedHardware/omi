@@ -16,7 +16,6 @@ import 'package:omi/pages/conversations/widgets/capture_continuity_dogfood_banne
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
-import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -239,8 +238,9 @@ List<_ConversationListRow> _withTodayRow(List<_ConversationListRow> rows, DateTi
   final opened = rows.indexWhere((r) => r.kind == kind);
   if (opened >= 0) return rows;
   // A row that already opened Today (the live episode) carries the header; sit right under it.
-  final todayOpener =
-      rows.indexWhere((r) => r.date == today && r.isFirst && r.kind != _ConversationListRowKind.topSpacer);
+  final todayOpener = rows.indexWhere(
+    (r) => r.date == today && r.isFirst && r.kind != _ConversationListRowKind.topSpacer,
+  );
   if (todayOpener >= 0) {
     return [...rows.take(todayOpener + 1), todayRow(kind), ...rows.skip(todayOpener + 1)];
   }
@@ -259,7 +259,10 @@ List<_ConversationListRow> _withTodayRow(List<_ConversationListRow> rows, DateTi
 /// One row per conversation still processing, right under Today's live row: the conversation the
 /// person just ended (Wrap up, a pendant double-tap) shows at once, then turns into its own row.
 List<_ConversationListRow> _withProcessingRows(
-    List<_ConversationListRow> rows, List<ServerConversation> processing, DateTime now) {
+  List<_ConversationListRow> rows,
+  List<ServerConversation> processing,
+  DateTime now,
+) {
   if (processing.isEmpty) return rows;
   final marked = _withTodayRow(rows, now, _ConversationListRowKind.processing);
   final at = marked.indexWhere((r) => r.kind == _ConversationListRowKind.processing);
@@ -286,7 +289,7 @@ Map<DateTime, List<ServerConversation>> _withoutBackground(Map<DateTime, List<Se
       for (final entry in byDate.entries)
         entry.key: [
           for (final c in entry.value)
-            if (!leftToDailyRecap(c)) c
+            if (!leftToDailyRecap(c)) c,
         ],
     };
 
@@ -571,10 +574,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
       builder: (context, snapshot, child) {
         final convoProvider = context.read<ConversationProvider>();
-        final hiddenByLive = episodeLive
-            ? hiddenLiveConversations(episodes!.liveConversationIds, snapshot.conversations,
-                serving: ClientRefactorFlags.serving)
-            : const <String>{};
+        final hiddenByLive = episodeLive ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
@@ -604,10 +604,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             convoProvider.isLoadingConversations ||
             convoProvider.isFetchingConversations ||
             convoProvider.isAwaitingInitialFetchRetry;
-        final mergedDates = <DateTime>{
-          ...convoProvider.groupedConversations.keys,
-          ...recordingsByDate.keys,
-        }.toList()
+        final mergedDates = <DateTime>{...convoProvider.groupedConversations.keys, ...recordingsByDate.keys}.toList()
           ..sort((a, b) => b.compareTo(a));
         final conversationsByDate = hiddenByLive.isEmpty
             ? convoProvider.groupedConversations
@@ -615,7 +612,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 for (final entry in convoProvider.groupedConversations.entries)
                   entry.key: [
                     for (final c in entry.value)
-                      if (!hiddenByLive.contains(c.id)) c
+                      if (!hiddenByLive.contains(c.id)) c,
                   ],
               };
         // Episodes beta, default view: background conversations live in the day's recap, not on Home.
@@ -658,7 +655,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // The live capture row: recording, a call, or a conversation being captured. With episodes
               // on, a streaming capture is the live episode row in Today instead.
               SliverToBoxAdapter(
-                  child: ConversationCaptureWidget(showsCall: true, deferStreamingToEpisode: episodeLive)),
+                child: ConversationCaptureWidget(showsCall: true, deferStreamingToEpisode: episodeLive),
+              ),
               const SliverToBoxAdapter(child: CaptureContinuityDogfoodBanner()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),

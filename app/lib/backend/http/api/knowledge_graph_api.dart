@@ -126,6 +126,30 @@ class KnowledgeGraphApi {
     _throwHttpFailure(action: 'load', statusCode: response?.statusCode, body: response?.body);
   }
 
+  /// Optional onboarding warm-up. Only a successfully read empty legacy graph
+  /// may schedule a rebuild; canonical graphs are derived on read.
+  /// Read failures (including a replaced session) propagate to onboarding's
+  /// best-effort boundary. They are not evidence that legacy recovery is safe.
+  static Future<void> prebuildForOnboarding() async {
+    final current = await getKnowledgeGraph();
+    if (current['canonical'] == true) return;
+    final nodes = current['nodes'] as List<dynamic>? ?? const [];
+    final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
+    if (hasGraph) return;
+
+    final rebuildResult = await rebuildKnowledgeGraph();
+    final status = rebuildResult['status'];
+    // 'canonical_up_to_date' is the synthetic client status returned on HTTP 409.
+    if (status == 'canonical_up_to_date') {
+      return;
+    }
+    await waitForGraphStability(
+      timeout: const Duration(seconds: 25),
+      interval: const Duration(seconds: 2),
+      stabilityChecks: 1,
+    );
+  }
+
   /// Triggers a rebuild of the knowledge graph.
   ///
   /// Accounts with canonical memory assertions return HTTP 409

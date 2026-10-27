@@ -15,10 +15,17 @@ import pytest
 from config.batch_pipeline_providers import ProviderConfig, provider_config
 from diarizer.batch_pipeline import PipelineWorker
 from diarizer import batch_pipeline_flight as flight
-from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
+from utils.batch_pipeline.contracts import Priority, ValidationFailureWork, WorkItem, WorkResult
 from utils.batch_pipeline.errors import FatalGpuError
 
 RATE = 16000
+
+
+@pytest.fixture(autouse=True)
+def legacy_worker_contract(monkeypatch):
+    # Preserve rollback seams for these deterministic packed-model tests.
+    # The ship-on strict-VAD receipt path is in test_batch_pipeline_empty_safety.
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
 
 
 def item(key, seconds):
@@ -255,6 +262,110 @@ def test_silence_skips_packed_diarization():
     results, saved, _ = run(packed, DURATIONS)
     assert {r.outcome for r in results} == {'silence'}
     assert not [c for c in packed.calls if c[0] == 'diarize_many']
+
+
+def test_frozen_unsupported_language_skips_the_packed_segmentation_pass(monkeypatch):
+    # A unit whose frozen language the word provider cannot serve can only end
+    # at the language barrier; it must not burn any pyannote pass. Strict VAD
+    # decides speech (held at the barrier) vs silence (free disposition).
+    packed = FakeFlight()
+    serial_vad_calls = []
+
+    def counted_vad(samples):
+        serial_vad_calls.append(len(samples))
+        return serial_vad(samples)
+
+    worker = PipelineWorker(
+        language_of=lambda work: 'zh' if work.segment_id == 'b' else 'en',
+        decode=lambda work: synthetic_audio(work.duration_seconds, 7),
+        vad=counted_vad,
+        words_providers={'parakeet': Words()},
+        diarizers={'pyannote': serial_diarize},
+        persist=lambda work, payload: 'encrypted-result://' + work.segment_id,
+        flight_models=packed,
+    )
+    monkeypatch.setattr('diarizer.batch_pipeline.inspect_worker_silence', lambda item, samples: None)
+    results = worker.process_batch([item(k, s) for k, s in DURATIONS.items()])
+    segmented = next(lengths for name, lengths in packed.calls if name == 'segment')
+    assert len(segmented) == 2  # only 'a' and 'c' entered the packed pass
+    assert serial_vad_calls == []  # the blocked unit spent no pyannote VAD either
+    assert sorted(results, key=lambda r: r.segment_id) == sorted(
+        [
+            WorkResult('a', 'encrypted-result://a', 'success'),
+            ValidationFailureWork('b', 'vad_windows', 'unsupported_language'),
+            WorkResult('c', 'encrypted-result://c', 'success'),
+        ],
+        key=lambda r: r.segment_id,
+    )
+
+
+def test_flight_excluded_strict_silence_takes_the_free_disposition(monkeypatch):
+    packed = FakeFlight()
+    worker = PipelineWorker(
+        language_of=lambda work: 'zh' if work.segment_id == 'b' else 'en',
+        decode=lambda work: synthetic_audio(work.duration_seconds, 7),
+        vad=serial_vad,
+        words_providers={'parakeet': Words()},
+        diarizers={'pyannote': serial_diarize},
+        persist=lambda work, payload: 'encrypted-result://' + work.segment_id,
+        flight_models=packed,
+    )
+    monkeypatch.setattr('diarizer.batch_pipeline.inspect_worker_silence', lambda item, samples: {'audio_seconds': 1})
+    results = worker.process_batch([item(k, s) for k, s in DURATIONS.items()])
+    by_id = {r.segment_id: r for r in results}
+    assert by_id['b'].outcome == 'silence'
+    assert not [c for c in packed.calls if c[0] == 'segment' and len(c[1]) == 3]
+
+
+def test_flight_excluded_strict_vad_failure_falls_back_to_serial_vad(monkeypatch):
+    packed = FakeFlight()
+    serial_vad_calls = []
+
+    def counted_vad(samples):
+        serial_vad_calls.append(len(samples))
+        return serial_vad(samples)
+
+    worker = PipelineWorker(
+        language_of=lambda work: 'zh' if work.segment_id == 'b' else 'en',
+        decode=lambda work: synthetic_audio(work.duration_seconds, 7),
+        vad=counted_vad,
+        words_providers={'parakeet': Words()},
+        diarizers={'pyannote': serial_diarize},
+        persist=lambda work, payload: 'encrypted-result://' + work.segment_id,
+        flight_models=packed,
+    )
+
+    def unavailable(item, samples):
+        raise ValueError('strict vad unavailable')
+
+    monkeypatch.setattr('diarizer.batch_pipeline.inspect_worker_silence', unavailable)
+    results = worker.process_batch([item(k, s) for k, s in DURATIONS.items()])
+    assert serial_vad_calls == [int(DURATIONS['b'] * RATE)]  # evidence fallback, not silence guessing
+    assert ValidationFailureWork('b', 'vad_windows', 'unsupported_language') in results
+
+
+def test_flight_exclusion_follows_the_validation_disposition_flag(monkeypatch):
+    packed = FakeFlight()
+    serial_vad_calls = []
+
+    def counted_vad(samples):
+        serial_vad_calls.append(len(samples))
+        return serial_vad(samples)
+
+    worker = PipelineWorker(
+        language_of=lambda work: 'zh' if work.segment_id == 'b' else 'en',
+        decode=lambda work: synthetic_audio(work.duration_seconds, 7),
+        vad=counted_vad,
+        words_providers={'parakeet': Words()},
+        diarizers={'pyannote': serial_diarize},
+        persist=lambda work, payload: 'encrypted-result://' + work.segment_id,
+        flight_models=packed,
+    )
+    monkeypatch.setattr('diarizer.batch_pipeline.inspect_worker_silence', lambda item, samples: None)
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'false')
+    results = worker.process_batch([item(k, s) for k, s in DURATIONS.items()])
+    assert serial_vad_calls == [int(DURATIONS['b'] * RATE)]  # flag off keeps the serial VAD evidence
+    assert ValidationFailureWork('b', 'vad_windows', 'unsupported_language') in results
 
 
 # ---- real pyannote equivalence (CPU) --------------------------------------------

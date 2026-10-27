@@ -24,6 +24,7 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal_frame_encoder.dart';
+import 'package:omi/services/wals/wal_backlog_telemetry.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
@@ -210,6 +211,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   void clearUserData() {
+    _backlogTelemetry.clearUserData();
     _sessionGeneration++;
     conversationCompletions.value = null;
     _lastStaleWalReportAt = null;
@@ -233,6 +235,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _admissionReservations.clear();
     _liveProofPendingWalIds.clear();
     _pendantBlockedByStorage = false;
+    _lastPersistedIndexFingerprint = null;
     heldRevision.value++;
   }
 
@@ -261,10 +264,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final WalCoverageTelemetryEmitter? _staleWalTelemetry;
   DateTime? _lastStaleWalReportAt;
   final Future<int?> Function()? _freeDiskBytesOverride;
+  final Future<void> Function(Duration duration)? _sleepOverride;
+  final WalBacklogTelemetry _backlogTelemetry;
   final PendantRingCustody _custody;
   final Future<DeviceConnection?> Function(String deviceId)? _connectionResolver;
 
   DateTime _now() => _nowOverride?.call() ?? DateTime.now();
+
+  Future<void> _sleep(Duration duration) => (_sleepOverride ?? Future<void>.delayed)(duration);
 
   Timer Function(Duration, void Function(Timer)) get _periodic => _periodicOverride ?? Timer.periodic;
 
@@ -281,6 +288,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     this.listener, {
     SyncUploadGate? uploadGate,
     SyncJobPoller? jobPoller,
+    WalBacklogTelemetry? backlogTelemetry,
     DateTime Function()? now,
     Timer Function(Duration, void Function(Timer))? periodic,
     Future<SyncJobFetch> Function(String jobId)? jobStatusFetcher,
@@ -289,9 +297,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     WalCoverageTelemetryEmitter? coverageTelemetry,
     WalCoverageTelemetryEmitter? staleWalTelemetry,
     Future<int?> Function()? freeDiskBytes,
+    Future<void> Function(Duration duration)? sleep,
     PendantRingCustody? custody,
     Future<DeviceConnection?> Function(String deviceId)? connectionResolver,
   })  : _jobPollerOverride = jobPoller,
+        _backlogTelemetry = backlogTelemetry ?? WalBacklogTelemetry(),
         _uploadGateOverride = uploadGate,
         _nowOverride = now,
         _periodicOverride = periodic,
@@ -301,6 +311,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _coverageTelemetryOverride = coverageTelemetry,
         _staleWalTelemetry = staleWalTelemetry,
         _freeDiskBytesOverride = freeDiskBytes,
+        _sleepOverride = sleep,
         _custody = custody ?? PendantRingCustody.shared,
         _connectionResolver = connectionResolver;
 
@@ -312,6 +323,26 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
+
+  /// Whether the most recent [onFrameCaptured] kept the frame (false when a
+  /// storage-blocked pendant buffer was full and the frame was dropped).
+  /// Reporting only; capture behaviour is unchanged.
+  bool get lastFrameAccepted => _lastFrameAccepted;
+  bool _lastFrameAccepted = true;
+
+  /// Strict durability of [frame] (as returned by [onFrameCaptured]): its
+  /// bytes were written to a disk WAL by a flush of the CURRENT generation and
+  /// that flush's index save completed. Anything else (buffered, in a memory
+  /// WAL, written but index not yet saved, a superseded generation) is false.
+  /// Read-only; used by the local-preview custody copies.
+  bool isFrameDurable(WalFrame frame) => _durableFlushGeneration[frame.payload] == _sessionGeneration;
+
+  /// Payload object -> generation whose flush made it durable (weak keys).
+  final Expando<int> _durableFlushGeneration = Expando<int>('durableFlushGeneration');
+
+  /// Test seam: take the existing storage-blocked refusal branch.
+  @visibleForTesting
+  bool debugRefusePendantFrames = false;
 
   @visibleForTesting
   List<bool> get testFrameSynced => _frameSynced;
@@ -948,6 +979,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   Future _flush(int generation) async {
+    _backlogTelemetry.flushPendantDrops();
     Logger.debug("_flushing");
     int flushedCount = 0;
     final durableWals = <Wal>[];
@@ -1011,6 +1043,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     if (indexSaved) {
       for (final wal in durableWals) {
+        // Recorded before the in-memory copy is released; observational only.
+        if (_isCurrent(generation)) {
+          for (final payload in wal.data) {
+            _durableFlushGeneration[payload] = generation;
+          }
+        }
         if (wal.deviceType == DeviceType.appleWatch && wal.ownerUid != null && _isCurrent(generation)) {
           try {
             await watchCoverage.record(wal.ownerUid!, wal.timerStart.toDouble(),
@@ -1114,10 +1152,18 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   // Foreign-owner audio is another account's: it never counts as this account's pressure.
+  // Pending means not yet acknowledged by the backend — exactly status !=
+  // synced. A synced status is set only by backend acknowledgement (job
+  // resolution, upload fast-path, capture-committed receipt, transcript
+  // coverage) or by delivery of every frame over a connected socket. A synced
+  // WAL with syncedAt == 0 (a transport-only streamed copy, or a record synced
+  // before the field existed) is acknowledged but of unknown age: unknown age
+  // protects deletion — _removeExpiredSyncedCopies never touches syncedAt == 0
+  // — and must not manufacture retention pressure.
   int get _pendingDiskWalCount => [
         ..._retiredWals,
         ..._wals,
-      ].where((wal) => wal.storage == WalStorage.disk && (wal.status != WalStatus.synced || wal.syncedAt == 0)).length;
+      ].where((wal) => wal.storage == WalStorage.disk && wal.status != WalStatus.synced).length;
 
   /// Surfaces the bounded-retention pressure once per cap-engagement event.
   /// Pending (unsynced) copies are never evicted and admission is not refused
@@ -1140,13 +1186,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         blockedCount: 0,
         reason: 'count_cap',
       );
+      // Once per episode, as documented above: the flush timer re-evaluates
+      // every few seconds while the cap stays engaged, and per-block counts
+      // already arrive with wal_admission_blocked.
+      DebugLogManager.logEvent('wal_admission_pressure', {
+        'policy': 'admission_count_cap',
+        'cap': maxRetainedCaptureWalCount,
+        'retained_count': retained,
+        'blocked_count': _admissionBlockedCount,
+      });
     }
-    DebugLogManager.logEvent('wal_admission_pressure', {
-      'policy': 'admission_count_cap',
-      'cap': maxRetainedCaptureWalCount,
-      'retained_count': retained,
-      'blocked_count': _admissionBlockedCount,
-    });
     return retained - maxRetainedCaptureWalCount;
   }
 
@@ -1292,7 +1341,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// copy redundant. Records with an unknown sync time (syncedAt == 0: synced
   /// before the field existed, or a live-streamed copy whose status came from
   /// transport-only socket sends rather than a server acknowledgement) are
-  /// deliberately never removed.
+  /// deliberately never removed. Unknown age also stops mattering for the
+  /// retention-pressure count once the status is synced —
+  /// [_pendingDiskWalCount] counts acknowledgement, not age — so it delays
+  /// deletion without keeping the count cap engaged.
   ///
   /// Best-effort and quiet: a record whose file delete fails stays for the
   /// next hook. Returns the number of local copies removed.
@@ -1345,6 +1397,19 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @visibleForTesting
   Future<int> enforceRetentionPolicyForTesting() => _evaluateRetentionPressure();
 
+  /// Fingerprint of the last snapshot this session persisted (or started
+  /// persisting). Null after load or a failed write, so the next save always
+  /// writes. The periodic flush saves unconditionally; with a
+  /// multi-thousand-entry index an unchanged snapshot must not pay the
+  /// whole-index encode and write again.
+  int? _lastPersistedIndexFingerprint;
+
+  /// The index write currently on disk-bound flight and the fingerprint it
+  /// carries. A save that skips on a matching fingerprint waits for it, so it
+  /// never reports durable before the bytes it relies on are written.
+  Future<void>? _indexWriteInFlight;
+  int? _indexWriteInFlightFingerprint;
+
   Future<bool> _saveWalsToFile(int generation) async {
     if (!_isCurrent(generation)) return false;
     // The save rewrites the whole index from memory, so every durable bucket
@@ -1353,17 +1418,54 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // recordings from disk on the next save.
     final snapshot = [..._retiredWals, ..._foreignWals, ..._wals].where((w) => w.storage != WalStorage.mem).toList();
     final confirmedKeys = snapshot.where((w) => w.storage == WalStorage.disk).map(_durableKey).toList();
-    Logger.debug('Saving WALs to file');
-    if (_persistWalsOverride != null) {
-      await _persistWalsOverride!(snapshot);
-      _confirmedDurableWalKeys.addAll(confirmedKeys);
-      return true;
+    final fingerprint = Wal.persistedIndexFingerprint(snapshot);
+    if (_lastPersistedIndexFingerprint == fingerprint) {
+      // Nothing persisted changed since the last write: skip the encode. If
+      // that write is still in flight, wait for it; durable means on disk.
+      final pending = _indexWriteInFlightFingerprint == fingerprint ? _indexWriteInFlight : null;
+      var written = true;
+      if (pending != null) {
+        try {
+          await pending;
+        } catch (_) {
+          written = false; // The matching write failed: write this snapshot ourselves.
+        }
+      }
+      if (written && _lastPersistedIndexFingerprint == fingerprint) {
+        _confirmedDurableWalKeys.addAll(confirmedKeys);
+        return true;
+      }
+      if (!_isCurrent(generation)) return false;
     }
-    if (!await WalFileManager.saveWals(snapshot)) {
-      throw StateError('WAL index save reported failure');
+    // Record before awaiting: saves can overlap (flush timer during a drain),
+    // and an older snapshot resolving last must not regress the fingerprint a
+    // newer save already recorded.
+    _lastPersistedIndexFingerprint = fingerprint;
+    final write = _writeIndex(snapshot);
+    _indexWriteInFlight = write;
+    _indexWriteInFlightFingerprint = fingerprint;
+    try {
+      await write;
+    } catch (_) {
+      if (_lastPersistedIndexFingerprint == fingerprint) _lastPersistedIndexFingerprint = null;
+      rethrow;
+    } finally {
+      if (identical(_indexWriteInFlight, write)) {
+        _indexWriteInFlight = null;
+        _indexWriteInFlightFingerprint = null;
+      }
     }
     _confirmedDurableWalKeys.addAll(confirmedKeys);
     return true;
+  }
+
+  Future<void> _writeIndex(List<Wal> snapshot) async {
+    Logger.debug('Saving WALs to file');
+    if (_persistWalsOverride != null) {
+      await _persistWalsOverride!(snapshot);
+    } else if (!await WalFileManager.saveWals(snapshot)) {
+      throw StateError('WAL index save reported failure');
+    }
   }
 
   String _durableKey(Wal wal) => '${wal.id}|${wal.filePath ?? wal.getFileName()}';
@@ -1458,6 +1560,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         )
         .singleOrNull;
     if (target == null) {
+      _notifyUpdated(generation);
+      return;
+    }
+    // Re-checked here, at the moment of deletion: a caller's row can be stale
+    // by the time its confirmation resolves, and audio that is mid-upload is
+    // never deleted under a refusal label that belongs to another member.
+    if (target.isSyncing) {
+      Logger.debug('deleteWal skipped ${target.id}: still uploading');
       _notifyUpdated(generation);
       return;
     }
@@ -1780,13 +1890,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     int? liveEpoch;
     int? liveRingId;
     if (_isPendantFrame(frame)) {
-      if ((_retentionRisk != null || _pendantBlockedByStorage) &&
-          _countPendantBuffered() >= _maxPendantBufferedFrames) {
-        _pendantDroppedWhileBlocked++;
-        DebugLogManager.logWarning('LocalWalSync: pendant frame dropped, storage admission blocked', {
-          'device': _deviceId,
-          'dropped_count': _pendantDroppedWhileBlocked,
-        });
+      if (debugRefusePendantFrames ||
+          ((_pendantBlockedByStorage || (_retentionRisk != null && _retentionRisk!.reason != 'count_cap')) &&
+              _countPendantBuffered() >= _maxPendantBufferedFrames)) {
+        _backlogTelemetry.pendantFrameDropped(
+            retentionReason: _retentionRisk?.reason, storageWriteBlocked: _pendantBlockedByStorage);
+        _lastFrameAccepted = false;
         return frame;
       }
       final counter = _packetCounterOf(frame);
@@ -1816,6 +1925,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     );
     _frames.add(positioned);
     _frameSynced.add(false);
+    _lastFrameAccepted = true;
     return positioned;
   }
 
@@ -1834,7 +1944,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   static const _maxPendantBufferedFrames = 2000;
-  int _pendantDroppedWhileBlocked = 0;
 
   final Set<String> _confirmedDurableWalKeys = {};
 
@@ -1844,16 +1953,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   bool _isPendantWal(Wal wal) =>
       _deviceId != null && _deviceId!.isNotEmpty && _deviceId != 'phone' && wal.device == _deviceId;
-
-  int _countPendantBuffered() {
-    var count = _frames.where(_isPendantFrame).length;
-    for (final wal in _wals) {
-      if (wal.storage == WalStorage.mem && _isPendantWal(wal)) {
-        count += wal.totalFrames;
-      }
-    }
-    return count;
-  }
 
   @override
   void markFrameSynced(FrameSyncKey key) {
@@ -1921,6 +2020,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     int batchesCompleted = 0;
     int batchesFailed = 0;
     int corruptedCount = 0;
+    // Consecutive 5xx refusals without server pacing guidance. Each unmetered
+    // retry spends a full multipart body upload against a server that just
+    // said it cannot serve; a short growing pause breaks that loop while the
+    // gate-level Retry-After cooldown handles the scoped variants.
+    int serverUnavailableStreak = 0;
     final totalFilesToUpload = wals.length;
 
     final attemptedWalIds = <String>{};
@@ -2097,6 +2201,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
         _clearRecoveryMarkers(batchWals, generation);
         batchesCompleted++;
+        serverUnavailableStreak = 0;
         reportUploadProgress();
       } on SyncRateLimitedException {
         // The cooldown is account-global, so every remaining batch would hit it too.
@@ -2139,33 +2244,39 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         await _saveWalsToFile(generation);
         _notifyUpdated(generation);
         continue;
+      } on SyncInvalidCaptureTimeException catch (e) {
+        if (!_isCurrent(generation)) return resp;
+        await handleBatchInvalidCaptureTime(
+          batchWals,
+          generation,
+          e,
+          isolateAfterRefusal: isolateAfterRefusal,
+          attemptedWalIds: attemptedWalIds,
+          walAttemptKey: walAttemptKey,
+        );
+        continue;
       } on SyncUploadHttpException catch (e) {
         if (!_isCurrent(generation)) return resp;
         final definitive = isDefinitiveUploadRefusal(e);
         // A request-level 400/413 proves nothing about every member. Try each
         // retained file once through the same gate before retiring that file.
         if (definitive && batchWals.length > 1) {
-          for (final wal in batchWals) {
-            final key = walAttemptKey(wal);
-            isolateAfterRefusal.add(key);
-            attemptedWalIds.remove(key);
-            wal.isSyncing = false;
-            wal.syncStartedAt = null;
-            wal.syncEtaSeconds = null;
-          }
-          DebugLogManager.logEvent('local_upload_batch_isolated', {
-            'statusCode': e.statusCode,
-            'walCount': batchWals.length,
-          });
-          await _saveWalsToFile(generation);
-          _notifyUpdated(generation);
+          await isolateBatchAfterRefusal(
+            batchWals,
+            generation,
+            isolateAfterRefusal: isolateAfterRefusal,
+            attemptedWalIds: attemptedWalIds,
+            walAttemptKey: walAttemptKey,
+            statusCode: e.statusCode,
+          );
           continue;
         }
         batchesFailed++;
         final authenticationFailed = e.statusCode == 401 || e.statusCode == 403;
         if (definitive) {
+          final reasonCode = uploadRejectionTokenForStatus(e.statusCode);
           for (final wal in batchWals) {
-            wal.markUploadRejected();
+            wal.markUploadRejected(reasonCode: reasonCode);
           }
           resp.localUploadPermanentFailures += batchWals.length;
           resp.localUploadPermanentError = e.toString();
@@ -2192,6 +2303,20 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           'statusCode': e.statusCode,
           'terminal': definitive,
         });
+        if (e.statusCode >= 500 && (e.retryAfterSeconds ?? 0) <= 0) {
+          // Unscoped 5xx (e.g. platform shedding under load): the server gave
+          // no pacing, so the drain pauses briefly and grows the pause with
+          // each consecutive refusal instead of immediately re-uploading the
+          // next full batch into the same condition.
+          serverUnavailableStreak++;
+          final pause = syncServerUnavailablePauseSeconds(serverUnavailableStreak);
+          DebugLogManager.logEvent('local_upload_server_unavailable_pause', {
+            'statusCode': e.statusCode,
+            'streak': serverUnavailableStreak,
+            'pauseSeconds': pause,
+          });
+          if (!_isCancelled && _isCurrent(generation)) await _sleep(Duration(seconds: pause));
+        }
         if (authenticationFailed) {
           await _saveWalsToFile(generation);
           _notifyUpdated(generation);
@@ -2416,9 +2541,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       await _saveWalsToFile(generation);
       _notifyUpdated(generation);
       return resp;
+    } on SyncInvalidCaptureTimeException catch (e) {
+      await handleSingleInvalidCaptureTime(walToSync, generation, e);
+      return resp;
     } on SyncUploadHttpException catch (e) {
       if (isDefinitiveUploadRefusal(e)) {
-        walToSync.markUploadRejected();
+        walToSync.markUploadRejected(reasonCode: uploadRejectionTokenForStatus(e.statusCode));
         resp.localUploadFailures = 1;
         resp.localUploadPermanentFailures = 1;
         resp.localUploadPermanentError = e.toString();

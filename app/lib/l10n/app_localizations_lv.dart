@@ -712,7 +712,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get remembering => 'Atceras';
 
   @override
-  String get unlimitedPlan => 'Neierobežots plāns';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Pārvaldīt plānu';
@@ -734,7 +734,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get upgrade => 'Jaunināt';
 
   @override
-  String get upgradeToUnlimited => 'Jauniniet uz neierobežotu';
+  String get upgradeToUnlimited => 'Jaunināt uz Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3162,7 +3162,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Jaunināt uz Pro';
+  String get upgradeToPro => 'Jaunināt uz Omi Pro';
 
   @override
   String get getOmiDevice => 'Iegūt Omi ierīci';
@@ -4286,7 +4286,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get trainingDataProgram => 'Apmācības datu programma';
 
   @override
-  String get getOmiUnlimitedFree => 'Iegūstiet Omi Unlimited bez maksas, sniedzot savus datus AI modeļu apmācībai.';
+  String get getOmiUnlimitedFree => 'Iegūstiet Omi Pro bez maksas, sniedzot savus datus AI modeļu apmācībai.';
 
   @override
   String get trainingDataBullets => '• Jūsu dati palīdz uzlabot AI modeļus\n• Tiek kopīgoti tikai nejutīgi dati';
@@ -8618,6 +8618,9 @@ class AppLocalizationsLv extends AppLocalizations {
       'Transkripcija nav pieejama — ierakstīšana turpinās, un jūsu audio tiek saglabāts.';
 
   @override
+  String get captureNoAudioFromPendant => 'No kulona nav audio';
+
+  @override
   String get capturing => 'Notiek ierakstīšana';
 
   @override
@@ -9683,7 +9686,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Pāriet uz bezmaksas versiju';
 
   @override
-  String get getFreeUnlimitedAccess => 'Iegūstiet bezmaksas neierobežotu piekļuvi';
+  String get getFreeUnlimitedAccess => 'Iegūstiet Omi Pro bez maksas';
 
   @override
   String get shareDataForTraining => 'Kopīgot datus apmācībai';
@@ -11117,6 +11120,12 @@ class AppLocalizationsLv extends AppLocalizations {
       'Bluetooth savienojums ar jūsu Omi ir apstājies, tāpēc audio nesasniedz lietotni. Omi turpina ierakstīt ierīcē un sinhronizēsies, kad savienojums atjaunosies. Atkārtots mēģinājums atkal izveido savienojumu; ja tas joprojām neizdodas, pārbaudiet ierīci sadaļā Iestatījumi > Ierīce.';
 
   @override
+  String get captureConnecting => 'Savienojas…';
+
+  @override
+  String get captureNoAudioDetail => 'Kulons ir savienots, taču nekāds skaņas signāls nesasniedz jūsu tālruni';
+
+  @override
   String get captureIngressNeedsReconnect => 'Audio nesasniedz lietotni — atkārtoti pievienojiet Omi';
 
   @override
@@ -11145,13 +11154,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Krātuve gandrīz pilna';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi pats atjaunos savienojumu';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12282,12 +12284,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Pārbaudiet savienojumu';
 
   @override
-  String get forYou => 'Jums';
-
-  @override
-  String get stopThese => 'Apturēt šos';
-
-  @override
   String get dismiss => 'Paslēpt';
 
   @override
@@ -12888,7 +12884,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Nosūtiet balss ziņu, un Omi uz to atbildēs.';
 
   @override
-  String get chatAppsPartOfPro => 'Tērzēšanas lietotnes ir daļa no Pro';
+  String get chatAppsPartOfPro => 'Tērzēšanas lietotnes ir daļa no Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Ziņas';
@@ -13523,7 +13519,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncDetailsCopy => 'Kopēt informāciju atbalstam';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Pieejams ar Operator un Architect';
+  String get chatAppsChannelPlanRequired => 'Pieejams ar Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14036,7 +14032,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Darbojas, kamēr tālrunis uzlādējas.';
 
   @override
-  String get onDeviceUpgradeBody => 'Pārejiet uz Pro runātāju nošķiršanai un augstākai precizitātei';
+  String get onDeviceUpgradeBody => 'Pārejiet uz Omi Pro runātāju nošķiršanai un augstākai precizitātei';
 
   @override
   String get onDeviceAtCapFooter => 'Nekas netiek zaudēts. To var mainīt sadaļā Iestatījumi › Transkripcija.';
@@ -14219,7 +14215,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Pārtaisīt ar Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Pārejiet uz Pro runātāju nošķiršanai un augstākai precizitātei';
+  String get onDeviceRedoHint => 'Pārejiet uz Omi Pro runātāju nošķiršanai un augstākai precizitātei';
 
   @override
   String get onDeviceKeepEverything => 'Glabāt visu šajā tālrunī';
@@ -14452,6 +14448,25 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Pašreizējās piezīmes netiek atjauninātas. Pagaidām skatiet transkripciju.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Ierakstīšana · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Iepriekšējā epizode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Gaidošie fragmenti: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Atvērt iepriekšējo epizodi';
+
+  @override
   String get episodeNotesSoon => 'Piezīmes parādās pēc pirmajām sarunas minūtēm.';
 
   @override
@@ -14588,4 +14603,54 @@ class AppLocalizationsLv extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Gatavs. $percent% atlaide nākamos $months mēnešus.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Citi';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Pabeigts';
+
+  @override
+  String get openLoopAnswerRemind => 'Atgādināt vēlāk';
+
+  @override
+  String get openLoopAnswerDrop => 'Atmest';
+
+  @override
+  String get syncRejectionInvalidDate => 'Nederīgs ieraksta datums';
+
+  @override
+  String get syncDeleteKeptUploading => 'Dažas daļas joprojām augšupielādē un tika paturētas';
+
+  @override
+  String get syncRejectionServer => 'Serveris noraidīja';
+
+  @override
+  String get syncRejectionTooLarge => 'Pārāk liels';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration telefonā';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Augšupielādes īsu brīdi ir pauzētas — tās automātiski atsāksies';
 }

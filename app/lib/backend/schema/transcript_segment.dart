@@ -214,13 +214,17 @@ class TranscriptSegment {
     return buffer.toString().trim();
   }
 
+  /// Whether no segment starts or ends after a later one: the pairwise check
+  /// `a.start > b.end || a.end > b.start` for every earlier `a`, in one pass
+  /// against the largest earlier start and end (opening a 1,200-line
+  /// conversation used to cost 720k pair comparisons on the UI isolate).
   static bool canDisplaySeconds(List<TranscriptSegment> segments) {
-    for (var i = 0; i < segments.length; i++) {
-      for (var j = i + 1; j < segments.length; j++) {
-        if (segments[i].start > segments[j].end || segments[i].end > segments[j].start) {
-          return false;
-        }
-      }
+    var maxStart = double.negativeInfinity;
+    var maxEnd = double.negativeInfinity;
+    for (final segment in segments) {
+      if (maxStart > segment.end || maxEnd > segment.start) return false;
+      if (segment.start > maxStart) maxStart = segment.start;
+      if (segment.end > maxEnd) maxEnd = segment.end;
     }
     return true;
   }

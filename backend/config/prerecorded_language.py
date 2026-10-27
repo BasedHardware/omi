@@ -55,8 +55,10 @@ def requires_multilingual(language: str | None) -> bool:
 
 # Self-hosted gate (Parakeet /v2/language, Whisper-base). The statistic is
 # P(supported) summed over the Parakeet-25 languages, not a vendor's top-1.
-# Offline maxima on unsupported speech: 0.922 at >=6 s, 0.978 for 3 s crops.
-SELF_LID_CONFIDENCE = 0.95
+# Production shadow also found Vietnamese/vendor versus English/self candidates
+# at 0.9700 and 0.9757 on 16.7/30 s probes. Retain them on the multilingual path;
+# longer audio is not sufficient reason to lower the support-confidence floor.
+SELF_LID_CONFIDENCE = 0.985
 SELF_LID_SHORT_CONFIDENCE = 0.985
 SELF_LID_SHORT_SECONDS = 6.0
 SELF_LID_MIN_SECONDS = 1.0

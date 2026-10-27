@@ -481,7 +481,17 @@ void main() {
   });
 
   group('upload batching', () {
-    test('newest first, one conversation per batch', () {
+    test('the unscoped-5xx pause grows exponentially and caps at 30s', () {
+      expect(syncServerUnavailablePauseSeconds(0), 0);
+      expect(syncServerUnavailablePauseSeconds(1), 2);
+      expect(syncServerUnavailablePauseSeconds(2), 4);
+      expect(syncServerUnavailablePauseSeconds(3), 8);
+      expect(syncServerUnavailablePauseSeconds(4), 16);
+      expect(syncServerUnavailablePauseSeconds(5), 30);
+      expect(syncServerUnavailablePauseSeconds(50), 30);
+    });
+
+    test('live capture leads newest first, historical backlog drains oldest first', () {
       const now = 2000000000;
       final oldNewest = Wal(timerStart: now - 7 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60);
       final liveOlder = Wal(
@@ -500,7 +510,26 @@ void main() {
 
       final batch = nextSyncUploadBatch([oldNewest, liveOlder, oldOldest, liveNewest], now);
 
+      // Live capture still claims its running conversation first, newest WAL
+      // of the conversation leading. The historical pair is ordered by the
+      // 30-day recovery deadline instead: the oldest recording drains first.
       expect(batch.map((wal) => wal.timerStart), [liveNewest.timerStart, liveOlder.timerStart]);
+      final remainder = [oldNewest, oldOldest];
+      expect(
+        nextSyncUploadBatch(remainder, now).map((wal) => wal.timerStart),
+        [oldOldest.timerStart, oldNewest.timerStart],
+      );
+    });
+
+    test('a historical drain picks the oldest WALs, not the newest', () {
+      const now = 2000000000;
+      final dayOld = Wal(timerStart: now - 24 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60);
+      final weekOld = Wal(timerStart: now - 7 * 24 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60);
+      final threeWeeksOld = Wal(timerStart: now - 21 * 24 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60);
+
+      final batch = nextSyncUploadBatch([dayOld, threeWeeksOld, weekOld], now);
+
+      expect(batch.map((wal) => wal.timerStart), [threeWeeksOld.timerStart, weekOld.timerStart, dayOld.timerStart]);
     });
 
     test('does not mix safety WALs from different recording sessions', () {
@@ -563,7 +592,11 @@ void main() {
       final batch = nextSyncUploadBatch(historical.reversed.toList(), now);
 
       expect(batch.length, 5);
-      expect(batch.map((wal) => wal.timerStart), historical.take(5).map((wal) => wal.timerStart));
+      expect(
+        batch.map((wal) => wal.timerStart),
+        historical.reversed.take(5).map((wal) => wal.timerStart),
+        reason: 'the oldest five WALs drain first — they are closest to the recovery deadline',
+      );
     });
 
     test('historical WALs with different recording locations are never uploaded as one conversation batch', () {
@@ -588,8 +621,10 @@ void main() {
 
       final batch = nextSyncUploadBatch(wals, now);
 
-      expect(batch, hasLength(2));
-      expect(batch.every((wal) => identical(wal.geolocation, firstCapture)), isTrue);
+      // Oldest-first: the 8h-old second-location recording leads, so the
+      // batch is that location alone.
+      expect(batch, hasLength(1));
+      expect(batch.every((wal) => identical(wal.geolocation, secondCapture)), isTrue);
     });
 
     test('a conversation too large for one batch does not claim a manifest', () {
@@ -627,7 +662,8 @@ void main() {
       expect(batch.fold<int>(0, (total, wal) => total + wal.seconds), 200);
       expect(
         batch.map((wal) => wal.timerStart),
-        custodyTail.take(syncUploadBatchMaxFiles).map((wal) => wal.timerStart),
+        custodyTail.reversed.take(syncUploadBatchMaxFiles).map((wal) => wal.timerStart),
+        reason: 'the oldest 10s chunks form the first job',
       );
     });
 
@@ -648,9 +684,12 @@ void main() {
       final long = Wal(timerStart: now - 7 * 60 * 60, codec: BleAudioCodec.opus, seconds: 400);
       final older = Wal(timerStart: now - 8 * 60 * 60, codec: BleAudioCodec.opus, seconds: 10);
 
+      // Oldest-first: the 8h-old WAL leads and the 400s WAL does not fit after
+      // it, so the long WAL uploads alone in the next batch.
       final batch = nextSyncUploadBatch([older, long], now);
 
-      expect(batch, [long]);
+      expect(batch, [older]);
+      expect(nextSyncUploadBatch([long], now), [long]);
     });
   });
 
@@ -687,6 +726,52 @@ void main() {
       // Over the count threshold is a warning only: with disk to spare, new audio is still admitted.
       expect(await sync.ensureStorageAdmission(bytes: 1024, admittedGeneration: sync.sessionGeneration), isTrue);
       expect(sync.retentionRisk?.reason, 'count_cap');
+    });
+
+    Wal diskCopy({required int timerStart, WalStatus status = WalStatus.miss, int syncedAt = 0}) => Wal(
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          storage: WalStorage.disk,
+          status: status,
+          syncedAt: syncedAt,
+        );
+
+    test('synced copies of unknown sync age are acknowledged, not pending pressure', () async {
+      // Streamed copies are born synced with syncedAt == 0 (transport-only
+      // delivery) and legacy records carry 0 because the field postdates them;
+      // thousands accumulate on a heavy streaming device. None of them waits
+      // on the backend, so none may engage the count cap.
+      sync.testWals = [
+        for (var i = 0; i < maxRetainedCaptureWalCount + 40; i++) diskCopy(timerStart: i, status: WalStatus.synced),
+        for (var i = 0; i < 10; i++) diskCopy(timerStart: 1000 + i, status: WalStatus.synced, syncedAt: 2000000000),
+      ];
+
+      final excess = await sync.enforceRetentionPolicyForTesting();
+
+      expect(excess, 0);
+      expect(sync.retentionRisk, isNull);
+      expect(sync.testWals, hasLength(maxRetainedCaptureWalCount + 50));
+    });
+
+    test('a mixed index counts only not-yet-acknowledged copies toward the cap', () async {
+      final acknowledged = [
+        for (var i = 0; i < maxRetainedCaptureWalCount + 40; i++) diskCopy(timerStart: i, status: WalStatus.synced),
+        for (var i = 0; i < 10; i++) diskCopy(timerStart: 1000 + i, status: WalStatus.synced, syncedAt: 2000000000),
+      ];
+      final pending = [
+        for (var i = 0; i < maxRetainedCaptureWalCount; i++) diskCopy(timerStart: 2000 + i),
+        for (var i = 0; i < 2; i++) diskCopy(timerStart: 4000 + i, status: WalStatus.uploaded),
+      ];
+
+      sync.testWals = [...acknowledged, ...pending];
+
+      final excess = await sync.enforceRetentionPolicyForTesting();
+
+      expect(excess, 2);
+      expect(sync.retentionRisk?.reason, 'count_cap');
+      expect(sync.retentionRisk?.retainedCount, maxRetainedCaptureWalCount + 2);
+      expect(sync.testWals, hasLength(2 * maxRetainedCaptureWalCount + 52));
     });
 
     test('admission refuses when free space would breach the 512MiB reserve', () async {
@@ -2558,39 +2643,39 @@ void main() {
           filePath: filePath,
         );
 
-    test('a claimable-newest mixed group uploads only the claimable files', () {
-      final claimableNew = claimWal(100, filePath: 'claim_new.bin');
+    test('a claimable-oldest mixed group uploads only the claimable files', () {
+      final claimableOldest = claimWal(70, filePath: 'claim_old.bin');
       final legacyMid = legacyWal(90, filePath: 'legacy_mid.bin');
-      final claimableOld = claimWal(80, filePath: 'claim_old.bin');
-      final legacyOld = legacyWal(70, filePath: 'legacy_old.bin');
+      final claimableNew = claimWal(100, filePath: 'claim_new.bin');
+      final legacyNew = legacyWal(110, filePath: 'legacy_new.bin');
 
-      final batch = nextSyncUploadBatch([claimableNew, legacyMid, claimableOld, legacyOld], now);
+      final batch = nextSyncUploadBatch([claimableNew, legacyMid, claimableOldest, legacyNew], now);
 
-      expect(batch, [claimableNew, claimableOld]);
-      expect(captureEvidenceUploadHeader(batch, [File('claim_new.bin'), File('claim_old.bin')]), isNotNull);
+      expect(batch, [claimableOldest, claimableNew]);
+      expect(captureEvidenceUploadHeader(batch, [File('claim_old.bin'), File('claim_new.bin')]), isNotNull);
     });
 
-    test('a legacy-newest group drains legacy first, then claimable siblings', () {
-      final legacyNew = legacyWal(100, filePath: 'legacy_new.bin');
+    test('a legacy-oldest group drains legacy first, then claimable siblings', () {
+      final legacyOldest = legacyWal(70, filePath: 'legacy_old.bin');
       final claimableMid = claimWal(90, filePath: 'claim_mid.bin');
-      final claimableOld = claimWal(80, filePath: 'claim_old.bin');
-      final pending = [legacyNew, claimableMid, claimableOld];
+      final claimableNew = claimWal(100, filePath: 'claim_new.bin');
+      final pending = [legacyOldest, claimableMid, claimableNew];
 
       final first = nextSyncUploadBatch(pending, now);
 
-      expect(first, [legacyNew]);
-      expect(captureEvidenceUploadHeader(first, [File('legacy_new.bin')]), isNull);
+      expect(first, [legacyOldest]);
+      expect(captureEvidenceUploadHeader(first, [File('legacy_old.bin')]), isNull);
 
       final remainder = pending.where((wal) => !first.contains(wal)).toList();
       final second = nextSyncUploadBatch(remainder, now);
-      expect(second, [claimableMid, claimableOld]);
-      expect(captureEvidenceUploadHeader(second, [File('claim_mid.bin'), File('claim_old.bin')]), isNotNull);
+      expect(second, [claimableMid, claimableNew]);
+      expect(captureEvidenceUploadHeader(second, [File('claim_mid.bin'), File('claim_new.bin')]), isNotNull);
     });
 
     test('equal timestamps keep their original input order', () {
       final first = legacyWal(100, filePath: 'tie_a.bin');
       final second = legacyWal(100, filePath: 'tie_b.bin');
-      final third = legacyWal(50, filePath: 'tie_c.bin');
+      final third = legacyWal(100, filePath: 'tie_c.bin');
 
       expect(nextSyncUploadBatch([first, second, third], now), [first, second, third]);
       expect(nextSyncUploadBatch([second, first, third], now), [second, first, third]);
@@ -2629,7 +2714,7 @@ void main() {
       final batch = nextSyncUploadBatch(wals, now);
 
       expect(batch.length, 5);
-      expect(batch.map((wal) => wal.timerStart), [100, 99, 98, 97, 96]);
+      expect(batch.map((wal) => wal.timerStart), [94, 95, 96, 97, 98]);
     });
 
     test('a legacy member between claimables does not suppress them', () {
@@ -2639,7 +2724,7 @@ void main() {
 
       final batch = nextSyncUploadBatch([claimableNew, legacy, claimableOld], now);
 
-      expect(batch, [claimableNew, claimableOld]);
+      expect(batch, [claimableOld, claimableNew]);
     });
 
     test('a duplicated file basename stops the claimable batch before it', () {
@@ -2649,22 +2734,22 @@ void main() {
 
       final batch = nextSyncUploadBatch([first, second, third], now);
 
-      expect(batch, [first]);
+      expect(batch, [third, second]);
     });
 
     test('single-file invalid claims keep the whole file in the legacy class', () {
       final cases = <Wal>[
-        claimWal(100, filePath: 'bad_root.bin', captureRoot: 'not-a-uuid'),
-        claimWal(100, filePath: 'neg_start.bin', sourceFrameStart: -1),
-        claimWal(100, filePath: 'neg_epoch.bin', sourceClockEpoch: -5),
-        claimWal(100, filePath: 'no_frames.bin', totalFrames: 0),
-        claimWal(100, filePath: 'stereo.bin', channel: 2),
-        claimWal(100, filePath: 'pcm8.bin', codec: BleAudioCodec.pcm8),
-        claimWal(100, filePath: 'bad name.bin'),
+        claimWal(90, filePath: 'bad_root.bin', captureRoot: 'not-a-uuid'),
+        claimWal(90, filePath: 'neg_start.bin', sourceFrameStart: -1),
+        claimWal(90, filePath: 'neg_epoch.bin', sourceClockEpoch: -5),
+        claimWal(90, filePath: 'no_frames.bin', totalFrames: 0),
+        claimWal(90, filePath: 'stereo.bin', channel: 2),
+        claimWal(90, filePath: 'pcm8.bin', codec: BleAudioCodec.pcm8),
+        claimWal(90, filePath: 'bad name.bin'),
       ];
 
       for (final invalid in cases) {
-        final claimable = claimWal(90, filePath: 'sibling.bin');
+        final claimable = claimWal(110, filePath: 'sibling.bin');
         final batch = nextSyncUploadBatch([invalid, claimable], now);
 
         expect(batch, [invalid], reason: 'invalid claim stays a single-file legacy batch');
@@ -2673,8 +2758,8 @@ void main() {
     });
 
     test('a name over 255 bytes or without a file name is legacy', () {
-      final tooLong = claimWal(100, filePath: 'a' * 256);
-      final claimable = claimWal(90, filePath: 'ok.bin');
+      final tooLong = claimWal(90, filePath: 'a' * 256);
+      final claimable = claimWal(110, filePath: 'ok.bin');
 
       final batch = nextSyncUploadBatch([tooLong, claimable], now);
 
@@ -2796,7 +2881,7 @@ void main() {
           ),
         );
 
-    test('a claimable-newest mixed drain sends claims, then the legacy batch goes unclaimed', () async {
+    test('a claimable-oldest mixed drain sends claims first, then the legacy batch goes unclaimed', () async {
       final local = buildSync();
       local.testWals = [
         diskWal(100, 'claim_a.bin', claimable: true),
@@ -2807,7 +2892,7 @@ void main() {
       await local.syncAll();
 
       expect(uploads.length, 2);
-      expect(uploads[0].$1, ['claim_a.bin', 'claim_c.bin']);
+      expect(uploads[0].$1, ['claim_c.bin', 'claim_a.bin']);
       final parsed = jsonDecode(uploads[0].$2!) as Map<String, dynamic>;
       expect(
         (parsed['files'] as List).map((claim) => claim['name']),
@@ -2818,7 +2903,7 @@ void main() {
       expect(uploads[1].$2, isNull);
     });
 
-    test('a legacy-newest mixed drain goes unclaimed first, then claimable siblings drain', () async {
+    test('a legacy-newest mixed drain sends the claimable siblings first, then the unclaimed legacy batch', () async {
       final local = buildSync();
       local.testWals = [
         diskWal(100, 'legacy_a.bin'),
@@ -2829,11 +2914,11 @@ void main() {
       await local.syncAll();
 
       expect(uploads.length, 2);
-      expect(uploads[0].$1, ['legacy_a.bin']);
-      expect(uploads[0].$2, isNull);
-      expect(uploads[1].$1, ['claim_b.bin', 'claim_c.bin']);
-      final parsed = jsonDecode(uploads[1].$2!) as Map<String, dynamic>;
-      expect((parsed['files'] as List).map((claim) => claim['name']), uploads[1].$1);
+      expect(uploads[0].$1, ['claim_c.bin', 'claim_b.bin']);
+      final parsed = jsonDecode(uploads[0].$2!) as Map<String, dynamic>;
+      expect((parsed['files'] as List).map((claim) => claim['name']), uploads[0].$1);
+      expect(uploads[1].$1, ['legacy_a.bin']);
+      expect(uploads[1].$2, isNull);
     });
 
     test('split WALs sharing one id still each upload in separate batches', () async {

@@ -145,6 +145,9 @@ triggers return 422. A legacy subscriber's header is always `Your plan`.
 ## Prices, hours, and usage
 
 Only active USD recurring month/year prices with `interval_count` 1 are sold.
+Checkout charges the currency the sheet shows: every Checkout session disables
+Stripe Adaptive Pricing (`backend/utils/stripe.py`). Google Play rejects an
+Android release whose displayed and charged prices differ.
 The current archived price is still shown. With no usable ladder price, Plus
 and Pro are hidden. Architect stays visible with `action: none`, except a Pro
 subscriber who is not cancel-scheduled and not on the exhausted surface: that

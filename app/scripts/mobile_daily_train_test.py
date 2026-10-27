@@ -808,6 +808,13 @@ class ReleaseNotesTests(unittest.TestCase):
 
 class AndroidTests(unittest.TestCase):
     def setUp(self):
+        # Ladder-mechanics tests pin held-changes mode off regardless of the
+        # module default (False since 2026-10-27, when Play went back to
+        # auto-sending changes for review); the dedicated held-mode tests
+        # below patch promote.CHANGES_NOT_SENT_FOR_REVIEW to True explicitly.
+        held_off = patch.object(promote, "CHANGES_NOT_SENT_FOR_REVIEW", False)
+        held_off.start()
+        self.addCleanup(held_off.stop)
         self.production = {
             "track": "production",
             "releases": [{"name": "1.0.552 (1246)", "versionCodes": ["1246"], "status": "completed"}],
@@ -874,6 +881,39 @@ class AndroidTests(unittest.TestCase):
             promote.submit_android(Mock(), "edit", "1.0.554", "1340", "n", status="completed", user_fraction=0.05)
         with self.assertRaisesRegex(promote.PromotionError, "strictly between"):
             promote.submit_android(Mock(), "edit", "1.0.554", "1340", "n", status="inProgress", user_fraction=1.0)
+
+    def test_held_changes_mode_parks_the_ladder_instead_of_hopping(self):
+        client = Mock()
+        staged = {"name": STALE_RECEIPT_NAME, "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
+        with patch.object(promote, "CHANGES_NOT_SENT_FOR_REVIEW", True), patch.object(
+            promote, "play_edit", return_value=(client, "edit")
+        ), patch.object(promote, "play_track", side_effect=lambda c, e, name: tracks[name]):
+            summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @5% parked (held-changes mode; manual review submission)")
+        client.edits().tracks().update.assert_not_called()
+        client.edits().commit.assert_not_called()
+
+    def test_held_changes_mode_still_stages_but_names_the_send_for_review_step(self):
+        client = Mock()
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": self.production}
+        with patch.object(promote, "CHANGES_NOT_SENT_FOR_REVIEW", True), tempfile.TemporaryDirectory() as tmp:
+            release = Path(tmp) / "1.0.554.json"
+            release.write_text(json.dumps({"version": "1.0.554", "date": "2026-10-06", "changes": ["Faster sync"]}))
+            with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+                promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+            ), patch.object(train, "ensure_release_notes", return_value=release), patch.object(
+                promote, "require_notes", return_value="Faster sync"
+            ):
+                summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(
+            summary,
+            f"android=staged 1.0.554 (1340) @{train.STAGED_ROLLOUT_FRACTION:.0%} "
+            f"(held; send for review in Play Console)",
+        )
+        client.edits().commit.assert_called_once_with(
+            packageName="com.friend.ios", editId="edit", changesNotSentForReview=True
+        )
 
     def test_ladder_promotes_staged_release_one_hop_per_green_day(self):
         client = Mock()
@@ -1427,7 +1467,9 @@ class CaptureHealthWiringTests(unittest.TestCase):
             "internal": {"track": "internal", "releases": []},
             "alpha": {"track": "alpha", "releases": []},
             "production": {"track": "production", "releases": [staged]}}
-        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+        with patch.object(promote, "CHANGES_NOT_SENT_FOR_REVIEW", False), patch.object(
+            promote, "play_edit", return_value=(client, "edit")
+        ), patch.object(
             promote, "play_track", side_effect=lambda c, e, name: tracks[name]
         ), patch.object(train, "capture_health_hold", return_value="capture wedge users above 50/day") as hold:
             summary = train.run_android(dry_run=False, release_date="2026-10-06")

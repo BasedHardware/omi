@@ -17,7 +17,7 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from database.batch_pipeline_store import FirestoreStore
-from utils.batch_pipeline.intake import artifacts_for
+from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.projection import Projector
 from utils.batch_pipeline.projection_repair import plan_owner, apply_owner
 from utils.rollout_cohorts import configure_rollout_runtime

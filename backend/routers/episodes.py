@@ -42,14 +42,24 @@ def _admitted(uid: str, channel: Optional[str]) -> bool:
     return True
 
 
-@router.get('/v1/episodes/live', response_model=EpisodeLiveResponse)
+@router.get('/v1/episodes/live', response_model=EpisodeLiveResponse, response_model_exclude_unset=True)
 def get_live_episode(
     uid: str = Depends(auth.get_current_user_uid),
     channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
 ):
     if not _admitted(uid, channel):
         return {'enabled': False, 'episode': None}
-    return {'enabled': True, 'episode': service.to_wire(service.live_episode(uid))}
+    episode = service.live_episode(uid)
+    response = {
+        'enabled': True,
+        'episode': service.to_wire(episode),
+    }
+    # Without a live episode this response is the recovery-navigation answer, so the
+    # recap is read fresh; alongside a live episode it comes from the poll cache.
+    closed = service.last_closed_episode(uid, fresh=episode is None)
+    if closed is not None:
+        response['last_closed_episode'] = service.to_wire(closed)
+    return response
 
 
 @router.get('/v1/episodes/by-conversation/{conversation_id}', response_model=EpisodeLookupResponse)
@@ -66,6 +76,19 @@ def get_episode_for_conversation(
 def _require(uid: str, channel: Optional[str]) -> None:
     if not _admitted(uid, channel):
         raise HTTPException(status_code=404, detail='Episodes are not available')
+
+
+@router.get('/v1/episodes/{episode_id}', response_model=Episode)
+def get_episode(
+    episode_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+):
+    _require(uid, channel)
+    episode = service.episode_by_id(uid, episode_id)
+    if episode is None:
+        raise HTTPException(status_code=404, detail='Episode not found')
+    return service.to_wire(episode)
 
 
 @router.post('/v1/episodes/{episode_id}/wrap-up', response_model=Episode)

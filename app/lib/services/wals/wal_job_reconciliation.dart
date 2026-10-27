@@ -8,6 +8,7 @@ extension _WalJobCompletion on LocalWalSyncImpl {
     final completed = <SyncLocalFilesResponse>[];
     bool changed = false;
     bool heldChanged = false;
+    var polledJobs = 0, transientJobs = 0, throttledJobs = 0, missingConfirmationJobs = 0;
     final nowSecs = _now().millisecondsSinceEpoch ~/ 1000;
     // A restored uploaded row with no job handle cannot ever be polled.
     // Retained audio re-enters the normal deduplicated upload path; missing
@@ -47,7 +48,7 @@ extension _WalJobCompletion on LocalWalSyncImpl {
     // Fresh uploads and old handles alternate; a dead backlog cannot starve them.
     final uploadedAt = {for (final e in byJob.entries) e.key: e.value.map((w) => w.uploadedAt).reduce(max)};
     final entries =
-        _jobPoller.ordered(byJob.keys, uploadedAtSeconds: uploadedAt).map((id) => MapEntry(id, byJob[id]!)).toList();
+        _jobPoller.dueForPass(byJob.keys, uploadedAtSeconds: uploadedAt).map((id) => MapEntry(id, byJob[id]!)).toList();
 
     for (var i = 0; i < entries.length; i += maxConcurrent) {
       final slice = entries.sublist(i, min(i + maxConcurrent, entries.length));
@@ -56,10 +57,13 @@ extension _WalJobCompletion on LocalWalSyncImpl {
       if (!_isCurrent(generation)) return resp;
 
       for (final (members, fetch) in fetched) {
+        if (!fetch.pollAdmitted) continue;
+        polledJobs++;
         final jobId = members.first.jobId;
         final memberWalIds = members.map((w) => w.id).toList();
         switch (fetch.outcome) {
           case SyncJobFetchOutcome.throttled:
+            throttledJobs++;
             if (!SyncRateLimiter.instance.isLimited) {
               final limit = fetch.rateLimit;
               SyncRateLimiter.instance.markLimited(
@@ -69,11 +73,16 @@ extension _WalJobCompletion on LocalWalSyncImpl {
             }
             break; // 429 rate limit cooldown installed; stop reconcile pass below (#21279).
           case SyncJobFetchOutcome.transient:
+            if (fetch.missingConfirmationPending) {
+              missingConfirmationJobs++;
+            } else {
+              transientJobs++;
+            }
             // Network/5xx — leave as `uploaded`, retry on the next pass.
             DebugLogManager.logEvent('reconcile_poll', {
               'jobId': jobId,
               'memberWalIds': memberWalIds,
-              'outcome': 'transient',
+              'outcome': fetch.missingConfirmationPending ? 'missing_confirmation' : 'transient',
             });
             break;
           case SyncJobFetchOutcome.notFound:
@@ -172,8 +181,9 @@ extension _WalJobCompletion on LocalWalSyncImpl {
               // backend stale guard (mark_job_completed only sets 'failed'
               // when total>0). String hint is a fallback if the structural
               // signal ever becomes ambiguous.
-              final capacityLimited = syncJobIsBackendBusy(s) || isPacedBackfillReasonCode(s.reasonCode);
-              if (capacityLimited) {
+              final capacityLimited = syncJobIsBackendBusy(s);
+              final admissionPaced = capacityLimited || isPacedSyncAdmissionReasonCode(s.reasonCode);
+              if (admissionPaced) {
                 SyncRateLimiter.instance.markLimited(
                   retryAfterSeconds: s.retryAfter ?? 600,
                   reason: RateLimitReason.backendBusy,
@@ -186,7 +196,7 @@ extension _WalJobCompletion on LocalWalSyncImpl {
               // and re-spent the budget, with the needs-attention banner never
               // clearing. Retire it to a terminal state instead, the way an
               // out-of-window rejection already does. The file stays on disk.
-              final permanentInput = !capacityLimited && syncJobFailureIsPermanent(s);
+              final permanentInput = !admissionPaced && syncJobFailureIsPermanent(s);
               for (final w in members) {
                 if (!_stillUploadedUnder(w, jobId)) continue;
                 changed = true;
@@ -198,7 +208,7 @@ extension _WalJobCompletion on LocalWalSyncImpl {
                 } else {
                   w.status = WalStatus.miss;
                   w.jobId = null;
-                  if (!capacityLimited) {
+                  if (!admissionPaced) {
                     w.retryCount += 1;
                     w.lastRetryAt = nowSecs;
                   }
@@ -213,8 +223,9 @@ extension _WalJobCompletion on LocalWalSyncImpl {
                   'totalSegments': s.totalSegments,
                   'retryCount': w.retryCount,
                   'capacityLimited': capacityLimited,
+                  'admissionPaced': admissionPaced,
                   'permanentInput': permanentInput,
-                  'retryCountBumped': !capacityLimited,
+                  'retryCountBumped': !admissionPaced,
                 });
               }
             }
@@ -225,6 +236,14 @@ extension _WalJobCompletion on LocalWalSyncImpl {
       if (SyncRateLimiter.instance.isLimited) break;
     }
 
+    if (_isCurrent(generation)) {
+      _backlogTelemetry.reconcilePass(
+          backlogJobs: byJob.length,
+          polledJobs: polledJobs,
+          transientJobs: transientJobs,
+          throttledJobs: throttledJobs,
+          missingConfirmationJobs: missingConfirmationJobs);
+    }
     if (changed) {
       await _saveWalsToFile(generation);
       _notifyUpdated(generation);

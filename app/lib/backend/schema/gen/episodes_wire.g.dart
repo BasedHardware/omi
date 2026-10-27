@@ -177,16 +177,19 @@ class GeneratedEpisode {
 class GeneratedEpisodeLiveResponse {
   final bool enabled;
   final GeneratedEpisode? episode;
+  final GeneratedEpisode? lastClosedEpisode;
 
   const GeneratedEpisodeLiveResponse({
     required this.enabled,
     this.episode,
+    this.lastClosedEpisode,
   });
 
   factory GeneratedEpisodeLiveResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedEpisodeLiveResponse(
       enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
       episode: _readFieldValue<GeneratedEpisode>(_readField(json, const ["episode"]), "episode", (value) => _readObject(value, GeneratedEpisode.fromJson), requiredField: false, nullable: true),
+      lastClosedEpisode: _readFieldValue<GeneratedEpisode>(_readField(json, const ["last_closed_episode"]), "last_closed_episode", (value) => _readObject(value, GeneratedEpisode.fromJson), requiredField: false, nullable: true),
     );
   }
 
@@ -194,6 +197,7 @@ class GeneratedEpisodeLiveResponse {
     return {
       'enabled': enabled,
       'episode': episode?.toJson(),
+      'last_closed_episode': lastClosedEpisode?.toJson(),
     };
   }
 }

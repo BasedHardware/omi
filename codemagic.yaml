@@ -363,6 +363,10 @@ workflows:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
         submit_as_draft: false
+        # Play auto-sends changes for review again (2026-10-27) and rejects
+        # any commit that sets changesNotSentForReview ("The query parameter
+        # changesNotSentForReview must not be set"), so the parameter must
+        # not be set.
 
   # ============================================
   # PRODUCTION RELEASE WORKFLOWS (Triggered by tags)
@@ -778,6 +782,8 @@ workflows:
     scripts:
       - name: Installing Android SDK
         script: |
+          set -euo pipefail
+          rm -f "$HOME/.omi-android-prod-internal-build-identity"
           export ANDROID_HOME="$HOME/opt/android-sdk"
           if [ ! -d "$ANDROID_HOME" ]; then
             echo "$ANDROID_HOME does not exist. Installing..."
@@ -891,6 +897,8 @@ workflows:
           TAG_BUILD_NUMBER="$BUILD_NUMBER"
           BUILD_NUMBER="$(jq -er '.build_number' <<<"$PLAY_PLAN")"
           echo "Android build number $BUILD_NUMBER (tag $TAG_BUILD_NUMBER, source: $(jq -r '.source' <<<"$PLAY_PLAN"))"
+          echo "BUILD_NAME=$BUILD_NAME" >> "$CM_ENV"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$CM_ENV"
 
           bash scripts/admit_android_source.sh "$CHECKED_OUT_SHA"
 
@@ -905,6 +913,12 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             $PROVENANCE_ARGS
+
+          # Post-publish scripts also run after a failed build. Persist the exact
+          # identity only after Flutter has completed successfully.
+          printf '%s\n%s\n%s\n%s\n' "$BUILD_NAME" "$BUILD_NUMBER" "${CM_TAG:?CM_TAG is required}" \
+            "${CM_BUILD_ID:?CM_BUILD_ID is required}" \
+            > "$HOME/.omi-android-prod-internal-build-identity"
 
 
     artifacts:
@@ -924,9 +938,35 @@ workflows:
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
+        # Publishing-block variables are evaluated before build scripts run.
+        # These built-in values bind the release to its tag and Codemagic run.
+        release_name: "$CM_TAG [$CM_BUILD_ID]"
         submit_as_draft: false
-        release_promotion:
-          track: "alpha"
+        # Same Play constraint as the internal auto track: Play auto-sends
+        # changes for review again (2026-10-27) and rejects any commit that
+        # sets changesNotSentForReview, so the parameter must not be set.
+      scripts:
+        - name: Promote the exact internal build to alpha
+          script: |
+            set -euo pipefail
+            IDENTITY="$HOME/.omi-android-prod-internal-build-identity"
+            if [[ ! -f "$IDENTITY" ]]; then
+              echo "Android internal build did not complete; skipping alpha promotion."
+              exit 0
+            fi
+            {
+              read -r PROMOTE_BUILD_NAME
+              read -r PROMOTE_BUILD_NUMBER
+              read -r PROMOTE_BUILD_TAG
+              read -r PROMOTE_BUILD_ID
+            } < "$IDENTITY"
+            python3 scripts/mobile_store_promote.py \
+              --confirm promote-internal-to-alpha \
+              --platform android \
+              --version "${PROMOTE_BUILD_NAME:?missing Android build name}" \
+              --android-build "${PROMOTE_BUILD_NUMBER:?missing Android build number}" \
+              --build-tag "${PROMOTE_BUILD_TAG:?missing Android release tag}" \
+              --build-id "${PROMOTE_BUILD_ID:?missing Codemagic build ID}"
 
   ios-prod-patch:
     name: Patch iOS to Production

@@ -25,7 +25,8 @@ from utils.rollout_cohorts import configure_rollout_runtime
 import batch_pipeline_held_disposition as held
 from google.cloud import firestore, storage
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
-from database.batch_pipeline_speech_redrive import SpeechRedriveStore
+from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive, replaceable_modulate_intent
+from config.batch_language_recovery import MAX_AUDIO_SECONDS, ESTIMATED_USD_PER_AUDIO_HOUR, independent_attempted
 from database.batch_pipeline_store import FirestoreStore
 from database.sync_ledger import batch_ledger_owes_held_units
 from utils.batch_pipeline.artifact_policy import create_artifact_store
@@ -40,12 +41,12 @@ OPERATION = 'speech-empty-multilingual-paid-epoch-2-v1'
 require = held.require
 
 
-def paid_digest(census_digest, speech_count, paid_epoch, *, silent=False):
+def paid_digest(census_digest, speech_count, paid_epoch, *, silent=False, independent=False):
     return hashlib.sha256(
         json.dumps(
             {
-                'operation': OPERATION,
-                'provider': 'modulate',
+                'operation': 'independent-language-recovery-v1' if independent else OPERATION,
+                'provider': 'soniox' if independent else 'modulate',
                 'census_sha256': census_digest,
                 'speech_count': speech_count,
                 'paid_epoch': paid_epoch,
@@ -65,29 +66,57 @@ def epoch1_failure(job):
     return f'{stage}/{reason}' if stage in STAGES and reason in REASONS else 'unrecorded'
 
 
-def checked_job(store, sid, uid, key):
+def eligible(job, after, cutoff, independent=False):
+    if not independent:
+        return scope.eligible(job, after, cutoff)
+    marker = job.get('speech_redrive') or {}
+    return (
+        after <= job.get('quarantined_at', 0) <= cutoff
+        and job.get('state') == 'quarantined'
+        and job.get('recovery_state') == 'failed_held'
+        and independent_redrive(job)
+        and not independent_attempted(job)
+        and not job.get('silence_disposition')
+        and (not marker or replaceable_modulate_intent(job, marker))
+    )
+
+
+def fingerprint(job, independent=False):
+    if not independent:
+        return held.fingerprint(job)
+    marker = job.get('speech_redrive') or {}
+    previous = marker.get('prior_speech_redrive') or {} if marker.get('provider') == 'soniox' else marker
+    return scope.digest({'unit': held.fingerprint(job), 'prior_paid_intent': previous, 'provider': 'soniox'})
+
+
+def checked_job(store, sid, uid, key, independent=False):
 
     def check(tx):
         job, binding = RecoveryStore(store).checked(
             tx, sid, allow_completed_silence=True, allow_completed_speech_redrive=True
         )
         result = tx.get('results', sid)
-        require(binding.owner_id == uid and held.fingerprint(job) == key, 'cohort_changed')
+        require(binding.owner_id == uid and fingerprint(job, independent) == key, 'cohort_changed')
+        require(not independent or not independent_attempted(job), 'independent_already_attempted')
         silence, speech = job.get('silence_disposition') or {}, job.get('speech_redrive') or {}
         require(not (silence and speech), 'conflicting_dispositions')
         if silence:
             require(silence.get('state') in {'prepared', 'completed'}, 'invalid_silence_intent')
             return job
         if speech:
+            if independent and replaceable_modulate_intent(job, speech):
+                require(SpeechRedriveStore.terminal(job, result, time.time()), 'not_failed_held')
+                return job
             require(
-                speech.get('paid_epoch') == 2
-                and speech.get('provider') == 'modulate'
+                speech.get('paid_epoch') == (3 if independent else 2)
+                and speech.get('provider') == ('soniox' if independent else 'modulate')
                 and speech.get('prior_recovery') == job.get('recovery')
                 and speech.get('state') in {'prepared', 'running', 'completed', 'failed_held'},
                 'invalid_paid_intent',
             )
             return job
         require(SpeechRedriveStore.terminal(job, result, time.time()), 'not_failed_held')
+        require(not independent or independent_redrive(job), 'language_guard_required')
         ledger = tx.get('content', f'{uid}/{binding.content_id}')
         require(batch_ledger_owes_held_units(ledger), 'completed_ledger')
         return job
@@ -95,9 +124,13 @@ def checked_job(store, sid, uid, key):
     return held.readonly_run(store, check)
 
 
-def inspect_unit(store, artifacts, sid, uid, key):
+def inspect_unit(store, artifacts, sid, uid, key, independent=False):
 
-    job = checked_job(store, sid, uid, key)
+    job = checked_job(store, sid, uid, key, independent)
+    # Independent-language plans always buy a recognizer, even if local VAD
+    # falls below one frame. Only its validated empty reply can close silence.
+    if independent:
+        return 'speech'
     # Immutable intent attestations retain the original census on replay, even
     # after results have projected and audio has entered completion retention.
     if job.get('speech_redrive'):
@@ -121,7 +154,10 @@ def main():
     parser.add_argument('--expect-count', type=int, required=True)
     parser.add_argument('--expect-speech-count', type=int, required=True)
     parser.add_argument('--source-census-sha256', help='Required with --apply; optional dry-run assertion')
-    parser.add_argument('--paid-epoch', type=int, choices=[2], required=True)
+    parser.add_argument('--paid-epoch', type=int, choices=[2, 3], required=True)
+    parser.add_argument(
+        '--independent-language', action='store_true', help='Soniox-only explicit epoch 3; exact unit IDs required'
+    )
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--approve-plan-sha256')
     parser.add_argument('--apply-limit', type=int, default=1, help='Fixed speech prefix, replay is idempotent')
@@ -129,6 +165,8 @@ def main():
         '--server-flags-file', help='Serving role env JSON for units with no stored policy; absent refuses them'
     )
     args = parser.parse_args()
+    require(args.paid_epoch == (3 if args.independent_language else 2), 'provider_epoch_mismatch')
+    require(not args.independent_language or bool(args.unit_ids_file), 'exact_independent_units_required')
     logging.disable(logging.CRITICAL)
     require(not os.getenv('FIRESTORE_EMULATOR_HOST'), 'explicit_cloud_only')
     require(
@@ -204,10 +242,10 @@ def main():
         )
         for doc in candidates:
             job = doc.to_dict() or {}
-            selected_here = job.get('owner_id') == uid and scope.eligible(job, after, cutoff)
+            selected_here = job.get('owner_id') == uid and eligible(job, after, cutoff, args.independent_language)
             require(ids is None or selected_here, 'unit_not_eligible')
             if selected_here:
-                selected.append((doc.id, held.fingerprint(job)))
+                selected.append((doc.id, fingerprint(job, args.independent_language)))
                 require(len(selected) <= args.expect_count, 'cohort_count_changed')
         require(len(selected) == args.expect_count, 'cohort_count_changed')
         units = []
@@ -216,7 +254,8 @@ def main():
         for start in range(0, len(ordered), 4):
             group = ordered[start : start + 4]
             futures = [
-                storage_executor.submit(inspect_unit, read_store, artifacts, sid, uid, key) for sid, key in group
+                storage_executor.submit(inspect_unit, read_store, artifacts, sid, uid, key, args.independent_language)
+                for sid, key in group
             ]
             units.extend((sid, key, future.result()) for (sid, key), future in zip(group, futures))
         manifest = {'scope': scope_spec, 'units': [list(unit) for unit in units]}
@@ -224,18 +263,27 @@ def main():
     require(not args.source_census_sha256 or census == args.source_census_sha256, 'source_census_changed')
     # Validate every immutable binding/intent before any mutation or paid dispatch.
     failures = {}
-    digest = paid_digest(census, sum(d == 'speech' for _, _, d in units), args.paid_epoch, silent=args.silent)
+    digest = paid_digest(
+        census,
+        sum(d == 'speech' for _, _, d in units),
+        args.paid_epoch,
+        silent=args.silent,
+        independent=args.independent_language,
+    )
     for sid, key, decision in units:
-        job = checked_job(read_store, sid, uid, key)
+        job = checked_job(read_store, sid, uid, key, args.independent_language)
         marker = job.get('speech_redrive')
-        if marker:
+        if marker and not (args.independent_language and replaceable_modulate_intent(job, marker)):
             require(
                 marker.get('plan_digest') == digest and marker.get('silent', False) is args.silent,
                 'paid_intent_changed',
             )
         else:
-            require(scope.eligible(job, after, cutoff), 'unit_not_eligible')
-        require(inspect_unit(read_store, artifacts, sid, uid, key) == decision, 'speech_decision_changed')
+            require(eligible(job, after, cutoff, args.independent_language), 'unit_not_eligible')
+        require(
+            inspect_unit(read_store, artifacts, sid, uid, key, args.independent_language) == decision,
+            'speech_decision_changed',
+        )
         failures[sid] = epoch1_failure(job)
     counts = Counter(decision for _, _, decision in units)
     require(counts['speech'] == args.expect_speech_count, 'speech_count_changed')
@@ -243,11 +291,12 @@ def main():
         scope.write(cohort_path, manifest)
     output = {
         'mode': 'apply' if args.apply else 'dry_run',
-        'operation': OPERATION,
+        'operation': 'independent-language-recovery-v1' if args.independent_language else OPERATION,
+        'provider': 'soniox' if args.independent_language else 'modulate',
         'checked_at': datetime.now(timezone.utc).isoformat(),
         'owner_count': 1,
         'units': len(units),
-        'strict_vad': dict(counts),
+        'strict_vad': {'unmeasured': counts['speech']} if args.independent_language else dict(counts),
         # Not in the digest: the approved census is unchanged by this report.
         'speech_epoch1_failures': dict(Counter(failures[sid] for sid, _, decision in units if decision == 'speech')),
         'paid_epoch': args.paid_epoch,
@@ -259,6 +308,9 @@ def main():
         'paid_stt_calls': 0,
         'firestore_writes': 0,
     }
+    if args.independent_language:
+        output['max_audio_seconds_per_unit'] = MAX_AUDIO_SECONDS
+        output['estimated_usd_per_unit_at_cap'] = MAX_AUDIO_SECONDS / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
     if args.apply:
 
         # Per-unit mutation consumes its persisted recovery owner part.
@@ -268,9 +320,17 @@ def main():
         # Always the same sorted prefix. Increasing the limit includes receipts
         # from the canary; it never silently selects one extra unattempted unit.
         for sid, key, _decision in [u for u in units if u[2] == 'speech'][: args.apply_limit]:
-            job = checked_job(read_store, sid, uid, key)
+            job = checked_job(read_store, sid, uid, key, args.independent_language)
             outcome = redrive_one(
-                store, artifacts, sid, uid, digest, job['recovery'], server_flags=server_flags, silent=args.silent
+                store,
+                artifacts,
+                sid,
+                uid,
+                digest,
+                job['recovery'],
+                server_flags=server_flags,
+                silent=args.silent,
+                independent_language=args.independent_language,
             )
             outcomes[outcome] += 1
             if not scope.successful(outcome):

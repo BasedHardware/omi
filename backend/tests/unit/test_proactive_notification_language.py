@@ -5,12 +5,9 @@ daily summary already respected it). The generator and critic prompts now carry 
 instruction derived from get_user_language_preference(uid), threaded in by the mentor pipeline.
 """
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from utils.llm import proactive_notification as pn
-
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 def _prompt_from(fn, **kwargs):
@@ -115,13 +112,3 @@ def test_critic_prompt_includes_language_as_reject_condition():
 def test_critic_prompt_clean_for_english():
     prompt = _critic("en")
     assert "language other than the user's" not in prompt
-
-
-# ---------------------------------------------------------------------------
-# v2 mentor producer wiring (source guard — producer imports are heavy)
-# ---------------------------------------------------------------------------
-def test_mentor_producer_fetches_and_threads_language():
-    src = (BACKEND_DIR / "utils" / "proactivity_producers.py").read_text(encoding="utf-8")
-    assert "get_user_language_preference(uid)" in src  # language is fetched into the mentor context
-    assert src.count("legacy.language_instruction(context['output_language']") >= 2  # generate AND critic
-    assert "for_critic=True" in src  # one of the two threadings targets the critic

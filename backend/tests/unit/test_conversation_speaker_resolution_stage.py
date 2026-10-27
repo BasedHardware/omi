@@ -1244,6 +1244,7 @@ def test_persisted_batch_authority_survives_rollbacks_and_mixed_live_segments(mo
     from unittest.mock import Mock
 
     monkeypatch.delenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', raising=False)
+    monkeypatch.setenv('BATCH_CONVERSATION_SPEAKERS_ENABLED', 'false')
     monkeypatch.setattr(stage, 'authoritative_for', lambda _: False)
     monkeypatch.setattr(stage, 'resolution_enabled', lambda: True)
     resolver = Mock()
@@ -1260,6 +1261,7 @@ def test_persisted_batch_authority_survives_rollbacks_and_mixed_live_segments(mo
 def test_batch_authority_applies_existing_manual_receipt_without_resolver(monkeypatch):
     from unittest.mock import Mock
 
+    monkeypatch.setenv('BATCH_CONVERSATION_SPEAKERS_ENABLED', 'false')
     monkeypatch.setattr(stage, 'resolution_enabled', lambda: True)
     resolver = Mock()
     monkeypatch.setattr(stage, '_resolve', resolver)
@@ -1278,6 +1280,7 @@ def test_batch_authority_applies_existing_manual_receipt_without_resolver(monkey
 def test_batch_authority_reuses_owner_safe_abstention_for_legacy_scopes(monkeypatch):
     from unittest.mock import Mock
 
+    monkeypatch.setenv('BATCH_CONVERSATION_SPEAKERS_ENABLED', 'false')
     monkeypatch.setattr(stage, 'resolution_enabled', lambda: True)
     resolver = Mock()
     monkeypatch.setattr(stage, '_resolve', resolver)
@@ -1290,3 +1293,125 @@ def test_batch_authority_reuses_owner_safe_abstention_for_legacy_scopes(monkeypa
     assert conv.transcript_segments[0].speaker_id_scope == 'final:batch:unit'
     assert conv.speaker_resolution.status == 'unavailable'
     resolver.assert_not_called()
+
+
+@pytest.mark.parametrize('evidence_mode', ['off', 'serve'])
+def test_batch_four_short_units_link_and_name_from_stored_pcm_then_reuse_cache(monkeypatch, env, evidence_mode):
+    from utils.speakers import processing as evidence_processing
+
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', evidence_mode)
+    monkeypatch.delenv('BATCH_CONVERSATION_SPEAKERS_ENABLED', raising=False)
+    monkeypatch.setattr(evidence_processing, '_roster', lambda *_: [])
+    monkeypatch.setattr(evidence_processing.storage, 'store_evidence', lambda *a, **kw: None)
+    monkeypatch.setattr(
+        stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {'user': VOICES[0], 'person': VOICES[1]}
+    )
+    plan = [0, 1] * 4
+    audio = _install_audio(monkeypatch, plan, seconds=3)
+    conv = _conversation(plan, seconds=3, scopes=[f'final:batch:unit{i // 2}' for i in range(8)])
+    origin = STARTED.timestamp()
+    conv.audio_files = [_span_manifest(origin, [(origin, origin + 24)])]
+    for s in conv.transcript_segments:
+        s.speaker_match_source = 'batch_pyannote'
+        s.speaker_identity_status = 'no_match'
+    assert stage.resolve_speakers_for_processing('synthetic', conv)
+    assert conv.speaker_resolution.status == 'resolved'
+    assert len({s.speaker_id for s in conv.transcript_segments}) == 2
+    for s, voice in zip(conv.transcript_segments, plan):
+        assert s.is_user == (voice == 0)
+        assert s.person_id == ('person' if voice == 1 else None)
+        assert s.provider_speaker['scope'].startswith('final:batch:')
+    _, diarizer = env
+    calls, downloads = diarizer.calls, audio.downloads
+    before = [(s.speaker_id, s.provider_speaker, s.is_user, s.person_id) for s in conv.transcript_segments]
+    conv = Conversation(**conv.model_dump())
+    assert stage.resolve_speakers_for_processing('synthetic', conv)
+    assert before == [(s.speaker_id, s.provider_speaker, s.is_user, s.person_id) for s in conv.transcript_segments]
+    assert (diarizer.calls, audio.downloads) == (calls, downloads)
+
+
+def test_batch_gap_and_segment_manual_edit_survive_naming(monkeypatch, env):
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'off')
+    monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {'user': VOICES[0]})
+    plan = [0] * 4
+    _install_audio(monkeypatch, plan, seconds=4)
+    conv = _conversation(plan, scopes=[f'final:batch:unit{i}' for i in range(4)])
+    origin = STARTED.timestamp()
+    conv.audio_files = [_span_manifest(origin, [(origin, origin + 16)])]
+    conv.transcript_segments[2].speaker_match_source = 'batch_abstention'
+    conv.transcript_segments[2].speaker_identity_status = 'ambiguous'
+    monkeypatch.setattr(
+        stage.conversations_db,
+        'get_manual_speaker_receipt',
+        lambda *_: {'segments': {'s1': {'is_user': False, 'person_id': 'manual-person'}}},
+    )
+    assert stage.resolve_speakers_for_processing('synthetic', conv)
+    assert conv.transcript_segments[0].is_user and conv.transcript_segments[3].is_user
+    assert conv.transcript_segments[1].person_id == 'manual-person'
+    assert conv.transcript_segments[1].speaker_label_source == 'manual'
+    assert not conv.transcript_segments[2].is_user and conv.transcript_segments[2].person_id is None
+    assert conv.transcript_segments[2].speaker_match_source == 'batch_abstention'
+
+
+def test_manual_gap_receipt_does_not_turn_gap_into_acoustic_evidence(monkeypatch, env):
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'off')
+    monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {'user': VOICES[0]})
+    _install_audio(monkeypatch, [0] * 3, seconds=4)
+    conv = _conversation([0] * 3, scopes=[f'final:batch:{i}' for i in range(3)])
+    conv.audio_files = [_span_manifest(STARTED.timestamp(), [(STARTED.timestamp(), STARTED.timestamp() + 12)])]
+    conv.transcript_segments[1].speaker = 'BATCH_UNASSIGNED_unit_1'
+    conv.transcript_segments[1].speaker_match_source = 'batch_abstention'
+    monkeypatch.setattr(
+        stage.conversations_db,
+        'get_manual_speaker_receipt',
+        lambda *_: {'segments': {'s1': {'is_user': False, 'person_id': 'manual-person'}}},
+    )
+    stage.resolve_speakers_for_processing('synthetic', conv)
+    assert env[1].calls == 2
+    assert conv.transcript_segments[1].person_id == 'manual-person'
+    assert conv.transcript_segments[1].speaker == 'BATCH_UNASSIGNED_unit_1'
+    assert conv.transcript_segments[1].speaker_id_scope == 'final:batch:1'
+
+
+@pytest.mark.parametrize('evidence_mode', ['off', 'serve'])
+def test_sync_off_kill_switch_preserves_incumbent_path_and_gap_participant_policy(monkeypatch, evidence_mode):
+    from unittest.mock import Mock
+    from utils.speakers import processing as evidence_processing
+
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', evidence_mode)
+    monkeypatch.setenv('BATCH_SYNC_OFF_CENTROIDS_ENABLED', 'false')
+    monkeypatch.setattr(evidence_processing, '_roster', lambda *_: [])
+    monkeypatch.setattr(evidence_processing.storage, 'store_evidence', lambda *a, **kw: None)
+    resolver = Mock()
+    monkeypatch.setattr(stage, '_resolve', resolver)
+    conv = _conversation([0, 1], pcs=False, seconds=12, scopes=['final:batch:unit'] * 2)
+    conv.transcript_segments[1].speaker = 'BATCH_UNASSIGNED_unit_1'
+    conv.transcript_segments[1].speaker_match_source = 'batch_abstention'
+    before = [s.model_dump() for s in conv.transcript_segments]
+    assert stage.resolve_speakers_for_processing('synthetic', conv)
+    resolver.assert_not_called()
+    assert [s.model_dump() for s in conv.transcript_segments] == before
+    assert conv.speaker_resolution.participant_speaker_ids == [0]
+
+
+@pytest.mark.parametrize('evidence_mode', ['off', 'serve'])
+def test_batch_incompatible_profile_preserves_established_owner_on_cached_reprocess(monkeypatch, env, evidence_mode):
+    from utils.speakers import processing as evidence_processing
+
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', evidence_mode)
+    monkeypatch.setattr(evidence_processing, '_roster', lambda *_: [])
+    monkeypatch.setattr(evidence_processing.storage, 'store_evidence', lambda *a, **kw: None)
+    roster = {'user': VOICES[0]}
+    monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a, **kw: roster)
+    _install_audio(monkeypatch, [0] * 4)
+    conv = _conversation([0] * 4, scopes=[f'final:batch:unit{i}' for i in range(4)])
+    conv.audio_files = [_span_manifest(STARTED.timestamp(), [(STARTED.timestamp(), STARTED.timestamp() + 16)])]
+    stage.resolve_speakers_for_processing('synthetic', conv)
+    assert all(s.is_user for s in conv.transcript_segments)
+    calls = env[1].calls
+    roster['user'] = np.ones(32)  # Cached fixture audio is in the 64-dimensional space.
+    conv = Conversation(**conv.model_dump())
+    stage.resolve_speakers_for_processing('synthetic', conv)
+    assert all(s.is_user and s.speaker_identity_status == 'user' for s in conv.transcript_segments)
+    assert len({s.speaker_id for s in conv.transcript_segments}) == 1
+    assert env[1].calls == calls

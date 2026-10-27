@@ -9,14 +9,14 @@ import shutil
 import tempfile
 
 from config.batch_pipeline import Priority, priority_for
-from config.batch_pipeline_shadow import selected, shadow_percent
+from config.batch_pipeline_shadow import language_only_enabled, selected, shadow_percent
 from config.batch_pipeline_providers import provider_config
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow import ShadowStore
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.intake import artifacts_for
+from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking, start_background_task
 from utils.sync.stage import current_stage
@@ -58,6 +58,27 @@ def repository_for_stage():
 async def offer_upload(
     *, uid, content_id, paths, lane, age, conversation_id, source, device_id, byok, policy, should_lock=False
 ):
+    if language_only_enabled():
+        from utils.batch_pipeline.language_shadow import offer_upload as offer_language_upload
+
+        offering = start_background_task(
+            offer_language_upload(
+                uid=uid,
+                content_id=content_id,
+                paths=paths,
+                conversation_id=conversation_id,
+                byok=byok,
+                policy=policy,
+            ),
+            name='batch_language_shadow_offer',
+        )
+        try:
+            await asyncio.wait_for(asyncio.shield(offering), timeout=1)
+        except asyncio.TimeoutError:
+            # The tracked task may finish best effort; legacy owns its own
+            # files and progress. A late copy failure consumes no external call.
+            pass
+        return
     if byok or not selected(uid, policy):
         return
     repository, reservation, directory = None, None, None

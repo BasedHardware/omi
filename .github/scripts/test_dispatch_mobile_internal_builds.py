@@ -2,10 +2,12 @@
 """Tests for the mobile internal build dispatch decision."""
 
 import importlib.util
+import io
 import os
 import pathlib
 import subprocess
 import tempfile
+from contextlib import redirect_stdout
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -327,6 +329,37 @@ class TestSourceIdentity(unittest.TestCase):
                     ]
                 )
         dispatch.assert_not_called()
+
+
+class TestHeldChangesReminder(unittest.TestCase):
+    def _schedule_dry_run(self):
+        with patch.dict(mod.os.environ, {"CODEMAGIC_API_TOKEN": "secret"}), patch.object(
+            mod, "_api_get", return_value={"builds": []}
+        ), patch.object(
+            mod.subprocess, "run", return_value=SimpleNamespace(stdout="a" * 40 + "\n")
+        ):
+            with redirect_stdout(io.StringIO()) as captured:
+                rc = mod.main(
+                    ["--event", "schedule", "--app-id", "app", "--source-sha", "a" * 40, "--dry-run"]
+                )
+        self.assertEqual(rc, 0)
+        return captured.getvalue()
+
+    def test_no_held_line_while_the_mode_is_off(self):
+        # Held-changes mode is off since 2026-10-27 (Play auto-sends changes
+        # for review again): a settled Android publish is tester-visible
+        # distribution, so scheduled runs stay silent about held changes.
+        self.assertNotIn("held-changes-mode", self._schedule_dry_run())
+
+    def test_a_schedule_run_names_the_held_android_distribution(self):
+        # Under held changes (ANDROID_HELD_CHANGES_MODE True) a settled
+        # Android publish is not tester-visible distribution; every scheduled
+        # run must say so instead of stalling silently on an advanced
+        # baseline.
+        with patch.object(mod, "ANDROID_HELD_CHANGES_MODE", True):
+            captured = self._schedule_dry_run()
+        self.assertIn("android_distribution=held-changes-mode", captured)
+        self.assertIn("Send for review", captured)
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]

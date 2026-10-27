@@ -38,6 +38,7 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
 @pytest.fixture(autouse=True)
 def _full_gpu_stages(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
     # This suite pins the full-stage chain. The ship-on GPU skips have their own
     # contract in test_batch_pipeline_diarization_gate.py.
     monkeypatch.setenv('BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED', 'false')
@@ -750,7 +751,7 @@ def test_capture_vad_groups_keep_words_and_diarization_on_original_span_clocks()
 def test_cap_provenance_is_additive_and_uses_actual_padded_provider_audio(monkeypatch, enforce):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
     worker, words, saved, _, _, _ = setup_worker()
-    worker.process_batch([item('a', 2)], authorize_dispatch=lambda ids: ids)
+    worker.process_batch([item('a', 2)], authorize_dispatch=lambda ids: {i: None for i in ids})
     if enforce:
         assert saved['a']['cap_dispatch'] == {
             'omi_funded_accepted_provider_audio_seconds': 2,
@@ -773,10 +774,10 @@ def test_worker_rechecks_immediately_before_asr_and_holds_without_failure(monkey
 
     def authorize(ids):
         checks.append(ids)
-        return set()
+        return {segment_id: 'allowance_exhausted' for segment_id in ids}
 
     result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
-    assert result == [HeldWork('a')]
+    assert result == [HeldWork('a', reason='allowance_exhausted')]
     assert checks == [{'a'}]
     assert not words.calls and not saved and not diarized and not failures
 
@@ -819,11 +820,13 @@ def test_full_capture_retry_rechecks_cap_and_counts_actual_padding(monkeypatch, 
 
     def authorize(ids):
         checks.append(ids)
-        return ids if len(checks) == 1 or recovery_allowed else set()
+        if len(checks) == 1 or recovery_allowed:
+            return {segment_id: None for segment_id in ids}
+        return {segment_id: 'allowance_exhausted' for segment_id in ids}
 
     result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
     if enforce and not recovery_allowed:
-        assert result == [HeldWork('a')]
+        assert result == [HeldWork('a', reason='allowance_exhausted')]
         assert calls == [[2]]
         assert not saved and not diarized and not failures
     else:
@@ -867,7 +870,7 @@ def test_oversized_empty_retry_holds_only_when_enforced(monkeypatch, enforce):
         words_providers={'parakeet': provider},
         recover_words=provider.recover_empty,
     )
-    result = worker.process_batch([item('a', 117)], authorize_dispatch=lambda ids: ids)
+    result = worker.process_batch([item('a', 117)], authorize_dispatch=lambda ids: {i: None for i in ids})
     assert model.transcribe.call_count == 1  # Initial ASR only; 121s padded retry cannot fit.
     assert not saved and not diarized
     if enforce:
@@ -1073,7 +1076,7 @@ def test_mixed_owner_gpu_batch_only_enforces_enrolled_owner(monkeypatch, ladder)
 
     def authorize(ids):
         checks.append(ids)
-        return set()
+        return {segment_id: 'allowance_exhausted' for segment_id in ids}
 
     result = worker.process_batch([item('a', 2), item('b', 2)], authorize_dispatch=authorize)
     assert checks == [{'a'}]
@@ -1099,7 +1102,7 @@ def test_offline_default_rechecks_gpu_spend_outside_legacy_scope(monkeypatch, ki
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
     monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
     worker, words, saved, _, _, failures = setup_worker()
-    authorize = Mock(side_effect=lambda ids: ids if authorized else set())
+    authorize = Mock(side_effect=lambda ids: {i: None for i in ids} if authorized else {i: '' for i in ids})
     result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
     if kill or authorized:
         assert words.calls == [[2]] and set(saved) == {'a'}

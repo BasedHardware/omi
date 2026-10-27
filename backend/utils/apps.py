@@ -78,6 +78,7 @@ from utils.conversations.render import conversations_to_string
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.llm.usage_tracker import track_usage, Features
+from utils.plugin_transport import plugin_transport
 from utils.executors import run_blocking, db_executor, llm_executor
 from utils.social import get_twitter_timeline
 from utils.marketplace_reviewers import parse_marketplace_reviewers, is_marketplace_reviewer
@@ -135,7 +136,21 @@ def validate_app_endpoints_for_reenable(app_dict: Dict[str, Any], update_dict: D
     seen_urls: Set[str] = set()
     webhook_url: Any = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
     if webhook_url:
-        endpoints_to_check.append(('webhook', str(webhook_url), 'POST', True))
+        try:
+            transport = plugin_transport(app_id)
+            if transport is not None:
+                transport.validate_url(str(webhook_url))
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail='Webhook does not match this app\'s trusted connection. Fix it before re-enabling.',
+            )
+        if transport is not None:
+            # An authenticated delivery endpoint rejects an unsigned empty POST by
+            # design; its service exposes a non-mutating health probe instead.
+            endpoints_to_check.append(('webhook', transport.health_url(), 'GET', True))
+        else:
+            endpoints_to_check.append(('webhook', str(webhook_url), 'POST', True))
         seen_urls.add(str(webhook_url))
     mcp_url: Any = updated_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
     if mcp_url:

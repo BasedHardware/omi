@@ -431,7 +431,9 @@ def _arm_cross_plan_upgrade(lane, monkeypatch, current_price='price_plus'):
     monkeypatch.setattr(payment.stripe.Subscription, 'retrieve', retrieve)
     monkeypatch.setattr(payment.stripe.Subscription, 'modify', modify)
     monkeypatch.setattr(
-        payment.stripe.Price, 'retrieve', lambda price_id: SimpleNamespace(recurring=SimpleNamespace(interval='month'))
+        payment.stripe.Price,
+        'retrieve',
+        lambda price_id: SimpleNamespace(currency='usd', recurring=SimpleNamespace(interval='month')),
     )
     monkeypatch.setattr(payment, '_release_attached_schedules', lambda stripe_sub: None)
 
@@ -439,11 +441,11 @@ def _arm_cross_plan_upgrade(lane, monkeypatch, current_price='price_plus'):
 def test_upgrade_subscription_normal_path_unchanged(lane, monkeypatch):
     _arm_cross_plan_upgrade(lane, monkeypatch)
     result = payment.upgrade_subscription_endpoint(
-        payment.UpgradeSubscriptionRequest(price_id='price_unlimited'), uid='fixture-user'
+        payment.UpgradeSubscriptionRequest(price_id='price_unlimited_v2'), uid='fixture-user'
     )
     assert result['status'] == 'success'
     assert 'upgraded' in result['message'].lower()
-    assert lane.current.plan == PlanType.unlimited
+    assert lane.current.plan == PlanType.unlimited_v2
     assert _call_names(lane) == [
         'modify',
         'write',
@@ -470,12 +472,12 @@ def test_upgrade_subscription_retries_unlock_after_fence_clears(lane, monkeypatc
     _arm_cross_plan_upgrade(lane, monkeypatch)
     monkeypatch.setattr(payment.conversations_db, 'unlock_all_conversations', conversations)
     monkeypatch.setattr(payment, 'has_recoverable_locked_content', lambda uid: True)
-    request = payment.UpgradeSubscriptionRequest(price_id='price_unlimited')
+    request = payment.UpgradeSubscriptionRequest(price_id='price_unlimited_v2')
 
     with pytest.raises(HTTPException) as first:
         payment.upgrade_subscription_endpoint(request, uid='fixture-user')
     assert first.value.status_code == 500
-    assert lane.current.plan == PlanType.unlimited
+    assert lane.current.plan == PlanType.unlimited_v2
     assert _call_names(lane).count('write') == 1
     assert _call_names(lane).count('modify') == 1
     assert 'memories' not in _call_names(lane)
@@ -508,10 +510,10 @@ _ALREADY_SUBSCRIBED = "You are already subscribed to this plan. Please select a 
 
 
 def test_already_subscribed_replays_unlock_only_when_locked_content_remains(lane, monkeypatch):
-    _arm_cross_plan_upgrade(lane, monkeypatch, current_price='price_unlimited')
+    _arm_cross_plan_upgrade(lane, monkeypatch, current_price='price_unlimited_v2')
     locked = {'on': False}
     monkeypatch.setattr(payment, 'has_recoverable_locked_content', lambda uid: locked['on'])
-    request = payment.UpgradeSubscriptionRequest(price_id='price_unlimited')
+    request = payment.UpgradeSubscriptionRequest(price_id='price_unlimited_v2')
 
     with pytest.raises(HTTPException) as first:
         payment.upgrade_subscription_endpoint(request, uid='fixture-user')

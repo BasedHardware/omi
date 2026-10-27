@@ -713,7 +713,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get remembering => 'Kommer ihåg';
 
   @override
-  String get unlimitedPlan => 'Obegränsad plan';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Hantera plan';
@@ -735,7 +735,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get upgrade => 'Uppgradera';
 
   @override
-  String get upgradeToUnlimited => 'Uppgradera till obegränsat';
+  String get upgradeToUnlimited => 'Uppgradera till Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3158,7 +3158,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Uppgradera till Pro';
+  String get upgradeToPro => 'Uppgradera till Omi Pro';
 
   @override
   String get getOmiDevice => 'Skaffa Omi-enhet';
@@ -4281,7 +4281,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get trainingDataProgram => 'Träningsdataprogram';
 
   @override
-  String get getOmiUnlimitedFree => 'Få Omi Unlimited gratis genom att bidra med dina data för att träna AI-modeller.';
+  String get getOmiUnlimitedFree => 'Få Omi Pro gratis genom att bidra med dina data för att träna AI-modeller.';
 
   @override
   String get trainingDataBullets =>
@@ -8602,6 +8602,9 @@ class AppLocalizationsSv extends AppLocalizations {
       'Transkribering är inte tillgänglig — inspelningen fortsätter och ditt ljud sparas.';
 
   @override
+  String get captureNoAudioFromPendant => 'Inget ljud från hänget';
+
+  @override
   String get capturing => 'Spelar in';
 
   @override
@@ -9660,7 +9663,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Byt till gratisversionen';
 
   @override
-  String get getFreeUnlimitedAccess => 'Få gratis obegränsad åtkomst';
+  String get getFreeUnlimitedAccess => 'Få Omi Pro gratis';
 
   @override
   String get shareDataForTraining => 'Dela data för träning';
@@ -11095,6 +11098,12 @@ class AppLocalizationsSv extends AppLocalizations {
       'Bluetooth-länken till din Omi har stannat, så ljudet når inte appen. Omi fortsätter spela in på enheten och synkar när länken återkommer. Försök igen återupprättar länken; om det fortsätter att misslyckas, kontrollera din enhet i Inställningar > Enhet.';
 
   @override
+  String get captureConnecting => 'Ansluter…';
+
+  @override
+  String get captureNoAudioDetail => 'Pendanten är ansluten, men ingen ljud når din telefon';
+
+  @override
   String get captureIngressNeedsReconnect => 'Ljudet når inte appen — anslut din Omi igen';
 
   @override
@@ -11123,13 +11132,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Lagringen är nästan full';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi ansluter igen av sig själv';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12260,12 +12262,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Kontrollera anslutningen';
 
   @override
-  String get forYou => 'För dig';
-
-  @override
-  String get stopThese => 'Stoppa dessa';
-
-  @override
   String get dismiss => 'Avvisa';
 
   @override
@@ -12864,7 +12860,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Skicka ett röstmeddelande så svarar Omi.';
 
   @override
-  String get chatAppsPartOfPro => 'Chattappar ingår i Pro';
+  String get chatAppsPartOfPro => 'Chattappar ingår i Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Meddelanden';
@@ -13498,7 +13494,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get syncDetailsCopy => 'Kopiera information för support';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Tillgängligt med Operator och Architect';
+  String get chatAppsChannelPlanRequired => 'Tillgängligt med Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14010,7 +14006,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Körs medan telefonen laddas.';
 
   @override
-  String get onDeviceUpgradeBody => 'Uppgradera till Pro för talarseparering och högre precision';
+  String get onDeviceUpgradeBody => 'Uppgradera till Omi Pro för talarseparering och högre precision';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14195,7 +14191,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Gör om med Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Uppgradera till Pro för talarseparering och högre precision';
+  String get onDeviceRedoHint => 'Uppgradera till Omi Pro för talarseparering och högre precision';
 
   @override
   String get onDeviceKeepEverything => 'Behåll allt på den här telefonen';
@@ -14428,6 +14424,25 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Löpande anteckningar uppdateras inte. Visa transkriptionen tills vidare.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Spelar in · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Föregående avsnitt';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Väntande delar: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Öppna föregående avsnitt';
+
+  @override
   String get episodeNotesSoon => 'Anteckningarna visas efter de första minuterna av samtalet.';
 
   @override
@@ -14564,4 +14579,54 @@ class AppLocalizationsSv extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Klart. $percent % rabatt de kommande $months månaderna.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Andra';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Klar';
+
+  @override
+  String get openLoopAnswerRemind => 'Påminn mig senare';
+
+  @override
+  String get openLoopAnswerDrop => 'Släpp det';
+
+  @override
+  String get syncRejectionInvalidDate => 'Ogiltigt inspelningsdatum';
+
+  @override
+  String get syncDeleteKeptUploading => 'Vissa delar laddas fortfarande upp och behölls';
+
+  @override
+  String get syncRejectionServer => 'Avvisad av servern';
+
+  @override
+  String get syncRejectionTooLarge => 'För stor';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration på telefonen';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Uppladdningar har pausats en stund — de återupptas automatiskt';
 }

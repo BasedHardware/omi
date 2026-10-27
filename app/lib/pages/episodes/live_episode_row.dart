@@ -11,6 +11,7 @@ import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -61,14 +62,21 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
   @override
   Widget build(BuildContext context) {
     final episodes = context.watch<EpisodeProvider>();
-    // Only what the row draws: the capture state, its start and whether it streams. Transcript
-    // lines, socket chatter and BLE samples no longer rebuild the row (the 1 s clock still ticks).
-    final (state, _, _) = context.select<CaptureProvider, (CaptureDisplayState, DateTime?, String?)>(
-      (c) => (EpisodePresentation.displayState(c), c.liveCaptureStartedAt, EpisodePresentation.streamingSource(c)),
+    // Only what the row draws: the capture state, its start, whether it streams, and whether
+    // the reader's Reconnect is still running (the button waits on it). Transcript lines,
+    // socket chatter and BLE samples no longer rebuild the row (the 1 s clock still ticks).
+    final (state, _, _, reconnecting) =
+        context.select<CaptureProvider, (CaptureDisplayState, DateTime?, String?, bool)>(
+      (c) => (
+        EpisodePresentation.displayState(c),
+        c.liveCaptureStartedAt,
+        EpisodePresentation.streamingSource(c),
+        c.pendantReconnectInFlight,
+      ),
     );
     return LiveEpisodeClock(
       clock: episodes.now,
-      builder: (context, now) => _row(context, episodes, context.read<CaptureProvider>(), state, now),
+      builder: (context, now) => _row(context, episodes, context.read<CaptureProvider>(), state, now, reconnecting),
     );
   }
 
@@ -78,6 +86,7 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     CaptureProvider capture,
     CaptureDisplayState state,
     DateTime now,
+    bool reconnecting,
   ) {
     final l10n = context.l10n;
     final episode = episodes.live;
@@ -88,11 +97,19 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
         ? EpisodePresentation.runningLength(running, l10n)
         : OmiDuration.compact(running.inMinutes * 60, l10n);
     final named = (episode?.title ?? '').trim();
-    final title = named.isEmpty ? l10n.episodeListeningNow : named;
-    final topics = named.isEmpty ? EpisodePresentation.topics(episode) : '';
-    final peopleNamed = _peopleCount(capture);
+    // A pendant whose recovery was exhausted owes audio: the row names the failure
+    // and offers the one action that can fix it — never Listening, and no topic of
+    // its own to headline over it.
+    final noAudio = state == CaptureDisplayState.noAudio;
+    final title = noAudio ? l10n.captureNoAudioFromPendant : (named.isEmpty ? l10n.episodeListeningNow : named);
+    final topics = noAudio || named.isNotEmpty ? '' : EpisodePresentation.topics(episode);
+    final peopleNamed = noAudio ? 0 : _peopleCount(capture);
     // Paused (or waiting) shows no clock: a time that keeps counting while nothing listens misleads.
-    final status = listening ? l10n.episodeLiveFor(elapsed) : captureStateLabel(l10n, state);
+    final status = noAudio
+        ? l10n.captureNoAudioDetail
+        : listening
+            ? (episode == null ? l10n.episodeCaptureFor : l10n.episodeLiveFor)(elapsed)
+            : captureStateLabel(l10n, state);
     final rest = [
       status,
       if (peopleNamed >= 2) l10n.peopleCount(peopleNamed),
@@ -109,60 +126,86 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
       routeToPage(context, LiveEpisodePage(topConversationId: capture.topConversationId));
     }
 
+    void reconnect() {
+      OmiHaptics.medium();
+      final message = l10n.somethingWentWrong;
+      capture.reconnectRecordingPendant().catchError((Object error) {
+        // A pendant that vanished under the tap is not the reader's problem to
+        // debug; anything else already rebuilt the row.
+        if (mounted) AppSnackbar.showSnackbar(message);
+      });
+    }
+
     return Padding(
       padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
-      child: Semantics(
-        button: true,
-        liveRegion: true,
-        label: '$title, $rest',
-        onTap: open,
-        excludeSemantics: true,
-        child: Material(
-          key: const Key('home_live_episode_row'),
-          // Outlined, not filled: the one row still happening reads as distinct from finished
-          // ones without a colored tile.
-          color: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: OmiRadius.xlAll, side: BorderSide(color: OmiColors.border)),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: open,
-            child: Padding(
-              padding: const EdgeInsetsDirectional.fromSTEB(14, 14, 10, 14),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      borderRadius: OmiRadius.mdAll,
-                      border: Border.all(color: OmiColors.border),
+      child: CaptureStateAnnouncement(
+        message: listening ? l10n.episodeListeningNow : captureStateLabel(l10n, state),
+        child: Semantics(
+          button: true,
+          label: '$title, $rest',
+          onTap: open,
+          excludeSemantics: true,
+          child: Material(
+            key: const Key('home_live_episode_row'),
+            // Outlined, not filled: the one row still happening reads as distinct from finished
+            // ones without a colored tile.
+            color: Colors.transparent,
+            shape: RoundedRectangleBorder(borderRadius: OmiRadius.xlAll, side: BorderSide(color: OmiColors.border)),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: open,
+              child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(14, 14, 10, 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        borderRadius: OmiRadius.mdAll,
+                        border: Border.all(color: noAudio ? OmiColors.warning : OmiColors.border),
+                      ),
+                      child: OmiBreathingDot(live: listening),
                     ),
-                    child: OmiBreathingDot(live: listening),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: Theme.of(context).textTheme.titleMedium,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          rest,
-                          style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(color: noAudio ? OmiColors.warning : null),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            rest,
+                            style:
+                                OmiType.subhead.copyWith(color: noAudio ? OmiColors.warning : OmiColors.textTertiary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  Icon(Icons.chevron_right_rounded, color: OmiColors.textDisabled),
-                ],
+                    if (noAudio)
+                      OmiButton.secondary(
+                        key: const Key('home_live_episode_reconnect'),
+                        label: l10n.reconnect,
+                        // Null while a reconnect runs: the controller ignores taps
+                        // meanwhile, and the row shows it.
+                        onPressed: reconnecting ? null : reconnect,
+                        size: OmiButtonSize.compact,
+                      )
+                    else
+                      Icon(Icons.chevron_right_rounded, color: OmiColors.textDisabled),
+                  ],
+                ),
               ),
             ),
           ),

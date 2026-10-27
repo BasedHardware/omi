@@ -3,6 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 import json
+import os
 from typing import Any, Callable, Literal
 
 from config import ladder_v1 as ladder_policy
@@ -515,4 +516,114 @@ def build_storefront(
         ),
         usage=usage,
         yearly_toggle_label=None if resubscribe_only else yearly_toggle_label(_sheet_months_free(tiers), locale),
+    )
+
+
+def _configured_unlimited_v2_rows(retrieve_price: Callable[[str], dict[str, Any]]) -> list[dict[str, Any]]:
+    """Live Stripe rows for the configured Omi Pro (`unlimited_v2`) prices.
+
+    Mirrors `_configured_plan_price_id(PRIMARY_BILLING_ENV_VARS[unlimited_v2])`
+    in utils.subscription without importing it (that would cycle). A missing
+    env price or a failed retrieval just drops that interval.
+    """
+    rows = []
+    for interval, env in (
+        ('month', 'STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID'),
+        ('year', 'STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID'),
+    ):
+        price_id = os.getenv(env)
+        if not price_id:
+            continue
+        row = _retrieve(retrieve_price, price_id)
+        if row and (row.get('recurring') or {}).get('interval') == interval:
+            rows.append(row)
+    return rows
+
+
+def build_single_plan_storefront(
+    *,
+    catalog_revision: int,
+    subscription: Subscription,
+    usage: StorefrontUsage,
+    retrieve_price: Callable[[str], dict[str, Any]],
+    trigger: str | None = None,
+    locale: str | None = None,
+) -> StorefrontResponse:
+    """Omi Pro (`unlimited_v2`) offer sheet for a buyer with no current paid plan.
+
+    Omi Pro is the only plan sold, on every platform. The ladder sheet has no
+    Omi Pro card, so this single-tier v2 sheet is served instead; current
+    subscribers keep the ladder sheet via `build_storefront`.
+    """
+    ladder = load_ladder()
+    current_plan = subscription.plan.value
+    raw_currency = ladder.get('currency')
+    currency = raw_currency if isinstance(raw_currency, str) else 'usd'
+    prices = _prices_for(_configured_unlimited_v2_rows(retrieve_price), offered=['month', 'year'], locale=locale)
+    action: Literal['checkout', 'current', 'none'] = 'checkout' if prices else 'none'
+    tier = StorefrontTier(
+        tier_id='unlimited_v2:single_plan',
+        plan_id='unlimited_v2',
+        name=plan_name('unlimited_v2', ladder),
+        recommended=bool(prices),
+        is_current=False,
+        hours_line=hours_line('unlimited_v2', locale),
+        bullets=bullets('unlimited_v2', trigger, locale),
+        action=action,
+        cta_label=cta_label(action=action, tier_plan='unlimited_v2', current_plan=current_plan, locale=locale),
+        blocked_line=None,
+        compact=False,
+        prices=prices,
+    )
+    # The Free current card keeps the sheet shape every other golden has (a
+    # current row: no bullets, no CTA, the $0 price) so clients render the Omi
+    # Pro offer next to where the buyer already is.
+    free_tier = StorefrontTier(
+        tier_id='basic:single_plan',
+        plan_id='basic',
+        name=plan_name('basic', ladder),
+        recommended=False,
+        is_current=True,
+        hours_line=hours_line('basic', locale),
+        bullets=[],
+        action='current',
+        cta_label=None,
+        blocked_line=None,
+        compact=True,
+        prices=[_free_price(currency, locale)],
+    )
+    line, _ = current_line(
+        plan_id=current_plan,
+        plan_name_text=plan_name(current_plan, ladder),
+        amount_minor=None,
+        interval=None,
+        period_end=subscription.current_period_end,
+        cancel=subscription.cancel_at_period_end,
+        legacy=False,
+        locale=locale,
+    )
+    return StorefrontResponse(
+        catalog_revision=catalog_revision,
+        header=header(
+            legacy=False,
+            trigger=trigger,
+            percent=usage.percent,
+            mcp_daily_cap=_mcp_cap(ladder, current_plan),
+            locale=locale,
+            cancel_scheduled=False,
+            plan_name_text=plan_name(current_plan, ladder),
+            period_end=None,
+        ),
+        tiers=[tier, free_tier],
+        current=StorefrontCurrent(
+            plan_id=current_plan,
+            name=plan_name(current_plan, ladder),
+            price_id=subscription.current_price_id,
+            interval=None,
+            legacy=False,
+            cancel_at_period_end=subscription.cancel_at_period_end,
+            line=line,
+        ),
+        usage=usage,
+        yearly_toggle_label=yearly_toggle_label(_sheet_months_free([tier]), locale),
     )

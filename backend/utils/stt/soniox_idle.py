@@ -31,6 +31,8 @@ from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.provider_stream_end import US_TIMEOUT, begin_stream_close, note_stream_close_intent
+from utils.observability.demand_cohort import current_transport_origin
+from config.live_stt_idle import idle_reopen_cost_reselect_enabled
 
 IDLE_DRAIN_SECONDS = 2.0
 _sleep = asyncio.sleep  # Seam for deterministic watchdog tests.
@@ -117,6 +119,9 @@ class IdleSonioxSocket(STTSocket):
         self._closed = False
         self._dead = False
         self.idle_reopen_failed = False
+        self.idle_cost_reselect_requested = False
+        self._cost_reselect_managed = False
+        self._cost_reselect_onset = False
         self._reason: str | None = None
         self._silent_since: float | None = None
         self._idle_since: float | None = None
@@ -297,6 +302,11 @@ class IdleSonioxSocket(STTSocket):
                 # never vendor capacity.
                 self._dead, self._reason = True, LOCAL_DELIVERY_SEND_QUEUE_FULL
                 return False
+            if data and not self._pending:
+                # Pin the dispatch decision before the cap wrapper accounts
+                # this send. Pending PCM has not reached the closed vendor;
+                # a managed successor owns its one funded dispatch instead.
+                self._cost_reselect_onset = self._cost_reselect_managed and idle_reopen_cost_reselect_enabled()
             self._pending.extend(data)
             if self._wire_epoch is not None:
                 audio = observed_audio(data, self._wire_epoch, capture_spans.get())
@@ -316,6 +326,45 @@ class IdleSonioxSocket(STTSocket):
         if self._reopen_task is None or self._reopen_task.done():
             self._reopen_task = create_named_task(self._resume(), name='soniox_idle_reopen')
         return await self._reopen_task
+
+    @property
+    def idle_reopen_pending(self) -> bool:
+        return self._idle_since is not None and bool(self._pending)
+
+    def set_cost_reselect_managed(self, enabled: bool) -> None:
+        self._cost_reselect_managed = enabled
+
+    @property
+    def idle_reopen_cost_reselect_pending(self) -> bool:
+        return self.idle_reopen_pending and self._cost_reselect_onset
+
+    @property
+    def defer_admission_charge(self) -> bool:
+        return self.idle_reopen_cost_reselect_pending
+
+    async def request_cost_reselect(self) -> bool:
+        """Flush old text before yielding the retained onset to managed handoff.
+
+        This is a planned transport boundary, not provider-failure evidence.
+        The serving owner takes the pending PCM through its existing retry or
+        ordered-tail path; no new socket is opened from inside the old writer.
+        """
+        if self._close_task is not None:
+            await self._close_task
+            self._close_task = None
+        if self._finishing:
+            return False
+        if self._transport.is_connection_dead:
+            return False  # A real rejection during drain keeps its typed failure.
+        self._account_avoided()
+        self.idle_cost_reselect_requested = True
+        self._dead, self._reason = True, 'normal_close'
+        return False
+
+    def note_cost_reopened(self) -> None:
+        self._idle_budget.rearm_at = time.monotonic() + self._idle_budget.rearm_seconds
+        self._metrics.reopens.inc()
+        self._metrics.cohort_reopens.labels(arm=self._idle_budget.arm).inc()
 
     async def _resume(self) -> bool:
         started = time.monotonic()
@@ -337,7 +386,11 @@ class IdleSonioxSocket(STTSocket):
         callback = self._socket_callback(offset, self._socket_epoch)
 
         try:
-            self._transport = await self._connect(callback)
+            origin_token = current_transport_origin.set('idle_reopened')
+            try:
+                self._transport = await self._connect(callback)
+            finally:
+                current_transport_origin.reset(origin_token)
             if self._wire_epoch is not None:
                 self._transport.set_wire_ledger(self._wire_epoch)
             if self._capture_axis_ledger is not None:

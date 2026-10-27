@@ -25,6 +25,7 @@ class Kind:
     # auto-apply on its own.
     verifier_checks: tuple[str, ...] = ()
     deterministic_sufficient: bool = False
+    dream_only: bool = False
 
     def validate(self, *args, **kwargs):
         return _call('utils.agent_capabilities.tools', self.validation, *args, **kwargs)
@@ -65,6 +66,9 @@ KINDS = {
         collections=('conversations',),
     ),
     'memory': Kind('validate_memory', 'apply_memory', default_policy='suggest', key_rule='memory'),
+    'resolve_required_memory': Kind(
+        'validate_required_intake', 'apply_required_intake', schema_rule='required_intake', dream_only=True
+    ),
     'merge_memories': Kind(
         'validate_memory',
         'apply_memory_merge',
@@ -140,7 +144,8 @@ KINDS['vocabulary'] = Kind(
     collections=('dream_vocabulary',),
     tool='learn_term',
 )
-EDIT_KINDS = {name: spec for name, spec in KINDS.items() if spec.tool == 'propose_edit'}
+ALL_EDIT_KINDS = {name: spec for name, spec in KINDS.items() if spec.tool == 'propose_edit'}
+EDIT_KINDS = {name: spec for name, spec in ALL_EDIT_KINDS.items() if not spec.dream_only}
 AUTO = frozenset(name for name, spec in KINDS.items() if spec.default_policy == 'auto')
 
 

@@ -78,6 +78,43 @@ def idle_close_due(episode: Optional[Mapping[str, Any]], now: datetime) -> bool:
     return last is not None and (now - last).total_seconds() >= CLOSE_GAP_SECONDS
 
 
+# Only silence ends are rejoinable by a late sync capture: a user close (finalize,
+# wrap-up) or a hard boundary (a meeting window, the caps, a decided move-on) is
+# an explicit end of the occasion, and a late WAL row never overrides it.
+REJOINABLE_CLOSE_REASONS = frozenset({'gap', 'idle'})
+
+
+def rejoinable_closed_episode(
+    episode: Optional[Mapping[str, Any]], started_at: datetime, finished_at: Optional[datetime]
+) -> bool:
+    """Whether a late sync clip may rejoin this closed episode.
+
+    The clip's span must meet the closed occasion the way a live conversation's
+    first words meet an open one: reach into its documented window
+    (``started_at``..``closed_at`` — the close, not the last live moment, is
+    the occasion's recorded end, and speech the live stream never carried is
+    exactly what that window still covers), begin within the continue gap
+    before its start (separate device clocks), or start within the continue gap
+    after its end. Audio from an occasion already over stays out.
+    """
+    if episode is None or is_live(episode):
+        return False
+    if (episode.get('close_reason') or '') not in REJOINABLE_CLOSE_REASONS:
+        return False
+    start = utc(episode.get('started_at'))
+    end = utc(episode.get('closed_at')) or utc(episode.get('last_activity_at'))
+    if start is None or end is None:
+        return False
+    finished = finished_at or started_at
+    if finished < start:
+        return (start - started_at).total_seconds() <= CONTINUE_GAP_SECONDS
+    if started_at > end:
+        # The same edge as a live continue: a gap at or beyond the continue gap
+        # is a different occasion, exactly as it is for an open episode.
+        return (started_at - end).total_seconds() < CONTINUE_GAP_SECONDS
+    return True
+
+
 def boundary(episode: Optional[Mapping[str, Any]], moment: MomentFacts) -> Boundary:
     if episode is None or not is_live(episode):
         return Boundary(NEW)

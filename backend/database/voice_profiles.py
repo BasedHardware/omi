@@ -10,6 +10,7 @@ from utils.speaker_tag_prompts.keys import ignored_voice_key
 
 from ._client import get_firestore_client, run_transactional
 from .speaker_profile_authority import owner_teaching_authorized
+from .speaker_auto_enroll import update_privacy
 
 SETTINGS_DEFAULTS: Dict[str, bool] = {
     'speaker_tag_prompts_enabled': True,
@@ -57,8 +58,9 @@ def set_voice_profile_settings(uid: str, updates: Dict[str, bool], *, firestore_
         raise ValueError(f'Unknown voice profile setting(s): {", ".join(sorted(unknown))}')
     if not updates:
         return
-    ref = _client(firestore_client).collection('users').document(uid)
-    ref.set({key: bool(value) for key, value in updates.items()}, merge=True)
+    update_privacy(
+        uid, {key: bool(value) for key, value in updates.items()}, firestore_client=_client(firestore_client)
+    )
 
 
 def _state_ref(uid: str, firestore_client: Any = None) -> Any:

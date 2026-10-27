@@ -55,6 +55,7 @@ _stub_modules = [
     'utils.conversations.factory',
     'utils.other.endpoints',
     'utils.other.storage',
+    'utils.other.local_storage',
     'utils.encryption',
     'utils.analytics',
     'utils.byok',

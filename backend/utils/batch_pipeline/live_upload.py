@@ -15,6 +15,7 @@ import wave
 from fastapi.responses import JSONResponse
 
 from config.batch_pipeline import (
+    known_unsupported_batch_language,
     record_capture_eligible,
 )
 from config.policy import resolve_batch_policy
@@ -23,7 +24,8 @@ from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.sync_ledger import LEDGER_RETENTION_DAYS
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.intake import artifacts_for, durable_status, start_response
+from utils.batch_pipeline.intake import durable_status, start_response
+from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.live import OWNER, record_identity
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.executors import db_executor, storage_executor, run_blocking, sync_executor
@@ -116,8 +118,10 @@ async def _legacy_final_pass_route(uid, conversation_id, store, legacy_mode) -> 
     return RecordUploadRoute.BATCH if final_pass_rehome.rehomes_to_batch(outcome) else RecordUploadRoute.LEGACY
 
 
-async def _legacy_takes_new_owner(policy, legacy_mode) -> bool:
-    """An ownerless conversation goes to legacy only for a narrowed uid at ``on``.
+async def _legacy_takes_new_owner(policy, legacy_mode, language=None) -> bool:
+    """An ownerless conversation goes to legacy only at ``on``: for a narrowed uid,
+    or (batch eligibility, lead 41e13b) a conversation language known to be
+    unsupported by batch Parakeet.
 
     Outside ``on`` legacy may take no new owner (M3 re-review): batch owns it even
     for a narrowed uid, as intake widens such an upload anyway. The mode is read
@@ -125,7 +129,7 @@ async def _legacy_takes_new_owner(policy, legacy_mode) -> bool:
     """
     from utils.sync import legacy_dark
 
-    if policy.batch_enabled:
+    if policy.batch_enabled and not known_unsupported_batch_language(language):
         return False
     return await _legacy_mode(legacy_mode) is legacy_dark.LegacySyncMode.ON
 
@@ -190,7 +194,7 @@ async def registered_record_response(
         if snapshot is not None and snapshot.exists and not row.get('record_lane_owner'):
             # Only enabled admission may establish a new dispatcher. BYOK takes the
             # batch owner like any upload (David, 10-19): no request-scoped keys needed.
-            legacy_owner = await _legacy_takes_new_owner(policy, legacy_mode)
+            legacy_owner = await _legacy_takes_new_owner(policy, legacy_mode, row.get('language'))
             owner = 'legacy_final_pass_v1' if legacy_owner else 'batch_sync_v1'
             revision = await run_blocking(
                 db_executor,

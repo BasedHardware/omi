@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import pytest
 
 from google.cloud import tasks_v2
 from google.protobuf import duration_pb2
@@ -68,7 +69,8 @@ def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -
     assert 'tests/unit/test_sync_cloud_tasks_stack_ci_wiring.py' in sync_contract['tests']
 
 
-def test_gauntlet_recorder_shares_the_production_task_payload_schema(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize('archived', [False, True])
+def test_gauntlet_recorder_shares_the_production_task_payload_schema(monkeypatch, tmp_path, archived) -> None:
     """The recorder must accept every durable field admission can enqueue."""
     handler_url = 'http://127.0.0.1:39123/v2/sync-jobs/run'
     monkeypatch.setenv('SYNC_TASKS_PROJECT', 'test-project')
@@ -87,6 +89,8 @@ def test_gauntlet_recorder_shares_the_production_task_payload_schema(monkeypatch
             'raw_blob_paths': ['gs://sync/job-1.opus'],
         }
     )
+    if archived:
+        payload['raw_capture_paths'] = ['raw-sync/synthetic/source/digest.bin.enc']
     recorder = CloudTasksRecorder()
     task = tasks_v2.Task(
         name=recorder.task_path('test-project', 'us-central1', 'sync-jobs', 'job-1'),

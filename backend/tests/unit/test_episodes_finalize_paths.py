@@ -260,3 +260,37 @@ def test_schedule_after_finalization_survives_a_saturated_pool(monkeypatch):
 
     monkeypatch.setattr(episode_finalize, 'submit_with_context', saturated)
     episode_finalize.schedule_after_finalization(_UID, 'c1', ProcessingTrigger.CLIENT_FINALIZE)
+
+
+def test_attach_synced_at_intake_joins_through_the_service_and_normalizes_the_row(monkeypatch):
+    from utils.episodes import service
+
+    seen = []
+    monkeypatch.setattr(episode_finalize.client_gate, 'client_seen_cached', lambda uid: True)
+    monkeypatch.setattr(
+        service,
+        'attach_synced_intake',
+        lambda uid, cid, row, collaborators=None: seen.append((uid, cid, row['source'])) or 'joined',
+    )
+    row = {'id': 'c-wal', 'source': ConversationSource.omi}
+    assert episode_finalize.attach_synced_at_intake(_UID, 'c-wal', row) == 'joined'
+    # The boundary rules compare wire values; the pydantic enum member never reaches them.
+    assert seen == [(_UID, 'c-wal', 'omi')]
+
+
+def test_attach_synced_at_intake_is_gated_and_fail_open(monkeypatch):
+    monkeypatch.setattr(episode_finalize.client_gate, 'client_seen_cached', lambda uid: False)
+    assert episode_finalize.attach_synced_at_intake(_UID, 'c-wal', {'id': 'c-wal'}) == 'skipped_no_client'
+    monkeypatch.setattr(episode_finalize.client_gate, 'client_seen_cached', lambda uid: True)
+    monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'off')
+    assert episode_finalize.attach_synced_at_intake(_UID, 'c-wal', {'id': 'c-wal'}) == 'disabled'
+    monkeypatch.delenv(config.EPISODES_ENABLED_ENV)
+    assert episode_finalize.attach_synced_at_intake(_UID, '', {'id': 'c-wal'}) == 'disabled'
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError('episode store unavailable')
+
+    from utils.episodes import service
+
+    monkeypatch.setattr(service, 'attach_synced_intake', boom)
+    assert episode_finalize.attach_synced_at_intake(_UID, 'c-wal', {'id': 'c-wal'}) == 'error'

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "catalog_revision": 10,
+  "catalog_revision": 12,
   "show_subscription_ui": true,
   "header": "You've used 80% of this month's usage",
   "current": {

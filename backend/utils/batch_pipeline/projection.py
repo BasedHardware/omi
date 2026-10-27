@@ -14,7 +14,7 @@ import threading
 import time
 import math
 import logging
-from typing import TYPE_CHECKING, Callable, NamedTuple
+from typing import TYPE_CHECKING, Callable, NamedTuple, cast
 from uuid import NAMESPACE_URL, uuid5
 
 from config.batch_pipeline import (
@@ -33,6 +33,7 @@ from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 from utils.batch_pipeline.projection_disposition import persist_disposition, mirror_assignment
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
@@ -40,6 +41,8 @@ from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
+from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidence
+from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.sync.intake_completion import log_sync_lineage_stamp_gap_refused
 
@@ -58,6 +61,18 @@ OWNER_DRAIN_STEP_ROWS = 128
 CANDIDATE_WAIT_SECONDS = 10.0
 # Held units read per partial-completion scan.
 HELD_PARTIAL_PAGE = 32
+BATCH_PROJECTION_BLOCK_REASONS = frozenset(
+    {
+        'intake_binding_mismatch',
+        'invalid_recording_clock',
+        'invalid_recording_identity',
+        'invalid_recording_interval',
+        'invalid_upload_filenames',
+        'lineage_identity_missing',
+        'lineage_ambiguous',
+        'other',
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -134,6 +149,18 @@ def fence_reason_field(error: BaseException) -> str:
     return ''
 
 
+def projection_block_reason(error: BaseException) -> str:
+    """Return only the closed, log-safe projection block reason token."""
+    try:
+        attributes = cast(object, error.__dict__)
+        reason = attributes.get('block_reason') if isinstance(attributes, dict) else None
+    except Exception:
+        reason = None
+    if type(reason) is str and reason in BATCH_PROJECTION_BLOCK_REASONS:
+        return reason
+    return 'other'
+
+
 @contextmanager
 def projection_phase(phase: str, policy: ProjectionPolicy | None = None) -> Iterator[None]:
     """Static phase tokens only; never log bindings, payloads or exception text."""
@@ -146,12 +173,13 @@ def projection_phase(phase: str, policy: ProjectionPolicy | None = None) -> Iter
         yield
     except Exception as error:
         logger.info(
-            'event=batch_projection_phase phase=%s outcome=error elapsed_ms=%d exception_type=%s%s%s',
+            'event=batch_projection_phase phase=%s outcome=error elapsed_ms=%d exception_type=%s%s%s block_reason=%s',
             phase,
             int((time.monotonic() - started) * 1000),
             error_type(error),
             fence_reason_field(error),
             error_site_field(error),
+            projection_block_reason(error),
         )
         raise
     else:
@@ -169,21 +197,19 @@ def build_incoming(
     from models.conversation import Conversation, CreateConversation
     from models.conversation_enums import ConversationSource
     from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
-    from utils.conversations.final_pass_assignment import assign_words
     from utils.stt.pre_recorded import postprocess_words
     from utils.sync.capture import chunk_identity
 
-    from diarizer.batch_pipeline import validate_words
-
-    words = validate_words(payload['words'], float(payload['audio_seconds']))
-    if not words:
-        raise ValueError('successful batch result must contain words')
     duration = float(payload['audio_seconds'])
     if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1:
         raise ValueError('result audio duration differs from admitted capture')
+    # Model clocks may exceed EOF by the validator's 10 ms tolerance. Bound
+    # words to real PCM, and keep its precision through the legacy grouper:
+    # rounding to centiseconds can otherwise create a decoded coverage hole.
+    words = bounded_projection_words(payload['words'], duration)
     # The existing final-pass aligner abstains in diarization gaps; the existing
     # prerecorded grouper supplies the same sentence/segment shapes as sync.
-    aligned = words if payload.get('recovery_version') == 1 else assign_words(words, payload['diarization']['turns'])
+    aligned = align_projection_words(words, payload, item.segment_id)
     authoritative = (binding.record_origin or (policy or ProjectionPolicy()).authoritative_labels) and payload.get(
         'recovery_version'
     ) != 1
@@ -203,16 +229,16 @@ def build_incoming(
                 in_gap = False
             prepared.append(word)
         aligned = prepared
-    segments = postprocess_words([{**word, 'text': word['word']} for word in aligned], 0)
+    segments = postprocess_words([{**word, 'text': word['word']} for word in aligned], 0, preserve_timestamps=True)
     if not segments:
         raise ValueError('successful batch result produced no transcript')
     # Legacy sync transcribes a VAD-isolated file whose capture timestamp is
     # already shifted. Batch words cover the full capture; undo the grouper's
     # first-word normalization to keep absolute speech/playback clocks intact.
-    offset = round(float(words[0]['timestamp'][0]), 2)
+    offset = float(words[0]['timestamp'][0])
     for index, segment in enumerate(segments):
-        segment.start = round(segment.start + offset, 2)
-        segment.end = round(segment.end + offset, 2)
+        segment.start += offset
+        segment.end += offset
         segment.id = str(uuid5(NAMESPACE_URL, f'batch:{item.segment_id}:{index}'))
         segment.speaker_id_scope = (
             f'final:batch:{batch_segment_id or item.segment_id}' if authoritative else f'sync:{item.segment_id}'
@@ -369,6 +395,9 @@ class Projector:
         self.handoff = threading.Lock()
         # Resume point of the held-partial scan; a short page wraps it.
         self.held_after: str | None = None
+        # Upload dedupe of the held-partial pass in flight; spans budget stops
+        # and wraps only when the scan's cursor does.
+        self.held_pass_seen: set[tuple[str, str]] = set()
 
     def request_drain(self, owner_id: str) -> None:
         with self.handoff:
@@ -477,6 +506,9 @@ class Projector:
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         session = self.store.session(segment_id, binding, self.clock(), policy=policy)
+        if job.get('_projection_privacy_deleted'):
+            persist_disposition(session, privacy_deleted=True)
+            return
         # A walk's fresh read showed no receipt; the transaction still fences.
         prechecked = not (hint is not None and hint.successor and not entry.get('projection'))
         if prechecked:
@@ -484,6 +516,11 @@ class Projector:
                 with projection_phase('predecessor', policy):
                     self.store.check(session)
             except ProjectionReplay:
+                return
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                    raise
+                persist_disposition(session, privacy_deleted=True)
                 return
         if entry['result']['outcome'] in {'silence', 'no_recoverable_speech'}:
             if entry['result']['outcome'] == 'no_recoverable_speech':
@@ -507,6 +544,10 @@ class Projector:
                 # Without the pre-check this is the replay it would have seen.
             except SyncAssignmentSuperseded:
                 self.supersede(session)
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                    raise
+                persist_disposition(session, privacy_deleted=True)
         else:
             with projection_phase('assignment', policy):
                 self.assign_parts(item, entry, binding, finish=finish, policy=policy, hint=hint)
@@ -621,23 +662,68 @@ class Projector:
             record_speech_steps(binding, accounting['source'], steps, times, self.clock())
         return result
 
-    def sweep_held(self, limit: int = HELD_PARTIAL_PAGE) -> dict[str, int]:
-        """Bounded page of held units; one partial attempt per upload."""
-        counts = {'partial': 0, 'waiting': 0, 'error': 0}
-        page = held_candidates(self.store.client, self.store.store.namespace, limit, after_id=self.held_after)
-        self.held_after = page[-1][0] if len(page) >= limit else None
-        seen = set()
-        for _, job in page:
+    def sweep_held(
+        self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None
+    ) -> dict[str, int]:
+        """Pages of held units chained into one bounded pass; one partial attempt per upload.
+
+        A ``deadline`` (a ``time.monotonic`` instant) or ``max_pages`` chains
+        full pages back to back — checked only between pages, so a pass
+        overruns its deadline by at most one page — while neither bound keeps
+        the legacy single-page contract. ``units`` counts held documents
+        examined; ``reads`` is what the caller should charge its read budget:
+        one read per examined document plus, per attempted upload, 5 reads per
+        sibling and 7 (the code-derived worst case of prepare_accounting plus
+        the complete_partial transaction, which walk every sibling), floored
+        at the benchmark's measured per-attempt worst case.
+        ``more`` marks a pass stopped on a full page or a failed fetch with the
+        cursor kept, so the caller can resume it without waiting out its
+        interval. The upload dedupe spans the whole pass — across budget stops
+        too — and resets only when a short page wraps the cursor.
+        """
+        counts = {'partial': 0, 'waiting': 0, 'error': 0, 'units': 0, 'reads': 0, 'more': 0}
+        pages = 0
+        while True:
             try:
-                binding = normalized_binding(job['projection_binding'])
-                if (binding.owner_id, binding.content_id) in seen:
-                    continue
-                seen.add((binding.owner_id, binding.content_id))
-                counts['partial' if self.complete_held(binding) is not None else 'waiting'] += 1
+                page = held_candidates(self.store.client, self.store.store.namespace, limit, after_id=self.held_after)
             except Exception as error:
-                counts['error'] += 1
-                logger.warning('event=batch_held_partial outcome=retry exception_type=%s', error_type(error))
-        return counts
+                # A failed fetch bills nothing but must not lose the pages the
+                # pass already served: end the segment resumable, not by raise.
+                counts['more'] = 1
+                logger.warning(
+                    'event=batch_held_partial action=fetch outcome=retry exception_type=%s', error_type(error)
+                )
+                return counts
+            full = len(page) >= limit
+            self.held_after = page[-1][0] if full else None
+            counts['units'] += len(page)
+            counts['reads'] += len(page)
+            counts['more'] = 1 if full else 0
+            pages += 1
+            for _, job in page:
+                try:
+                    binding = normalized_binding(job['projection_binding'])
+                    if (binding.owner_id, binding.content_id) in self.held_pass_seen:
+                        continue
+                    self.held_pass_seen.add((binding.owner_id, binding.content_id))
+                    # 5 reads per sibling and 7 more per attempt bound both
+                    # accounting passes; the floor keeps a one-segment upload
+                    # at the benchmark's measured per-attempt worst case.
+                    counts['reads'] += max(16, 5 * len(binding.segment_ids) + 7)
+                    counts['partial' if self.complete_held(binding) is not None else 'waiting'] += 1
+                except Exception as error:
+                    counts['error'] += 1
+                    logger.warning('event=batch_held_partial outcome=retry exception_type=%s', error_type(error))
+            if not full:
+                # The scan wrapped: the pass is complete and the next one starts fresh.
+                self.held_pass_seen = set()
+                return counts
+            if deadline is None and max_pages is None:
+                return counts
+            if deadline is not None and time.monotonic() >= deadline:
+                return counts
+            if max_pages is not None and pages >= max_pages:
+                return counts
 
     def assign_record_silence(self, item, binding, session, *, hint=None):
         incoming = {
@@ -818,6 +904,16 @@ class Projector:
                 receipt = persist_disposition(session, quarantined=True)
             except SyncAssignmentSuperseded:
                 receipt = self.supersede(session)
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                    if policy.projection_contention:
+                        logger.error(
+                            'event=batch_projection action=assignment outcome=error exception_type=%s%s',
+                            error_type(error),
+                            fence_reason_field(error),
+                        )
+                    raise
+                receipt = persist_disposition(session, privacy_deleted=True)
             except Exception as error:
                 if policy.projection_contention:
                     logger.error(
@@ -834,6 +930,10 @@ class Projector:
 
     def finish_part(self, item, binding, receipt, index, *, policy=None):
         policy = policy or self.store.policy(item.segment_id)
+        if receipt.get('conversation_id'):
+            self.store.settle_deleted_output(
+                item.segment_id, binding, self.clock(), receipt, part_index=index, policy=policy
+            )
         if receipt['state'] in {'ready', 'quarantined'}:
             return
         if receipt.get('conversation_id'):
@@ -856,6 +956,8 @@ class Projector:
                     else:
                         self.persist_playback(item, binding, canonical, receipt)
             if receipt['enrichment_required']:
+                if (receipt.get('speaker_scope') or '').startswith('final:batch:'):
+                    prepare_voice_evidence(self, item, binding, canonical)
                 with projection_phase('enrichment', policy):
                     self.store.mark_enrichment(
                         item.segment_id,

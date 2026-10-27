@@ -28,6 +28,8 @@ from utils.model_text import (
     untrusted_block,
 )
 
+from utils.speakers.display import display_participants, developer_speaker_names
+
 logger = logging.getLogger(__name__)
 
 
@@ -74,13 +76,13 @@ def format_local_date(dt: datetime, display_tz: tzinfo) -> str:
 # ---------------------------------------------------------------------------
 
 
-def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> None:
+def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]], *, preserve_api_values: bool = False) -> None:
     """Add speaker_name to transcript segments based on person_id mappings.
 
     Mutates conversation dicts in-place. Works with both single conversations
     (pass as [conv]) and lists.
     """
-    user_name = get_user_name(uid, use_default=False) or 'User'
+    user_name = get_user_name(uid, use_default=False) or ('User' if preserve_api_values else 'You')
 
     all_person_ids: Set[str] = set()
     for conv in conversations:
@@ -95,15 +97,18 @@ def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> Non
         people_map = {str(p['id']): str(p['name']) for p in people_data}
 
     for conv in conversations:
+        # Dense labels are assigned per conversation: the same diarization id in another
+        # conversation is a different voice, never the same "Speaker A".
         segments = cast(List[Dict[str, Any]], conv.get('transcript_segments') or [])
+        if preserve_api_values:
+            for seg, name in zip(segments, developer_speaker_names(segments, names=people_map, owner_name=user_name)):
+                seg['speaker_name'] = name
+            continue
+        display = display_participants(
+            segments, names=people_map, owner_name=user_name, resolution=conv.get('speaker_resolution')
+        )
         for seg in segments:
-            if seg.get('is_user'):
-                seg['speaker_name'] = user_name
-            elif seg.get('person_id') and str(seg['person_id']) in people_map:
-                seg['speaker_name'] = people_map[str(seg['person_id'])]
-            else:
-                speaker_id = seg.get('speaker_id')
-                seg['speaker_name'] = f"Speaker {speaker_id}" if speaker_id is not None else 'Unknown speaker'
+            seg['speaker_name'] = display.label(seg)
 
 
 def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None:

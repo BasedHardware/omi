@@ -715,7 +715,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get remembering => 'Запомняне';
 
   @override
-  String get unlimitedPlan => 'Неограничен план';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Управлявай план';
@@ -737,7 +737,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get upgrade => 'Надстрой';
 
   @override
-  String get upgradeToUnlimited => 'Надградете до неограничено';
+  String get upgradeToUnlimited => 'Надграждане до Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3161,7 +3161,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Надграждане до Pro';
+  String get upgradeToPro => 'Надграждане до Omi Pro';
 
   @override
   String get getOmiDevice => 'Вземете Omi устройство';
@@ -4288,8 +4288,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get trainingDataProgram => 'Програма за данни за обучение';
 
   @override
-  String get getOmiUnlimitedFree =>
-      'Получете Omi Unlimited безплатно, като допринесете данните си за обучение на AI модели.';
+  String get getOmiUnlimitedFree => 'Получете Omi Pro безплатно, като допринесете данните си за обучение на AI модели.';
 
   @override
   String get trainingDataBullets =>
@@ -8632,6 +8631,9 @@ class AppLocalizationsBg extends AppLocalizations {
       'Транскрипцията не е налична — записът продължава и аудиото ви се запазва.';
 
   @override
+  String get captureNoAudioFromPendant => 'Няма звук от висулката';
+
+  @override
   String get capturing => 'Записване';
 
   @override
@@ -9696,7 +9698,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Преминаване към безплатен план';
 
   @override
-  String get getFreeUnlimitedAccess => 'Получете безплатен неограничен достъп';
+  String get getFreeUnlimitedAccess => 'Получете Omi Pro безплатно';
 
   @override
   String get shareDataForTraining => 'Споделяне на данни за обучение';
@@ -11131,6 +11133,12 @@ class AppLocalizationsBg extends AppLocalizations {
       'Връзката по Bluetooth с вашия Omi прекъсна, така че звукът не стига до приложението. Omi продължава да записва на устройството и ще се синхронизира, щом връзката се възстанови. Повторният опит възстановява връзката; ако продължава да се проваля, проверете устройството си в Настройки > Устройство.';
 
   @override
+  String get captureConnecting => 'Свързване…';
+
+  @override
+  String get captureNoAudioDetail => 'Висулката е свързана, но до телефона не достига звук';
+
+  @override
   String get captureIngressNeedsReconnect => 'Аудиото не достига до приложението — свържете отново Omi';
 
   @override
@@ -11159,13 +11167,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Паметта е почти пълна';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi ще се свърже отново сам';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12300,12 +12301,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Проверете връзката';
 
   @override
-  String get forYou => 'За вас';
-
-  @override
-  String get stopThese => 'Спри тези';
-
-  @override
   String get dismiss => 'Скрий';
 
   @override
@@ -12907,7 +12902,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Изпрати гласово съобщение и Omi ще отговори.';
 
   @override
-  String get chatAppsPartOfPro => 'Чат приложенията са част от Pro';
+  String get chatAppsPartOfPro => 'Чат приложенията са част от Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Съобщения';
@@ -13541,7 +13536,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get syncDetailsCopy => 'Копиране на данните за поддръжката';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Достъпно в Operator и Architect';
+  String get chatAppsChannelPlanRequired => 'Достъпно в Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14052,7 +14047,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Работи, докато телефонът се зарежда.';
 
   @override
-  String get onDeviceUpgradeBody => 'Надстройте до Pro за разделяне на говорителите и по-висока точност';
+  String get onDeviceUpgradeBody => 'Надстройте до Omi Pro за разделяне на говорителите и по-висока точност';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14239,7 +14234,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Повтори с Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Надстройте до Pro за разделяне на говорителите и по-висока точност';
+  String get onDeviceRedoHint => 'Надстройте до Omi Pro за разделяне на говорителите и по-висока точност';
 
   @override
   String get onDeviceKeepEverything => 'Пазене на всичко на този телефон';
@@ -14472,6 +14467,25 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Текущите бележки не се обновяват. Засега вижте транскрипцията.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Записване · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Предишен епизод';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Чакащи фрагменти: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Отворете предишния епизод';
+
+  @override
   String get episodeNotesSoon => 'Бележките се появяват след първите минути разговор.';
 
   @override
@@ -14608,4 +14622,54 @@ class AppLocalizationsBg extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Готово. $percent% отстъпка за следващите $months месеца.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Други';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Готово';
+
+  @override
+  String get openLoopAnswerRemind => 'Напомни по-късно';
+
+  @override
+  String get openLoopAnswerDrop => 'Изостави го';
+
+  @override
+  String get syncRejectionInvalidDate => 'Невалидна дата на записа';
+
+  @override
+  String get syncDeleteKeptUploading => 'Някои части все още се качват и бяха запазени';
+
+  @override
+  String get syncRejectionServer => 'Отказано от сървъра';
+
+  @override
+  String get syncRejectionTooLarge => 'Твърде голям';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration в телефона';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Качването е спряно за момент — ще продължи автоматично';
 }

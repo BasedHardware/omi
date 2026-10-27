@@ -39,6 +39,7 @@ import utils.conversations.meeting_context_pack as meeting_context_pack
 import utils.imports.limitless as limitless
 import utils.llm.fair_use_classifier as fair_use_classifier
 import utils.llm.goals as llm_goals
+import utils.open_loops.daily as open_loops_daily
 import utils.other.notifications as notifications_utils
 import utils.retrieval.tool_services.conversations as tool_conversations
 import utils.retrieval.tools.conversation_tools as conversation_tools
@@ -429,6 +430,20 @@ def _run_completed_day_generation(monkeypatch: pytest.MonkeyPatch, capture: Help
     trial(capture, daily_recap.generate, 'u1', '2026-01-15', FROZEN_NOW, FROZEN_LATER, legacy=lambda *_: None)
 
 
+def _run_open_loops_daily_pass(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    monkeypatch.setenv('OPEN_LOOPS_ENABLED', 'on')
+    _stub(monkeypatch, open_loops_daily.open_loops_db, 'get_cards_doc', lambda *a, **k: None)
+    trial(
+        capture,
+        open_loops_daily.run_daily_pass,
+        'u1',
+        date_str='2026-01-15',
+        start_utc=FROZEN_NOW,
+        end_utc=FROZEN_LATER,
+        tz='UTC',
+    )
+
+
 def _run_tool_service(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     for statuses in (None, '', 'completed', 'processing,completed'):
         for discarded in _DISCARDED:
@@ -696,6 +711,14 @@ WITNESSES: dict[str, CallerWitness] = {
             ('daily-summary-generation',),
             1,
             _run_daily_summary_generation,
+        ),
+        CallerWitness(
+            'utils/open_loops/daily.py:run_daily_pass:database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            ('open-loops-daily-pass',),
+            1,
+            _run_open_loops_daily_pass,
         ),
         CallerWitness(
             'utils/retrieval/tool_services/conversations.py:get_conversations_text:database.conversations.get_conversations',

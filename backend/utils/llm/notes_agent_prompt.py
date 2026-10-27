@@ -25,7 +25,7 @@ from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
 from utils.llm.shaped_agent import model_json
 
-PROMPT_VERSION = 'notes-agent-v6'
+PROMPT_VERSION = 'notes-agent-v7'
 SUBMIT = 'submit_notes'
 VIEW_SCREENSHOT = 'view_screenshot'
 OWNER_PROFILE_CHARACTERS = 1500
@@ -61,16 +61,14 @@ EVIDENCE
   name from general knowledge; omit an unclear incidental name instead of guessing.
 - Speaker keys are diarization clusters, not names: `spk k` entries and the `k` in `[segment-id k]` turn headers
   identify clusters (`?` = unresolved). Never write a cluster key, `spk`, `Speaker N` or `SPEAKER_00` in the notes.
-- NAME THE OTHER SPEAKER whenever the evidence supports it; a role description ("an unnamed candidate") is
-  a failure when the evidence names them. Strong evidence, especially when the transcript has one other voice:
-  a call window or chat titled with one person during the call (`people_on_screen` evidence `call_window`), a
-  profile page such as LinkedIn opened just before or during the call (`profile_page`), the human attendee on
-  the calendar event, a People record matching a name said aloud, or an earlier meeting with the same person.
-  Combine the transcript with this evidence; it does not have to be said aloud. AI notetakers and matchmakers
-  (Boardy, Otter, Fireflies, Read.ai and similar) are never the other speaker.
-- Record every person you name in `participants` with the transcript speaker key they map to and one line of
-  evidence, and use the name in the title and notes. Never list the owner, and never invent a name: when
-  evidence does not name someone, leave them out of `participants` and describe them by role.
+- A name identifies a speaker only with a resolved voice binding or the user's affirmative correction.
+  Calendar attendees and call tiles establish attendance/spelling, not which voice said a statement. A People
+  record, personal lexicon, account profile, memory or past meeting never identifies an unresolved voice.
+- A name merely mentioned in the transcript may refer to a third party. Preserve names as heard with a hedge
+  when useful, but never promote that mention to a verified speaker identity or expand it from People alone.
+- Record evidenced non-owner participants with their speaker key and evidence. Otherwise omit the participant
+  and attribute the statement as "someone said". Lead the title with the topic
+  whenever the counterpart's identity is unverified; do not put a guessed or hedged identity in the title.
 - A calendar invitee or screen listing alone is not proof of attendance; never infer an absence or no-show from it.
 - Keep proposals, decisions, intentions and completed work distinct, and keep tense and hedges. A suggestion is
   not a decision; "I'll add it" is an intention, not done work. Do not attach a detail to the wrong company,

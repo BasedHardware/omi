@@ -1,0 +1,7 @@
+{
+  "version": "0.12.534",
+  "date": "2026-10-25",
+  "changes": [
+    "Opening app settings or retrying an integration setup now uses a fresh sign-in link instead of an expired or already-used link"
+  ]
+}

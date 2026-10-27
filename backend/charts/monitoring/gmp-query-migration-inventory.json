@@ -993,6 +993,20 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "((max by (namespace, pod) (omi_stt_window_batch_pressure_replicas{job=\"backend-listen-metrics\",state=\"fresh\"}) == 0) + 1) or on (namespace, pod) (time() - max by (namespace, pod) (omi_stt_window_batch_pressure_progress_timestamp_seconds{job=\"backend-listen-metrics\"} > 0) > 15)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_batch_pressure_progress_timestamp_seconds",
+        "omi_stt_window_batch_pressure_replicas"
+      ],
+      "owner_title": "Live STT - pressure sampler stuck",
+      "owner_uid": "omi-stt-pressure-sampler-stuck",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[2h]))",
       "file": "alerts/owner-recognition.json",
       "issues": [],
@@ -1030,6 +1044,21 @@
       "panel": null,
       "pointer": "/data/2/model/expr",
       "scope": "explicit-bridge"
+    },
+    {
+      "expression": "(sum(increase(omi_audio_custody_would_drop_total[5m])) or vector(0)) + (sum(increase(omi_audio_custody_failures_total[5m])) or vector(0)) + (sum(increase(pusher_queue_drops_total{queue=~\"private.*|audio.*\"}[5m])) or vector(0)) + (sum(increase(pusher_private_cloud_upload_drops_total[5m])) or vector(0)) + ((max(omi_audio_custody_last_risk_timestamp_seconds) > time() - 300) or vector(0))",
+      "file": "alerts/pusher.json",
+      "issues": [],
+      "metrics": [
+        "omi_audio_custody_failures_total",
+        "omi_audio_custody_last_risk_timestamp_seconds",
+        "omi_audio_custody_would_drop_total"
+      ],
+      "owner_title": "Audio custody - prevented drop or archive failure",
+      "owner_uid": "omi-audio-custody-pressure",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
     },
     {
       "expression": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m]))",
@@ -3116,7 +3145,7 @@
   ],
   "counts": {
     "explicit_bridge": 23,
-    "query_consumers": 205
+    "query_consumers": 207
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

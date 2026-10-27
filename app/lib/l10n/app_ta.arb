@@ -917,7 +917,7 @@
     "@remembering": {
         "description": "Remembering stat title"
     },
-    "unlimitedPlan": "வரம்பற்ற திட்டம்",
+    "unlimitedPlan": "Omi Pro",
     "@unlimitedPlan": {
         "description": "Unlimited plan name"
     },
@@ -957,7 +957,7 @@
     "@upgrade": {
         "description": "Upgrade button"
     },
-    "upgradeToUnlimited": "வரம்பற்ற மேம்படுத்தவும்",
+    "upgradeToUnlimited": "Omi Pro க்கு மேம்படுத்து",
     "@upgradeToUnlimited": {
         "description": "Message shown on locked memory items"
     },
@@ -3652,7 +3652,7 @@
     "@pro": {
         "description": "Badge label for pro/unlimited users"
     },
-    "upgradeToPro": "Pro க்கு மேம்படுத்து",
+    "upgradeToPro": "Omi Pro க்கு மேம்படுத்து",
     "@upgradeToPro": {
         "description": "Subscription banner button text"
     },
@@ -4941,7 +4941,7 @@
     "@trainingDataProgram": {
         "description": "Label for training data program"
     },
-    "getOmiUnlimitedFree": "AI மாதிரികளை பயிற்சி செய்ய உங்கள் தரவு பங்களிப்பதன் மூலம் Omi Unlimited ஐ இலவசமாகப் பெறவும்.",
+    "getOmiUnlimitedFree": "AI மாதிரികளை பயிற்சி செய்ய உங்கள் தரவு பங்களிப்பதன் மூலம் Omi Pro ஐ இலவசமாகப் பெறவும்.",
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
@@ -10536,7 +10536,7 @@
     "freemiumLimitsIntro": "Omi இலவசம், ஆனால் இலவச பதிப்பில் உங்கள் அனுபவத்தைப் பாதிக்கும் வரம்புகள் உள்ளன:",
     "downgradeLimitDelayNotRealTime": "5-7 வினாடி தாமதம் (நிகழ்நேரம் அல்ல)",
     "downgradeToFreemiumAction": "இலவச பதிப்புக்கு மாறவும்",
-    "getFreeUnlimitedAccess": "இலவச வரம்பற்ற அணுகலைப் பெறுங்கள்",
+    "getFreeUnlimitedAccess": "Omi Pro-ஐ இலவசமாகப் பெறுங்கள்",
     "shareDataForTraining": "பயிற்சிக்காக தரவைப் பகிரவும்",
     "yourRequestUnderReview": "உங்கள் கோரிக்கை பரிசீலனையில் உள்ளது",
     "pinAsBaseline": "அடிப்படையாகப் பின் செய்",
@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "பதிவேற்றம் தோல்வியடைந்தது — {duration} ஆடியோ உங்கள் ஃபோனில் வைக்கப்பட்டுள்ளது.",
     "audioUploadFailedTapRetry": "பதிவேற்றம் தோல்வியடைந்தது — {duration} ஆடியோ உங்கள் ஃபோனில் வைக்கப்பட்டுள்ளது. மீண்டும் முயல தட்டவும்.",
     "audioUploadRetrying": "பதிவேற்றம் மீண்டும் முயலப்படுகிறது… {duration} ஆடியோ உங்கள் ஃபோனில் வைக்கப்பட்டுள்ளது",
+    "captureNoAudioFromPendant": "பதக்கத்திலிருந்து ஆடியோ இல்லை",
     "capturing": "பதிவுசெய்கிறது",
     "capturingPhotos": "புகைப்படங்கள் எடுக்கப்படுகின்றன",
     "listeningTranscriptWillAppear": "கேட்கிறது… டிரான்ஸ்கிரிப்ட் இங்கே தோன்றும்.",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "மீண்டும் இணைக்க முயற்சிக்கவும்",
     "captureBannerRetrySync": "ஒத்திசைவை மீண்டும் முயற்சிக்கவும்",
     "captureWedgeBleExplanation": "உங்கள் Omi-உடனான புளூடூத் இணைப்பு தடைபட்டுள்ளது, எனவே ஆடியோ ஆப்பை அடையவில்லை. Omi சாதனத்தில் பதிவு செய்வதைத் தொடர்கிறது, இணைப்பு மீட்டமைக்கப்பட்டவுடன் ஒத்திசைக்கப்படும். மீண்டும் முயற்சிப்பது இணைப்பை மீண்டும் ஏற்படுத்தும்; தொடர்ந்து தோல்வியுற்றால், அமைப்புகள் > சாதனம் பகுதியில் உங்கள் சாதனத்தைச் சரிபார்க்கவும்.",
+    "captureConnecting": "இணைக்கிறது…",
+    "captureNoAudioDetail": "பெண்டன்ட் இணைக்கப்பட்டுள்ளது, ஆனால் எந்த ஆடியோவும் உங்கள் போனை அடையவில்லை",
     "captureIngressNeedsReconnect": "ஆடியோ ஆப்பை அடையவில்லை — உங்கள் Omi-ஐ மீண்டும் இணைக்கவும்",
     "captureIngressNeedsReconnectExplanation": "ஆப்பால் Omi சாதனத்திலிருந்து ஆடியோவை இனி பெற முடியவில்லை, இணைப்பை தானாக மீட்கவும் முடியவில்லை. சாதனத்தைத் துண்டித்து மீண்டும் இணைக்கவும் — சாதன அமைப்புகளிலிருந்து அல்லது அணைத்து மீண்டும் இயக்கி. சாதனத்தில் சேமிக்கப்பட்ட ஆடியோ பின்னர் ஒத்திசைக்கப்படும்.",
     "captureStillRecording": "இன்னும் பதிவாகிறது",
@@ -10926,7 +10929,6 @@
     "captureStarting": "தொடங்குகிறது…",
     "capturePhoneStorageFull": "ஃபோன் சேமிப்பகம் நிரம்பியது",
     "captureStorageAlmostFull": "சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது",
-    "capturePendantDisconnectedDetail": "உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.",
     "participantsSummaryUncounted": "{name} மற்றும் மற்றவர்கள்",
     "deviceOnboardingVoiceReplyTitle": "Omi-யின் பதில்களைக் கேளுங்கள்",
     "deviceOnboardingVoiceReplySample": "புரிந்தது. உங்கள் அடுத்த சந்திப்பு இருபது நிமிடங்களில் தொடங்கும்.",
@@ -11204,9 +11206,6 @@
     "playbackAudioUnavailable": "ஆடியோ கிடைக்கவில்லை",
     "playbackAudioLoadFailed": "ஆடியோவை ஏற்ற முடியவில்லை",
     "playbackAudioNetworkFailed": "இணைப்பைச் சரிபார்க்கவும்",
-    "capturePendantDisconnectedShort": "Omi தானாகவே மீண்டும் இணையும்",
-    "forYou": "உங்களுக்காக",
-    "stopThese": "இவற்றை நிறுத்து",
     "dismiss": "மறை",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
@@ -11371,7 +11370,7 @@
     "chatAppsShowInAppOff": "அணைப்பு: {app}-இல் மட்டுமே பார்ப்பீர்கள்.",
     "chatAppsProPerkText": "Telegram, iMessage-இலிருந்து Omi-க்கு மெசேஜ் அனுப்புங்கள்",
     "chatAppsVoiceNotesSubtitle": "குரல் குறிப்பை அனுப்புங்கள், Omi பதிலளிக்கும்.",
-    "chatAppsPartOfPro": "சாட் ஆப்ஸ் Pro-வின் ஒரு பகுதி",
+    "chatAppsPartOfPro": "சாட் ஆப்ஸ் Omi Pro-வின் ஒரு பகுதி",
     "chatAppsMessagesApp": "செய்திகள்",
     "chatAppsTelegramOtherDevice": "வேறொரு சாதனத்தில் Telegram உள்ளதா?",
     "chatAppsHeroMessage": "உங்கள் நாளைப் பற்றி கேளுங்கள், நினைவுகளைச் சேமியுங்கள், பணிகளை Telegram அல்லது iMessage-இலிருந்தே நிர்வகியுங்கள். உங்கள் சாட்கள் நீங்கள் பயன்படுத்தும் ஆப்ஸிலேயே இருக்கும்; நீங்கள் பேசியதை Omi எல்லா இடத்திலும் நினைவில் வைத்திருக்கும்.",
@@ -11556,7 +11555,7 @@
     "syncDetailsAudioFiles": "ஆடியோ கோப்புகள்",
     "syncDetailsServerJobs": "சர்வர் பணிகள் (முடிந்தவை / மொத்தம்)",
     "syncDetailsCopy": "ஆதரவுக்காக விவரங்களை நகலெடுக்கவும்",
-    "chatAppsChannelPlanRequired": "Operator மற்றும் Architect இல் கிடைக்கும்",
+    "chatAppsChannelPlanRequired": "Omi Pro இல் கிடைக்கும்",
     "chatAppsAtCapacity": "{app} நிரம்பியுள்ளது",
     "chatAppsJoinWaitlist": "காத்திருப்புப் பட்டியலில் சேர்",
     "chatAppsOnWaitlist": "நீங்கள் காத்திருப்புப் பட்டியலில் உள்ளீர்கள்",
@@ -11707,7 +11706,7 @@
     "onDeviceTranscribeOnPhone": "இந்த ஃபோனிலேயே உரையாக்கு",
     "onDeviceIncluded": "உள்ளடங்கியது",
     "onDeviceOptionChargingBody": "தொலைபேசி சார்ஜ் ஆகும்போது இயங்கும்.",
-    "onDeviceUpgradeBody": "பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Pro-க்கு மேம்படுத்தவும்",
+    "onDeviceUpgradeBody": "பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Omi Pro-க்கு மேம்படுத்தவும்",
     "onDeviceAtCapFooter": "எந்த வழியிலும் எதுவும் இழக்கப்படாது. இதை அமைப்புகள் › பேச்சு என்பதில் மாற்றலாம்.",
     "onDeviceStepOf": "படி {step} / {total}",
     "onDeviceSetupBody": "Omi பேச்சு மாதிரியை ஒருமுறை பதிவிறக்கும். அதன் பிறகு உங்கள் பதிவுகள் இங்கேயே உரையாக மாறும், உங்கள் பயன்பாட்டில் கணக்கிடப்படாமல்.",
@@ -11760,7 +11759,7 @@
     "onDeviceWhyCloudIphone": "இந்த iPhone தானாகச் சுருக்க முடியாது (அதற்கு iPhone 15 Pro அல்லது அதற்குப் பிந்தையது தேவை). உரைப்பதிவு உங்கள் ஃபோனில் உருவாக்கப்பட்டது, அதன் உரை மட்டுமே சுருக்குவதற்காக Omi-க்கு அனுப்பப்பட்டது. இது உங்கள் பயன்பாட்டில் கணக்கிடப்படாது.",
     "onDeviceWhyCloudPhone": "இந்த ஃபோன் தானாகச் சுருக்க முடியாது. உரைப்பதிவு உங்கள் ஃபோனில் உருவாக்கப்பட்டது, அதன் உரை மட்டுமே சுருக்குவதற்காக Omi-க்கு அனுப்பப்பட்டது. இது உங்கள் பயன்பாட்டில் கணக்கிடப்படாது.",
     "onDeviceRedoWithCloud": "Omi Cloud மூலம் மீண்டும் செய்",
-    "onDeviceRedoHint": "பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Pro-க்கு மேம்படுத்தவும்",
+    "onDeviceRedoHint": "பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Omi Pro-க்கு மேம்படுத்தவும்",
     "onDeviceKeepEverything": "எல்லாவற்றையும் இந்த ஃபோனிலேயே வை",
     "onDeviceKeepEverythingSubtitle": "உரைப்பதிவுகள் மட்டும், சுருக்கங்கள் இல்லை",
     "onDeviceAfterLiveHours": "உங்கள் வரம்பை அடையும்போது",
@@ -11816,6 +11815,11 @@
     "episodeSoFar": "இதுவரை",
     "episodeUpdatedJustNow": "இப்போது புதுப்பிக்கப்பட்டது · முடிவில் முழு குறிப்புகள்",
     "episodeUpdatedMinutesAgo": "{minutes} நிமி. முன் புதுப்பிக்கப்பட்டது · முடிவில் முழு குறிப்புகள்",
+    "episodeNotesUnavailable": "நடப்பு குறிப்புகள் புதுப்பிக்கப்படவில்லை. இப்போதைக்கு உரைப்பதிவைப் பார்க்கவும்.",
+    "episodeCaptureFor": "பதிவு செய்கிறது · {duration}",
+    "episodePrevious": "முந்தைய பகுதி",
+    "captureChunksPending": "நிலுவையில் உள்ள துண்டுகள்: {pending}",
+    "episodeOpenPrevious": "முந்தைய பகுதியைத் திறக்கவும்",
     "episodeNotesSoon": "பேச்சின் முதல் சில நிமிடங்களுக்குப் பிறகு குறிப்புகள் தோன்றும்.",
     "episodeOpenAll": "அனைத்தையும் திற",
     "episodeWrapUpNow": "இப்போதே முடி",
@@ -11851,5 +11855,21 @@
     "recapInTheBackground": "பின்னணியில்",
     "retentionOfferAccept": "{percent}% தள்ளுபடியுடன் தொடருங்கள்",
     "retentionOfferBody": "தொடருங்கள், மாதம் {price} செலுத்துங்கள், அடுத்த {months} மாதங்களுக்கு.",
-    "retentionOfferApplied": "முடிந்தது. {percent}% தள்ளுபடி, அடுத்த {months} மாதங்களுக்கு."
+    "retentionOfferApplied": "முடிந்தது. {percent}% தள்ளுபடி, அடுத்த {months} மாதங்களுக்கு.",
+    "othersSpeakerLabel": "மற்றவர்கள்",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "முடிந்தது",
+    "openLoopAnswerRemind": "பின்னர் நினைவூட்டு",
+    "openLoopAnswerDrop": "விட்டுவிடு",
+    "syncRejectionInvalidDate": "தவறான பதிவு தேதி",
+    "syncDeleteKeptUploading": "சில பகுதிகள் இன்னும் பதிவேற்றப்பட்டு வருகின்றன, அவை வைக்கப்பட்டுள்ளன",
+    "syncRejectionServer": "சேவையகம் நிராகரித்தது",
+    "syncRejectionTooLarge": "மிகப் பெரியது",
+    "deviceOnPhoneQueue": "போனில் {duration}",
+    "syncCardUploadsPaused": "பதிவேற்றங்கள் சிறிது நேரம் இடைநிறுத்தப்பட்டுள்ளன — தானாகவே தொடரும்"
 }

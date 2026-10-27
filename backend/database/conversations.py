@@ -1,4 +1,4 @@
-from database import conversation_visibility_counts, processing_backlog
+from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll
 from utils.conversations import summary_delivery, lifecycle_clocks
 from config.refactor_modes import serving_for, shadow_or_serve
 import copy
@@ -33,6 +33,7 @@ from utils.conversations.transcript_hash import (
     transcript_sha256_for_binding,
 )
 from utils.observability.speaker_identification import record_speaker_review
+from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 from models.person_confidence import SOURCE_MANUAL
 from utils.manual_speaker_assignments import (
     LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT,
@@ -46,8 +47,14 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
+from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
-from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
+from database.sync_assignment import (
+    SyncAssignmentClock,
+    SyncAssignmentDiscovery,
+    encode_sync_assignment_plan,
+    run_sync_assignment,
+)
 from database.sync_conversation_snapshot import read_redirected, resolve_snapshot
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
@@ -65,6 +72,7 @@ from .read_boundary import parse_payload_strict
 from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
+    budgeted_get_all,
     budgeted_stream_iter,
     indexed_list_reads_enabled,
 )
@@ -369,6 +377,20 @@ def _prepare_conversation_for_write(
     if 'user_corrections' in data and isinstance(data['user_corrections'], list):
         data['user_corrections'] = _protect_json_value(data['user_corrections'], uid, level)
         data['user_corrections_compressed'] = True
+    if OPEN_LOOP_EXTRACTIONS_FIELD in data:
+        # Server-only derived content (quotes from the conversation), so it
+        # rides the same compressed/encrypted-at-rest protection as the other
+        # derived JSON blobs. An explicit null clears a prior value together
+        # with its marker; merge=True would otherwise keep both.
+        open_loops = data.get(OPEN_LOOP_EXTRACTIONS_FIELD)
+        if open_loops:
+            if not isinstance(open_loops, dict):
+                raise ValueError('open_loop_extractions must be an object')
+            data[OPEN_LOOP_EXTRACTIONS_FIELD] = _protect_json_value(open_loops, uid, level)
+            data[OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD] = True
+        else:
+            data[OPEN_LOOP_EXTRACTIONS_FIELD] = None
+            data[OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD] = None
     guard_match_score_size(data)
     return data
 
@@ -579,8 +601,41 @@ def _reveal_user_corrections_for_read(data: Dict[str, Any], uid: str) -> None:
         data['user_corrections'] = _reveal_json_value(data.get('user_corrections'), uid, True)
 
 
+def decode_open_loop_extractions(uid: str, raw: Any, compressed: bool) -> Optional[dict]:
+    """Strict write-side round trip; unreadable retained content must abort the write."""
+    if raw is None:
+        return None
+    value = _reveal_json_value(raw, uid, compressed)
+    if not isinstance(value, dict):
+        raise ValueError('open_loop_extractions must be an object')
+    return value
+
+
+def get_open_loop_extractions(uid: str, conversation_data: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Decode the server-only open-loop extractions from one raw conversation document.
+
+    Server-only by construction: the field is outside the Conversation wire
+    model, and this helper (not ``prepare_conversation_for_read``) is the only
+    intended reader. An absent, cleared, or undecodable value is None; a later
+    daily pass treats that as "no extractions", never as an error.
+    """
+    if not conversation_data:
+        return None
+    if not conversation_data.get(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD):
+        return None
+    try:
+        value = _reveal_json_value(conversation_data.get(OPEN_LOOP_EXTRACTIONS_FIELD), uid, True)
+    except (ValueError, TypeError, json.JSONDecodeError, zlib.error):
+        return None
+    return value if isinstance(value, dict) else None
+
+
 def prepare_conversation_for_read(
-    conversation_data: Optional[Dict[str, Any]], uid: str, *, firestore_client: Any = None
+    conversation_data: Optional[Dict[str, Any]],
+    uid: str,
+    *,
+    firestore_client: Any = None,
+    read_budget: Optional[ListReadBudget] = None,
 ) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None
@@ -604,7 +659,9 @@ def prepare_conversation_for_read(
     if level == 'enhanced':
         from utils.agent_capabilities.transcripts import project
 
-        return project(uid, _decrypt_conversation_data(data, uid), firestore_client=firestore_client)
+        return project(
+            uid, _decrypt_conversation_data(data, uid), firestore_client=firestore_client, read_budget=read_budget
+        )
 
     # Handle standard level with potential compression
     if data.get('transcript_segments_compressed'):
@@ -624,7 +681,7 @@ def prepare_conversation_for_read(
     _reveal_match_scores_for_read(data, uid)
     from utils.agent_capabilities.transcripts import project
 
-    return project(uid, data, firestore_client=firestore_client)
+    return project(uid, data, firestore_client=firestore_client, read_budget=read_budget)
 
 
 def document_data_with_revision(document) -> Optional[Dict[str, Any]]:
@@ -725,6 +782,15 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
     """A processor owns content, never the receipt read in its commit transaction."""
     write_data.pop('manual_speaker_assignments', None)
     write_data.pop('manual_speaker_assignments_compressed', None)
+    level = existing.get('data_protection_level') or write_data.get('data_protection_level') or 'standard'
+    if OPEN_LOOP_EXTRACTIONS_FIELD in write_data and write_data.get('data_protection_level') != level:
+        # Processing may have encoded fresh extractions before a protection
+        # migration committed. Re-protect that output at the transaction's level.
+        extracted = decode_open_loop_extractions(
+            uid, write_data[OPEN_LOOP_EXTRACTIONS_FIELD], bool(write_data.get(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD))
+        )
+        write_data.update(_prepare_conversation_for_write({OPEN_LOOP_EXTRACTIONS_FIELD: extracted}, uid, level))
+        write_data['data_protection_level'] = level
     if 'transcript_segments' not in write_data:
         return
     if existing.get('has_transcript_corrections'):
@@ -734,7 +800,6 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
             if field in existing:
                 write_data[field] = existing[field]
         return
-    level = existing.get('data_protection_level') or write_data.get('data_protection_level') or 'standard'
     receipt = decode_manual_speaker_assignments(
         uid, existing.get('manual_speaker_assignments'), bool(existing.get('manual_speaker_assignments_compressed'))
     )
@@ -1110,6 +1175,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         transaction.set(conversation_ref, write_data)
 
     run_transactional(db, _write_processing_result)
+    stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
     if summary_changed:
         _drop_summary_memo(uid)
 
@@ -1304,6 +1370,7 @@ def persist_processing_result_with_lifecycle(
         return True
 
     persisted = run_transactional(db, _persist)
+    stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
     if summary_changed:
         _drop_summary_memo(uid)
     if persisted:
@@ -2167,6 +2234,7 @@ def _finalize_audio_file_group(
     # v2 groups carry validated contiguous coverage spans from blob metadata;
     # duration is the authoritative span extent, never an encoded-size guess.
     spans: List[Tuple[float, float]] = []
+    playback_starts: List[float] = []
     for chunk in chunk_group:
         span = chunk.get('span')
         if not isinstance(span, dict):
@@ -2183,6 +2251,9 @@ def _finalize_audio_file_group(
             spans = []
             break
         spans.append((start, start + samples / rate))
+        playback_start = span.get('playback_start')
+        if isinstance(playback_start, (int, float)):
+            playback_starts.append(float(playback_start))
 
     if spans:
         started_at = datetime.fromtimestamp(spans[0][0], tz=timezone.utc)
@@ -2197,6 +2268,10 @@ def _finalize_audio_file_group(
             started_at=started_at,
             duration=duration,
             chunk_spans=[ChunkSpan(start=round(start, 3), end=round(end, 3)) for start, end in spans],
+            # The normalized wall basis holds only when every chunk in the
+            # group carries its persisted playback start; one legacy chunk
+            # leaves the part on the raw capture clock.
+            playback_start=(min(playback_starts) if len(playback_starts) == len(spans) else None),
         )
 
     # Calculate started_at and duration from timestamps and blob sizes
@@ -2356,6 +2431,7 @@ def delete_conversation(uid, conversation_id):
     the account-deletion wipe, which walks *existing* documents and never sees a deleted parent.
     Children are enumerated live, so a subcollection added later is purged too.
     """
+    speaker_auto_enroll.retract_conversation(uid, conversation_id, firestore_client=db)
     try:
         # A deleted capture must not stay listed as a member of its event.
         leave_capture_group(uid, conversation_id, sticky=False, close=True, firestore_client=db)
@@ -2366,6 +2442,7 @@ def delete_conversation(uid, conversation_id):
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
+    stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
     from config.stt_cap_dispatch import any_execution_admission_enabled
 
     if any_execution_admission_enabled(uid):
@@ -2397,15 +2474,18 @@ def get_conversations_by_id(
     return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
 
 
-@prepare_for_read(decrypt_func=prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read, read_budget_arg='read_budget')
 def get_conversations_by_id_without_photos(
     uid,
     conversation_ids,
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    read_budget: Optional[ListReadBudget] = None,
 ):
-    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
+    return _get_conversations_by_id(
+        uid, conversation_ids, include_discarded=include_discarded, read_site=read_site, read_budget=read_budget
+    )
 
 
 def _get_conversations_by_id(
@@ -2414,12 +2494,13 @@ def _get_conversations_by_id(
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    read_budget: Optional[ListReadBudget] = None,
 ):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
 
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
-    docs = db.get_all(doc_refs)
+    docs = budgeted_get_all(db, doc_refs, read_budget)
 
     hits = 0
     misses = 0
@@ -2515,6 +2596,12 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                 _reveal_match_scores_for_read(current, uid)
                 if match_scores.FIELD in current:
                     payload[match_scores.FIELD] = current[match_scores.FIELD]
+            if OPEN_LOOP_EXTRACTIONS_FIELD in current:
+                payload[OPEN_LOOP_EXTRACTIONS_FIELD] = decode_open_loop_extractions(
+                    uid,
+                    current[OPEN_LOOP_EXTRACTIONS_FIELD],
+                    bool(current.get(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD)),
+                )
             if 'manual_speaker_assignments' in current:
                 payload['manual_speaker_assignments'] = decode_manual_speaker_assignments(
                     uid,
@@ -2696,6 +2783,8 @@ def transition_conversation_status(uid: str, conversation_id: str, status: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'status': status})
+    if status != 'in_progress':
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
     invalidate_people_stats_cache(uid)
 
 
@@ -2744,11 +2833,15 @@ def claim_conversation_status(
                     uid, current, extra_updates, transcript_corrections=corrections
                 )
             )
+        if expected_status == ConversationStatus.processing and claimed_status == ConversationStatus.in_progress:
+            restore_quiet_check_in_transaction(transaction, db, uid, conversation_id, current | updates)
         transaction.update(conversation_ref, updates)
         return True
 
     claimed = run_transactional(db, _claim)
     if claimed:
+        if claimed_status != ConversationStatus.in_progress:
+            stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
         invalidate_people_stats_cache(uid)
         if serving_for('LIFECYCLE_V2_MODE', uid):
             _sync_conversation_search_index(uid, conversation_id)
@@ -2759,6 +2852,7 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'discarded': True, 'sync_relevance_user_kept': False})
+    stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_id)
 
@@ -2803,6 +2897,8 @@ def rule_discard_outcome(
         return 'discarded'
 
     outcome = run_transactional(db, _discard)
+    if outcome in {'discarded', 'already_discarded'}:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=db)
     if outcome == 'discarded':
         invalidate_people_stats_cache(uid)
         _sync_conversation_search_index(uid, conversation_id)
@@ -4174,7 +4270,7 @@ def assign_sync_conversation(
     call: it receives the canonical and its donor lineage, and the caller
     converges each conversation once later (``index_sync_assignment``).
     """
-    from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
+    from utils.sync.assignment import assign_in_transaction
     from config.sync_lineage import sync_lineage_resolve_enabled
     from utils.sync.intake_completion import log_sync_lineage_created
 
@@ -4186,8 +4282,7 @@ def assign_sync_conversation(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
 
-    live_candidate_ids: tuple[str, ...] = ()
-    live_lookup: dict = {}
+    discovery = SyncAssignmentDiscovery(lineage_eligible)
     absorbed: list[str] = []
 
     score_snapshots: dict = {}
@@ -4206,6 +4301,10 @@ def assign_sync_conversation(
             )
         else:
             result.pop('manual_speaker_assignments', None)
+        # Never decode here (every same-chain replay would pay it) and never
+        # hand the blob to the logical encoder; the encode seam preserves it.
+        result.pop(OPEN_LOOP_EXTRACTIONS_FIELD, None)
+        result.pop(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, None)
         _reveal_match_scores_for_read(result, uid)
         return result
 
@@ -4239,9 +4338,9 @@ def assign_sync_conversation(
                 encode=encode,
                 invalidate=clear_client_processing,
                 full_ids=full_ids,
-                live_candidate_ids=live_candidate_ids,
+                live_candidate_ids=discovery.candidate_ids,
                 absorbed=absorbed,
-                **({'live_lookup_complete': live_lookup.get('lookup_complete', False)} if lineage_eligible else {}),
+                **discovery.plan_kwargs(),
             )
         # Remember the candidate before the transaction commits.
         attempted['canonical'] = planned[0]['id']
@@ -4251,20 +4350,24 @@ def assign_sync_conversation(
         clock.body_done()
         return planned
 
+    def discover_live_candidates():
+        with clock.timed('live_overlap'):
+            discovery.discover(user_ref, incoming, find_sync_live_overlap_candidates)
+
     with clock.call():
         if not target_id and (
             (incoming.get('client_device_id') and live_overlap_enabled()) or shadow_or_serve('CAPTURE_COVERAGE_MODE')
         ):
-            with clock.timed('live_overlap'):
-                live_candidate_ids = find_sync_live_overlap_candidates(
-                    user_ref, incoming, **({'diagnostics': live_lookup} if lineage_eligible else {})
-                )
+            discover_live_candidates()
         with clock.timed('transaction'):
-            result = run_with_size_limit_backstop(
+            result = discovery.run(
                 lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
                 lambda: attempted.get('canonical'),
+                discover_live_candidates,
             )
         conversation = result[0]
+        for retired_id in sorted({conversation['id'], *absorbed}):
+            stop_quiet_check_for_conversation(uid, retired_id, firestore_client=client)
         observation = conversation.pop('_sync_lineage_created', None)
         if lineage_eligible and observation is not None:
             log_sync_lineage_created(observation)

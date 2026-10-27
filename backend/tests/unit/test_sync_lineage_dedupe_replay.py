@@ -31,7 +31,10 @@ from utils.sync import assignment
 from utils.sync.capture_repeat_evidence import capture_covered_indices
 from utils.sync.recording_lineage import select_segment_targets
 
-T0 = 1_800_000_000.0
+# 2025-10-09, deliberately in the past: these fixtures verify timeless
+# dedupe/lineage/parity behavior, and a future T0 would collide with the
+# capture-time skew policy that clamps stored conversation times to now.
+T0 = 1_760_000_000.0
 LIVE_ID = 'LIVE-ROW'
 ORIGIN = 'REC-1'
 
@@ -591,7 +594,6 @@ def _drive_process_segment(
     from utils.conversations import lifecycle
 
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', signed_url_impl or (lambda _path: 'file://x'))
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
     monkeypatch.setattr(pipeline, 'prerecorded', prerecorded_impl or (lambda *args, **kwargs: (['w'], 'en')))
     monkeypatch.setattr(pipeline, 'postprocess_words', lambda *args, **kwargs: _segments(texts))

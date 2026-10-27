@@ -69,6 +69,7 @@ from config.refactor_modes import serving_for
 from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
+from utils.conversations.relevance_media_metrics import observe_owner_memory_admission
 from utils.llm.notes_short_clip import quiet_minimum
 from utils.llm.output_language import resolve_output_language
 from utils.conversations.deterministic_minimum import (
@@ -97,6 +98,7 @@ from utils.conversations.relevance import (
     final_relevance,
 )
 from utils.conversations.relevance_jev import jev_discard_probability, jev_tier_applies, relevance_transcript
+from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD
 from utils.conversations.reprocess_contract import (
     DERIVED_EFFECTS_TRANSCRIPT_FIELD,
     derived_effects_transcript_digest,
@@ -119,7 +121,11 @@ from utils.conversations.projection_payload import (
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
-from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
+from utils.conversations.owner_attribution import (
+    OwnerAttributionEvidence,
+    may_attribute_to_owner,
+    confident_owner_segments,
+)
 from utils.conversations.speaker_resolution import resolve_speakers_for_processing
 from utils.observability.owner_identity_retry import identity_pass
 from utils.memory.memory_service import MemoryService
@@ -346,6 +352,7 @@ def _get_structured(
     recovery_transcript_decoded: bool = True,
     recovery_minimum_fallback_observer: Optional[Callable[[], None]] = None,
     llm_hashes: dict[str, str] | None = None,
+    open_loop_out: Optional[dict[str, Any]] = None,
 ) -> Tuple[Structured, bool]:
     try:
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
@@ -447,6 +454,7 @@ def _get_structured(
                         roster=roster,
                         screen_frames=_frames,
                         screen_frame_count=_frame_count,
+                        open_loop_out=open_loop_out,
                     )
                 validate_structured_source_segment_ids(structured, ())
                 return structured, False
@@ -638,6 +646,7 @@ def _get_structured(
                 roster=roster,
                 screen_frames=screen_frames,
                 screen_frame_count=screen_frame_count,
+                open_loop_out=open_loop_out,
                 **notes_agent_inputs(main_conv, desktop_capture),
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
@@ -1015,6 +1024,16 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     # configuration contract that Pusher qualification is meant to exercise.
     db_client = getattr(db_client_module, 'db', None)
     MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
+    if serving_for('SPEAKER_EVIDENCE_MODE', uid) and conversation.source != ConversationSource.external_integration:
+        owner_segments = confident_owner_segments(conversation.transcript_segments)
+        observe_owner_memory_admission(len(conversation.transcript_segments), len(owner_segments))
+        if not owner_segments:
+            # No new memory and no empty replacement of earlier memories. A
+            # later confident resolution/manual correction may retry normally.
+            return
+        # Quote grounding and the L1 fingerprint must see this same owner-only
+        # input. Never mutate the retained transcript or the notes/task input.
+        conversation = conversation.model_copy(update={'transcript_segments': owner_segments})
     sweep_owned_mode = _sweep_owned_writer_mode(uid)
     if sweep_owned_mode is not None:
         logger.info(
@@ -2668,6 +2687,10 @@ def process_conversation(
     bind_generation(uid, generated_conversation_id)
     decisions: list[RelevanceDecision] = []
     llm_hashes: dict[str, str] = {}
+    # Filled only by a fresh notes parse that ran with open loops enabled; a
+    # dedupe reuse or quiet-minimum path leaves it empty so the stored
+    # extractions survive this persist untouched.
+    open_loop_sink: dict[str, Any] = {}
     recovery_minimum_fallback = False
 
     def _mark_recovery_minimum_fallback() -> None:
@@ -2686,6 +2709,7 @@ def process_conversation(
         recovery_transcript_decoded=recovery_transcript_decoded,
         recovery_minimum_fallback_observer=_mark_recovery_minimum_fallback,
         llm_hashes=llm_hashes,
+        open_loop_out=open_loop_sink,
     )
     if recovery_minimum_fallback:
         sys.stdout.write(
@@ -2754,6 +2778,12 @@ def process_conversation(
     conversation.status = ConversationStatus.completed
     content_excluded = exclude_from_derived(uid, conversation, consumer='notes')
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
+    if user_kept and not conversation.discarded:
+        # Commit restore authority with visibility, before derived work can fail.
+        payload['sync_relevance_user_kept'] = True
+        if conversation.sync_relevance == 'review':
+            conversation.sync_relevance = 'keep'
+            payload['sync_relevance'] = 'keep'
     if serving_for('MEDIA_NOISE_MODE', uid):
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True if content_excluded else None
     from config.sync_reprocess import dedupe_enabled
@@ -2762,6 +2792,12 @@ def process_conversation(
     if NOTES_OUTPUT_HASH in llm_hashes:
         llm_hashes[NOTES_OUTPUT_HASH] = output_fingerprint(structured)
     payload.update(llm_hashes)
+    if 'extractions' in open_loop_sink:
+        # Server-only derived field, deliberately outside the client wire
+        # model, like RELEVANCE_DECISION_FIELD below. None is a fresh parse
+        # that found nothing; it clears a stale prior value on reprocess.
+        # Content excluded from derived consumers must not seed open loops either.
+        payload[OPEN_LOOP_EXTRACTIONS_FIELD] = None if content_excluded else open_loop_sink['extractions']
 
     if not dedupe_enabled() and not is_initial_creation:
         # Rollback keeps generating normally; clear server-only checkpoints in
@@ -3032,7 +3068,7 @@ def process_conversation(
             # "<App> couldn't finish" while the regenerated notes stay persisted.
             logger.error('Conversation processing failed: %s', type(failure).__name__)
             raise HTTPException(status_code=502, detail=APP_RESULT_FAILED_ERROR_DETAIL) from failure
-        raise conversation_processing_http_exception(failure) from failure
+        raise conversation_processing_http_exception(failure, route='conversation_processing/app_result') from failure
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation
 

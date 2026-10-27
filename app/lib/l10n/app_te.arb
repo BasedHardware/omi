@@ -917,7 +917,7 @@
     "@remembering": {
         "description": "Remembering stat title"
     },
-    "unlimitedPlan": "అపరిమిత ప్లాన్",
+    "unlimitedPlan": "Omi Pro",
     "@unlimitedPlan": {
         "description": "Unlimited plan name"
     },
@@ -957,7 +957,7 @@
     "@upgrade": {
         "description": "Upgrade button"
     },
-    "upgradeToUnlimited": "అపరిమితానికి అప్‌గ్రేడ్ చేయండి",
+    "upgradeToUnlimited": "Omi Pro కు అప్‌గ్రేడ్ చేయండి",
     "@upgradeToUnlimited": {
         "description": "Message shown on locked memory items"
     },
@@ -3652,7 +3652,7 @@
     "@pro": {
         "description": "Badge label for pro/unlimited users"
     },
-    "upgradeToPro": "ప్రోకు అపగ్రేడ్ చేయండి",
+    "upgradeToPro": "Omi Pro కు అప్‌గ్రేడ్ చేయండి",
     "@upgradeToPro": {
         "description": "Subscription banner button text"
     },
@@ -4941,7 +4941,7 @@
     "@trainingDataProgram": {
         "description": "Label for training data program"
     },
-    "getOmiUnlimitedFree": "AI నమూనాలను శిక్షణ ఇవ్వటానికి మీ డేటాకు సహకరించడం ద్వారా Omi అనీమితాన్ని ఉచితంగా పొందండి.",
+    "getOmiUnlimitedFree": "AI నమూనాలను శిక్షణ ఇవ్వటానికి మీ డేటాకు సహకరించడం ద్వారా Omi Pro ను ఉచితంగా పొందండి.",
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
@@ -10536,7 +10536,7 @@
     "freemiumLimitsIntro": "Omi ఉచితం, కానీ ఉచిత వెర్షన్‌లో మీ అనుభవాన్ని ప్రభావితం చేసే పరిమితులు ఉన్నాయి:",
     "downgradeLimitDelayNotRealTime": "5-7 సెకన్ల ఆలస్యం (రియల్-టైమ్ కాదు)",
     "downgradeToFreemiumAction": "ఉచిత వెర్షన్‌కు మారండి",
-    "getFreeUnlimitedAccess": "ఉచిత అపరిమిత యాక్సెస్ పొందండి",
+    "getFreeUnlimitedAccess": "Omi Pro ను ఉచితంగా పొందండి",
     "shareDataForTraining": "శిక్షణ కోసం డేటాను భాగస్వామ్యం చేయండి",
     "yourRequestUnderReview": "మీ అభ్యర్థన సమీక్షలో ఉంది",
     "pinAsBaseline": "ఆధారంగా పిన్ చేయండి",
@@ -10615,6 +10615,7 @@
     "audioUploadFailedKeptLocal": "అప్‌లోడ్ విఫలమైంది — {duration} ఆడియో మీ ఫోన్‌లో ఉంచబడింది.",
     "audioUploadFailedTapRetry": "అప్‌లోడ్ విఫలమైంది — {duration} ఆడియో మీ ఫోన్‌లో ఉంచబడింది. మళ్లీ ప్రయత్నించడానికి నొక్కండి.",
     "audioUploadRetrying": "అప్‌లోడ్ మళ్లీ ప్రయత్నిస్తోంది… {duration} ఆడియో మీ ఫోన్‌లో ఉంచబడింది",
+    "captureNoAudioFromPendant": "పెండెంట్ నుండి ఆడియో లేదు",
     "capturing": "క్యాప్చర్ అవుతోంది",
     "capturingPhotos": "ఫోటోలు క్యాప్చర్ అవుతున్నాయి",
     "listeningTranscriptWillAppear": "వింటోంది… ట్రాన్స్‌క్రిప్ట్ ఇక్కడ కనిపిస్తుంది.",
@@ -10917,6 +10918,8 @@
     "captureBannerTryReconnect": "మళ్లీ కనెక్ట్ చేయడానికి ప్రయత్నించండి",
     "captureBannerRetrySync": "సమకాలీకరణను మళ్లీ ప్రయత్నించండి",
     "captureWedgeBleExplanation": "మీ Omiకి బ్లూటూత్ లింక్ ఆగిపోయింది, కాబట్టి ఆడియో యాప్‌ను చేరడం లేదు. Omi పరికరంలో రికార్డ్ చేయడం కొనసాగిస్తుంది మరియు లింక్ పునరుద్ధరించబడినప్పుడు సింక్ అవుతుంది. మళ్లీ ప్రయత్నించడం వల్ల లింక్ తిరిగి కనెక్ట్ అవుతుంది; అది నిరంతరం విఫలమైతే, సెట్టింగ్‌లు > పరికరంలో మీ పరికరాన్ని తనిఖీ చేయండి.",
+    "captureConnecting": "కనెక్ట్ అవుతోంది…",
+    "captureNoAudioDetail": "పెండెంట్ కనెక్ట్ అయింది, కానీ ఎలాంటి ఆడియో మీ ఫోన్‌కు చేరడం లేదు",
     "captureIngressNeedsReconnect": "ఆడియో యాప్‌ను చేరడం లేదు — మీ Omiని మళ్లీ కనెక్ట్ చేయండి",
     "captureIngressNeedsReconnectExplanation": "యాప్ ఇక Omi పరికరం నుండి ఆడియోను స్వీకరించలేకపోతోంది మరియు కనెక్షన్‌ను స్వయంచాలకంగా పునరుద్ధరించలేకపోయింది. పరికరాన్ని డిస్‌కనెక్ట్ చేసి మళ్లీ కనెక్ట్ చేయండి — పరికర సెట్టింగ్‌ల నుండి లేదా ఆఫ్ చేసి ఆన్ చేసి. పరికరంలో సేవ్ చేసిన ఆడియో తర్వాత సింక్ అవుతుంది.",
     "captureStillRecording": "ఇంకా రికార్డ్ అవుతోంది",
@@ -10926,7 +10929,6 @@
     "captureStarting": "ప్రారంభమవుతోంది…",
     "capturePhoneStorageFull": "ఫోన్ స్టోరేజ్ నిండింది",
     "captureStorageAlmostFull": "స్టోరేజ్ దాదాపు నిండింది",
-    "capturePendantDisconnectedDetail": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
     "participantsSummaryUncounted": "{name} మరియు ఇతరులు",
     "deviceOnboardingVoiceReplyTitle": "Omi సమాధానాలను వినండి",
     "deviceOnboardingVoiceReplySample": "అర్థమైంది. మీ తదుపరి సమావేశం ఇరవై నిమిషాల్లో ప్రారంభమవుతుంది.",
@@ -11204,9 +11206,6 @@
     "playbackAudioUnavailable": "ఆడియో అందుబాటులో లేదు",
     "playbackAudioLoadFailed": "ఆడియో లోడ్ చేయలేకపోయింది",
     "playbackAudioNetworkFailed": "కనెక్షన్‌ను తనిఖీ చేయండి",
-    "capturePendantDisconnectedShort": "Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది",
-    "forYou": "మీ కోసం",
-    "stopThese": "వీటిని ఆపండి",
     "dismiss": "దాచు",
     "syncCardDownloadPercent": "{percent}%",
     "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
@@ -11371,7 +11370,7 @@
     "chatAppsShowInAppOff": "ఆఫ్: మీరు వాటిని {app}లో మాత్రమే చూస్తారు.",
     "chatAppsProPerkText": "Telegram, iMessage నుండి Omiకి మెసేజ్ చేయండి",
     "chatAppsVoiceNotesSubtitle": "వాయిస్ నోట్ పంపండి, Omi సమాధానమిస్తుంది.",
-    "chatAppsPartOfPro": "చాట్ యాప్‌లు Proలో భాగం",
+    "chatAppsPartOfPro": "చాట్ యాప్‌లు Omi Proలో భాగం",
     "chatAppsMessagesApp": "సందేశాలు",
     "chatAppsTelegramOtherDevice": "మరో పరికరంలో Telegram ఉందా?",
     "chatAppsHeroMessage": "మీ రోజు గురించి అడగండి, జ్ఞాపకాలను సేవ్ చేయండి, టాస్క్‌లను Telegram లేదా iMessage నుండే నిర్వహించండి. మీ చాట్‌లు మీరు వాడే యాప్‌లోనే ఉంటాయి, మీరు మాట్లాడినది Omi అన్నిచోట్లా గుర్తుంచుకుంటుంది.",
@@ -11556,7 +11555,7 @@
     "syncDetailsAudioFiles": "ఆడియో ఫైళ్లు",
     "syncDetailsServerJobs": "సర్వర్ జాబ్‌లు (పూర్తైనవి / మొత్తం)",
     "syncDetailsCopy": "సపోర్ట్ కోసం వివరాలను కాపీ చేయండి",
-    "chatAppsChannelPlanRequired": "Operator మరియు Architect లో అందుబాటులో ఉంది",
+    "chatAppsChannelPlanRequired": "Omi Pro లో అందుబాటులో ఉంది",
     "chatAppsAtCapacity": "{app} నిండిపోయింది",
     "chatAppsJoinWaitlist": "వెయిట్‌లిస్ట్‌లో చేరండి",
     "chatAppsOnWaitlist": "మీరు వెయిట్‌లిస్ట్‌లో ఉన్నారు",
@@ -11707,7 +11706,7 @@
     "onDeviceTranscribeOnPhone": "ఈ ఫోన్‌లోనే ట్రాన్‌స్క్రైబ్ చేయండి",
     "onDeviceIncluded": "చేర్చబడింది",
     "onDeviceOptionChargingBody": "ఫోన్ ఛార్జ్ అవుతున్నప్పుడు నడుస్తుంది.",
-    "onDeviceUpgradeBody": "మాట్లాడేవారిని వేరు చేయడానికి మరియు మరింత ఖచ్చితత్వం కోసం Proకి అప్‌గ్రేడ్ చేయండి",
+    "onDeviceUpgradeBody": "మాట్లాడేవారిని వేరు చేయడానికి మరియు మరింత ఖచ్చితత్వం కోసం Omi Proకి అప్‌గ్రేడ్ చేయండి",
     "onDeviceAtCapFooter": "ఏ విధంగానైనా ఏదీ కోల్పోరు. దీన్ని సెట్టింగ్‌లు › ట్రాన్‌స్క్రిప్షన్‌లో మార్చవచ్చు.",
     "onDeviceStepOf": "దశ {step}/{total}",
     "onDeviceSetupBody": "Omi స్పీచ్ మోడల్‌ను ఒక్కసారి డౌన్‌లోడ్ చేస్తుంది. ఆ తర్వాత మీ రికార్డింగ్‌లు ఇక్కడే టెక్స్ట్‌గా మారతాయి, మీ వినియోగంలో లెక్కించబడకుండా.",
@@ -11760,7 +11759,7 @@
     "onDeviceWhyCloudIphone": "ఈ iPhone స్వయంగా సారాంశం రూపొందించలేదు (దానికి iPhone 15 Pro లేదా తర్వాతి మోడల్ అవసరం). ట్రాన్‌స్క్రిప్ట్ మీ ఫోన్‌లో రూపొందించబడింది, సారాంశం కోసం దాని టెక్స్ట్ మాత్రమే Omiకి పంపబడింది. ఇది మీ వినియోగంలో లెక్కించబడదు.",
     "onDeviceWhyCloudPhone": "ఈ ఫోన్ స్వయంగా సారాంశం రూపొందించలేదు. ట్రాన్‌స్క్రిప్ట్ మీ ఫోన్‌లో రూపొందించబడింది, సారాంశం కోసం దాని టెక్స్ట్ మాత్రమే Omiకి పంపబడింది. ఇది మీ వినియోగంలో లెక్కించబడదు.",
     "onDeviceRedoWithCloud": "Omi Cloudతో మళ్లీ చేయండి",
-    "onDeviceRedoHint": "మాట్లాడేవారిని వేరు చేయడానికి మరియు మరింత ఖచ్చితత్వం కోసం Proకి అప్‌గ్రేడ్ చేయండి",
+    "onDeviceRedoHint": "మాట్లాడేవారిని వేరు చేయడానికి మరియు మరింత ఖచ్చితత్వం కోసం Omi Proకి అప్‌గ్రేడ్ చేయండి",
     "onDeviceKeepEverything": "అన్నింటినీ ఈ ఫోన్‌లోనే ఉంచండి",
     "onDeviceKeepEverythingSubtitle": "ట్రాన్‌స్క్రిప్ట్‌లు మాత్రమే, సారాంశాలు ఉండవు",
     "onDeviceAfterLiveHours": "మీరు పరిమితిని చేరుకున్నప్పుడు",
@@ -11816,6 +11815,11 @@
     "episodeSoFar": "ఇప్పటివరకు",
     "episodeUpdatedJustNow": "ఇప్పుడే నవీకరించబడింది · ముగిసినప్పుడు పూర్తి నోట్స్",
     "episodeUpdatedMinutesAgo": "{minutes} నిమి. క్రితం నవీకరించబడింది · ముగిసినప్పుడు పూర్తి నోట్స్",
+    "episodeNotesUnavailable": "ప్రస్తుత గమనికలు నవీకరించబడటం లేదు. ప్రస్తుతానికి లిప్యంతరీకరణను చూడండి.",
+    "episodeCaptureFor": "రికార్డింగ్ · {duration}",
+    "episodePrevious": "మునుపటి ఎపిసోడ్",
+    "captureChunksPending": "పెండింగ్‌లో ఉన్న భాగాలు: {pending}",
+    "episodeOpenPrevious": "మునుపటి ఎపిసోడ్‌ను తెరవండి",
     "episodeNotesSoon": "మాటల మొదటి కొన్ని నిమిషాల తర్వాత నోట్స్ కనిపిస్తాయి.",
     "episodeOpenAll": "అన్నీ తెరవండి",
     "episodeWrapUpNow": "ఇప్పుడే ముగించు",
@@ -11851,5 +11855,21 @@
     "recapInTheBackground": "నేపథ్యంలో",
     "retentionOfferAccept": "{percent}% తగ్గింపుతో కొనసాగండి",
     "retentionOfferBody": "కొనసాగండి, నెలకు {price} చెల్లించండి, తదుపరి {months} నెలలు.",
-    "retentionOfferApplied": "పూర్తైంది. {percent}% తగ్గింపు, తదుపరి {months} నెలలు."
+    "retentionOfferApplied": "పూర్తైంది. {percent}% తగ్గింపు, తదుపరి {months} నెలలు.",
+    "othersSpeakerLabel": "ఇతరులు",
+    "livePreviewLabel": "Live preview",
+    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "livePreviewStarting": "Starting live preview…",
+    "livePreviewTranscribingTitle": "Transcribing…",
+    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
+    "openLoopAnswerDone": "పూర్తయింది",
+    "openLoopAnswerRemind": "తర్వాత గుర్తు చేయి",
+    "openLoopAnswerDrop": "వదిలేయి",
+    "syncRejectionInvalidDate": "చెల్లని రికార్డింగ్ తేదీ",
+    "syncDeleteKeptUploading": "కొన్ని భాగాలు ఇంకా అప్‌లోడ్ అవుతున్నాయి, అవి నిలిపివేయబడ్డాయి",
+    "syncRejectionServer": "సర్వర్ తిరస్కరించింది",
+    "syncRejectionTooLarge": "చాలా పెద్దది",
+    "deviceOnPhoneQueue": "ఫోన్‌లో {duration}",
+    "syncCardUploadsPaused": "అప్‌లోడ్‌లు కొద్దిసేపు నిలిచిపోయాయి — అవి స్వయంచాలకంగా కొనసాగుతాయి"
 }

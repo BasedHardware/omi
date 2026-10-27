@@ -51,7 +51,44 @@ The public port 8080 `/metrics` route stays fail-closed with bearer authenticati
 
 The application therefore starts a second Prometheus HTTP listener bound specifically to `127.0.0.1:9090` when `PROMETHEUS_SIDECAR_PORT=9090`. Cloud Run containers in one instance share a network namespace, so the collector can reach it. Cloud Run ingress cannot. This avoids weakening the public route or trusting proxy-derived client IPs.
 
-`backend/deploy/cloud_run_gmp_sidecar.yaml` keeps only `omi_.*`, includes only the service metadata label (the per-instance label is mandatory), and sets scrape limits. The deploy helper pins the collector image by digest, uses 1 vCPU and 512 MiB by default, preserves existing containers and ingress settings, refuses a service whose traffic follows `latestRevision`, and creates the final sidecar revision at zero traffic. Candidate acceptance still happens before any traffic shift.
+`backend/deploy/cloud_run_gmp_sidecar.yaml` keeps only `omi_.*`, includes only the service metadata label (the per-instance label is mandatory), and sets scrape limits. The deploy helper pins the collector image by digest, uses the service allocation below, preserves existing containers and ingress settings, refuses a service whose traffic follows `latestRevision`, and creates the final sidecar revision at zero traffic. Candidate acceptance still happens before any traffic shift.
+
+## Backend collector CPU
+
+The `backend` service collector uses **0.25 vCPU / 512Mi** with its existing broad
+**30s** scrape configuration. Seven days of native Cloud Monitoring
+`run.googleapis.com/container/cpu/usage` (2026-10-19..25, `container_name=collector`,
+hourly `ALIGN_PERCENTILE_99`, then `REDUCE_MAX` across revisions) peaked at
+**1.60 CPU-seconds per 60s sample**; 0.25 CPU supplies 15 CPU-seconds/minute.
+The matching memory p99 peaked at **211 MiB**, so its 512Mi limit stays.
+Application resources, billing mode, probes, scrape configuration and metric
+families keep their existing settings. Desktop and jobs retain 1 CPU / 512Mi;
+the sync services retain the profile below.
+
+On the 2026-10-24 billed backend CPU line ($14.80/day, total allocation 3 CPU),
+the fixed-instance estimate is **$3.70/day, $111/30 days**. This is a model:
+reducing the total instance CPU denominator can increase autoscaling and absorb
+some savings. Book only the net service bill after instance growth is measured.
+
+The lead owns rollout. Qualify a zero-traffic candidate in dev first, verifying
+collector readiness and fresh metric timestamps at the same 30s cadence. Then
+route production **5% -> 25% -> 100%**, holding each step for **one hour**, through
+one peak-load window. Before expanding, compare the candidate with the old
+revision for application request p95, live first-text p95, 5xx, collector probe
+failures/restarts, and freshness of every currently consumed metric family.
+Any p95 regression, new metric gap (>2 scrape intervals), readiness failure or
+resource exhaustion stops expansion and routes traffic back to the prior
+revision. Do not accept a latency/accuracy/speaker-label or Free-plan tradeoff.
+
+Rollback immediately to the prior traffic-selected revision. For a subsequent
+attachment, pass **`--backend-collector-cpu 1`** to
+`attach_cloud_run_gmp_sidecar.py`; this restores the collector allocation without
+changing the application. The default applies to the service named `backend`
+in either project, so qualify dev before the production train. The lead must
+use a candidate traffic ramp rather than the automatic 100% promotion path for
+the first rollout. Complete the production ramp by **2026-10-28**, owned by the
+lead, only if every gate passes; otherwise retain the old revision and report
+the blocked saving. No production mutation is part of the sizing PR.
 
 ## Sync fleet cost profile
 
@@ -72,8 +109,9 @@ that fix's cap-enforcement watch counters
 function of reason, and only the `sync` lane meters audio seconds on this fleet,
 so they add at most ~70 series per instance (label-product bound 160 + 90),
 realistically 20–30. Sync/summary/storage fallback series
-remain; eagerly initialized live-STT fallback components are dropped. Backend,
-desktop, listen, and jobs retain their existing allocation/configuration.
+remain; eagerly initialized live-STT fallback components are dropped. Backend
+keeps its broad 30s configuration with the CPU allocation above; desktop, listen,
+and jobs retain their existing allocation/configuration.
 
 The fleet and David gates currently read projection logs and durable job state;
 the fleet gate also reads native `run.googleapis.com/request_count`. These paths

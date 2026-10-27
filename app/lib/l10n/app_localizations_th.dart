@@ -708,7 +708,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get remembering => 'การจดจำ';
 
   @override
-  String get unlimitedPlan => 'แผนไม่จำกัด';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'จัดการแผน';
@@ -730,7 +730,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get upgrade => 'อัปเกรด';
 
   @override
-  String get upgradeToUnlimited => 'อัปเกรดเป็นไม่จำกัด';
+  String get upgradeToUnlimited => 'อัปเกรดเป็น Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3135,7 +3135,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'อัปเกรดเป็น Pro';
+  String get upgradeToPro => 'อัปเกรดเป็น Omi Pro';
 
   @override
   String get getOmiDevice => 'รับอุปกรณ์ Omi';
@@ -4252,7 +4252,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get trainingDataProgram => 'โปรแกรมข้อมูลการฝึก';
 
   @override
-  String get getOmiUnlimitedFree => 'รับ Omi Unlimited ฟรีโดยการมีส่วนร่วมข้อมูลของคุณเพื่อฝึกโมเดล AI';
+  String get getOmiUnlimitedFree => 'รับ Omi Pro ฟรีโดยการมีส่วนร่วมข้อมูลของคุณเพื่อฝึกโมเดล AI';
 
   @override
   String get trainingDataBullets => '• ข้อมูลของคุณช่วยปรับปรุงโมเดล AI\n• แชร์เฉพาะข้อมูลที่ไม่ละเอียดอ่อน';
@@ -8553,6 +8553,9 @@ class AppLocalizationsTh extends AppLocalizations {
       'ไม่สามารถถอดเสียงได้ — การบันทึกยังดำเนินต่อไปและเสียงของคุณถูกบันทึกไว้';
 
   @override
+  String get captureNoAudioFromPendant => 'ไม่มีเสียงจากจี้';
+
+  @override
   String get capturing => 'กำลังบันทึก';
 
   @override
@@ -9601,7 +9604,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get downgradeToFreemiumAction => 'เปลี่ยนไปใช้เวอร์ชันฟรี';
 
   @override
-  String get getFreeUnlimitedAccess => 'รับสิทธิ์ใช้งานไม่จำกัดฟรี';
+  String get getFreeUnlimitedAccess => 'รับ Omi Pro ฟรี';
 
   @override
   String get shareDataForTraining => 'แบ่งปันข้อมูลเพื่อการฝึกฝน';
@@ -11028,6 +11031,12 @@ class AppLocalizationsTh extends AppLocalizations {
       'การเชื่อมต่อบลูทูธกับ Omi ของคุณหยุดชะงัก จึงทำให้เสียงไม่ถึงแอป Omi ยังคงบันทึกบนอุปกรณ์ต่อไปและจะซิงก์เมื่อการเชื่อมต่อกลับมา การลองใหม่จะเชื่อมต่อให้อีกครั้ง หากยังล้มเหลวอยู่ให้ตรวจสอบอุปกรณ์ของคุณใน การตั้งค่า > อุปกรณ์';
 
   @override
+  String get captureConnecting => 'กำลังเชื่อมต่อ…';
+
+  @override
+  String get captureNoAudioDetail => 'พลอยห้อยเชื่อมต่ออยู่ แต่ไม่มีเสียงใดถึงโทรศัพท์ของคุณ';
+
+  @override
   String get captureIngressNeedsReconnect => 'เสียงไม่ถึงแอป — เชื่อมต่อ Omi ของคุณใหม่';
 
   @override
@@ -11056,13 +11065,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'พื้นที่ใกล้เต็ม';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'จี้ของคุณขาดการเชื่อมต่อกับโทรศัพท์เครื่องนี้ Omi จะเชื่อมต่อใหม่เองเมื่อจี้เปิดอยู่และอยู่ใกล้ ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi จะเชื่อมต่อใหม่เอง';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12190,12 +12192,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'ตรวจสอบการเชื่อมต่อ';
 
   @override
-  String get forYou => 'สำหรับคุณ';
-
-  @override
-  String get stopThese => 'หยุดรายการแบบนี้';
-
-  @override
   String get dismiss => 'ปิด';
 
   @override
@@ -12794,7 +12790,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'ส่งข้อความเสียงแล้ว Omi จะตอบกลับ';
 
   @override
-  String get chatAppsPartOfPro => 'แอปแชตเป็นส่วนหนึ่งของ Pro';
+  String get chatAppsPartOfPro => 'แอปแชตเป็นส่วนหนึ่งของ Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'ข้อความ';
@@ -13425,7 +13421,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncDetailsCopy => 'คัดลอกรายละเอียดสำหรับฝ่ายสนับสนุน';
 
   @override
-  String get chatAppsChannelPlanRequired => 'ใช้ได้ในแพ็กเกจ Operator และ Architect';
+  String get chatAppsChannelPlanRequired => 'ใช้ได้ในแพ็กเกจ Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13935,7 +13931,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'ทำงานขณะที่โทรศัพท์กำลังชาร์จ';
 
   @override
-  String get onDeviceUpgradeBody => 'อัปเกรดเป็น Pro เพื่อแยกผู้พูดและเพิ่มความแม่นยำ';
+  String get onDeviceUpgradeBody => 'อัปเกรดเป็น Omi Pro เพื่อแยกผู้พูดและเพิ่มความแม่นยำ';
 
   @override
   String get onDeviceAtCapFooter => 'ไม่ว่าเลือกแบบไหนก็ไม่มีอะไรสูญหาย คุณเปลี่ยนได้ที่ การตั้งค่า › การถอดเสียง';
@@ -14116,7 +14112,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'ทำใหม่ด้วย Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'อัปเกรดเป็น Pro เพื่อแยกผู้พูดและเพิ่มความแม่นยำ';
+  String get onDeviceRedoHint => 'อัปเกรดเป็น Omi Pro เพื่อแยกผู้พูดและเพิ่มความแม่นยำ';
 
   @override
   String get onDeviceKeepEverything => 'เก็บทุกอย่างไว้บนโทรศัพท์เครื่องนี้';
@@ -14348,6 +14344,25 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'บันทึกสดไม่ได้อัปเดต โปรดดูข้อความถอดเสียงไปก่อน';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'กำลังบันทึก · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'ตอนก่อนหน้า';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'ช่วงเสียงที่รอดำเนินการ: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'เปิดตอนก่อนหน้า';
+
+  @override
   String get episodeNotesSoon => 'บันทึกจะแสดงหลังจากพูดคุยไปสองสามนาทีแรก';
 
   @override
@@ -14484,4 +14499,54 @@ class AppLocalizationsTh extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'เรียบร้อย ส่วนลด $percent% ใน $months เดือนถัดไป';
   }
+
+  @override
+  String get othersSpeakerLabel => 'คนอื่น ๆ';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'เสร็จแล้ว';
+
+  @override
+  String get openLoopAnswerRemind => 'เตือนฉันทีหลัง';
+
+  @override
+  String get openLoopAnswerDrop => 'ทิ้งไป';
+
+  @override
+  String get syncRejectionInvalidDate => 'วันที่บันทึกเสียงไม่ถูกต้อง';
+
+  @override
+  String get syncDeleteKeptUploading => 'บางส่วนยังคงอัปโหลดอยู่และถูกเก็บไว้';
+
+  @override
+  String get syncRejectionServer => 'เซิร์ฟเวอร์ปฏิเสธ';
+
+  @override
+  String get syncRejectionTooLarge => 'ใหญ่เกินไป';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration บนโทรศัพท์';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'การอัปโหลดหยุดชั่วคราว — จะดำเนินต่อโดยอัตโนมัติ';
 }

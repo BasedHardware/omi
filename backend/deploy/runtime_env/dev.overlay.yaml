@@ -18,6 +18,9 @@ overlay:
           value: '0'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '0'
+          value: '0'
+        AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
+          value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
@@ -89,6 +92,9 @@ overlay:
         AUDIO_ARCHIVE_PERCENT:
           value: '0'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+          value: '0'
+          value: '0'
+        AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
@@ -316,6 +322,9 @@ overlay:
             value: '0'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '0'
+            value: '0'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
+            value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -379,6 +388,9 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
+            value: '0'
             value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
@@ -463,6 +475,9 @@ overlay:
             value: '0'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '0'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
+            value: '0'
+            value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
           SYNC_REPROCESS_COALESCE_ENABLED:
@@ -524,6 +539,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          # Lead ruling01d584: activation waits for approved CPU-role secret access.
+          BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'false', category: ops_kill}
           BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
             value: https://backend-integration-dt5lrfkkoa-uc.a.run.app
             category: service_auth
@@ -536,6 +553,9 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
+            value: '0'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
@@ -597,20 +617,6 @@ overlay:
             value: based-hardware
         forbidden_env:
         - HOSTED_PUSHER_API_URL
-      memory-maintenance-job:
-        flags:
-          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
-          --cpu: '2'
-          --memory: 2Gi
-        env:
-          PINECONE_INDEX_NAME:
-            value: memories-backend-dev
-          OMI_CUSTOMER_DATA_PROJECT:
-            value: based-hardware
-          GOOGLE_CLOUD_PROJECT:
-            value: based-hardware
-          MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
-            value: '25'
       frame-request-retention-job:
         env:
           OMI_CUSTOMER_DATA_PROJECT:
@@ -634,8 +640,6 @@ overlay:
     - .github/workflows/gcp_backend.yml
     - .github/workflows/gcp_notifications_job.yml
     - .github/workflows/gcp_x_connector_sync_job.yml
-    - .github/workflows/gcp_memory_maintenance_job.yml
-    - .github/workflows/gcp_memory_maintenance_job_auto_dev.yml
     - .github/workflows/gcp_frame_request_retention_job.yml
     - .github/workflows/gcp_day3_reengagement_email_job.yml
     - .github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml

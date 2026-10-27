@@ -284,6 +284,13 @@ def load_module_fresh(name: str, path: str) -> ModuleType:
     """
     import importlib.util
 
+    if name == "utils.llm.goals" and "models.goal" not in sys.modules:
+        models_pkg = sys.modules.get("models")
+        if isinstance(models_pkg, ModuleType) and getattr(models_pkg, "__path__", None) == []:
+            goal_path = Path(path).resolve().parents[2] / "models" / "goal.py"
+            if goal_path.is_file():
+                models_pkg.__path__ = [str(goal_path.parent)]  # type: ignore[attr-defined]
+
     sys.modules.pop(name, None)
     # Do NOT pass submodule_search_locations: passing it (even []) marks the module
     # as a package, which corrupts ``__package__`` and breaks relative imports

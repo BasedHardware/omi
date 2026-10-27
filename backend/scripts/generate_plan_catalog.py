@@ -386,6 +386,7 @@ def validate_catalog(catalog: Mapping[str, Any]) -> list[str]:
         'measurement_contracts',
         'plans',
         'recognized_stripe_prices',
+        'management_currency_prices',
         'recognized_stripe_products',
     }
     _unexpected_keys(catalog, expected_root_keys, 'catalog', errors)
@@ -591,6 +592,34 @@ def validate_catalog(catalog: Mapping[str, Any]) -> list[str]:
                 seen_prices[price_id] = mapping
             if entry.get('environment') not in {'dev', 'prod'}:
                 errors.append(f'{path}.environment: expected dev or prod')
+
+    managed = catalog.get('management_currency_prices', [])
+    seen_managed = set()
+    if not isinstance(managed, list):
+        errors.append('management_currency_prices: expected a list')
+        managed = []
+    for entry in managed:
+        if not isinstance(entry, dict):
+            errors.append('management_currency_prices: expected objects')
+            continue
+        _unexpected_keys(entry, {'price_id', 'plan_id', 'interval', 'currency'}, 'management_currency_prices', errors)
+        price_id, currency = entry.get('price_id'), entry.get('currency')
+        mapping = (entry.get('plan_id'), entry.get('interval'), currency)
+        if not all(isinstance(value, str) for value in mapping):
+            errors.append('management currency offer requires string plan, interval and currency')
+            continue
+        if not isinstance(price_id, str) or seen_prices.get(price_id) != mapping[:2]:
+            errors.append('management currency price must match a retained plan and interval')
+        retained = next(
+            (row for row in (price_entries or []) if isinstance(row, dict) and row.get('price_id') == price_id), {}
+        )
+        if retained.get('entitlement_version') != 'legacy':
+            errors.append('management currency prices require legacy entitlements')
+        if not isinstance(currency, str) or not re.fullmatch(r'[a-z]{3}', currency) or currency == 'usd':
+            errors.append('management currency price requires a non-USD ISO currency')
+        if mapping in seen_managed:
+            errors.append('duplicate management currency offer')
+        seen_managed.add(mapping)
 
     product_entries = catalog.get('recognized_stripe_products')
     seen_products: dict[str, str] = {}
@@ -858,6 +887,8 @@ PROACTIVITY_V2_BUDGET: Final[dict[str, Any]] = {_python_literal(catalog.get('pro
 ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {_python_literal(catalog['entitlement_versions'])}
 LADDER_V1_PRICE_BINDINGS: Final[dict[str, Any]] = {_python_literal(catalog['ladder_v1_price_bindings'])}
 LADDER_V1_STRIPE_PRICES: Final[list[str]] = {_python_literal(catalog['ladder_v1_stripe_prices'])}
+MANAGEMENT_CURRENCY_PRICES: Final[dict[str, Any]] = {_python_literal({entry['price_id']: entry for entry in catalog.get('management_currency_prices', [])})}
+
 RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {_python_literal({entry['price_id']: entry['entitlement_version'] for entry in catalog['recognized_stripe_prices']})}
 MEASUREMENT_CONTRACTS: Final = {_python_literal(catalog['measurement_contracts'])}
 PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {_python_literal(plan_data)}
@@ -894,6 +925,7 @@ __all__ = [
     'LADDER_V1_STRIPE_PRICES',
     'LADDER_V1_PRICE_BINDINGS',
     'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS',
+    'MANAGEMENT_CURRENCY_PRICES',
     'BILLING_ENV_VAR_PLAN_TYPES',
     'CATALOG_AUTHORITY',
     'CATALOG_REVISION',

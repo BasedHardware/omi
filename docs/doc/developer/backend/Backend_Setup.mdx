@@ -8,6 +8,14 @@ description: "Set up the Omi backend infrastructure for local development. This 
 
 The Omi backend powers all AI capabilities including transcription, conversation processing, chat, and integrations. This guide will help you set up a local development environment.
 
+For chat retrieval development, topic search uses the configured search providers.
+Explicit transcript recall can also read saved text directly through the existing
+conversation-search tool's optional `transcript_query` and `transcript_cursor`
+arguments. This path needs Firestore and the backend encryption configuration,
+but does not need Pinecone or a transcript backfill. Its bounded pages return
+source-linked excerpts and indicate when more history remains. The implementation
+and local verification checklist are in `backend/docs/transcript-recall.md`.
+
 ```mermaid
 flowchart LR
     subgraph External["External Services"]
@@ -585,3 +593,18 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     Get help from the community
   </Card>
 </CardGroup>
+
+
+### Testing subscription currency changes
+
+The first-party `GET /v1/payments/available-plans` response includes an optional
+formatted `billing_total` and a `currency` for each offer. Amounts remain in
+Stripe minor units; JPY uses whole yen. Currency-aware clients send
+`X-Omi-Billing-Currency: 1` and display the returned total before submitting the
+exact selected price to `POST /v1/payments/upgrade-subscription`. Refresh plans
+if a stale target returns HTTP 409. A payment decline returns HTTP 402.
+
+For provider integration testing, use a separate Stripe sandbox with synthetic
+customers and a test-mode key. The opt-in billing integration test documents its
+command and cleans up its disposable subscriptions and customers. Never run a
+plan-change test against a customer account or a live-mode key.

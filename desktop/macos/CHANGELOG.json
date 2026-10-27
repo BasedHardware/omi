@@ -2,6 +2,132 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.547",
+      "date": "2026-10-27",
+      "changes": [
+        "Omi Pro is now the only plan offered in Plans & Billing, and buying it from the Mac works"
+      ]
+    },
+    {
+      "version": "0.12.546",
+      "date": "2026-10-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.545",
+      "date": "2026-10-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.544",
+      "date": "2026-10-26",
+      "changes": [
+        "Fixed a stale conversation staying in search results after restoring it changed the text that matched your search"
+      ]
+    },
+    {
+      "version": "0.12.543",
+      "date": "2026-10-26",
+      "changes": [
+        "Fixed browser control failing with \"unsupported protocol version\" by updating the bundled Playwright MCP server"
+      ]
+    },
+    {
+      "version": "0.12.542",
+      "date": "2026-10-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.541",
+      "date": "2026-10-26",
+      "changes": [
+        "Added Show discarded and Restore Conversation so you can recover hidden audio and transcripts"
+      ]
+    },
+    {
+      "version": "0.12.540",
+      "date": "2026-10-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.539",
+      "date": "2026-10-26",
+      "changes": [
+        "Keep individual utterance timestamps when uploading local transcripts instead of collapsing one speaker's recording into a single long segment."
+      ]
+    },
+    {
+      "version": "0.12.538",
+      "date": "2026-10-25",
+      "changes": [
+        "Removed the proactive \"For you\" suggestion cards and their notifications"
+      ]
+    },
+    {
+      "version": "0.12.537",
+      "date": "2026-10-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.536",
+      "date": "2026-10-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.535",
+      "date": "2026-10-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.534",
+      "date": "2026-10-25",
+      "changes": [
+        "Opening app settings or retrying an integration setup now uses a fresh sign-in link instead of an expired or already-used link"
+      ]
+    },
+    {
+      "version": "0.12.533",
+      "date": "2026-10-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.532",
+      "date": "2026-10-24",
+      "changes": [
+        "Conversations summarized on-device no longer show the 🧠 placeholder when no emoji was chosen; they show the category emoji or 💬"
+      ]
+    },
+    {
+      "version": "0.12.531",
+      "date": "2026-10-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.530",
+      "date": "2026-10-24",
+      "changes": [
+        "Fixed calls splitting into multiple conversations after brief audio interruptions or an app relaunch during a scheduled meeting, while bounding recording in idle messaging voice channels"
+      ]
+    },
+    {
       "version": "0.12.529",
       "date": "2026-10-23",
       "changes": [

@@ -811,8 +811,12 @@ async def test_on_mode_keeps_todays_routes(dark_intake, monkeypatch):
     assert await dark_intake.intake.accept_upload(**UPLOAD) is None  # legacy claimant stays authoritative
     dark_intake.store.run(lambda tx: tx.put('content', f'{OWNER}/content', {}))
     dark_intake.user['language'] = 'ja'
+    # Batch eligibility (lead 41e13b): a known unsupported language stays on legacy sync at 'on'.
+    assert await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': True}) is None
+    assert dark_intake.calls == []
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'false')
     response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': True})
-    assert response.status_code == 202  # BYOK admitted like any upload; GPU route at 'on'
+    assert response.status_code == 202  # kill switch off: BYOK admitted like any upload; GPU route at 'on'
     ((items, kwargs),) = dark_intake.calls
     assert kwargs['enqueue'] is None and kwargs['adopt'] is None and items[0].requires_compute_admission is True
 
@@ -847,15 +851,18 @@ def test_policy_route_fields_default_validate_and_fail_closed_on_read():
         ('DRAINING', 'ja', False, ('provider', 'unsupported_language', 'modulate')),
         ('DRAINING', 'ja', True, ('provider', 'byok', 'modulate')),
         # legacy_sync 'on' never takes the provider route; only the BYOK funding decision is kept.
+        # (A known unsupported language reaches batch at 'on' only with the eligibility kill switch off.)
         ('ON', 'ja', False, ('parakeet', 'none', 'none')),
         ('ON', 'ja', True, ('parakeet', 'byok', 'none')),
     ],
 )
 async def test_intake_records_the_route_it_takes_in_the_admission_policy(
-    dark_intake, mode_name, language, byok, expected
+    dark_intake, monkeypatch, mode_name, language, byok, expected
 ):
     from utils.sync.legacy_dark import LegacySyncMode
 
+    if mode_name == 'ON':
+        monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'false')
     dark_intake.mode['value'] = LegacySyncMode[mode_name]
     dark_intake.user['language'] = language
     response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': byok})
@@ -892,8 +899,8 @@ async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake,
     monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,sync,batch')
     monkeypatch.setattr(cap_policy, '_BATCH_LANE_READY', True)
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
-    gate = Mock(return_value=False)  # the owner's keyless allowance is exhausted
-    monkeypatch.setattr(admission, 'sync_allowed', gate)
+    gate = Mock(return_value=(False, 'allowance_exhausted'))  # the owner's keyless allowance is exhausted
+    monkeypatch.setattr(admission, 'sync_admission', gate)
     monkeypatch.setattr(admission, 'get_hard_restriction_status', Mock(return_value=(False, None)))
     monkeypatch.setattr(admission, 'is_daily_audio_ceiling_exceeded', Mock(return_value=False))
     monkeypatch.setattr(admission, 'reserve_backfill_speech', Mock(return_value=type('R', (), {'allowed': True})()))
@@ -902,7 +909,11 @@ async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake,
         assert receipt['allowed'] == [lease.item.segment_id]
         gate.assert_not_called()
     else:
-        assert receipt == {'allowed': [], 'retry_after': {lease.item.segment_id: 60}}
+        assert receipt == {
+            'allowed': [],
+            'retry_after': {lease.item.segment_id: 60},
+            'held_reason': {lease.item.segment_id: 'allowance_exhausted'},
+        }
 
 
 # --- a legacy_final_pass_v1 conversation in draining/dark (M3 review; lead ruling b209a5) ---------

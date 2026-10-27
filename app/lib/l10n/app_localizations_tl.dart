@@ -716,7 +716,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get remembering => 'Naaalala';
 
   @override
-  String get unlimitedPlan => 'Unlimited Plan';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Pamahalaan ang Plan';
@@ -738,7 +738,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get upgrade => 'I-upgrade';
 
   @override
-  String get upgradeToUnlimited => 'I-upgrade sa unlimited';
+  String get upgradeToUnlimited => 'Mag-upgrade sa Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3180,7 +3180,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Mag-upgrade sa Pro';
+  String get upgradeToPro => 'Mag-upgrade sa Omi Pro';
 
   @override
   String get getOmiDevice => 'Kumuha ng Omi Device';
@@ -4310,7 +4310,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'Makakuha ng Omi Unlimited nang libre sa pamamagitan ng pagbibigay ng iyong data upang magsanay sa AI models.';
+      'Makakuha ng Omi Pro nang libre sa pamamagitan ng pagbibigay ng iyong data upang magsanay sa AI models.';
 
   @override
   String get trainingDataBullets =>
@@ -8674,6 +8674,9 @@ class AppLocalizationsTl extends AppLocalizations {
       'Hindi available ang transcription — tuloy ang pagre-record at naka-save ang iyong audio.';
 
   @override
+  String get captureNoAudioFromPendant => 'Walang audio mula sa pendant';
+
+  @override
   String get capturing => 'Kumukuha';
 
   @override
@@ -9744,7 +9747,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Lumipat sa libreng bersyon';
 
   @override
-  String get getFreeUnlimitedAccess => 'Kumuha ng libreng walang limitasyong access';
+  String get getFreeUnlimitedAccess => 'Kumuha ng Omi Pro nang libre';
 
   @override
   String get shareDataForTraining => 'Magbahagi ng data para sa training';
@@ -11184,6 +11187,12 @@ class AppLocalizationsTl extends AppLocalizations {
       'Nag-stall ang Bluetooth link sa iyong Omi, kaya hindi umaabot sa app ang audio. Patuloy na nagre-record ang Omi sa device at mag-si-sync kapag nakabawi ang link. Ang pag-subok muli ay muling nagkokonekta ng link; kung patuloy itong nabibigo, tingnan ang iyong device sa Mga Setting > Device.';
 
   @override
+  String get captureConnecting => 'Kumokonekta…';
+
+  @override
+  String get captureNoAudioDetail => 'Nakakonekta ang pendant, ngunit walang audio na umaabot sa iyong telepono';
+
+  @override
   String get captureIngressNeedsReconnect => 'Hindi naabot ng audio ang app — i-reconnect ang iyong Omi';
 
   @override
@@ -11212,13 +11221,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Halos puno na ang storage';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Kusang kokonekta muli ang Omi';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12355,12 +12357,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Suriin ang Koneksyon';
 
   @override
-  String get forYou => 'Para Sa Iyo';
-
-  @override
-  String get stopThese => 'Itigil Ang Mga Ito';
-
-  @override
   String get dismiss => 'Isara';
 
   @override
@@ -12964,7 +12960,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Magpadala ng voice note at sasagutin ito ni Omi.';
 
   @override
-  String get chatAppsPartOfPro => 'Bahagi ng Pro ang mga chat app';
+  String get chatAppsPartOfPro => 'Bahagi ng Omi Pro ang mga chat app';
 
   @override
   String get chatAppsMessagesApp => 'Messages';
@@ -13598,7 +13594,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncDetailsCopy => 'Kopyahin ang mga detalye para sa support';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Available sa Operator at Architect';
+  String get chatAppsChannelPlanRequired => 'Available sa Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14114,7 +14110,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceUpgradeBody =>
-      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
+      'Mag-upgrade sa Omi Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14301,7 +14297,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceRedoHint =>
-      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
+      'Mag-upgrade sa Omi Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
 
   @override
   String get onDeviceKeepEverything => 'Itago ang lahat sa phone na ito';
@@ -14534,6 +14530,25 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Hindi nag-a-update ang mga live na tala. Tingnan muna ang transcript.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Nagre-record · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Nakaraang episode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Mga nakabinbing chunk: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Buksan ang Nakaraang Episode';
+
+  @override
   String get episodeNotesSoon => 'Lalabas ang mga tala pagkatapos ng unang ilang minuto ng usapan.';
 
   @override
@@ -14671,4 +14686,55 @@ class AppLocalizationsTl extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Tapos na. $percent% diskwento sa susunod na $months buwan.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Iba pa';
+
+  @override
+  String get livePreviewLabel => 'Live preview';
+
+  @override
+  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get livePreviewTranscribingTitle => 'Transcribing…';
+
+  @override
+  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
+
+  @override
+  String get openLoopAnswerDone => 'Tapos';
+
+  @override
+  String get openLoopAnswerRemind => 'Ipaalala sa akin mamaya';
+
+  @override
+  String get openLoopAnswerDrop => 'Iwanan';
+
+  @override
+  String get syncRejectionInvalidDate => 'Di-wastong petsa ng pag-record';
+
+  @override
+  String get syncDeleteKeptUploading => 'Ang ilang bahagi ay kasalukuyang ina-upload at pinanatili';
+
+  @override
+  String get syncRejectionServer => 'Tinanggihan ng server';
+
+  @override
+  String get syncRejectionTooLarge => 'Masyadong malaki';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration sa telepono';
+  }
+
+  @override
+  String get syncCardUploadsPaused =>
+      'Pansamantalang naka-pause ang mga upload — awtomatikong magpapatuloy ang mga ito';
 }
