@@ -37,6 +37,7 @@ from utils.sync.live_speech_dedupe import (
     drop_covered_repeats,
     drop_proven_exact_retries,
     pinned_audio_timeline,
+    speech_overlap_seconds,
 )
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.donor_dedupe import DonorDedupe, dedupe_donor, live_reference
@@ -629,6 +630,13 @@ def assign_in_transaction(
             conversation_rows=records,
             proof=capture_covered_indices,
         )
+        if live_dedupe and live_stats is not None:
+            live_stats['appended_seconds_overlapping_live'] = speech_overlap_seconds(
+                survivors,
+                live_row.get('transcript_segments') or [],
+                live_origin=plan_target['started_at'].timestamp(),
+                live_pinned=pinned_audio_timeline(plan_target.get('audio_timeline')),
+            )
         surviving = {id(segment) for segment in survivors}
         kept = tuple(i for i, segment in indexed_new if id(segment) in surviving)
         for segment in survivors:
@@ -845,6 +853,7 @@ def assign_in_transaction(
             no_op['_sync_lineage_completion_pending'] = True
         no_op['_sync_lineage_dedupe'] = {
             'appended_seconds': 0.0,
+            'appended_seconds_overlapping_live': 0.0,
             'dropped_as_repeat_seconds': bounded_span_seconds(incoming['transcript_segments']),
             'alignment_method': append_alignment_method(live_stats['report'], live_stats['exact_retries']),
             'repeat_only': True,
@@ -953,6 +962,7 @@ def assign_in_transaction(
         appended = bounded_span_seconds(survivors)
         result['_sync_lineage_dedupe'] = {
             'appended_seconds': appended,
+            'appended_seconds_overlapping_live': live_stats['appended_seconds_overlapping_live'],
             'dropped_as_repeat_seconds': max(0.0, bounded_span_seconds(incoming['transcript_segments']) - appended),
             'alignment_method': append_alignment_method(live_stats['report'], live_stats['exact_retries']),
             'repeat_only': False,

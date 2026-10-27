@@ -158,6 +158,55 @@ def eligible_live_segment(segment: dict) -> bool:
     return not any(scope.startswith(prefix) for prefix in EXCLUDED_SCOPES)
 
 
+def live_speech_union(
+    live: list[dict], *, live_origin: float, live_pinned: bool
+) -> tuple[list[tuple[float, float]], bool]:
+    """Eligible original-live timing union and whether every range was measured."""
+    ranges = []
+    complete = True
+    for segment in live:
+        if not eligible_live_segment(segment):
+            continue
+        bounds = live_speech_bounds(segment, live_origin, live_pinned)
+        if bounds is None:
+            complete = False
+        else:
+            ranges.append(bounds[:2])
+    union = []
+    for low, high in sorted(ranges):
+        if union and low <= union[-1][1]:
+            union[-1] = (union[-1][0], max(high, union[-1][1]))
+        else:
+            union.append((low, high))
+    return union, complete
+
+
+def speech_overlap_seconds(
+    incoming: list[dict], live: list[dict], *, live_origin: float, live_pinned: bool
+) -> Optional[float]:
+    """Sum source speech intersecting the live timing union, or unknown.
+
+    Each source segment contributes once even when several live windows cover
+    it. Invalid timing cannot certify zero overlap. This never authorizes drops.
+    """
+    try:
+        union, complete = live_speech_union(live, live_origin=live_origin, live_pinned=live_pinned)
+        if not complete:
+            return None
+        seconds = total = 0.0
+        for segment in incoming:
+            span = incoming_speech_span(segment)
+            if span is None:
+                return None
+            total += span[1] - span[0]
+            seconds += sum(max(0.0, min(span[1], high) - max(span[0], low)) for low, high in union)
+        # The existing append denominator saturates here; never certify a ratio
+        # against an incomplete denominator.
+        return seconds if total <= MAX_TOTAL_SPAN_SECONDS and math.isfinite(seconds) else None
+    except Exception:
+        return None  # Observation failure must never abort content persistence.
+
+
 def _aggregate_method(methods: list[str]) -> str:
     if not methods:
         return 'none'

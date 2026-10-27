@@ -132,13 +132,19 @@ def log_sync_lineage_append(stats: dict, existing_completion: bool = False) -> N
     try:
         logger.info(
             'event=sync_lineage_append appended_seconds=%.2f dropped_as_repeat_seconds=%.2f '
-            'alignment_method=%s repeat_only=%s existing_completion=%s span_delta_bucket=%s',
+            'alignment_method=%s repeat_only=%s existing_completion=%s span_delta_bucket=%s '
+            'appended_seconds_overlapping_live=%s',
             stats['appended_seconds'],
             stats['dropped_as_repeat_seconds'],
             stats['alignment_method'],
             stats['repeat_only'],
             existing_completion,
             stats.get('span_delta_bucket', 'none'),
+            (
+                f"{stats['appended_seconds_overlapping_live']:.1f}"
+                if stats.get('appended_seconds_overlapping_live') is not None
+                else 'unknown'
+            ),
         )
     except Exception:
         pass

@@ -49,17 +49,23 @@ def dedupe_donor(incoming: list[dict], donor: dict, live: dict) -> DonorDedupe:
         # Unlike capture_repeat_evidence's legacy WAL-context seam, committed
         # frame proof can validate the persisted transcript ledger directly.
         verified |= covered_indices(incoming, donor, [live])
-        unproven = [segment for index, segment in enumerate(incoming) if index not in verified]
         lexical, report = drop_covered_repeats(
-            unproven,
+            incoming,
             stored,
             live_origin=origin,
             live_pinned=pinned_audio_timeline(live.get('audio_timeline')),
+            verified_capture_indices=verified,
             require_capture_proof=False,
         )
         reference = [dict(segment, timestamp=origin + segment['start']) for segment in stored]
-        kept, retries, _ = drop_proven_exact_retries(list(enumerate(lexical)), reference)
-        return DonorDedupe(kept, len(verified), report['dropped_segments'], retries)
+        lexical_kept_ids = {id(segment) for segment in lexical}
+        kept, retries, _ = drop_proven_exact_retries(
+            [(index, segment) for index, segment in enumerate(incoming) if id(segment) in lexical_kept_ids],
+            reference,
+            verified_indices=verified,
+        )
+        capture = report['methods'].count('source_frame_lexical')
+        return DonorDedupe(kept, capture, report['dropped_segments'] - capture, retries)
     except (AttributeError, KeyError, TypeError, ValueError, OverflowError):
         # Unsupported stored content is preserved; the bridge cannot certify it.
         return DonorDedupe(list(incoming), incomplete_reason='unsupported_content')

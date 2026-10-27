@@ -15,6 +15,8 @@ from tests.unit.test_sync_cross_job_assignment import chunk
 from utils.sync import bridge_observation as observation_module
 from utils.sync import donor_dedupe
 from utils.sync.assignment_index import AssignmentIndex
+from utils.sync.intake_completion import log_sync_lineage_append
+from utils.sync.live_speech_dedupe import speech_overlap_seconds
 from utils.sync.donor_dedupe import DonorDedupe, dedupe_donor
 from utils.conversations.smart_merge_policy import rebase_donor_segments
 
@@ -87,7 +89,7 @@ def test_exact_retry_requires_same_sync_scope():
 
 
 def test_capture_proof_path_uses_original_receipts_and_frozen_reference(monkeypatch):
-    live, donor = rows('brief phrase')
+    live, donor = rows()
     live['capture_evidence'] = {'origin': 'live'}
     donor['capture_evidence'] = {'origin': 'sync_vad'}
     seen = []
@@ -167,6 +169,11 @@ def test_assignment_dedupes_donor_and_observes_once_after_commit(monkeypatch, ca
     assert len(bridge_lines(caplog)) == 1 and f'outcome={outcome}' in bridge_lines(caplog)[0]
     assert 'target_kind=live' in bridge_lines(caplog)[0] and 'donor_count_bucket=1' in bridge_lines(caplog)[0]
     assert WORDS not in bridge_lines(caplog)[0] and 'uid=' not in bridge_lines(caplog)[0]
+    fields = dict(field.split('=', 1) for field in bridge_lines(caplog)[0].split())
+    assert float(fields['donor_seconds_in']) == 9.5
+    assert float(fields['donor_seconds_dropped']) == (0.0 if kept else 9.5)
+    assert float(fields['donor_seconds_retained']) == (9.5 if kept else 0.0)
+    assert float(fields['donor_seconds_retained_overlapping_live']) == (7.5 if kept else 0.0)
     assert not any('_sync_lineage_bridge' in value for value in store.rows.values())
     monkeypatch.setattr(store, 'transaction', lambda: StrictFirestore.transaction(store))
     with caplog.at_level(logging.INFO):
@@ -235,8 +242,24 @@ def test_observation_unknown_and_overlap_precedence_and_fail_open(monkeypatch):
     transfer(store)  # Logging failure cannot turn a committed write into failure.
 
 
-def test_real_committed_frame_receipts_drop_without_wal_context():
-    live, donor = rows('brief phrase')
+@pytest.mark.parametrize(
+    'live_text,donor_text,drop',
+    [
+        (WORDS, WORDS, True),
+        (WORDS, 'brief phrase', False),
+        (WORDS, WORDS + ' tomorrow', False),
+        (WORDS + ' in 41 days', WORDS + ' in 42 days', False),
+        (WORDS, WORDS.replace('should', 'should not'), False),
+        (WORDS, 'actually ' + WORDS, False),
+        (WORDS + ' in 41 days', WORDS, False),
+        ('never ' + WORDS, WORDS, False),
+        ('correction ' + WORDS, WORDS, False),
+        (WORDS, WORDS.replace('proposal', 'proposal proposal'), False),
+    ],
+)
+def test_real_committed_frame_receipts_still_require_lexical_safety(live_text, donor_text, drop):
+    live, donor = rows(donor_text)
+    live['transcript_segments'][0]['text'] = live_text
     live['capture_evidence'] = _envelope(range(8))
     donor['transcript_segments'][0]['id'] = 'synthetic-segment'
     donor['capture_evidence'] = dict(
@@ -258,9 +281,17 @@ def test_real_committed_frame_receipts_drop_without_wal_context():
             )
         ],
     )
-    report = dedupe_donor(absolute(donor), donor, live)
-    assert not report.kept and report.capture == 1
-    # Partial/conflicting coverage cannot delete this short, lexically unproven line.
+    incoming = absolute(donor)
+    before = deepcopy((live, donor, incoming))
+    # Real source-frame proof qualifies even the novel/corrective cases.
+    assert donor_dedupe.covered_indices(incoming, donor, [live]) == frozenset({0})
+    report = dedupe_donor(incoming, donor, live)
+    assert report.kept == ([] if drop else incoming)
+    assert report.capture == int(drop)
+    assert report.lexical == 0 and report.exact_retry == 0
+    assert (live, donor, incoming) == before
+    # Partial/conflicting coverage cannot delete a short, lexically unproven line.
+    donor['transcript_segments'][0]['text'] = 'brief phrase'
     live['capture_evidence'] = _envelope(range(2))
     assert dedupe_donor(absolute(donor), donor, live).kept
     live['capture_evidence'] = _envelope(range(8))
@@ -342,7 +373,7 @@ def test_observation_failure_is_unknown(monkeypatch):
     live, donor = rows()
     incoming = absolute(donor)
     monkeypatch.setattr(
-        observation_module, 'live_speech_bounds', lambda *a: (_ for _ in ()).throw(RuntimeError('synthetic'))
+        observation_module, 'live_speech_union', lambda *a: (_ for _ in ()).throw(RuntimeError('synthetic'))
     )
     measured = observation_module.bridge_observation(
         live, [(incoming, DonorDedupe(incoming))], operation='assignment', target_kind='live'
@@ -361,3 +392,92 @@ def test_sync_smart_survivor_does_not_certify_a_live_transfer(monkeypatch, caplo
     assert len(bridge_lines(caplog)) == 1
     assert 'target_kind=sync' in bridge_lines(caplog)[0]
     assert 'outcome=bridge_unknown' in bridge_lines(caplog)[0]
+
+
+def test_capture_exact_retry_preserves_original_indices_after_lexical_drop(monkeypatch):
+    live, donor = rows(donor_start=1000)
+    live['transcript_segments'].append(dict(start=20, end=22, text='brief phrase'))
+    donor['transcript_segments'].extend(
+        [
+            dict(start=20, end=22, text='brief phrase'),
+            dict(start=25, end=27, text='brief phrase'),
+        ]
+    )
+    monkeypatch.setattr(donor_dedupe, 'capture_covered_indices', lambda *a: frozenset({0, 1}))
+    monkeypatch.setattr(donor_dedupe, 'covered_indices', lambda *a: frozenset())
+    incoming = absolute(donor)
+    report = dedupe_donor(incoming, donor, live)
+    assert report.kept == [incoming[2]]
+    assert report.capture == 1 and report.exact_retry == 1 and report.lexical == 0
+
+
+def test_numeric_observation_measures_retained_partial_overlap_and_rounds(caplog):
+    live, _ = rows()
+    live['transcript_segments'] = [
+        dict(start=0, end=6, text=WORDS),
+        dict(start=4, end=10, text=WORDS),
+        # Stored sync text must not enlarge the original-live union.
+        dict(start=10, end=30, text=WORDS, speaker_id_scope='sync:previous'),
+    ]
+    original = [
+        dict(timestamp=1002.04, start=0, end=10, text='retained'),
+        dict(timestamp=1040, start=0, end=2.26, text='dropped'),
+        dict(timestamp=1020, start=0, end=4.12, text='retained outside live'),
+    ]
+    observation = observation_module.bridge_observation(
+        live,
+        [(original, DonorDedupe([original[0], original[2]]))],
+        operation='assignment',
+        target_kind='live',
+    )
+    assert observation['donor_seconds_in'] == 16.4
+    assert observation['donor_seconds_dropped'] == 2.3
+    assert observation['donor_seconds_retained'] == 14.1
+    assert observation['donor_seconds_retained_overlapping_live'] == 8.0
+    assert speech_overlap_seconds(
+        [original[0], original[2]], live['transcript_segments'], live_origin=1000, live_pinned=False
+    ) == pytest.approx(7.96)
+    with caplog.at_level(logging.INFO):
+        observation_module.log_bridge_observation(observation)
+    assert 'donor_seconds_retained_overlapping_live=8.0' in bridge_lines(caplog)[0]
+    assert 'donor_seconds_in=16.4' in bridge_lines(caplog)[0]
+
+
+def test_fresh_append_overlap_is_measurable_from_append_line(monkeypatch, caplog):
+    monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', 'false')
+    store = StrictFirestore()
+    live, _ = rows()
+    store.rows[('users', 'u', 'conversations', 'live')] = live
+    incoming = dict(
+        chunk('fresh', 1007, 'New words survive though they overlap live speech.'), data_protection_level='standard'
+    )
+    row, _, _ = db.assign_sync_conversation('u', incoming, target_id='live', firestore_client=store)
+    stats = row['_sync_lineage_dedupe']
+    assert stats['appended_seconds'] == 9.5
+    assert stats['appended_seconds_overlapping_live'] == 2.5
+    with caplog.at_level(logging.INFO):
+        log_sync_lineage_append(stats)
+    assert any('appended_seconds_overlapping_live=2.5' in record.message for record in caplog.records)
+
+
+def test_append_line_marks_absent_overlap_measurement_unknown(caplog):
+    with caplog.at_level(logging.INFO):
+        log_sync_lineage_append(
+            dict(appended_seconds=2.0, dropped_as_repeat_seconds=0.0, alignment_method='none', repeat_only=False)
+        )
+    assert any('appended_seconds_overlapping_live=unknown' in record.message for record in caplog.records)
+
+
+@pytest.mark.parametrize('invalid', ['live', 'incoming', 'denominator_cap', 'malformed'])
+def test_fresh_overlap_measurement_abstains_on_incomplete_timing(invalid):
+    live, donor = rows()
+    incoming = absolute(donor)
+    if invalid == 'live':
+        live['transcript_segments'][0]['end'] = float('nan')
+    elif invalid == 'incoming':
+        incoming[0]['timestamp'] = float('inf')
+    elif invalid == 'denominator_cap':
+        incoming[0]['end'] = 86401
+    else:
+        live['transcript_segments'] = [None]
+    assert speech_overlap_seconds(incoming, live['transcript_segments'], live_origin=1000, live_pinned=False) is None

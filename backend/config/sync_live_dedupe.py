@@ -15,7 +15,7 @@ stored line's nonempty ``sync:`` scope; anything ambiguous is kept.
 
 Stored sync donors consolidated into a live target use the same gate at the
 transactional content-transfer boundary, including smart absorb. Committed
-frame coverage is authoritative; without it, the existing bounded lexical
+frame coverage also requires lexical safety checks; without it, the bounded lexical
 matcher supplies independent repeat proof, followed by the same exact-retry
 pass. Original donor receipts and the frozen pre-merge live snapshot stay
 separate. Retained timing overlap is observation only. See
