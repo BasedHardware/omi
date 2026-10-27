@@ -10,23 +10,21 @@ from __future__ import annotations
 import contextlib
 import os
 import sys
-from pathlib import Path
 from typing import Optional
 
 from omi_cli import config as cfg
 
 
 @contextlib.contextmanager
-def _config_lock():
+def config_lock():
     """Serialize concurrent read-modify-write cycles on the config file.
 
-    ``store_*`` functions load the whole config, mutate one profile, then save
-    the whole config.  Without a lock, two concurrent calls (e.g. two ``omi
-    auth login`` invocations for different profiles) both read the same stale
-    config, each overwrites a different profile, and the last ``save()`` wins —
-    silently dropping the other profile's credential.
+    ``store_*`` functions and config commands load the whole config, mutate
+    one profile, then save the whole config. Without a lock, two concurrent
+    calls both read the same stale config, each overwrites a different
+    profile, and the last ``save()`` wins — silently dropping the other.
     """
-    lock_path = Path.home() / ".omi" / "config.lock"
+    lock_path = cfg.default_config_path().with_suffix(".lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     if sys.platform == "win32":
         import msvcrt
@@ -53,7 +51,7 @@ def _config_lock():
 
 def store_api_key(profile_name: str, api_key: str, *, api_base: Optional[str] = None) -> cfg.Profile:
     """Persist an API key to the named profile and return the updated Profile."""
-    with _config_lock():
+    with config_lock():
         config = cfg.load()
         profile = config.get_profile(profile_name)
         profile.auth_method = "api_key"
@@ -84,7 +82,7 @@ def store_oauth_tokens(
     session — the ``/v1/dev/*`` endpoints authenticate with the key while
     ``omi chat`` requires the oauth session, so a browser login needs both.
     """
-    with _config_lock():
+    with config_lock():
         config = cfg.load()
         profile = config.get_profile(profile_name)
         profile.auth_method = "oauth"
@@ -102,7 +100,7 @@ def store_oauth_tokens(
 
 def update_oauth_id_token(profile_name: str, *, id_token: str, expires_at: float) -> cfg.Profile:
     """Update only the short-lived ID token after a refresh round-trip."""
-    with _config_lock():
+    with config_lock():
         config = cfg.load()
         profile = config.get_profile(profile_name)
         if profile.auth_method != "oauth":
@@ -117,7 +115,7 @@ def update_oauth_id_token(profile_name: str, *, id_token: str, expires_at: float
 
 def clear_credentials(profile_name: str) -> bool:
     """Wipe credentials from the named profile. Returns True if anything was cleared."""
-    with _config_lock():
+    with config_lock():
         config = cfg.load()
         if profile_name not in config.profiles:
             return False
