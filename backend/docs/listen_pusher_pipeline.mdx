@@ -1879,7 +1879,7 @@ No series carries uid, session or conversation labels.
 
 `LISTEN_LOOP_METRICS_ENABLED` is the kill switch. It is on by default; `false`, `0`, `off` or `no` disables it. It is read when the probe starts, once per session for frame timing and once per VAD gate, so a change takes effect at the next process start.
 
-The lag probe is a process-wide task started from an empty `contextvars.Context`, so it never keeps the first session's BYOK keys or uid alive.
+The lag probe is a process-wide task started from an empty `contextvars.Context`, so it never keeps the first session's BYOK keys or uid alive. `run_listen_session` starts it on each session (idempotent per loop). All four series are on the default registry that listen `/metrics` serves. The label-less lag histogram and VAD counters export zero-valued series from import, so every listen pod running #22397 or later shows `omi_listen_event_loop_lag_seconds_count` before any session. `omi_listen_frame_processing_seconds` has a `codec` label: its child appears, at zero, when a session enters its receive loop, so an idle pod without it is healthy and a zero `_count` does not mean a frame was timed. If `job="backend-listen-metrics"` has no `omi_listen_event_loop_lag_seconds_count`, check the listen deployment's image tag before you suspect the code: Cloud Run `backend` series can appear while listen still runs an older image.
 
 D0b watch: `histogram_quantile(0.99, sum by (le) (rate(omi_listen_event_loop_lag_seconds_bucket[5m])))` must stay under 50 ms for 24h after the retune rolls, and before the HPA floor is lowered.
 
