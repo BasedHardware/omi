@@ -5,6 +5,7 @@ These tools allow the LLM to search and query files uploaded to chat sessions.
 """
 
 import contextvars
+import math
 from collections.abc import Mapping
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -52,6 +53,17 @@ _ATTACHMENT_PARAM_SUFFIXES = (
     '.image_url.url',
 )
 
+
+
+def _parse_seconds(val: Any) -> Optional[float]:
+    """Parse a video timestamp in seconds safely, rejecting booleans, non-numerics, NaN, and Inf."""
+    if val is None or isinstance(val, bool):
+        return None
+    try:
+        f = float(val)
+        return max(0.0, f) if not (math.isnan(f) or math.isinf(f)) else None
+    except (ValueError, TypeError):
+        return None
 
 def _names_request_field(param: object, code: object, provider_rejection: object = None) -> bool:
     """Whether one (param, code, provider_rejection) triple from a provider 400 names our request shape."""
@@ -146,15 +158,24 @@ def search_files_tool(
         return "Error: Configuration not available"
 
     try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-        chat_session_id = configurable.get('chat_session_id')
+        raw_configurable = cfg.get('configurable') if isinstance(cfg, dict) else None
+        if raw_configurable is not None and not isinstance(raw_configurable, dict):
+            return "Error: Configuration error"
+        configurable = raw_configurable if isinstance(raw_configurable, dict) else {}
+        uid = configurable.get('user_id') or (cfg.get('user_id') if isinstance(cfg, dict) else None)
+        chat_session_id = configurable.get('chat_session_id') or (cfg.get('chat_session_id') if isinstance(cfg, dict) else None)
+
+        if raw_configurable is None and (not uid or not chat_session_id):
+            return "Error: Configuration error"
     except (KeyError, TypeError, AttributeError) as e:
         logger.error("❌ search_files_tool - error accessing config: %s", type(e).__name__)
         return "Error: Configuration error"
 
     if not chat_session_id:
         return "No active chat session. Files are not available."
+
+    if not question or not isinstance(question, str) or not question.strip():
+        return "Please provide a question about the files."
 
     try:
         # Get session data
@@ -163,30 +184,45 @@ def search_files_tool(
         if not session_data:
             return "Chat session not found."
 
-        chat_session = ChatSession(**session_data)
+        if isinstance(session_data, dict):
+            if 'created_at' not in session_data:
+                from datetime import datetime, timezone
+                session_data = dict(session_data)
+                session_data['created_at'] = datetime.now(timezone.utc)
+            chat_session = ChatSession(**session_data)
+        elif isinstance(session_data, ChatSession):
+            chat_session = session_data
+        else:
+            chat_session = ChatSession(**(session_data or {}))
 
         # Determine which files to search
-        if file_ids and len(file_ids) > 0:
+        if isinstance(file_ids, str):
+            file_ids = [file_ids]
+        clean_file_ids = [fid.strip() for fid in (file_ids or []) if isinstance(fid, str) and fid.strip()]
+
+        if clean_file_ids:
             # Use specified files
             # Validate that these files belong to the session
             session_file_ids = set(chat_session.file_ids or [])
-            file_ids_to_search = [fid for fid in file_ids if fid in session_file_ids]
+            file_ids_to_search = [fid for fid in clean_file_ids if fid in session_file_ids]
 
             if not file_ids_to_search:
                 return "The specified files are not available in this chat session."
         else:
             # Use all session files
-            file_ids_to_search = chat_session.file_ids if chat_session.file_ids else []
+            file_ids_to_search = [fid for fid in (chat_session.file_ids or []) if fid]
 
             if not file_ids_to_search:
                 return "No files have been uploaded to this chat session yet. Ask the user to upload files first."
 
         # Use FileChatTool to query files
         fc_tool = FileChatTool(uid, chat_session_id)
+        parsed_start = _parse_seconds(start_seconds)
+        parsed_end = _parse_seconds(end_seconds)
         video_window = None
-        if start_seconds is not None or end_seconds is not None:
-            start = max(0.0, float(start_seconds if start_seconds is not None else max(0.0, (end_seconds or 0) - 5)))
-            end = max(start, float(end_seconds if end_seconds is not None else start + 5))
+        if parsed_start is not None or parsed_end is not None:
+            start = parsed_start if parsed_start is not None else max(0.0, (parsed_end if parsed_end is not None else 0.0) - 5.0)
+            end = max(start, parsed_end if parsed_end is not None else start + 5.0)
             video_window = (start, end)
         answer = fc_tool.process_chat_with_file(question, file_ids_to_search, video_window)
 
@@ -225,3 +261,4 @@ def search_files_tool(
             exc_info=True,
         )
         return "I encountered an error while searching the files. Please try again or rephrase your question."
+
