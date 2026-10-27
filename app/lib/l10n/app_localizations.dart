@@ -25545,28 +25545,16 @@ abstract class AppLocalizations {
   /// **'Chunks pending: {pending}'**
   String captureChunksPending(int pending);
 
-  /// No description provided for @episodeOpenPrevious.
-  ///
-  /// In en, this message translates to:
-  /// **'Open Previous Episode'**
-  String get episodeOpenPrevious;
-
   /// Shown in the running notes card before the first notes exist.
   ///
   /// In en, this message translates to:
   /// **'Running notes appear after the first few minutes of talk.'**
   String get episodeNotesSoon;
 
-  /// Opens the full live transcript from its preview on a live episode.
-  ///
-  /// In en, this message translates to:
-  /// **'Open All'**
-  String get episodeOpenAll;
-
   /// Button that ends a live episode now and makes its full notes.
   ///
   /// In en, this message translates to:
-  /// **'Wrap Up Now'**
+  /// **'Wrap up now'**
   String get episodeWrapUpNow;
 
   /// Above the Wrap Up Now button: the episode also ends by itself when the user moves on.
@@ -25773,18 +25761,6 @@ abstract class AppLocalizations {
   /// **'Others'**
   String get othersSpeakerLabel;
 
-  /// Small caption above the on-device live transcript preview while recording
-  ///
-  /// In en, this message translates to:
-  /// **'Live preview'**
-  String get livePreviewLabel;
-
-  /// One-line explanation under the Live preview caption: the provisional text is made on the phone and replaced by the final transcript
-  ///
-  /// In en, this message translates to:
-  /// **'On-device preview. The final transcript replaces it shortly.'**
-  String get livePreviewExplanation;
-
   /// Live preview is running on the phone but no words have been recognized yet
   ///
   /// In en, this message translates to:
@@ -25796,18 +25772,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Starting live preview…'**
   String get livePreviewStarting;
-
-  /// Calm state when this phone has no on-device preview: the recording is being transcribed after capture
-  ///
-  /// In en, this message translates to:
-  /// **'Transcribing…'**
-  String get livePreviewTranscribingTitle;
-
-  /// Explains, under Transcribing…, where and when the transcript appears; not an error
-  ///
-  /// In en, this message translates to:
-  /// **'Your transcript appears in Conversations when processing finishes.'**
-  String get livePreviewTranscribingMessage;
 
   /// Answer button on an open-loop Review card: the follow-up happened.
   ///
@@ -25862,6 +25826,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Uploads paused for a moment — they\'ll resume automatically'**
   String get syncCardUploadsPaused;
+
+  /// Pill under the live duration: this capture continues the previous episode.
+  ///
+  /// In en, this message translates to:
+  /// **'Continues “{title}”'**
+  String episodeContinues(Object title);
+
+  /// The wall-clock start of the live session, after its running length.
+  ///
+  /// In en, this message translates to:
+  /// **'· since {time}'**
+  String episodeLiveSince(Object time);
+
+  /// Quiet line when no on-device notes can be drafted.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes start when the final transcript arrives.'**
+  String get episodeNotesStartWithTranscript;
+
+  /// Footnote under on-device live notes.
+  ///
+  /// In en, this message translates to:
+  /// **'Drafted on your phone as you talk. The full notes arrive with the final transcript.'**
+  String get episodeOnDeviceNotesFootnote;
+
+  /// Tag on notes drafted on-device from the live preview.
+  ///
+  /// In en, this message translates to:
+  /// **'On this phone'**
+  String get episodeOnThisPhone;
+
+  /// Link from the Summary live card to the Transcript tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Open transcript'**
+  String get episodeOpenTranscript;
+
+  /// Title of the live preview card on the Summary tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Live'**
+  String get liveCardTitle;
+
+  /// Quiet line: how far the final transcript lags the live preview.
+  ///
+  /// In en, this message translates to:
+  /// **'Final transcript about {duration} behind'**
+  String livePreviewBehind(Object duration);
+
+  /// Quiet line when the final-transcript lag is unknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Final transcript catching up'**
+  String get livePreviewCatchingUp;
+
+  /// No-engine preview card body.
+  ///
+  /// In en, this message translates to:
+  /// **'Your words show up here a minute or two after you say them.'**
+  String get livePreviewNoEngineBody;
+
+  /// No-engine preview card title.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording safely'**
+  String get livePreviewNoEngineTitle;
+
+  /// Divider between the final transcript and the on-device preview lines.
+  ///
+  /// In en, this message translates to:
+  /// **'Live on this phone'**
+  String get livePreviewOnPhoneDivider;
+
+  /// Link to the speech settings where the platform can deep-link to them.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on live text'**
+  String get livePreviewTurnOnLiveText;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

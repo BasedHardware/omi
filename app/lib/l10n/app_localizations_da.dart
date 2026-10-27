@@ -14422,13 +14422,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Åbn forrige episode';
-
-  @override
   String get episodeNotesSoon => 'Noterne vises efter de første minutters snak.';
-
-  @override
-  String get episodeOpenAll => 'Åbn alle';
 
   @override
   String get episodeWrapUpNow => 'Afslut nu';
@@ -14567,22 +14561,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get othersSpeakerLabel => 'Andre';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Færdig';
@@ -14612,4 +14594,50 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Uploads er sat på pause et øjeblik — de fortsætter automatisk';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Fortsætter ”$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· siden $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Noter begynder, når den endelige transskription ankommer.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Udarbejdet på din telefon, mens du taler. De fuldstændige noter kommer med den endelige transskription.';
+
+  @override
+  String get episodeOnThisPhone => 'På denne telefon';
+
+  @override
+  String get episodeOpenTranscript => 'Åbn transskription';
+
+  @override
+  String get liveCardTitle => 'Live';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Endelig transskription ca. $duration bagefter';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Endelig transskription indhenter';
+
+  @override
+  String get livePreviewNoEngineBody => 'Dine ord vises her et til to minutter efter, du har sagt dem.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Optager sikkert';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Live på denne telefon';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Aktivér live-tekst';
 }

@@ -14445,13 +14445,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Önceki Bölümü Aç';
-
-  @override
   String get episodeNotesSoon => 'Notlar konuşmanın ilk birkaç dakikasından sonra görünür.';
-
-  @override
-  String get episodeOpenAll => 'Tümünü Aç';
 
   @override
   String get episodeWrapUpNow => 'Şimdi Bitir';
@@ -14589,22 +14583,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get othersSpeakerLabel => 'Diğerleri';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Tamamlandı';
@@ -14634,4 +14616,50 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Yüklemeler kısa süreliğine duraklatıldı — otomatik olarak devam edecek';
+
+  @override
+  String episodeContinues(Object title) {
+    return '“$title” devam ediyor';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· $time’den beri';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Notlar, nihai transkript geldiğinde başlar.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Konuşurken telefonunda hazırlanıyor. Tam notlar nihai transkriptle birlikte gelecek.';
+
+  @override
+  String get episodeOnThisPhone => 'Bu telefonda';
+
+  @override
+  String get episodeOpenTranscript => 'Transkripti aç';
+
+  @override
+  String get liveCardTitle => 'Canlı';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Nihai transkript yaklaşık $duration geride';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Nihai transkript yaklaşıyor';
+
+  @override
+  String get livePreviewNoEngineBody => 'Sözlerin, söyledikten bir iki dakika sonra burada görünür.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Güvenle kaydediyor';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Bu telefonda canlı';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Canlı metni aç';
 }
