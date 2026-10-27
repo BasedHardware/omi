@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:omi/services/devices/charge_start_tracker.dart';
-import 'package:omi/services/devices/device_last_connected.dart';
+import 'package:omi/utils/device_last_connected.dart';
 import 'package:omi/services/devices/fully_charged_alert_gate.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'dart:io';

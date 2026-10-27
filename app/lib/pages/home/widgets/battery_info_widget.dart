@@ -38,6 +38,18 @@ const int kLowBatteryPercent = 20;
 
 const _stopGlyphRadius = BorderRadius.all(Radius.circular(4)); // omi-ux-allow: radius-literal -- a glyph
 
+/// What Home's Connect chip opens: pairing for a phone that never paired a device, the device page
+/// otherwise. The reconnect row's Reconnect opens the same.
+Future<void> openHomeConnect(BuildContext context) async {
+  OmiHaptics.selection();
+  if (SharedPreferencesUtil().btDevice.id.isEmpty) {
+    routeToPage(context, const ConnectDevicePage());
+    PlatformManager.instance.analytics.connectFriendClicked();
+  } else {
+    await routeToPage(context, const ConnectedDevice());
+  }
+}
+
 class BatteryInfoWidget extends StatefulWidget {
   const BatteryInfoWidget({super.key});
 
@@ -173,15 +185,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
               final label = isConnecting ? l10n.searching : l10n.connect;
               return _DevicePill(
                 semanticsLabel: label,
-                onTap: () async {
-                  OmiHaptics.selection();
-                  if (SharedPreferencesUtil().btDevice.id.isEmpty) {
-                    routeToPage(context, const ConnectDevicePage());
-                    PlatformManager.instance.analytics.connectFriendClicked();
-                  } else {
-                    await routeToPage(context, const ConnectedDevice());
-                  }
-                },
+                onTap: () => openHomeConnect(context),
                 children: [
                   // The asset is white; tint it so it shows on the light pill too.
                   Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16, color: OmiColors.textPrimary),

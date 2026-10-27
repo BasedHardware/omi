@@ -10,7 +10,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:omi/services/devices/device_last_connected.dart';
+import 'package:omi/utils/device_last_connected.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';

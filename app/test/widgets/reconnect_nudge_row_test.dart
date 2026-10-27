@@ -1,6 +1,3 @@
-import 'dart:async';
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,13 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/pages/home/widgets/reconnect_nudge_row.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:omi/services/devices/bluetooth_readiness.dart';
-import 'package:omi/services/devices/device_last_connected.dart';
+import 'package:omi/utils/device_last_connected.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
-import 'package:omi/widgets/bluetooth_guidance_listener.dart';
 
 final _now = DateTime.utc(2026, 10, 26, 18);
 final _omi = BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -50, firmwareRevision: '3.0.21');
@@ -25,16 +21,6 @@ const _reconnect = Key('reconnect_nudge_reconnect');
 const _close = Key('reconnect_nudge_close');
 
 class _FakeDeviceProvider extends ChangeNotifier implements DeviceProvider {
-  _FakeDeviceProvider({this.reconnects = false, this.slow = false});
-
-  /// Whether Reconnect brings the Omi back.
-  final bool reconnects;
-
-  /// Whether an attempt waits for [finish] instead of ending at once.
-  final bool slow;
-  Completer<void>? _attempt;
-  int connectCalls = 0;
-
   @override
   BtDevice? pairedDevice;
   @override
@@ -49,20 +35,6 @@ class _FakeDeviceProvider extends ChangeNotifier implements DeviceProvider {
     pairedDevice = _omi;
     isConnected = true;
     notifyListeners();
-  }
-
-  /// Ends a slow attempt; [connected] lands the Omi first.
-  void finish({bool connected = false}) {
-    if (connected) connect();
-    _attempt?.complete();
-  }
-
-  @override
-  Future scanAndConnectToDevice() {
-    connectCalls++;
-    if (slow) return (_attempt = Completer<void>()).future;
-    if (reconnects) connect();
-    return Future.value();
   }
 
   @override
@@ -100,10 +72,6 @@ class _RecordingAnalytics implements AnalyticsAdapter {
       ];
 }
 
-/// Bluetooth on and allowed.
-BluetoothReadiness _ready() =>
-    BluetoothReadiness(readState: () async => 'on', permissionState: (_) async => null, observeBridge: false);
-
 /// Stored state of a phone whose Omi last connected [daysAgo] days before [_now].
 Future<void> _seed({BtDevice? device, double? daysAgo, DateTime? dismissedAt}) async {
   final prefs = SharedPreferencesUtil();
@@ -115,16 +83,12 @@ Future<void> _seed({BtDevice? device, double? daysAgo, DateTime? dismissedAt}) a
   if (dismissedAt != null) ReconnectNudge.markClosed(dismissedAt);
 }
 
-/// Home with the row. [clock] is what the row reads as now; tests move it with the fake timers.
-/// [homeVisible] stands in for Home's tab being shown. The app's Bluetooth prompt is mounted the
-/// way main.dart mounts it.
+/// Home with the row. [clock] is what the row reads as now. [opens] records Reconnect's action.
 Future<void> _pump(
   WidgetTester tester,
   _FakeDeviceProvider provider, {
   DateTime Function()? clock,
-  List<BuildContext>? guideOpens,
-  BluetoothReadiness? readiness,
-  ValueListenable<bool>? homeVisible,
+  List<BuildContext>? opens,
   double textScale = 1,
 }) async {
   // iPhone 17 Pro, so widths and wrapping match the device.
@@ -132,31 +96,28 @@ Future<void> _pump(
     ..physicalSize = const Size(402 * 3, 874 * 3)
     ..devicePixelRatio = 3;
   addTearDown(tester.view.reset);
-  final bluetooth = readiness ?? _ready();
-  final navigatorKey = GlobalKey<NavigatorState>();
-  Widget row = ReconnectNudgeRow(
-    now: clock ?? () => _now,
-    readiness: bluetooth,
-    openGuide: (context) async => guideOpens?.add(context),
-  );
-  if (homeVisible != null) {
-    final child = row;
-    row = ValueListenableBuilder<bool>(
-        valueListenable: homeVisible, builder: (_, visible, __) => TickerMode(enabled: visible, child: child));
-  }
   await tester.pumpWidget(
     MaterialApp(
-      navigatorKey: navigatorKey,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      builder: (context, child) =>
-          BluetoothGuidanceListener(readiness: bluetooth, navigatorKey: navigatorKey, child: child!),
       home: MediaQuery(
         data: MediaQueryData(size: const Size(402, 874), textScaler: TextScaler.linear(textScale)),
-        child: ChangeNotifierProvider<DeviceProvider>.value(value: provider, child: Scaffold(body: row)),
+        child: ChangeNotifierProvider<DeviceProvider>.value(
+          value: provider,
+          child: Scaffold(
+            body: ReconnectNudgeRow(now: clock ?? () => _now, openConnect: (context) async => opens?.add(context)),
+          ),
+        ),
       ),
     ),
   );
+  await tester.pump();
+}
+
+/// The app went to the background and came back.
+Future<void> _resume(WidgetTester tester) async {
+  tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+  tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
   await tester.pump();
 }
 
@@ -256,7 +217,7 @@ void main() {
   });
 
   group('time passing while Home stays open', () {
-    testWidgets('a close holds 24 hours, then the row returns without leaving Home', (tester) async {
+    testWidgets('a close holds 24 hours, read from the saved time on each return to the app', (tester) async {
       var clock = _now;
       await _seed(device: _omi, daysAgo: 4);
       await _pump(tester, _FakeDeviceProvider(), clock: () => clock);
@@ -271,221 +232,50 @@ void main() {
       expect(dismissed.single.$2, containsPair('days_since_connected', 4));
 
       clock = _now.add(const Duration(hours: 23));
-      await tester.pump(const Duration(hours: 23));
+      await _resume(tester);
       expect(find.byKey(_row), findsNothing, reason: '23 hours after closing');
 
       clock = _now.add(const Duration(hours: 24));
-      await tester.pump(const Duration(hours: 1));
+      await _resume(tester);
       expect(find.text("Your Omi hasn't connected in 5 days"), findsOneWidget, reason: '24 hours after closing');
 
       clock = _now.add(const Duration(hours: 25));
-      await tester.pump(const Duration(hours: 1));
+      await _resume(tester);
       expect(find.text("Your Omi hasn't connected in 5 days"), findsOneWidget, reason: '25 hours after closing');
     });
 
-    testWidgets('the row appears when the three days run out, no restart needed', (tester) async {
+    testWidgets('three days passing is picked up on the next return, no restart needed', (tester) async {
       var clock = _now;
       await _seed(device: _omi, daysAgo: 71 / 24);
       await _pump(tester, _FakeDeviceProvider(), clock: () => clock);
       expect(find.byKey(_row), findsNothing);
 
-      clock = _now.add(const Duration(minutes: 59));
-      await tester.pump(const Duration(minutes: 59));
-      expect(find.byKey(_row), findsNothing);
-
       clock = _now.add(const Duration(hours: 1));
-      await tester.pump(const Duration(minutes: 1));
+      await _resume(tester);
       expect(find.text("Your Omi hasn't connected in 3 days"), findsOneWidget);
-    });
-
-    testWidgets('coming back from the background looks again, though no timer ran meanwhile', (tester) async {
-      var clock = _now;
-      await _seed(device: _omi, daysAgo: 4);
-      await _pump(tester, _FakeDeviceProvider(), clock: () => clock);
-      await tester.tap(find.byKey(_close));
-      await tester.pump();
-      expect(find.byKey(_row), findsNothing);
-
-      // Suspended for 30 hours: the wall clock moved, the timers did not.
-      clock = _now.add(const Duration(hours: 30));
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.pump();
-
-      expect(find.text("Your Omi hasn't connected in 5 days"), findsOneWidget);
     });
   });
 
   group('Reconnect', () {
-    testWidgets('bringing the Omi back hides the row without the guide', (tester) async {
-      await _seed(device: _omi, daysAgo: 5);
-      final provider = _FakeDeviceProvider(reconnects: true);
-      final guideOpens = <BuildContext>[];
-      await _pump(tester, provider, guideOpens: guideOpens);
-
-      await tester.tap(find.byKey(_reconnect));
-      await tester.pumpAndSettle();
-      await tester.runAsync(() => AnalyticsManager.flushPending(force: true));
-
-      expect(provider.connectCalls, 1);
-      expect(guideOpens, isEmpty);
-      expect(find.byKey(_row), findsNothing);
-      final tapped = analytics.named('Reconnect Nudge Tapped');
-      expect(tapped, hasLength(1));
-      expect(tapped.single.$2, containsPair('days_since_connected', 5));
+    test('opens what the Connect chip opens', () {
+      expect(identical(const ReconnectNudgeRow().openConnect, openHomeConnect), isTrue);
     });
 
-    testWidgets('finding nothing opens the guide, again on every new attempt; the row stays', (tester) async {
+    testWidgets('opens it at once on every tap and logs each tap; the row stays', (tester) async {
       await _seed(device: _omi, daysAgo: 5);
-      final provider = _FakeDeviceProvider();
-      final guideOpens = <BuildContext>[];
-      await _pump(tester, provider, guideOpens: guideOpens);
+      final opens = <BuildContext>[];
+      await _pump(tester, _FakeDeviceProvider(), opens: opens);
 
-      for (var attempt = 1; attempt <= 3; attempt++) {
+      for (var tap = 1; tap <= 3; tap++) {
         await tester.tap(find.byKey(_reconnect));
-        await tester.pumpAndSettle();
-        expect(provider.connectCalls, attempt);
-        expect(guideOpens, hasLength(attempt));
+        expect(opens, hasLength(tap), reason: 'tap $tap opens before any frame or timer');
+        await tester.pump();
         expect(find.byKey(_row), findsOneWidget);
       }
-    });
-
-    testWidgets('an Omi that never answers gets the guide after the 15 second budget', (tester) async {
-      await _seed(device: _omi, daysAgo: 5);
-      final guideOpens = <BuildContext>[];
-      await _pump(tester, _FakeDeviceProvider(slow: true), guideOpens: guideOpens);
-
-      await tester.tap(find.byKey(_reconnect));
-      await tester.pump(const Duration(seconds: 14));
-      expect(guideOpens, isEmpty);
-      await tester.pump(const Duration(seconds: 1));
-      expect(guideOpens, hasLength(1));
-    });
-
-    testWidgets('a late connection hides the row and opens nothing', (tester) async {
-      await _seed(device: _omi, daysAgo: 5);
-      final provider = _FakeDeviceProvider(slow: true);
-      final guideOpens = <BuildContext>[];
-      await _pump(tester, provider, guideOpens: guideOpens);
-
-      await tester.tap(find.byKey(_reconnect));
-      await tester.pump(const Duration(seconds: 5));
-      provider.finish(connected: true);
-      await tester.pumpAndSettle();
-      await tester.pump(const Duration(seconds: 15));
-
-      expect(find.byKey(_row), findsNothing);
-      expect(guideOpens, isEmpty);
-    });
-
-    testWidgets('closing the row while it tries means no guide afterwards', (tester) async {
-      await _seed(device: _omi, daysAgo: 5);
-      final provider = _FakeDeviceProvider(slow: true);
-      final guideOpens = <BuildContext>[];
-      await _pump(tester, provider, guideOpens: guideOpens);
-
-      await tester.tap(find.byKey(_reconnect));
-      await tester.pump(const Duration(seconds: 2));
-      await tester.tap(find.byKey(_close));
-      await tester.pump();
-      provider.finish();
-      await tester.pump(const Duration(seconds: 15));
-
-      expect(find.byKey(_row), findsNothing);
-      expect(guideOpens, isEmpty);
-    });
-
-    testWidgets('a page opened over Home while it tries means no guide, even past the budget', (tester) async {
-      await _seed(device: _omi, daysAgo: 5);
-      final guideOpens = <BuildContext>[];
-      await _pump(tester, _FakeDeviceProvider(slow: true), guideOpens: guideOpens);
-
-      await tester.tap(find.byKey(_reconnect));
-      await tester.pump(const Duration(seconds: 2));
-      Navigator.of(tester.element(find.byKey(_row)))
-          .push(MaterialPageRoute<void>(builder: (_) => const Scaffold(body: Text('Elsewhere'))));
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pump(const Duration(seconds: 15));
-
-      expect(find.text('Elsewhere'), findsOneWidget);
-      expect(guideOpens, isEmpty);
-    });
-
-    testWidgets('switching to another tab while it tries means no guide', (tester) async {
-      await _seed(device: _omi, daysAgo: 5);
-      final provider = _FakeDeviceProvider(slow: true);
-      final guideOpens = <BuildContext>[];
-      final homeVisible = ValueNotifier(true);
-      addTearDown(homeVisible.dispose);
-      await _pump(tester, provider, guideOpens: guideOpens, homeVisible: homeVisible);
-
-      await tester.tap(find.byKey(_reconnect));
-      await tester.pump(const Duration(seconds: 2));
-      homeVisible.value = false;
-      await tester.pump();
-      provider.finish();
-      await tester.pump(const Duration(seconds: 15));
-
-      expect(guideOpens, isEmpty);
-    });
-  });
-
-  group('Bluetooth not usable: the app\'s Bluetooth prompt, never a connect or the device guide', () {
-    Future<void> tapAndAnswer(WidgetTester tester, {required String prompt, required String answer}) async {
-      await tester.tap(find.byKey(_reconnect));
-      await tester.pumpAndSettle();
-      expect(find.text(prompt), findsOneWidget);
-      await tester.tap(find.text(answer).last);
-      await tester.pumpAndSettle();
-      expect(find.text(prompt), findsNothing);
-    }
-
-    testWidgets('off: every tap, before and after the prompt was acknowledged', (tester) async {
-      await _seed(device: _omi, daysAgo: 5);
-      final readiness =
-          BluetoothReadiness(readState: () async => 'off', permissionState: (_) async => null, observeBridge: false);
-      final provider = _FakeDeviceProvider();
-      final guideOpens = <BuildContext>[];
-      await _pump(tester, provider, guideOpens: guideOpens, readiness: readiness);
-
-      for (var tap = 0; tap < 3; tap++) {
-        await tapAndAnswer(tester, prompt: 'Enable Bluetooth', answer: 'OK');
-      }
-      expect(provider.connectCalls, 0);
-      expect(guideOpens, isEmpty);
-    });
-
-    testWidgets('off, with the launch prompt already acknowledged before the first tap', (tester) async {
-      await _seed(device: _omi, daysAgo: 5);
-      final readiness =
-          BluetoothReadiness(readState: () async => 'off', permissionState: (_) async => null, observeBridge: false);
-      expect(await readiness.ensureReady(BluetoothUse.connection), isFalse);
-      readiness.dismissGuidance(readiness.guidance!.id);
-      final provider = _FakeDeviceProvider();
-      final guideOpens = <BuildContext>[];
-      await _pump(tester, provider, guideOpens: guideOpens, readiness: readiness);
-
-      await tapAndAnswer(tester, prompt: 'Enable Bluetooth', answer: 'OK');
-      expect(provider.connectCalls, 0);
-      expect(guideOpens, isEmpty);
-    });
-
-    testWidgets('not allowed: the permission prompt on every tap, before and after Not Now', (tester) async {
-      await _seed(device: _omi, daysAgo: 5);
-      final readiness = BluetoothReadiness(
-        readState: () async => 'on',
-        permissionState: (_) async => BluetoothAdapterState.unauthorized,
-        observeBridge: false,
-      );
-      final provider = _FakeDeviceProvider();
-      final guideOpens = <BuildContext>[];
-      await _pump(tester, provider, guideOpens: guideOpens, readiness: readiness);
-
-      for (var tap = 0; tap < 3; tap++) {
-        await tapAndAnswer(tester, prompt: 'Permissions Required', answer: 'Not Now');
-      }
-      expect(provider.connectCalls, 0);
-      expect(guideOpens, isEmpty);
+      await tester.runAsync(() => AnalyticsManager.flushPending(force: true));
+      final tapped = analytics.named('Reconnect Nudge Tapped');
+      expect(tapped, hasLength(3));
+      expect(tapped.first.$2, containsPair('days_since_connected', 5));
     });
   });
 
