@@ -126,6 +126,24 @@ void main() {
       expect(notes.calls, hasLength(2));
     });
 
+    test('volatile revisions cannot count the same growing words repeatedly', () async {
+      final notes = _ScriptedNotes();
+      final harness = _Harness(notes);
+      addTearDown(harness.controller.dispose);
+      await harness.ready();
+      for (var i = 0; i < 50; i++) {
+        harness.engine.emit('volatile', 'one two three', false);
+        harness.engine.emit('volatile', 'one', false);
+      }
+      await harness.ready();
+      expect(harness.controller.totalWordsSeen, 3);
+      expect(notes.calls, isEmpty);
+      harness.engine.emit('volatile', List.generate(40, (i) => 'w$i').join(' '), true);
+      await harness.ready();
+      expect(harness.controller.totalWordsSeen, 40);
+      expect(notes.calls, hasLength(1));
+    });
+
     test('continues drafting past 1500 words and after bounded lines evict', () async {
       final notes = _ScriptedNotes();
       final harness = _Harness(notes);

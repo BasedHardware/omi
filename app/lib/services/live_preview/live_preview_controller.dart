@@ -128,6 +128,7 @@ class LivePreviewController extends ChangeNotifier {
   int _sessionGeneration = 0;
   int get sessionGeneration => _sessionGeneration;
   int _totalWordsSeen = 0;
+  final Map<String, int> _lineWordHighWater = {};
   int get totalWordsSeen => _totalWordsSeen;
 
   int _generation = 0;
@@ -405,9 +406,12 @@ class LivePreviewController extends ChangeNotifier {
       if (index >= 0 && !_lines[index].isFinal) _lines.removeAt(index);
       if (result.isFinal) _finalWordCounts.remove(result.segmentId);
     } else {
-      final previousWords = index < 0 ? 0 : _wordCount(_lines[index].text);
+      final previousWords = _lineWordHighWater[result.segmentId] ?? 0;
       final newWords = _wordCount(text);
-      if (newWords > previousWords) _totalWordsSeen += newWords - previousWords;
+      if (newWords > previousWords) {
+        _totalWordsSeen += newWords - previousWords;
+        _lineWordHighWater[result.segmentId] = newWords;
+      }
       final line = LivePreviewLine(
           id: result.segmentId,
           text: text,
@@ -419,7 +423,13 @@ class LivePreviewController extends ChangeNotifier {
         _lines[index] = line;
       } else {
         _lines.add(line);
-        if (_lines.length > maxLines) _lines.removeRange(0, _lines.length - maxLines);
+        if (_lines.length > maxLines) {
+          final evicted = _lines.length - maxLines;
+          for (final line in _lines.take(evicted)) {
+            _lineWordHighWater.remove(line.id);
+          }
+          _lines.removeRange(0, evicted);
+        }
       }
       if (result.isFinal) _finalWordCounts[result.segmentId] = _wordCount(text);
     }
@@ -429,6 +439,7 @@ class LivePreviewController extends ChangeNotifier {
   void _clearLines() {
     _sessionGeneration++;
     _totalWordsSeen = 0;
+    _lineWordHighWater.clear();
     _lines.clear();
   }
 
