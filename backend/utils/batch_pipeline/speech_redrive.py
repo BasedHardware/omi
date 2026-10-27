@@ -11,14 +11,9 @@ from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
 from config.batch_pipeline_empty_asr import terminal_empty_allowed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import normalized_binding
-from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive, redrive_route
+from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive
 from database.batch_pipeline_recognizer_receipts import record_recognizer
-from config.batch_language_recovery import (
-    allowed as independent_allowed,
-    below_silence_threshold,
-    prior_modulate_empty,
-    modulate_words_redrive,
-)
+from config.batch_language_recovery import allowed as independent_allowed, below_silence_threshold, prior_modulate_empty
 from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_result_allowed, worker_vad_speech
 from utils.batch_pipeline.quarantine_recovery import log_failure, log_terminal_empty
 from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe
@@ -69,7 +64,7 @@ def redrive_one(
         return 'policy_unpinned'
     if policy is None or not policy.recovery_enabled:
         return 'disabled'
-    if not redrive_route(policy, original_job):
+    if not policy.speech_empty_multilingual and not independent_redrive(original_job):
         return 'disabled'
     if independent_redrive(original_job) != independent_language:
         return 'independent_plan_required'
@@ -130,10 +125,10 @@ def redrive_one(
     _, duration, spans = inspect_audio(item, audio)
     measured = sum(span['end'] - span['start'] for span in spans)
     # Bound worker VAD may locate guarded words that strict CPU VAD missed.
-    worker = worker_vad_speech(job) if independent or modulate_words_redrive(job) else None
+    worker = worker_vad_speech(job) if independent else None
     if independent and not protocol.observe_vad(sid, token, plan_digest, measured):
         return 'fenced'
-    if not spans and not independent and worker is None:
+    if not spans and not independent:
         raise RecoveryFailure('strict_vad', 'no_speech')
     if independent and not independent_allowed(duration):
         return 'independent_budget_held'
@@ -169,13 +164,7 @@ def redrive_one(
         payload = (
             independent_stt(item, audio, MultilingualEmpty(duration, spans, worker))
             if independent
-            else stt(
-                item,
-                normalized_binding(job['projection_binding']),
-                audio,
-                multilingual=True,
-                **({} if worker is None else {'force_recognition': True, 'worker_speech': worker}),
-            )
+            else stt(item, normalized_binding(job['projection_binding']), audio, multilingual=True)
         )
         if result_outcome(payload) != 'success' or not payload.get('words'):
             raise RecoveryFailure('payload_validation', 'invalid_payload')

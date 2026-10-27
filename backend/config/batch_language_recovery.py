@@ -38,28 +38,6 @@ def independent_attempted(job):
     return receipt.get('outcome') in {'started', 'words', 'empty', 'error'}
 
 
-def modulate_words_redrive(job):
-    """Spent Modulate words rejected only for zero strict CPU VAD, under bound worker VAD.
-
-    Those words are the evidence an operator Modulate epoch buys again (not an
-    independent Soniox one); a Soniox intent already prepared keeps its route.
-    """
-    from utils.batch_pipeline.contracts import worker_vad_speech
-
-    recovery = job.get('recovery') or {}
-    receipt = (recovery.get('recognizers') or {}).get('modulate') or {}
-    return (
-        language_guarded(job)
-        and recovery.get('provider') == 'modulate'
-        and recovery.get('failure') == {'stage': 'payload_validation', 'reason': 'invalid_payload'}
-        and receipt.get('outcome') == 'words'
-        and type(receipt.get('word_count')) is int
-        and receipt['word_count'] > 0
-        and (job.get('speech_redrive') or {}).get('provider') != PROVIDER
-        and worker_vad_speech(job) is not None
-    )
-
-
 def prior_modulate_empty(job):
     paid = job.get('speech_redrive') or {}
     if paid.get('provider') == PROVIDER:

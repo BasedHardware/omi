@@ -26,12 +26,7 @@ import batch_pipeline_held_disposition as held
 from google.cloud import firestore, storage
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive, replaceable_modulate_intent
-from config.batch_language_recovery import (
-    MAX_AUDIO_SECONDS,
-    ESTIMATED_USD_PER_AUDIO_HOUR,
-    independent_attempted,
-    modulate_words_redrive,
-)
+from config.batch_language_recovery import MAX_AUDIO_SECONDS, ESTIMATED_USD_PER_AUDIO_HOUR, independent_attempted
 from database.batch_pipeline_store import FirestoreStore
 from database.sync_ledger import batch_ledger_owes_held_units
 from utils.batch_pipeline.artifact_policy import create_artifact_store
@@ -144,8 +139,7 @@ def inspect_unit(store, artifacts, sid, uid, key, independent=False):
         return 'silent'
     item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
     _, _, spans = inspect_audio(item, artifacts.fetch_audio(item))
-    # Spent Modulate words under bound worker VAD are speech even at zero CPU VAD.
-    return 'speech' if spans or modulate_words_redrive(job) else 'silent'
+    return 'speech' if spans else 'silent'
 
 
 def main():

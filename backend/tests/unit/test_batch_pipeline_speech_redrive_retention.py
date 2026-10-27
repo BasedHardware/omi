@@ -78,21 +78,3 @@ def test_epoch3_registration_rejects_foreign_or_unsupported_intent(setup, monkey
     with pytest.raises(BatchPrivacyBlocked, match='result_lease_lost'):
         register_batch_artifact(store, binding.owner_id, 'bad', f'gs://synthetic/results/bad/{token}.enc', 'results', 0)
     assert not [key for key in client.rows if key[0] == 'batch_pipeline_prod_artifacts']
-
-
-@pytest.mark.parametrize('multilingual', [True, False])
-def test_running_words_redrive_registers_result_with_multilingual_off(
-    setup, monkeypatch, legacy_dependencies, multilingual
-):
-    from tests.unit.test_batch_language_recovery import settled_words_without_vad
-
-    client, store, binding, _, _, _, old = settled_words_without_vad(
-        setup, monkeypatch, legacy_dependencies, multilingual=multilingual
-    )
-    protocol = SpeechRedriveStore(store, server_flags=SERVING_ENV)
-    token = protocol.prepare('bad', binding.owner_id, 'words-plan', old, 100)['speech_redrive']['token']
-    assert protocol.start('bad', token, 'words-plan', 101)
-    assert row(client)['speech_redrive']['provider'] == 'modulate'
-    uri = f'gs://synthetic/results/bad/{token}.enc'
-    register_batch_artifact(store, binding.owner_id, 'bad', uri, 'results', 0)
-    assert [v['uri'] for k, v in client.rows.items() if k[0] == 'batch_pipeline_prod_artifacts'] == [uri]
