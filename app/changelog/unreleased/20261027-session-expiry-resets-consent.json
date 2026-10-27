@@ -1,0 +1,1 @@
+{"change": "After a session expires, the next sign-in asks for AI consent again, so a different account no longer inherits the previous account's consent and onboarding."}
