@@ -27,6 +27,8 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 def _recovery_route(monkeypatch):
     # Rollback must still retain unsafe admitted audio before a model call.
     monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', 'false')
+    # This suite pins the legacy GPU route; batch language eligibility is covered in its own suite.
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
