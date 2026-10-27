@@ -260,7 +260,7 @@ Merging config is not a deployment or a successful production E2E receipt.
 | `main.py` → `start_serving_from_env` → recovery/projection/cleanup | Only Cloud Run `backend-integration`; existing deployment has minimum three instances and CPU throttling disabled. Other CPU hosts keep the pump off |
 | `compute_client.from_env` | Dedicated GPU worker; HTTPS base `https://backend-sync-hhibjajaja-uc.a.run.app`, exact same OIDC audience |
 | `routers/batch_pipeline.verify_worker` → spend admission | Only Cloud Run `backend-sync` is configured to accept `batch-pipeline-worker@based-hardware.iam.gserviceaccount.com` with that audience |
-| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, two fixed replicas (one L4 node each), autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
+| `diarizer.batch_pipeline_runtime` | Separate prod worker chart, fixed4 with scaler off until qualification. The prepared OD/Spot cutover has each HPA1–12 on fresh admissible queued-unit counts (total2–24), requiring a measured target and approval; worker's own upload-admission gate stays false. |
 | `pusher.main` | No batch upload admission, serving-loop or dedicated-worker consumer; no pusher flag change |
 
 Intake and worker ceilings both stay at 3600 seconds, ASR/segmentation/VAD model

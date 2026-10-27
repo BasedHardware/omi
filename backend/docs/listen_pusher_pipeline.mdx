@@ -19,6 +19,13 @@ transactional job claims and recovery cadence are unchanged. See
 
 ## Server batch-only capture by platform
 
+Dedicated batch GPU capacity follows fresh admissible queued-unit counts, not
+raw queue age. Allowance-held work remains in durable custody while parked;
+its periodic ready/re-evaluation transition cannot request additional GPUs.
+Capacity never bypasses funding/privacy or changes capture admission. The
+[worker capacity contract](batch-pipeline-worker.md#capacity-and-autoscaling)
+defines OD/Spot floors, rollout qualification, drain and rollback.
+
 `SERVER_BATCH_ONLY_ENABLED` defaults true; set false to restore live STT on
 new sessions. `SERVER_BATCH_ONLY_PLATFORMS` defaults `macos,windows` and may
 also name `linux`. An empty list disables desktop admission. Mobile uses
