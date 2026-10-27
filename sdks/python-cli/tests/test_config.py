@@ -950,3 +950,112 @@ def test_config_set_rejects_empty_or_whitespace_local_token(config_path: Path, c
     assert "Invalid value for 'local_token'" in result.output
     config = cfg.load()
     assert config.get_profile("default").local_token is None
+
+
+def test_concurrent_store_api_key_preserves_all_profiles(config_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Concurrent profile logins must serialize load -> mutate -> save (#22972)."""
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    import time
+
+    from omi_cli.auth.store import store_api_key
+
+    real_load = cfg.load
+    barrier = threading.Barrier(2)
+
+    def delayed_load(path: Path | None = None) -> cfg.Config:
+        loaded = real_load(path)
+        # Pause briefly after load so an unlocked implementation would let both
+        # callers read the same initial state and overwrite one another on save.
+        time.sleep(0.03)
+        return loaded
+
+    monkeypatch.setattr(cfg, "load", delayed_load)
+
+    def worker(profile_name: str, key: str) -> None:
+        barrier.wait(timeout=5)
+        store_api_key(profile_name, key)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f1 = pool.submit(worker, "personal", "omi_dev_personal_key")
+        f2 = pool.submit(worker, "work", "omi_dev_work_key")
+        f1.result(timeout=10)
+        f2.result(timeout=10)
+
+    monkeypatch.setattr(cfg, "load", real_load)
+    saved = cfg.load(config_path)
+    assert "personal" in saved.profiles
+    assert "work" in saved.profiles
+    assert saved.profiles["personal"].api_key == "omi_dev_personal_key"
+    assert saved.profiles["work"].api_key == "omi_dev_work_key"
+    assert saved.active_profile in {"personal", "work"}
+
+
+def test_concurrent_subprocess_profile_writes_preserve_all_credentials(config_path: Path) -> None:
+    """Cross-process file locking prevents lost updates across separate CLI processes (#22972)."""
+    import subprocess
+
+    profiles = [(f"profile_{i}", f"omi_dev_key_{i}") for i in range(4)]
+    code = (
+        "import sys, time; "
+        "from omi_cli import config as cfg; "
+        "from omi_cli.auth.store import store_api_key; "
+        "orig = cfg.load; "
+        "cfg.load = lambda p=None: (time.sleep(0.02), orig(p))[1]; "
+        "store_api_key(sys.argv[1], sys.argv[2])"
+    )
+    env = {**os.environ, cfg.ENV_CONFIG_PATH: str(config_path)}
+    procs = [
+        subprocess.Popen(
+            [sys.executable, "-c", code, name, key],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for name, key in profiles
+    ]
+    for proc in procs:
+        _, stderr = proc.communicate(timeout=30)
+        assert proc.returncode == 0, stderr
+
+    saved = cfg.load(config_path)
+    for name, key in profiles:
+        assert name in saved.profiles
+        assert saved.profiles[name].api_key == key
+
+
+def test_concurrent_oauth_refresh_and_profile_updates_do_not_clobber_each_other(config_path: Path) -> None:
+    """OAuth token refresh on one profile must not clobber concurrent writes to another profile."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from omi_cli.auth.store import (
+        clear_credentials,
+        store_api_key,
+        store_oauth_tokens,
+        update_oauth_id_token,
+    )
+
+    store_oauth_tokens(
+        "oauth_prof",
+        id_token="id_initial",
+        refresh_token="refresh_keep",
+        expires_at=1000.0,
+        api_key="omi_dev_oauth",
+    )
+    store_api_key("stale_prof", "omi_dev_to_clear")
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = [
+            pool.submit(update_oauth_id_token, "oauth_prof", id_token="id_refreshed", expires_at=2000.0),
+            pool.submit(store_api_key, "api_prof", "omi_dev_fresh"),
+            pool.submit(clear_credentials, "stale_prof"),
+        ]
+        for fut in futures:
+            fut.result(timeout=10)
+
+    saved = cfg.load(config_path)
+    assert saved.profiles["oauth_prof"].id_token == "id_refreshed"
+    assert saved.profiles["oauth_prof"].refresh_token == "refresh_keep"
+    assert saved.profiles["api_prof"].api_key == "omi_dev_fresh"
+    assert not saved.profiles["stale_prof"].is_authenticated()

@@ -101,15 +101,9 @@ def set_value(
             message=f"Unknown config key '{key}'",
             detail=f"Settable keys: {sorted(_SETTABLE_KEYS)}",
         )
-    config = ctx.load_config()
-    profile = config.get_profile(ctx.profile_name)
     if key in {"api_base", "local_api_url"}:
         stored_value = validated_url(key, value)
-        if key == "api_base":
-            profile.api_base = stored_value
-        else:
-            profile.local_api_url = stored_value
-    elif key == "local_token":
+    else:
         cleaned = value.strip()
         if not cleaned:
             raise UsageError(
@@ -117,9 +111,18 @@ def set_value(
                 detail=f"'{key}' cannot be empty.",
             )
         stored_value = cleaned
-        profile.local_token = stored_value
-    config.set_profile(profile)
-    cfg.save(config)
+
+    with cfg.locked_config() as config:
+        profile = config.get_profile(ctx.profile_name)
+        if key == "api_base":
+            profile.api_base = stored_value
+        elif key == "local_api_url":
+            profile.local_api_url = stored_value
+        elif key == "local_token":
+            profile.local_token = stored_value
+        config.set_profile(profile)
+        cfg.save(config)
+        ctx._config = config
     display_value = (
         cfg.Profile(name=profile.name, local_token=stored_value).masked_local_token()
         if key == "local_token"
@@ -163,13 +166,14 @@ def profile_use(
     name: str = typer.Argument(..., help="Profile name to make active."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    config = ctx.load_config()
-    if name not in config.profiles:
-        # Allow switching to a brand-new (yet-unconfigured) profile so users can
-        # bootstrap a fresh context: `omi config profile use work && omi auth login`
-        config.profiles[name] = cfg.Profile(name=name)
-    config.active_profile = name
-    cfg.save(config)
+    with cfg.locked_config() as config:
+        if name not in config.profiles:
+            # Allow switching to a brand-new (yet-unconfigured) profile so users can
+            # bootstrap a fresh context: `omi config profile use work && omi auth login`
+            config.profiles[name] = cfg.Profile(name=name)
+        config.active_profile = name
+        cfg.save(config)
+        ctx._config = config
     ctx.renderer.success(f"Active profile: [bold]{escape(name)}[/bold].")
     if ctx.renderer.json_mode:
         ctx.renderer.emit({"ok": True, "active_profile": name})
@@ -187,8 +191,12 @@ def profile_delete(
         raise UsageError(message=f"No such profile: '{name}'")
     if not confirm:
         typer.confirm(f"Delete profile '{name}'?", abort=True, err=ctx.renderer.json_mode)
-    config.delete_profile(name)
-    cfg.save(config)
+    with cfg.locked_config() as locked:
+        if name not in locked.profiles:
+            raise UsageError(message=f"No such profile: '{name}'")
+        locked.delete_profile(name)
+        cfg.save(locked)
+        ctx._config = locked
     ctx.renderer.success(f"Deleted profile [bold]{escape(name)}[/bold].")
     if ctx.renderer.json_mode:
         ctx.renderer.emit({"ok": True, "deleted_profile": name})

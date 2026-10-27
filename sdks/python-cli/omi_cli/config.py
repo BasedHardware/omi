@@ -19,9 +19,11 @@ import math
 import os
 import secrets
 import sys
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 import tomli_w
 
@@ -31,6 +33,11 @@ if sys.version_info >= (3, 11):
     import tomllib
 else:  # pragma: no cover — exercised only on 3.10
     import tomli as tomllib  # noqa: F401
+
+if sys.platform == "win32":  # pragma: no cover — exercised on Windows runners
+    import msvcrt
+else:
+    import fcntl
 
 
 DEFAULT_API_BASE = "https://api.omi.me"
@@ -321,6 +328,133 @@ def _has_non_directory_parent(path: Path) -> bool:
     return False
 
 
+def _ensure_parent_dir(parent: Path) -> None:
+    """Create ``parent`` if missing, tightening mode to ``0o700`` only when newly created."""
+    parent_existed = parent.exists()
+    parent.mkdir(parents=True, exist_ok=True)
+    # Owner-only perms on a directory we create ourselves. Leave a
+    # pre-existing (e.g. user-selected via $OMI_CONFIG, possibly shared)
+    # directory's permissions untouched — best-effort, don't fail on it.
+    if not parent_existed:
+        try:
+            os.chmod(parent, 0o700)
+        except OSError:
+            pass
+
+
+_PROCESS_LOCKS_GUARD = threading.Lock()
+_PROCESS_LOCKS: dict[Path, threading.RLock] = {}
+_LOCK_STATE = threading.local()
+
+
+def _get_process_lock(key: Path) -> threading.RLock:
+    with _PROCESS_LOCKS_GUARD:
+        lock = _PROCESS_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _PROCESS_LOCKS[key] = lock
+        return lock
+
+
+def _acquire_os_lock(fd: int) -> None:
+    if sys.platform == "win32":  # pragma: no cover — exercised on Windows runners
+        while True:
+            try:
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+                return
+            except OSError as exc:
+                if exc.errno not in (errno.EACCES, errno.EDEADLK):
+                    raise
+    else:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+
+
+def _release_os_lock(fd: int) -> None:
+    try:
+        if sys.platform == "win32":  # pragma: no cover — exercised on Windows runners
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        else:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    except OSError:
+        pass
+
+
+@contextmanager
+def config_lock(path: Optional[Path] = None) -> Iterator[Path]:
+    """Acquire an exclusive process- and thread-level lock for the config at ``path``."""
+    p = path or default_config_path()
+    key = Path(os.path.abspath(os.fspath(p)))
+    rlock = _get_process_lock(key)
+    depths: Optional[dict[Path, int]] = getattr(_LOCK_STATE, "depths", None)
+    if depths is None:
+        depths = {}
+        _LOCK_STATE.depths = depths
+
+    with rlock:
+        depth = depths.get(key, 0)
+        if depth > 0:
+            depths[key] = depth + 1
+            try:
+                yield p
+            finally:
+                depths[key] = depth
+            return
+
+        lock_fd: Optional[int] = None
+        if not _has_non_directory_parent(p):
+            try:
+                _ensure_parent_dir(p.parent)
+                lock_path = p.with_suffix(p.suffix + ".lock")
+                old_umask = os.umask(0o077)
+                try:
+                    flags = (
+                        os.O_CREAT
+                        | os.O_RDWR
+                        | getattr(os, "O_NOFOLLOW", 0)
+                        | getattr(os, "O_CLOEXEC", 0)
+                        | getattr(os, "O_BINARY", 0)
+                    )
+                    lock_fd = os.open(lock_path, flags, 0o600)
+                finally:
+                    os.umask(old_umask)
+                _acquire_os_lock(lock_fd)
+            except OSError:
+                if lock_fd is not None:
+                    try:
+                        os.close(lock_fd)
+                    except OSError:
+                        pass
+                    lock_fd = None
+
+        depths[key] = 1
+        try:
+            yield p
+        finally:
+            depths.pop(key, None)
+            if lock_fd is not None:
+                try:
+                    _release_os_lock(lock_fd)
+                finally:
+                    try:
+                        os.close(lock_fd)
+                    except OSError:
+                        pass
+
+
+@contextmanager
+def locked_config(path: Optional[Path] = None) -> Iterator[Config]:
+    """Acquire an exclusive lock for ``path`` and yield the freshly loaded :class:`Config`.
+
+    Hold this context across a ``load() -> mutate -> save()`` cycle so concurrent
+    CLI invocations targeting different profiles serialize their read-modify-write
+    instead of overwriting one another's changes.
+    """
+    with config_lock(path) as p:
+        yield load(p)
+
+
 def save(config: Config) -> None:
     """Persist the config to disk with secure (owner-only) permissions.
 
@@ -339,17 +473,7 @@ def save(config: Config) -> None:
         raise ConfigWriteRefused(
             f"refusing to overwrite {config.path}: {config.load_error}. " "Fix or remove the config file and try again."
         )
-    parent = config.path.parent
-    parent_existed = parent.exists()
-    parent.mkdir(parents=True, exist_ok=True)
-    # Owner-only perms on a directory we create ourselves. Leave a
-    # pre-existing (e.g. user-selected via $OMI_CONFIG, possibly shared)
-    # directory's permissions untouched — best-effort, don't fail on it.
-    if not parent_existed:
-        try:
-            os.chmod(parent, 0o700)
-        except OSError:
-            pass
+    _ensure_parent_dir(config.path.parent)
 
     payload: dict[str, Any] = {
         **config.extra,
