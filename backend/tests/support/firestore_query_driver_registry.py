@@ -174,14 +174,17 @@ BODY_DIGEST = {
     'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'edf090b47ae28c017f15251bc0c9a4fe6d92445745f3b89f585159ac51f0c8d1',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
-    'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
+    # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
+    'database.sync_backfill_sequencer._pending_for_uid': 'fc7bb91a5b03e84f63950c00ca896eaadcd97f055c571fac6a761e4d6bb4fa1d',
     # Re-reviewed: the post-commit task-list cache invalidation adds no query.
     'database.workstreams.import_task_goal_links': '5d2384ad2102107cc487d29c18a47204f5d5fea0201c9ae0d2a56f5959b91971',
     # Re-reviewed: public size guard rename and correction-parent rejection add
     # no query. Post-commit quiet retirement adds document reads only; terminal
     # streams still belong to the two driven callees. Retained extraction
     # re-encryption on protection upgrade adds no query or document read.
-    'database.smart_merge.absorb_conversation': '55c3b4249fd2ac67d6f49a0da36bbdd24715b803c62d2e44191de2de2b3a2a40',
+    # Donor dedupe uses the decoded transaction snapshot; its cohort gate can
+    # refresh a document read, while post-commit bridge logging adds no query.
+    'database.smart_merge.absorb_conversation': 'd2f4c29d3d2b15062fe20bc40cf90f038fcd4ce14ab620249d293da1d7b22f1d',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
     # Open-loop store: whole-subcollection stream by document id, filtered in Python.
@@ -806,6 +809,21 @@ _add(
     )
 )
 _add(DriverEntry('database.conversation_finalization_jobs.get_finalization_job_summary'))
+
+_add(
+    DriverEntry(
+        'database.transcript_search.read_transcript_search_page',
+        base={'uid': UID, 'query': 'invoice'},
+        domains={'start_date': [None, T0], 'end_date': [None, T1]},
+        neutrals={
+            'cursor': _CURSOR,
+            'budget': (
+                ListReadBudget(deadline_monotonic=12.0, max_documents=50, clock=lambda: 0.0),
+                'required bounded scan budget; frozen clock, fresh per driver trial',
+            ),
+        },
+    )
+)
 
 
 def _byok_reclaim_cursor(client, combo, trial):

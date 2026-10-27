@@ -14227,13 +14227,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => '前のエピソードを開く';
-
-  @override
   String get episodeNotesSoon => '会話が数分続くとメモが表示されます。';
-
-  @override
-  String get episodeOpenAll => 'すべて開く';
 
   @override
   String get episodeWrapUpNow => '今すぐまとめる';
@@ -14371,22 +14365,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get othersSpeakerLabel => 'その他';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => '完了';
@@ -14416,4 +14398,49 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'アップロードは一時停止中です — 自動的に再開されます';
+
+  @override
+  String episodeContinues(Object title) {
+    return '「$title」の続き';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· $timeから';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => '最終書き起こしが届くとノートが始まります。';
+
+  @override
+  String get episodeOnDeviceNotesFootnote => '話している間にこのスマホで下書きされます。完全なノートは最終書き起こしと一緒に届きます。';
+
+  @override
+  String get episodeOnThisPhone => 'この端末上で';
+
+  @override
+  String get episodeOpenTranscript => '文字起こしを開く';
+
+  @override
+  String get liveCardTitle => 'ライブ';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return '最終書き起こしは約$duration遅れています';
+  }
+
+  @override
+  String get livePreviewCatchingUp => '最終書き起こしを準備中です';
+
+  @override
+  String get livePreviewNoEngineBody => '発言は話してから1〜2分後にここに表示されます。';
+
+  @override
+  String get livePreviewNoEngineTitle => '安全に録音しています';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'この端末でライブ';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'ライブテキストをオンにする';
 }

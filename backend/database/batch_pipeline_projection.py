@@ -18,6 +18,7 @@ from database.fsr_read_cache import writing
 from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, BatchPrivacyReason
+from database.batch_pipeline_projection_privacy import HOLD_REASONS
 from database.sync_ledger import (
     BATCH_PARTIAL_STATUS,
     batch_projection_ledger_owner_matches,
@@ -91,7 +92,7 @@ class ProjectionStore:
             try:
                 job, _ = load_stage_policy(self.store, segment_id, 'projection')
             except BatchPrivacyBlocked as error:
-                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED and error.reason not in HOLD_REASONS:
                     raise
                 # Deletion may win before the projection policy was first
                 # pinned. No policy or source mutation is allowed then. These
@@ -99,7 +100,11 @@ class ProjectionStore:
                 # Projector must never assign a job carrying this hint.
                 job = {
                     **job,
-                    '_projection_privacy_deleted': True,
+                    **(
+                        {'_projection_privacy_deleted': True}
+                        if error.reason == BatchPrivacyReason.CONVERSATION_DELETED
+                        else {'_projection_privacy_refusal': error.reason.value}
+                    ),
                     'policy_parts': {**(job.get('policy_parts') or {}), 'projection': ProjectionPolicy().to_dict()},
                 }
         entry = self.ref('results', segment_id).get().to_dict() or {}
@@ -403,7 +408,8 @@ class ProjectionStore:
             return None
         charged = ledger.get('usage_committed_seconds', 0.0) if ledger.get('status') == BATCH_PARTIAL_STATUS else 0.0
         steps, step_times = charge_chain(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else ([0.0], [])
-        if binding.native_record:
+        intake = self.ref('intakes', binding.job_id).get().to_dict() or {}
+        if binding.native_record and intake.get('server_batch_only') is not True:
             return {
                 'seconds': seconds,
                 'source': 'realtime',
@@ -418,7 +424,6 @@ class ProjectionStore:
         updates = {}
         if int(seconds) - int(charged) > 0 and ledger.get('status') != 'completed':
             # Lane 6 ruling B(a): bill a cap-hold unit to its funded month across a rollover.
-            intake = self.ref('intakes', binding.job_id).get().to_dict() or {}
             stamp = usage_stamp(stamp, intake.get('usage_period'))
             from database.llm_usage import resolve_usage_plan_id
             from database.hourly_usage_updates import prepare_hourly_usage_updates
@@ -766,7 +771,8 @@ OPERATOR_INTENTS = ('speech_redrive', 'terminal_disposition', 'silence_dispositi
 def held_without_recovery(job: dict) -> bool:
     """A quarantined unit that nothing automatic will change.
 
-    Its one paid recovery settled without words (``failed_held``), or its
+    Its recovery settled without words or hit the hard independent duration
+    limit before spending (``failed_held``), or its
     recorded recovery policy is off and no paid call was ever authorized. Either
     way its encrypted audio stays server-side for a reviewed operator redrive.
     """

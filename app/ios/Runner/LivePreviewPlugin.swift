@@ -80,10 +80,13 @@ final class LivePreviewPlugin: NSObject, FlutterStreamHandler {
                 reply(choice.wire)
             }
         case "feed":
-            guard let data = (call.arguments as? FlutterStandardTypedData)?.data, let session else {
+            let args = call.arguments as? [String: Any] ?? [:]
+            guard let data = (args["pcm"] as? FlutterStandardTypedData)?.data, let session else {
                 reply(false); return
             }
-            reply(session.append(pcm16: data))
+            let startedAt = (args["startMs"] as? Double).map { $0 / 1000 }
+                ?? (Date().timeIntervalSince1970 - Double(data.count) / 32000)
+            reply(session.append(pcm16: data, startedAt: startedAt))
         case "stop":
             generation += 1
             let retired = retireSession()
@@ -104,8 +107,9 @@ final class LivePreviewPlugin: NSObject, FlutterStreamHandler {
         sink?(["failure": "engine_error", "engine": engine])
     }
 
-    private func emit(_ segmentId: String, _ text: String, _ isFinal: Bool) {
-        sink?(["segmentId": segmentId, "text": text, "isFinal": isFinal])
+    private func emit(_ segmentId: String, _ text: String, _ isFinal: Bool, _ start: Double, _ end: Double, _ spans: [PreviewTimedSpan]) {
+        sink?(["segmentId": "\(generation):\(segmentId)", "text": text, "isFinal": isFinal, "startMs": start * 1000, "endMs": end * 1000,
+               "spans": spans.map { ["text": $0.text, "startMs": $0.start * 1000, "endMs": $0.end * 1000] }])
     }
 
     private var bundledInstalled: Bool {
@@ -116,7 +120,10 @@ final class LivePreviewPlugin: NSObject, FlutterStreamHandler {
 
     private func select(language: String, exclude: Set<String>, generation mine: Int) async -> (LivePreviewSession?, LivePreviewChoice) {
         let bundled = bundledInstalled
-        let onResult: (String, String, Bool) -> Void = { [weak self] id, text, isFinal in self?.emit(id, text, isFinal) }
+        let onResult: (String, String, Bool, Double, Double, [PreviewTimedSpan]) -> Void = { [weak self] id, text, isFinal, start, end, spans in
+            guard let self, mine == self.generation else { return }
+            self.emit(id, text, isFinal, start, end, spans)
+        }
         func onFailure(_ engine: String) -> () -> Void {
             { [weak self] in self?.runtimeFailure(engine: engine, generation: mine) }
         }
@@ -155,7 +162,7 @@ final class LivePreviewPlugin: NSObject, FlutterStreamHandler {
 @MainActor
 protocol LivePreviewSession: AnyObject {
     /// Appends 16 kHz mono little-endian PCM16. False when the chunk was refused.
-    func append(pcm16 data: Data) -> Bool
+    func append(pcm16 data: Data, startedAt: TimeInterval) -> Bool
     /// Returns once the recognizer has finished releasing its resources.
     func stop() async
 }
@@ -193,10 +200,10 @@ final class AnalyzerPreviewSession: LivePreviewSession {
         return (.ready, Locale(identifier: identifier))
     }
 
-    static func start(locale: Locale, onResult: @escaping (String, String, Bool) -> Void,
+    static func start(locale: Locale, onResult: @escaping (String, String, Bool, Double, Double, [PreviewTimedSpan]) -> Void,
                       onFailure: @escaping () -> Void) async throws -> AnalyzerPreviewSession {
         let transcriber = SpeechTranscriber(locale: locale, transcriptionOptions: [],
-                                            reportingOptions: [.volatileResults, .fastResults], attributeOptions: [])
+                                            reportingOptions: [.volatileResults, .fastResults], attributeOptions: [.audioTimeRange])
         guard let inputFormat = previewInputFormat else {
             throw NSError(domain: "LivePreview", code: 1, userInfo: [NSLocalizedDescriptionKey: "No PCM16 input format"])
         }
@@ -212,10 +219,16 @@ final class AnalyzerPreviewSession: LivePreviewSession {
                 for try await result in transcriber.results {
                     guard let session, !session.stopped else { return }
                     let text = String(result.text.characters)
-                    onResult(ids.id(isFinal: result.isFinal), text, result.isFinal)
+                    let spans = result.text.runs.map { run -> PreviewTimedSpan in
+                        let range = run.audioTimeRange ?? result.range
+                        return PreviewTimedSpan(text: String(result.text[run.range].characters),
+                                                start: range.start.seconds, end: CMTimeRangeGetEnd(range).seconds)
+                    }
+                    onResult(ids.id(isFinal: result.isFinal), text, result.isFinal,
+                             result.range.start.seconds, CMTimeRangeGetEnd(result.range).seconds, spans)
                 }
             } catch {
-                NSLog("[LivePreview] SpeechAnalyzer results failed: %@", error.localizedDescription)
+                NSLog("[LivePreview] SpeechAnalyzer results failed")
             }
             // Results only end on their own when the analyzer failed or finished
             // underneath us; either way the preview is no longer live.
@@ -248,9 +261,10 @@ final class AnalyzerPreviewSession: LivePreviewSession {
         self.continuation = continuation
     }
 
-    func append(pcm16 data: Data) -> Bool {
+    func append(pcm16 data: Data, startedAt: TimeInterval) -> Bool {
         guard !stopped, let input = int16Buffer(data), let buffer = convert(input) else { return false }
-        if case .dropped = continuation.yield(AnalyzerInput(buffer: buffer)) { return false }
+        if case .dropped = continuation.yield(AnalyzerInput(buffer: buffer, bufferStartTime:
+            CMTime(seconds: startedAt, preferredTimescale: 16000))) { return false }
         return true
     }
 
@@ -308,10 +322,11 @@ final class SFSpeechPreviewSession: LivePreviewSession {
     static let rotateAfter: TimeInterval = 50
 
     private let recognizer: SFSpeechRecognizer
-    private let onResult: (String, String, Bool) -> Void
+    private let onResult: (String, String, Bool, Double, Double, [PreviewTimedSpan]) -> Void
     private let floatFormat = AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1)
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var tasks: [SFSpeechRecognitionTask] = []
+    private var requestClock: PreviewRequestClock?
     private var requestStartedAt = Date()
     private var segment = 0
     private var stopped = false
@@ -323,7 +338,7 @@ final class SFSpeechPreviewSession: LivePreviewSession {
     private let onFailure: () -> Void
     private var consecutiveFailures = 0
 
-    init(recognizer: SFSpeechRecognizer, onResult: @escaping (String, String, Bool) -> Void,
+    init(recognizer: SFSpeechRecognizer, onResult: @escaping (String, String, Bool, Double, Double, [PreviewTimedSpan]) -> Void,
          onFailure: @escaping () -> Void) {
         self.recognizer = recognizer
         self.onResult = onResult
@@ -340,6 +355,8 @@ final class SFSpeechPreviewSession: LivePreviewSession {
         if #available(iOS 16, *) { request.addsPunctuation = true }
         self.request = request
         requestStartedAt = Date()
+        let audioClock = PreviewRequestClock()
+        requestClock = audioClock
         let task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             let text = result?.bestTranscription.formattedString
             // "No speech detected" (kAFAssistantErrorDomain 1110) is silence,
@@ -350,7 +367,13 @@ final class SFSpeechPreviewSession: LivePreviewSession {
             Task { @MainActor in
                 guard let self, !self.stopped else { return }
                 if let text {
-                    self.onResult(id, text, isFinal)
+                    let parts = result?.bestTranscription.segments ?? []
+                    let origin = audioClock.origin ?? 0
+                    self.onResult(id, text, isFinal,
+                                  origin + (parts.first?.timestamp ?? 0),
+                                  origin + (parts.last.map { $0.timestamp + $0.duration } ?? 0),
+                                  parts.map { PreviewTimedSpan(text: $0.substring, start: origin + $0.timestamp,
+                                                               end: origin + $0.timestamp + $0.duration) })
                     if !text.isEmpty { self.consecutiveFailures = 0 }
                 }
                 if failed, self.request === request {
@@ -364,7 +387,14 @@ final class SFSpeechPreviewSession: LivePreviewSession {
                 // recognizer hiccup) ends; the next audio opens a new one.
                 // Requests that fail at once back off so they cannot spin.
                 if (failed || isFinal), self.request === request {
-                    if failed, let text { self.onResult(id, text, true) }
+                    if failed, let text {
+                        let parts = result?.bestTranscription.segments ?? []
+                        let origin = audioClock.origin ?? 0
+                        self.onResult(id, text, true, origin + (parts.first?.timestamp ?? 0),
+                                      origin + (parts.last.map { $0.timestamp + $0.duration } ?? 0),
+                                  parts.map { PreviewTimedSpan(text: $0.substring, start: origin + $0.timestamp,
+                                                               end: origin + $0.timestamp + $0.duration) })
+                    }
                     let quick = Date().timeIntervalSince(self.requestStartedAt) < 1
                     self.request?.endAudio()
                     self.request = nil
@@ -382,7 +412,7 @@ final class SFSpeechPreviewSession: LivePreviewSession {
         begin()
     }
 
-    func append(pcm16 data: Data) -> Bool {
+    func append(pcm16 data: Data, startedAt: TimeInterval) -> Bool {
         guard !stopped else { return false }
         if request == nil {
             guard Date() >= retryAt else { return false }
@@ -391,6 +421,9 @@ final class SFSpeechPreviewSession: LivePreviewSession {
             rotate()
         }
         guard let request, let buffer = floatBuffer(data) else { return false }
+        if requestClock?.origin == nil {
+            requestClock?.origin = startedAt
+        }
         request.append(buffer)
         return true
     }
@@ -416,4 +449,15 @@ final class SFSpeechPreviewSession: LivePreviewSession {
         tasks.forEach { $0.cancel() }
         tasks.removeAll()
     }
+}
+
+/// One request's audio clock survives rotation until its final result returns.
+private final class PreviewRequestClock {
+    var origin: TimeInterval?
+}
+
+struct PreviewTimedSpan {
+    let text: String
+    let start: Double
+    let end: Double
 }

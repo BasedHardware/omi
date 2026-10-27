@@ -14460,13 +14460,7 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Odpri prejšnjo epizodo';
-
-  @override
   String get episodeNotesSoon => 'Zapiski se prikažejo po prvih minutah pogovora.';
-
-  @override
-  String get episodeOpenAll => 'Odpri vse';
 
   @override
   String get episodeWrapUpNow => 'Zaključi zdaj';
@@ -14604,22 +14598,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get othersSpeakerLabel => 'Drugi';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Končano';
@@ -14649,4 +14631,50 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Nalaganje je za trenutek zaustavljeno — samodejno se bo nadaljevalo';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Nadaljevanje „$title“';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· od $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Opombe se začnejo, ko prispe končni prepis.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Nastajajo na tvojem telefonu, medtem ko govoriš. Popolne opombe pridejo s končnim prepisom.';
+
+  @override
+  String get episodeOnThisPhone => 'V tem telefonu';
+
+  @override
+  String get episodeOpenTranscript => 'Odpri prepis';
+
+  @override
+  String get liveCardTitle => 'V živo';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Končni prepis za približno $duration zadaj';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Končni prepis dohiteva';
+
+  @override
+  String get livePreviewNoEngineBody => 'Tvoje besede se tu pokažejo eno do dve minuti po izreku.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Varno snema';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'V živo v tem telefonu';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Vklopi besedilo v živo';
 }

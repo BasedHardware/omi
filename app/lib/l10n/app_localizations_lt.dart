@@ -14455,13 +14455,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Atidaryti ankstesnį epizodą';
-
-  @override
   String get episodeNotesSoon => 'Užrašai atsiranda po pirmųjų pokalbio minučių.';
-
-  @override
-  String get episodeOpenAll => 'Atidaryti viską';
 
   @override
   String get episodeWrapUpNow => 'Užbaigti dabar';
@@ -14599,22 +14593,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get othersSpeakerLabel => 'Kiti';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Atlikta';
@@ -14644,4 +14626,50 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Įkėlimai trumpai pristabdyti — jie atsinaujins automatiškai';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Tęsia „$title“';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· nuo $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Pastabos prasidės, kai atvyks galutinė transkripcija.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Kuriamos telefone, kol kalbate. Pilnos pastabos atvyks kartu su galutine transkripcija.';
+
+  @override
+  String get episodeOnThisPhone => 'Šiame telefone';
+
+  @override
+  String get episodeOpenTranscript => 'Atidaryti transkripciją';
+
+  @override
+  String get liveCardTitle => 'Tiesiogiai';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Galutinė transkripcija atsilieka maždaug $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Galutinė transkripcija pasivijo';
+
+  @override
+  String get livePreviewNoEngineBody => 'Tavo žodžiai čia pasirodo po minutės ar dviejų.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Saugiai įrašinėja';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Tiesiogiai šiame telefone';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Įjungti tiesioginį tekstą';
 }

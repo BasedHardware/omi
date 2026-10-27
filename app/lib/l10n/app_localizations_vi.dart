@@ -14432,13 +14432,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Mở phiên trước';
-
-  @override
   String get episodeNotesSoon => 'Ghi chú xuất hiện sau vài phút đầu trò chuyện.';
-
-  @override
-  String get episodeOpenAll => 'Mở tất cả';
 
   @override
   String get episodeWrapUpNow => 'Kết thúc ngay';
@@ -14577,22 +14571,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get othersSpeakerLabel => 'Những người khác';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Xong';
@@ -14622,4 +14604,50 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Tải lên tạm dừng trong chốc lát — sẽ tự động tiếp tục';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Tiếp tục “$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· từ $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Ghi chú bắt đầu khi bản ghi chép cuối cùng đến.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Được soạn trên điện thoại của bạn khi bạn nói. Ghi chú đầy đủ sẽ đến cùng bản ghi chép cuối cùng.';
+
+  @override
+  String get episodeOnThisPhone => 'Trên điện thoại này';
+
+  @override
+  String get episodeOpenTranscript => 'Mở bản ghi chép';
+
+  @override
+  String get liveCardTitle => 'Trực tiếp';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Bản ghi chép cuối cùng chậm khoảng $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Bản ghi chép cuối cùng đang cập nhật';
+
+  @override
+  String get livePreviewNoEngineBody => 'Lời nói của bạn sẽ xuất hiện ở đây sau một đến hai phút.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Đang ghi âm an toàn';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Trực tiếp trên điện thoại này';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Bật văn bản trực tiếp';
 }

@@ -14436,13 +14436,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Avaa edellinen jakso';
-
-  @override
   String get episodeNotesSoon => 'Muistiinpanot näkyvät ensimmäisten puheminuuttien jälkeen.';
-
-  @override
-  String get episodeOpenAll => 'Avaa kaikki';
 
   @override
   String get episodeWrapUpNow => 'Päätä nyt';
@@ -14580,22 +14574,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get othersSpeakerLabel => 'Muut';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Valmis';
@@ -14625,4 +14607,51 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Lataukset on pysäytetty hetkeksi — ne jatkuvat automaattisesti';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Jatkoa: “$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· alkaen $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Muistiinpanot alkavat, kun lopullinen litterointi saapuu.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Laadittu puhelimessasi puhuessasi. Täydelliset muistiinpanot saapuvat lopullisen litteroinnin mukana.';
+
+  @override
+  String get episodeOnThisPhone => 'Tässä puhelimessa';
+
+  @override
+  String get episodeOpenTranscript => 'Avaa litterointi';
+
+  @override
+  String get liveCardTitle => 'Live';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Lopullinen litterointi noin $duration jäljessä';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Lopullinen litterointi saavuttaa';
+
+  @override
+  String get livePreviewNoEngineBody =>
+      'Sanasi näkyvät tässä yhdestä kahteen minuuttia sen jälkeen, kun olet sanonut ne.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Tallentaa turvallisesti';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Live tässä puhelimessa';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Ota live-teksti käyttöön';
 }

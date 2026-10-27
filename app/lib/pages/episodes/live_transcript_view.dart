@@ -24,6 +24,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_preview_coverage.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/components/local_stt_recovery_notice.dart';
 import 'package:omi/ui/ui.dart';
@@ -93,6 +94,14 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
             provider.activeCaptureSessionId ?? widget.topConversationId ?? 'pending-live-capture';
         final transcriptScrollState = _scrollStateFor(transcriptSessionId);
         final decorated = widget.episode != null;
+        // Under the transcript on the episode page, as the last thing read; the legacy page's
+        // floating controls cover its bottom, so there it stays on top.
+        final behind = _showsLivePreview(provider)
+            ? ListenableBuilder(
+                listenable: provider.livePreview!,
+                builder: (context, _) => _quietBehindLine(provider) ?? const SizedBox.shrink(),
+              )
+            : null;
         return Column(
           children: [
             const CaptureRecoveryStatus(),
@@ -104,9 +113,11 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
                 onSetup: () => routeToPage(context, const TranscriptionSettingsPage()),
               ),
             _buildUnsyncedWalIndicator(provider),
+            if (behind != null && !decorated) behind,
             Expanded(
               child: _showsLivePreview(provider)
-                  ? LivePreviewTranscript(preview: provider.livePreview!, bottomInset: widget.jumpToLatestBottom)
+                  ? _previewBody(provider, transcriptSessionId, transcriptScrollState,
+                      widget.topConversationId ?? provider.topConversationId)
                   : provider.segments.isEmpty && provider.photos.isEmpty
                       ? Center(
                           child: Padding(
@@ -147,9 +158,35 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
                               editSegment: (segmentId, speakerId) => _nameSpeaker(segmentId, speakerId, provider),
                             ),
             ),
+            if (behind != null && decorated) behind,
           ],
         );
       },
+    );
+  }
+
+  /// The preview body of a local-preview session: the whole surface when no
+  /// final line has arrived, else the final transcript with the "Live on this
+  /// phone" divider and the uncovered preview lines under it.
+  Widget _previewBody(
+    CaptureProvider provider,
+    String sessionId,
+    TranscriptScrollState scrollState,
+    String? conversationId,
+  ) {
+    final preview = provider.livePreview!;
+    if (provider.segments.isEmpty) {
+      return LivePreviewTranscript(preview: preview, bottomInset: widget.jumpToLatestBottom);
+    }
+    return ListenableBuilder(
+      listenable: preview,
+      builder: (context, _) => _buildChronologicalTimeline(
+        provider,
+        sessionId,
+        scrollState,
+        conversationId,
+        preview: preview,
+      ),
     );
   }
 
@@ -159,8 +196,9 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     CaptureProvider provider,
     String sessionId,
     TranscriptScrollState scrollState,
-    String? conversationId,
-  ) {
+    String? conversationId, {
+    LivePreviewController? preview,
+  }) {
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
     // The copy, the speaker resolver and the episode decorations walk every line, and a capture
     // notifies several times a minute while live; recompute only when the transcript, the
@@ -227,7 +265,11 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       followLatest: true,
       scrollState: scrollState,
       jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + widget.jumpToLatestBottom,
-      contentVersion: provider.segmentsPhotosVersion ^ decorations.signature,
+      contentVersion: provider.segmentsPhotosVersion ^
+          decorations.signature ^
+          (preview == null
+              ? 0
+              : Object.hash(preview.lines.length, preview.lines.lastOrNull?.id, preview.lines.lastOrNull?.text.length)),
       layoutIdentity: widget.episode == null ? 'photo-timeline' : 'episode-timeline',
       leadingItems: leadingItems,
       leadingItemIds: photoGroups.map((group) => group.first.id).toList(),
@@ -235,7 +277,10 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         final line = _buildTranscriptTimelineItem(segment, provider, people, names);
         final divider = decorations.dividerBefore[segment.id];
         final items = decorations.itemsAfter[segment.id] ?? const <EpisodeItem>[];
-        if (divider == null && items.isEmpty) return line;
+        final tail = index == segments.length - 1 && preview != null
+            ? LivePreviewTail(preview: preview, finalSegments: segments, finalOrigin: provider.liveTranscriptStartedAt)
+            : null;
+        if (divider == null && items.isEmpty && tail == null) return line;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -243,6 +288,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
             if (divider != null) EpisodeMomentDivider(moment: divider),
             line,
             for (final item in items) EpisodeCapturedItemCard(item: item, onUndo: widget.onDismissItem),
+            if (tail != null) tail,
           ],
         );
       },
@@ -626,11 +672,57 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     return context.l10n.waitingForTranscriptOrPhotos;
   }
 
+  /// A local-preview session has no uploading pill to watch: one quiet line under the
+  /// transcript says how far behind the final transcript is. Failures and retries keep
+  /// today's actionable pill above it (its retry is the point of it). Null when the pill applies.
+  Widget? _quietBehindLine(CaptureProvider provider) {
+    if (!_showsLivePreview(provider)) return null;
+    final unsyncedWals = provider.unsyncedSessionWals;
+    final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + provider.inFlightAudioSeconds;
+    // Uploaded audio has no pending-upload duration, but the server may still
+    // be transcribing it. Only uncovered preview text proves we are waiting.
+    final waitingWithoutDuration = totalSeconds == 0 &&
+        LivePreviewCoverage.uncovered(
+          provider.livePreview!.lines,
+          provider.segments,
+          provider.liveTranscriptStartedAt,
+        ).isNotEmpty;
+    if (totalSeconds <= 5 && !waitingWithoutDuration) return null;
+    final worst = worstSessionSyncState(unsyncedWals);
+    if ((worst != null && _isTerminalWalState(worst)) || worst == WalSyncDisplayState.retrying) return null;
+    final l10n = context.l10n;
+    final behind = (totalSeconds / 10).round() * 10;
+    return SafeArea(
+      top: false,
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.sm),
+        child: Row(
+          key: const Key('live_preview_behind_line'),
+          children: [
+            Icon(Icons.schedule, size: 14, color: OmiColors.textTertiary),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                behind > 0 ? l10n.livePreviewBehind(OmiDuration.compact(behind, l10n)) : l10n.livePreviewCatchingUp,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildUnsyncedWalIndicator(CaptureProvider provider) {
     final unsyncedWals = provider.unsyncedSessionWals;
     final inFlightSeconds = provider.inFlightAudioSeconds;
     final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + inFlightSeconds;
     if (totalSeconds <= 5) return const SizedBox.shrink();
+
+    if (_quietBehindLine(provider) != null) return const SizedBox.shrink();
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     final label = minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';
@@ -772,6 +864,75 @@ class LiveTranscriptDecorations {
       dividerBefore: dividers,
       itemsAfter: items,
       signature: Object.hash(Object.hashAll(dividers.keys), Object.hashAll(episode.items.map((i) => (i.id, i.status)))),
+    );
+  }
+}
+
+/// The thin hairline that names where the final transcript ends and the
+/// on-device preview continues.
+class LivePreviewDivider extends StatelessWidget {
+  const LivePreviewDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = context.l10n.livePreviewOnPhoneDivider;
+    final line = Expanded(child: Container(height: 1, color: OmiColors.surface2));
+    return Semantics(
+      header: true,
+      label: label,
+      excludeSemantics: true,
+      child: Padding(
+        key: const Key('live_preview_divider'),
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.xs),
+        child: Row(
+          children: [
+            line,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
+              child: Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+            ),
+            line,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Under the divider: the preview lines the final transcript does not already
+/// cover — the recognizer's still-volatile newest words in lighter text. The
+/// preview carries audio timestamps; only full interval coverage replaces a line.
+class LivePreviewTail extends StatelessWidget {
+  const LivePreviewTail({super.key, required this.preview, required this.finalSegments, required this.finalOrigin});
+
+  final LivePreviewController preview;
+  final List<TranscriptSegment> finalSegments;
+
+  final DateTime? finalOrigin;
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = LivePreviewCoverage.uncovered(preview.lines, finalSegments, finalOrigin);
+    if (lines.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const LivePreviewDivider(),
+        for (var i = 0; i < lines.length; i++)
+          Padding(
+            key: ValueKey('live_preview_tail_${lines[i].id}'),
+            padding: EdgeInsets.fromLTRB(OmiSpacing.md, i == 0 ? OmiSpacing.xs : 0, OmiSpacing.md, OmiSpacing.sm),
+            child: Text(
+              lines[i].text,
+              style: OmiType.body.copyWith(
+                height: 1.4,
+                color: lines[i].isFinal ? OmiColors.textPrimary : OmiColors.textSecondary,
+              ),
+            ),
+          ),
+        SizedBox(height: MediaQuery.paddingOf(context).bottom + 84),
+      ],
     );
   }
 }

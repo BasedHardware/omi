@@ -14440,13 +14440,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Öppna föregående avsnitt';
-
-  @override
   String get episodeNotesSoon => 'Anteckningarna visas efter de första minuterna av samtalet.';
-
-  @override
-  String get episodeOpenAll => 'Öppna alla';
 
   @override
   String get episodeWrapUpNow => 'Avsluta nu';
@@ -14584,22 +14578,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get othersSpeakerLabel => 'Andra';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Klar';
@@ -14629,4 +14611,50 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Uppladdningar har pausats en stund — de återupptas automatiskt';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Fortsätter ”$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· sedan $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Anteckningar börjar när den slutgiltiga transkriptionen kommer.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Utarbetade på din telefon medan du pratar. De fullständiga anteckningarna kommer med den slutgiltiga transkriptionen.';
+
+  @override
+  String get episodeOnThisPhone => 'På den här telefonen';
+
+  @override
+  String get episodeOpenTranscript => 'Öppna transkription';
+
+  @override
+  String get liveCardTitle => 'Live';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Slutgiltig transkription cirka $duration efter';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Slutgiltig transkription ikapp';
+
+  @override
+  String get livePreviewNoEngineBody => 'Dina ord visas här en till två minuter efter att du sagt dem.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Spelar in säkert';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Live på den här telefonen';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Aktivera live-text';
 }

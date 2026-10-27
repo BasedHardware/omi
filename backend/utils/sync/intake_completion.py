@@ -25,6 +25,7 @@ from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.stt.outcomes import TranscriptionOutcome
 from utils.sync.assignment_telemetry import CREATED_UNKNOWN_REASONS
+from utils.sync.bridge_observation import log_bridge_observation
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,16 @@ def log_sync_lineage_created(observation: dict) -> None:
         )
     except Exception:
         pass
+
+
+def log_assignment_observations(conversation: dict, *, lineage_eligible: bool) -> None:
+    """Consume only the successful assignment result, before external effects."""
+    bridge = conversation.pop('_sync_lineage_bridge', None)
+    if bridge is not None:
+        log_bridge_observation(bridge)
+    created = conversation.pop('_sync_lineage_created', None)
+    if lineage_eligible and created is not None:
+        log_sync_lineage_created(created)
 
 
 def acknowledge_processed_segment(
@@ -121,13 +132,19 @@ def log_sync_lineage_append(stats: dict, existing_completion: bool = False) -> N
     try:
         logger.info(
             'event=sync_lineage_append appended_seconds=%.2f dropped_as_repeat_seconds=%.2f '
-            'alignment_method=%s repeat_only=%s existing_completion=%s span_delta_bucket=%s',
+            'alignment_method=%s repeat_only=%s existing_completion=%s span_delta_bucket=%s '
+            'appended_seconds_overlapping_live=%s',
             stats['appended_seconds'],
             stats['dropped_as_repeat_seconds'],
             stats['alignment_method'],
             stats['repeat_only'],
             existing_completion,
             stats.get('span_delta_bucket', 'none'),
+            (
+                f"{stats['appended_seconds_overlapping_live']:.1f}"
+                if stats.get('appended_seconds_overlapping_live') is not None
+                else 'unknown'
+            ),
         )
     except Exception:
         pass
