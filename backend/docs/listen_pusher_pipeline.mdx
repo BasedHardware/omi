@@ -6361,6 +6361,8 @@ may complete as partial while this audio remains retained for a separately
 reviewed recovery plan. The existing paid-redrive tool requires a previously
 started intent and cannot adopt this no-spend refusal; the independent duration
 limit still applies. This custody change does not transcribe those longer units.
+The refusal records the validated WAV duration, checks the same immutable audio
+URI, and rechecks the inspector's 0.1-second job-duration tolerance transactionally.
 A disabled recovery setting, lower runtime cap or temporary allowance refusal
 for an otherwise eligible window keeps its existing retry behavior.
 

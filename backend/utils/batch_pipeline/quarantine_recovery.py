@@ -314,7 +314,9 @@ class QuarantineRecovery:
                 except RecoveryFailure as error:
                     inspection_failure = error
             if language_guarded(job) and inspected_spans == [] and not independent_allowed(duration):
-                if duration > MAX_AUDIO_SECONDS and self.protocol.hold_duration_limit(segment_id, token, self.clock()):
+                if duration > MAX_AUDIO_SECONDS and self.protocol.hold_duration_limit(
+                    segment_id, token, self.clock(), audio_uri=item.audio_uri, audio_seconds=duration
+                ):
                     logger.info('event=batch_quarantine_recovery outcome=failed_held reason=independent_duration_limit')
                     return 'failed_held'
                 self.protocol.observe_vad(segment_id, token, 0)

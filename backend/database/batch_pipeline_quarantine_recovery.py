@@ -1,6 +1,7 @@
 """Per-unit handoff; ordinary worker tokens and upload ownership never transfer."""
 
 from dataclasses import asdict
+import math
 from typing import Any
 from uuid import uuid4
 
@@ -244,8 +245,10 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
-    def hold_duration_limit(self, segment_id, token, now):
+    def hold_duration_limit(self, segment_id, token, now, *, audio_uri, audio_seconds):
         """Retain an impossible independent recovery without starting a paid intent."""
+        if not math.isfinite(audio_seconds) or not MAX_AUDIO_SECONDS < audio_seconds <= 7200:
+            return False
 
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
@@ -257,7 +260,9 @@ class RecoveryStore:
                 or job.get('recovery', {}).get('token') != token
                 or job.get('recovery', {}).get('started_at') is not None
                 or not language_guarded(job)
-                or not job['duration_seconds'] > MAX_AUDIO_SECONDS
+                or job.get('audio_uri') != audio_uri
+                or not math.isfinite(job['duration_seconds'])
+                or abs(job['duration_seconds'] - audio_seconds) > 0.1
                 or job.get('result')
                 or existing
                 or job.get('token')
@@ -269,7 +274,11 @@ class RecoveryStore:
             job['measured_held_vad_speech_seconds'] = held_vad_census(job, 0)
             job['recovery'].update(
                 settled_at=now,
-                refusal={'reason': 'independent_duration_limit', 'max_audio_seconds': MAX_AUDIO_SECONDS},
+                refusal={
+                    'reason': 'independent_duration_limit',
+                    'max_audio_seconds': MAX_AUDIO_SECONDS,
+                    'audio_seconds': audio_seconds,
+                },
             )
             tx.put('jobs', segment_id, job)
             return True
