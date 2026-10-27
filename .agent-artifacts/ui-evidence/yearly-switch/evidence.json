@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-yearly-switch-home-row.png",
+      "platform": "mobile-ios",
+      "description": "Home for a monthly Unlimited subscriber in their second paid month: main (left) and the quiet Save $90 a year with yearly row (right), simulator",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-yearly-switch-plans-row.png",
+      "platform": "mobile-ios",
+      "description": "Plans & Billing for the same subscriber: main (left) and the Switch to Yearly, Save $89.97 a year row under the renewal line (right)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
