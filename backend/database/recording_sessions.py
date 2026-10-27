@@ -142,10 +142,37 @@ def _create_or_get_recording_session_txn(
             current.get('conversation_id') == proposed_conversation_id
             and str(current.get('lifecycle_phase') or 'in_progress') == 'in_progress'
         ):
-            transaction.update(
-                session_ref,
-                {'lease_expires_at': now + RECORDING_SESSION_LEASE_DURATION, 'updated_at': now},
-            )
+            remaining_runway = _remaining_lease_runway(current, now)
+            if remaining_runway is not None and remaining_runway > RECORDING_SESSION_LEASE_RUNWAY_FLOOR:
+                # The fence the session's own renewals stamp every minute still
+                # holds: this reconnect's open re-verifies identity, binding and
+                # phase against the stored row and commits read-only instead of
+                # re-stamping the same value. A re-stamp here would take the
+                # session document's write lock — the lock every lifecycle event
+                # and the SERVER_RECOVERY admission need — on top of the same
+                # lock the renewal's runway skip (2026-10-27) already stopped
+                # taking for four of every five renewals on the same row (prod
+                # backend-listen 2026-10-27: the open boundary ×143/30m against
+                # the renewal's ×184/30m, both fed by one contention engine).
+                # The fence is wall clock, so the skip consumes nothing: the
+                # session's renewals keep re-stamping from their own cadence,
+                # and a reconnect arriving after silence (fence at or below the
+                # floor, missing, or malformed) still writes the full duration
+                # exactly as before, so the first open after a gap re-arms
+                # blackout immunity unchanged.
+                logger.info(
+                    'recording session open runway verified; nothing written '
+                    'uid=%s session=%s proposed=%s runway_s=%d',
+                    uid,
+                    recording_session_id,
+                    proposed_conversation_id,
+                    int(remaining_runway.total_seconds()),
+                )
+            else:
+                transaction.update(
+                    session_ref,
+                    {'lease_expires_at': now + RECORDING_SESSION_LEASE_DURATION, 'updated_at': now},
+                )
     else:
         transaction.create(session_ref, current)
 

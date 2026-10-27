@@ -5499,3 +5499,30 @@ renewal re-stamped its own five-minute fence every renewal minute, so most
 renewal transactions took the session document's write lock only to rewrite
 the value the previous renewal had just written, manufacturing the very
 contention the retry layers were built to survive.
+
+Since 2026-10-27 the session open learned the same discipline on the same
+document. An open is not only the first connection: every reconnect, resume
+adoption and rollover continuation re-runs
+`create_or_get_recording_session`, and its matching-binding `in_progress`
+arm re-stamped `lease_expires_at` + `updated_at` on every one of them. When
+that arm finds the fence the session's own renewals stamp every minute still
+holding more than `RECORDING_SESSION_LEASE_RUNWAY_FLOOR` of runway, the open
+now commits read-only — the transaction still reads through the session
+document and re-verifies identity, binding and phase, the binding payload the
+WebSocket handshake receives is byte-identical, and one bounded INFO
+(`recording session open runway verified; nothing written`) records the skip.
+The conversation-side `external_data` marker keeps its atomic commit
+semantics in the skip arm: it is stamped in the same transaction when missing
+and left alone when already bound. A fence at or below the floor, missing or
+malformed — the first open after a silence gap — still writes the full
+duration, so blackout immunity after downtime is unchanged; the fence is wall
+clock, so skipped opens consume nothing, and the recovery sweep reads the
+same unshortened fence through the same marker. Mapping-conflict opens,
+non-`in_progress` rows and brand-new sessions behave exactly as before.
+
+Failure-Class: FC-session-open-restamps-a-live-fence — the open re-stamped
+its five-minute fence on every reconnect while the session's own renewals
+were already re-stamping the same value from their own cadence, so every
+reconnect took the session document's write lock only to rewrite the value
+the previous renewal had just written, feeding the same contention engine on
+the same row the lease renewal's runway skip had just emptied.
