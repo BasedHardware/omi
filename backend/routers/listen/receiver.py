@@ -1313,6 +1313,7 @@ class ListenReceiver(ReplayFilterMixin):
 
     async def _initialize_stt(self) -> bool:
         self.host.server_batch_only = server_batch_suppresses_live(self.host)
+        self.host.server_batch_initialized = True
         if self.host.server_batch_only:
             self.cloud_live_suppressed = True
             if not getattr(self, '_server_batch_logged', False):

@@ -75,6 +75,11 @@ def request_eligible(host) -> bool:
     language = normalized_stt_language(getattr(host.request, 'language', None))
     return bool(
         enabled()
+        and (not getattr(host, 'server_batch_initialized', False) or getattr(host, 'server_batch_only', False))
+        and audio_outbox_enabled()
+        and getattr(host, 'private_cloud_sync_enabled', False)
+        and getattr(host, 'pusher_enabled', False)
+        and os.getenv('HOSTED_PUSHER_API_URL')
         and not host.use_custom_stt
         and not getattr(host, 'server_batch_byok', False)
         and not host.is_multi_channel

@@ -26,6 +26,11 @@ sessions retain their live behavior. A fresh admitted conversation reserves
 read that reservation. Initial connect, deferred opens, reconnect and idle reopen
 cannot dial any provider for a batch-only session. The live-STT buffer is cleared
 independently of original-byte archiving and PCM forwarding to pusher.
+The socket's mode stays pinned across conversation generations: a batch-owned
+continuation retains its admission after mobile cohort rollback; a live control
+does not convert mid-socket. If a new generation loses privacy/ownership
+eligibility, the socket closes with 1013 so reconnect re-reads admission rather
+than accepting provider-free audio without a batch owner.
 
 Original audio commits through `LiveAudioArchive` -> `commit_capture` (immutable
 media plus manifest). Only after that commit does a transaction record monotonic

@@ -138,6 +138,26 @@ def test_validated_provider_byok_keeps_live_even_on_reserved_reconnect():
     assert not server_batch.suppress_live(h)
 
 
+def test_admitted_socket_rollover_survives_mobile_cohort_rollback(monkeypatch):
+    monkeypatch.setenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '100')
+    h = host()
+    h.request.source = 'omi'
+    h.client_device_context = SimpleNamespace(platform='ios')
+    h.server_batch_initialized = True
+    h.server_batch_only = False
+    assert not server_batch.request_eligible(h)  # No mid-socket conversion of a live control.
+    h.server_batch_only = True
+    assert server_batch.request_eligible(h)
+    row = capture()
+    row.update(source='omi', client_platform='ios', external_data={})
+    row.pop('record_lane_owner')
+    monkeypatch.setattr(lifecycle.conversations_db, 'upsert_conversation_with_lifecycle', Mock())
+    assert lifecycle.create_in_progress_conversation(
+        'owner', row, server_batch_requested=True, server_batch_continuation=True
+    )
+    assert server_batch.owned(row)  # BATCH_PIPELINE_ENABLED is false: this is a prior admission's continuation.
+
+
 @pytest.mark.parametrize('platform', ['ios', 'android'])
 def test_mobile_percent_is_nested_in_actual_batch_admission(monkeypatch, platform):
     row = capture()

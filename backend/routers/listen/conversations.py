@@ -670,7 +670,17 @@ class LiveConversationController:
             request.uid,
             payload,
             idempotent=idempotent_create,
-            **({'server_batch_requested': True} if server_batch_request_eligible(self.host) else {}),
+            **(
+                {
+                    'server_batch_requested': True,
+                    'server_batch_continuation': bool(
+                        getattr(self.host, 'server_batch_only', False)
+                        and server_batch_owned(getattr(self.host, 'batch_record_capture', None) or {})
+                    ),
+                }
+                if server_batch_request_eligible(self.host)
+                else {}
+            ),
         )
         if created or not idempotent_create:
             self.host.batch_record_capture = capture_snapshot(payload)
@@ -685,6 +695,15 @@ class LiveConversationController:
                 read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
             )
             self.host.batch_record_capture = capture_snapshot(stored) if stored else None
+        if getattr(self.host, 'server_batch_only', False) and not server_batch_owned(
+            self.host.batch_record_capture or {}
+        ):
+            # A privacy/ownership change cannot leave a provider-free socket on an
+            # unowned generation. Reconnect re-reads consent and restores live admission.
+            self.host.state.close_code = 1013
+            self.host.state.active = False
+            await request.websocket.close(code=1013, reason='Capture policy changed; reconnect')
+            return
         if rollover:
             proposed = {'conversation_id': conversation_id, 'recording_session_id': self.host.recording_session_id}
             adopted = await self._continuation(proposed)

@@ -109,14 +109,20 @@ def _require_status(data: Mapping[str, Any], *allowed: ConversationStatus) -> No
 
 @set_data_protection_level(data_arg_name='conversation_data')
 def _reserve_batch_live_capture(
-    uid: str, conversation_data: dict[str, Any], *, server_batch_requested: bool = False
+    uid: str,
+    conversation_data: dict[str, Any],
+    *,
+    server_batch_requested: bool = False,
+    server_batch_continuation: bool = False,
 ) -> None:
     # Resolve privacy at the existing write boundary before deciding ownership.
     # The downstream DB decorator sees the resolved value and performs no second lookup.
     if conversation_data.get('record_lane_owner'):
         return
     policy = resolve_batch_policy(uid)
-    if server_batch_requested and server_batch.eligible(conversation_data, uid, batch_admitted=policy.batch_enabled):
+    if server_batch_requested and server_batch.eligible(
+        conversation_data, uid, batch_admitted=policy.batch_enabled or server_batch_continuation
+    ):
         conversation_data['record_lane_owner'] = 'batch_live_v1'
         conversation_data['external_data'] = {
             **(conversation_data.get('external_data') or {}),
@@ -131,13 +137,20 @@ def _reserve_batch_live_capture(
 
 
 def create_in_progress_conversation(
-    uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False, server_batch_requested: bool = False
+    uid: str,
+    conversation_data: dict[str, Any],
+    *,
+    idempotent: bool = False,
+    server_batch_requested: bool = False,
+    server_batch_continuation: bool = False,
 ) -> bool:
     """Create the one durable in-progress resource for a recording generation."""
     _require_status(conversation_data, ConversationStatus.in_progress)
     if server_batch_requested:
         # The decorated reservation resolves a missing/None privacy level first.
-        _reserve_batch_live_capture(uid, conversation_data, server_batch_requested=True)
+        _reserve_batch_live_capture(
+            uid, conversation_data, server_batch_requested=True, server_batch_continuation=server_batch_continuation
+        )
     elif live_record_enabled_for(uid):
         _reserve_batch_live_capture(uid, conversation_data)
     if idempotent:

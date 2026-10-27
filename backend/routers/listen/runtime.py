@@ -207,6 +207,7 @@ class ListenSessionRuntime:
         # Mobile local-preview lane, pinned once before STT starts (routers/listen/local_preview.py).
         self.local_preview_batch = False
         self.server_batch_only = False
+        self.server_batch_initialized = False
         self.has_speech_profile = False
         self.conversation_creation_timeout = request.conversation_timeout
         self.occasion_mode = False
