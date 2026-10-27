@@ -3,7 +3,10 @@
 Production maintenance coordination defaults on independently of the
 `singleton_loops` percentage in `FIRESTORE_READ_LEVERS`. Rolling back cache
 levers must not restore a full queue-age and finalization scan on every replica.
-Non-production retains the existing cohort unless explicitly overridden.
+Non-production, including staging (`OMI_ENV_STAGE=prod` with
+`OMI_DEPLOYMENT=staging`), retains the existing cohort unless explicitly
+overridden. Production means stage prod with an absent/prod/production
+deployment identity; other explicit deployment identities retain qualification.
 
 The existing Redis owner/generation/tick protocol is unchanged, including
 interval cadence, stale-owner takeover, max-hold bounds, cooperative fencing,

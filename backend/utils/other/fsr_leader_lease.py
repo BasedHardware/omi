@@ -98,7 +98,9 @@ def singleton_loops_enabled() -> bool:
     override = os.getenv('FSR_MAINTENANCE_COORDINATION_ENABLED', '').strip().lower()
     if override in {'false', '0', 'off', 'no'}:
         return False
-    if override in {'true', '1', 'on', 'yes'} or os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'prod':
+    deployment = os.getenv('OMI_DEPLOYMENT', '').strip().lower()
+    production = os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'prod' and deployment in {'', 'prod', 'production'}
+    if override in {'true', '1', 'on', 'yes'} or production:
         return True
     identity = os.getenv('HOSTNAME') or f'{os.getenv("K_REVISION", "local")}:{socket.gethostname()}'
     return lever_enabled('singleton_loops', identity)

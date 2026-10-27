@@ -9,6 +9,7 @@ from utils.other import fsr_leader_lease as leases
 
 def test_real_sampler_wave_reads_with_empty_lever_literal(fleet, monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.delenv('OMI_DEPLOYMENT', raising=False)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
     counts = []
     for override in ('false', 'true'):
@@ -32,6 +33,7 @@ def test_real_sampler_wave_reads_with_empty_lever_literal(fleet, monkeypatch):
 @pytest.mark.parametrize('literal', ['{}', '{"singleton_loops":0}', 'malformed', '{"singleton_loops":5}'])
 def test_production_scan_waves_keep_one_admission_per_tick(fleet, monkeypatch, literal):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.delenv('OMI_DEPLOYMENT', raising=False)
     monkeypatch.delenv('FSR_MAINTENANCE_COORDINATION_ENABLED', raising=False)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', literal)
     replicas = [fleet.replica('reconcile_stale_in_progress_conversations') for _ in range(20)]
@@ -47,6 +49,7 @@ def test_production_scan_waves_keep_one_admission_per_tick(fleet, monkeypatch, l
 @pytest.mark.parametrize('override', ['false', '0', 'off', 'no', ' FALSE '])
 def test_explicit_kill_switch_restores_per_replica_path_without_redis(fleet, monkeypatch, override):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.delenv('OMI_DEPLOYMENT', raising=False)
     monkeypatch.setenv('FSR_MAINTENANCE_COORDINATION_ENABLED', override)
     calls = []
     for _ in range(5):
@@ -58,6 +61,7 @@ def test_explicit_kill_switch_restores_per_replica_path_without_redis(fleet, mon
 
 def test_redis_outage_preserves_local_recovery_during_production_wave(fleet, monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.delenv('OMI_DEPLOYMENT', raising=False)
     monkeypatch.delenv('FSR_MAINTENANCE_COORDINATION_ENABLED', raising=False)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
     fleet.redis.error = True
@@ -67,6 +71,7 @@ def test_redis_outage_preserves_local_recovery_during_production_wave(fleet, mon
 
 def test_queue_sampling_keeps_designated_publisher_and_takeover(fleet, monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.delenv('OMI_DEPLOYMENT', raising=False)
     monkeypatch.delenv('FSR_MAINTENANCE_COORDINATION_ENABLED', raising=False)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
     monkeypatch.setenv('FSR_QUEUE_AGE_PUBLISHER', '0')
@@ -82,8 +87,10 @@ def test_queue_sampling_keeps_designated_publisher_and_takeover(fleet, monkeypat
     assert calls == ['owner', 'takeover']
 
 
-def test_nonproduction_retains_legacy_qualification_cohort(monkeypatch):
-    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+@pytest.mark.parametrize('stage,deployment', [('dev', ''), ('prod', 'staging'), ('prod', 'preview')])
+def test_nonproduction_retains_legacy_qualification_cohort(monkeypatch, stage, deployment):
+    monkeypatch.setenv('OMI_ENV_STAGE', stage)
+    monkeypatch.setenv('OMI_DEPLOYMENT', deployment)
     monkeypatch.delenv('FSR_MAINTENANCE_COORDINATION_ENABLED', raising=False)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
     assert not leases.singleton_loops_enabled()
