@@ -81,3 +81,161 @@ def test_list_meetings_applies_where_filters_in_utc_before_limit(monkeypatch):
     assert calls[1] == ('where', 'start_time', '<=', datetime(2026, 9, 24, 18, 0, 0, tzinfo=timezone.utc))
     assert calls[2] == ('order_by', 'start_time')
     assert calls[3] == ('limit', 10)
+
+
+def test_store_meeting_request_rejects_empty_and_whitespace_only_fields():
+    with pytest.raises(Exception):
+        calendar_router.StoreMeetingRequest(
+            calendar_event_id='',
+            calendar_source='google_calendar',
+            title='Valid Title',
+            start_time=datetime(2026, 9, 24, 12, 0, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 9, 24, 12, 30, 0, tzinfo=timezone.utc),
+        )
+
+    with pytest.raises(Exception):
+        calendar_router.StoreMeetingRequest(
+            calendar_event_id='evt-1',
+            calendar_source='   ',
+            title='Valid Title',
+            start_time=datetime(2026, 9, 24, 12, 0, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 9, 24, 12, 30, 0, tzinfo=timezone.utc),
+        )
+
+    with pytest.raises(Exception):
+        calendar_router.StoreMeetingRequest(
+            calendar_event_id='evt-1',
+            calendar_source='google_calendar',
+            title='  \t\n  ',
+            start_time=datetime(2026, 9, 24, 12, 0, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 9, 24, 12, 30, 0, tzinfo=timezone.utc),
+        )
+
+
+def test_store_meeting_request_strips_leading_and_trailing_whitespace():
+    req = calendar_router.StoreMeetingRequest(
+        calendar_event_id='  evt-clean-1  ',
+        calendar_source='  macos_calendar  ',
+        title='  Standup Discussion  ',
+        start_time=datetime(2026, 9, 24, 12, 0, 0, tzinfo=timezone.utc),
+        end_time=datetime(2026, 9, 24, 12, 30, 0, tzinfo=timezone.utc),
+    )
+    assert req.calendar_event_id == 'evt-clean-1'
+    assert req.calendar_source == 'macos_calendar'
+    assert req.title == 'Standup Discussion'
+
+
+def test_clean_path_id_rejects_empty_whitespace_and_path_traversal():
+    with pytest.raises(ValueError, match="cannot be empty or whitespace-only"):
+        calendar_db._clean_path_id("", "uid")
+
+    with pytest.raises(ValueError, match="cannot be empty or whitespace-only"):
+        calendar_db._clean_path_id("   ", "uid")
+
+    with pytest.raises(ValueError, match="cannot contain path separator"):
+        calendar_db._clean_path_id("user/admin", "uid")
+
+    with pytest.raises(ValueError, match="cannot contain path separator"):
+        calendar_db._clean_path_id("..\\nested", "meeting_id")
+
+    with pytest.raises(ValueError, match="must be a string"):
+        calendar_db._clean_path_id(12345, "uid")  # type: ignore
+
+    assert calendar_db._clean_path_id("  valid-id-123  ", "uid") == "valid-id-123"
+
+
+def test_outlook_and_graph_event_ids_with_slashes_allowed():
+    """External provider IDs (like Outlook / Microsoft Graph) can contain slashes."""
+    outlook_event_id = "AAMkAGI2/AA=Tk0AAA="
+    outlook_source = "outlook/exchange"
+
+    # StoreMeetingRequest must accept slashes
+    req = calendar_router.StoreMeetingRequest(
+        calendar_event_id=outlook_event_id,
+        calendar_source=outlook_source,
+        title="Quarterly Review",
+        start_time=datetime(2026, 9, 24, 12, 0, 0, tzinfo=timezone.utc),
+        end_time=datetime(2026, 9, 24, 12, 30, 0, tzinfo=timezone.utc),
+    )
+    assert req.calendar_event_id == outlook_event_id
+    assert req.calendar_source == outlook_source
+
+    # _clean_identifier must accept slashes
+    assert calendar_db._clean_identifier(outlook_event_id, "calendar_event_id") == outlook_event_id
+    assert calendar_db._clean_identifier(outlook_source, "calendar_source") == outlook_source
+
+    # create_meeting with mock must accept slashes and hash deterministic doc id
+    fake_client = MagicMock()
+    doc_ref = MagicMock()
+    fake_client.collection.return_value.document.return_value.collection.return_value.document.return_value = doc_ref
+    fake_client.transaction.return_value = MagicMock()
+
+    meeting_data = {
+        'calendar_source': outlook_source,
+        'calendar_event_id': outlook_event_id,
+        'title': 'Quarterly Review',
+    }
+    doc_id = calendar_db.create_meeting('uid-1', meeting_data, db_client=fake_client)
+    assert isinstance(doc_id, str) and len(doc_id) > 0
+
+
+def test_to_utc_strictly_raises_on_non_datetime_type():
+    with pytest.raises(ValueError, match="Expected datetime instance"):
+        calendar_db._to_utc("2026-09-24T12:00:00Z")  # string instead of datetime
+
+    with pytest.raises(ValueError, match="Expected datetime instance"):
+        calendar_db._to_utc(1727179200)  # integer timestamp instead of datetime
+
+
+def test_list_meetings_clamps_limit_bounds(monkeypatch):
+    calls = []
+
+    class FakeQuery:
+        def order_by(self, field, direction=None):
+            return self
+
+        def limit(self, count):
+            calls.append(count)
+            return self
+
+        def stream(self):
+            return []
+
+    monkeypatch.setattr(calendar_db, '_get_meetings_collection', lambda uid, client=None: FakeQuery())
+
+    # Underflow limit clamped to 1
+    calendar_db.list_meetings('uid-1', limit=-5)
+    assert calls[-1] == 1
+
+    calendar_db.list_meetings('uid-1', limit=0)
+    assert calls[-1] == 1
+
+    # Overflow limit clamped to 500
+    calendar_db.list_meetings('uid-1', limit=1000)
+    assert calls[-1] == 500
+
+
+def test_update_meeting_handles_not_found_with_merge_upsert():
+    from google.api_core import exceptions
+
+    doc_ref = MagicMock()
+    doc_ref.update.side_effect = exceptions.NotFound("Document missing")
+
+    fake_client = MagicMock()
+    fake_client.collection.return_value.document.return_value.collection.return_value.document.return_value = doc_ref
+
+    meeting_data = {'title': 'Updated Title'}
+    calendar_db.update_meeting('uid-1', 'meeting-123', meeting_data, db_client=fake_client)
+
+    # doc_ref.set must have been called with merge=True as fallback
+    doc_ref.set.assert_called_once_with(meeting_data, merge=True)
+
+
+def test_get_calendar_meeting_route_rejects_invalid_id_format():
+    with pytest.raises(HTTPException) as exc_info:
+        calendar_router.get_calendar_meeting(meeting_id="../traversal", uid="uid-1")
+    assert exc_info.value.status_code == 400
+
+    with pytest.raises(HTTPException) as exc_info:
+        calendar_router.get_calendar_meeting(meeting_id="   ", uid="uid-1")
+    assert exc_info.value.status_code == 400
