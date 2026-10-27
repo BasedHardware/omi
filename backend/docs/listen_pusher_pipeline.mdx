@@ -50,17 +50,20 @@ language and retains ordinary privacy, compute/funding and language guardrails.
 Live transcription usage and live-transcript success metrics exclude intentional
 batch-only capture; batch projection owns the actual transcription usage.
 
-After the archive-close barrier, a capture with no committed nonempty audio span
-uses the existing atomic empty cleanup instead of registering batch work. The
-transaction still refuses content, audio bounds, locks and tombstones; an open
-capture cannot use this exception. Zero-sample original receipts remain durable
+After capture stops and the archive-close barrier completes, a capture with no
+committed nonempty audio span and explicit never-received proof uses atomic empty
+cleanup instead of registering batch work. Active rollover publishes no close
+marker and defers empty deletion to the existing expired-lease recovery path;
+another first frame can still arrive while that generation is active. The
+transaction refuses received or unknown audio, content, audio bounds, locks and
+tombstones. Zero-sample original receipts and their display rows remain protected
 but do not invent a batch input or time span.
 Fresh reservations explicitly record no received audio. The first buffered frame
 durably flips that marker once per conversation, after retaining its bytes in the
 pack so a metadata failure still allows shutdown custody. Recovery may reclaim a
 never-received reservation only under the existing expired lease, quiet cutoff,
 identity and content fences. Missing/unknown markers and buffered audio stay
-protected until archive closure.
+protected even after archive closure when no committed span exists.
 
 Server-only native records carry their marker into the immutable intake. The
 batch projector uses its existing idempotent hourly/monthly usage and fair-use

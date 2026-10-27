@@ -398,7 +398,7 @@ class LiveConversationController:
             raw_archive = getattr(receiver, 'raw_archive', None)
             if conversation_id == self.host.state.current_conversation_id and raw_archive is not None:
                 await raw_archive.close()
-                if not await self.host.persistence.call(
+                if getattr(self.host.state, 'active', False) is not True and not await self.host.persistence.call(
                     close_server_batch_audio, self.host.request.uid, conversation_id
                 ):
                     return False
@@ -414,6 +414,10 @@ class LiveConversationController:
                 return await self.schedule_finalization(conversation_id)
         if data.get('transcript_segments') or data.get('photos'):
             return await self.schedule_finalization(conversation_id)
+        if server_batch_owned(data) and getattr(self.host.state, 'active', False) is True:
+            # Rollover runs concurrently with receive_data. It cannot certify
+            # no input while another first frame can still enter this generation.
+            return False
         recording_session_id = recording_session_id_for_lifecycle_event(
             self.host.recording_session_ids_by_conversation, conversation_id
         )

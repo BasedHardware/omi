@@ -441,7 +441,8 @@ def test_no_audio_server_capture_cannot_register_batch_even_from_another_caller(
 
 
 @pytest.mark.asyncio
-async def test_real_controller_closes_empty_archive_and_atomically_removes_no_input_generation(monkeypatch):
+@pytest.mark.parametrize('active', [False, True])
+async def test_real_controller_closes_empty_archive_and_only_removes_inactive_no_input_generation(monkeypatch, active):
     import routers.listen.conversations as controller_module
     from tests.unit.test_recording_sessions import _FakeFirestore
 
@@ -456,7 +457,7 @@ async def test_real_controller_closes_empty_archive_and_atomically_removes_no_in
     erase = Mock()
     monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', erase)
     h = host()
-    h.state = SimpleNamespace(current_conversation_id='conversation', first_audio_byte_timestamp=None)
+    h.state = SimpleNamespace(current_conversation_id='conversation', first_audio_byte_timestamp=None, active=active)
     h.recording_session_ids_by_conversation = {}
     h.receiver = SimpleNamespace(raw_archive=LiveAudioArchive(h))
 
@@ -467,10 +468,59 @@ async def test_real_controller_closes_empty_archive_and_atomically_removes_no_in
     h.persistence = SimpleNamespace(call=call)
     controller = controller_module.LiveConversationController(h)
     controller.schedule_finalization = AsyncMock()
-    assert await controller.process_conversation('conversation')
-    assert ROW not in db.documents
+    assert await controller.process_conversation('conversation') is (not active)
+    assert (ROW in db.documents) is active
     controller.schedule_finalization.assert_not_awaited()
     erase.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_late_first_frame_after_close_cannot_delete_capture_before_commit(remote, monkeypatch):
+    from tests.unit.test_recording_sessions import _FakeFirestore
+
+    db = _FakeFirestore({ROW: capture()})
+    monkeypatch.setattr(recording_sessions.firestore, 'transactional', lambda fn: fn)
+    monkeypatch.setattr(recording_sessions, 'get_firestore_client', lambda: db)
+    monkeypatch.setattr(server_batch_audio, 'get_firestore_client', lambda: db)
+    monkeypatch.setattr(recording_sessions, 'invalidate_people_stats_cache', lambda *a: None)
+    monkeypatch.setattr(recording_sessions, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
+    monkeypatch.setattr(conversations, 'get_conversation', lambda *a, **kw: db.documents.get(ROW))
+    monkeypatch.setattr(conversations, 'delete_conversation_photos', lambda *a: None)
+    monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', Mock())
+    h = archive_host()
+    h.server_batch_only = True
+    h.state = SimpleNamespace(current_conversation_id='conversation', first_audio_byte_timestamp=None, active=True)
+    h.recording_session_ids_by_conversation = {}
+    archive = LiveAudioArchive(h)
+    h.receiver = SimpleNamespace(raw_archive=archive)
+    close = archive.close
+    packet = b'\x00\x00' * 160
+
+    async def close_then_receive():
+        await close()
+        await archive.append(packet, 'conversation', 1000, 160, decoded=packet)
+
+    archive.close = close_then_receive
+
+    async def call(fn, *args, **kwargs):
+        kwargs.pop('read_site', None)
+        return fn(*args, **kwargs)
+
+    h.persistence = SimpleNamespace(call=call)
+    controller = LiveConversationController(h)
+    controller.schedule_finalization = AsyncMock(return_value=True)
+    assert not await controller.process_conversation('conversation')
+    assert db.documents[ROW]['server_batch_audio_received'] is True
+    controller.schedule_finalization.assert_not_awaited()
+    await close()
+    assert db.documents[ROW]['server_batch_audio_start'] == 1000
+    assert db.documents[ROW]['server_batch_audio_end'] == 1000.01
+    receipts = [AudioReceipt(**event.receipt) for event in h.events]
+    assert b''.join(read_pcm('owner', receipt) for receipt in receipts) == packet
+    archive.close = close
+    h.state.active = False
+    assert await controller.process_conversation('conversation')
+    controller.schedule_finalization.assert_awaited_once_with('conversation')
 
 
 @pytest.mark.asyncio
@@ -679,3 +729,20 @@ def test_closed_empty_cleanup_fences_unclosed_and_committed_audio(monkeypatch, s
     rows[ROW].pop('server_batch_audio_end')
     assert recording_sessions.tombstone_and_delete_empty_conversation('owner', 'conversation', None, **kwargs)
     assert ROW not in rows
+
+
+@pytest.mark.parametrize('received', [True, None, False])
+def test_closed_empty_cleanup_requires_explicit_never_received_proof(monkeypatch, received):
+    from tests.unit.test_recording_sessions import _FakeFirestore
+
+    row = capture()
+    row.update(server_batch_audio_closed=True, server_batch_audio_received=received)
+    db = _FakeFirestore({ROW: row})
+    monkeypatch.setattr(recording_sessions.firestore, 'transactional', lambda fn: fn)
+    monkeypatch.setattr(recording_sessions, 'invalidate_people_stats_cache', lambda *a: None)
+    monkeypatch.setattr(recording_sessions, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'owner', 'conversation', None, firestore_client=db, allow_empty_server_batch=True
+    )
+    assert deleted is (received is False)
+    assert (ROW in db.documents) is (received is not False)

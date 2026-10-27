@@ -290,6 +290,7 @@ def tombstone_and_delete_empty_conversation(
                 (allow_empty_server_batch and conversation.get('server_batch_audio_closed') is True)
                 or (require_expired_recording_lease and conversation.get('server_batch_audio_received') is False)
             )
+            and conversation.get('server_batch_audio_received') is False
             and conversation.get('server_batch_audio_start') is None
             and conversation.get('server_batch_audio_end') is None
         )
