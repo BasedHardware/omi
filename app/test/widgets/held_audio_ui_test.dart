@@ -377,6 +377,69 @@ void main() {
         exceedsRemaining: exceeds,
       );
 
+  UserSubscriptionResponse subscription(PlanType plan) => UserSubscriptionResponse(
+        subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 0,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+      );
+
+  for (final (plan, showsUpgrade) in [
+    (PlanType.basic, true),
+    (PlanType.unlimitedV2, false),
+    (PlanType.unlimited, false),
+    (PlanType.plus, false),
+    (PlanType.operator, false),
+    (PlanType.architect, false),
+    (PlanType.unknown('future_paid_plan'), false),
+  ]) {
+    testWidgets('${plan.name} backlog actions follow the subscription on every surface', (tester) async {
+      final usage = UsageProvider()..debugSetSubscription(subscription(plan));
+      addTearDown(usage.dispose);
+      for (final state in ['capped', 'waiting_choice', 'processing']) {
+        for (final surface in ['a', 'b', 'c']) {
+          await pump(
+            tester,
+            ChangeNotifierProvider<UsageProvider>.value(
+              value: usage,
+              child: ProcessingBacklogView(backlog: backlog(state), surface: surface, onUpgrade: () {}),
+            ),
+          );
+          expect(find.byKey(Key('processing_backlog_$surface')), findsOneWidget);
+          expect(find.byKey(Key('processing_backlog_upgrade_$surface')), showsUpgrade ? findsOneWidget : findsNothing);
+          expect(find.byKey(Key('processing_backlog_process_$surface')),
+              state == 'waiting_choice' ? findsOneWidget : findsNothing);
+        }
+      }
+    });
+  }
+
+  testWidgets('subscription refresh removes the upgrade action without hiding the processing backlog', (tester) async {
+    final usage = UsageProvider();
+    addTearDown(usage.dispose);
+    await pump(
+      tester,
+      ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: ProcessingBacklogView(backlog: backlog('processing'), surface: 'a', onUpgrade: () {}),
+      ),
+    );
+    expect(find.byKey(const Key('processing_backlog_upgrade_a')), findsNothing);
+    usage.debugSetSubscription(subscription(PlanType.basic));
+    await tester.pump();
+    expect(find.byKey(const Key('processing_backlog_upgrade_a')), findsOneWidget);
+    usage.debugSetSubscription(subscription(PlanType.unlimitedV2));
+    await tester.pump();
+    expect(find.byKey(const Key('processing_backlog_upgrade_a')), findsNothing);
+    expect(find.text('Processing your waiting recordings…'), findsOneWidget);
+    usage.debugSetSubscription(subscription(PlanType.basic));
+    await tester.pump();
+    expect(find.byKey(const Key('processing_backlog_upgrade_a')), findsOneWidget);
+  });
+
   for (final state in ['capped', 'waiting_choice', 'processing', 'none']) {
     for (final surface in ['a', 'b', 'c']) {
       testWidgets('$surface follows server $state even on phone', (tester) async {
@@ -395,7 +458,7 @@ void main() {
         if (state == 'waiting_choice') {
           expect(find.text('2h waiting · Process now uses about 13% of this month'), findsOneWidget);
         }
-        if (state != 'none') expect(find.byKey(Key('processing_backlog_upgrade_$surface')), findsOneWidget);
+        expect(find.byKey(Key('processing_backlog_upgrade_$surface')), findsNothing);
       });
     }
   }
