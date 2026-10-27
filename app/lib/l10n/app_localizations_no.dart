@@ -14436,13 +14436,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Åpne forrige episode';
-
-  @override
   String get episodeNotesSoon => 'Notatene vises etter de første minuttene av samtalen.';
-
-  @override
-  String get episodeOpenAll => 'Åpne alle';
 
   @override
   String get episodeWrapUpNow => 'Avslutt nå';
@@ -14580,22 +14574,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get othersSpeakerLabel => 'Andre';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Ferdig';
@@ -14625,4 +14607,50 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Opplastinger er satt på pause en stund — de fortsetter automatisk';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Fortsetter «$title»';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· siden $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Notater begynner når den endelige utskriften kommer.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Utarbeidet på telefonen din mens du snakker. De fullstendige notatene kommer med den endelige utskriften.';
+
+  @override
+  String get episodeOnThisPhone => 'På denne telefonen';
+
+  @override
+  String get episodeOpenTranscript => 'Åpne utskrift';
+
+  @override
+  String get liveCardTitle => 'Direkte';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Endelig utskrift omtrent $duration bak';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Endelig utskrift tar igjen';
+
+  @override
+  String get livePreviewNoEngineBody => 'Ordene dine vises her ett til to minutter etter at du har sagt dem.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Tar opp trygt';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Direkte på denne telefonen';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Slå på direkte tekst';
 }

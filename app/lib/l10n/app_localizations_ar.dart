@@ -14350,13 +14350,7 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'افتح الحلقة السابقة';
-
-  @override
   String get episodeNotesSoon => 'تظهر الملاحظات بعد الدقائق الأولى من الحديث.';
-
-  @override
-  String get episodeOpenAll => 'فتح الكل';
 
   @override
   String get episodeWrapUpNow => 'إنهاء الآن';
@@ -14494,22 +14488,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get othersSpeakerLabel => 'آخرون';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'تم';
@@ -14539,4 +14521,49 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'تم إيقاف الرفع مؤقتًا — سيستأنف تلقائيًا';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'متابعة “$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· منذ $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'تبدأ الملاحظات عند وصول النسخ النهائي.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote => 'تُصاغ على هاتفك أثناء حديثك. تصل الملاحظات الكاملة مع النسخ النهائي.';
+
+  @override
+  String get episodeOnThisPhone => 'على هذا الهاتف';
+
+  @override
+  String get episodeOpenTranscript => 'فتح النسخ';
+
+  @override
+  String get liveCardTitle => 'مباشر';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'النسخ النهائي متأخر بنحو $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'النسخ النهائي يلحق';
+
+  @override
+  String get livePreviewNoEngineBody => 'تظهر كلماتك هنا بعد دقيقة أو دقيقتين من قولها.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'يسجّل بأمان';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'مباشر على هذا الهاتف';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'تشغيل النص المباشر';
 }

@@ -14480,13 +14480,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Открыть предыдущий эпизод';
-
-  @override
   String get episodeNotesSoon => 'Заметки появятся после первых минут разговора.';
-
-  @override
-  String get episodeOpenAll => 'Открыть всё';
 
   @override
   String get episodeWrapUpNow => 'Завершить сейчас';
@@ -14624,22 +14618,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get othersSpeakerLabel => 'Другие';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Готово';
@@ -14669,4 +14651,50 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Загрузка ненадолго приостановлена — она возобновится автоматически';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Продолжение «$title»';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· с $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Заметки появятся, когда прибудет финальная расшифровка.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Создаются на вашем телефоне, пока вы говорите. Полные заметки появятся вместе с финальной расшифровкой.';
+
+  @override
+  String get episodeOnThisPhone => 'На этом телефоне';
+
+  @override
+  String get episodeOpenTranscript => 'Открыть расшифровку';
+
+  @override
+  String get liveCardTitle => 'Прямой эфир';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Финальная расшифровка отстает примерно на $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Финальная расшифровка догоняет';
+
+  @override
+  String get livePreviewNoEngineBody => 'Ваши слова появятся здесь через минуту-две после того, как вы их произнесли.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Безопасная запись';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Прямой эфир на этом телефоне';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Включить текст прямой трансляции';
 }
