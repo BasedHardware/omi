@@ -2031,6 +2031,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     final attemptedWalIds = <String>{};
     final isolateAfterRefusal = <String>{};
+    var refusalRetries = 0;
     String walAttemptKey(Wal wal) => captureEvidenceWalClaimable(wal) ? _durableKey(wal) : wal.id;
     // A conversation whose first batch uploaded unclaimed stays unclaimable for
     // the rest of the drain: the manifest is immutable per conversation, so a
@@ -2043,7 +2044,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       final batchNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
       final candidates = _wals
           .where((wal) =>
-              isAutoUploadEligible(wal, nowSeconds: batchNowSeconds) && !attemptedWalIds.contains(walAttemptKey(wal)))
+              isAutoUploadEligible(wal, nowSeconds: batchNowSeconds) &&
+              !attemptedWalIds.contains(walAttemptKey(wal)) &&
+              (wal.status != WalStatus.uploadRejected || refusalRetries < walMaxRefusalRetriesPerDrain))
           .toList();
       final pending = candidates.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
       if (pending.isEmpty) break;
@@ -2053,6 +2056,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           .any((wal) => wal.status == WalStatus.uploadRejected || isolateAfterRefusal.contains(walAttemptKey(wal)))) {
         batch = [batch.first];
       }
+      if (batch.first.status == WalStatus.uploadRejected) refusalRetries++;
       attemptedWalIds.addAll(batch.map(walAttemptKey));
       final batchConversationId = batch.first.conversationId;
       final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&

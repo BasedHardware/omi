@@ -176,6 +176,11 @@ int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
 /// cannot drift apart. Only the per-recording manual Retry ignores it.
 const int walMaxAutoRetries = 3;
 
+/// Refused recordings one automatic drain may re-send. A day-long server bug can refuse
+/// thousands; their daily recovery then spreads over later drains instead of firing every
+/// single-file upload back to back (400s engage neither the 429 limiter nor the 5xx pause).
+const int walMaxRefusalRetriesPerDrain = 25;
+
 /// A recording young enough to still attach to a live conversation (matches
 /// the backend's fresh-lane cutoff, `SYNC_FRESH_MAX_AGE_SECONDS`).
 const int liveCaptureMaxAgeSeconds = 6 * 60 * 60;
@@ -350,8 +355,11 @@ class Wal {
 
   /// Daily recovery is independent of the transient network retry budget.
   /// Old indexes get a new seven-day window on their first recovery pass.
+  /// Refusals fixed by the bytes themselves (size, part count) never succeed on a resend.
   bool refusalRetryDue(int nowSeconds) =>
       status == WalStatus.uploadRejected &&
+      uploadRejectionReason != WalUploadRejection.tooLarge &&
+      uploadRejectionReason != WalUploadRejection.tooManyParts &&
       (uploadRejectedAt == 0 || nowSeconds < uploadRejectedAt + 7 * 86400) &&
       (uploadRefusalLastAttemptAt == 0 || nowSeconds >= uploadRefusalLastAttemptAt + 86400);
 

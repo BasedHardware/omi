@@ -171,6 +171,42 @@ void main() {
     expect(isAutoUploadEligible(wal, nowSeconds: tomorrow), isFalse);
   });
 
+  test('byte-determined refusals never auto-resend; one drain re-sends at most a capped batch', () async {
+    final yesterday = now.subtract(const Duration(days: 1)).millisecondsSinceEpoch ~/ 1000;
+    final today = now.millisecondsSinceEpoch ~/ 1000;
+    for (final reason in [WalUploadRejection.tooLarge, WalUploadRejection.tooManyParts]) {
+      final wal = _wal(now)..markUploadRejected(reasonCode: reason, nowSeconds: yesterday);
+      expect(wal.refusalRetryDue(today), isFalse, reason: reason);
+    }
+    var calls = 0;
+    final gate = SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
+          calls++;
+          throw const SyncUploadHttpException(400, 'still refused', reasonCode: 'invalid_file');
+        });
+    await File('${dir.path}/audio.bin').writeAsBytes([1, 0, 0, 0, 42]);
+    final sync = LocalWalSyncImpl(_Listener(), now: () => now, uploadGate: gate);
+    sync.testWals = [
+      for (var i = 0; i < walMaxRefusalRetriesPerDrain + 5; i++)
+        _wal(now.subtract(Duration(minutes: 2 * i)))
+          ..markUploadRejected(reasonCode: WalUploadRejection.invalidFile, nowSeconds: yesterday),
+    ];
+    await sync.syncAll();
+    expect(calls, walMaxRefusalRetriesPerDrain, reason: 'a server-wide refusal never fires every resend at once');
+    await sync.syncAll();
+    expect(calls, walMaxRefusalRetriesPerDrain + 5, reason: 'the rest wait for a later drain, not a later day');
+  });
+
   test('old completed/gone jobs reconcile; confirmed pending alone renews old span', () async {
     final poller = SyncJobPoller(clock: () => now);
     final wals = [
