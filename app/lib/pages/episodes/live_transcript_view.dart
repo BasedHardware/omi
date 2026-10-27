@@ -24,6 +24,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_preview_coverage.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/components/local_stt_recovery_notice.dart';
 import 'package:omi/ui/ui.dart';
@@ -206,7 +207,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       // A lazy row can be requested after a server deletion mutates the capture
       // list, while its old delegate still has the previous itemCount. Keep one
       // membership snapshot for that delegate, its names and decorations.
-      _timelineSegments = List<TranscriptSegment>.of(provider.segments);
+      _timelineSegments = List<TranscriptSegment>.of(provider.segments)..sort((a, b) => a.start.compareTo(b.start));
       _timelineNames =
           SpeakerNames.forSegments(_timelineSegments!, people: people, l10n: context.l10n, deferShortVoices: true);
       _timelineDecorations = LiveTranscriptDecorations.of(widget.episode, conversationId, _timelineSegments!);
@@ -267,7 +268,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         final divider = decorations.dividerBefore[segment.id];
         final items = decorations.itemsAfter[segment.id] ?? const <EpisodeItem>[];
         final tail = index == segments.length - 1 && preview != null
-            ? LivePreviewTail(preview: preview, finalSegments: segments)
+            ? LivePreviewTail(preview: preview, finalSegments: segments, finalOrigin: provider.liveTranscriptStartedAt)
             : null;
         if (divider == null && items.isEmpty && tail == null) return line;
         return Column(
@@ -880,28 +881,18 @@ class LivePreviewDivider extends StatelessWidget {
 
 /// Under the divider: the preview lines the final transcript does not already
 /// cover — the recognizer's still-volatile newest words in lighter text. The
-/// preview has no timestamps, so coverage is a normalized text match.
+/// preview carries audio timestamps; only full interval coverage replaces a line.
 class LivePreviewTail extends StatelessWidget {
-  const LivePreviewTail({super.key, required this.preview, required this.finalSegments});
+  const LivePreviewTail({super.key, required this.preview, required this.finalSegments, required this.finalOrigin});
 
   final LivePreviewController preview;
   final List<TranscriptSegment> finalSegments;
 
-  static String _normalize(String text) => text
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^\p{L}\p{N}\s]', unicode: true), '')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
+  final DateTime? finalOrigin;
 
   @override
   Widget build(BuildContext context) {
-    final covered = _normalize([
-      for (final segment in finalSegments) segment.text,
-    ].join(' '));
-    final lines = [
-      for (final line in preview.lines)
-        if (_normalize(line.text).isNotEmpty && !covered.contains(_normalize(line.text))) line,
-    ];
+    final lines = LivePreviewCoverage.uncovered(preview.lines, finalSegments, finalOrigin);
     if (lines.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

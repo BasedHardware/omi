@@ -106,6 +106,8 @@ class LivePreviewNotes extends ChangeNotifier {
   Timer? _cadence;
   DateTime? _lastRunAt;
   int _wordsAtLastRun = 0;
+  int _generation = 0;
+  int? _previewGeneration;
   bool _running = false;
   bool _busyReported = false;
   bool _disposed = false;
@@ -113,6 +115,7 @@ class LivePreviewNotes extends ChangeNotifier {
   void attach(LivePreviewController preview) {
     if (_preview != null) return;
     _preview = preview;
+    _previewGeneration = preview.sessionGeneration;
     preview.addListener(_onPreviewChanged);
   }
 
@@ -140,6 +143,10 @@ class LivePreviewNotes extends ChangeNotifier {
   void _onPreviewChanged() {
     final preview = _preview;
     if (preview == null) return;
+    if (_previewGeneration != preview.sessionGeneration) {
+      _previewGeneration = preview.sessionGeneration;
+      _reset();
+    }
     if (preview.lines.isEmpty) {
       _stopCadence();
       _reset();
@@ -150,6 +157,7 @@ class LivePreviewNotes extends ChangeNotifier {
   }
 
   void _reset() {
+    _generation++;
     if (_bullets.isEmpty && _lastRunAt == null && _wordsAtLastRun == 0) return;
     _bullets = [];
     _lastRunAt = null;
@@ -162,7 +170,7 @@ class LivePreviewNotes extends ChangeNotifier {
     final now = _now();
     final last = _lastRunAt;
     if (last != null && now.difference(last) < LivePreviewNotesPolicy.minRunInterval) return;
-    final words = LivePreviewNotesPolicy.wordCount(LivePreviewNotesPolicy.inputText(preview.lines));
+    final words = preview.totalWordsSeen;
     if (words - _wordsAtLastRun < LivePreviewNotesPolicy.minNewWords) return;
     if (_running) {
       // Drop the run; one report per busy stretch says so.
@@ -177,13 +185,14 @@ class LivePreviewNotes extends ChangeNotifier {
   }
 
   Future<void> _run(LivePreviewController preview, int words, DateTime at) async {
+    final generation = _generation;
     _running = true;
     _lastRunAt = at;
     final input = LivePreviewNotesPolicy.inputText(preview.lines);
     final started = _now();
     try {
       final drafted = await engine(input, preview.language);
-      if (_disposed || _preview != preview || preview.lines.isEmpty) return;
+      if (_disposed || generation != _generation || _preview != preview || preview.lines.isEmpty) return;
       _wordsAtLastRun = words;
       final bullets = LivePreviewNotesPolicy.clamp(drafted ?? const <String>[]);
       // Unavailable drafts nothing: the quiet line replaces the bullets.
@@ -196,7 +205,7 @@ class LivePreviewNotes extends ChangeNotifier {
       );
       notifyListeners();
     } catch (_) {
-      if (_disposed || _preview != preview) return;
+      if (_disposed || generation != _generation || _preview != preview) return;
       _wordsAtLastRun = words;
       // An error hides the bullets too: the quiet line, no cloud fallback.
       _bullets = [];

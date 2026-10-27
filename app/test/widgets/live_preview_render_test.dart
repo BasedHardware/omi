@@ -16,6 +16,8 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -129,6 +131,8 @@ class _Capture extends CaptureProvider {
   @override
   bool get localPreviewAdmitted => admitted;
   @override
+  DateTime? get liveTranscriptStartedAt => DateTime.utc(2026, 10, 27);
+  @override
   String? get liveCaptureSource => 'omi';
   @override
   bool get pendantCaptureVerified => true;
@@ -185,9 +189,12 @@ void main() {
         state == _State.hybrid ||
         state == _State.notes ||
         state == _State.notesUnavailable) {
-      engine.emit('a0', 'Okay, so the plan for Thursday is to ship the pendant update first.', true);
-      engine.emit('a1', 'Then we check the battery numbers with the team before the weekend.', true);
-      engine.emit('a2', 'and if the overnight run looks clean we can', false);
+      engine.emit('a0', 'Okay, so the plan for Thursday is to ship the pendant update first.', true,
+          startedAt: DateTime.utc(2026, 10, 27), endedAt: DateTime.utc(2026, 10, 27, 0, 0, 4));
+      engine.emit('a1', 'Then we check the battery numbers with the team before the weekend.', true,
+          startedAt: DateTime.utc(2026, 10, 27, 0, 0, 4), endedAt: DateTime.utc(2026, 10, 27, 0, 0, 9));
+      engine.emit('a2', 'and if the overnight run looks clean we can', false,
+          startedAt: DateTime.utc(2026, 10, 27, 0, 0, 9), endedAt: DateTime.utc(2026, 10, 27, 0, 0, 12));
       if (state == _State.notes || state == _State.notesUnavailable) {
         engine.emit('a3', 'The beta goes out to the pilot cohort on Friday morning.', true);
       }
@@ -366,6 +373,12 @@ void main() {
       android = onAndroid;
       final (preview, _) = await tester.runAsync(() => previewIn(_State.hybrid)) ?? (null, null);
       final capture = captureFor(_State.hybrid, preview, inFlightSeconds: 22);
+      capture.applyInProgressConversation(ServerConversation(
+          id: 'c1',
+          createdAt: DateTime.utc(2026, 10, 27),
+          structured: Structured('', ''),
+          transcriptSegments: capture.segments.reversed.toList()));
+      expect(capture.segments.map((s) => s.start), [0, 4]);
       addTearDown(capture.dispose);
       await shoot(tester, name('live-preview-hybrid', light),
           light: light, home: const LiveEpisodePage(), capture: capture);

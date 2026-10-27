@@ -32,12 +32,30 @@ void main() {
       expect(anchor.resolve(episode: null, captureStart: later, streaming: true, now: later), _t0);
     });
 
-    test('the server episode start wins, and its close lets the next stretch count fresh', () {
+    test('local capture start wins over the server episode start', () {
       final anchor = LiveStartAnchor();
       final now = _t0.add(const Duration(minutes: 8));
-      expect(anchor.resolve(episode: _episode(_t0), captureStart: now, streaming: true, now: now), _t0);
+      expect(anchor.resolve(episode: _episode(_t0), captureStart: now, streaming: true, now: now), now);
       final next = now.add(const Duration(minutes: 40));
-      expect(anchor.resolve(episode: null, captureStart: next, streaming: true, now: next), next);
+      expect(anchor.resolve(episode: null, captureStart: next, streaming: true, now: next), now);
+    });
+
+    test('fresh Home mount uses actual 08:11:57 capture despite 08:20:02 server start', () {
+      final capture = DateTime.utc(2026, 10, 27, 8, 11, 57);
+      final shifted = _episode(DateTime.utc(2026, 10, 27, 8, 20, 2));
+      final now = capture.add(const Duration(minutes: 8, seconds: 24));
+      for (final anchor in [LiveStartAnchor(), LiveStartAnchor()]) {
+        final start = anchor.resolve(episode: shifted, captureStart: capture, streaming: true, now: now);
+        expect(start, capture);
+        expect(now.difference(start!), const Duration(minutes: 8, seconds: 24));
+      }
+    });
+
+    test('server start is the fallback until the capture start becomes available', () {
+      final anchor = LiveStartAnchor();
+      final older = _episode(_t0.subtract(const Duration(minutes: 3)));
+      expect(anchor.resolve(episode: older, captureStart: null, streaming: true, now: _t0), older.startedAt);
+      expect(anchor.resolve(episode: older, captureStart: _t0, streaming: true, now: _t0), _t0);
     });
 
     test('an episode rotating mid-capture keeps the session start', () {

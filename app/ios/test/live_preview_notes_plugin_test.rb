@@ -36,6 +36,10 @@ class LivePreviewNotesPluginTest < Minitest::Test
                   // Empties and whitespace drop out.
                   precondition(policy.clamp(["   ", "", "ok"]) == ["ok"])
                   precondition(policy.clamp([]) == [])
+                  precondition(policy.clamp(["one\\ntwo\\tthree"]) == ["one two three"])
+                  precondition(policy.boundedInput(String(repeating: "word ", count: 2000)).count <= policy.maxInputCharacters)
+                  precondition(policy.boundedInput(String(repeating: "x", count: 20000)).count == policy.maxInputCharacters)
+                  precondition(policy.instructions.contains("invented speaker labels"))
                   // The prompt stays inside AFM's shared prompt+completion budget.
                   precondition(!policy.instructions.isEmpty)
                   print("live preview notes: bounds and clamp passed")

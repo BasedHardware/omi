@@ -27,13 +27,22 @@ enum LivePreviewPhase {
 
 @immutable
 class LivePreviewLine {
-  const LivePreviewLine({required this.id, required this.text, required this.isFinal});
+  const LivePreviewLine(
+      {required this.id,
+      required this.text,
+      required this.isFinal,
+      this.startedAt,
+      this.endedAt,
+      this.spans = const []});
 
   final String id;
   final String text;
 
   /// False while the recognizer may still revise the words (volatile).
   final bool isFinal;
+  final DateTime? startedAt;
+  final DateTime? endedAt;
+  final List<LivePreviewSpan> spans;
 }
 
 /// Display-only on-device preview for mobile local-preview sessions.
@@ -114,6 +123,13 @@ class LivePreviewController extends ChangeNotifier {
   LivePreviewStart? _start;
   LivePreviewStart? get selected => _start;
 
+  // Separate from socket/engine generation: a silence boundary also clears
+  // display state, even when the same engine immediately fills the next line.
+  int _sessionGeneration = 0;
+  int get sessionGeneration => _sessionGeneration;
+  int _totalWordsSeen = 0;
+  int get totalWordsSeen => _totalWordsSeen;
+
   int _generation = 0;
   Future<void> _serial = Future.value();
   StreamSubscription<LivePreviewResult>? _results;
@@ -124,6 +140,7 @@ class LivePreviewController extends ChangeNotifier {
   bool _drainScheduled = false;
   final BytesBuilder _pending = BytesBuilder(copy: false);
   int _inFlight = 0;
+  DateTime? _pendingStartedAt;
 
   // Per-session telemetry.
   DateTime? _firstAudioAt;
@@ -184,7 +201,9 @@ class LivePreviewController extends ChangeNotifier {
       _resetSessionTelemetry();
       telemetry.engineSelected(start, platform: platform, osMajor: osMajor);
       if (start.running) {
-        _results = _engine.results.listen(_onResult, onError: (Object error) => _onRuntimeFailure(generation, error));
+        _results = _engine.results.listen((result) {
+          if (generation == _generation) _onResult(result);
+        }, onError: (Object error) => _onRuntimeFailure(generation, error));
         _phase = LivePreviewPhase.streaming;
       } else {
         _phase = LivePreviewPhase.unavailable;
@@ -227,7 +246,7 @@ class LivePreviewController extends ChangeNotifier {
     _generation++;
     _phase = LivePreviewPhase.inactive;
     _stopEngine();
-    _lines.clear();
+    _clearLines();
     _lastResultAt = null;
     _lastNotRequested = null;
     if (hadState) notifyListeners();
@@ -240,6 +259,7 @@ class LivePreviewController extends ChangeNotifier {
     _results = null;
     _queue.clear();
     _pending.clear();
+    _pendingStartedAt = null;
     if (start != null && start.running) {
       telemetry.sessionEnded(
         start.engine,
@@ -274,13 +294,13 @@ class LivePreviewController extends ChangeNotifier {
     if (!_feeding || packet.length <= 3) return;
     final isOpus = codec.isOpusSupported();
     if (!isOpus && codec != BleAudioCodec.pcm16) return;
-    _enqueue(_PreviewAudio(Uint8List.fromList(packet.sublist(3)), opus: isOpus));
+    _enqueue(_PreviewAudio(Uint8List.fromList(packet.sublist(3)), opus: isOpus, receivedAt: _now()));
   }
 
   /// Phone-mic tap: PCM16 16 kHz mono.
   void onPhonePcm(List<int> pcm) {
     if (!_feeding || pcm.isEmpty) return;
-    _enqueue(_PreviewAudio(Uint8List.fromList(pcm), opus: false));
+    _enqueue(_PreviewAudio(Uint8List.fromList(pcm), opus: false, receivedAt: _now()));
   }
 
   void _enqueue(_PreviewAudio audio) {
@@ -323,6 +343,7 @@ class LivePreviewController extends ChangeNotifier {
       } else {
         pcm = audio.bytes;
       }
+      _pendingStartedAt ??= audio.receivedAt.subtract(Duration(microseconds: pcm.length * 1000000 ~/ 32000));
       _pending.add(pcm);
       if (_pending.length >= feedChunkBytes) _flush();
     }
@@ -345,6 +366,8 @@ class LivePreviewController extends ChangeNotifier {
 
   void _flush() {
     final chunk = _pending.takeBytes();
+    final startedAt = _pendingStartedAt;
+    _pendingStartedAt = null;
     if (chunk.isEmpty) return;
     if (_inFlight >= maxInFlightFeeds) {
       _droppedBytes += chunk.length;
@@ -353,7 +376,7 @@ class LivePreviewController extends ChangeNotifier {
     _firstAudioAt ??= _now();
     _inFlight++;
     final generation = _generation;
-    _engine.feedPcm16(chunk).then((accepted) {
+    _engine.feedPcm16(chunk, startedAt: startedAt).then((accepted) {
       if (generation != _generation) return;
       if (accepted) {
         _fedBytes += chunk.length;
@@ -373,7 +396,7 @@ class LivePreviewController extends ChangeNotifier {
     if (text.isNotEmpty) {
       // A silence as long as the conversation timeout is a conversation
       // boundary: the earlier span becomes its own record, so stop showing it.
-      if (last != null && now.difference(last) >= _conversationGap()) _lines.clear();
+      if (last != null && now.difference(last) >= _conversationGap()) _clearLines();
       _lastResultAt = now;
       _noteFirstWord(now);
     }
@@ -382,7 +405,16 @@ class LivePreviewController extends ChangeNotifier {
       if (index >= 0 && !_lines[index].isFinal) _lines.removeAt(index);
       if (result.isFinal) _finalWordCounts.remove(result.segmentId);
     } else {
-      final line = LivePreviewLine(id: result.segmentId, text: text, isFinal: result.isFinal);
+      final previousWords = index < 0 ? 0 : _wordCount(_lines[index].text);
+      final newWords = _wordCount(text);
+      if (newWords > previousWords) _totalWordsSeen += newWords - previousWords;
+      final line = LivePreviewLine(
+          id: result.segmentId,
+          text: text,
+          isFinal: result.isFinal,
+          startedAt: result.startedAt,
+          endedAt: result.endedAt,
+          spans: result.spans);
       if (index >= 0) {
         _lines[index] = line;
       } else {
@@ -392,6 +424,12 @@ class LivePreviewController extends ChangeNotifier {
       if (result.isFinal) _finalWordCounts[result.segmentId] = _wordCount(text);
     }
     notifyListeners();
+  }
+
+  void _clearLines() {
+    _sessionGeneration++;
+    _totalWordsSeen = 0;
+    _lines.clear();
   }
 
   void _noteFirstWord(DateTime now) {
@@ -414,8 +452,9 @@ class LivePreviewController extends ChangeNotifier {
 }
 
 class _PreviewAudio {
-  _PreviewAudio(this.bytes, {required this.opus});
+  _PreviewAudio(this.bytes, {required this.opus, required this.receivedAt});
 
   final Uint8List bytes;
   final bool opus;
+  final DateTime receivedAt;
 }

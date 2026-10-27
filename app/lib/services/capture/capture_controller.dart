@@ -761,6 +761,7 @@ class CaptureController extends ChangeNotifier
   }
 
   ServerConversation? _conversation;
+  DateTime? get liveTranscriptStartedAt => _conversation?.startedAt;
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
 
@@ -3734,7 +3735,8 @@ class CaptureController extends ChangeNotifier
     }
     _conversation = nextConversation;
     if (_conversation != null) {
-      segments = _conversation!.transcriptSegments;
+      segments = List<TranscriptSegment>.of(_conversation!.transcriptSegments)
+        ..sort((a, b) => a.start.compareTo(b.start));
       // Merge server photos with locally-captured temp photos to avoid losing
       // photos that haven't been processed server-side yet.
       final serverPhotos = _conversation!.photos;
@@ -4400,6 +4402,7 @@ class CaptureController extends ChangeNotifier
     retainManualLiveLabels(segments, newSegments, _manualSpeakerDefaults);
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     segments.addAll(remainSegments);
+    segments.sort((a, b) => a.start.compareTo(b.start));
 
     // Refresh people cache if we see unknown personIds (backend-created persons)
     // Check all newSegments, not just remainSegments, to catch updates to existing segments

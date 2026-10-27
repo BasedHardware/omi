@@ -590,9 +590,16 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// conversations. Surfaces them without disturbing an active sync.
   Future<void> _onReconciledConversations(SyncLocalFilesResponse result, int generation) async {
     if (!_isCurrent(generation)) return;
+    final refreshedIds = <String>{};
     final conversations = await ConversationSyncUtils.processConversationIds(
       newConversationIds: result.newConversationIds,
-      updatedConversationIds: result.updatedConversationIds,
+      updatedConversationIds: {
+        ...result.updatedConversationIds,
+        ..._syncState.syncedConversations.map((p) => p.conversation.id),
+      }.toList(),
+      onConversation: (id, _) {
+        if (_isCurrent(generation)) refreshedIds.add(id);
+      },
     );
     if (!_isCurrent(generation)) return;
     // Refresh WALs *before* updating the "synced" conversation UI so we don't
@@ -600,9 +607,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     // WALs in an uploaded/pending state (issue #7240).
     await _refreshWals(generation);
     if (!_isCurrent(generation)) return;
-    if (conversations.isNotEmpty && !_syncState.isProcessing) {
+    if ((conversations.isNotEmpty || refreshedIds.isNotEmpty) && !_syncState.isProcessing) {
       // Append to whatever is already shown — jobs reconcile incrementally.
-      final merged = [..._syncState.syncedConversations, ...conversations];
+      final merged = [
+        ..._syncState.syncedConversations.where((p) => !refreshedIds.contains(p.conversation.id)),
+        ...conversations,
+      ];
       final filtered = filterFullySyncedConversations(conversations: merged, wals: _allWals);
       _updateSyncState(_syncState.toCompleted(conversations: filtered), generation);
     }
@@ -1155,6 +1165,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
 
     bool isFullySynced(SyncedConversationPointer pointer) {
+      if (pointer.conversation.isHiddenFromDefaultList) return false;
       final walsForConversation = byConversationId[pointer.conversation.id] ?? const <Wal>[];
       if (walsForConversation.isEmpty) return true; // No local WALs → nothing pending.
       return walsForConversation.every((w) => w.status == WalStatus.synced);

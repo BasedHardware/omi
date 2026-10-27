@@ -107,7 +107,7 @@ Models (iOS 26+ with Apple Intelligence available) over
 `com.omi/live_preview_notes` (`LivePreviewNotesPlugin.swift`; the schema caps
 the array at four bullets, the clamp is the belt, generation runs detached off
 the main thread and a busy draft is dropped). Android ships no engine in this
-release. A draft runs at most once a minute and only after at least 40 new
+release. A session generation fences late results after any clear, including a silence clear-and-refill. New-word admission uses a monotonic session total, independent of the bounded prompt and line eviction. A draft runs at most once a minute and only after at least 40 new
 preview words; the prompt is capped to the newest ~1500 words (AFM's context
 budget is prompt plus completion). When the engine is unavailable or errors,
 the card shows the quiet "Notes start when the final transcript arrives."
@@ -123,19 +123,27 @@ card shows those, as before.
 creation). Lines clear on capture stop/account change, and after a silence as
 long as the conversation timeout; the conversation list's normal refresh shows
 the record. Home's listening row reads the running session duration (the same
-`LiveStartAnchor` start the live page counts from — a mid-capture episode
-rotation may only move the start earlier) and, for an admitted preview, the
+`LiveStartAnchor` start the live page counts from — local capture start is authoritative,
+with the server episode start used only until a local capture start is known) and, for an admitted preview, the
 newest preview line in its subtitle. The live page's duration line adds
 "· since <time>" and a small Continues pill for the previous episode. The
 Summary tab shows the on-device notes (above) and a "Live" card of the newest
 preview text (no speaker label) with an Open transcript link. The Transcript
 tab shows final segments first, then a "Live on this phone" divider, then the
-preview lines the finals do not already cover (normalized text match; the
+preview lines the finals do not already cover (union of final audio-time intervals; timed words allow partial hand-off; the
 volatile tail reads lighter), with one quiet "Final transcript about <N>s
 behind" line replacing the uploading pill (failed/retrying uploads keep their
 actionable pill). With no on-device engine the tab shows the calm "Recording
 safely" card; its "Turn on live text" link appears only where the platform can
 deep-link to its speech settings (a denied speech permission).
+
+Audio feed timestamps are minted at the capture tap before bounded decoding,
+so a queued PCM slice and a late recognition result do not shift the preview's
+audio time to delivery time. iOS carries recognized word/phrase ranges; Android
+14+ requests optional word-start timing; Whisper carries the window range.
+Missing timing (including Android 13 recognizers) is kept conservatively. Final
+coverage uses the server conversation origin, independently of the local capture
+timer shown on Home. Preview words and timing stay display-only and in memory.
 
 ## Telemetry
 

@@ -126,6 +126,74 @@ void main() {
       expect(notes.calls, hasLength(2));
     });
 
+    test('continues drafting past 1500 words and after bounded lines evict', () async {
+      final notes = _ScriptedNotes();
+      final harness = _Harness(notes);
+      addTearDown(harness.controller.dispose);
+      await harness.ready();
+      harness.emit(1500);
+      await harness.ready();
+      harness.advance(const Duration(seconds: 61));
+      harness.emit(40);
+      await harness.ready();
+      expect(notes.calls, hasLength(2));
+      expect(notes.calls.last.$1.split(' '), hasLength(1500));
+      for (var i = 0; i < 205; i++) {
+        harness.emit(1);
+      }
+      harness.advance(const Duration(seconds: 61));
+      harness.emit(40);
+      await harness.ready();
+      expect(harness.controller.lines, hasLength(200));
+      expect(notes.calls, hasLength(3));
+    });
+
+    for (final failure in [false, true]) {
+      test('old session ${failure ? 'error' : 'result'} cannot render after account clear and refill', () async {
+        final notes = _ScriptedNotes()..gate = Completer<List<String>?>();
+        final harness = _Harness(notes);
+        addTearDown(harness.controller.dispose);
+        await harness.ready();
+        harness.emit(40);
+        harness.controller.endCapture(); // account replacement uses this same boundary
+        harness.controller.admit(language: 'en');
+        await harness.ready();
+        harness.emit(40);
+        if (failure) {
+          notes.gate!.completeError(StateError('old failure'));
+        } else {
+          notes.gate!.complete(['old private notes']);
+        }
+        await harness.ready();
+        expect(harness.controller.notes.bullets, isEmpty);
+        notes.gate = null;
+        harness.advance(const Duration(seconds: 61));
+        harness.emit(40);
+        await harness.ready();
+        expect(harness.controller.notes.bullets, ['draft']);
+      });
+    }
+
+    test('silence clear and refill resets notes and fences a late draft', () async {
+      final notes = _ScriptedNotes()..gate = Completer<List<String>?>();
+      final harness = _Harness(notes);
+      addTearDown(harness.controller.dispose);
+      await harness.ready();
+      harness.emit(40);
+      final generation = harness.controller.sessionGeneration;
+      harness.advance(const Duration(minutes: 3));
+      harness.emit(1); // clear and refill happen in a single notification
+      expect(harness.controller.sessionGeneration, greaterThan(generation));
+      expect(harness.controller.totalWordsSeen, 1);
+      notes.gate!.complete(['old']);
+      await harness.ready();
+      expect(harness.controller.notes.bullets, isEmpty);
+      notes.gate = null;
+      harness.emit(39);
+      await harness.ready();
+      expect(harness.controller.notes.bullets, ['draft']);
+    });
+
     test('the input is capped to the newest words and carries the language', () async {
       final notes = _ScriptedNotes((text, language) async {
         expect(language, 'en');
