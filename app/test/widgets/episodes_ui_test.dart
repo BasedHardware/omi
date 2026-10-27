@@ -830,6 +830,54 @@ void main() {
       await _unmount(tester);
     });
 
+    testWidgets('the row keeps the newest preview words after final lines arrive', (tester) async {
+      final engine = FakeLivePreviewEngine();
+      final preview = LivePreviewController(
+        engine: engine,
+        telemetry: LivePreviewTelemetry(emit: (_) {}),
+        platform: LivePreviewPlatform.ios,
+        osMajor: 26,
+      );
+      preview.admit(language: 'en');
+      final clock = tester.binding.clock;
+      var disposed = false;
+      await tester.runAsync(() async {
+        await pumpEventQueue();
+        engine.emit('a0', 'and if the overnight run looks clean we can', false);
+        await pumpEventQueue();
+      });
+      addTearDown(() {
+        if (!disposed) preview.dispose();
+      });
+      final capture = _LiveCapture()
+        ..preview = preview
+        ..previewAdmitted = true
+        ..startedAt = clock.now().subtract(const Duration(minutes: 2));
+      // The batch transcript has landed for earlier audio; the preview is still ahead of it.
+      capture.segments = [_segment('s1', 'Testing live transcription.', 0)];
+      addTearDown(capture.dispose);
+      final episodes = _episodes(live: null, clock: clock.now);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      final line = tester.widget<Text>(
+          find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
+      expect(line.textSpan!.toPlainText(), endsWith('and if the overnight run looks clean we can'));
+      // New words land without waiting for the clock's tick.
+      await tester.runAsync(() async {
+        engine.emit('a0', 'and if the overnight run looks clean we can ship', false);
+        await pumpEventQueue();
+      });
+      await tester.pump();
+      final updated = tester.widget<Text>(
+          find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
+      expect(updated.textSpan!.toPlainText(), endsWith('we can ship'));
+      await tester.runAsync(() async {
+        preview.dispose();
+        disposed = true;
+      });
+      await _unmount(tester);
+    });
+
     testWidgets('a preview row with no words yet keeps today\'s subtitle', (tester) async {
       final engine = FakeLivePreviewEngine();
       final preview = LivePreviewController(
@@ -969,8 +1017,8 @@ void main() {
       expect(find.textContaining('24m', findRichText: true), findsOneWidget);
       // A titled episode's title is its topic; the moment headings would repeat it.
       expect(find.textContaining('Where to eat', findRichText: true), findsNothing);
-      // No filled green tile: the live mark is the small breathing dot.
-      expect(find.byType(OmiBreathingDot), findsOneWidget);
+      // No filled green tile and no dot: the tile holds the running length alone.
+      expect(find.byType(OmiBreathingDot), findsNothing);
       expect(find.byType(OmiLiveDot), findsNothing);
       await _unmount(tester);
     });
