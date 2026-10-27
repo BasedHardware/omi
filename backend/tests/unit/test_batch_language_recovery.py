@@ -505,7 +505,7 @@ def test_missing_soniox_key_does_not_burn_the_independent_attempt(setup, monkeyp
     )
 
 
-@pytest.mark.parametrize('case', ['disabled', 'cap', 'allowance', 'empty', 'error', 'words_without_vad'])
+@pytest.mark.parametrize('case', ['disabled', 'cap', 'allowance', 'empty', 'error', 'worker_vad_words'])
 def test_cpu_zero_never_erases_positive_worker_census(setup, monkeypatch, legacy_dependencies, case):
     from utils.batch_pipeline.contracts import vad_receipt
 
@@ -521,14 +521,18 @@ def test_cpu_zero_never_erases_positive_worker_census(setup, monkeypatch, legacy
         monkeypatch.setattr('utils.batch_pipeline.quarantine_recovery.sync_allowed', lambda *a, **kw: False)
     elif case == 'error':
         soniox.side_effect = TimeoutError('synthetic')
-    elif case == 'words_without_vad':
+    elif case == 'worker_vad_words':
         soniox.return_value = (WORDS, 'vi')
-    expected = 'held' if case in {'disabled', 'cap', 'allowance'} else 'failed_held'
+    expected = (
+        'held'
+        if case in {'disabled', 'cap', 'allowance'}
+        else 'recovered' if case == 'worker_vad_words' else 'failed_held'
+    )
     assert recovery.recover('bad', binding.owner_id) == expected
     final = row(client)
     assert final['measured_held_vad_speech_seconds'] == 2
     assert final['worker_vad_receipt'] == receipt
-    artifacts.persist_recovery_result.assert_not_called()
+    assert artifacts.persist_recovery_result.called is (expected == 'recovered')
     if expected == 'failed_held':
         assert all(r['vad_speech_seconds'] == 0 for r in final['recovery']['recognizers'].values())
 
@@ -596,3 +600,199 @@ def test_saved_silence_cannot_discharge_unknown_or_positive_held_evidence(
         assert not protocol.settle('bad', token, 101, 'encrypted:stale-silence', outcome='silence')
     assert row(client)['measured_held_vad_speech_seconds'] == prior
     assert not row(client).get('result')
+
+
+def worker_receipt(client, seconds):
+    from utils.batch_pipeline.contracts import vad_receipt
+
+    job = row(client)
+    job['worker_vad_receipt'] = vad_receipt(job['audio_uri'], round(job['duration_seconds'] * 16000), seconds)
+    job['measured_held_vad_speech_seconds'] = seconds
+    return job['worker_vad_receipt']
+
+
+def assert_worker_vad_result(client, payload, seconds):
+    """The recovered payload passes the typed contracts projection enforces."""
+    from dataclasses import fields
+
+    from utils.batch_pipeline.contracts import WorkItem, WorkResult, projection_speech_spans
+    from utils.batch_pipeline.projection_parts import split_result
+
+    assert result_outcome(payload) == 'success'
+    assert projection_speech_spans(payload, 5) == [{'start': 1.0, 'end': 2.0}]
+    assert payload['speech_seconds'] == 1.0 and payload['audio_seconds'] == 5
+    assert payload['speech_spans_source'] == 'worker_vad_word_clocks'
+    assert payload['worker_vad_speech_seconds'] == seconds
+    assert payload['language'] == 'vi' and [w['word'] for w in payload['words']] == ['Synthetic.']
+    job = row(client)
+    item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
+    [(_, part)] = split_result(item, payload)
+    assert part['speech_seconds'] == 1.0 and [w['word'] for w in part['words']] == ['Synthetic.']
+    assert job['recovery_state'] == 'recovered' and job['state'] == 'result_ready'
+    assert WorkResult(**job['result']).outcome == 'success'
+    assert job['measured_held_vad_speech_seconds'] == max(seconds, 1.0)
+
+
+@pytest.mark.parametrize('seconds', [0.032, 1.5, 4.384])
+def test_worker_vad_locates_modulate_words_when_cpu_vad_is_empty(setup, monkeypatch, legacy_dependencies, seconds):
+    client, _, binding, artifacts, modulate, soniox, recovery, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0
+    )
+    worker_receipt(client, seconds)
+    modulate.return_value = (WORDS, 'vi')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert_worker_vad_result(client, artifacts.persist_recovery_result.call_args.args[1], seconds)
+    assert row(client)['recovery']['recognizers']['modulate'] == {
+        'provider': 'modulate',
+        'outcome': 'words',
+        'word_count': 1,
+        'vad_speech_seconds': 0,
+    }
+    modulate.assert_called_once()
+    soniox.assert_not_called()
+
+
+@pytest.mark.parametrize('mode', ['sync', 'async'])
+def test_worker_vad_locates_independent_words_after_modulate_empty(setup, monkeypatch, legacy_dependencies, mode):
+    import asyncio
+
+    client, _, binding, artifacts, modulate, soniox, recovery, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0
+    )
+    worker_receipt(client, 1.5)
+    soniox.return_value = (WORDS, 'vi')
+    outcome = (
+        recovery.recover('bad', binding.owner_id)
+        if mode == 'sync'
+        else asyncio.run(recovery.recover_async('bad', binding.owner_id))
+    )
+    assert outcome == 'recovered'
+    payload = artifacts.persist_recovery_result.call_args.args[1]
+    assert payload['words_provider'] == 'soniox'
+    assert_worker_vad_result(client, payload, 1.5)
+    modulate.assert_called_once()
+    soniox.assert_called_once()
+
+
+@pytest.mark.parametrize('change', ['absent', 'zero', 'subframe', 'foreign_audio', 'unmeasured', 'other_duration'])
+def test_words_without_independent_worker_speech_still_fail_closed(setup, monkeypatch, legacy_dependencies, change):
+    import hashlib
+
+    client, _, binding, artifacts, modulate, soniox, recovery, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0
+    )
+    receipt = worker_receipt(client, 0.016 if change == 'subframe' else 0 if change == 'zero' else 1.5)
+    if change == 'absent':
+        row(client).pop('worker_vad_receipt')
+    elif change == 'foreign_audio':
+        receipt['input_uri_sha256'] = hashlib.sha256(b'gs://synthetic/other').hexdigest()
+    elif change == 'unmeasured':
+        receipt['state'] = 'unavailable'
+    elif change == 'other_duration':
+        receipt['captured_samples'] = 7 * 16000
+    modulate.return_value = soniox.return_value = (WORDS, 'vi')
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    job = row(client)
+    assert job['recovery']['failure'] == {'stage': 'payload_validation', 'reason': 'invalid_payload'}
+    assert {p: r['outcome'] for p, r in job['recovery']['recognizers'].items()} == {
+        'modulate': 'words',
+        'soniox': 'words',
+    }
+    artifacts.persist_recovery_result.assert_not_called()
+
+
+def settled_words_without_vad(setup, monkeypatch, legacy_dependencies, *, multilingual=True):
+    """The prod settlement before this fix: worker VAD ignored, Modulate words rejected."""
+    client, store, binding, artifacts, modulate, soniox, recovery, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', str(multilingual).lower())
+    worker_receipt(client, 1.5)
+    modulate.return_value = (WORDS, 'vi')
+    with monkeypatch.context() as patch:
+        patch.setattr('utils.batch_pipeline.quarantine_recovery.worker_vad_speech', lambda job: None)
+        assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    job = row(client)
+    assert job['recovery']['failure'] == {'stage': 'payload_validation', 'reason': 'invalid_payload'}
+    assert job['recovery']['recognizers']['modulate']['outcome'] == 'words'
+    assert job['recovery']['recognizers']['soniox']['outcome'] == 'empty'
+    artifacts.persist_recovery_result.assert_not_called()
+    return client, store, binding, artifacts, modulate, soniox, deepcopy(job['recovery'])
+
+
+@pytest.mark.parametrize('multilingual', [True, False])
+def test_operator_redrive_recovers_settled_words_without_vad(setup, monkeypatch, legacy_dependencies, multilingual):
+    client, store, binding, artifacts, modulate, soniox, old = settled_words_without_vad(
+        setup, monkeypatch, legacy_dependencies, multilingual=multilingual
+    )
+    args = (store, artifacts, 'bad', binding.owner_id, 'words-plan', old)
+    # Soniox was already spent on this intent: the independent plan stays refused.
+    assert redrive_one(*args, server_flags=SERVING_ENV, independent_language=True) == 'independent_plan_required'
+    assert not row(client).get('speech_redrive')
+    for expected in ('recovered', 'already_applied'):
+        assert redrive_one(*args, server_flags=SERVING_ENV, clock=lambda: 100) == expected
+    marker = row(client)['speech_redrive']
+    assert (marker['provider'], marker['paid_epoch'], marker['state']) == ('modulate', 2, 'completed')
+    assert row(client)['recovery'] == old
+    assert_worker_vad_result(client, artifacts.persist_recovery_result.call_args.args[1], 1.5)
+    assert modulate.call_count == 2
+    soniox.assert_called_once()
+
+
+def test_words_redrive_route_requires_bound_worker_speech(setup, monkeypatch, legacy_dependencies):
+    from config.batch_language_recovery import modulate_words_redrive
+    from database.batch_pipeline_speech_redrive import independent_redrive
+
+    client, *_ = settled_words_without_vad(setup, monkeypatch, legacy_dependencies)
+    job = deepcopy(row(client))
+    assert modulate_words_redrive(job) and not independent_redrive(job)
+    for change in ('receipt', 'words', 'soniox_intent'):
+        changed = deepcopy(job)
+        if change == 'receipt':
+            changed.pop('worker_vad_receipt')
+        elif change == 'words':
+            changed['recovery']['recognizers']['modulate'].update(outcome='empty', word_count=0)
+        else:
+            changed['speech_redrive'] = {'provider': 'soniox'}
+        assert not modulate_words_redrive(changed) and independent_redrive(changed)
+
+
+def test_operator_census_counts_worker_vad_words_as_speech(setup, monkeypatch, legacy_dependencies):
+    import importlib.util
+    from pathlib import Path
+
+    client, store, binding, artifacts, *_ = settled_words_without_vad(setup, monkeypatch, legacy_dependencies)
+    scripts = Path(__file__).parents[2] / 'scripts'
+    monkeypatch.syspath_prepend(str(scripts))
+    spec = importlib.util.spec_from_file_location('words_operator', scripts / 'batch_pipeline_speech_redrive.py')
+    operator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(operator)
+    job = row(client)
+    monkeypatch.setattr(operator, 'checked_job', lambda *a, **kw: job)
+    assert operator.inspect_unit(store, artifacts, 'bad', binding.owner_id, 'key') == 'speech'
+    job.pop('worker_vad_receipt')
+    assert operator.inspect_unit(store, artifacts, 'bad', binding.owner_id, 'key') == 'silent'
+
+
+def test_independent_redrive_uses_worker_vad_for_words(setup, monkeypatch, legacy_dependencies):
+    client, store, binding, artifacts, modulate, soniox, _, old = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0, automatic=False
+    )
+    worker_receipt(client, 1.5)
+    soniox.return_value = (WORDS, 'vi')
+    outcome = redrive_one(
+        store,
+        artifacts,
+        'bad',
+        binding.owner_id,
+        'independent-plan',
+        old,
+        server_flags=SERVING_ENV,
+        clock=lambda: 100,
+        independent_language=True,
+    )
+    assert outcome == 'recovered'
+    assert row(client)['speech_redrive']['recognizers']['soniox']['word_count'] == 1
+    assert_worker_vad_result(client, artifacts.persist_recovery_result.call_args.args[1], 1.5)
+    modulate.assert_not_called()
+    soniox.assert_called_once()

@@ -5,7 +5,7 @@ from dataclasses import asdict
 from uuid import uuid4
 
 from config.policy import RecoveryPolicy
-from config.batch_language_recovery import language_guarded, independent_attempted
+from config.batch_language_recovery import language_guarded, independent_attempted, modulate_words_redrive
 from database.batch_pipeline_policy import load_stage_policy, stage_in_transaction, record_policy_observations
 from database.batch_pipeline_terminal_empty import spent_canary
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
@@ -18,7 +18,15 @@ PAID_EPOCH = 2
 
 
 def independent_redrive(job):
-    return language_guarded(job) and (job.get('recovery') or {}).get('provider') == 'modulate'
+    return (
+        language_guarded(job)
+        and (job.get('recovery') or {}).get('provider') == 'modulate'
+        and not modulate_words_redrive(job)
+    )
+
+
+def redrive_route(policy, job):
+    return policy.speech_empty_multilingual or independent_redrive(job) or modulate_words_redrive(job)
 
 
 def replaceable_modulate_intent(job, marker):
@@ -78,7 +86,7 @@ class SpeechRedriveStore:
             policy = stage_in_transaction(
                 tx, job, 'recovery', candidates=candidates, observations=observations, server_flags=self.server_flags
             )
-            if not policy.recovery_enabled or (not policy.speech_empty_multilingual and not independent_redrive(job)):
+            if not policy.recovery_enabled or not redrive_route(policy, job):
                 raise ProjectionBlocked('speech redrive disabled')
             existing = tx.get('results', segment_id)
             marker = job.get('speech_redrive') or {}
@@ -148,7 +156,7 @@ class SpeechRedriveStore:
             marker = job.get('speech_redrive') or {}
             if (
                 not policy.recovery_enabled
-                or (not policy.speech_empty_multilingual and not independent_redrive(job))
+                or not redrive_route(policy, job)
                 or not self.terminal(job, existing, now)
                 or marker.get('token') != token
                 or marker.get('plan_digest') != plan_digest
