@@ -31,7 +31,12 @@ from database.batch_pipeline_policy import load_stage_policy, refresh_disabled_r
 from config.policy import kill_switch
 from config.batch_pipeline_empty_asr import safety_net_enabled, terminal_empty_allowed
 from config.stt_provider_policy import HELD_RECOVERY_SECOND_PROVIDER
-from config.batch_language_recovery import allowed as independent_allowed, language_guarded, below_silence_threshold
+from config.batch_language_recovery import (
+    MAX_AUDIO_SECONDS,
+    allowed as independent_allowed,
+    language_guarded,
+    below_silence_threshold,
+)
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
@@ -309,6 +314,9 @@ class QuarantineRecovery:
                 except RecoveryFailure as error:
                     inspection_failure = error
             if language_guarded(job) and inspected_spans == [] and not independent_allowed(duration):
+                if duration > MAX_AUDIO_SECONDS and self.protocol.hold_duration_limit(segment_id, token, self.clock()):
+                    logger.info('event=batch_quarantine_recovery outcome=failed_held reason=independent_duration_limit')
+                    return 'failed_held'
                 self.protocol.observe_vad(segment_id, token, 0)
                 return 'held'
 

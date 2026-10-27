@@ -6350,6 +6350,17 @@ for the language-guarded Modulate recovery route. Legacy multilingual redrive
 retains its epoch-2 contract. Both paths require the current privacy generation,
 owner and exact intent token; enabling independent recovery does not require the
 legacy multilingual flag.
+
+When strict CPU VAD finds no spans in a guarded window longer than the fixed
+60-second independent limit, recovery records an `independent_duration_limit`
+refusal and enters `failed_held` before any paid start. This stops repeated
+downloads and inspections of an impossible prepared intent. Encrypted audio,
+worker VAD evidence and the maximum held speech census remain intact; no words,
+silence or no-recoverable-speech result is invented. Successful upload siblings
+may complete as partial while this audio remains available for reviewed redrive.
+A disabled recovery setting, lower runtime cap or temporary allowance refusal
+for an otherwise eligible window keeps its existing retry behavior.
+
 The Soniox incremental public-rate estimate is $0.000556/20 s or $0.001667/60 s; actual
 token-based vendor billing is authoritative. Temporary vendor resources have
 best-effort cleanup and may persist to documented 30-day expiry after a crash.
