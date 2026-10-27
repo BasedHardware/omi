@@ -57,6 +57,7 @@ agentic_mock.agent_config_context.get.return_value = None
 
 sys.path.insert(0, str(BACKEND_DIR))
 
+
 def _load_module(name: str, file_path: Path):
     spec = importlib.util.spec_from_file_location(name, str(file_path))
     if spec is None or spec.loader is None:
