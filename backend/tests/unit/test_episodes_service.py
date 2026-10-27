@@ -1579,7 +1579,11 @@ def test_synced_attach_retries_two_version_conflicts_and_preserves_other_members
     assert len(attempts) == 3 and len(set(attempts)) == 3
 
 
-def test_large_recovered_member_does_not_receipt_words_truncated_from_the_prompt():
+@pytest.mark.parametrize('notes_mode', ['off', 'serve'])
+def test_large_recovered_member_does_not_receipt_words_truncated_from_the_prompt(monkeypatch, notes_mode):
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', notes_mode)
+    monkeypatch.setattr(service.incremental, 'get_evidence', lambda *a, **k: None)
+    monkeypatch.setattr(service.incremental, 'resolve_output_language', lambda *a, **k: 'English')
     store = StrictFirestore()
     model = FakeModel()
     c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
@@ -1592,3 +1596,39 @@ def test_large_recovered_member_does_not_receipt_words_truncated_from_the_prompt
     calls = len(model.calls)
     service.attach_synced_intake(UID, 'c-wal', row, collaborators=c)
     assert len(model.calls) == calls
+
+
+def test_recovery_batch_slices_preserve_the_stored_segment_id_for_speaker_evidence():
+    original = {'id': 'stored-segment', 'text': 'recovered words ' * 200, 'start': 0, 'end': 10}
+    slices = [segment for batch in service.recovery.segment_batches([original]) for segment in batch]
+    assert len(slices) > 1
+    assert {segment['id'] for segment in slices} == {'stored-segment'}
+    assert len({segment['_episode_recovery_key'] for segment in slices}) == len(slices)
+
+
+def test_recovered_unplaced_segment_is_not_reapplied_by_an_ordinary_finalize_tail():
+    store = StrictFirestore()
+    model = FakeModel()
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'c-live', 'omi', started_at=T0, collaborators=c)
+    tail = replace(_unplaced('unplaced-recovered'), conversation_id='c-wal', trigger='finalize')
+    row = _wal_row(transcript_segments=list(tail.segments))
+    assert service.attach_synced_intake(UID, 'c-wal', row, collaborators=c) == 'joined'
+    assert len(model.calls) == 1
+    assert service.record_moment(UID, tail, c) == 'skipped_applied'
+    assert len(model.calls) == 1
+
+
+def test_failed_recovery_slice_does_not_consume_the_whole_unplaced_segment():
+    store = StrictFirestore()
+    model = FakeModel({}, RuntimeError('provider unavailable'))
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'c-live', 'omi', started_at=T0, collaborators=c)
+    segment = {'id': 'long-unplaced', 'text': 'recovered words ' * 700, 'start': -1, 'end': -1}
+    row = _wal_row(transcript_segments=[segment])
+    assert service.attach_synced_intake(UID, 'c-wal', row, collaborators=c) == 'joined'
+    consumed, _ = _consumed(store, 'c-wal')
+    assert 'long-unplaced' not in consumed
+    service.attach_synced_intake(UID, 'c-wal', row, collaborators=c)
+    consumed, _ = _consumed(store, 'c-wal')
+    assert 'long-unplaced' in consumed

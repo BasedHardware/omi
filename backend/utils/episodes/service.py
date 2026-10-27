@@ -39,13 +39,11 @@ Nothing here writes a conversation, an action item or a memory.
 from __future__ import annotations
 
 import logging
-import json
 import random
 import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from hashlib import sha256
 from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
 
@@ -66,7 +64,8 @@ from database import users as users_db
 from database.auth import get_user_name
 from utils.episodes import moment_render, boundary_runtime
 from utils.episodes.output_language import resolved_invoke
-from utils.episodes import client_gate, incremental, metrics, policy
+from utils.episodes import client_gate, incremental, metrics, policy, recovery
+from utils.episodes.recovery import segment_end as _segment_end, segment_start as _segment_start
 from utils.episodes.moment import MomentInput
 from utils.episodes.state import apply_update, clean_text, provisional_items, render_state
 
@@ -102,20 +101,6 @@ class Collaborators:
 
 def _now(c: Collaborators) -> datetime:
     return c.now() if c.now else datetime.now(timezone.utc)
-
-
-def _segment_end(segment: Mapping[str, Any]) -> float:
-    try:
-        return float(segment.get('end') or 0.0)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _segment_start(segment: Mapping[str, Any]) -> float:
-    try:
-        return float(segment.get('start') or 0.0)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _tz(uid: str, c: Collaborators) -> str:
@@ -596,22 +581,15 @@ def _record_moment_once(
             # Recovery can fill a gap *behind* the placed cursor, or extend text
             # in place. A content receipt, committed with notes, is the proof of
             # consumption; temporal overlap with live speech is not that proof.
-            sid = (
-                'sync:'
-                + sha256(
-                    json.dumps(
-                        [
-                            sid if sid else [_segment_start(segment), _segment_end(segment)],
-                            str(segment.get('text') or '').strip(),
-                        ],
-                        ensure_ascii=False,
-                    ).encode()
-                ).hexdigest()
-            )
+            sid = recovery.receipt_id(segment)
         if sid in consumed or sid in selected_ids:
             continue
         if recovered:
             selected_ids.add(sid)
+            if _segment_end(segment) < 0 and segment.get('id') and segment.get('_episode_recovery_last', True):
+                # Ordinary unplaced live/finalize replays consume original IDs.
+                # Recovery also needs its content receipt for in-place revisions.
+                selected_ids.add(segment['id'])
         elif _segment_end(segment) < 0:
             # Unplaced segments retain individual IDs at persistence. Their sentinel
             # is not an ordering cursor; a repaired placement retains this receipt.
@@ -1059,57 +1037,12 @@ def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], 
 
 
 def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
-    segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
-    if not segments:
-        return 'skipped_applied'
-    started = policy.utc(row.get('started_at')) or policy.utc(row.get('created_at')) or _now(c)
-    ended = policy.utc(row.get('finished_at')) or _wall(started, max(_segment_end(s) for s in segments)) or started
     outcome = 'skipped_applied'
-    for batch in _recovery_batches(segments):
-        outcome = record_moment(
-            uid,
-            MomentInput(
-                conversation_id=conversation_id,
-                source=str(row.get('source') or '') or None,
-                segments=batch,
-                started_at=started,
-                ended_at=min(ended, _now(c)),
-                trigger='sync_recovery',
-                calendar_identity=_calendar_identity(row),
-                language=row.get('language'),
-            ),
-            c,
-            member_episode_id=episode_id,
-        )
+    for moment in recovery.moments(conversation_id, row, now=_now(c), calendar_identity=_calendar_identity(row)):
+        outcome = record_moment(uid, moment, c, member_episode_id=episode_id)
         if outcome not in {'applied', 'skipped_applied'}:
             return outcome
     return outcome
-
-
-def _recovery_batches(segments: Sequence[Mapping[str, Any]]):
-    """Keep all recovered words inside the moment renderer's 6000-character budget.
-
-    Stable per-segment slices keep receipts independent of batch boundaries.
-    Head/tail truncation must never mark unseen middle speech as consumed.
-    """
-    batch, chars = [], 0
-    for segment in segments:
-        text = str(segment.get('text') or '').strip()
-        part = 0
-        while text:
-            cut = min(len(text), 1500)
-            if cut < len(text):
-                cut = text.rfind(' ', 0, cut) if ' ' in text[:cut] else cut
-            chunk, text = text[:cut], text[cut:].lstrip()
-            if batch and (chars + len(chunk) > 3000 or len(batch) >= 32):
-                yield batch
-                batch, chars = [], 0
-            identity = segment.get('id') or [_segment_start(segment), _segment_end(segment)]
-            batch.append({**segment, 'id': json.dumps([identity, part]), 'text': chunk})
-            chars += len(chunk)
-            part += 1
-    if batch:
-        yield batch
 
 
 def _attach_synced(uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
