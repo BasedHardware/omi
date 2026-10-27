@@ -512,7 +512,7 @@ class ProjectionStore:
                 result['reason_code'] = 'conversation_deleted'
             if session.ledger.get('status') == 'completed':
                 old = session.ledger.get('result')
-                if not is_valid_completed_sync_content_result(old):
+                if not isinstance(old, dict) or not is_valid_completed_sync_content_result(old):
                     raise ProjectionBlocked('invalid existing ledger completion')
                 if deleted_output_count:
                     # Preserve historical usage; publish only destinations that

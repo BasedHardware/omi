@@ -719,6 +719,38 @@ def test_privacy_disposition_requires_transactional_input_tombstone_proof(bindin
         assert client.rows == before
 
 
+@pytest.mark.parametrize('deleted', [False, True])
+def test_separate_output_guards_preserve_distinct_document_budget(binding, deleted, monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_budget'))
+    user = client.collection('users').document(binding.owner_id)
+    user.create({'data_protection_level': 'standard'})
+    session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
+    session._privacy_fence_ids = set()  # The grouped input/output prepare phase.
+    transaction = client.transaction()
+    for index in range(256):
+        cid = f'output-{index}'
+        if deleted:
+            user.collection('deleted_conversations').document(cid).create({'deleted': True})
+            with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
+                session.guard(transaction, [cid])
+        else:
+            session.guard(transaction, [cid])
+    # Rechecking a previously seen source does not consume another slot.
+    if deleted:
+        with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
+            session.guard(transaction, ['output-0'])
+    else:
+        session.guard(transaction, ['output-0'])
+    with pytest.raises(BatchPrivacyBlocked, match='conversation_fence_budget'):
+        session.guard(transaction, ['later-input'])
+    session._privacy_fence_ids = None  # Later validate_plan keeps its existing budget.
+    session.guard(transaction, ['later-input'])
+
+
 @pytest.mark.parametrize('reason', ['conversation_fence_budget', 'conversation_deleted', 'private-text-not-a-reason'])
 def test_assignment_privacy_fence_logs_bounded_reason(binding, monkeypatch, caplog, reason):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked

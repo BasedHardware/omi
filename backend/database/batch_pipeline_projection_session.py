@@ -60,6 +60,7 @@ class ProjectionSession:
         self.speaker_scope: str | None = None
         self.total_speech_seconds = 0.0
         self._source_deletion_transaction = None
+        self._privacy_fence_ids: set[str] | None = None
 
     def receipt(self) -> dict:
         parts = self.entry.get('projection_parts') or {}
@@ -91,17 +92,34 @@ class ProjectionSession:
         options = {}
         if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
             options['memo'] = getattr(self, '_privacy_memo', None)
-        return assert_batch_write_allowed(
-            self.client,
-            transaction,
-            self.binding.owner_id,
-            conversation_ids=conversation_ids,
-            expected_generation=self.binding.privacy_generation,
-            **options,
-        )
+        snapshots: dict[str, Any] = {}
+        try:
+            return assert_batch_write_allowed(
+                self.client,
+                transaction,
+                self.binding.owner_id,
+                conversation_ids=conversation_ids,
+                expected_generation=self.binding.privacy_generation,
+                snapshots=snapshots,
+                **options,
+            )
+        except BatchPrivacyBlocked as error:
+            if error.conversation_id:
+                # A tombstone refuses before the conversation snapshot exists.
+                snapshots.setdefault('conversations', {})[error.conversation_id] = {}
+            raise
+        finally:
+            # Input/output checks have separate refusal semantics, but share
+            # the same distinct-document ceiling during prepare. Later plan
+            # validations retain their existing independent walk budgets.
+            if self._privacy_fence_ids is not None:
+                self._privacy_fence_ids.update(snapshots.get('conversations', {}))
+                if len(self._privacy_fence_ids) > 256:
+                    raise BatchPrivacyBlocked('conversation_fence_budget')
 
     def prepare(self, transaction, *, replay=True, privacy_deleted=False):
         self._source_deletion_transaction = None
+        self._privacy_fence_ids = set()
         if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
             # A session may survive the pre-check and assignment retries. Only
             # prepare and validate_plan within this attempt may share snapshots.
@@ -204,6 +222,7 @@ class ProjectionSession:
                 # A prior output was already assigned before the user deleted
                 # it. Reconcile its receipt, while later input parts still owe
                 # their own assignments. Never authorize input deletion here.
+        self._privacy_fence_ids = None
         durable = self.ledger.get('batch_pipeline') or {}
         if (
             self.ledger.get('dispatch_protocol') != 'batch_v1'
