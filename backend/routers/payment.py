@@ -50,7 +50,6 @@ from utils.subscription import (
     is_paid_plan,
     filter_plans_for_user,
     desktop_to_consumer_plan_change_error,
-    retired_plan_change_error,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
     clear_trial_paywall_cache,
@@ -890,9 +889,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
         current_plan = get_plan_type_from_price_id(current_price_id)
 
-        change_error = desktop_to_consumer_plan_change_error(current_plan, target_plan) or retired_plan_change_error(
+        change_error = desktop_to_consumer_plan_change_error(
             current_plan, target_plan
-        )
+        ) or subscription_utils.retired_plan_change_error(current_plan, target_plan)
         if change_error:
             raise HTTPException(status_code=400, detail=change_error)
 
