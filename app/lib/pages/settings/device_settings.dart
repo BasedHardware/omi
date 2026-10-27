@@ -201,21 +201,46 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
-  String _doubleTapActionLabel(int action) {
+  String _buttonActionLabel(int action) {
+    final l10n = context.l10n;
     switch (action) {
       case 1:
-        return context.l10n.deviceOnboardingMuteUnmute;
+        return l10n.deviceOnboardingMuteUnmute;
       case 2:
-        return context.l10n.starConversation;
+        return l10n.starConversation;
+      case 3:
+        return l10n.deviceOnboardingAskQuestionTitle;
+      case 4:
+        return l10n.off;
       default:
-        return context.l10n.endConversation;
+        return l10n.endConversation;
     }
+  }
+
+  Future<void> _pickSinglePressAction() async {
+    final action = await showButtonActionSheet(
+      context,
+      title: context.l10n.singlePressAction,
+      current: SharedPreferencesUtil().singlePressAction,
+    );
+    if (action == null || !mounted) return;
+    setState(() => SharedPreferencesUtil().singlePressAction = action);
   }
 
   Future<void> _pickDoubleTapAction() async {
     final action = await showDoubleTapActionSheet(context, current: SharedPreferencesUtil().doubleTapAction);
     if (action == null || !mounted) return;
     setState(() => SharedPreferencesUtil().doubleTapAction = action);
+  }
+
+  Future<void> _pickTriplePressAction() async {
+    final action = await showButtonActionSheet(
+      context,
+      title: context.l10n.triplePressAction,
+      current: SharedPreferencesUtil().triplePressAction,
+    );
+    if (action == null || !mounted) return;
+    setState(() => SharedPreferencesUtil().triplePressAction = action);
   }
 
   Future<void> _findDevice(DeviceProvider provider) async {
@@ -411,12 +436,37 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final l10n = context.l10n;
     final isOmi = device?.type == DeviceType.omi;
     final supportsFind = isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
+    final singlePressRow = OmiSettingsRow(
+      key: const Key('single_tap_setting'),
+      leading: const FaIcon(FontAwesomeIcons.handPointer),
+      title: l10n.singlePress,
+      value: _buttonActionLabel(SharedPreferencesUtil().singlePressAction),
+      onTap: _pickSinglePressAction,
+      showChevron: true,
+    );
     final doubleTapRow = OmiSettingsRow(
+      key: const Key('double_tap_setting'),
       leading: const FaIcon(FontAwesomeIcons.handPointer),
       title: l10n.doubleTap,
-      value: _doubleTapActionLabel(SharedPreferencesUtil().doubleTapAction),
+      value: _buttonActionLabel(SharedPreferencesUtil().doubleTapAction),
       onTap: _pickDoubleTapAction,
       showChevron: true,
+    );
+    final triplePressRow = OmiSettingsRow(
+      key: const Key('triple_tap_setting'),
+      leading: const FaIcon(FontAwesomeIcons.handPointer),
+      title: l10n.triplePress,
+      value: _buttonActionLabel(SharedPreferencesUtil().triplePressAction),
+      onTap: _pickTriplePressAction,
+      showChevron: true,
+    );
+    final longPressRow = OmiSettingsRow(
+      key: const Key('long_press_setting'),
+      leading: const FaIcon(FontAwesomeIcons.powerOff),
+      title: l10n.longPress,
+      subtitle: l10n.deviceOnboardingTurnOffSubtitle,
+      value: l10n.turnOnOff,
+      showChevron: false,
     );
     return OmiSettingsGroup(
       header: l10n.customizationSection,
@@ -446,8 +496,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               }
             },
           ),
-          // Double tap is only configurable while Omi button actions are enabled.
-          if (_omiButtonActionsEnabled) doubleTapRow,
+          // Button gestures are only configurable while Omi button actions are enabled.
+          if (_omiButtonActionsEnabled) ...[
+            singlePressRow,
+            doubleTapRow,
+            triplePressRow,
+            longPressRow,
+          ],
         ] else
           doubleTapRow,
         if (_isDimRatioLoaded && _hasDimmingFeature == true)

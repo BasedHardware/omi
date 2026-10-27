@@ -687,10 +687,46 @@ class SharedPreferencesUtil {
 
   set batchModeSuspendedForOnboarding(bool value) => saveBool('batchModeSuspendedForOnboarding', value);
 
-  // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
-  int get doubleTapAction => getInt('doubleTapAction');
+  // Hardware button action codes: 0 = end conversation, 1 = mute/unmute, 2 = star, 3 = ask Omi, 4 = none
+  static const Set<int> validButtonActions = {0, 1, 2, 3, 4};
 
-  set doubleTapAction(int value) => saveInt('doubleTapAction', value);
+  int _sanitizeButtonAction(int value, int fallback) => validButtonActions.contains(value) ? value : fallback;
+
+  int get singlePressAction => _sanitizeButtonAction(getInt('singlePressAction', defaultValue: 3), 3);
+
+  set singlePressAction(int value) => saveInt('singlePressAction', _sanitizeButtonAction(value, 3));
+
+  int get singleTapAction => singlePressAction;
+
+  set singleTapAction(int value) => singlePressAction = value;
+
+  int get doublePressAction {
+    if (_preferences?.containsKey('doublePressAction') == true) {
+      return _sanitizeButtonAction(getInt('doublePressAction', defaultValue: 1), 1);
+    }
+    if (_preferences?.containsKey('doubleTapAction') == true) {
+      return _sanitizeButtonAction(getInt('doubleTapAction', defaultValue: 1), 1);
+    }
+    return 1;
+  }
+
+  set doublePressAction(int value) {
+    final sanitized = _sanitizeButtonAction(value, 1);
+    saveInt('doublePressAction', sanitized);
+    saveInt('doubleTapAction', sanitized);
+  }
+
+  int get doubleTapAction => doublePressAction;
+
+  set doubleTapAction(int value) => doublePressAction = value;
+
+  int get triplePressAction => _sanitizeButtonAction(getInt('triplePressAction', defaultValue: 0), 0);
+
+  set triplePressAction(int value) => saveInt('triplePressAction', _sanitizeButtonAction(value, 0));
+
+  int get tripleTapAction => triplePressAction;
+
+  set tripleTapAction(int value) => triplePressAction = value;
 
   // Keep backward compatibility
   bool get doubleTapPausesMuting => doubleTapAction == 1;

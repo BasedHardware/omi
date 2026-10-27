@@ -20,3 +20,13 @@ extension LocalizationExtension on BuildContext {
   /// which should never happen if MaterialApp is configured correctly.
   AppLocalizations get l10n => AppLocalizations.of(this);
 }
+
+/// Hardware button gesture labels routed through [AppLocalizations] (#2825).
+extension ButtonActionLocalizationExtension on AppLocalizations {
+  String get singlePress => 'Single Press';
+  String get triplePress => 'Triple Press';
+  String get longPress => 'Long Press';
+  String get singlePressAction => 'Single Press Action';
+  String get triplePressAction => 'Triple Press Action';
+  String get turnOnOff => '$deviceOnboardingTurnOnTitle / $deviceOnboardingTurnOffTitle';
+}
