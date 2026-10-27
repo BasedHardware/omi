@@ -58,6 +58,7 @@ from database.sync_assignment import (
 from database.sync_conversation_snapshot import read_redirected, resolve_snapshot
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
+from utils.sync.bridge_observation import log_bridge_observation
 from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, preserve_duplicate_hint, transcript_fingerprint
 from .firestore_index_registry import (
@@ -4366,6 +4367,9 @@ def assign_sync_conversation(
                 discover_live_candidates,
             )
         conversation = result[0]
+        bridge = conversation.pop('_sync_lineage_bridge', None)
+        if bridge is not None:
+            log_bridge_observation(bridge)
         for retired_id in sorted({conversation['id'], *absorbed}):
             stop_quiet_check_for_conversation(uid, retired_id, firestore_client=client)
         observation = conversation.pop('_sync_lineage_created', None)

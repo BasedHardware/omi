@@ -4,7 +4,7 @@ Live and sync transcribe the same audio with different wording, so the existing
 exact-text/exact-range merge dedupe cannot drop a reworded repeat. There is no
 reliable constant offset between WAL and live clocks, so this helper never
 rewrites timestamps and never drops on time coverage alone: an incoming segment
-is dropped only when its capture is independently proven (``verified_capture_indices``)
+is dropped by default only when its capture is independently proven (``verified_capture_indices``)
 AND a contiguous window of canonical live segments in its time neighborhood
 lexically covers every substantive incoming token.
 
@@ -310,6 +310,7 @@ def drop_covered_repeats(
     live_origin: float,
     live_pinned: bool,
     verified_capture_indices: frozenset[int] = frozenset(),
+    require_capture_proof: bool = True,
 ) -> tuple[list[dict], dict]:
     """Return (kept incoming segments, drop report) for one bound intake.
 
@@ -318,9 +319,11 @@ def drop_covered_repeats(
     every other incoming segment is kept before any candidate work. The report
     carries ``dropped_seconds``, the per-drop ``methods`` and ``repeat_only``
     (every evaluated incoming segment was covered). Callers own telemetry
-    aggregation; nothing here mutates the inputs.
+    aggregation; nothing here mutates the inputs. Stored donor consolidation may
+    explicitly set ``require_capture_proof=False`` to use the same lexical rule
+    when WAL context is unavailable. The incoming default remains proof-gated.
     """
-    if not verified_capture_indices or len(live_segments) > MAX_LIVE_SEGMENTS:
+    if (require_capture_proof and not verified_capture_indices) or len(live_segments) > MAX_LIVE_SEGMENTS:
         return list(incoming_segments), _zero_report()
     live_index = []
     for segment in live_segments:
@@ -346,7 +349,7 @@ def drop_covered_repeats(
         if index >= MAX_INCOMING_SEGMENTS:
             kept.append(segment)
             continue
-        if index not in verified_capture_indices:
+        if require_capture_proof and index not in verified_capture_indices:
             kept.append(segment)
             continue
         evaluated += 1
@@ -435,7 +438,7 @@ def drop_covered_repeats(
             continue
         dropped_count += 1
         dropped_seconds += incoming_duration
-        methods.append('source_frame_lexical')
+        methods.append('source_frame_lexical' if index in verified_capture_indices else 'lexical')
     report = {
         'dropped_seconds': dropped_seconds,
         'dropped_segments': dropped_count,
