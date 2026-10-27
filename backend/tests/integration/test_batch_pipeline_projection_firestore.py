@@ -265,7 +265,7 @@ def test_crash_after_ledger_completion_repairs_client_without_reprocessing(lane)
 
 
 @pytest.mark.parametrize('kind', ['account', 'conversation'])
-def test_deletion_during_projection_cannot_resurrect_or_complete(lane, monkeypatch, kind):
+def test_deletion_during_projection_never_resurrects_and_only_conversation_deletion_settles(lane, monkeypatch, kind):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
     from utils.batch_pipeline import projection
 
@@ -291,10 +291,14 @@ def test_deletion_during_projection_cannot_resurrect_or_complete(lane, monkeypat
                 {'deleted': True}
             )
         deleted.set()
-        with pytest.raises(BatchPrivacyBlocked):
-            future.result()
-    assert not active_rows(lane) and not lane.tasks and not lane.published
-    assert batch.ledger.get().to_dict()['status'] == 'processing'
+        if kind == 'account':
+            with pytest.raises(BatchPrivacyBlocked):
+                future.result()
+        else:
+            assert future.result()['reason_code'] == 'conversation_deleted'
+    assert not active_rows(lane) and not lane.tasks
+    assert batch.ledger.get().to_dict()['status'] == ('processing' if kind == 'account' else 'completed')
+    assert len(lane.published) == (0 if kind == 'account' else 1)
 
 
 def test_silence_commits_without_loading_transcript_or_marking_enrichment(lane):
@@ -408,8 +412,8 @@ def test_delete_after_assignment_cannot_recreate_reprocess_obligation(lane, monk
     lane.finish(batch)
     original = bridge.finish_sync_bridges
 
-    def delete_before_mark(uid, cid):
-        result = original(uid, cid)
+    def delete_before_mark(uid, cid, **kwargs):
+        result = original(uid, cid, **kwargs)
         lane.client.collection('account_deletions').document(lane.uid).set({'wipe_status': 'queued'})
         return result
 

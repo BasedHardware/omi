@@ -2,6 +2,27 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.547",
+      "date": "2026-10-27",
+      "changes": [
+        "Omi Pro is now the only plan offered in Plans & Billing, and buying it from the Mac works"
+      ]
+    },
+    {
+      "version": "0.12.546",
+      "date": "2026-10-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.545",
+      "date": "2026-10-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.544",
       "date": "2026-10-26",
       "changes": [

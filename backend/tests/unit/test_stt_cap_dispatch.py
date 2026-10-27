@@ -100,6 +100,28 @@ async def test_held_constructor_resumes_after_reset_without_reopening_capture(mo
     raw.finish.assert_called_once()
 
 
+async def test_cap_held_idle_reopen_keeps_origin_when_later_admitted(monkeypatch):
+    from utils.observability import demand_cohort as telemetry
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    state = cap.LiveAdmission('synthetic')
+    factory = AsyncMock(side_effect=lambda rate: SimpleNamespace(meter=telemetry.create_wire_meter('soniox', rate)))
+    connect = cap.live_provider('soniox', 0)(factory)
+    admission_token = cap.current_live_admission.set(state)
+    origin_token = telemetry.current_transport_origin.set('idle_reopened')
+    try:
+        socket = await connect(16000)
+        assert socket.raw is None
+        factory.assert_not_called()
+    finally:
+        cap.current_live_admission.reset(admission_token)
+        telemetry.current_transport_origin.reset(origin_token)
+    state.managed, state.remaining = True, 10
+    await socket.resume()
+    assert socket.raw.meter.origin == 'idle_reopened'
+    assert telemetry.current_transport_origin.get() == 'initial'
+
+
 @pytest.mark.parametrize('flag', [None, 'true', 'false', '0', 'off'])
 def test_cap_proxy_preserves_provider_finalize_arguments(monkeypatch, flag):
     if flag is None:

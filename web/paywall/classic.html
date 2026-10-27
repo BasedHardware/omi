@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Omi Unlimited</title>
+<title>Omi Pro</title>
 <style>
   :root { --bg:#000; --surface:#1c1c1e; --surface2:#2c2c2e; --border:#38383a; --text:#fff; --text2:#aeaeb2; --text3:#8e8e93; --accent:#fff; --on:#000; --ok:#30d158; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -44,7 +44,7 @@
   <main>
     <div class="eyebrow" id="eyebrow"></div>
     <h1 id="headline">Never miss a word again.</h1>
-    <p id="body">Upgrade to go unlimited.</p>
+    <p id="body">Upgrade to Omi Pro.</p>
     <div style="height:8px"></div>
     <div class="plan" id="yearly" data-interval="year">
       <div class="radio"></div>
@@ -57,7 +57,7 @@
       <div class="price"><b id="monthly-price"></b><span>/ month</span></div>
     </div>
     <div class="spacer"></div>
-    <button class="cta" id="cta" type="button">Upgrade to Unlimited</button>
+    <button class="cta" id="cta" type="button">Upgrade to Omi Pro</button>
     <div class="caption">Cancel anytime.</div>
     <button class="text" id="free" type="button">Use Free Plan</button>
   </main>
@@ -77,7 +77,7 @@
   var name = q.get('name');
   if (name) document.getElementById('eyebrow').textContent = 'For ' + name;
   var freeMinutes = parseInt(q.get('free_minutes') || '0', 10);
-  if (freeMinutes > 0) document.getElementById('body').textContent = 'Your plan includes ' + freeMinutes + ' free minutes per month. Upgrade to go unlimited.';
+  if (freeMinutes > 0) document.getElementById('body').textContent = 'Your plan includes ' + freeMinutes + ' free minutes per month. Upgrade to Omi Pro.';
 
   var year = q.get('year_amount') ? parseInt(q.get('year_amount'), 10) : null;
   var month = q.get('month_amount') ? parseInt(q.get('month_amount'), 10) : null;

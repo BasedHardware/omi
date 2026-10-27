@@ -917,7 +917,7 @@
     "@remembering": {
         "description": "Remembering stat title"
     },
-    "unlimitedPlan": "Neograničeni plan",
+    "unlimitedPlan": "Omi Pro",
     "@unlimitedPlan": {
         "description": "Unlimited plan name"
     },
@@ -957,7 +957,7 @@
     "@upgrade": {
         "description": "Upgrade button"
     },
-    "upgradeToUnlimited": "Nadogradi na neograničeno",
+    "upgradeToUnlimited": "Nadogradi na Omi Pro",
     "@upgradeToUnlimited": {
         "description": "Message shown on locked memory items"
     },
@@ -3652,7 +3652,7 @@
     "@pro": {
         "description": "Badge label for pro/unlimited users"
     },
-    "upgradeToPro": "Nadogradi na Pro",
+    "upgradeToPro": "Nadogradi na Omi Pro",
     "@upgradeToPro": {
         "description": "Subscription banner button text"
     },
@@ -4941,7 +4941,7 @@
     "@trainingDataProgram": {
         "description": "Label for training data program"
     },
-    "getOmiUnlimitedFree": "Dobij Omi Unlimited besplatno doprinošenjem svojih podataka za treniranje AI modela.",
+    "getOmiUnlimitedFree": "Dobij Omi Pro besplatno doprinošenjem svojih podataka za treniranje AI modela.",
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
@@ -10536,7 +10536,7 @@
     "freemiumLimitsIntro": "Omi je besplatan, ali besplatna verzija ima ograničenja koja utiču na vaše iskustvo:",
     "downgradeLimitDelayNotRealTime": "Kašnjenje od 5-7 sekundi (nije u stvarnom vremenu)",
     "downgradeToFreemiumAction": "Pređite na besplatnu verziju",
-    "getFreeUnlimitedAccess": "Ostvarite besplatan neograničen pristup",
+    "getFreeUnlimitedAccess": "Dobijte Omi Pro besplatno",
     "shareDataForTraining": "Dijelite podatke za treniranje",
     "yourRequestUnderReview": "Vaš zahtjev je na pregledu",
     "pinAsBaseline": "Prikači kao osnovu",
@@ -11370,7 +11370,7 @@
     "chatAppsShowInAppOff": "Isključeno: vidiš ih samo u aplikaciji {app}.",
     "chatAppsProPerkText": "Piši Omiju iz Telegrama i iMessagea",
     "chatAppsVoiceNotesSubtitle": "Pošalji glasovnu poruku i Omi će odgovoriti na nju.",
-    "chatAppsPartOfPro": "Chat aplikacije su dio Proa",
+    "chatAppsPartOfPro": "Chat aplikacije su dio Omi Pro plana",
     "chatAppsMessagesApp": "Poruke",
     "chatAppsTelegramOtherDevice": "Telegram na drugom uređaju?",
     "chatAppsHeroMessage": "Pitaj o svom danu, spremaj uspomene i upravljaj zadacima iz Telegrama ili iMessagea. Tvoji razgovori ostaju u aplikaciji koju koristiš, a Omi pamti o čemu ste pričali svugdje.",
@@ -11555,7 +11555,7 @@
     "syncDetailsAudioFiles": "Audio datoteke",
     "syncDetailsServerJobs": "Poslovi na serveru (gotovo / ukupno)",
     "syncDetailsCopy": "Kopiraj detalje za podršku",
-    "chatAppsChannelPlanRequired": "Dostupno uz Operator i Architect",
+    "chatAppsChannelPlanRequired": "Dostupno uz Omi Pro",
     "chatAppsAtCapacity": "{app} je popunjen",
     "chatAppsJoinWaitlist": "Pridruži se listi čekanja",
     "chatAppsOnWaitlist": "Na listi čekanja ste",
@@ -11706,7 +11706,7 @@
     "onDeviceTranscribeOnPhone": "Prepisuj na ovom telefonu",
     "onDeviceIncluded": "Uključeno",
     "onDeviceOptionChargingBody": "Radi dok se telefon puni.",
-    "onDeviceUpgradeBody": "Nadogradite na Pro za razdvajanje govornika i veću preciznost",
+    "onDeviceUpgradeBody": "Nadogradite na Omi Pro za razdvajanje govornika i veću preciznost",
     "onDeviceAtCapFooter": "Ništa se ne gubi ni u jednom slučaju. Ovo možete promijeniti u Postavke › Prepis.",
     "onDeviceStepOf": "Korak {step} od {total}",
     "onDeviceSetupBody": "Omi jednom preuzima govorni model. Nakon toga se vaši snimci pretvaraju u tekst ovdje, bez uračunavanja u korištenje.",
@@ -11759,7 +11759,7 @@
     "onDeviceWhyCloudIphone": "Ovaj iPhone ne može sam praviti sažetke (za to je potreban iPhone 15 Pro ili noviji). Prepis je napravljen na vašem telefonu, a Omiju je radi sažimanja poslan samo njegov tekst. Ne uračunava se u vaše korištenje.",
     "onDeviceWhyCloudPhone": "Ovaj telefon ne može sam praviti sažetke. Prepis je napravljen na vašem telefonu, a Omiju je radi sažimanja poslan samo njegov tekst. Ne uračunava se u vaše korištenje.",
     "onDeviceRedoWithCloud": "Ponovi s Omi Cloud",
-    "onDeviceRedoHint": "Nadogradite na Pro za razdvajanje govornika i veću preciznost",
+    "onDeviceRedoHint": "Nadogradite na Omi Pro za razdvajanje govornika i veću preciznost",
     "onDeviceKeepEverything": "Čuvaj sve na ovom telefonu",
     "onDeviceKeepEverythingSubtitle": "Samo prepisi, bez sažetaka",
     "onDeviceAfterLiveHours": "Kada dostignete svoje ograničenje",
@@ -11865,5 +11865,11 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "Gotovo",
     "openLoopAnswerRemind": "Podsjeti me kasnije",
-    "openLoopAnswerDrop": "Odbaci"
+    "openLoopAnswerDrop": "Odbaci",
+    "syncRejectionInvalidDate": "Nevažeći datum snimanja",
+    "syncDeleteKeptUploading": "Neki dijelovi se još uvijek prenose i zadržani su",
+    "syncRejectionServer": "Server je odbio",
+    "syncRejectionTooLarge": "Preveliko",
+    "deviceOnPhoneQueue": "{duration} na telefonu",
+    "syncCardUploadsPaused": "Otpremanje je kratko pauzirano — nastavit će se automatski"
 }

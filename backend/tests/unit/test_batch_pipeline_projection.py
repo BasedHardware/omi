@@ -1,6 +1,9 @@
 """Projection binding validation and provider-free retry/publication guards."""
 
 from dataclasses import replace
+from dataclasses import asdict
+from copy import deepcopy
+from types import SimpleNamespace
 from config.policy import BatchUnitPolicy, ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
 import logging
 from unittest.mock import Mock
@@ -12,6 +15,10 @@ from utils.batch_pipeline.contracts import ProjectionBinding
 from database.batch_pipeline_projection import ProjectionStore
 from utils.batch_pipeline import projection
 from utils.sync import bridge
+from database.sync_ledger import sync_content_ledger_ref
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.batch_pipeline.scheduler import owner_key
+from utils.sync.capture import chunk_identity
 
 
 @pytest.fixture
@@ -553,6 +560,7 @@ def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(bind
     monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda *_, **kw: 'synthetic-conversation')
     playback = Mock(side_effect=ValueError('private-error-must-never-be-logged'))
     projector = projection.Projector(Mock(), Mock(), playback=playback)
+    monkeypatch.setattr(projector.store, 'settle_deleted_output', Mock())
     receipt = {
         'state': 'persisted',
         'conversation_id': 'synthetic-conversation',
@@ -644,6 +652,105 @@ def test_supersession_cannot_bypass_privacy_fence(binding):
         projector.supersede(session)
 
 
+@pytest.mark.parametrize(
+    'source', ['live', 'donor_only', 'output_only', 'direct_deleted', 'redirect_deleted', 'soft_deleted']
+)
+def test_privacy_disposition_requires_transactional_input_tombstone_proof(binding, source, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_proof'))
+    user = client.collection('users').document(binding.owner_id)
+    user.create({'data_protection_level': 'standard'})
+    cid = chunk_identity(binding.owner_id, binding.source, binding.client_device_id, binding.is_locked, 1000)
+    if source == 'direct_deleted':
+        user.collection('deleted_conversations').document(cid).create({'deleted': True})
+    elif source == 'redirect_deleted':
+        user.collection('conversations').document(cid).create({'deleted': True, 'sync_merged_into': 'deleted-survivor'})
+        user.collection('deleted_conversations').document('deleted-survivor').create({'deleted': True})
+    elif source == 'soft_deleted':
+        user.collection('conversations').document(cid).create({'deleted': True})
+    elif source in {'donor_only', 'output_only'}:
+        user.collection('deleted_conversations').document('unrelated-donor').create({'deleted': True})
+    result = {'outcome': 'success', 'result_uri': 'gs://synthetic/result'}
+    store.ref('jobs', 'segment').create(
+        {
+            'projection_binding': asdict(binding),
+            'owner_id': binding.owner_id,
+            'capture_at': 1000,
+            'privacy_generation': 0,
+            'result': result,
+            **({'conversation_ids': ['unrelated-donor']} if source == 'output_only' else {}),
+        }
+    )
+    store.ref('results', 'segment').create(
+        {
+            'owner_key': owner_key(binding.owner_id),
+            'protocol_version': 1,
+            'segment_id': 'segment',
+            'capture_at': 1000,
+            'previous_segment_id': None,
+            'result': result,
+        }
+    )
+    store.ref('owners', owner_key(binding.owner_id)).create({'projection_watermark': None})
+    sync_content_ledger_ref(client, binding.owner_id, binding.content_id).create(
+        {
+            'dispatch_protocol': 'batch_v1',
+            'status': 'processing',
+            'job_id': binding.job_id,
+            'batch_pipeline': {'protocol_version': 1, 'namespace': store.store.namespace, 'segment_ids': ['segment']},
+        }
+    )
+    session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
+    transaction = client.transaction()
+    before = deepcopy(client.rows)
+    if source == 'output_only':
+        session.prepare(transaction)
+        assert client.rows == before
+        transaction = client.transaction()
+    if source in {'direct_deleted', 'redirect_deleted'}:
+        session.prepare(transaction, privacy_deleted=True)
+        receipt = session.persist(transaction, superseded=True, privacy_deleted=True)
+        assert receipt['privacy_reason'] == 'conversation_deleted' and receipt['speech_seconds'] == 0
+        assert store.projection_watermark(owner_key(binding.owner_id)) == 'segment'
+    else:
+        with pytest.raises(projection.ProjectionBlocked, match='requires a source deletion tombstone'):
+            session.prepare(transaction, privacy_deleted=True)
+        assert client.rows == before
+
+
+@pytest.mark.parametrize('deleted', [False, True])
+def test_separate_output_guards_preserve_distinct_document_budget(binding, deleted, monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_budget'))
+    user = client.collection('users').document(binding.owner_id)
+    user.create({'data_protection_level': 'standard'})
+    session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
+    session._privacy_fence_ids = set()  # The grouped input/output prepare phase.
+    transaction = client.transaction()
+    for index in range(256):
+        cid = f'output-{index}'
+        if deleted:
+            user.collection('deleted_conversations').document(cid).create({'deleted': True})
+            with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
+                session.guard(transaction, [cid])
+        else:
+            session.guard(transaction, [cid])
+    # Rechecking a previously seen source does not consume another slot.
+    if deleted:
+        with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
+            session.guard(transaction, ['output-0'])
+    else:
+        session.guard(transaction, ['output-0'])
+    with pytest.raises(BatchPrivacyBlocked, match='conversation_fence_budget'):
+        session.guard(transaction, ['later-input'])
+    session._privacy_fence_ids = None  # Later validate_plan keeps its existing budget.
+    session.guard(transaction, ['later-input'])
+
+
 @pytest.mark.parametrize('reason', ['conversation_fence_budget', 'conversation_deleted', 'private-text-not-a-reason'])
 def test_assignment_privacy_fence_logs_bounded_reason(binding, monkeypatch, caplog, reason):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -674,15 +781,26 @@ def test_assignment_privacy_fence_logs_bounded_reason(binding, monkeypatch, capl
     monkeypatch.setattr(
         projection.conversations_db, 'assign_sync_conversation', Mock(side_effect=BatchPrivacyBlocked(reason))
     )
-    with caplog.at_level(logging.INFO, logger=projection.__name__):
-        with pytest.raises(BatchPrivacyBlocked):
-            with projection.projection_phase('assignment', policy):
-                projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, policy=policy)
+    session = projector.store.session.return_value
+    session.persist_empty.return_value = {'state': 'ready', 'privacy_reason': 'conversation_deleted'}
+    with caplog.at_level(logging.INFO):
+        if reason == 'conversation_deleted':
+            projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, policy=policy)
+            session.persist_empty.assert_called_once_with(superseded=True, privacy_deleted=True)
+        else:
+            with pytest.raises(BatchPrivacyBlocked):
+                with projection.projection_phase('assignment', policy):
+                    projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, policy=policy)
     expected = reason if reason != 'private-text-not-a-reason' else 'unknown'
     text = caplog.text
-    assert f'action=assignment outcome=error exception_type=BatchPrivacyBlocked fence_reason={expected}' in text
-    assert f'phase=assignment outcome=error' in text
-    assert text.count(f'fence_reason={expected}') == 2
+    if reason == 'conversation_deleted':
+        assert 'action=assignment outcome=privacy_terminal fence_reason=conversation_deleted' in text
+        assert 'phase=assignment outcome=error' not in text
+        assert text.count(f'fence_reason={expected}') == 1
+    else:
+        assert f'action=assignment outcome=error exception_type=BatchPrivacyBlocked fence_reason={expected}' in text
+        assert 'phase=assignment outcome=error' in text
+        assert text.count(f'fence_reason={expected}') == 2
     assert 'private-text' not in text
     assert binding.owner_id not in text
 

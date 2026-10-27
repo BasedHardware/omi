@@ -278,9 +278,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       );
 
   /// Spent retry budgets and request refusals can be explicitly retried.
-  /// Missing files and permanent audio/lookback verdicts remain excluded.
-  List<Wal> get retryableAttentionWals =>
-      _allWals.where((w) => !w.onDeviceOnly && isRetryableSyncState(w.syncDisplayState)).toList();
+  /// Missing files, permanent audio/lookback verdicts and the deterministic
+  /// too-large refusal remain excluded.
+  List<Wal> get retryableAttentionWals => _allWals.where(walRetryCanHelp).toList();
 
   /// Retry every recording in [retryableAttentionWals]. The automatic drain
   /// skips a recording once its budget is spent, so a plain [syncWals] from
@@ -1086,7 +1086,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   Future<void> retrySync() async {
     final generation = _sessionGeneration;
     final failedWal = _syncState.failedWal;
-    if (failedWal != null && (failedWal.status == WalStatus.miss || failedWal.status == WalStatus.uploadRejected)) {
+    // A deterministic too_large refusal is the one failed upload a retry can
+    // never fix — the same bytes are the same size — so the error card's
+    // Retry falls through to work that can still move (the row's own Delete
+    // owns the too-large recording).
+    if (failedWal != null &&
+        (failedWal.status == WalStatus.miss || failedWal.status == WalStatus.uploadRejected) &&
+        failedWal.uploadRejectionReason != WalUploadRejection.tooLarge) {
       await syncWal(failedWal);
       return;
     }

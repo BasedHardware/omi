@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Omi Unlimited</title>
+<title>Omi Pro</title>
 <link rel="preload" href="/manrope-latin.woff2" as="font" type="font/woff2" crossorigin>
 <style>@font-face { font-family:Manrope; font-style:normal; font-weight:400 800; font-display:swap; src:url(/manrope-latin.woff2) format("woff2"); }</style>
 <style>
@@ -197,7 +197,7 @@
   <!-- 3: plans, with the device -->
   <section class="step later" data-step="2">
     <img class="device" src="/omi-pendant-front.webp" alt="">
-    <h1>Unlock Omi Unlimited</h1>
+    <h1>Unlock Omi Pro</h1>
     <div class="accolades">
       <div class="accolade"><img src="/laurel-left.svg" alt=""><div>300K+<small>Users</small></div><img src="/laurel-right.svg" alt=""></div>
       <div class="accolade"><img src="/laurel-left.svg" alt=""><div>4.7 Stars<span class="stars" id="stars"></span></div><img src="/laurel-right.svg" alt=""></div>
@@ -253,7 +253,7 @@
   var star = '<svg viewBox="0 0 17 16"><path d="M8.5 1.33l2.06 4.18 4.6.67-3.33 3.25.79 4.58L8.5 11.85l-4.12 2.16.79-4.58L1.83 6.18l4.61-.67L8.5 1.33z" fill="#f5a623" stroke="#f5a623" stroke-width="1.3" stroke-linejoin="round"/></svg>';
   $('stars').innerHTML = star + star + star + star + star;
 
-  // What Unlimited includes (backend/config/plan_catalog.json, unlimited_v2).
+  // What Omi Pro includes (backend/config/plan_catalog.json, unlimited_v2).
   var tick = '<i><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></i>';
   $('gets').innerHTML = [
     'Unlimited recording, no monthly cap',
@@ -294,7 +294,7 @@
     $('legal').classList.toggle('hidden', !last);
     $('cta').classList.toggle('shiny', last);
     $('promise').classList.toggle('hidden', last);
-    $('cta-label').textContent = last ? 'Unlock Omi Unlimited' : 'Continue';
+    $('cta-label').textContent = last ? 'Unlock Omi Pro' : 'Continue';
     $('cta').disabled = last && noPlans;
     if (last && noPlans) $('fine').textContent = 'Unable to load plans';
     ['yearly', 'monthly'].forEach(function (id) {

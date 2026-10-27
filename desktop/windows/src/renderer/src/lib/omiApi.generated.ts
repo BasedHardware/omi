@@ -679,6 +679,7 @@ export interface AudioFile {
   conversation_id: string;
   duration: number;
   id: string;
+  playback_start?: number | null;
   provider?: string;
   source_fingerprint?: string | null;
   started_at?: string | null;
