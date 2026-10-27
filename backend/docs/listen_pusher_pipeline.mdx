@@ -6357,7 +6357,10 @@ refusal and enters `failed_held` before any paid start. This stops repeated
 downloads and inspections of an impossible prepared intent. Encrypted audio,
 worker VAD evidence and the maximum held speech census remain intact; no words,
 silence or no-recoverable-speech result is invented. Successful upload siblings
-may complete as partial while this audio remains available for reviewed redrive.
+may complete as partial while this audio remains retained for a separately
+reviewed recovery plan. The existing paid-redrive tool requires a previously
+started intent and cannot adopt this no-spend refusal; the independent duration
+limit still applies. This custody change does not transcribe those longer units.
 A disabled recovery setting, lower runtime cap or temporary allowance refusal
 for an otherwise eligible window keeps its existing retry behavior.
 

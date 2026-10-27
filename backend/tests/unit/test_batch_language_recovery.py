@@ -8,6 +8,7 @@ import pytest
 from config.batch_language_recovery import allowed, below_silence_threshold
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection import ProjectionStore
+from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup, legacy_dependencies, row, PARTIAL_ACCOUNTING
@@ -95,6 +96,12 @@ def test_hard_duration_refusal_retains_audio_without_repeating_inspection(
     artifacts.persist_recovery_result.assert_not_called()
     modulate.assert_not_called()
     soniox.assert_not_called()
+    # Retaining an unspent intent must not fabricate eligibility for the paid
+    # redrive tool, whose ownership proof requires a previously started epoch.
+    with pytest.raises(ProjectionBlocked, match='speech redrive ownership changed'):
+        SpeechRedriveStore(store, server_flags=SERVING_ENV).prepare(
+            'bad', binding.owner_id, 'reviewed-plan', deepcopy(held['recovery']), 101
+        )
     # The client can finish its successful sibling while the original audio
     # remains held for a reviewed redrive. No held seconds are charged.
     assert ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING)[0]['held_segments'] == 1
