@@ -20,7 +20,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 174,
+  "count": 175,
   "names": {
     "BATCH_PIPELINE_API_URL": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS": {"seeded": "2026-10-25"},
@@ -36,6 +36,7 @@
     "BATCH_PIPELINE_FLIGHT_BATCH_SECONDS": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED": {"owner": "dazheng (batch record lane / rollout lead)", "review_by": "2026-11-15"},
+    "BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED": {"owner": "dazheng (batch record lane / rollout lead)", "review_by": "2026-11-15"},
     "BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS": {"seeded": "2026-10-25"},

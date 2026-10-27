@@ -475,6 +475,23 @@ results. Sync retains its existing chunk-merge language behavior: persisted
 `TranscriptSegment` records have no per-segment language for a conversation-wide
 weighted recomputation.
 
+New batch sync pieces inherit the bound conversation's recognized language,
+then the user's configured language, before unit-level routing. Recognized
+codes come from the Modulate and prerecorded Parakeet policies; auto, multi,
+unknown and invalid values do not count as declarations. Only when both are
+unknown does per-piece self/vendor LID run, including in single-language mode.
+Short ambient-dominated clips cannot override known context. The authenticated
+audio context and projection binding freeze the inherited language; the worker's
+unsupported-language barrier still applies. The default-on kill switch is
+`BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED=false` on intake hosts; it restores
+the former input selection for new units without rewriting existing work.
+
+For v1 live persistence, delayed first words and reconnects retain the earlier
+capture start and project their offsets against it. Missing or invalid stored
+starts use the session's first-audio clock. The v2 origin pin remains unchanged.
+Language inheritance needs a backend-sync release; the origin fix needs a
+backend-listen release. See [batch serving operations](batch-pipeline-serving.md#language-inheritance-for-sync-pieces).
+
 The live calendar stamp includes the meeting title (an empty string when absent)
 so it is a valid `CalendarMeetingContext` for finalization and summarization even
 when its scheduled window makes continuity hydration unnecessary.

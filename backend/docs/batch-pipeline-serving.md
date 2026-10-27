@@ -7,6 +7,27 @@ allowlist/percentage after qualification. Agent A does not deploy or apply index
 
 ## Host settings and rollback
 
+### Language inheritance for sync pieces
+
+`BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED` ships on. New batch uploads
+use the bound conversation's recognized language, then the user's configured
+language. Blank, auto, multi and unrecognized codes remain unknown. Only when
+both are unknown does each decoded unit run the existing self/vendor LID.
+This also applies to pieces under ten seconds: ambient speech cannot replace
+a known English conversation language with Vietnamese or Japanese.
+
+The decision is frozen as declared language evidence in the authenticated
+audio context, so the worker's existing unsupported-language guard still
+applies. Legacy eligibility and durable route ownership are unchanged.
+Set the switch to `false` on backend-sync to restore the former per-piece
+input selection for new intakes; already staged units retain their evidence.
+No transcript rewrite or paid recovery is part of this switch.
+
+The v1 listen transcript writer also retains the earlier capture start when
+the first words arrive late or after reconnect. Segment offsets are computed
+against that retained start. This writer fix needs a backend-listen release;
+the v2 audio-timeline origin pin continues to follow its existing contract.
+
 ### Partial-ramp owner isolation
 
 `BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS` ships on; only `off` disables

@@ -432,13 +432,14 @@ def test_language_gate_and_vendor_guard_metrics_survive_the_sync_export_allowlis
     [('en', 0.99, 'en'), ('vi', 0.99, 'vi'), ('en', 0.5, 'und')]
     + [(case['detected_language'], case['confidence'], 'und') for case in SHORT_FALSE_PERMISSIONS],
 )
-async def test_cpu_intake_freezes_detection_proof_instead_of_primary_setting(monkeypatch, code, confidence, frozen):
+async def test_cpu_intake_freezes_detection_proof_with_inheritance_disabled(monkeypatch, code, confidence, frozen):
     from types import SimpleNamespace
     from utils.batch_pipeline import intake
     from utils.batch_pipeline.audio import audio_unit, read_context
     from utils.batch_pipeline.artifacts import ProtectionContext
     from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'false')
     detector(monkeypatch, code, confidence)
     captured = []
 
@@ -504,7 +505,7 @@ async def test_self_lid_intake_context_roundtrips_through_real_batch_worker(monk
     staged = []
 
     def authorize(store, seed, snapshots):
-        snapshots['user'] = {'language': 'en', 'transcription_preferences': {'single_language_mode': False}}
+        snapshots['user'] = {'language': 'multi', 'transcription_preferences': {'single_language_mode': False}}
         return ProtectionContext('standard', 0)
 
     def stage(work, body):
