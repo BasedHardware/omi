@@ -368,6 +368,10 @@ class AccountingEvent:
     cache_field_reported: bool = False
     cache_storage_token_seconds: int = 0
 
+    # Observation-only validity retained from raw provider metadata. Deliberately
+    # not added to as_dict(): existing ledger pricing/persistence is unchanged.
+    billable_usage_complete: bool = False
+
     def as_dict(self) -> dict[str, Any]:
         return {
             'attempt_id': self.attempt_id,
@@ -725,6 +729,7 @@ def build_accounting_event(
         cacheable_prefix_tokens=attempt.cacheable_prefix_tokens,
         cache_field_reported=usage.cache_status not in {CacheStatus.NOT_REPORTED, CacheStatus.NOT_APPLICABLE},
         cache_storage_token_seconds=usage.cache_storage_token_seconds,
+        billable_usage_complete=attempt.billable_usage_complete and usage.cache_operation_usage_complete,
         unit_type=usage.unit_type,
         image_count=usage.image_count,
         image_size=usage.image_size,
@@ -784,6 +789,13 @@ def complete_openai_billable_usage(raw: Mapping[str, Any]) -> bool:
     if any(type(value) is not int or value < 0 for value in (cached, written, reasoning)):
         return False
     return cached + written <= input_count and reasoning <= output_count
+
+
+def complete_openai_embedding_usage(raw: Mapping[str, Any]) -> bool:
+    """Embedding receipts have input units only; absence is not a reported zero."""
+    prompt = raw.get('prompt_tokens')
+    total = raw.get('total_tokens', prompt)
+    return type(prompt) is int and prompt >= 0 and type(total) is int and total == prompt
 
 
 def _openai_usage(raw: Mapping[str, Any], *, cache_requested: bool) -> ProviderUsage:

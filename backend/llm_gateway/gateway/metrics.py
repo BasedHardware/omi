@@ -8,7 +8,7 @@ from typing import Protocol
 
 from prometheus_client import Counter, Gauge, Histogram
 
-from llm_gateway.gateway.accounting import AccountingEvent
+from llm_gateway.gateway.accounting import AccountingEvent, rate_card_for
 from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.errors import GatewayError, GatewayErrorCode, INVALID_REQUEST_REJECTION_CODES
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, output_budget_bucket
@@ -94,7 +94,9 @@ ACCOUNTING_EVENTS_TOTAL = Counter(
 
 # Only newly persisted events contribute. Delivery failures/drops remain visible
 # in ACCOUNTING_EVENTS_TOTAL; duplicate persistence never bills a second time.
-_SPEND_LABELS = ['lane_id', 'provider', 'model', 'payer', 'traffic_type']
+_SPEND_LABELS = ['lane_id', 'api_surface', 'provider', 'model', 'payer', 'traffic_type']
+_spend_lane_ids: frozenset[str] = frozenset()
+_spend_model_ids: frozenset[tuple[str, str]] = frozenset()
 ACCOUNTED_ATTEMPTS_TOTAL = Counter(
     'llm_gateway_accounted_attempts_total',
     'Newly persisted provider attempts by usage and cost coverage (not vendor invoices)',
@@ -367,10 +369,29 @@ def observe_accounted_spend(event: AccountingEvent) -> None:
     stays a coverage count, never an invented zero-dollar estimate. The existing
     LLM_GATEWAY_ACCOUNTING_ENABLED switch also disables this observation path.
     """
+    model = (event.resolved_model or event.configured_model).strip()
+    known_model = (event.provider, model) in _spend_model_ids or rate_card_for(event.provider, model) is not None
+    complete = event.unit_type != 'tokens' or event.billable_usage_complete
     labels = {
-        'lane_id': _bounded(event.lane_id),
-        'provider': _bounded(event.provider),
-        'model': _bounded(event.resolved_model or event.configured_model),
+        'lane_id': event.lane_id if event.lane_id in _spend_lane_ids else 'unknown',
+        'api_surface': (
+            event.api_surface
+            if event.api_surface
+            in {
+                'openai_chat_completions',
+                'openai_embeddings',
+                'openai_images_generations',
+                'openrouter_systemone',
+                'anthropic_messages',
+            }
+            else 'unknown'
+        ),
+        'provider': (
+            event.provider
+            if event.provider in {'openai', 'gemini', 'anthropic', 'openrouter', 'perplexity'}
+            else 'unknown'
+        ),
+        'model': model if known_model else 'unknown',
         'payer': event.payer if event.payer in {'omi', 'byok'} else 'unknown',
         'traffic_type': (
             event.traffic_type.lower()
@@ -381,9 +402,13 @@ def observe_accounted_spend(event: AccountingEvent) -> None:
         ),
     }
     ACCOUNTED_ATTEMPTS_TOTAL.labels(
-        **labels, usage_status=event.usage_status.value, cost_status=event.cost_status.value
+        **labels,
+        usage_status=(
+            event.usage_status.value if complete or event.usage_status.value != 'confirmed' else 'indeterminate'
+        ),
+        cost_status=event.cost_status.value if complete or event.cost_status.value != 'estimated' else 'indeterminate',
     ).inc()
-    if event.usage_status.value == 'confirmed' and event.unit_type == 'tokens':
+    if complete and event.usage_status.value == 'confirmed' and event.unit_type == 'tokens':
         for token_type, value in {
             'prompt': event.prompt_tokens,
             'uncached_input': event.uncached_input_tokens,
@@ -398,7 +423,12 @@ def observe_accounted_spend(event: AccountingEvent) -> None:
             'reasoning': event.reasoning_tokens,
         }.items():
             ACCOUNTED_TOKENS_TOTAL.labels(**labels, token_type=token_type).inc(max(value, 0))
-    if event.payer == 'omi' and event.cost_status.value == 'estimated' and event.estimated_cost_micro_usd is not None:
+    if (
+        complete
+        and event.payer == 'omi'
+        and event.cost_status.value == 'estimated'
+        and event.estimated_cost_micro_usd is not None
+    ):
         ESTIMATED_COST_MICRO_USD_TOTAL.labels(**labels, rate_card_id=_bounded(event.rate_card_id or 'unknown')).inc(
             max(event.estimated_cost_micro_usd, 0)
         )
@@ -406,6 +436,13 @@ def observe_accounted_spend(event: AccountingEvent) -> None:
 
 def observe_gateway_config_identity(config: GatewayConfig, *, build_identity: str) -> None:
     """Publish one bounded info series per lane pointer, never per request."""
+    global _spend_lane_ids, _spend_model_ids
+    _spend_lane_ids = frozenset(config.lanes)
+    _spend_model_ids = frozenset(
+        (provider.provider, provider.model)
+        for route in config.route_artifacts.values()
+        for provider in (route.primary, *route.fallbacks)
+    )
     build_label = _build_identity_label(build_identity)
     GATEWAY_CONFIG_INFO.clear()
     for lane_id, lane in sorted(config.lanes.items()):

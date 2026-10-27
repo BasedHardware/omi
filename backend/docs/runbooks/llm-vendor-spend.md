@@ -12,7 +12,12 @@ and `llm_gateway_estimated_cost_micro_usd_total` observe **newly persisted**
 accounting events. These counters run after responses, alongside existing
 accounting delivery telemetry. They include short/non-cache-eligible requests,
 retries, and failed provider attempts when usage was reported. Duplicate writes
-never count again. Missing/unpriced usage is a coverage gap, not free work.
+never count again. Missing/unpriced usage is a coverage gap, not free work. For token events, raw
+provider completeness must also be true: permissive legacy normalization may
+mark partial usage confirmed while filling absent fields with zero. Those
+events are indeterminate in these counters and publish neither token classes
+nor estimated dollars. This stricter observation does not change stored ledger
+pricing or the provider response.
 `payer` separates Omi from BYOK; the dollar counter includes only estimated Omi
 cost. Returned `traffic_type` distinguishes Flex from Standard/unknown. A lane's
 name or a requested service tier does not prove the vendor served that tier.
@@ -24,13 +29,13 @@ midnight for a calendar day. Do not sum counters across the in-cluster and GMP
 surfaces unless their populations are proven disjoint.
 
 ```promql
-sum by (lane_id,provider,model,traffic_type,token_type) (
+sum by (lane_id,api_surface,provider,model,traffic_type,token_type) (
   increase(llm_gateway_accounted_tokens_total{payer="omi"}[24h])
 )
-sum by (lane_id,provider,model,traffic_type,rate_card_id) (
+sum by (lane_id,api_surface,provider,model,traffic_type,rate_card_id) (
   increase(llm_gateway_estimated_cost_micro_usd_total{payer="omi"}[24h])
 ) / 1e6
-sum by (lane_id,provider,model,usage_status,cost_status) (
+sum by (lane_id,api_surface,provider,model,usage_status,cost_status) (
   increase(llm_gateway_accounted_attempts_total{payer="omi"}[24h])
 )
 sum by (provider,payer,delivery,usage_status,cost_status) (
@@ -64,9 +69,14 @@ using a daily delta. Backend-only deployment does not update the gateway.
 No new response work, model, prompt, route, account document, or production
 configuration is introduced. Roll back the gateway image to remove this
 telemetry; the existing accounting switch is a broader emergency stop. Series
-are lazy, with existing lane/provider/model identities, finite payer/tier/token
-classes and rate-card IDs; there are no user, request, transcript, or response
-labels. No provider content is logged by this change.
+are lazy, with gateway-configured lane/model identities or rate-card models
+(unknown values collapse to `unknown`), finite API-surface/provider/payer/tier/
+token classes and rate-card IDs; there are no user, request, transcript, or response
+labels. No provider content is logged by this change. Legacy image generation does not
+have a routed lane; its dollars retain `lane_id="unknown"` and are separately
+attributable by `api_surface="openai_images_generations"`. Unrecognized image
+model request strings collapse to the same `model="unknown"` value. This keeps
+image spend visible without inventing a gateway lane or leaking request values.
 
 ## Batch eligibility and discount accounting
 
