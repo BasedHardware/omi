@@ -6,6 +6,17 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Fleet recovery scan coordination
+
+Production maintenance keeps the existing Redis admission lease even when
+`FIRESTORE_READ_LEVERS.singleton_loops` is absent, zero or malformed. This
+prevents a cache rollback from multiplying queue-age and finalization sweeps
+by every replica. `FSR_MAINTENANCE_COORDINATION_ENABLED=false` restores the
+per-replica path. Queue age still needs a designated
+`FSR_QUEUE_AGE_PUBLISHER=1` instance; existing lease takeover, outage fail-open,
+transactional job claims and recovery cadence are unchanged. See
+[Firestore spend guard](runbooks/firestore-spend-guard.md).
+
 ## Sync storage round trips
 
 Retained server-only `open_loop_extractions` never reach the conversation

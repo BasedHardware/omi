@@ -430,6 +430,7 @@ and an explicit empty literal renders as `''`.
 | `EPISODES_ENABLED` | Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `FAIR_USE_ENABLED` | Enforce fair-use metering; set false to stop enforcement | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | keep | — | unowned |
+| `FSR_MAINTENANCE_COORDINATION_ENABLED` | Default on in prod independently of read-lever rollback; explicit false restores per-replica maintenance | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `JOBSTORE_SHADOW_WRITES` | Default on unless 0/false/off/no; off stops the A2 Postgres shadow mirror (and its parity reads) while BATCH_JOBSTORE_MODE=shadow | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED` | Abandon finalization after BYOK failure | backend | env | open | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | unowned |
 | `LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED` | Cap durable listen worker attempts while retaining transcript-only conversations | backend | env | open | — | — | true | — | keep | keep | — | dazheng |
@@ -834,6 +835,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FIRST_SUMMARY_DEADLINE_SECONDS` — First required summary dispatch budget; default 120 seconds, bounded 60 to 120 (fail: closed)
 - `FIRST_SUMMARY_UID_ALLOWLIST` — Optional summary canary owner allowlist; empty admits only the positive percentage cohort when global gate is on (fail: closed)
+- `FSR_MAINTENANCE_COORDINATION_ENABLED` — Default on in prod independently of read-lever rollback; explicit false restores per-replica maintenance (fail: open)
 - `HELD_CONTENT_COHORT` — Fallback tokens uid:<uid>,pct:<0-100> or explicit all, used only after rollout_cohorts/held-content is confirmed absent; empty, unset, or malformed admits nobody (fail: closed)
 - `HELD_CONTENT_ENABLED` — Default-off at-cap choice API; additionally requires X-Omi-Held-Content: 1. Capture custody and recovery must ship before enablement. (fail: closed)
 - `JOBSTORE_SHADOW_WRITES` — Default on unless 0/false/off/no; off stops the A2 Postgres shadow mirror (and its parity reads) while BATCH_JOBSTORE_MODE=shadow (fail: open)
