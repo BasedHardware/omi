@@ -21,10 +21,14 @@ Serve bypasses the legacy clock/energy trim. Stored held pieces recheck before
 each new paid intent; partial proof delegates to deterministic hash-verified
 source slices in one lease-fenced checkpoint. Cached provider results keep
 their reconciliation path, and child slices inherit the paid attempt limit.
-`dedupe.py` shares the bridge/incoming fallback: committed frame proof first,
-then unambiguous conversation-wide text clock estimation and narrow matching.
-Known uncovered positions never fall through to text deletion. Speaker and
-owner labels do not participate.
+`dedupe.py` shares the bridge/incoming fallback: committed frame proof qualifies
+segments for the lexical novelty/protected-token checks documented in
+[`../sync/ARCHITECTURE.md`](../sync/ARCHITECTURE.md), followed by proven exact
+retries. Verified segments that survive those checks are kept. Only unpositioned
+speech may use conversation-wide text clock estimation and narrow matching;
+known uncovered positions never fall through to text deletion. Speaker and
+owner labels do not participate. The architecture's hard serve-ramp gate requires
+both the incoming and donor lexical fixes to be serving before expansion.
 
 All paths read `CAPTURE_COVERAGE_MODE` through `config.refactor_modes`. Default
 shadow computes decisions and records committed evidence while legacy output
