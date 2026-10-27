@@ -207,7 +207,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       // A lazy row can be requested after a server deletion mutates the capture
       // list, while its old delegate still has the previous itemCount. Keep one
       // membership snapshot for that delegate, its names and decorations.
-      _timelineSegments = List<TranscriptSegment>.of(provider.segments)..sort((a, b) => a.start.compareTo(b.start));
+      _timelineSegments = List<TranscriptSegment>.of(provider.segments);
       _timelineNames =
           SpeakerNames.forSegments(_timelineSegments!, people: people, l10n: context.l10n, deferShortVoices: true);
       _timelineDecorations = LiveTranscriptDecorations.of(widget.episode, conversationId, _timelineSegments!);
