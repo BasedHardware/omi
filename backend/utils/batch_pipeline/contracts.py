@@ -18,8 +18,9 @@ MAX_PROJECTION_PARTS = 128
 def projection_speech_spans(payload: dict, duration: float) -> list[dict[str, float]]:
     """Encrypted result contract: original sample-rounded, unpadded VAD union.
 
-    No transcript-derived estimate may substitute for this production evidence,
-    except ``worker_vad_word_spans`` under a bound measured worker VAD receipt.
+    No transcript-derived estimate may substitute for this production evidence.
+    ``worker_vad_word_spans`` only positions a bound worker VAD measure at word
+    clocks; its total is that acoustic measure, never the ASR duration.
     Parts/receipts stay embedded in the original result document for erasure.
     """
     raw = payload.get('speech_spans')
@@ -185,22 +186,51 @@ def worker_vad_speech(job):
     return None if below_silence_threshold(seconds) else seconds
 
 
-def worker_vad_word_spans(words, duration):
-    """Sample-rounded union of positive word clocks within the captured audio.
+def worker_vad_word_spans(words, duration, seconds):
+    """Place the worker's acoustic speech measure at validated word clocks.
 
-    Locates speech only when strict CPU VAD found none but a bound worker VAD
-    receipt measured it; point words carry no voice evidence and add nothing.
+    Only for strict CPU VAD with no spans under a bound worker VAD receipt. Word
+    clocks license placement only: the spans always total the acoustic measure
+    (capped at the captured audio), never the ASR word duration, so settlement,
+    usage and ramp accounting stay acoustic. Point words carry no voice evidence.
     """
-    spans = []
+    rate = 16000
+    end_sample = math.floor(duration * rate)
+    regions = []
     for word in words:
-        start, end = (min(duration, round(max(0.0, value) * 16000) / 16000) for value in word['timestamp'])
+        start, end = (min(end_sample, max(0, round(value * rate))) for value in word['timestamp'])
         if end <= start:
             continue
-        if spans and start <= spans[-1]['end']:
-            spans[-1]['end'] = max(spans[-1]['end'], end)
+        if regions and start <= regions[-1][1]:
+            regions[-1][1] = max(regions[-1][1], end)
         else:
-            spans.append({'start': start, 'end': end})
-    return spans
+            regions.append([start, end])
+    target = min(round(seconds * rate), end_sample)
+    if not regions or target <= 0:
+        return []
+    placed, remaining = [], target
+    for start, end in regions:  # The acoustic measure fills word clocks in order.
+        take = min(end - start, remaining)
+        if take > 0:
+            placed.append([start, start + take])
+            remaining -= take
+    for index, span in enumerate(placed):  # Then grows forward into following silence.
+        limit = placed[index + 1][0] if index + 1 < len(placed) else end_sample
+        grow = min(limit - span[1], remaining)
+        span[1] += grow
+        remaining -= grow
+    for index in range(len(placed) - 1, -1, -1):  # Then backward; target <= audio, so it fits.
+        limit = placed[index - 1][1] if index else 0
+        grow = min(placed[index][0] - limit, remaining)
+        placed[index][0] -= grow
+        remaining -= grow
+    merged = []
+    for start, end in placed:
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return [{'start': start / rate, 'end': end / rate} for start, end in merged]
 
 
 def attach_held_vad(job, seconds=None, receipt=None, *, receipt_field='worker_vad_receipt'):

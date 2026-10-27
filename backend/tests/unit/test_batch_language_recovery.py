@@ -611,26 +611,33 @@ def worker_receipt(client, seconds):
     return job['worker_vad_receipt']
 
 
+# Acoustic worker measure placed at the [1, 2] word clock within the 5 s capture.
+PLACED = {0.032: [(1.0, 1.032)], 1.5: [(1.0, 2.5)], 4.384: [(0.616, 5.0)]}
+
+
 def assert_worker_vad_result(client, payload, seconds):
-    """The recovered payload passes the typed contracts projection enforces."""
+    """The recovered payload passes the typed contracts projection enforces, and
+    every accounting input is the acoustic worker measure (lead ruling ef03d2)."""
     from dataclasses import fields
 
     from utils.batch_pipeline.contracts import WorkItem, WorkResult, projection_speech_spans
     from utils.batch_pipeline.projection_parts import split_result
 
     assert result_outcome(payload) == 'success'
-    assert projection_speech_spans(payload, 5) == [{'start': 1.0, 'end': 2.0}]
-    assert payload['speech_seconds'] == 1.0 and payload['audio_seconds'] == 5
+    spans = projection_speech_spans(payload, 5)
+    assert [(s['start'], s['end']) for s in spans] == [pytest.approx(pair) for pair in PLACED[seconds]]
+    assert payload['speech_seconds'] == pytest.approx(seconds, abs=1e-9) and payload['audio_seconds'] == 5
     assert payload['speech_spans_source'] == 'worker_vad_word_clocks'
     assert payload['worker_vad_speech_seconds'] == seconds
     assert payload['language'] == 'vi' and [w['word'] for w in payload['words']] == ['Synthetic.']
     job = row(client)
     item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
     [(_, part)] = split_result(item, payload)
-    assert part['speech_seconds'] == 1.0 and [w['word'] for w in part['words']] == ['Synthetic.']
+    assert part['speech_seconds'] == pytest.approx(seconds, abs=1e-9)
+    assert [w['word'] for w in part['words']] == ['Synthetic.']
     assert job['recovery_state'] == 'recovered' and job['state'] == 'result_ready'
     assert WorkResult(**job['result']).outcome == 'success'
-    assert job['measured_held_vad_speech_seconds'] == max(seconds, 1.0)
+    assert job['measured_held_vad_speech_seconds'] == pytest.approx(seconds, abs=1e-9)
 
 
 @pytest.mark.parametrize('seconds', [0.032, 1.5, 4.384])
@@ -723,3 +730,64 @@ def test_independent_redrive_uses_worker_vad_for_words(setup, monkeypatch, legac
     assert_worker_vad_result(client, artifacts.persist_recovery_result.call_args.args[1], 1.5)
     modulate.assert_not_called()
     soniox.assert_called_once()
+
+
+def accounting(payload):
+    """Every speech-accounting input a recovered result feeds: settlement evidence,
+    projection usage (per-part and total) and the T2 denominator (part speech)."""
+    from dataclasses import fields
+
+    from utils.batch_pipeline.contracts import WorkItem
+    from utils.batch_pipeline.projection_parts import split_result
+    from utils.batch_pipeline.recovery_disposition import result_vad_evidence
+
+    item = WorkItem(**{f.name: payload['_job'][f.name] for f in fields(WorkItem) if f.name in payload['_job']})
+    body = {k: v for k, v in payload.items() if k != '_job'}
+    parts = split_result(item, body)
+    return {
+        'settlement': result_vad_evidence(body),
+        'usage_total': body['speech_seconds'],
+        'usage_parts': sum(part['speech_seconds'] for _, part in parts),
+    }
+
+
+def test_minimal_worker_frame_never_licenses_long_asr_accounting(setup, monkeypatch, legacy_dependencies):
+    """bramp3 39fb29: one 512-sample worker frame, empty CPU VAD and one word spanning
+    the whole capture must not become seconds of speech in any accounting field."""
+    client, _, binding, artifacts, modulate, _, recovery, _ = guarded(setup, monkeypatch, legacy_dependencies, speech=0)
+    worker_receipt(client, 512 / 16000)
+    modulate.return_value = ([{'text': 'Synthetic.', 'timestamp': [0, 5], 'speaker': '0'}], 'vi')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    payload = artifacts.persist_recovery_result.call_args.args[1]
+    assert payload['speech_spans'] == [{'start': 0.0, 'end': 0.032}]
+    assert accounting({**payload, '_job': row(client)}) == {
+        'settlement': pytest.approx(0.032),
+        'usage_total': pytest.approx(0.032),
+        'usage_parts': pytest.approx(0.032),
+    }
+    assert row(client)['measured_held_vad_speech_seconds'] == pytest.approx(0.032)
+    assert [w['timestamp'] for w in payload['words']] == [[0.0, 5.0]]
+
+
+@pytest.mark.parametrize('seconds', [0.032, 1.5, 4.384])
+@pytest.mark.parametrize('clock', [[1, 2], [0, 5], [4.9, 5]])
+def test_worker_vad_fallback_conserves_main_accounting(setup, monkeypatch, legacy_dependencies, seconds, clock):
+    """Same audio and receipt: main settles the acoustic census and nothing else; the
+    fix adds a transcript but every accounting input equals that same acoustic value."""
+    client, _, binding, artifacts, modulate, _, recovery, _ = guarded(setup, monkeypatch, legacy_dependencies, speech=0)
+    worker_receipt(client, seconds)
+    modulate.return_value = ([{'text': 'Synthetic.', 'timestamp': clock, 'speaker': '0'}], 'vi')
+    main_job = deepcopy(row(client))
+    with monkeypatch.context() as patch:
+        # main: no worker-VAD placement, so the words are rejected.
+        patch.setattr('utils.batch_pipeline.quarantine_recovery.worker_vad_speech', lambda job: None)
+        assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    main_census = row(client)['measured_held_vad_speech_seconds']
+    assert main_census == seconds
+    client.rows[('batch_pipeline_prod_jobs', 'bad')] = main_job
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    payload = artifacts.persist_recovery_result.call_args.args[1]
+    assert row(client)['measured_held_vad_speech_seconds'] == pytest.approx(main_census, abs=1e-9)
+    assert accounting({**payload, '_job': row(client)}) == {
+        key: pytest.approx(main_census, abs=1e-9) for key in ('settlement', 'usage_total', 'usage_parts')
+    }

@@ -151,8 +151,9 @@ def words_payload(duration, spans, words, language, *, worker_speech=None):
     if not spans and worker_speech:
         # Strict CPU VAD can miss short low-energy speech that the GPU worker's
         # bound VAD receipt measured. Words alone never prove speech: only with
-        # that independent measurement may their clocks locate the spans.
-        spans = worker_vad_word_spans(words, duration)
+        # that independent measurement may their clocks place it, and
+        # speech_seconds stays the acoustic measure (lead ruling ef03d2).
+        spans = worker_vad_word_spans(words, duration, worker_speech)
         evidence = {'speech_spans_source': 'worker_vad_word_clocks', 'worker_vad_speech_seconds': worker_speech}
     if not spans:
         raise WordsWithoutVad(len(words))
