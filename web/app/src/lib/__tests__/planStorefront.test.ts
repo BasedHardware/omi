@@ -144,6 +144,15 @@ describe('storefront goldens', () => {
     expect(shouldGate(golden('pro_budget_cap'), 'proactive_agent')).toBe(false);
     expect(shouldGate(golden('legacy_neo'), 'proactive_agent')).toBe(false);
   });
+
+  it('Omi Pro clears every Pro gate', () => {
+    const free = golden('free_pro_gate_proactive');
+    const gated = { ...free, usage: { ...free.usage, proGates: ['proactive_agent'] } };
+    expect(shouldGate(gated, 'proactive_agent')).toBe(true);
+    const omiPro = { ...gated, current: { ...gated.current!, planId: 'unlimited_v2' } };
+    expect(shouldGate(omiPro, 'proactive_agent')).toBe(false);
+    expect(shouldGate(gated, 'proactive_agent', 'unlimited_v2')).toBe(false);
+  });
 });
 
 describe('defensive decode', () => {

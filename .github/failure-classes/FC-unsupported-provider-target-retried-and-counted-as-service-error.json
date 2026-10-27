@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-unsupported-provider-target-retried-and-counted-as-service-error",
+  "violated_contract": "A provider's static capability table is part of the call contract. A target the provider can never serve must be filtered before dispatch: rediscovering the same permanent rejection as a 4xx on every call burns a round trip per batch forever, and because the rejection is client input, counting it in the provider's error-budget ratios pages on a perfectly healthy service.",
+  "canonical_prevention": "Mirror the provider's supported-target table on the caller side (one shared set, with a test pinning parity against the provider's own table), check the session target before queueing dispatch, and count the skip on a bounded metric with one log per session. Provider-agnostic lanes that serve every target stay exempt. Alert error-ratio rules must exclude client-input rejection statuses from the numerator, the denominator, and the volume gate so the budget measures service failures over service-eligible requests.",
+  "canonical_prevention_artifact": [
+    "backend/utils/translation_language.py",
+    "backend/utils/translation_coordinator.py",
+    "backend/tests/unit/test_nllb_service_metrics.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/translation*",
+    "backend/charts/*/templates/prometheusrule.yaml"
+  ],
+  "status": "open"
+}

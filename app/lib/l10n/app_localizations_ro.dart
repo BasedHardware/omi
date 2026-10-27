@@ -715,7 +715,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get remembering => 'Memorare';
 
   @override
-  String get unlimitedPlan => 'Plan nelimitat';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Gestionează planul';
@@ -737,7 +737,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get upgrade => 'Actualizare';
 
   @override
-  String get upgradeToUnlimited => 'Actualizează la nelimitat';
+  String get upgradeToUnlimited => 'Actualizează la Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3170,7 +3170,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Actualizează la Pro';
+  String get upgradeToPro => 'Actualizează la Omi Pro';
 
   @override
   String get getOmiDevice => 'Obține dispozitiv Omi';
@@ -4298,7 +4298,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'Obțineți Omi Unlimited gratuit contribuind cu datele dvs. pentru antrenarea modelelor AI.';
+      'Obțineți Omi Pro gratuit contribuind cu datele dvs. pentru antrenarea modelelor AI.';
 
   @override
   String get trainingDataBullets =>
@@ -9709,7 +9709,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Treci la versiunea gratuită';
 
   @override
-  String get getFreeUnlimitedAccess => 'Obține acces nelimitat gratuit';
+  String get getFreeUnlimitedAccess => 'Obține Omi Pro gratuit';
 
   @override
   String get shareDataForTraining => 'Partajează date pentru antrenare';
@@ -12910,7 +12910,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Trimite un mesaj vocal și Omi îți va răspunde.';
 
   @override
-  String get chatAppsPartOfPro => 'Aplicațiile de chat fac parte din Pro';
+  String get chatAppsPartOfPro => 'Aplicațiile de chat fac parte din Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Mesaje';
@@ -13544,7 +13544,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncDetailsCopy => 'Copiază detaliile pentru asistență';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Disponibil cu Operator și Architect';
+  String get chatAppsChannelPlanRequired => 'Disponibil cu Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14059,7 +14059,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Rulează în timp ce telefonul se încarcă.';
 
   @override
-  String get onDeviceUpgradeBody => 'Treci la Pro pentru separarea vorbitorilor și o precizie mai mare';
+  String get onDeviceUpgradeBody => 'Treci la Omi Pro pentru separarea vorbitorilor și o precizie mai mare';
 
   @override
   String get onDeviceAtCapFooter => 'Oricum ai alege, nu se pierde nimic. Poți schimba asta în Setări › Transcriere.';
@@ -14245,7 +14245,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Refă cu Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Treci la Pro pentru separarea vorbitorilor și o precizie mai mare';
+  String get onDeviceRedoHint => 'Treci la Omi Pro pentru separarea vorbitorilor și o precizie mai mare';
 
   @override
   String get onDeviceKeepEverything => 'Păstrează totul pe acest telefon';
@@ -14663,6 +14663,26 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Renunță';
+
+  @override
+  String get syncRejectionInvalidDate => 'Dată de înregistrare nevalidă';
+
+  @override
+  String get syncDeleteKeptUploading => 'Unele părți încă se încarcă și au fost păstrate';
+
+  @override
+  String get syncRejectionServer => 'Respins de server';
+
+  @override
+  String get syncRejectionTooLarge => 'Prea mare';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration pe telefon';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Încărcările sunt pauzate pentru o clipă — vor reveni automat';
 
   @override
   String get consentShortMessage =>

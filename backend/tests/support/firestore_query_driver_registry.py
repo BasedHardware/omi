@@ -807,6 +807,21 @@ _add(
 )
 _add(DriverEntry('database.conversation_finalization_jobs.get_finalization_job_summary'))
 
+_add(
+    DriverEntry(
+        'database.transcript_search.read_transcript_search_page',
+        base={'uid': UID, 'query': 'invoice'},
+        domains={'start_date': [None, T0], 'end_date': [None, T1]},
+        neutrals={
+            'cursor': _CURSOR,
+            'budget': (
+                ListReadBudget(deadline_monotonic=12.0, max_documents=50, clock=lambda: 0.0),
+                'required bounded scan budget; frozen clock, fresh per driver trial',
+            ),
+        },
+    )
+)
+
 
 def _byok_reclaim_cursor(client, combo, trial):
     if trial:

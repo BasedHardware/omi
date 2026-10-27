@@ -712,7 +712,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get remembering => 'Prisiminimas';
 
   @override
-  String get unlimitedPlan => 'Neribojamas planas';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Valdyti planą';
@@ -734,7 +734,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get upgrade => 'Atnaujinti';
 
   @override
-  String get upgradeToUnlimited => 'Atnaujinti į neribotą';
+  String get upgradeToUnlimited => 'Atnaujinti į Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3152,7 +3152,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Atnaujinti į Pro';
+  String get upgradeToPro => 'Atnaujinti į Omi Pro';
 
   @override
   String get getOmiDevice => 'Gauti Omi įrenginį';
@@ -4274,8 +4274,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get trainingDataProgram => 'Mokymo duomenų programa';
 
   @override
-  String get getOmiUnlimitedFree =>
-      'Gaukite Omi Unlimited nemokamai, prisidėdami savo duomenimis prie AI modelių mokymo.';
+  String get getOmiUnlimitedFree => 'Gaukite Omi Pro nemokamai, prisidėdami savo duomenimis prie AI modelių mokymo.';
 
   @override
   String get trainingDataBullets =>
@@ -9679,7 +9678,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Pereiti prie nemokamos versijos';
 
   @override
-  String get getFreeUnlimitedAccess => 'Gaukite nemokamą neribotą prieigą';
+  String get getFreeUnlimitedAccess => 'Gaukite Omi Pro nemokamai';
 
   @override
   String get shareDataForTraining => 'Dalytis duomenimis mokymui';
@@ -12879,7 +12878,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Atsiųskite balso žinutę, o Omi į ją atsakys.';
 
   @override
-  String get chatAppsPartOfPro => 'Pokalbių programos įeina į Pro';
+  String get chatAppsPartOfPro => 'Pokalbių programos įeina į Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Žinutės';
@@ -13513,7 +13512,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncDetailsCopy => 'Kopijuoti informaciją palaikymo komandai';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Prieinama su Operator ir Architect';
+  String get chatAppsChannelPlanRequired => 'Prieinama su Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14026,7 +14025,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Veikia, kol telefonas kraunasi.';
 
   @override
-  String get onDeviceUpgradeBody => 'Pereikite į Pro, kad būtų atskirti kalbėtojai ir padidėtų tikslumas';
+  String get onDeviceUpgradeBody => 'Pereikite į Omi Pro, kad būtų atskirti kalbėtojai ir padidėtų tikslumas';
 
   @override
   String get onDeviceAtCapFooter => 'Niekas neprarandama. Tai galite pakeisti skiltyje Nustatymai › Transkripcija.';
@@ -14208,7 +14207,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Perdaryti su Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Pereikite į Pro, kad būtų atskirti kalbėtojai ir padidėtų tikslumas';
+  String get onDeviceRedoHint => 'Pereikite į Omi Pro, kad būtų atskirti kalbėtojai ir padidėtų tikslumas';
 
   @override
   String get onDeviceKeepEverything => 'Viską laikyti šiame telefone';
@@ -14625,6 +14624,26 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Atmesti';
+
+  @override
+  String get syncRejectionInvalidDate => 'Netinkamas įrašo data';
+
+  @override
+  String get syncDeleteKeptUploading => 'Kai kurios dalys vis dar įkeliamos ir buvo paliktos';
+
+  @override
+  String get syncRejectionServer => 'Serveris atmetė';
+
+  @override
+  String get syncRejectionTooLarge => 'Per didelis';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration telefone';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Įkėlimai trumpai pristabdyti — jie atsinaujins automatiškai';
 
   @override
   String get consentShortMessage =>

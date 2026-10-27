@@ -407,9 +407,14 @@ def is_allowance_policy_hold(job: dict[str, Any]) -> bool:
     commitment, so age-based safety proxies must not measure it (2026-10-25:
     131 such holds, ~26h old, kept the in-cluster guard's
     uncommitted_job_age_over_30m proxy tripped permanently and masked real
-    wedges).
+    wedges). An unevaluated re-evaluation clears the decision to BLIND without
+    ending the hold; until an allow or another hold replaces it, the job's
+    last_policy_hold still classifies it (2026-10-27: held jobs re-read as
+    decisionless between evaluations flapped the proxy to ~54h).
     """
-    decision = job.get('compute_decision') or {}
+    decision = job.get('compute_decision')
+    if not decision:
+        return (job.get('last_policy_hold') or {}).get('reason') == 'allowance_exhausted'
     return decision.get('outcome') == 'held' and decision.get('reason') == 'allowance_exhausted'
 
 

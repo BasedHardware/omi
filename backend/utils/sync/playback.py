@@ -636,10 +636,20 @@ def build_conversation_playback_artifact(
             continue
         if not pcm:
             continue
+        # Chunk keys stay on the raw capture clock; a part whose chunks
+        # persisted their skew-normalized playback start carries the wall
+        # basis the conversation's server-clock started_at actually compares
+        # against (a +N s skewed capture yields wall_offset ~0, not ~N).
+        playback_start = af.get('playback_start')
+        wall_basis = (
+            float(playback_start)
+            if isinstance(playback_start, (int, float)) and not isinstance(playback_start, bool)
+            else timestamps[0]
+        )
         spans.append(
             {
                 'file_id': af['id'],
-                'wall_offset': round(timestamps[0] - started_at_ts, 3),
+                'wall_offset': round(wall_basis - started_at_ts, 3),
                 'artifact_offset': round(len(pcm_buf) / _PCM_BYTES_PER_SECOND, 3),
                 'len': round(len(pcm) / _PCM_BYTES_PER_SECOND, 3),
             }

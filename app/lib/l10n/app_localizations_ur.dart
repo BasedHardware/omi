@@ -712,7 +712,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get remembering => 'یاد رکھنا';
 
   @override
-  String get unlimitedPlan => 'غیر محدود منصوبہ';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'منصوبہ منیج کریں';
@@ -734,7 +734,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get upgrade => 'اپ گریڈ کریں';
 
   @override
-  String get upgradeToUnlimited => 'غیر محدود میں اپ گریڈ کریں';
+  String get upgradeToUnlimited => 'Omi Pro میں اپ گریڈ کریں';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3162,7 +3162,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Pro میں اپ گریڈ کریں';
+  String get upgradeToPro => 'Omi Pro میں اپ گریڈ کریں';
 
   @override
   String get getOmiDevice => 'Omi ڈیوائس حاصل کریں';
@@ -4284,7 +4284,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get trainingDataProgram => 'تربیت کا ڈیٹا پروگرام';
 
   @override
-  String get getOmiUnlimitedFree => 'اپنے ڈیٹا کو AI ماڈلز کی تربیت کے لیے شراکت کر کے Omi Unlimited مفت حاصل کریں۔';
+  String get getOmiUnlimitedFree => 'اپنے ڈیٹا کو AI ماڈلز کی تربیت کے لیے شراکت کر کے Omi Pro مفت حاصل کریں۔';
 
   @override
   String get trainingDataBullets =>
@@ -9675,7 +9675,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get downgradeToFreemiumAction => 'مفت ورژن پر جائیں';
 
   @override
-  String get getFreeUnlimitedAccess => 'مفت لامحدود رسائی حاصل کریں';
+  String get getFreeUnlimitedAccess => 'Omi Pro مفت حاصل کریں';
 
   @override
   String get shareDataForTraining => 'تربیت کے لیے ڈیٹا شیئر کریں';
@@ -12870,7 +12870,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'وائس نوٹ بھیجیں اور Omi جواب دے گا۔';
 
   @override
-  String get chatAppsPartOfPro => 'چیٹ ایپس Pro کا حصہ ہیں';
+  String get chatAppsPartOfPro => 'چیٹ ایپس Omi Pro کا حصہ ہیں';
 
   @override
   String get chatAppsMessagesApp => 'پیغامات';
@@ -13502,7 +13502,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get syncDetailsCopy => 'سپورٹ کے لیے تفصیلات کاپی کریں';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator اور Architect پر دستیاب';
+  String get chatAppsChannelPlanRequired => 'Omi Pro پر دستیاب';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14013,7 +14013,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'فون چارج ہوتے ہوئے چلتا ہے۔';
 
   @override
-  String get onDeviceUpgradeBody => 'بولنے والوں کو الگ پہچاننے اور زیادہ درستگی کے لیے Pro میں اپ گریڈ کریں';
+  String get onDeviceUpgradeBody => 'بولنے والوں کو الگ پہچاننے اور زیادہ درستگی کے لیے Omi Pro میں اپ گریڈ کریں';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14197,7 +14197,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud سے دوبارہ کریں';
 
   @override
-  String get onDeviceRedoHint => 'بولنے والوں کو الگ پہچاننے اور زیادہ درستگی کے لیے Pro میں اپ گریڈ کریں';
+  String get onDeviceRedoHint => 'بولنے والوں کو الگ پہچاننے اور زیادہ درستگی کے لیے Omi Pro میں اپ گریڈ کریں';
 
   @override
   String get onDeviceKeepEverything => 'سب کچھ اسی فون پر رکھیں';
@@ -14614,6 +14614,26 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'چھوڑ دیں';
+
+  @override
+  String get syncRejectionInvalidDate => 'غلط ریکارڈنگ کی تاریخ';
+
+  @override
+  String get syncDeleteKeptUploading => 'کچھ حصے اب بھی اپلوڈ ہو رہے ہیں اور محفوظ رکھے گئے ہیں';
+
+  @override
+  String get syncRejectionServer => 'سرور نے مسترد کیا';
+
+  @override
+  String get syncRejectionTooLarge => 'بہت بڑا';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'فون پر $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'اپلوڈز چند لمحے کے لیے روک دیے گئے ہیں — یہ خودکار طور پر دوبارہ شروع ہوں گے';
 
   @override
   String get consentShortMessage =>

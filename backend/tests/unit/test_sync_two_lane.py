@@ -49,11 +49,15 @@ def test_lane_classification_fresh_backfill_and_untrusted(monkeypatch):
     now = 2_000_000_000
     monkeypatch.setenv('SYNC_FRESH_MAX_AGE_SECONDS', '21600')
     monkeypatch.setenv('SYNC_BACKFILL_MAX_AGE_SECONDS', '2592000')
+    monkeypatch.delenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', raising=False)
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda name: int(name.split('.')[0]))
 
     fresh = lanes.classify_sync_lane([f'{now - 60}.opus'], client_device_id='device-1', now=now)
     historical = lanes.classify_sync_lane([f'{now - 8 * 86400}.opus'], client_device_id='device-1', now=now)
-    future = lanes.classify_sync_lane([f'{now + 301}.opus'], client_device_id='device-1', now=now)
+    # Phone-clock skew inside the shared tolerance stays trusted fresh audio...
+    skewed = lanes.classify_sync_lane([f'{now + 301}.opus'], client_device_id='device-1', now=now)
+    # ...while stamps beyond it remain untrusted backfill.
+    future = lanes.classify_sync_lane([f'{now + 601}.opus'], client_device_id='device-1', now=now)
     invalid = lanes.classify_sync_lane(['invalid.opus'], client_device_id='device-1', now=now)
     legacy = lanes.classify_sync_lane([f'{now - 60}.opus'], client_device_id=None, now=now)
 
@@ -61,6 +65,9 @@ def test_lane_classification_fresh_backfill_and_untrusted(monkeypatch):
     assert fresh.trust == lanes.CaptureTimeTrust.DEVICE_BOUND
     assert historical.lane == lanes.SyncLane.BACKFILL
     assert historical.reason == 'historical_capture'
+    assert skewed.lane == lanes.SyncLane.FRESH
+    assert skewed.trust is lanes.CaptureTimeTrust.DEVICE_BOUND
+    assert skewed.newest_capture_at <= now
     assert future.lane == lanes.SyncLane.BACKFILL
     assert future.trust == lanes.CaptureTimeTrust.UNTRUSTED
     assert invalid.lane == lanes.SyncLane.BACKFILL

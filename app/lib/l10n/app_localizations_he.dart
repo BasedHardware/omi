@@ -707,7 +707,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get remembering => 'זיכור';
 
   @override
-  String get unlimitedPlan => 'תוכנית בלתי מוגבלת';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'נהל תוכנית';
@@ -729,7 +729,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get upgrade => 'שדרוג';
 
   @override
-  String get upgradeToUnlimited => 'שדרג לבלתי מוגבל';
+  String get upgradeToUnlimited => 'שדרג ל-Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3135,7 +3135,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'שדרג ל-Pro';
+  String get upgradeToPro => 'שדרג ל-Omi Pro';
 
   @override
   String get getOmiDevice => 'קנה מכשיר Omi';
@@ -4247,7 +4247,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get trainingDataProgram => 'תוכנית נתוני הדרכה';
 
   @override
-  String get getOmiUnlimitedFree => 'קבל Omi Unlimited בחינם על ידי תרומת הנתונים שלך לאימון מודלי AI.';
+  String get getOmiUnlimitedFree => 'קבל Omi Pro בחינם על ידי תרומת הנתונים שלך לאימון מודלי AI.';
 
   @override
   String get trainingDataBullets => '• הנתונים שלך עוזרים לשפר את מודלי ה-AI\n• רק נתונים לא רגישים משותפים';
@@ -9584,7 +9584,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get downgradeToFreemiumAction => 'מעבר לגרסה החינמית';
 
   @override
-  String get getFreeUnlimitedAccess => 'קבלו גישה בלתי מוגבלת בחינם';
+  String get getFreeUnlimitedAccess => 'קבלו את Omi Pro בחינם';
 
   @override
   String get shareDataForTraining => 'שיתוף נתונים לאימון';
@@ -12762,7 +12762,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'שלחו הודעה קולית ו-Omi יענה עליה.';
 
   @override
-  String get chatAppsPartOfPro => 'אפליקציות צ\'אט הן חלק מ-Pro';
+  String get chatAppsPartOfPro => 'אפליקציות צ\'אט הן חלק מ-Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'הודעות';
@@ -13393,7 +13393,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncDetailsCopy => 'העתקת פרטים לתמיכה';
 
   @override
-  String get chatAppsChannelPlanRequired => 'זמין ב-Operator וב-Architect';
+  String get chatAppsChannelPlanRequired => 'זמין ב-Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13902,7 +13902,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'פועל בזמן שהטלפון נטען.';
 
   @override
-  String get onDeviceUpgradeBody => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
+  String get onDeviceUpgradeBody => 'שדרגו ל-Omi Pro להפרדה בין דוברים ולדיוק גבוה יותר';
 
   @override
   String get onDeviceAtCapFooter => 'שום דבר לא הולך לאיבוד בכל מקרה. אפשר לשנות זאת בהגדרות › תמלול.';
@@ -14083,7 +14083,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'ביצוע מחדש עם Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
+  String get onDeviceRedoHint => 'שדרגו ל-Omi Pro להפרדה בין דוברים ולדיוק גבוה יותר';
 
   @override
   String get onDeviceKeepEverything => 'לשמור הכול בטלפון הזה';
@@ -14498,6 +14498,26 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'ותר על זה';
+
+  @override
+  String get syncRejectionInvalidDate => 'תאריך הקלטה לא תקין';
+
+  @override
+  String get syncDeleteKeptUploading => 'חלקים מסוימים עדיין בהעלאה ונשמרו';
+
+  @override
+  String get syncRejectionServer => 'נדחה על ידי השרת';
+
+  @override
+  String get syncRejectionTooLarge => 'גדול מדי';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration בטלפון';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'ההעלאות הושהו לרגע — הן יימשכו אוטומטית';
 
   @override
   String get consentShortMessage => 'Omi משתמש בבינה מלאכותית כדי להפוך את השיחות שלך להערות. אפשר למחוק אותן בכל עת.';

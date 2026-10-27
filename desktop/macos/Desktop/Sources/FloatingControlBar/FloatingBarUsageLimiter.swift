@@ -16,7 +16,7 @@ final class FloatingBarUsageLimiter: ObservableObject {
     switch defaults.string(forKey: .floatingBarCachedPlan) {
     case SubscriptionPlanType.architect.rawValue, SubscriptionPlanType.pro.rawValue:
       return 4
-    case SubscriptionPlanType.operator.rawValue:
+    case SubscriptionPlanType.operator.rawValue, SubscriptionPlanType.unlimitedV2.rawValue:
       return 2
     case SubscriptionPlanType.unlimited.rawValue:
       let grandfatherUntil = defaults.double(forKey: .floatingBarCachedDesktopGrandfatherUntil)

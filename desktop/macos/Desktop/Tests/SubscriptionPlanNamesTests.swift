@@ -3,10 +3,10 @@ import XCTest
 @testable import Omi_Computer
 
 final class SubscriptionPlanNamesTests: XCTestCase {
-  func testNamesNeverConfuseProWithArchitectOrUnlimitedWithNeo() {
+  func testNamesMapOmiProToUnlimitedV2AndNeverConfuseRetiredPlans() {
     let names = [
       "Plus": "plus", "Pro": "operator", "Operator": "operator",
-      "Architect": "architect", "Omi Pro": "architect", "Neo": "unlimited",
+      "Architect": "architect", "Omi Pro": "unlimited_v2", "Neo": "unlimited",
       "Unlimited (legacy)": "unlimited", "Unlimited Plan": "unlimited", "Unlimited": "unlimited_v2",
     ]
     for (name, id) in names {
@@ -22,9 +22,9 @@ final class SubscriptionPlanNamesTests: XCTestCase {
 
   func testCanonicalDisplayNames() {
     let names = [
-      "basic": "Free", "plus": "Plus", "operator": "Pro",
+      "basic": "Free", "plus": "Plus", "operator": "Operator",
       "architect": "Architect", "pro": "Architect", "unlimited": "Neo",
-      "unlimited_v2": "Unlimited",
+      "unlimited_v2": "Omi Pro",
     ]
     for (id, name) in names {
       XCTAssertEqual(SubscriptionPlanType(rawValue: id).displayName, name)

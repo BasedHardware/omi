@@ -23,6 +23,7 @@ from database import (
     review_queries,
     review_store as store,
 )
+from database.people_generation import bump_people_generation
 from database.action_items_cache import bump_action_items_list_version
 from database import review_exact_undo
 from database.review_field_states import read_field_state, write_field_state
@@ -187,6 +188,8 @@ def record_agent_change(
                     transaction.set(target, edit.patch)
                 else:
                     transaction.update(target, edit.patch)
+                if edit.collection == 'people':
+                    bump_people_generation(transaction, target)
             transaction.set(ref, store.encode_doc(uid, journal))
 
         return {'mutations': mutations, 'projection_writer': write}
@@ -402,7 +405,14 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
                 # A full-row fence permits exact replacement without DELETE_FIELD
                 # transforms. Missing fields stay missing, including after Redo.
                 exact_restores[target.path] = review_exact_undo.restored_row(current, edit[destination])
-            rows.append((target, {key: write_field_state(value) for key, value in edit[destination].items()}, current))
+            rows.append(
+                (
+                    edit['collection'],
+                    target,
+                    {key: write_field_state(value) for key, value in edit[destination].items()},
+                    current,
+                )
+            )
         change = dict(data['change'], undone=undone)
         result['change'] = change
         merge = data.get('entity_merge')
@@ -410,7 +420,7 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
         if merge:
             if undone:
                 restored = []
-                for target, patch, current in rows:
+                for _, target, patch, current in rows:
                     restored_doc = copy.deepcopy(current)
                     for key, value in patch.items():
                         if value is firestore.DELETE_FIELD:
@@ -423,7 +433,9 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
                 mutations = [memory_ledger.merge_entities(*merge, evidence={'review_change_id': change_id})]
 
         def write(transaction):
-            for target, patch, _ in rows:
+            for collection, target, patch, _ in rows:
+                if collection == 'people':
+                    bump_people_generation(transaction, target)
                 identity = target.path
                 if identity in exact_restores:
                     transaction.set(target, exact_restores[identity])

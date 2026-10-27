@@ -363,10 +363,10 @@ workflows:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
         submit_as_draft: false
-        # Play rejects automated edits.commit for this app ("set the query
-        # parameter changesNotSentForReview to true"); held changes are sent
-        # from Play Console -> Publishing overview -> Send for review.
-        changes_not_sent_for_review: true
+        # Play auto-sends changes for review again (2026-10-27) and rejects
+        # any commit that sets changesNotSentForReview ("The query parameter
+        # changesNotSentForReview must not be set"), so the parameter must
+        # not be set.
 
   # ============================================
   # PRODUCTION RELEASE WORKFLOWS (Triggered by tags)
@@ -942,9 +942,9 @@ workflows:
         # These built-in values bind the release to its tag and Codemagic run.
         release_name: "$CM_TAG [$CM_BUILD_ID]"
         submit_as_draft: false
-        # Same Play constraint as the internal auto track: automated commits
-        # must hold changes for the Console's Send for review step.
-        changes_not_sent_for_review: true
+        # Same Play constraint as the internal auto track: Play auto-sends
+        # changes for review again (2026-10-27) and rejects any commit that
+        # sets changesNotSentForReview, so the parameter must not be set.
       scripts:
         - name: Promote the exact internal build to alpha
           script: |

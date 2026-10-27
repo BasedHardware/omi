@@ -9,7 +9,7 @@ from collections import deque
 from contextlib import suppress
 from dataclasses import replace
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -96,7 +96,8 @@ def test_hard_outage_detection_samples(warmup):
     assert state.stage == 0
 
 
-def test_staged_recovery_and_exponential_backoff():
+def test_staged_recovery_and_exponential_backoff(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED', 'false')
     state = GateState()
     for i in range(8):
         state = transition(state, True, 0, witness=f'{i:016x}')
@@ -123,7 +124,8 @@ def test_staged_recovery_and_exponential_backoff():
     assert chronic.until == 14400
 
 
-def test_failed_trial_rebenches_at_fixed_sample_even_without_early_rejection():
+def test_failed_trial_legacy_kill_switch_rebenches_at_fixed_sample(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED', 'false')
     state = GateState(stage=5)
     for index in range(30):
         state = transition(state, index in (4, 14, 24), 0)
@@ -1561,7 +1563,8 @@ def test_single_user_failed_recovery_step_holds_without_fleet_strike():
 
 
 @pytest.mark.parametrize('stage,required', [(5, 30), (25, 60)])
-def test_two_user_failed_trial_holds_then_healthy_window_promotes(stage, required):
+def test_legacy_two_user_failed_trial_holds_then_healthy_window_promotes(monkeypatch, stage, required):
+    monkeypatch.setenv('STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED', 'false')
     state = GateState(stage=stage, strikes=2, generation=4)
     language = state
     for i in range(4 * required):
@@ -1579,7 +1582,8 @@ def test_two_user_failed_trial_holds_then_healthy_window_promotes(stage, require
 
 
 @pytest.mark.parametrize('stage,required', [(5, 30), (25, 60)])
-def test_broad_fixed_boundary_trial_rejection_spends_one_fleet_strike(stage, required):
+def test_legacy_broad_fixed_boundary_trial_rejection_spends_one_fleet_strike(monkeypatch, stage, required):
+    monkeypatch.setenv('STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED', 'false')
     state = GateState(stage=stage, strikes=1, generation=4)
     # No sequential alarm: rejection at the boundary itself must check breadth.
     breadth = 10 if stage == 5 else 20
@@ -1733,7 +1737,8 @@ async def test_new_endpoint_only_registry_keeps_configured_endpoint_tail(monkeyp
 
 
 @pytest.mark.parametrize('language_only', [False, True])
-def test_two_failing_users_and_healthy_majority_recover_after_trial_dwell(language_only):
+def test_legacy_two_failing_users_and_healthy_majority_recover_after_trial_dwell(monkeypatch, language_only):
+    monkeypatch.setenv('STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED', 'false')
     state = GateState(stage=5, strikes=2)
     completed = 0
     for stage, required, users, dwell in ((5, 30, 26, 300), (25, 60, 25, 600)):
@@ -1750,7 +1755,8 @@ def test_two_failing_users_and_healthy_majority_recover_after_trial_dwell(langua
     assert state.stage == 100 and completed <= 360 and state.strikes == 2
 
 
-def test_trial_majority_uses_admitted_user_outcomes_and_broad_late_failure_rejects():
+def test_legacy_trial_majority_uses_admitted_user_outcomes_and_broad_late_failure_rejects(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED', 'false')
     state = GateState(stage=5)
     # First three samples from each user pass, but a later outage dominates.
     for i in range(12):
@@ -1758,6 +1764,137 @@ def test_trial_majority_uses_admitted_user_outcomes_and_broad_late_failure_rejec
     for i in range(24):
         state = transition(state, True, 0, witness=f'{4 + i % 8:016x}')
     assert state.stage == 0 and state.strikes == 1
+
+
+@pytest.mark.parametrize('stage', [5, 25])
+@pytest.mark.parametrize('language_only', [False, True])
+@pytest.mark.parametrize('n,failures', [(20, 1), (30, 2), (90, 2), (99, 13)])
+def test_recovery_small_samples_cannot_rebench(stage, language_only, n, failures, monkeypatch):
+    monkeypatch.delenv('STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED', raising=False)
+    state = GateState(stage=stage, generation=3, strikes=2)
+    for i in range(n):
+        state = transition(state, i >= n - failures, 0, witness=f'{i:016x}', language_only=language_only)
+        assert state.stage == stage
+    assert state.n == n and state.failures == failures and state.strikes == 2
+
+
+@pytest.mark.parametrize('stage', [5, 25])
+@pytest.mark.parametrize('language_only', [False, True])
+def test_recovery_rebenches_at_100_only_with_same_burst_evidence(stage, language_only):
+    state = GateState(stage=stage)
+    for i in range(100):
+        state = transition(state, i >= 87, 0, witness=f'{i:016x}', language_only=language_only)
+        if i < 99:
+            assert state.stage == stage
+    assert state.stage == 0 and state.n == 100 and state.failures == 13 and state.strikes == 2
+
+
+@pytest.mark.parametrize('stage', [5, 25])
+def test_recovery_high_share_without_burst_does_not_rebench(stage):
+    state = GateState(stage=stage)
+    # 10% failures is above the 8% gate, but separated failures carry no burst.
+    for i in range(100):
+        state = transition(state, i % 10 == 0, 0, witness=f'{i:016x}')
+    assert state.stage == stage and state.n == 100 and state.failures == 10
+
+
+@pytest.mark.parametrize('stage', [5, 25])
+def test_recovery_fast_path_needs_twenty_votes_and_twenty_five_percent_failures(stage):
+    state = GateState(stage=stage)
+    for i in range(19):
+        state = transition(state, True, 0, witness=f'{i:016x}')
+        assert state.stage == stage
+    assert transition(state, True, 0, witness=f'{19:016x}').stage == 0
+    for failures, expected in ((4, stage), (5, 0)):
+        state = GateState(stage=stage)
+        for i in range(20):
+            state = transition(state, i % 4 == 0 and i // 4 < failures, 0, witness=f'{i:016x}')
+        assert state.stage == expected
+
+
+def test_false_bench_with_two_recovery_timeouts_completes_clean_ramp_and_resets_strikes():
+    state = GateState(stage=0, strikes=3, until=300)
+    state = begin_trial(state, 300)
+    for i in range(30):
+        state = transition(state, i in (4, 14), 600, witness=f'{i:016x}')
+    assert state.stage == 25 and state.strikes == 3
+    for i in range(60):
+        state = transition(state, i in (4, 44), 1200, witness=f'{i:016x}')
+    assert state.stage == 100 and state.strikes == 0
+
+
+def test_recovery_rebench_adds_extra_cooldown_exponent_caps_at_six_hours_and_clean_ramp_resets():
+    state = GateState(stage=5, strikes=1)
+    now = 0
+    for expected_strikes, wait in ((3, 1200), (5, 4800), (7, 19200), (9, 21600), (10, 21600)):
+        for i in range(20):
+            state = transition(state, True, now, witness=f'{i:016x}')
+        assert state.stage == 0 and state.strikes == expected_strikes and state.until == now + wait
+        now = state.until
+        state = begin_trial(state, now)
+    for stage, required, dwell in ((5, 30, 300), (25, 60, 600)):
+        assert state.stage == stage
+        now += dwell
+        for i in range(required):
+            state = transition(state, False, now, witness=f'{i:016x}')
+    assert state.stage == 100 and state.strikes == 0
+    for i in range(8):
+        state = transition(state, True, now, witness=f'{i:016x}')
+    assert state.stage == 0 and state.until == now + 300
+
+
+@pytest.mark.parametrize('n,failures,language_only', [(10200, 39, False), (16485, 264, True)])
+def test_incident_aggregate_history_and_13_timeout_burst_still_benches(n, failures, language_only):
+    # The incident supplies aggregate counters and 13 timeouts, not event times.
+    # Replay a burst consistent with those totals; do not infer raw chronology.
+    state = GateState(n=n - 26, failures=failures - 13)
+    for i in range(26):
+        state = transition(state, i % 2 == 1, i * 60, witness=f'{i:016x}', language_only=language_only)
+        if state.stage == 0:
+            break
+    assert state.stage == 0 and state.generation == 1
+
+
+@pytest.mark.parametrize('reason', ['no_text', 'first_text_deadline', 'send_queue_full'])
+def test_censored_recovery_outcomes_never_count_towards_sample_or_failures(monkeypatch, reason):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    pod = live_health.FleetHealth(redis_client=MemoryRedis())
+    pod._check_identity()
+    for lang in ('all', 'en'):
+        pod._cost_local[('parakeet-window', lang)] = GateState(stage=5, n=99, failures=13)
+    with patch.object(pod, 'schedule') as schedule:
+        for outcome in ('no_text', 'failover', 'connect_failure'):
+            assert pod.record_session('parakeet-window', 'en', outcome, uid='synthetic', reason=reason)
+        schedule.assert_not_called()
+    for lang in ('all', 'en'):
+        state = pod._cost_local[('parakeet-window', lang)]
+        assert state.stage == 5 and state.n == 99 and state.failures == 13
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('target', DEFAULT_TARGETS, ids=lambda target: target.id)
+async def test_operator_reset_fences_old_session_votes_and_unreconciled_pod_benches(monkeypatch, target):
+    import fakeredis.aioredis
+    from utils.stt.live_cost_reset import reset_cost_target
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+    async with fakeredis.aioredis.FakeRedis(decode_responses=True) as redis:
+        pod = live_health.FleetHealth(redis_client=redis)
+        pod._check_identity()
+        for language in ('all', 'en'):
+            await redis.set(
+                live_stt_state.cost_key(target, language), json.dumps(GateState(stage=5, generation=8).encode())
+            )
+            pod._cost_local[(target.id, language)] = GateState(stage=0, generation=20, until=1e20)
+            pod._cost_unreconciled.add((target.id, language))
+        await reset_cost_target(redis, target=target.id, environment='offline', reason='stale-votes', apply=True)
+        await pod.refresh_cost_once()
+        assert pod.cost_stage(target.id, 'en') == 100
+        await pod._write_cost_result(target.id, 'en', True, {'all': 8, 'en': 8}, 'f' * 16)
+        await pod.refresh_cost_once()
+        for language in ('all', 'en'):
+            state = pod._cost_cached[(target.id, language)]
+            assert state.stage == 100 and state.n == 0 and state.generation > 20
 
 
 def test_trial_user_state_roundtrip_and_bounded_validation():
