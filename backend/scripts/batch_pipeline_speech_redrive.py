@@ -29,8 +29,11 @@ from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independe
 from config.batch_language_recovery import (
     MAX_AUDIO_SECONDS,
     ESTIMATED_USD_PER_AUDIO_HOUR,
+    REPAIR_EPOCH,
+    duration_limited,
     independent_attempted,
     language_guarded,
+    words_repair_eligible,
 )
 from database.batch_pipeline_store import FirestoreStore
 from database.sync_ledger import batch_ledger_owes_held_units
@@ -43,6 +46,8 @@ from utils.batch_pipeline import redrive_scope as scope
 from utils.executors import storage_executor
 
 OPERATION = 'speech-empty-multilingual-paid-epoch-2-v1'
+# Lead ruling 7fa3d2: one explicit Modulate call per language-guard words unit.
+REPAIR_OPERATION = 'language-guard-words-repair-v1'
 PREPARED_OPERATION = 'prepared-independent-recovery-v1'
 require = held.require
 
@@ -54,6 +59,7 @@ def paid_digest(
     *,
     silent=False,
     independent=False,
+    repair=False,
     prepared=False,
     max_seconds=None,
     usd_cap=None,
@@ -62,7 +68,9 @@ def paid_digest(
     # the approver signs; existing epochs keep their byte-stable digests.
     body = {
         'operation': (
-            PREPARED_OPERATION if prepared else ('independent-language-recovery-v1' if independent else OPERATION)
+            PREPARED_OPERATION
+            if prepared
+            else REPAIR_OPERATION if repair else 'independent-language-recovery-v1' if independent else OPERATION
         ),
         'provider': 'soniox' if (prepared or independent) else 'modulate',
         'census_sha256': census_digest,
@@ -84,7 +92,16 @@ def epoch1_failure(job):
     return f'{stage}/{reason}' if stage in STAGES and reason in REASONS else 'unrecorded'
 
 
-def eligible(job, after, cutoff, independent=False):
+def eligible(job, after, cutoff, independent=False, repair=False):
+    if repair:
+        return (
+            after <= job.get('quarantined_at', 0) <= cutoff
+            and job.get('state') == 'quarantined'
+            and job.get('recovery_state') == 'failed_held'
+            and not job.get('speech_redrive')
+            and not job.get('silence_disposition')
+            and words_repair_eligible(job)
+        )
     if not independent:
         return scope.eligible(job, after, cutoff)
     marker = job.get('speech_redrive') or {}
@@ -100,11 +117,13 @@ def eligible(job, after, cutoff, independent=False):
 
 
 def prepared_eligible(job, after, cutoff, max_seconds):
-    """Sealed selection: guarded epoch-1 prepared intents above the runtime bound only.
+    """Sealed selection: guarded epoch-1 intents above the runtime bound only.
 
     The global 60s independent bound stays untouched; this predicate exists so
     an operator plan may admit exactly the sealed ids a lead granted, and only
-    while their intent is still unspent (no receipt, no result, no marker).
+    while their intent is still unspent (no receipt, no result, no marker). It
+    admits both the still-`prepared` units and the exact `failed_held` shape
+    #23795's duration-limit refusal settles without ever starting the intent.
     """
     recovery = job.get('recovery') or {}
     return (
@@ -112,11 +131,10 @@ def prepared_eligible(job, after, cutoff, max_seconds):
         and job.get('state') == 'quarantined'
         and job.get('quarantine_reason') == 'worker_failed'
         and language_guarded(job)
-        and job.get('recovery_state') == 'prepared'
+        and (job.get('recovery_state') == 'prepared' and not recovery.get('settled_at') or duration_limited(job))
         and recovery.get('epoch') == 1
         and bool(recovery.get('token'))
         and not recovery.get('started_at')
-        and not recovery.get('settled_at')
         and not recovery.get('recognizers')
         and not independent_attempted(job)
         and not job.get('result')
@@ -127,7 +145,7 @@ def prepared_eligible(job, after, cutoff, max_seconds):
     )
 
 
-def fingerprint(job, independent=False, prepared=False):
+def fingerprint(job, independent=False, repair=False, prepared=False):
     if prepared:
         # The take-over freezes the exact prepared intent. start()/settle() only
         # append fields, so a spent unit replays without a cohort_changed refusal.
@@ -139,6 +157,8 @@ def fingerprint(job, independent=False, prepared=False):
                 'provider': 'soniox',
             }
         )
+    if repair:
+        return scope.digest({'unit': held.fingerprint(job), 'operation': REPAIR_OPERATION, 'provider': 'modulate'})
     if not independent:
         return held.fingerprint(job)
     marker = job.get('speech_redrive') or {}
@@ -160,7 +180,7 @@ def checked_prepared(store, sid, uid, key, after, cutoff, max_seconds):
     def check(tx):
         job, binding = RecoveryStore(store).checked(tx, sid, allow_completed_recovery=True)
         require(binding.owner_id == uid and fingerprint(job, prepared=True) == key, 'cohort_changed')
-        if job.get('recovery_state') == 'prepared':
+        if job.get('recovery_state') == 'prepared' or duration_limited(job):
             require(prepared_eligible(job, after, cutoff, max_seconds), 'unit_not_eligible')
             ledger = tx.get('content', f'{uid}/{binding.content_id}')
             require(batch_ledger_owes_held_units(ledger), 'completed_ledger')
@@ -173,14 +193,32 @@ def checked_prepared(store, sid, uid, key, after, cutoff, max_seconds):
     return held.readonly_run(store, check)
 
 
-def checked_job(store, sid, uid, key, independent=False):
+def checked_job(store, sid, uid, key, independent=False, repair=False):
 
     def check(tx):
         job, binding = RecoveryStore(store).checked(
             tx, sid, allow_completed_silence=True, allow_completed_speech_redrive=True
         )
         result = tx.get('results', sid)
-        require(binding.owner_id == uid and fingerprint(job, independent) == key, 'cohort_changed')
+        require(binding.owner_id == uid and fingerprint(job, independent, repair) == key, 'cohort_changed')
+        if repair:
+            # Never consults or resets the spent Soniox attempt; one repair intent per unit.
+            require(words_repair_eligible(job), 'repair_not_eligible')
+            speech = job.get('speech_redrive') or {}
+            if speech:
+                require(
+                    speech.get('paid_epoch') == REPAIR_EPOCH
+                    and speech.get('provider') == 'modulate'
+                    and speech.get('prior_recovery') == job.get('recovery')
+                    and speech.get('state') in {'prepared', 'running', 'completed', 'failed_held'},
+                    'invalid_paid_intent',
+                )
+                return job
+            require(not job.get('silence_disposition'), 'conflicting_dispositions')
+            require(SpeechRedriveStore.terminal(job, result, time.time()), 'not_failed_held')
+            ledger = tx.get('content', f'{uid}/{binding.content_id}')
+            require(batch_ledger_owes_held_units(ledger), 'completed_ledger')
+            return job
         require(not independent or not independent_attempted(job), 'independent_already_attempted')
         silence, speech = job.get('silence_disposition') or {}, job.get('speech_redrive') or {}
         require(not (silence and speech), 'conflicting_dispositions')
@@ -209,7 +247,7 @@ def checked_job(store, sid, uid, key, independent=False):
 
 
 def inspect_unit(
-    store, artifacts, sid, uid, key, independent=False, prepared=False, after=0, cutoff=0, max_seconds=0.0
+    store, artifacts, sid, uid, key, independent=False, repair=False, prepared=False, after=0, cutoff=0, max_seconds=0.0
 ):
 
     if prepared:
@@ -217,10 +255,11 @@ def inspect_unit(
         # falls below one frame; its validated empty reply settles failed_held.
         checked_prepared(store, sid, uid, key, after, cutoff, max_seconds)
         return 'speech'
-    job = checked_job(store, sid, uid, key, independent)
+    job = checked_job(store, sid, uid, key, independent, repair)
     # Independent-language plans always buy a recognizer, even if local VAD
     # falls below one frame. Only its validated empty reply can close silence.
-    if independent:
+    # A words repair is speech by its bound worker VAD receipt.
+    if independent or repair:
         return 'speech'
     # Immutable intent attestations retain the original census on replay, even
     # after results have projected and audio has entered completion retention.
@@ -245,9 +284,14 @@ def main():
     parser.add_argument('--expect-count', type=int, required=True)
     parser.add_argument('--expect-speech-count', type=int, required=True)
     parser.add_argument('--source-census-sha256', help='Required with --apply; optional dry-run assertion')
-    parser.add_argument('--paid-epoch', type=int, choices=[1, 2, 3], required=True)
+    parser.add_argument('--paid-epoch', type=int, choices=[1, 2, 3, REPAIR_EPOCH], required=True)
     parser.add_argument(
         '--independent-language', action='store_true', help='Soniox-only explicit epoch 3; exact unit IDs required'
+    )
+    parser.add_argument(
+        '--language-guard-repair',
+        action='store_true',
+        help='Lead 7fa3d2: one Modulate call per guarded words unit, epoch 4; exact unit IDs required',
     )
     parser.add_argument(
         '--prepared-independent',
@@ -267,16 +311,23 @@ def main():
         '--server-flags-file', help='Serving role env JSON for units with no stored policy; absent refuses them'
     )
     args = parser.parse_args()
-    require(not (args.prepared_independent and args.independent_language), 'one_paid_mode_required')
-    if args.prepared_independent:
+    repair = args.language_guard_repair
+    prepared = args.prepared_independent
+    require(not (repair and args.independent_language), 'conflicting_plans')
+    require(not (prepared and (args.independent_language or repair)), 'conflicting_plans')
+    if prepared:
         require(args.paid_epoch == 1, 'provider_epoch_mismatch')
         require(bool(args.unit_ids_file), 'exact_prepared_units_required')
         require(not args.silent, 'silent_mode_unsupported')
         require(args.max_seconds is not None and args.max_seconds > MAX_AUDIO_SECONDS, 'scoped_bound_required')
         require(args.usd_cap is not None and args.usd_cap > 0, 'usd_cap_required')
     else:
-        require(args.paid_epoch == (3 if args.independent_language else 2), 'provider_epoch_mismatch')
+        require(
+            args.paid_epoch == (REPAIR_EPOCH if repair else 3 if args.independent_language else 2),
+            'provider_epoch_mismatch',
+        )
     require(not args.independent_language or bool(args.unit_ids_file), 'exact_independent_units_required')
+    require(not repair or bool(args.unit_ids_file), 'exact_repair_units_required')
     logging.disable(logging.CRITICAL)
     require(not os.getenv('FIRESTORE_EMULATOR_HOST'), 'explicit_cloud_only')
     require(
@@ -352,13 +403,15 @@ def main():
         )
         for doc in candidates:
             job = doc.to_dict() or {}
-            if args.prepared_independent:
+            if prepared:
                 selected_here = job.get('owner_id') == uid and prepared_eligible(job, after, cutoff, args.max_seconds)
             else:
-                selected_here = job.get('owner_id') == uid and eligible(job, after, cutoff, args.independent_language)
+                selected_here = job.get('owner_id') == uid and eligible(
+                    job, after, cutoff, args.independent_language, repair
+                )
             require(ids is None or selected_here, 'unit_not_eligible')
             if selected_here:
-                selected.append((doc.id, fingerprint(job, args.independent_language, args.prepared_independent)))
+                selected.append((doc.id, fingerprint(job, args.independent_language, repair, prepared)))
                 require(len(selected) <= args.expect_count, 'cohort_count_changed')
         require(len(selected) == args.expect_count, 'cohort_count_changed')
         units = []
@@ -375,7 +428,8 @@ def main():
                     uid,
                     key,
                     args.independent_language,
-                    args.prepared_independent,
+                    repair,
+                    prepared,
                     after,
                     cutoff,
                     args.max_seconds or 0.0,
@@ -395,15 +449,16 @@ def main():
         args.paid_epoch,
         silent=args.silent,
         independent=args.independent_language,
-        prepared=args.prepared_independent,
+        repair=repair,
+        prepared=prepared,
         max_seconds=args.max_seconds,
         usd_cap=args.usd_cap,
     )
     for sid, key, decision in units:
-        if args.prepared_independent:
+        if prepared:
             job = checked_prepared(read_store, sid, uid, key, after, cutoff, args.max_seconds)
         else:
-            job = checked_job(read_store, sid, uid, key, args.independent_language)
+            job = checked_job(read_store, sid, uid, key, args.independent_language, repair)
         durations[sid] = job.get('duration_seconds') or 0
         marker = job.get('speech_redrive')
         if marker and not (args.independent_language and replaceable_modulate_intent(job, marker)):
@@ -411,8 +466,8 @@ def main():
                 marker.get('plan_digest') == digest and marker.get('silent', False) is args.silent,
                 'paid_intent_changed',
             )
-        elif not args.prepared_independent:
-            require(eligible(job, after, cutoff, args.independent_language), 'unit_not_eligible')
+        elif not prepared:
+            require(eligible(job, after, cutoff, args.independent_language, repair), 'unit_not_eligible')
         require(
             inspect_unit(
                 read_store,
@@ -421,7 +476,8 @@ def main():
                 uid,
                 key,
                 args.independent_language,
-                args.prepared_independent,
+                repair,
+                prepared,
                 after,
                 cutoff,
                 args.max_seconds or 0.0,
@@ -434,7 +490,7 @@ def main():
     require(counts['speech'] == args.expect_speech_count, 'speech_count_changed')
     total_audio_seconds, estimated_usd_total = (
         prepared_budget([durations[sid] for sid, _, decision in units if decision == 'speech'], args.usd_cap)
-        if args.prepared_independent
+        if prepared
         else (0, 0)
     )
     if not cohort_path.exists():
@@ -443,14 +499,22 @@ def main():
         'mode': 'apply' if args.apply else 'dry_run',
         'operation': (
             PREPARED_OPERATION
-            if args.prepared_independent
-            else 'independent-language-recovery-v1' if args.independent_language else OPERATION
+            if prepared
+            else (
+                REPAIR_OPERATION
+                if repair
+                else 'independent-language-recovery-v1' if args.independent_language else OPERATION
+            )
         ),
-        'provider': 'soniox' if (args.prepared_independent or args.independent_language) else 'modulate',
+        'provider': 'soniox' if (prepared or args.independent_language) else 'modulate',
         'checked_at': datetime.now(timezone.utc).isoformat(),
         'owner_count': 1,
         'units': len(units),
-        'strict_vad': {'unmeasured': counts['speech']} if args.independent_language else dict(counts),
+        'strict_vad': (
+            {'worker_vad_speech': counts['speech']}
+            if repair
+            else {'unmeasured': counts['speech']} if args.independent_language or prepared else dict(counts)
+        ),
         # Not in the digest: the approved census is unchanged by this report.
         'speech_epoch1_failures': dict(Counter(failures[sid] for sid, _, decision in units if decision == 'speech')),
         'paid_epoch': args.paid_epoch,
@@ -462,16 +526,18 @@ def main():
         'paid_stt_calls': 0,
         'firestore_writes': 0,
     }
-    if args.prepared_independent:
+    if args.independent_language or repair:
+        output['max_audio_seconds_per_unit'] = MAX_AUDIO_SECONDS
+    if args.independent_language:
+        # Soniox rate; a repair's Modulate call is metered by its own allowance.
+        output['estimated_usd_per_unit_at_cap'] = MAX_AUDIO_SECONDS / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
+    if prepared:
         output['runtime_max_audio_seconds'] = MAX_AUDIO_SECONDS
         output['max_audio_seconds_per_unit'] = args.max_seconds
         output['estimated_usd_per_unit_at_cap'] = args.max_seconds / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
         output['total_audio_seconds'] = total_audio_seconds
         output['estimated_usd_total'] = estimated_usd_total
         output['usd_cap'] = args.usd_cap
-    elif args.independent_language:
-        output['max_audio_seconds_per_unit'] = MAX_AUDIO_SECONDS
-        output['estimated_usd_per_unit_at_cap'] = MAX_AUDIO_SECONDS / 3600 * ESTIMATED_USD_PER_AUDIO_HOUR
     if args.apply:
 
         # Per-unit mutation consumes its persisted recovery owner part.
@@ -481,7 +547,7 @@ def main():
         # Always the same sorted prefix. Increasing the limit includes receipts
         # from the canary; it never silently selects one extra unattempted unit.
         for sid, key, _decision in [u for u in units if u[2] == 'speech'][: args.apply_limit]:
-            if args.prepared_independent:
+            if prepared:
                 checked_prepared(read_store, sid, uid, key, after, cutoff, args.max_seconds)
                 outcome = prepared_independent_one(
                     store,
@@ -492,7 +558,7 @@ def main():
                     server_flags=server_flags,
                 )
             else:
-                job = checked_job(read_store, sid, uid, key, args.independent_language)
+                job = checked_job(read_store, sid, uid, key, args.independent_language, repair)
                 outcome = redrive_one(
                     store,
                     artifacts,
@@ -503,6 +569,7 @@ def main():
                     server_flags=server_flags,
                     silent=args.silent,
                     independent_language=args.independent_language,
+                    repair=repair,
                 )
             outcomes[outcome] += 1
             if not scope.successful(outcome):

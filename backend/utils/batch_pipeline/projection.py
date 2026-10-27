@@ -33,6 +33,7 @@ from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 from utils.batch_pipeline.projection_disposition import persist_disposition, mirror_assignment
+from utils.batch_pipeline.projection_privacy import PRIVACY_HELD, settle_refusals
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
@@ -444,17 +445,17 @@ class Projector:
             job, entry, binding = self.store.read(segment_id)
         self._persist_read(segment_id, job, entry, binding)
 
+    @settle_refusals(assignment=True)
     def _persist_read(self, segment_id, job, entry, binding, *, hint=None, claimed=False):
         if job.get('shadow'):
             raise ProjectionBlocked('shadow publication forbidden')
         if claimed:
             # The walk holds this owner's claim for its whole step.
-            self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
-            return
+            return self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
         with projection_claim(self.store.store.namespace, owner_key(binding.owner_id)) as acquired:
             if not acquired:
                 raise ProjectionBlocked('projection assignment claim busy')
-            self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
+            return self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
 
     async def start_followups(self, priority=()):
         # Imported lazily: the synchronous worker seam remains lightweight.
@@ -469,12 +470,14 @@ class Projector:
     def project(self, segment_id: str) -> dict | None:
         return self._project_read(segment_id, *self.store.read(segment_id))
 
+    @settle_refusals()
     def _project_read(self, segment_id, job, entry, binding, *, hint=None, claimed=False):
         if job.get('shadow'):
             raise ProjectionBlocked('shadow publication forbidden')
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         if policy.async_projection:
-            self._persist_read(segment_id, job, entry, binding, hint=hint, claimed=claimed)
+            if self._persist_read(segment_id, job, entry, binding, hint=hint, claimed=claimed) is PRIVACY_HELD:
+                return None
             job, entry, binding = self.store.read(segment_id)
             return self._finish(segment_id, job, entry, binding)
         if policy.projection_contention:
@@ -601,6 +604,7 @@ class Projector:
             return False, None
         return candidate is not None, candidate
 
+    @settle_refusals()
     def _finish(self, segment_id, job, entry, binding):
         if job.get('shadow'):
             raise ProjectionBlocked('shadow publication forbidden')
@@ -1250,8 +1254,11 @@ class Projector:
                     parallel_candidate=prefetch is not None,
                     deadline=deadline,
                 )
+                privacy_held = False
                 if policy.async_projection:
-                    self._persist_read(segment_id, job, entry, binding, hint=hint, claimed=drain)
+                    privacy_held = (
+                        self._persist_read(segment_id, job, entry, binding, hint=hint, claimed=drain) is PRIVACY_HELD
+                    )
                 else:
                     self._project_read(segment_id, job, entry, binding, hint=hint, claimed=drain)
             except StepDeadline:
@@ -1277,7 +1284,7 @@ class Projector:
             if policy.async_projection:
                 if segment_id == recovered:
                     first = binding.content_id
-                if not owe(segment_id, binding):
+                if not privacy_held and not owe(segment_id, binding):
                     break
         else:
             more = True
@@ -1325,9 +1332,10 @@ class Projector:
                     continue
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 contention = contention or policy.projection_contention
+                privacy_held = False
                 if policy.async_projection:
                     self.has_async_followups = True
-                    self._persist_read(segment_id, job, entry, binding)
+                    privacy_held = self._persist_read(segment_id, job, entry, binding) is PRIVACY_HELD
                     result = None
                 else:
                     result = self._project_read(segment_id, job, entry, binding)
@@ -1393,7 +1401,7 @@ class Projector:
                     if chain_deadline is None:
                         chain_deadline = time.monotonic() + OWNER_CHAIN_SECONDS
                     budget = max(0.0, min(OWNER_CHAIN_SECONDS, chain_deadline - time.monotonic()))
-                seed = (segment_id, binding) if policy.async_projection else None
+                seed = (segment_id, binding) if policy.async_projection and not privacy_held else None
                 if budget > 0 or seed is not None:
                     if budget > 0:
                         walked.add(binding.owner_id)

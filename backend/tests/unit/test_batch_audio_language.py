@@ -18,6 +18,13 @@ SHORT_FALSE_PERMISSIONS = json.loads(Path(__file__).with_name('fixtures').joinpa
 ]
 
 
+@pytest.fixture(autouse=True)
+def legacy_admission_for_audio_lid_tests(monkeypatch):
+    # Keep testing per-unit LID for rollback and already admitted work. New
+    # custody exclusions are exercised in test_batch_admission_language.
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
+
+
 def wav(seconds=6):
     output = BytesIO()
     with wave.open(output, 'wb') as writer:
