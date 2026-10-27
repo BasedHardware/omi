@@ -6399,6 +6399,26 @@ for restart, privacy, ordering and p95 qualification limits. This changes no
 client wire fields or live STT ownership rules.
 
 
+### Recovery and admission migration conformance
+
+`tests/integration/test_recovery_admission_conformance.py` runs PL-057/072/086
+through the production scheduler and recovery coordinator on the simulator,
+Firestore emulator and Postgres. Vendor credit/uncertain replies retain the
+original speech and spent intent; a lost result acknowledgment reconciles its
+existing object without another paid call. Refusal waits survive restart,
+preserve explicit policy delays and provider attempts, and allow same-owner
+siblings to progress. Deletion must cancel before paid work or result upload.
+
+The existing emulator-proof runner includes this suite. Local qualification
+requires `OMI_REQUIRE_STORE_BACKENDS=all`; skips do not prove parity. The
+simulator/Postgres deletion-cancellation cases are strict expected failures
+linked to [#23761](https://github.com/BasedHardware/omi/issues/23761): the current
+cancellation writer directly uses a Firestore client instead of the Store
+surface. They assert no provider/result-upload calls even on that failure and
+do not satisfy migration acceptance. Physical erasure and the serving privacy
+bridge remain separate gates. All content and external IO in this suite are
+synthetic; it does not qualify real ASR accuracy or vendor transport retries.
+
 ### Paid quarantine recovery request lifetime
 
 Each serving sweep attempts up to `BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE`
