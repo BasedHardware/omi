@@ -50,6 +50,14 @@ void main() {
     expect(filtered.map((p) => p.conversation.id), ['c2']);
   });
 
+  test('reconciled pointers collapse onto one canonical row, with the latest visibility winning', () {
+    final old = ConversationSyncUtils.createPointer(_convo('live'), SyncedConversationType.newConversation);
+    final updated = ConversationSyncUtils.createPointer(_convo('live'), SyncedConversationType.updatedConversation);
+    expect(SyncProvider.filterFullySyncedConversations(conversations: [old, updated], wals: []), [updated]);
+    updated.conversation.discarded = true;
+    expect(SyncProvider.filterFullySyncedConversations(conversations: [old, updated], wals: []), isEmpty);
+  });
+
   test('pending-sync results hide discarded, deleted and merged donors', () {
     final hidden = [
       _convo('discarded')..discarded = true,

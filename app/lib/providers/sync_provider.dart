@@ -1171,7 +1171,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       return walsForConversation.every((w) => w.status == WalStatus.synced);
     }
 
-    return conversations.where(isFullySynced).toList();
+    final latestById = {for (final pointer in conversations) pointer.conversation.id: pointer};
+    return latestById.values.where(isFullySynced).toList();
   }
 
   // Audio playback delegate methods

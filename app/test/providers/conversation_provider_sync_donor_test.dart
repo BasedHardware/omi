@@ -35,7 +35,17 @@ void main() {
       onConversation: (id, value) => seen.add('$id:${value.id}'),
     );
     expect(seen, ['donor:donor', 'old-redirect:live', 'live:live']);
-    expect(pointers.every((p) => p.conversation.id == 'live'), isTrue);
+    expect(pointers.map((p) => p.conversation.id), ['live']);
+  });
+
+  test('a later hidden sync result supersedes the earlier visible result for the same ID', () async {
+    var reads = 0;
+    final pointers = await ConversationSyncUtils.processConversationIds(
+      newConversationIds: ['donor'],
+      updatedConversationIds: ['donor'],
+      fetchConversation: (id) async => row(id, discarded: ++reads == 2),
+    );
+    expect(pointers, isEmpty);
   });
 
   test('a discarded update immediately disappears from Home groups', () async {

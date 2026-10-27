@@ -13,48 +13,31 @@ class ConversationSyncUtils {
     void Function(String requestedId, ServerConversation conversation)? onConversation,
     Future<ServerConversation?> Function(String id)? fetchConversation,
   }) async {
-    final List<SyncedConversationPointer> result = [];
-
-    if (newConversationIds.isNotEmpty) {
-      final newConversations = await _fetchConversations(newConversationIds, fetchConversation ?? getConversationById);
-      for (var i = 0; i < newConversations.length; i++) {
-        final row = newConversations[i];
-        if (row != null) onConversation?.call(newConversationIds[i], row);
+    final result = <String, SyncedConversationPointer>{};
+    Future<void> read(List<String> ids, SyncedConversationType type) async {
+      if (ids.isEmpty) return;
+      final rows = await _fetchConversations(ids, fetchConversation ?? getConversationById);
+      for (var i = 0; i < rows.length; i++) {
+        final row = rows[i];
+        if (row == null) continue; // Failed/unknown reads cannot remove a prior result.
+        onConversation?.call(ids[i], row);
+        result.remove(ids[i]);
+        result.remove(row.id);
+        if (row.status == ConversationStatus.completed && !row.isHiddenFromDefaultList) {
+          result[row.id] = createPointer(row, type);
+        }
       }
-      final newPointers = _createPointers(newConversations, SyncedConversationType.newConversation);
-      result.addAll(newPointers);
     }
 
-    if (updatedConversationIds.isNotEmpty) {
-      final updatedConversations =
-          await _fetchConversations(updatedConversationIds, fetchConversation ?? getConversationById);
-      for (var i = 0; i < updatedConversations.length; i++) {
-        final row = updatedConversations[i];
-        if (row != null) onConversation?.call(updatedConversationIds[i], row);
-      }
-      final updatedPointers = _createPointers(updatedConversations, SyncedConversationType.updatedConversation);
-      result.addAll(updatedPointers);
-    }
-
-    return result;
+    await read(newConversationIds, SyncedConversationType.newConversation);
+    await read(updatedConversationIds, SyncedConversationType.updatedConversation);
+    return result.values.toList();
   }
 
   static Future<List<ServerConversation?>> _fetchConversations(
       List<String> conversationIds, Future<ServerConversation?> Function(String id) fetch) async {
     final futures = conversationIds.map(fetch).toList();
     return await Future.wait(futures).timeout(_fetchTimeout);
-  }
-
-  static List<SyncedConversationPointer> _createPointers(
-    List<ServerConversation?> conversations,
-    SyncedConversationType type,
-  ) {
-    final validConversations = conversations.where((conversation) => conversation != null).toList();
-    final completedConversations = validConversations
-        .where((conversation) =>
-            conversation!.status == ConversationStatus.completed && !conversation.isHiddenFromDefaultList)
-        .toList();
-    return completedConversations.map((conversation) => createPointer(conversation!, type)).toList();
   }
 
   /// The pointer's `key` is handed straight to `ConversationDetailProvider` when
