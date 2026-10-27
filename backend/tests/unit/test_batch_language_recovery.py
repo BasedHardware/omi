@@ -889,3 +889,200 @@ def test_worker_vad_fallback_conserves_main_accounting(setup, monkeypatch, legac
     assert accounting({**payload, '_job': row(client)}) == {
         key: pytest.approx(main_census, abs=1e-9) for key in ('settlement', 'usage_total', 'usage_parts')
     }
+
+
+def settled_words_without_vad(setup, monkeypatch, legacy_dependencies, *, soniox_words=False, multilingual=True):
+    """The prod settlement before the WordsWithoutVad fix: worker VAD ignored, Modulate
+    words rejected, then the capped Soniox call answered empty (10) or words (6)."""
+    client, store, binding, artifacts, modulate, soniox, recovery, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', str(multilingual).lower())
+    worker_receipt(client, 1.5)
+    modulate.return_value = (WORDS, 'vi')
+    soniox.return_value = (WORDS if soniox_words else [], 'vi')
+    with monkeypatch.context() as patch:
+        patch.setattr('utils.batch_pipeline.quarantine_recovery.worker_vad_speech', lambda job: None)
+        assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    job = row(client)
+    assert job['recovery']['failure'] == {'stage': 'payload_validation', 'reason': 'invalid_payload'}
+    assert job['recovery']['recognizers']['modulate']['outcome'] == 'words'
+    assert job['recovery']['recognizers']['soniox']['outcome'] == ('words' if soniox_words else 'empty')
+    artifacts.persist_recovery_result.assert_not_called()
+    return client, store, binding, artifacts, modulate, soniox, deepcopy(job['recovery'])
+
+
+@pytest.mark.parametrize('multilingual', [True, False])
+@pytest.mark.parametrize('soniox_words', [False, True])
+def test_words_repair_buys_one_modulate_call_for_soniox_empty_or_words_units(
+    setup, monkeypatch, legacy_dependencies, multilingual, soniox_words
+):
+    # Lead a3af50: the 14 Soniox-empty and the 16 Soniox-words units take the same route.
+    client, store, binding, artifacts, modulate, soniox, old = settled_words_without_vad(
+        setup, monkeypatch, legacy_dependencies, soniox_words=soniox_words, multilingual=multilingual
+    )
+    args = (store, artifacts, 'bad', binding.owner_id, 'repair-plan', old)
+    for expected in ('recovered', 'already_applied'):
+        assert redrive_one(*args, server_flags=SERVING_ENV, clock=lambda: 100, repair=True) == expected
+    marker = row(client)['speech_redrive']
+    assert (marker['provider'], marker['paid_epoch'], marker['state']) == ('modulate', 4, 'completed')
+    assert marker['recognizers']['modulate'] == {
+        'provider': 'modulate',
+        'outcome': 'words',
+        'word_count': 1,
+        'vad_speech_seconds': 0,
+    }
+    # The spent intent and both of its receipts are untouched audit facts.
+    assert row(client)['recovery'] == old
+    assert_worker_vad_result(client, artifacts.persist_recovery_result.call_args.args[1], 1.5)
+    assert modulate.call_count == 2
+    soniox.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    'change', ['no_receipt', 'subframe_receipt', 'independent_plan', 'both_empty', 'soniox_error', 'epoch4_marker']
+)
+def test_words_repair_refuses_every_other_unit_without_spend(setup, monkeypatch, legacy_dependencies, change):
+    from database.batch_pipeline_projection_protocol import ProjectionBlocked
+
+    client, store, binding, artifacts, modulate, soniox, old = settled_words_without_vad(
+        setup, monkeypatch, legacy_dependencies
+    )
+    receipts = row(client)['recovery']['recognizers']
+    if change == 'both_empty':
+        receipts['modulate'].update(outcome='empty', word_count=0)
+    elif change == 'soniox_error':
+        receipts['soniox'].update(outcome='error', word_count=None)
+    old = deepcopy(row(client)['recovery'])
+    if change == 'epoch4_marker':
+        # Any unit already carrying an epoch-4 repair intent never buys another call.
+        row(client)['speech_redrive'] = marker = {
+            'provider': 'modulate',
+            'paid_epoch': 4,
+            'state': 'failed_held',
+            'token': 'spent-repair-token',
+            'plan_digest': 'earlier-repair-plan',
+            'privacy_generation': 0,
+            'prior_recovery': deepcopy(old),
+            'silent': False,
+        }
+        with pytest.raises(ProjectionBlocked, match='different speech redrive intent'):
+            redrive_one(
+                store, artifacts, 'bad', binding.owner_id, 'repair-plan', old, server_flags=SERVING_ENV, repair=True
+            )
+        assert row(client)['speech_redrive'] == marker
+        assert modulate.call_count == 1
+        return
+    if change == 'no_receipt':
+        row(client).pop('worker_vad_receipt')
+    elif change == 'subframe_receipt':
+        worker_receipt(client, 0.016)
+    outcome = redrive_one(
+        store,
+        artifacts,
+        'bad',
+        binding.owner_id,
+        'repair-plan',
+        old,
+        server_flags=SERVING_ENV,
+        repair=True,
+        independent_language=change == 'independent_plan',
+    )
+    assert outcome == 'repair_not_eligible'
+    assert not row(client).get('speech_redrive') and row(client)['recovery'] == old
+    assert row(client)['recovery_state'] == 'failed_held'
+    assert modulate.call_count == 1
+    soniox.assert_called_once()
+
+
+def test_words_repair_is_capped_at_one_call_per_unit(setup, monkeypatch, legacy_dependencies):
+    from database.batch_pipeline_projection_protocol import ProjectionBlocked
+
+    client, store, binding, artifacts, modulate, soniox, old = settled_words_without_vad(
+        setup, monkeypatch, legacy_dependencies
+    )
+    modulate.return_value = ([], 'vi')
+    args = (store, artifacts, 'bad', binding.owner_id, 'repair-plan', old)
+    assert redrive_one(*args, server_flags=SERVING_ENV, clock=lambda: 100, repair=True) == 'failed_held'
+    receipt = row(client)['speech_redrive']['recognizers']['modulate']
+    assert (receipt['outcome'], receipt['word_count']) == ('empty', 0)
+    assert redrive_one(*args, server_flags=SERVING_ENV, clock=lambda: 101, repair=True) == 'failed_held'
+    with pytest.raises(ProjectionBlocked, match='different speech redrive intent'):
+        redrive_one(store, artifacts, 'bad', binding.owner_id, 'new-plan', old, server_flags=SERVING_ENV, repair=True)
+    assert modulate.call_count == 2
+    artifacts.persist_recovery_result.assert_not_called()
+    # Lead a3af50: a failed repair is ledgered failed_held with its audio retained.
+    job = row(client)
+    assert (job['state'], job['recovery_state'], job['speech_redrive']['state']) == (
+        'quarantined',
+        'failed_held',
+        'failed_held',
+    )
+    assert job['speech_redrive']['failure'] == {'stage': 'response_validation', 'reason': 'empty_asr'}
+    assert job['audio_uri'] == 'gs://synthetic/audio' and not job.get('result')
+    assert not [call for call in artifacts.method_calls if 'delete' in call[0]]
+
+
+def test_words_repair_leaves_shared_redrive_plans_unchanged(setup, monkeypatch, legacy_dependencies):
+    from database.batch_pipeline_projection_protocol import ProjectionBlocked
+
+    client, store, binding, artifacts, modulate, soniox, old = settled_words_without_vad(
+        setup, monkeypatch, legacy_dependencies
+    )
+    args = (store, artifacts, 'bad', binding.owner_id, 'plan', old)
+    assert redrive_one(*args, server_flags=SERVING_ENV) == 'independent_plan_required'
+    with pytest.raises(ProjectionBlocked, match='already attempted'):
+        redrive_one(*args, server_flags=SERVING_ENV, independent_language=True)
+    assert not row(client).get('speech_redrive')
+    assert modulate.call_count == 1
+    soniox.assert_called_once()
+
+
+def test_operator_repair_census_selects_the_modulate_words_cohort(setup, monkeypatch, legacy_dependencies):
+    import importlib.util
+    from pathlib import Path
+
+    scripts = Path(__file__).parents[2] / 'scripts'
+    monkeypatch.syspath_prepend(str(scripts))
+    spec = importlib.util.spec_from_file_location('repair_operator', scripts / 'batch_pipeline_speech_redrive.py')
+    operator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(operator)
+    client, *_ = settled_words_without_vad(setup, monkeypatch, legacy_dependencies)
+    job = deepcopy(row(client))
+    job['quarantined_at'] = 50
+    assert operator.eligible(job, 0, 100, repair=True)
+    assert not operator.eligible(job, 0, 100, independent=True)  # Soniox already spent.
+    soniox_words = deepcopy(job)
+    soniox_words['recovery']['recognizers']['soniox'].update(outcome='words', word_count=1)
+    assert operator.eligible(soniox_words, 0, 100, repair=True)
+    both_empty = deepcopy(job)
+    both_empty['recovery']['recognizers']['modulate'].update(outcome='empty', word_count=0)
+    assert not operator.eligible(both_empty, 0, 100, repair=True)
+    assert not operator.eligible({**job, 'speech_redrive': {'paid_epoch': 4}}, 0, 100, repair=True)
+    assert operator.paid_digest('census', 1, 4, repair=True) not in {
+        operator.paid_digest('census', 1, 4),
+        operator.paid_digest('census', 1, 4, independent=True),
+    }
+
+
+@pytest.mark.parametrize('fault', ['decoded_over_cap', 'missing_audio_uri'])
+def test_words_repair_bounds_decoded_audio_and_fails_closed_on_malformed_jobs(
+    setup, monkeypatch, legacy_dependencies, fault
+):
+    from config.batch_language_recovery import words_repair_eligible
+
+    client, store, binding, artifacts, modulate, soniox, old = settled_words_without_vad(
+        setup, monkeypatch, legacy_dependencies
+    )
+    if fault == 'missing_audio_uri':
+        job = deepcopy(row(client))
+        job.pop('audio_uri')
+        assert not words_repair_eligible(job)
+        return
+    monkeypatch.setattr('utils.batch_pipeline.speech_redrive.MAX_AUDIO_SECONDS', 4.99)
+    outcome = redrive_one(
+        store, artifacts, 'bad', binding.owner_id, 'repair-plan', old, server_flags=SERVING_ENV, repair=True
+    )
+    assert outcome == 'repair_budget_held'
+    assert row(client)['speech_redrive']['state'] == 'prepared'
+    assert modulate.call_count == 1
