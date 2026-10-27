@@ -151,7 +151,7 @@ def test_process_exit_is_prompt_after_hermetic_shutdown(tmp_path):
     """
     child = tmp_path / "child_shutdown_probe.py"
     child.write_text(
-        "import sys\n"
+        "import sys, time\n"
         f"sys.path.insert(0, {str(E2E_DIR)!r})\n"
         "import conftest  # hermetic env + socket guard, no pytest involved\n"
         "from fakes.redis import setup_fake_redis, patch_redis_client\n"
@@ -163,7 +163,7 @@ def test_process_exit_is_prompt_after_hermetic_shutdown(tmp_path):
         "executors.db_executor.submit(int).result()  # spawn one idle pool worker\n"
         "from conftest import _teardown_hermetic_process_state\n"
         f"elapsed = _teardown_hermetic_process_state()  # asserts its own {HERMETIC_SHUTDOWN_BUDGET_SECONDS}s budget\n"
-        "print(f'TEARDOWN {elapsed:.3f}', flush=True)\n"
+        "print(f'TEARDOWN {time.time():.3f} {elapsed:.3f}', flush=True)\n"
     )
     proc = subprocess.Popen(
         [sys.executable, "-I", str(child)],
@@ -172,26 +172,24 @@ def test_process_exit_is_prompt_after_hermetic_shutdown(tmp_path):
         text=True,
     )
     try:
-        teardown_line = None
-        for line in proc.stdout:
-            if line.startswith("TEARDOWN"):
-                teardown_line = line.strip()
-                break
-        assert teardown_line is not None, "child never reported teardown completion"
-        shutdown_done = time.monotonic()
-        stderr_tail = proc.stderr.read()
-        returncode = proc.wait(timeout=30)
-    finally:
-        if proc.poll() is None:
-            proc.kill()
-            proc.wait()
-    assert returncode == 0, f"child failed after hermetic shutdown:\n{stderr_tail}"
-    exit_seconds = time.monotonic() - shutdown_done
+        # communicate() bounds the child's whole lifetime (imports, teardown,
+        # interpreter exit) and waits for EOF on both pipes, so a hung child
+        # fails here with the bound instead of blocking the outer suite.
+        stdout, stderr = proc.communicate(timeout=60)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        pytest.fail("child did not exit within 60s of the hermetic shutdown probe")
+    teardown_lines = [line.strip() for line in stdout.splitlines() if line.startswith("TEARDOWN")]
+    assert teardown_lines, f"child never reported teardown completion:\n{stderr[-2000:]}"
+    assert proc.returncode == 0, f"child failed after hermetic shutdown:\n{stderr[-2000:]}"
+    teardown_epoch = float(teardown_lines[-1].split()[1])
+    exit_seconds = time.time() - teardown_epoch
     # Healthy interpreter exit for this import set measures well under 2s;
     # 8s leaves CI-variance headroom while still catching a single 5s atexit
     # join, sentinel hang, or non-daemon thread park.
     assert exit_seconds < 8.0, (
         f"process took {exit_seconds:.2f}s to exit after hermetic teardown "
-        f"({teardown_line}); a slow atexit hook or lingering thread is eating "
+        f"({teardown_lines[-1]}); a slow atexit hook or lingering thread is eating "
         "the E2E_PYTEST_TIMEOUT wrapper budget"
     )

@@ -290,23 +290,36 @@ def _teardown_hermetic_process_state() -> float:
 
     executors_module.shutdown_executors()
 
-    # threading._shutdown joins non-daemon threads before atexit runs, so any
-    # leaked non-daemon thread silently extends process exit past the wrapper
-    # budget. Idle shared-executor workers are expected here: they block on
-    # their work queue and exit once concurrent.futures' atexit hook delivers
-    # the None sentinels.
+    # shutdown(wait=False) leaves idle workers parked on their work queue and
+    # running workers mid-task. Both are non-daemon: threading._shutdown would
+    # join them unboundedly at interpreter exit, silently eating the wrapper
+    # budget after this teardown already passed. Deliver the None sentinels the
+    # concurrent.futures atexit hook would push (executor._shutdown is already
+    # set, so they stick), then bound the whole drain by the same budget below.
     pool_workers: set = set()
     for executor in executors_module._ALL_EXECUTORS:
-        pool_workers.update(getattr(executor, "_threads", None) or ())
+        workers = getattr(executor, "_threads", None) or ()
+        pool_workers.update(workers)
+        work_queue = getattr(executor, "_work_queue", None)
+        if work_queue is not None:
+            for _ in workers:
+                work_queue.put(None)
+
+    # Every non-daemon thread that is not the main thread must be gone within
+    # the budget: a leaked foreign thread stalls process exit the same way,
+    # and a pool worker still alive past the budget means a task outlived the
+    # session. Name whichever class is left.
     deadline = started + HERMETIC_SHUTDOWN_BUDGET_SECONDS
     strays: list = []
+    lingering_workers: list = []
     while True:
+        lingering_workers = [t for t in pool_workers if t.is_alive()]
         strays = [
             t
             for t in threading.enumerate()
             if t is not threading.main_thread() and not t.daemon and t.is_alive() and t not in pool_workers
         ]
-        if not strays or time.monotonic() >= deadline:
+        if (not strays and not lingering_workers) or time.monotonic() >= deadline:
             break
         time.sleep(0.05)
     elapsed = time.monotonic() - started
@@ -315,6 +328,13 @@ def _teardown_hermetic_process_state() -> float:
         raise AssertionError(
             f"Hermetic e2e teardown left non-daemon thread(s) alive after {elapsed:.2f}s: {names}. "
             "They would stall process exit past the E2E_PYTEST_TIMEOUT wrapper budget."
+        )
+    if lingering_workers:
+        names = ", ".join(sorted(t.name for t in lingering_workers))
+        raise AssertionError(
+            f"Shared executor worker(s) still alive after {elapsed:.2f}s: {names}. "
+            "A task outlived the session and would stall process exit past the "
+            "E2E_PYTEST_TIMEOUT wrapper budget."
         )
     if elapsed > HERMETIC_SHUTDOWN_BUDGET_SECONDS:
         raise AssertionError(
