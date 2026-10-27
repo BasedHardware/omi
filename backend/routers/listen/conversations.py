@@ -387,8 +387,9 @@ class LiveConversationController:
         if server_batch_owned(data):
             # Commit the silence/partial-window tail before creating a batch obligation.
             receiver = getattr(self.host, 'receiver', None)
-            if conversation_id == self.host.state.current_conversation_id and getattr(receiver, 'raw_archive', None):
-                await receiver.raw_archive.close()
+            raw_archive = getattr(receiver, 'raw_archive', None)
+            if conversation_id == self.host.state.current_conversation_id and raw_archive is not None:
+                await raw_archive.close()
             return await self.schedule_finalization(conversation_id)
         if data.get('transcript_segments') or data.get('photos'):
             return await self.schedule_finalization(conversation_id)
