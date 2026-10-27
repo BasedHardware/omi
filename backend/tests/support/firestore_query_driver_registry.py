@@ -1115,8 +1115,16 @@ _add(
     DriverEntry(
         'database.daily_summaries.get_daily_summaries',
         base={'uid': UID},
-        domains={'start_date': [None, '2026-01-01'], 'end_date': [None, '2026-01-02']},
-        neutrals={'limit': _LIMIT, 'offset': _OFFSET},
+        domains={
+            'start_date': [None, '2026-01-01'],
+            'end_date': [None, '2026-01-02'],
+        },
+        neutrals={
+            'limit': _LIMIT,
+            'offset': _OFFSET,
+            'record_filter': (bool, 'post-stream response validation; no server filter/order or index effect'),
+            'read_budget': _BUDGET,
+        },
     )
 )
 _add(DriverEntry('database.daily_summaries.get_daily_summary_by_date', base={'uid': UID, 'date': '2026-01-01'}))

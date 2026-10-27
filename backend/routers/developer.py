@@ -32,6 +32,7 @@ from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
+from utils.daily_summary_validation import DailySummaryUnavailable, read_daily_summary_page, require_daily_summary
 from utils.client_device import resolve_client_device_from_request
 from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
 from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
@@ -1246,28 +1247,16 @@ def get_developer_daily_summaries(
     status = 500
     returned_count = 0
     try:
-        summaries = daily_summaries_db.get_daily_summaries(
-            auth.uid,
-            limit=limit,
-            offset=offset,
-            start_date=start_date,
-            end_date=end_date,
-        )
-        # Validate each record individually so a single malformed/legacy doc doesn't fail the whole page
-        # with a 500. Mirrors the hardening already applied to action items, conversations, and memories.
-        valid_summaries = []
-        for s in summaries:
-            if not isinstance(s, dict) or not s.get('id'):
-                logger.warning('Skipping malformed daily summary in Developer API daily-summaries list')
-                continue
-            try:
-                valid_summaries.append(DailySummaryResponse.model_validate(s))
-            except ValidationError as e:
-                logger.warning('Skipping invalid daily summary %s in Developer API list: %s', s.get('id'), e)
-                continue
-        returned_count = len(valid_summaries)
+        try:
+            summaries = read_daily_summary_page(
+                auth.uid, limit=limit, offset=offset, start_date=start_date, end_date=end_date, request=request
+            )
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
+        returned_count = len(summaries)
         status = 200
-        return {'summaries': valid_summaries}
+        return {'summaries': summaries}
     finally:
         _audit_developer_read(
             request=request,
@@ -1296,16 +1285,14 @@ def get_developer_daily_summary(
     returned_count = 0
     try:
         summary = daily_summaries_db.get_daily_summary(auth.uid, summary_id)
-        if not summary or not isinstance(summary, dict):
+        if not summary:
             status = 404
             raise HTTPException(status_code=404, detail='Daily summary not found')
-        # A malformed/legacy doc in Firestore must read as not-found, not 500.
         try:
-            validated = DailySummaryResponse.model_validate(summary)
-        except ValidationError as e:
-            logger.warning('Daily summary %s failed response validation: %s', summary_id, e)
-            status = 404
-            raise HTTPException(status_code=404, detail='Daily summary not found')
+            validated = require_daily_summary(summary, uid=auth.uid, operation='developer_detail')
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
         status = 200
         returned_count = 1
         return validated
