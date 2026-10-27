@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Optional
 
 from config.batch_live_preview import capture_snapshot
+from config.server_batch import owned as server_batch_owned
+from config.server_batch import request_eligible as server_batch_request_eligible
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database.firestore_read_metrics import FirestoreReadSite
 from database.stale_conversation_recovery import get_stale_recovery_page
@@ -382,6 +384,12 @@ class LiveConversationController:
             if data.get(guard):
                 logger.info('Listen finalization skipped conversation=%s outcome=%s', conversation_id, guard)
                 return False
+        if server_batch_owned(data):
+            # Commit the silence/partial-window tail before creating a batch obligation.
+            receiver = getattr(self.host, 'receiver', None)
+            if conversation_id == self.host.state.current_conversation_id and getattr(receiver, 'raw_archive', None):
+                await receiver.raw_archive.close()
+            return await self.schedule_finalization(conversation_id)
         if data.get('transcript_segments') or data.get('photos'):
             return await self.schedule_finalization(conversation_id)
         recording_session_id = recording_session_id_for_lifecycle_event(
@@ -662,6 +670,7 @@ class LiveConversationController:
             request.uid,
             payload,
             idempotent=idempotent_create,
+            **({'server_batch_requested': True} if server_batch_request_eligible(self.host) else {}),
         )
         if created or not idempotent_create:
             self.host.batch_record_capture = capture_snapshot(payload)
@@ -950,6 +959,10 @@ class LiveConversationController:
                 continue
             conversation = await self._continuity_row(conversation)
             finished_at = speech_clock(self.host.request.uid, conversation) or self.clock()
+            if server_batch_owned(conversation) and self.host.state.last_audio_received_time is not None:
+                finished_at = max(
+                    finished_at, datetime.fromtimestamp(self.host.state.last_audio_received_time, timezone.utc)
+                )
             action = decide_lifecycle_action(
                 conversation_exists=True,
                 status=conversation.get('status'),

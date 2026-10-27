@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from utils.observability.sync_phases import sync_phase
 from config.batch_pipeline import live_record_enabled_for, record_capture_eligible
+from config import server_batch
 from config.policy import resolve_batch_policy
 from database.batch_ramp import ramp_admission_policy
 
@@ -107,10 +108,19 @@ def _require_status(data: Mapping[str, Any], *allowed: ConversationStatus) -> No
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
-def _reserve_batch_live_capture(uid: str, conversation_data: dict[str, Any]) -> None:
+def _reserve_batch_live_capture(
+    uid: str, conversation_data: dict[str, Any], *, server_batch_requested: bool = False
+) -> None:
     # Resolve privacy at the existing write boundary before deciding ownership.
     # The downstream DB decorator sees the resolved value and performs no second lookup.
     if conversation_data.get('record_lane_owner'):
+        return
+    if server_batch_requested and server_batch.eligible(conversation_data, uid):
+        conversation_data['record_lane_owner'] = 'batch_live_v1'
+        conversation_data['external_data'] = {
+            **(conversation_data.get('external_data') or {}),
+            server_batch.MARKER: True,
+        }
         return
     policy = resolve_batch_policy(uid)
     if (
@@ -120,10 +130,15 @@ def _reserve_batch_live_capture(uid: str, conversation_data: dict[str, Any]) -> 
         conversation_data['record_lane_owner'] = 'batch_live_v1'
 
 
-def create_in_progress_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
+def create_in_progress_conversation(
+    uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False, server_batch_requested: bool = False
+) -> bool:
     """Create the one durable in-progress resource for a recording generation."""
     _require_status(conversation_data, ConversationStatus.in_progress)
-    if live_record_enabled_for(uid):
+    if server_batch_requested:
+        # The decorated reservation resolves a missing/None privacy level first.
+        _reserve_batch_live_capture(uid, conversation_data, server_batch_requested=True)
+    elif live_record_enabled_for(uid):
         _reserve_batch_live_capture(uid, conversation_data)
     if idempotent:
         return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
@@ -283,6 +298,26 @@ def ensure_processing(uid: str, conversation_id: str) -> bool:
     if status in {ConversationStatus.completed.value, ConversationStatus.failed.value}:
         return False
     return admit_processing(uid, conversation_id)
+
+
+def complete_server_batch_capture(uid: str, conversation_id: str, capture: Mapping[str, Any]) -> bool:
+    """Close only a reserved raw capture, after its batch obligation was written."""
+    if not server_batch.owned(capture):
+        return False
+    return conversations_db.claim_conversation_status(
+        uid,
+        conversation_id,
+        ConversationStatus.processing,
+        ConversationStatus.completed,
+        expected_fields={
+            'record_lane_owner': 'batch_live_v1',
+            'external_data': capture.get('external_data'),
+            'private_cloud_sync_enabled': True,
+            'deleted': False,
+            'is_locked': False,
+            'uses_custom_stt': False,
+        },
+    )
 
 
 def complete(uid: str, conversation_id: str) -> bool:

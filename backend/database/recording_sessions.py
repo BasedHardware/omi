@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Mapping, TypedDict
 
 from google.cloud import firestore
+from config.server_batch import owned as server_batch_owned
 
 from database import conversations as conversations_db
 from database.quiet_check_retirement import stop_quiet_check_for_conversation
@@ -288,6 +289,7 @@ def tombstone_and_delete_empty_conversation(
             or conversation.get('deleted')
             or conversation.get('is_locked')
             or conversation.get('sync_content_revision')
+            or server_batch_owned(conversation)
             or conversations_db.raw_conversation_has_content(uid, conversation)
         ):
             return False

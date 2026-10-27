@@ -14,6 +14,7 @@ from enum import Enum
 
 from fastapi import HTTPException
 from config.batch_pipeline import RecordOwnerContention
+from config.server_batch import owned as server_batch_owned
 from config.episodes import episodes_enabled_for
 from config.rollout_cohorts import warm_rollout_cohorts
 
@@ -221,6 +222,35 @@ async def finalize_persisted_conversation(
     )
     if fenced is not None:
         return fenced
+    if server_batch_owned(conversation_data) and not conversation.transcript_segments:
+        # No preview to enrich. Reserve batch before terminalizing this generation;
+        # its upload barrier still prevents work until pusher has committed the tail.
+        if not await run_blocking(db_executor, register_recording, uid, conversation_data):
+            raise RuntimeError('desktop batch registration refused')
+        if conversation.status != ConversationStatus.completed:
+            if not await run_blocking(
+                db_executor, lifecycle_service.complete_server_batch_capture, uid, conversation_id, conversation_data
+            ):
+                raise RuntimeError('desktop batch completion fenced')
+        fanout = await run_blocking(
+            db_executor,
+            lifecycle_service.claim_finalization_fanout,
+            finalization_job_id,
+            dispatch_generation,
+            lease_epoch,
+        )
+        if fanout['status'] == 'claimed':
+            if not await run_blocking(
+                db_executor,
+                lifecycle_service.complete_finalization_fanout,
+                finalization_job_id,
+                dispatch_generation,
+                lease_epoch,
+            ):
+                raise RuntimeError('desktop batch handoff completion fenced')
+        elif fanout['status'] not in {'completed', 'fenced'}:
+            raise RuntimeError('desktop batch handoff claim pending')
+        return ConversationFinalizationDisposition.completed
     await _episode_at_finalization_start(uid, conversation_id, conversation_data, trigger)
 
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL

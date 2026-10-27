@@ -1,0 +1,92 @@
+"""Platform-scoped, consented server batch capture. Desktop on, mobile dark."""
+
+import os
+from collections.abc import Mapping
+
+from config.audio_outbox import enabled as audio_outbox_enabled
+from config.policy import cohort_bucket, resolve_batch_policy
+from config.policy.batch import parse_percent
+from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
+
+MARKER = 'server_batch_only'
+
+
+def enabled() -> bool:
+    return os.getenv('SERVER_BATCH_ONLY_ENABLED', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
+
+
+def selected(owner_id: str, platform: str | None, source: str | None) -> bool:
+    if source == 'phone_call':
+        return False
+    platform = platform or ('macos' if source == 'desktop' else None)
+    if platform in {'ios', 'android'}:
+        percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_MOBILE_PERCENT', '0'))
+        return bool(
+            owner_id
+            and percent > 0
+            and cohort_bucket(owner_id, '') < percent
+            and resolve_batch_policy(owner_id).batch_enabled
+        )
+    platforms = {
+        value.strip().lower() for value in os.getenv('SERVER_BATCH_ONLY_PLATFORMS', 'macos,windows').split(',')
+    }
+    return platform in {'macos', 'windows', 'linux'} and platform in platforms and source == 'desktop'
+
+
+def eligible(capture: Mapping, owner_id: str) -> bool:
+    """Desktop bypasses mobile cohorts; mobile admission stays nested in batch."""
+    external = capture.get('external_data') or {}
+    return bool(
+        enabled()
+        and audio_outbox_enabled()
+        and os.getenv('HOSTED_PUSHER_API_URL')
+        and selected(owner_id, capture.get('client_platform'), capture.get('source'))
+        and capture.get('private_cloud_sync_enabled')
+        and not capture.get('uses_custom_stt')
+        and not any(capture.get(key) for key in ('deleted', 'discarded', 'is_locked'))
+        and not external.get('onboarding_session_id')
+        and capture.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
+        and normalized_stt_language(capture.get('language'))
+        in (PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'})
+    )
+
+
+def owned(capture: Mapping) -> bool:
+    """A durable admission survives a policy rollback until batch finishes."""
+    return bool(
+        capture.get('record_lane_owner') == 'batch_live_v1'
+        and (capture.get(MARKER) is True or (capture.get('external_data') or {}).get(MARKER) is True)
+    )
+
+
+def suppress_live(host) -> bool:
+    capture = getattr(host, 'batch_record_capture', None) or {}
+    return bool(
+        enabled()
+        and audio_outbox_enabled()
+        and owned(capture)
+        and getattr(host, 'private_cloud_sync_enabled', False)
+        and not getattr(host, 'use_custom_stt', False)
+        and not getattr(host, 'is_multi_channel', False)
+        and not getattr(host.request, 'onboarding_mode', False)
+        and getattr(host, 'pusher_enabled', False)
+        and request_eligible(host)
+    )
+
+
+def request_eligible(host) -> bool:
+    """No inferred English admission for multi/auto/unknown request languages."""
+    language = normalized_stt_language(getattr(host.request, 'language', None))
+    return bool(
+        enabled()
+        and not host.use_custom_stt
+        and not host.is_multi_channel
+        and not host.request.onboarding_mode
+        and selected(
+            host.request.uid,
+            getattr(getattr(host, 'client_device_context', None), 'platform', None),
+            host.request.source,
+        )
+        and language == normalized_stt_language(host.language)
+        and language in (PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'})
+    )

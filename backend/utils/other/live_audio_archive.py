@@ -7,8 +7,9 @@ from collections.abc import Awaitable, Callable
 
 from config.audio_archive import admitted
 from config.audio_outbox import enabled as audio_outbox_enabled
+from database.conversations import note_server_batch_audio
 from models.message_event import AudioCustodyEvent
-from utils.executors import run_blocking, storage_executor
+from utils.executors import db_executor, run_blocking, storage_executor
 from utils.other.raw_audio import CapturePack
 from utils.other.storage import archive_capture_bytes
 from utils.other.audio_outbox import commit_capture
@@ -270,6 +271,11 @@ class LiveAudioArchive:
                 metadata,
                 frames,
             )
+            if getattr(self.host, 'server_batch_only', False) and pack.conversation_id and pack.end is not None:
+                if not await run_blocking(
+                    db_executor, note_server_batch_audio, request.uid, pack.conversation_id, pack.start, pack.end
+                ):
+                    raise RuntimeError('desktop batch capture owner unavailable')
             # A failed/disconnected delivery leaves the producer unacknowledged;
             # receipt loss is safe because the immutable media remains indexed.
             query = getattr(request.websocket, 'query_params', {})
