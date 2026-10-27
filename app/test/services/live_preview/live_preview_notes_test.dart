@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:characters/characters.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -80,6 +81,31 @@ void main() {
       }
     });
 
+    for (final unit in ['漢字', 'かな', 'カナ', '한글', 'ภาษา', 'ที่นี่', '𠀀𠀁']) {
+      test('unspaced $unit shares the throttle, prompt and bullet budget', () {
+        final long = List.filled(1601, unit).join();
+        final units = LivePreviewNotesPolicy.wordCount(long);
+        expect(units, greaterThanOrEqualTo(1601));
+        final bullet = LivePreviewNotesPolicy.clamp([long]).single;
+        expect(LivePreviewNotesPolicy.wordCount(bullet), 12);
+        expect(long, startsWith(bullet));
+        expect(bullet.characters.length, 24);
+        final input = LivePreviewNotesPolicy.inputText([
+          LivePreviewLine(id: 'a', text: long, isFinal: true),
+        ]);
+        expect(LivePreviewNotesPolicy.wordCount(input), 1500);
+        expect(long, endsWith(input));
+        expect(input.characters.length, 3000);
+      });
+    }
+
+    test('mixed scripts cannot hide an unspaced run in a whitespace word', () {
+      expect(LivePreviewNotesPolicy.wordCount('hello漢字かなworld ภาษา'), 6);
+      final bullet = LivePreviewNotesPolicy.clamp(['hello${List.filled(30, '漢字').join()}world']).single;
+      expect(LivePreviewNotesPolicy.wordCount(bullet), 12);
+      expect(bullet, 'hello${List.filled(11, '漢字').join()}');
+    });
+
     test('the input is the newest 1500 words', () {
       final lines = [
         for (var i = 0; i < 40; i++)
@@ -125,6 +151,29 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(notes.calls, hasLength(2));
     });
+
+    for (final unit in ['漢字', 'かな', '한글', 'ที่นี่']) {
+      test('one unspaced $unit segment reaches 40-word admission and refreshes', () async {
+        final notes = _ScriptedNotes((text, language) async => [List.filled(40, unit).join()]);
+        final harness = _Harness(notes);
+        addTearDown(harness.controller.dispose);
+        await harness.ready();
+        harness.engine.emit('one', List.filled(39, unit).join(), false);
+        await harness.ready();
+        expect(notes.calls, isEmpty);
+        // Growing the same segment adds only its new words.
+        harness.engine.emit('one', List.filled(40, unit).join(), true);
+        await harness.ready();
+        expect(harness.controller.totalWordsSeen, 40);
+        expect(notes.calls, hasLength(1));
+        expect(harness.controller.notes.bullets.single.characters.length, 24);
+        harness.advance(const Duration(seconds: 61));
+        harness.engine.emit('two', List.filled(40, unit).join(), true);
+        await harness.ready();
+        expect(harness.controller.totalWordsSeen, 80);
+        expect(notes.calls, hasLength(2));
+      });
+    }
 
     test('volatile revisions cannot count the same growing words repeatedly', () async {
       final notes = _ScriptedNotes();

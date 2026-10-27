@@ -77,6 +77,27 @@
       "description": "Summary at the largest accessibility text size: header and tabs clamp, cards stack their title and tag.",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-transcript-catching-up.png",
+      "platform": "mobile-ios",
+      "description": "Uploaded audio awaiting a final transcript: the catching-up line remains visible while preview text is uncovered.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-ios-home-unspaced-preview.png",
+      "platform": "mobile-ios",
+      "description": "Home preview in Japanese: leading ellipsis and newest graphemes retained at the end.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-ios-summary-continues-hit-area.png",
+      "platform": "mobile-ios",
+      "description": "Continues pill retains its compact visual inside a minimum 44 pt tap target.",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }

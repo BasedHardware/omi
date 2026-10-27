@@ -710,7 +710,19 @@ void main() {
       await tester.pump();
       expect(find.byKey(const Key('previous_episode_pill')), findsOneWidget);
       expect(episodes.previous?.live, isFalse);
-      await tester.tap(find.text('Continues “Lunch plans with Maya”'));
+      final pill = find.byKey(const Key('previous_episode_pill'));
+      final target = find.descendant(of: pill, matching: find.byType(InkWell));
+      final visual = find.descendant(of: pill, matching: find.byType(Container)).first;
+      final hitRect = tester.getRect(target);
+      final visualRect = tester.getRect(visual);
+      expect(hitRect.height, greaterThanOrEqualTo(44));
+      expect(hitRect.width, greaterThanOrEqualTo(44));
+      expect(visualRect.height, lessThan(44), reason: 'the visible pill keeps its small size');
+      expect(visualRect.center, hitRect.center);
+      // Activate the newly reachable area above the visible pill.
+      final tap = Offset(hitRect.center.dx, hitRect.top + 1);
+      expect(visualRect.contains(tap), isFalse);
+      await tester.tapAt(tap);
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       await tester.tap(find.byKey(const ValueKey('previous_episode_conversation_c1')));

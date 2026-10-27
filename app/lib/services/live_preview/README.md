@@ -108,7 +108,11 @@ Models (iOS 26+ with Apple Intelligence available) over
 the array at four bullets, the clamp is the belt, generation runs detached off
 the main thread and a busy draft is dropped). Android ships no engine in this
 release. A session generation fences late results after any clear, including a silence clear-and-refill. New-word admission uses a monotonic session total, independent of the bounded prompt and line eviction. A draft runs at most once a minute and only after at least 40 new
-preview words; the prompt is capped to the newest ~1500 words (AFM's context
+preview words. The shared Dart `LivePreviewWordBudget` and matching native
+clamp budget Han/Kana/Hangul-syllable/Thai runs at one word per two graphemes
+(rounded up), and other non-whitespace runs at one word; script transitions
+end a run. This deterministic approximation bounds mixed and unspaced text
+without depending on OS tokenizers. The prompt is capped to the newest ~1500 words (AFM's context
 budget is prompt plus completion). When the engine is unavailable or errors,
 the card shows the quiet "Notes start when the final transcript arrives."
 line — there is no cloud fallback. The preview and the notes never leave the

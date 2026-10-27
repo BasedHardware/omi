@@ -104,7 +104,11 @@ enum LivePreviewNotesPolicy {
     }
 
     static func boundedInput(_ text: String) -> String {
-        String(text.split(whereSeparator: { $0.isWhitespace }).suffix(maxInputWords).joined(separator: " ").suffix(maxInputCharacters))
+        let text = text.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        let ranges = wordRanges(text)
+        guard let last = ranges.last else { return "" }
+        let first = ranges[max(0, ranges.count - maxInputWords)]
+        return String(text[first.lowerBound..<last.upperBound].suffix(maxInputCharacters))
     }
 
     static func draft(_ text: String, language: String) async throws -> [String] {
@@ -119,8 +123,50 @@ enum LivePreviewNotesPolicy {
     /// At most [maxBullets] bullets of at most [maxBulletWords] words each, no empties.
     static func clamp(_ bullets: [String]) -> [String] {
         bullets.prefix(maxBullets).map { bullet in
-            bullet.split(whereSeparator: { $0.isWhitespace }).prefix(maxBulletWords).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+            let text = bullet.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+            let ranges = wordRanges(text)
+            guard let first = ranges.first else { return "" }
+            return String(text[first.lowerBound..<ranges[min(maxBulletWords, ranges.count) - 1].upperBound])
         }
         .filter { !$0.isEmpty }
+    }
+
+    /// Match Dart's LivePreviewWordBudget: one word per two graphemes in
+    /// Han/Kana/Hangul-syllable/Thai runs, rounded up, and one per other
+    /// non-whitespace run. Script transitions end a run. This is a bounded
+    /// approximation, independent of whether an OS word tokenizer is available.
+    static func wordRanges(_ text: String) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var start: String.Index?
+        var unspaced = false
+        var graphemes = 0
+        func flush(_ end: String.Index) {
+            if let from = start { ranges.append(from..<end) }
+            start = nil
+            graphemes = 0
+        }
+        for index in text.indices {
+            let character = text[index]
+            let nextUnspaced = isUnspaced(character.unicodeScalars.first!.value)
+            if character.isWhitespace {
+                flush(index)
+            } else {
+                if start != nil && (nextUnspaced != unspaced || (unspaced && graphemes == 2)) { flush(index) }
+                if start == nil { start = index }
+                unspaced = nextUnspaced
+                graphemes += 1
+            }
+        }
+        flush(text.endIndex)
+        return ranges
+    }
+
+    private static func isUnspaced(_ scalar: UInt32) -> Bool {
+        (0x3400...0x9fff).contains(scalar) || (0xf900...0xfaff).contains(scalar)
+            || (0x20000...0x323af).contains(scalar) // Han
+            || (0x3040...0x30ff).contains(scalar) || (0x31f0...0x31ff).contains(scalar)
+            || (0xff66...0xff9f).contains(scalar) // Kana
+            || (0xac00...0xd7a3).contains(scalar) // Hangul syllables
+            || (0x0e00...0x0e7f).contains(scalar) // Thai
     }
 }

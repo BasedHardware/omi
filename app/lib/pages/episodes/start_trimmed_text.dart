@@ -1,3 +1,4 @@
+import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 
 /// One run of [StartTrimmedText]: its words and, optionally, its own style.
@@ -6,7 +7,7 @@ typedef TrimmedRun = ({String text, TextStyle? style});
 /// Running text that keeps its newest words visible: when the runs do not fit
 /// in [maxLines], the oldest words are dropped and a leading "…" stands in for
 /// them, so a live line reads "…the words just said" instead of ending mid-sentence.
-/// Cuts land on word boundaries.
+/// Cuts prefer word boundaries, falling back to graphemes for unspaced text.
 class StartTrimmedText extends StatelessWidget {
   const StartTrimmedText({super.key, required this.runs, required this.style, this.maxLines = 1});
 
@@ -42,20 +43,32 @@ class StartTrimmedText extends StatelessWidget {
         if (start > 0 || !fits(0)) {
           // Word starts after [start]; the later the cut, the shorter the text, so the first
           // start that fits is found by bisection.
-          final cuts = <int>[
-            for (var i = start + 1; i < full.length; i++)
-              if (full[i - 1] == ' ' && full[i] != ' ') i,
-          ];
-          var lo = 0, hi = cuts.length;
-          while (lo < hi) {
-            final mid = (lo + hi) >> 1;
-            if (fits(cuts[mid])) {
-              hi = mid;
-            } else {
-              lo = mid + 1;
+          final graphemeCuts = <int>[];
+          final wordCuts = <int>[];
+          var offset = 0;
+          var afterSpace = false;
+          for (final character in full.characters) {
+            if (offset > start) {
+              graphemeCuts.add(offset);
+              if (afterSpace && character.trim().isNotEmpty) wordCuts.add(offset);
             }
+            offset += character.length;
+            afterSpace = character.trim().isEmpty;
           }
-          start = lo < cuts.length ? cuts[lo] : (cuts.lastOrNull ?? start);
+          int? firstFit(List<int> cuts) {
+            var lo = 0, hi = cuts.length;
+            while (lo < hi) {
+              final mid = (lo + hi) >> 1;
+              if (fits(cuts[mid])) {
+                hi = mid;
+              } else {
+                lo = mid + 1;
+              }
+            }
+            return lo < cuts.length ? cuts[lo] : null;
+          }
+
+          start = firstFit(wordCuts) ?? firstFit(graphemeCuts) ?? full.length;
         }
         return Text.rich(
           _span(start, start > 0, effective),

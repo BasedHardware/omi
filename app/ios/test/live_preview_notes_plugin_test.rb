@@ -39,6 +39,21 @@ class LivePreviewNotesPluginTest < Minitest::Test
                   precondition(policy.clamp(["one\\ntwo\\tthree"]) == ["one two three"])
                   precondition(policy.boundedInput(String(repeating: "word ", count: 2000)).count <= policy.maxInputCharacters)
                   precondition(policy.boundedInput(String(repeating: "x", count: 20000)).count == policy.maxInputCharacters)
+                  // Keep the same unspaced-script and mixed-script budgets as Dart.
+                  for unit in ["漢字", "かな", "カナ", "한글", "ภาษา", "ที่นี่", "𠀀𠀁"] {
+                    let long = String(repeating: unit, count: 1601)
+                    let bullet = policy.clamp([long])[0]
+                    precondition(policy.wordRanges(bullet).count == 12)
+                    precondition(bullet.count == 24)
+                    precondition(long.hasPrefix(bullet))
+                    let input = policy.boundedInput(long)
+                    precondition(policy.wordRanges(input).count == 1500)
+                    precondition(input.count == 3000)
+                    precondition(long.hasSuffix(input))
+                  }
+                  precondition(policy.wordRanges("hello漢字かなworld ภาษา").count == 6)
+                  let mixed = policy.clamp(["hello" + String(repeating: "漢字", count: 30) + "world"])[0]
+                  precondition(mixed == "hello" + String(repeating: "漢字", count: 11))
                   precondition(policy.instructions.contains("invented speaker labels"))
                   // The prompt stays inside AFM's shared prompt+completion budget.
                   precondition(!policy.instructions.isEmpty)

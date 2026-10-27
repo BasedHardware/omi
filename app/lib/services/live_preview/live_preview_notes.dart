@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/live_preview/live_preview_telemetry.dart';
+import 'package:omi/services/live_preview/live_preview_word_budget.dart';
 
 /// The outcome of one on-device notes attempt, as telemetry reports it (no text).
 enum LivePreviewNotesResult { ok, unavailable, error, droppedBusy }
@@ -26,30 +27,19 @@ abstract final class LivePreviewNotesPolicy {
   static const maxBullets = 4;
   static const maxBulletWords = 12;
 
-  static int wordCount(String text) => text.split(RegExp(r'\s+')).where((word) => word.isNotEmpty).length;
+  static int wordCount(String text) => LivePreviewWordBudget.count(text);
 
-  /// The newest [maxInputWords] words of [lines], in order, newest last.
-  static String inputText(List<LivePreviewLine> lines) {
-    final words = <String>[];
-    for (final line in lines.reversed) {
-      final text = line.text.trim();
-      if (text.isEmpty) continue;
-      final lineWords = text.split(RegExp(r'\s+')).where((word) => word.isNotEmpty).toList();
-      final remaining = LivePreviewNotesPolicy.maxInputWords - words.length;
-      if (lineWords.length >= remaining) {
-        words.insertAll(0, lineWords.sublist(lineWords.length - remaining));
-        break;
-      }
-      words.insertAll(0, lineWords);
-    }
-    return words.join(' ');
-  }
+  /// The newest [maxInputWords] word units of [lines], in order, newest last.
+  static String inputText(List<LivePreviewLine> lines) => LivePreviewWordBudget.last(
+        lines.map((line) => line.text.trim()).where((text) => text.isNotEmpty).join(' '),
+        maxInputWords,
+      );
 
-  /// Belt to the native schema's bounds: at most [maxBullets] bullets of at
-  /// most [maxBulletWords] words each, no empties.
+  /// Belt to the native schema's bounds, using the same word budget as the
+  /// throttle and prompt, including scripts that do not separate words by spaces.
   static List<String> clamp(List<String> bullets) => [
         for (final bullet in bullets.take(maxBullets))
-          bullet.trim().split(RegExp(r'\s+')).where((word) => word.isNotEmpty).take(maxBulletWords).join(' '),
+          LivePreviewWordBudget.first(bullet.trim().replaceAll(RegExp(r'\s+'), ' '), maxBulletWords),
       ].where((bullet) => bullet.isNotEmpty).toList();
 }
 

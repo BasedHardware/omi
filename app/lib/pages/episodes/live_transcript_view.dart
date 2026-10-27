@@ -96,7 +96,12 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         final decorated = widget.episode != null;
         // Under the transcript on the episode page, as the last thing read; the legacy page's
         // floating controls cover its bottom, so there it stays on top.
-        final behind = _quietBehindLine(provider);
+        final behind = _showsLivePreview(provider)
+            ? ListenableBuilder(
+                listenable: provider.livePreview!,
+                builder: (context, _) => _quietBehindLine(provider) ?? const SizedBox.shrink(),
+              )
+            : null;
         return Column(
           children: [
             const CaptureRecoveryStatus(),
@@ -674,7 +679,15 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     if (!_showsLivePreview(provider)) return null;
     final unsyncedWals = provider.unsyncedSessionWals;
     final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + provider.inFlightAudioSeconds;
-    if (totalSeconds <= 5) return null;
+    // Uploaded audio has no pending-upload duration, but the server may still
+    // be transcribing it. Only uncovered preview text proves we are waiting.
+    final waitingWithoutDuration = totalSeconds == 0 &&
+        LivePreviewCoverage.uncovered(
+          provider.livePreview!.lines,
+          provider.segments,
+          provider.liveTranscriptStartedAt,
+        ).isNotEmpty;
+    if (totalSeconds <= 5 && !waitingWithoutDuration) return null;
     final worst = worstSessionSyncState(unsyncedWals);
     if ((worst != null && _isTerminalWalState(worst)) || worst == WalSyncDisplayState.retrying) return null;
     final l10n = context.l10n;

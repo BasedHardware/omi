@@ -158,8 +158,8 @@ void main() {
 
   final t0 = DateTime.utc(2026, 10, 22, 2, 18);
 
-  Episode episodeWith({List<String> bullets = const [], String title = 'Meeting Prep'}) => Episode(
-      id: 'ep1',
+  Episode episodeWith({List<String> bullets = const [], String title = 'Meeting Prep', String id = 'ep1'}) => Episode(
+      id: id,
       live: true,
       startedAt: t0,
       lastActivityAt: t0,
@@ -324,6 +324,9 @@ void main() {
     'transcript-mixed': 9,
     'transcript-no-engine': 10,
     'summary-largest-type': 11,
+    'transcript-catching-up': 12,
+    'home-unspaced-preview': 13,
+    'summary-continues-hit-area': 14,
   };
   String? name(String slug, bool light) {
     if (android) return null;
@@ -449,6 +452,71 @@ void main() {
           expect(tester.getTopLeft(behind).dy,
               greaterThan(tester.getBottomLeft(find.byKey(const Key('live_preview_divider'))).dy));
         }
+      });
+    }
+
+    testWidgets('catching-up follows preview arrivals without waiting for a capture notification ($theme)',
+        (tester) async {
+      android = onAndroid;
+      final (preview, engine) = await tester.runAsync(() => previewIn(_State.listening)) ?? (null, null);
+      final capture = captureFor(_State.listening, preview);
+      addTearDown(capture.dispose);
+      await shoot(tester, null,
+          light: light, home: const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript), capture: capture);
+      expect(find.text(en.livePreviewCatchingUp), findsNothing);
+      engine!.emit('new', 'Words still waiting for the final transcript', true);
+      await tester.pump();
+      expect(find.text(en.livePreviewCatchingUp), findsOneWidget);
+      preview!.endCapture();
+      await tester.pump();
+      expect(find.text(en.livePreviewCatchingUp), findsNothing);
+    });
+
+    for (final seconds in [0, 3, 22]) {
+      testWidgets('preview ahead with $seconds pending seconds ($theme)', (tester) async {
+        android = onAndroid;
+        final (preview, _) = await tester.runAsync(() => previewIn(_State.hybrid)) ?? (null, null);
+        final capture = captureFor(_State.hybrid, preview, inFlightSeconds: seconds);
+        addTearDown(capture.dispose);
+        await shoot(tester, seconds == 0 ? name('transcript-catching-up', light) : null,
+            light: light, home: const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript), capture: capture);
+        expect(find.byKey(const Key('live_preview_tail_a2')), findsOneWidget);
+        if (seconds == 0) {
+          expect(find.text(en.livePreviewCatchingUp), findsOneWidget,
+              reason: 'uploaded audio can still be awaiting the final transcript');
+        } else if (seconds <= 5) {
+          expect(find.byKey(const Key('live_preview_behind_line')), findsNothing,
+              reason: 'a known small lag keeps the existing quiet threshold');
+        } else {
+          expect(find.text(en.livePreviewBehind(en.timeCompactSecs(20))), findsOneWidget);
+        }
+      });
+    }
+
+    for (final hasWords in [false, true]) {
+      testWidgets('no catching-up line when ${hasWords ? 'finals cover the preview' : 'no preview words yet'} ($theme)',
+          (tester) async {
+        android = onAndroid;
+        final state = hasWords ? _State.hybrid : _State.listening;
+        final (preview, _) = await tester.runAsync(() => previewIn(state)) ?? (null, null);
+        final capture = captureFor(state, preview);
+        addTearDown(capture.dispose);
+        if (hasWords) {
+          capture.segments = [
+            TranscriptSegment(
+                id: 'all',
+                text: 'Final transcript',
+                speaker: 'SPEAKER_0',
+                isUser: true,
+                personId: null,
+                start: 0,
+                end: 12,
+                translations: []),
+          ];
+        }
+        await shoot(tester, null,
+            light: light, home: const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript), capture: capture);
+        expect(find.byKey(const Key('live_preview_behind_line')), findsNothing);
       });
     }
 
@@ -616,6 +684,41 @@ void main() {
       });
     }
 
+    testWidgets('home unspaced preview keeps the newest graphemes ($theme)', (tester) async {
+      android = onAndroid;
+      final (preview, engine) = await tester.runAsync(() => previewIn(_State.listening)) ?? (null, null);
+      const newest = '明日の予定を確認しましょう';
+      engine!.emit('latest', '${List.filled(40, '今日の会議で話し合った内容').join()}$newest', true);
+      final capture = captureFor(_State.streaming, preview);
+      addTearDown(capture.dispose);
+      final episodes = episodesWith(episodeWith());
+      addTearDown(episodes.dispose);
+      await shoot(tester, name('home-unspaced-preview', light),
+          light: light, home: homeRow(), capture: capture, episodes: episodes);
+      final text = tester.widget<Text>(
+          find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
+      expect(text.textSpan!.toPlainText(), startsWith('…'));
+      expect(text.textSpan!.toPlainText(), endsWith(newest));
+    });
+
+    testWidgets('Continues pill keeps its compact visual inside the larger hit area ($theme)', (tester) async {
+      android = onAndroid;
+      final (preview, _) = await tester.runAsync(() => previewIn(_State.streaming)) ?? (null, null);
+      final capture = captureFor(_State.streaming, preview);
+      addTearDown(capture.dispose);
+      final episodes = EpisodeProvider(
+        clock: () => t0.add(const Duration(minutes: 12)),
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: episodeWith())),
+        lookup: (_) async => ApiSuccess(
+            EpisodeRead(enabled: true, episode: episodeWith(title: 'Earlier plans', id: 'old').copyWith(live: false))),
+      )..debugSetLive(episodeWith());
+      addTearDown(episodes.dispose);
+      await episodes.recoverPrevious('old');
+      await shoot(tester, name('summary-continues-hit-area', light),
+          light: light, home: const LiveEpisodePage(), capture: capture, episodes: episodes);
+      expect(find.text('Continues “Earlier plans”'), findsOneWidget);
+    });
+
     testWidgets('home capture card shows the newest preview line in its last-line slot ($theme)', (tester) async {
       android = onAndroid;
       final (preview, _) = await tester.runAsync(() => previewIn(_State.streaming)) ?? (null, null);
@@ -667,6 +770,13 @@ Future<void> _loadFonts() async {
     }
     await loader.load();
   }
+  // Evidence only: SF Pro lacks CJK glyphs. Use the host's CJK face without
+  // adding a licensed system font to the app bundle or repository.
+  final cjk = File('/System/Library/Fonts/Hiragino Sans GB.ttc');
+  if (cjk.existsSync()) {
+    await (FontLoader('PreviewCjkEvidence')..addFont(Future.value(ByteData.sublistView(await cjk.readAsBytes()))))
+        .load();
+  }
   final icons = _materialIcons();
   if (icons != null) {
     final bytes = await icons.readAsBytes();
@@ -689,7 +799,7 @@ InlineSpan _productFont(InlineSpan span) {
   if (family != null && (family.startsWith('packages/') || family.contains('Icons'))) return span;
   return TextSpan(
     text: span.text,
-    style: style.copyWith(fontFamily: 'SF Pro Display'),
+    style: style.copyWith(fontFamily: 'SF Pro Display', fontFamilyFallback: const ['PreviewCjkEvidence']),
     children: span.children?.map(_productFont).toList(),
     recognizer: span.recognizer,
     semanticsLabel: span.semanticsLabel,
