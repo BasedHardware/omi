@@ -55,6 +55,7 @@ def host(row=None):
         is_multi_channel=False,
         pusher_enabled=True,
         language='en',
+        language_profile=SimpleNamespace(primary='en', expected=('en',)),
     )
 
 
@@ -134,6 +135,17 @@ def test_platform_defaults(platform, source, expected):
 def test_validated_provider_byok_keeps_live_even_on_reserved_reconnect():
     h = host()
     h.server_batch_byok = True
+    assert not server_batch.request_eligible(h)
+    assert not server_batch.suppress_live(h)
+
+
+@pytest.mark.parametrize(
+    'profile',
+    [None, SimpleNamespace(primary='en', expected=('en', 'zh')), SimpleNamespace(primary='es', expected=('es',))],
+)
+def test_unknown_or_unqualified_language_profile_preserves_live(profile):
+    h = host()
+    h.language_profile = profile
     assert not server_batch.request_eligible(h)
     assert not server_batch.suppress_live(h)
 

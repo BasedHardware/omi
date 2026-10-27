@@ -20,7 +20,9 @@ Admission requires cloud-storage consent, durable outbox and pusher availability
 a named Parakeet-supported language matching the request, server STT, and
 single-channel capture outside onboarding/phone calls. Storage-disabled,
 multi/auto/unsupported-language, BYOK/custom-STT, and excluded-platform
-sessions retain their live behavior. A fresh admitted conversation reserves
+sessions retain their live behavior. The session's language profile must agree with that named primary and contain
+only supported expected languages; missing or mixed unsupported profiles stay live.
+A fresh admitted conversation reserves
 `record_lane_owner=batch_live_v1` and the server-owned
 `external_data.server_batch_only` marker before STT initialization. Reconnects
 read that reservation. Initial connect, deferred opens, reconnect and idle reopen

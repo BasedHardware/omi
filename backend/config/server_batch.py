@@ -73,6 +73,9 @@ def suppress_live(host) -> bool:
 def request_eligible(host) -> bool:
     """No inferred English admission for multi/auto/unknown request languages."""
     language = normalized_stt_language(getattr(host.request, 'language', None))
+    profile = getattr(host, 'language_profile', None)
+    expected = getattr(profile, 'expected', ())
+    supported = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
     return bool(
         enabled()
         and (not getattr(host, 'server_batch_initialized', False) or getattr(host, 'server_batch_only', False))
@@ -90,5 +93,8 @@ def request_eligible(host) -> bool:
             host.request.source,
         )
         and language == normalized_stt_language(host.language)
-        and language in (PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'})
+        and language in supported
+        and getattr(profile, 'primary', None) == language
+        and expected
+        and all(normalized_stt_language(code) in supported for code in expected)
     )
