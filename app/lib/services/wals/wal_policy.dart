@@ -60,12 +60,12 @@ bool canClaimLiveCapture(List<Wal> batch, List<Wal> pendingForConversation, int 
 /// the same bytes forever. The per-recording manual Retry
 /// ([LocalWalSyncImpl.syncWal]) deliberately ignores this budget.
 @visibleForTesting
-bool isAutoUploadEligible(Wal wal) =>
+bool isAutoUploadEligible(Wal wal, {int? nowSeconds}) =>
     !wal.onDeviceOnly &&
-    !wal.holdForUser &&
-    wal.status == WalStatus.miss &&
     wal.storage == WalStorage.disk &&
-    wal.retryCount < walMaxAutoRetries;
+    ((wal.status == WalStatus.uploadRejected &&
+            wal.refusalRetryDue(nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000)) ||
+        (!wal.holdForUser && wal.status == WalStatus.miss && wal.retryCount < walMaxAutoRetries));
 
 /// Pause tolerance for saved utterance gaps and WAL edges; coverage only suppresses automatic
 /// repair, never deletes audio, so short gaps are treated as pauses while the copy stays recoverable.
@@ -133,14 +133,8 @@ typedef WalCoverageTelemetryEmitter = void Function(Map<String, Object?> fields)
 String uploadRejectionTokenForStatus(int statusCode) =>
     statusCode == 413 ? WalUploadRejection.tooLarge : WalUploadRejection.serverRefused;
 
-/// An `invalid_capture_time` refusal on a recording, in the server's own
-/// terms: the audio is never deleted and never renamed for its claimed time —
-/// not even when a neighbour plausibly names another one, because a derived
-/// date can misfile the recording's day and the file's own name is the only
-/// honest witness left. A single-file refusal marks that WAL as needing
-/// attention with the reason kept ("Invalid recording date"), where the
-/// user's Delete decides and Retry resends the file unchanged — a server-side
-/// fix (the clock window server PR #23746 widened) can still accept it.
+/// Capture-time refusals share the daily, bounded recovery policy. Dates and
+/// bytes stay intact so a server correction can recover the original audio.
 extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
   /// A request-level refusal proves nothing about every member: isolate the
   /// batch so the next attempt names the actual file, exactly like a
@@ -214,6 +208,28 @@ extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
     _notifyUpdated(generation);
   }
 
+  Future<void> applyUploadRefusal(Wal wal, int generation, {required String reason, required int statusCode}) async {
+    final path = await Wal.getFilePath(wal.filePath);
+    if (!_isCurrent(generation)) return;
+    var empty = false;
+    if (path != null) {
+      try {
+        empty = await File(path).length() <= 4;
+      } catch (_) {/* Keep unreadable audio. */}
+    }
+    if (!_isCurrent(generation)) return;
+    final now = _now().millisecondsSinceEpoch ~/ 1000;
+    wal.markUploadRejected(reasonCode: empty ? 'empty_clip' : reason, statusCode: statusCode, nowSeconds: now);
+    _backlogTelemetry.uploadRefused(reason: empty ? 'empty_clip' : reason, statusCode: statusCode);
+    if (empty) {
+      // A four-byte length prefix without payload contains no audio frames.
+      // This is a local no-op receipt; short encoded speech never takes it.
+      wal.status = WalStatus.synced;
+      wal.syncedAt = now;
+      wal.holdForUser = false;
+    }
+  }
+
   Future<void> applyInvalidCaptureTimeRefusal(
     List<Wal> wals,
     int generation,
@@ -223,10 +239,10 @@ extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
       wal.isSyncing = false;
       wal.syncStartedAt = null;
       wal.syncEtaSeconds = null;
-      wal.markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime);
+      await applyUploadRefusal(wal, generation, reason: WalUploadRejection.invalidCaptureTime, statusCode: 400);
       DebugLogManager.logEvent('invalid_capture_time_terminal', {
         'walId': wal.id,
-        'reason': e.serverReason ?? '',
+        'reason': WalUploadRejection.invalidCaptureTime,
       });
     }
   }

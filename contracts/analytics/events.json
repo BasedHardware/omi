@@ -4782,6 +4782,37 @@
         "live-preview"
       ],
       "correlation": null
+    },
+    {
+      "id": "walUploadRefused",
+      "wire_name": "WAL Upload Refused",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "invalid_capture_time",
+            "too_large",
+            "server_refused",
+            "invalid_file",
+            "malformed_multipart",
+            "too_many_parts",
+            "empty_clip"
+          ]
+        },
+        "statusCode": {
+          "type": "int",
+          "wire_name": "status_code"
+        }
+      },
+      "consumers": [
+        "wal-upload-refusals"
+      ],
+      "correlation": null
     }
   ],
   "transport_dispositions": {

@@ -191,6 +191,7 @@ from utils.sync.pipeline import (
     retrieve_vad_segments,
     SyncConversationPersistenceFenced,
 )
+from utils.sync.empty_upload import nonempty_sync_uploads
 from utils.sync.capture_clock import (
     INVALID_CAPTURE_TIME_CODE,
     INVALID_CAPTURE_TIME_DETAIL,
@@ -1060,6 +1061,17 @@ async def sync_local_files_v2(
     immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
     an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
+    # Empty/torn-header clips contain no audio frames. Acknowledge them before
+    # clock/age admission; a bogus date on zero audio has nothing to recover.
+    upload_filenames = [f.filename or '' for f in files]
+    nonempty_files = await run_blocking(sync_executor, nonempty_sync_uploads, files)
+    if len(nonempty_files) != len(files):
+        logger.info(
+            'sync_empty_clip uid=%s count=%s status=200 reason=empty_clip', uid, len(files) - len(nonempty_files)
+        )
+    if not nonempty_files:
+        return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
+    files = nonempty_files
     if isinstance(recording_session_id, str):
         recording_session_id = recording_session_id.strip() or None
     else:
@@ -1096,8 +1108,13 @@ async def sync_local_files_v2(
         uid,
         client_device_context.client_device_id,
         conversation_id,
-        filenames,
+        upload_filenames,
     )
+    if manifest_claims is not None:
+        # Verify the signed request before dropping no-audio members. Their
+        # omission must not demote the remaining legitimate capture to legacy.
+        nonempty_names = {os.path.basename(name) for name in filenames}
+        manifest_claims = [claim for claim in manifest_claims if claim['name'] in nonempty_names]
     record_snapshot = {}
     has_server_capture_proof = manifest_claims is not None and await run_blocking(
         db_executor,
@@ -1233,6 +1250,7 @@ async def sync_local_files_v2(
         try:
             paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id)
         except SyncCaptureTimeRejected:
+            logger.info('sync_upload_refused uid=%s status=400 reason=invalid_capture_time', uid)
             # Typed 400 for implausible capture times (beyond the shared
             # future-skew tolerance or before 2024). Released clients only see
             # the status + detail; new clients can act on the code.
@@ -1903,7 +1921,11 @@ async def sync_local_files_v2(
                 'lane': lane_decision.lane.value,
             },
         )
-    except HTTPException:
+    except HTTPException as error:
+        if error.status_code == 400:
+            reason = error.detail.get('code', 'server_refused') if isinstance(error.detail, dict) else 'server_refused'
+            logger.info('sync_upload_refused uid=%s status=400 reason=%s', uid, reason)
+            return JSONResponse(status_code=400, content={'code': reason, 'detail': 'Invalid sync file format'})
         if backfill_slot_acquired:
             try:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)

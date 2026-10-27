@@ -153,16 +153,13 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 120));
 
-    expect(find.text('Invalid recording date'), findsNWidgets(2));
-    expect(find.text('Too large'), findsOneWidget);
+    expect(find.text('Invalid recording date'), findsNothing);
+    expect(find.text('Too large'), findsNothing);
     expect(find.text('Too old to sync — Omi can\'t accept it'), findsOneWidget);
-    // The invalid-date rows keep Retry; the too-large row offers Delete only.
-    expect(find.text('Try Again'), findsNWidgets(2));
-    expect(find.text('3m'), findsOneWidget, reason: 'the undated row still shows its length');
-    // The 7:58 uploading piece and the 8:00 refused piece are one recording;
-    // the undated 1985 row lists outside the day totals.
-    expect(find.text('5 recordings · 28m on the way'), findsOneWidget);
-    expect(find.text('5 recordings · 28m · 1 uploading · 3 need attention'), findsOneWidget);
+    expect(find.text('Try Again'), findsNothing, reason: 'deterministic refusals belong to automatic recovery');
+    expect(find.text('3m'), findsNothing, reason: 'undated refused audio stays out of user attention');
+    expect(WalRefusalSummary.from(sync.allWals).count, 3);
+    expect(WalRefusalSummary.from(sync.allWals).userActionCanHelp, isFalse);
 
     await writeFrame(tester, const Key('sync_attention_on_the_way'), 'on-the-way-rows');
   });

@@ -20,12 +20,14 @@ typedef DeviceCatchUpLocal = ({
   String targetIds,
 });
 
-DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
+DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now}) {
+  final nowSeconds = (now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000;
+  final minute = nowSeconds ~/ 60;
   // Sync progress notifies with the same list instance (the provider swaps it on
   // status changes), so an identity+length memo keeps a per-chunk tick from
   // rescanning recording history on the UI isolate.
   final memo = _catchUpMemo[wals];
-  if (memo != null && memo.$1 == wals.length) return memo.$2;
+  if (memo != null && memo.$1 == wals.length && memo.$2 == minute) return memo.$3;
   // Exactly the rows On the Way lists, so the card can never open an empty page:
   // terminal recordings belong to the bell, a lagging device twin is hidden, and
   // a drain's copied pieces fold into their source.
@@ -33,7 +35,7 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
   final rows = [...uploaded, ...SyncPendingWork.syncingOf(wals)];
   var onDeviceSeconds = 0;
   var onPhoneSeconds = 0;
-  DateTime? start, end;
+  final spans = <(DateTime, DateTime)>[];
   final ids = <String>{};
   for (final w in rows) {
     if (w.conversationId case final id? when id.isNotEmpty) ids.add(id);
@@ -46,6 +48,11 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
       onPhoneSeconds += w.seconds;
     }
     if (w.timerStart <= 0) continue;
+    // Historical handles retain custody/counts but must be confirmed pending
+    // before they can claim a capture range in Right now.
+    if (w.status == WalStatus.uploaded &&
+        w.uploadedAt < nowSeconds - 86400 &&
+        w.jobPendingConfirmedAt < nowSeconds - 300) continue;
     // A recording time before the plausibility floor is a device clock that was
     // never set; the seconds still count, but the range must not stretch to it.
     if (!walTimerStartPlausible(w.timerStart)) {
@@ -54,9 +61,9 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
     }
     final from = DateTime.fromMillisecondsSinceEpoch(w.timerStart * 1000);
     final to = from.add(Duration(seconds: w.seconds));
-    if (start == null || from.isBefore(start)) start = from;
-    if (end == null || to.isAfter(end)) end = to;
+    spans.add((from, to));
   }
+  final (start, end) = pendingCatchUpSpan(spans);
   final targets = ids.toList()..sort();
   final result = (
     onDeviceSeconds: onDeviceSeconds,
@@ -67,11 +74,26 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
     end: end,
     targetIds: targets.join('\n'),
   );
-  _catchUpMemo[wals] = (wals.length, result);
+  _catchUpMemo[wals] = (wals.length, minute, result);
   return result;
 }
 
-final Expando<(int, DeviceCatchUpLocal)> _catchUpMemo = Expando('deviceCatchUpLocal');
+final Expando<(int, int, DeviceCatchUpLocal)> _catchUpMemo = Expando('deviceCatchUpLocal');
+
+/// One contiguous pending run on the most recent pending day. Inventory and
+/// target totals still include historical work; a gap is never called audio.
+(DateTime?, DateTime?) pendingCatchUpSpan(List<(DateTime, DateTime)> spans) {
+  if (spans.isEmpty) return (null, null);
+  spans.sort((a, b) => a.$2.compareTo(b.$2));
+  final end = spans.last.$2;
+  final midnight = DateTime(end.year, end.month, end.day);
+  var start = spans.last.$1.isBefore(midnight) ? midnight : spans.last.$1;
+  for (final span in spans.reversed.skip(1)) {
+    if (span.$2.isBefore(midnight) || span.$2.isBefore(start.subtract(const Duration(minutes: 2)))) break;
+    if (span.$1.isBefore(start)) start = span.$1.isBefore(midnight) ? midnight : span.$1;
+  }
+  return (start, end);
+}
 
 /// Local transfers and server work share a card, even after upload or before targets are known.
 /// Progress is deliberately indeterminate: a device drain's pieces, virtual source timestamps and
@@ -95,7 +117,9 @@ class DeviceCatchUpSummary {
     required List<ServerConversation> processing,
   }) {
     if (!local.hasPending && !serverProcessing && pending.isEmpty && processing.isEmpty) return null;
-    var start = local.start, end = local.end;
+    final spans = <(DateTime, DateTime)>[
+      if (local.start != null && local.end != null) (local.start!, local.end!),
+    ];
     final ids = {if (local.targetIds.isNotEmpty) ...local.targetIds.split('\n')};
     void include(DateTime? from, int seconds, String id) {
       if (from == null || seconds <= 0) return;
@@ -107,8 +131,7 @@ class DeviceCatchUpSummary {
         return;
       }
       final to = from.add(Duration(seconds: seconds));
-      if (start == null || from.isBefore(start!)) start = from;
-      if (end == null || to.isAfter(end!)) end = to;
+      spans.add((from, to));
     }
 
     for (final work in pending) {
@@ -125,6 +148,7 @@ class DeviceCatchUpSummary {
       final title = conversation?.structured.title.trim() ?? '';
       if (title.isNotEmpty) titles.add(title);
     }
+    final (start, end) = pendingCatchUpSpan(spans);
     return DeviceCatchUpSummary(
       status: status,
       start: start,

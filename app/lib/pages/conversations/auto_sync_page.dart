@@ -316,12 +316,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     );
   }
 
-  static bool _needsAttention(WalSyncDisplayState s) =>
-      s == WalSyncDisplayState.failed ||
-      s == WalSyncDisplayState.corrupted ||
-      s == WalSyncDisplayState.outsideRecoveryWindow ||
-      s == WalSyncDisplayState.unsupportedAudio ||
-      s == WalSyncDisplayState.uploadRejected;
+  static bool _needsAttention(WalSyncDisplayState s) => isAttentionSyncState(s);
 
   // ─────────────────────────────────────────
   //  Error card
@@ -862,7 +857,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
         state == WalSyncDisplayState.unsupportedAudio ||
-        (state == WalSyncDisplayState.uploadRejected && wal.uploadRejectionReason == WalUploadRejection.tooLarge);
+        (state == WalSyncDisplayState.uploadRejected);
   }
 
   Future<void> _confirmDeleteWals(List<Wal> wals) async {

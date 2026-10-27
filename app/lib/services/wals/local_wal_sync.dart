@@ -1991,7 +1991,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     final initialNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
     var wals = _wals
-        .where((wal) => isAutoUploadEligible(wal) && (!liveCaptureOnly || isLiveCaptureWal(wal, initialNowSeconds)))
+        .where((wal) =>
+            isAutoUploadEligible(wal, nowSeconds: initialNowSeconds) &&
+            (!liveCaptureOnly || isLiveCaptureWal(wal, initialNowSeconds)))
         .toList();
     if (wals.isEmpty) {
       Logger.debug("All synced!");
@@ -2039,13 +2041,18 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       // Re-snapshot between batches so a newly captured WAL can preempt an
       // hours-long historical drain without waiting for the original list.
       final batchNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
-      final candidates =
-          _wals.where((wal) => isAutoUploadEligible(wal) && !attemptedWalIds.contains(walAttemptKey(wal))).toList();
+      final candidates = _wals
+          .where((wal) =>
+              isAutoUploadEligible(wal, nowSeconds: batchNowSeconds) && !attemptedWalIds.contains(walAttemptKey(wal)))
+          .toList();
       final pending = candidates.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
       if (pending.isEmpty) break;
       var batch = nextSyncUploadBatch(pending, batchNowSeconds);
       if (batch.isEmpty) break;
-      if (batch.any((wal) => isolateAfterRefusal.contains(walAttemptKey(wal)))) batch = [batch.first];
+      if (batch
+          .any((wal) => wal.status == WalStatus.uploadRejected || isolateAfterRefusal.contains(walAttemptKey(wal)))) {
+        batch = [batch.first];
+      }
       attemptedWalIds.addAll(batch.map(walAttemptKey));
       final batchConversationId = batch.first.conversationId;
       final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&
@@ -2149,6 +2156,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         // wait for server-side processing here; the reconciler resolves the
         // job_id later. Only WALs that actually became files (batchWals) are
         // mutated — corrupted ones already short-circuited above.
+        var reservedRefusal = false;
+        for (final wal in batchWals) {
+          if (wal.status != WalStatus.uploadRejected) continue;
+          if (wal.uploadRejectedAt == 0) wal.uploadRejectedAt = batchNowSeconds;
+          wal.uploadRefusalLastAttemptAt = batchNowSeconds;
+          reservedRefusal = true;
+        }
+        if (reservedRefusal) await _saveWalsToFile(generation);
+        if (!_isCurrent(generation)) return resp;
         final audioBounds = syncUploadAudioBounds(batchWals);
         final result = await _uploadGate.upload(
           files,
@@ -2271,15 +2287,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           );
           continue;
         }
-        batchesFailed++;
+        if (!definitive) batchesFailed++;
         final authenticationFailed = e.statusCode == 401 || e.statusCode == 403;
         if (definitive) {
-          final reasonCode = uploadRejectionTokenForStatus(e.statusCode);
+          final reasonCode = WalUploadRejection.bounded(e.reasonCode ?? uploadRejectionTokenForStatus(e.statusCode));
           for (final wal in batchWals) {
-            wal.markUploadRejected(reasonCode: reasonCode);
+            await applyUploadRefusal(wal, generation, reason: reasonCode, statusCode: e.statusCode);
           }
-          resp.localUploadPermanentFailures += batchWals.length;
-          resp.localUploadPermanentError = e.toString();
           DebugLogManager.logEvent('local_upload_terminal_http_refusal', {
             'statusCode': e.statusCode,
             'walCount': batchWals.length,
@@ -2385,7 +2399,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   Future<SyncLocalFilesResponse?> _syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
-    if (wal.onDeviceOnly) return null;
+    if (wal.onDeviceOnly || wal.status == WalStatus.uploadRejected) return null;
     final generation = _sessionGeneration;
     await _enqueueBuffer(() => _flush(generation));
     if (!_isCurrent(generation)) return null;
@@ -2546,10 +2560,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       return resp;
     } on SyncUploadHttpException catch (e) {
       if (isDefinitiveUploadRefusal(e)) {
-        walToSync.markUploadRejected(reasonCode: uploadRejectionTokenForStatus(e.statusCode));
-        resp.localUploadFailures = 1;
-        resp.localUploadPermanentFailures = 1;
-        resp.localUploadPermanentError = e.toString();
+        final reason = WalUploadRejection.bounded(e.reasonCode ?? uploadRejectionTokenForStatus(e.statusCode));
+        await applyUploadRefusal(walToSync, generation, reason: reason, statusCode: e.statusCode);
         DebugLogManager.logEvent('single_wal_terminal_http_refusal', {'walId': wal.id, 'statusCode': e.statusCode});
         await _saveWalsToFile(generation);
         _notifyUpdated(generation);

@@ -273,13 +273,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
             s == WalSyncDisplayState.failed ||
             s == WalSyncDisplayState.corrupted ||
             s == WalSyncDisplayState.outsideRecoveryWindow ||
-            s == WalSyncDisplayState.unsupportedAudio ||
-            s == WalSyncDisplayState.uploadRejected,
+            s == WalSyncDisplayState.unsupportedAudio,
       );
 
-  /// Spent retry budgets and request refusals can be explicitly retried.
-  /// Missing files, permanent audio/lookback verdicts and the deterministic
-  /// too-large refusal remain excluded.
+  /// Explicit Retry restores transient budgets; deterministic refusals are
+  /// owned by the persisted daily recovery schedule.
   List<Wal> get retryableAttentionWals => _allWals.where(walRetryCanHelp).toList();
 
   /// Retry every recording in [retryableAttentionWals]. The automatic drain
@@ -294,9 +292,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   /// Durable HTTP refusals that automatic connectivity wakes must never retry.
-  /// The Auto Sync Needs Attention chip renders this count through
-  /// [needsAttentionWalsCount]; this narrower accessor keeps the terminal-HTTP
-  /// incident observable in tests and diagnostics.
+  /// Count-only operator feedback for the UI lane; no per-row repair gesture.
+  WalRefusalSummary get refusalSummary => WalRefusalSummary.from(_allWals);
+
   int get terminallyFailedWalsCount => _allWals.where((w) => w.status == WalStatus.uploadRejected).length;
 
   int get retryingWalsCount => _countWhere((s) => s == WalSyncDisplayState.retrying);
@@ -547,7 +545,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           if (_isCurrent(_admittedWorkGeneration)) await phone.resetExhaustedAutoRetries();
         },
         networkChanges: ConnectivityService().onNetworkChange,
-        hasPendingWork: () => pendingWals.any((wal) => !wal.holdForUser) || uploadedWals.isNotEmpty,
+        hasPendingWork: () =>
+            pendingWals.any((wal) => !wal.holdForUser) ||
+            uploadedWals.isNotEmpty ||
+            _allWals.any((wal) => wal.status == WalStatus.uploadRejected && isAutoUploadEligible(wal)),
         onPassTimedOut: _onTransferPassTimedOut,
       );
       _periodicSync?.dispose();
@@ -628,6 +629,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     return _drainWals(liveCaptureOnly: false);
   }
 
+  @visibleForTesting
+  Future<RecordingTransferDrainResult> drainForTesting() {
+    // The coordinator's admission callback captures this generation in the app.
+    _admittedWorkGeneration = _isDisposed ? -1 : _sessionGeneration;
+    return _drainWals(liveCaptureOnly: false);
+  }
+
   Future<RecordingTransferDrainResult> _drainLiveCaptureWals() async {
     return _drainWals(liveCaptureOnly: true);
   }
@@ -642,8 +650,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
 
     final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final eligibleWals = missingWals
-        .where((wal) => !wal.holdForUser && (!liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds)))
+    final eligibleWals = [
+      ...missingWals,
+      ..._allWals.where((wal) => wal.status == WalStatus.uploadRejected && isAutoUploadEligible(wal)),
+    ]
+        .where((wal) =>
+            (!wal.holdForUser || wal.status == WalStatus.uploadRejected) &&
+            (!liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds)))
         .toList();
     final hadEligibleWals = eligibleWals.isNotEmpty;
     if (!hadEligibleWals) return const RecordingTransferDrainResult.skipped();
@@ -865,6 +878,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWal(Wal wal) async {
+    if (wal.status == WalStatus.uploadRejected) return;
     final generation = _sessionGeneration;
     wal.prepareManualRetry();
     // UI Sync/Auto Sync still call syncWal for a single row, but must not
@@ -1101,7 +1115,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     // Retry falls through to work that can still move (the row's own Delete
     // owns the too-large recording).
     if (failedWal != null &&
-        (failedWal.status == WalStatus.miss || failedWal.status == WalStatus.uploadRejected) &&
+        failedWal.status == WalStatus.miss &&
         failedWal.uploadRejectionReason != WalUploadRejection.tooLarge) {
       await syncWal(failedWal);
       return;

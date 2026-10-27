@@ -1,0 +1,3 @@
+{
+  "change": "Recordings refused by the server now recover automatically without repeated Try Again prompts, and Catching up shows the current pending recording span"
+}
