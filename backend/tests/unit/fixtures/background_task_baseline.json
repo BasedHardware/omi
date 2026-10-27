@@ -177,6 +177,13 @@
     },
     {
       "path": "utils/episodes/finalize.py",
+      "function": "_queue_retry",
+      "kind": "submit_with_context_retry",
+      "count": 1,
+      "why": "PR #23828: saturation admission retry for the already-inventoried best-effort episode finalize/intake overlay hooks in this module. Runs on the same pool with at most 64 deferred calls and synchronous producer backpressure. No source processing authority is delegated: transcript/audio/job/task/memory persistence precedes the hook. SIGKILL or shutdown cancellation can leave derived notes or episode attachment stale; a later finalize/close can repair from retained transcripts. This site and the executor admission implementation are both inventoried; future retry callers must declare their own lifetime."
+    },
+    {
+      "path": "utils/episodes/finalize.py",
       "function": "schedule_synced_intake_attach",
       "kind": "submit_with_context",
       "count": 1,
