@@ -46,7 +46,7 @@ import asyncio
 import copy
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -275,6 +275,12 @@ def test_renewal_succeeds_on_the_next_minute_after_a_blip(blipping_store, blip):
         'uid', 'session', 'conversation', firestore_client=blipping_store
     )
     assert first is False
+    # Deplete the fence to a minute of runway so the clean renewal after the
+    # blip has a real stamp to land (the runway skip leaves a still-healthy
+    # fence untouched by design).
+    blipping_store.documents[_SESSION_PATH]['lease_expires_at'] = blipping_store.documents[_SESSION_PATH][
+        'lease_expires_at'
+    ] - timedelta(minutes=4)
     before = blipping_store.documents[_SESSION_PATH]['lease_expires_at']
 
     second = lifecycle_service.renew_live_recording_session_lease(
@@ -347,6 +353,11 @@ def test_renewal_commit_side_blip_is_also_absorbed(blipping_store, caplog):
     """The 503 usually hits the commit, not the read — same transient arm."""
     _seed_session(blipping_store)
     blipping_store.write_errors = [ServiceUnavailable('503: backend unavailable')]
+    # A fence at the floor keeps this a real write attempt (the runway skip
+    # leaves a still-healthy fence untouched by design).
+    blipping_store.documents[_SESSION_PATH]['lease_expires_at'] = blipping_store.documents[_SESSION_PATH][
+        'lease_expires_at'
+    ] - timedelta(minutes=4)
 
     with caplog.at_level('WARNING'):
         renewed = lifecycle_service.renew_live_recording_session_lease(
@@ -1053,6 +1064,12 @@ def test_renewal_blip_between_two_clean_renewals_keeps_both_healthy(blipping_sto
     """A single blipped minute between clean minutes changes nothing durable."""
     _seed_session(blipping_store)
     blipping_store.read_errors = [ServiceUnavailable('503: backend unavailable')]
+    # Deplete the fence to a minute of runway so the clean renewals after the
+    # blip land real stamps (the runway skip leaves a still-healthy fence
+    # untouched by design).
+    blipping_store.documents[_SESSION_PATH]['lease_expires_at'] = blipping_store.documents[_SESSION_PATH][
+        'lease_expires_at'
+    ] - timedelta(minutes=4)
     before = blipping_store.documents[_SESSION_PATH]['lease_expires_at']
 
     blipped = lifecycle_service.renew_live_recording_session_lease(

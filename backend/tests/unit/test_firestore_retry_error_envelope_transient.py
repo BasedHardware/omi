@@ -408,6 +408,12 @@ def test_renewal_commits_on_the_next_minute_after_the_envelope(envelope_store):
         )
         is False
     )
+    # Deplete the fence to a minute of runway so the clean renewal after the
+    # envelope has a real stamp to land (the runway skip leaves a still-
+    # healthy fence untouched by design).
+    envelope_store.documents[_SESSION_PATH]['lease_expires_at'] = envelope_store.documents[_SESSION_PATH][
+        'lease_expires_at'
+    ] - timedelta(minutes=4)
     before = envelope_store.documents[_SESSION_PATH]['lease_expires_at']
 
     assert (
@@ -441,6 +447,12 @@ def test_renewal_envelope_advances_the_lease_by_the_full_duration(envelope_store
 def test_renewal_envelope_between_clean_renewals_keeps_the_fence_healthy(envelope_store):
     _seed_session(envelope_store)
     envelope_store.read_errors = [_TIMEOUT_ENVELOPES[0]]
+    # Deplete the fence to a minute of runway so the clean renewals after the
+    # envelope land real stamps (the runway skip leaves a still-healthy fence
+    # untouched by design).
+    envelope_store.documents[_SESSION_PATH]['lease_expires_at'] = envelope_store.documents[_SESSION_PATH][
+        'lease_expires_at'
+    ] - timedelta(minutes=4)
     before = envelope_store.documents[_SESSION_PATH]['lease_expires_at']
 
     blipped = lifecycle_service.renew_live_recording_session_lease(
@@ -461,6 +473,11 @@ def test_renewal_commit_side_envelope_is_also_absorbed(envelope_store, caplog):
     """A drained budget on the commit RPC lands the same way."""
     _seed_session(envelope_store)
     envelope_store.write_errors = [_TIMEOUT_ENVELOPES[0]] * 50
+    # A fence at the floor keeps this a real write attempt (the runway skip
+    # leaves a still-healthy fence untouched by design).
+    envelope_store.documents[_SESSION_PATH]['lease_expires_at'] = envelope_store.documents[_SESSION_PATH][
+        'lease_expires_at'
+    ] - timedelta(minutes=4)
 
     with caplog.at_level('WARNING'):
         renewed = lifecycle_service.renew_live_recording_session_lease(
@@ -793,6 +810,11 @@ def test_lifecycle_classifier_accepts_the_envelope_directly():
 def test_renewal_commit_side_trio_envelopes_are_absorbed(envelope_store, caplog, blip):
     _seed_session(envelope_store)
     envelope_store.write_errors = [RetryError('Timeout of 60.0s exceeded', type(blip)(str(blip)))] * 50
+    # A fence at the floor keeps this a real write attempt (the runway skip
+    # leaves a still-healthy fence untouched by design).
+    envelope_store.documents[_SESSION_PATH]['lease_expires_at'] = envelope_store.documents[_SESSION_PATH][
+        'lease_expires_at'
+    ] - timedelta(minutes=4)
 
     with caplog.at_level('WARNING'):
         renewed = lifecycle_service.renew_live_recording_session_lease(
@@ -812,6 +834,11 @@ def test_renewal_read_then_commit_envelopes_in_one_session(envelope_store, caplo
     _seed_session(envelope_store)
     envelope_store.read_errors = [RetryError('Timeout of 60.0s exceeded', ServiceUnavailable('503'))]
     envelope_store.write_errors = [RetryError('Timeout of 60.0s exceeded', DeadlineExceeded('504'))] * 50
+    # A fence at the floor keeps both renewals real write attempts (the runway
+    # skip leaves a still-healthy fence untouched by design).
+    envelope_store.documents[_SESSION_PATH]['lease_expires_at'] = envelope_store.documents[_SESSION_PATH][
+        'lease_expires_at'
+    ] - timedelta(minutes=4)
 
     with caplog.at_level('WARNING'):
         first = lifecycle_service.renew_live_recording_session_lease(
@@ -1480,6 +1507,10 @@ async def test_converged_cycle_renews_idempotently_the_next_minute(real_stack, m
     await asyncio.gather(*host.spawned)
     path = _SESSION_PATH
     first_commit = store.documents[path]['lease_expires_at']
+    # Deplete the fence to a minute of runway so the next cycle's renewal has
+    # a real stamp to land (the runway skip leaves a still-healthy fence
+    # untouched by design).
+    store.documents[path]['lease_expires_at'] = first_commit - timedelta(minutes=4)
 
     clock.advance(minutes=1)
     controller.note_audio_activity()
@@ -1499,6 +1530,11 @@ async def test_full_envelope_exhaustion_is_bounded_across_two_cycles(real_stack,
     store, host, clock, controller = _cadence_fixture()
     monkeypatch.setattr(recording_sessions, '_now', lambda: clock.value)
     store.read_errors = [_TIMEOUT_ENVELOPES[0]] * (1 + RECORDING_SESSION_LEASE_RETRY_ATTEMPTS)
+    # A fence at the floor keeps the second cycle's convergence a real write
+    # (the runway skip leaves a still-healthy fence untouched by design).
+    store.documents[_SESSION_PATH]['lease_expires_at'] = store.documents[_SESSION_PATH]['lease_expires_at'] - timedelta(
+        minutes=4
+    )
 
     controller.note_audio_activity()
     await asyncio.gather(*host.spawned)

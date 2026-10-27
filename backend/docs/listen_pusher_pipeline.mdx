@@ -5473,3 +5473,29 @@ Failure-Class: FC-drain-refusal-crashes-fire-and-forget-caller — a
 fire-and-forget executor submit raised the shutdown drain's refusal into its
 caller, turning the drain (expected, bounded) into a caller-visible 500 or
 degrade at every deploy.
+
+
+Since 2026-10-27 the renewal stops writing when the durable fence still has
+more than `RECORDING_SESSION_LEASE_RUNWAY_FLOOR` (two minutes) of runway: the
+transactional read re-verifies identity and phase, the commit carries no
+write, and the renewal reports True with one bounded INFO
+(`recording session lease runway verified; nothing written`). A renewal is
+once a minute for the whole life of a live recording, so the old
+re-stamp-every-minute behavior took the session document's write lock — the
+same lock every lifecycle event and the `SERVER_RECOVERY` admission need —
+roughly four times out of five only to rewrite the value the previous renewal
+had just written (prod backend-listen 2026-10-27: the renewal ×184/30m and
+its `open_recording_session` sibling ×143/30m, both fed by that contention
+engine). The floor keeps one renewal interval plus the redrive budget of
+guaranteed coverage; the fence is wall clock, so skipped renewals never
+consume it — after silence the next renewal re-stamps the full duration from
+that instant, blackout immunity is unchanged, and the recovery sweep keeps
+refusing exactly as long as it would have. Depleted fences (runway at or
+below the floor), identity/phase refusals, missing rows, and every
+contention/retired-id/availability arm behave exactly as before.
+
+Failure-Class: FC-lease-renewal-locks-the-document-it-only-reads — the
+renewal re-stamped its own five-minute fence every renewal minute, so most
+renewal transactions took the session document's write lock only to rewrite
+the value the previous renewal had just written, manufacturing the very
+contention the retry layers were built to survive.

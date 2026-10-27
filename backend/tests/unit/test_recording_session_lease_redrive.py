@@ -627,6 +627,10 @@ async def test_converged_cycle_redrives_to_a_clean_no_op(expired_id_store, monke
     await asyncio.gather(*host.spawned)
     path = ('users', 'uid', 'recording_sessions', 'session')
     first_commit = expired_id_store.documents[path]['lease_expires_at']
+    # Deplete the fence to a minute of runway so the second cycle's renewal
+    # has a real stamp to land (the runway skip leaves a still-healthy fence
+    # untouched by design).
+    expired_id_store.documents[path]['lease_expires_at'] = first_commit - timedelta(minutes=4)
 
     clock.advance(minutes=1)
     controller.note_audio_activity()

@@ -180,6 +180,11 @@ def test_renewal_runs_on_the_named_shared_budget(contending_store):
 def test_renewal_replays_read_abort_on_fresh_transactions_and_commits_once(contending_store):
     _seed_session(contending_store)
     session_path = ('users', 'uid', 'recording_sessions', 'session')
+    # A fence at the floor keeps this a real write attempt (the runway skip
+    # leaves a still-healthy fence untouched by design).
+    contending_store.documents[session_path]['lease_expires_at'] = contending_store.documents[session_path][
+        'lease_expires_at'
+    ] - timedelta(minutes=4)
     before = contending_store.documents[session_path]['lease_expires_at']
 
     renewed = recording_sessions.renew_recording_session_lease(
@@ -197,6 +202,11 @@ def test_renewal_restarts_on_expired_transaction_id(contending_store):
     _seed_session(contending_store)
     contending_store.read_errors = [InvalidArgument('The referenced transaction has expired or is no longer valid')]
     session_path = ('users', 'uid', 'recording_sessions', 'session')
+    # A fence at the floor keeps this a real write attempt (the runway skip
+    # leaves a still-healthy fence untouched by design).
+    contending_store.documents[session_path]['lease_expires_at'] = contending_store.documents[session_path][
+        'lease_expires_at'
+    ] - timedelta(minutes=4)
     before = contending_store.documents[session_path]['lease_expires_at']
 
     renewed = recording_sessions.renew_recording_session_lease(
@@ -279,6 +289,11 @@ def test_non_contention_failure_keeps_the_failed_write_classification(contending
 def test_concurrent_renewals_converge_on_one_durable_lease(contending_store):
     _seed_session(contending_store)
     session_path = ('users', 'uid', 'recording_sessions', 'session')
+    # A fence at the floor keeps every renewal a real write attempt (the
+    # runway skip leaves a still-healthy fence untouched by design).
+    contending_store.documents[session_path]['lease_expires_at'] = contending_store.documents[session_path][
+        'lease_expires_at'
+    ] - timedelta(minutes=4)
     before = contending_store.documents[session_path]['lease_expires_at']
 
     def renew(_index: int) -> bool:
@@ -393,9 +408,11 @@ def test_contended_minute_is_recoverable_by_the_next_clean_renewal(contending_st
     contended = lifecycle_service.renew_live_recording_session_lease(
         'uid', 'session', 'conversation', firestore_client=contending_store
     )
-    # The next minute arrives with a clean Firestore.
+    # The next minute arrives with a clean Firestore and a fence decayed to a
+    # minute of runway, so the recovery renewal has a real stamp to land.
     next_minute = started_at + timedelta(minutes=1)
     monkeypatch.setattr(recording_sessions, '_now', lambda: next_minute)
+    contending_store.documents[session_path]['lease_expires_at'] = next_minute - timedelta(minutes=4)
     contending_store.read_errors = []
     recovered = lifecycle_service.renew_live_recording_session_lease(
         'uid', 'session', 'conversation', firestore_client=contending_store
@@ -413,6 +430,12 @@ def test_success_still_reports_true_for_controller_accounting(contending_store):
     """The controller gates nothing on the bool, but False must mean 'not renewed'."""
     started_at = datetime(2026, 10, 16, 12, tzinfo=timezone.utc)
     _seed_session(contending_store, started_at=started_at)
+    # A fence at the floor keeps this a real write attempt (the runway skip
+    # leaves a still-healthy fence untouched by design).
+    session_path = ('users', 'uid', 'recording_sessions', 'session')
+    contending_store.documents[session_path]['lease_expires_at'] = contending_store.documents[session_path][
+        'lease_expires_at'
+    ] - timedelta(minutes=4)
 
     renewed = recording_sessions.renew_recording_session_lease(
         'uid', 'session', 'conversation', firestore_client=contending_store
@@ -537,12 +560,18 @@ def test_same_session_id_across_users_renews_only_its_own_row(contending_store):
     _seed_session(contending_store, uid='user-one')
     _seed_session(contending_store, uid='user-two')
 
+    one_path = ('users', 'user-one', 'recording_sessions', 'session')
+    two_path = ('users', 'user-two', 'recording_sessions', 'session')
+    # A fence at the floor keeps user-one's renewal a real write attempt (the
+    # runway skip leaves a still-healthy fence untouched by design).
+    contending_store.documents[one_path]['lease_expires_at'] = contending_store.documents[one_path][
+        'lease_expires_at'
+    ] - timedelta(minutes=4)
+
     renewed = recording_sessions.renew_recording_session_lease(
         'user-one', 'session', 'conversation', firestore_client=contending_store
     )
 
-    one_path = ('users', 'user-one', 'recording_sessions', 'session')
-    two_path = ('users', 'user-two', 'recording_sessions', 'session')
     assert renewed is True
     assert (
         contending_store.documents[one_path]['lease_expires_at']

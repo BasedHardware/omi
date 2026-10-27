@@ -9,6 +9,7 @@ persists the recording identity and its outbound event sequence.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Mapping, TypedDict
 
@@ -19,11 +20,20 @@ from database._client import get_firestore_client, run_transactional
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.people_stats_cache import invalidate_people_stats_cache
 
+logger = logging.getLogger(__name__)
+
 RECORDING_SESSIONS_COLLECTION = 'recording_sessions'
 CONVERSATIONS_COLLECTION = 'conversations'
 RECORDING_SESSION_SCHEMA_VERSION = 1
 LIFECYCLE_ENVELOPE_VERSION = 1
 RECORDING_SESSION_LEASE_DURATION = timedelta(minutes=5)
+# A renewal commits read-only while the durable fence still has more than this
+# much runway, and re-stamps the full duration once it decays to or below it.
+# Two minutes is one renewal interval of guaranteed coverage (the next cycle
+# re-checks in one minute) plus the redrive budget (three 15s waits), so a
+# skipped minute never lets the fence reach a recovery sweep before the next
+# renewal can re-arm it.
+RECORDING_SESSION_LEASE_RUNWAY_FLOOR = timedelta(minutes=2)
 RecordingPhase = Literal['in_progress', 'processing', 'completed', 'failed', 'discarded']
 
 _PHASE_ORDER: dict[str, int] = {
@@ -200,6 +210,21 @@ def create_or_get_recording_session(
     )
 
 
+def _remaining_lease_runway(current: Mapping[str, Any], now: datetime) -> timedelta | None:
+    """Runway left on the stored fence, or None when it is missing/malformed.
+
+    Firestore stores naive datetimes; a stored fence is read as UTC exactly
+    like the recovery sweep reads it back (see
+    ``conversation_finalization_jobs._has_active_recording_session_lease``).
+    """
+    lease_expires_at = current.get('lease_expires_at')
+    if not isinstance(lease_expires_at, datetime):
+        return None
+    if lease_expires_at.tzinfo is None and now.tzinfo is not None:
+        lease_expires_at = lease_expires_at.replace(tzinfo=timezone.utc)
+    return lease_expires_at - now
+
+
 def _renew_recording_session_lease_txn(
     transaction: Any,
     session_ref: Any,
@@ -219,6 +244,29 @@ def _renew_recording_session_lease_txn(
         or str(current.get('lifecycle_phase') or 'in_progress') != 'in_progress'
     ):
         return False
+    remaining_runway = _remaining_lease_runway(current, now)
+    if remaining_runway is not None and remaining_runway > RECORDING_SESSION_LEASE_RUNWAY_FLOOR:
+        # The fence the previous renewal stamped still holds: this minute's
+        # renewal has nothing to move, so commit the verified read without a
+        # write. A write here would take the same document lock every
+        # lifecycle event and the recovery sweep need — for four of every
+        # five renewals, only to rewrite the value the last one wrote (prod
+        # backend-listen 2026-10-27: the renewal ×184/30m and the open
+        # ×143/30m, the two boundaries this contention engine feeds). The
+        # transactional read above IS the renewal: it re-verifies identity
+        # and phase, keeps the whole verification atomic with any competing
+        # writer's commit, and reports True because the fence is verified
+        # live, not decayed. Skips never consume the fence — it is wall
+        # clock — so silence still decays to the floor and the next renewal
+        # re-stamps the full duration from that instant.
+        logger.info(
+            'recording session lease runway verified; nothing written ' 'uid=%s session=%s conversation=%s runway_s=%d',
+            uid,
+            recording_session_id,
+            conversation_id,
+            int(remaining_runway.total_seconds()),
+        )
+        return True
     transaction.update(
         session_ref,
         {'lease_expires_at': now + RECORDING_SESSION_LEASE_DURATION, 'updated_at': now},
@@ -246,6 +294,15 @@ def renew_recording_session_lease(
     uses apply here: the shared bounded fresh-transaction contention budget
     replays a read-time abort on a brand-new transaction, and
     ``run_transactional`` restarts an expired-transaction rejection.
+
+    Since 2026-10-27 the renewal commits read-only while the durable fence
+    still holds more than ``RECORDING_SESSION_LEASE_RUNWAY_FLOOR`` of runway:
+    the transactional read re-verifies identity and phase, reports True, and
+    writes nothing, so roughly two of every three renewals stop taking the
+    document lock every lifecycle event and the recovery sweep need. The
+    floor keeps one renewal interval plus the redrive budget of guaranteed
+    coverage; once wall-clock decay reaches it the next renewal re-stamps the
+    full duration, preserving blackout immunity exactly as before.
     """
     if not uid or not recording_session_id or not conversation_id:
         return False

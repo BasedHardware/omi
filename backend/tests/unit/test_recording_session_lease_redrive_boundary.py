@@ -540,6 +540,10 @@ async def test_converged_cycle_redrives_to_a_clean_no_op(blip_store, monkeypatch
     await asyncio.gather(*host.spawned)
     path = ('users', 'uid', 'recording_sessions', 'session')
     first_commit = blip_store.documents[path]['lease_expires_at']
+    # Deplete the fence to a minute of runway so the second cycle's renewal
+    # has a real stamp to land (the runway skip leaves a still-healthy fence
+    # untouched by design).
+    blip_store.documents[path]['lease_expires_at'] = first_commit - timedelta(minutes=4)
 
     clock.advance(minutes=1)
     controller.note_audio_activity()
@@ -729,24 +733,31 @@ async def test_committed_fence_is_in_the_future_after_convergence(blip_store, mo
 
 
 async def test_two_clean_minutes_keep_advancing_the_fence(blip_store, monkeypatch):
-    """Two consecutive healthy minutes commit two renewals with no waits: the
+    """Consecutive healthy minutes stay wait-free while the fence holds: a
+    floor-depleted minute writes, the next minute verifies read-only, and the
     controller-side bookkeeping stays out of the healthy path entirely."""
     clock = _Clock(datetime(2026, 10, 22, 15, 30, tzinfo=timezone.utc))
     monkeypatch.setattr(recording_sessions, '_now', lambda: clock.value)
+    # A fence at the floor makes the first clean minute a real write; the
+    # runway skip then holds the fresh fence without a second lock.
+    blip_store.documents[('users', 'uid', 'recording_sessions', 'session')]['lease_expires_at'] = blip_store.documents[
+        ('users', 'uid', 'recording_sessions', 'session')
+    ]['lease_expires_at'] - timedelta(minutes=4)
     host = _RenewalHost(blip_store, clock)
     controller = LiveConversationController(host, clock=clock)
 
     controller.note_audio_activity()
     await asyncio.gather(*host.spawned)
     path = ('users', 'uid', 'recording_sessions', 'session')
+    written_fence = blip_store.documents[path]['lease_expires_at']
 
     clock.advance(minutes=1)
     controller.note_audio_activity()
     await asyncio.gather(*host.spawned)
 
-    assert blip_store.documents[path]['lease_expires_at'] == (
-        clock.value + recording_sessions.RECORDING_SESSION_LEASE_DURATION
-    )
+    # The skip keeps the written fence: still a future fence, never decayed.
+    assert blip_store.documents[path]['lease_expires_at'] == written_fence
+    assert blip_store.documents[path]['lease_expires_at'] > clock.value
     assert host.waits == []
 
 
