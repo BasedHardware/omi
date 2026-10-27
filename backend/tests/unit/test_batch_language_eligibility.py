@@ -10,8 +10,14 @@ from unittest.mock import Mock
 from prometheus_client import REGISTRY
 import pytest
 
-from config.batch_pipeline import language_eligibility_enabled
+from config.batch_pipeline import known_unsupported_batch_language, language_eligibility_enabled
 from config.policy import BatchUnitPolicy
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+from utils.batch_pipeline import intake
+from utils.batch_pipeline.artifacts import ProtectionContext
+from utils.batch_pipeline.audio import audio_unit
+from utils.stt import batch_language
+from utils.sync.legacy_dark import LegacySyncMode
 
 ROUTE_METRIC = 'omi_batch_pipeline_language_route_total'
 EXCLUDED_LABELS = {'surface': 'intake', 'language_class': 'unsupported', 'route': 'multilingual'}
@@ -27,15 +33,8 @@ def defaults(monkeypatch):
     monkeypatch.delenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', raising=False)
 
 
-async def upload(monkeypatch, *, user_language, single=False, conversation_language=None, mode='on'):
+async def upload(monkeypatch, *, user_language, single=False, conversation_language=None, mode='on', owner=None):
     """Run a new sync upload through intake; staging raises so admission stops at custody."""
-    from utils.batch_pipeline import intake
-    from utils.batch_pipeline.audio import audio_unit
-    from utils.batch_pipeline.artifacts import ProtectionContext
-    from utils.stt import batch_language
-    from utils.sync.legacy_dark import LegacySyncMode
-    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
-
     staged = []
     probe = Mock(
         return_value=SimpleNamespace(
@@ -50,7 +49,10 @@ async def upload(monkeypatch, *, user_language, single=False, conversation_langu
             'transcription_preferences': {'single_language_mode': single},
         }
         if conversation_id:
-            snapshots['conversations'] = {conversation_id: {'language': conversation_language}}
+            row = {'language': conversation_language}
+            if owner:
+                row['record_lane_owner'] = owner
+            snapshots['conversations'] = {conversation_id: row}
         return ProtectionContext('standard', 0)
 
     def stage(work, body):
@@ -117,7 +119,7 @@ async def test_supported_language_is_still_admitted(monkeypatch, user_language):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('user_language', [None, '', 'multi', 'und', 'unknown'])
+@pytest.mark.parametrize('user_language', [None, '', 'multi', 'und', 'unknown', 'auto', 'japanese', 'xx'])
 async def test_multi_blank_or_unknown_language_is_still_admitted(monkeypatch, user_language):
     """Plan section 4: multi/blank users are 52-95% of users and must stay in batch."""
     before = excluded_count()
@@ -155,3 +157,21 @@ async def test_legacy_draining_or_dark_keeps_the_provider_route(monkeypatch, mod
     # Legacy cannot take the upload back there; the C8 provider-STT route serves it.
     response, staged, _ = await upload(monkeypatch, user_language='ja', mode=mode)
     assert admitted(response, staged)
+
+
+@pytest.mark.asyncio
+async def test_durable_batch_sync_owner_never_falls_through_to_legacy(monkeypatch):
+    # live_upload may claim batch_sync_v1 before intake; that owner is durable (routers/sync.py).
+    response, staged, _ = await upload(
+        monkeypatch, user_language='ja', conversation_language='ja', owner='batch_sync_v1'
+    )
+    assert admitted(response, staged)
+
+
+@pytest.mark.parametrize(
+    'language,known',
+    [('ja', True), ('ko-KR', True), ('zh_CN', True), ('en', False), ('es', False), ('multi', False)]
+    + [(value, False) for value in (None, '', 'auto', 'und', 'unknown', 'japanese', 'xx', 3)],
+)
+def test_known_unsupported_requires_a_recognized_non_parakeet_code(language, known):
+    assert known_unsupported_batch_language(language) is known
