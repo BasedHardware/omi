@@ -1547,7 +1547,9 @@ compression/encryption and redirect patches. Over-cap donors remain separate;
 assignment rechecks every replan against excluded and already-existing anchors
 so a late/retried chunk cannot replace its donor's earlier speech. When removing
 a bridge strands that anchor, assignment keeps the old survivor separate and
-appends or deduplicates at the existing donor. The 900 KiB sync append preflight
+appends or deduplicates at the existing donor. The cap limits donor absorption;
+incoming speech that still fits under the append budget can remain on the
+canonical. The 900 KiB sync append preflight
 and size-limit backstop remain. Incoming speech that cannot fit uses the usual
 new/neighbouring-row rollover without truncation. Smart-merge absorption also
 uses the size-limit backstop: a rejected absorb leaves the durable donor intact
@@ -4356,9 +4358,15 @@ complete encoded plan, so a write that fits behaves exactly as before. Each acce
 rollover is re-checked until it fits; a chain of full conversations costs one plan per
 row, which only an account at the ceiling pays. An
 identical retry plans the same rollover and deduplicates into it. A dedupe-only retry
-still writes in place. When no safe home exists (the new row would overwrite a
-tombstone, be empty, or break a fence) the original write stands
-(`reason=size_rollover_unavailable outcome=unavailable`). If a commit is still rejected for size, and the
+writes in place only when the projected document fits; otherwise it acknowledges
+already durable speech without a write. When no ordinary safe home exists, incoming
+speech goes to a deterministic fresh sync row with no inherited transcript. If it
+cannot fit in one row, assignment splits it across fresh rows at segment boundaries,
+in order, and sizes every part before staging any write. A single indivisible
+segment that exceeds the budget rejects the entire transaction with keyed
+`reason=size_rollover_unavailable outcome=rejected`, preserving the input for retry.
+Batch live-record replacement uses the same encoded pre-write gate and honours
+commit-proven full targets. If a commit is still rejected for size, and the
 message names a conversation (or no document), `assign_sync_conversation` retries once
 with it marked full (`reason=size_limit_retry outcome=rejected`, then `trigger=commit_limit`); a
 second rejection, or one naming an index document, fails as before and earns a strike.

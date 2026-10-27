@@ -179,10 +179,18 @@ Assignment stops adding donors and replans without them or their bridge
 intervals. Every replan rejects excluded/existing IDs as new creates; when
 removing a bridge strands its own incoming anchor, the old survivor stays
 separate and speech appends/deduplicates at the durable donor. Unabsorbed
-donors retain their earlier speech. Ordinary appends
+donors retain their earlier speech. The cap stops **donor absorption**: incoming
+speech that still fits on the canonical under the 900 KiB append budget stays
+there; a cap stop alone does not require rollover. Ordinary appends
 retain the **900 KiB** whole-document preflight and the size-limit commit
 backstop: speech that cannot fit goes to a new or neighbouring sync row,
-without truncation or dropping speech. Smart-merge absorption now uses that
+without truncation or dropping speech. Batch live-record replacement uses the
+same encoded pre-write budget and honours commit-proven full IDs on retry.
+If no existing or ordinary new anchor is safe, assignment creates deterministic
+fresh sync rows containing only incoming speech. Inputs larger than one row
+split at segment boundaries in order, with every part sized before any write.
+A single segment that cannot fit rejects the whole transaction and retains the
+input for retry; no oversized write is staged. Smart-merge absorption uses that
 backstop too; a rejected absorb keeps its already durable donor separate, so
 normal finalization produces its own summary. No redirect, ancestry or audit
 write from the rejected absorb commits. Existing oversized rows are not migrated.
@@ -197,7 +205,10 @@ invents a size band.
 
 The existing `sync_assignment_target` event uses `reason=size_rollover`,
 `size_rollover_unavailable` or `size_limit_retry` with closed
-`outcome=rolled_over|unavailable|rejected`. Size-backstop rollover success is
+`outcome=rolled_over|rejected`. `size_rollover_unavailable` is reserved for an
+indivisible input that cannot fit, with `outcome=rejected` and attribution.
+Cap-triggered changes of destination emit the same keyed rollover event with
+`trigger=size_cap` and the actual new/sibling target kind. Size-backstop rollover success is
 emitted after commit (`stage=commit`); transaction-body-only callers explicitly
 report `stage=plan`. These events and size-related `sync_persistence_exception`
 lines carry `job_ref` and `attempt_ref` through `bounded_correlation_ref`:

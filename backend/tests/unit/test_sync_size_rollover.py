@@ -25,7 +25,7 @@ from tests.unit.test_sync_cross_job_assignment import _smart_merge_pair, chunk, 
 from utils.conversations.size_limit import projected_document_bytes, projected_size_bucket
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.sync import assignment
-from utils.sync.assignment_errors import SyncAssignmentSuperseded
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
 from utils.sync.pipeline import _firestore_doc_kind
 
 _LONG = 'An unusually long stretch of narration that fills the conversation. ' * 60
@@ -292,16 +292,18 @@ def test_deleted_rollover_stays_deleted(monkeypatch):
     assert _row(store, 'b') == deleted
 
 
-def test_redirected_anchor_with_no_safe_home_keeps_the_original_write(monkeypatch, caplog):
+def test_redirected_anchor_with_no_safe_home_uses_fresh_incoming_only_row(monkeypatch, caplog):
     store = _full_store(monkeypatch)
     store.rows[('users', 'u', 'conversations', 'x')] = dict(
         chunk('x', 1060), deleted=True, discarded=True, sync_merged_into='a', sync_content_revision=1
     )
+    before = deepcopy(_row(store, 'a'))
     result, created, _ = intake(store, chunk('x', 1060, text='Words for a redirected anchor.'))
-    assert result['id'] == 'a' and not created
-    assert [line.split(" job_ref=")[0] for line in _events(caplog)] == [
-        'event=sync_assignment_target reason=size_rollover_unavailable outcome=unavailable trigger=estimate projected_size_bucket=lt_500k'
-    ]
+    assert result['id'] not in {'a', 'x'} and created
+    assert _texts(result) == ['Words for a redirected anchor.']
+    assert _row(store, 'a') == before
+    assert 'outcome=rolled_over' in caplog.text
+    assert 'size_rollover_unavailable' not in caplog.text
     assert _row(store, 'x')['sync_merged_into'] == 'a'
 
 
@@ -653,7 +655,8 @@ def test_pipeline_doc_kind_prefers_the_bounded_stamp():
 # --------------------------------------------------------- pre-absorption cap
 
 
-def test_absorption_cap_keeps_donor_intact_without_losing_speech(caplog):
+def test_absorption_cap_stops_donors_but_keeps_fitting_incoming_append_on_canonical(caplog):
+    """The 800 KiB donor cap does not forbid an append that fits the 900 KiB budget."""
     store = _receipt_bridge_store(850 * 1024)
     donor = deepcopy(_row(store, 'c'))
     result, created, survivors = intake(store, chunk('b', 1120, text='One short bridging sentence.'))
@@ -797,7 +800,7 @@ def test_cap_stop_never_recreates_an_excluded_existing_anchor(new_speech):
     assert not any(path[2] == 'conversations' for path, _ in store.transactions[-1].sets)
 
 
-@pytest.mark.parametrize('destination', ['new_row', 'sibling_row', 'none'])
+@pytest.mark.parametrize('destination', ['new_row', 'sibling_row', 'fresh_row'])
 def test_rollover_attribution_describes_limited_payload(monkeypatch, caplog, destination):
     from uuid import uuid4
 
@@ -807,7 +810,7 @@ def test_rollover_attribution_describes_limited_payload(monkeypatch, caplog, des
     store = _full_store(monkeypatch)
     if destination == 'sibling_row':
         intake(store, chunk('sibling', 1120, text='Speech already on the sibling.'))
-    elif destination == 'none':
+    elif destination == 'fresh_row':
         store.rows[('users', 'u', 'conversations', 'incoming')] = dict(
             chunk('incoming', 1060), deleted=True, discarded=True, sync_merged_into='a', sync_content_revision=1
         )
@@ -821,14 +824,17 @@ def test_rollover_attribution_describes_limited_payload(monkeypatch, caplog, des
     result, created, _ = invoke(job_id=job, attempt_ref=attempt)
     event = next(line for line in _events(caplog) if 'reason=size_rollover' in line)
     assert f'job_ref={bounded_correlation_ref(job)} attempt_ref={bounded_correlation_ref(attempt)}' in event
-    assert f'rollover_target_kind={destination}' in event
-    assert f"outcome={'unavailable' if destination == 'none' else 'rolled_over'}" in event
+    assert f"rollover_target_kind={'new_row' if destination == 'fresh_row' else destination}" in event
+    assert 'outcome=rolled_over' in event
     # The destination has fewer segments. Report the plan that exceeded the limit.
     assert f"segments_bucket={'3' if destination == 'sibling_row' else '2'}" in event
     assert 'speech_seconds_bucket=30' in event
     assert all(value not in event for value in [job, attempt, 'Private speech', 'incoming', 'pendant'])
-    assert created is (destination == 'new_row')
-    assert result['id'] == {'new_row': 'incoming', 'sibling_row': 'sibling', 'none': 'a'}[destination]
+    assert created is (destination != 'sibling_row')
+    if destination == 'fresh_row':
+        assert result['id'] not in {'incoming', 'a'}
+    else:
+        assert result['id'] == {'new_row': 'incoming', 'sibling_row': 'sibling'}[destination]
 
 
 def test_backstop_logs_rollover_only_after_successful_commit(adapter, caplog):
@@ -869,3 +875,197 @@ def test_abandoned_transaction_plan_never_claims_a_committed_rollover(monkeypatc
     result, created, survivors = assignment.run_with_size_limit_backstop(retry_like_sdk, lambda: 'b')
     assert result['id'] == 'b' and not created and not survivors
     assert not [line for line in _events(caplog) if 'outcome=rolled_over' in line]
+
+
+@pytest.mark.parametrize('commit_rejection', [False, True])
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_batch_live_replacement_sizes_before_write_and_routes_commit_retry(
+    adapter, monkeypatch, caplog, level, commit_rejection
+):
+    store = _RejectingStore(0)
+    original = dict(chunk('live', 1000), data_protection_level=level, record_lane_owner='batch_live_v1')
+    original['transcript_segments'][0]['id'] = 'old'
+    original['structured'] = {'overview': 'x' * 4000}
+    encoded = adapter._prepare_conversation_for_write(deepcopy(original), 'u', level)
+    store.rows[('users', 'u', 'conversations', 'live')] = encoded
+    before = deepcopy(encoded)
+    incoming = dict(chunk('replacement', 1000, text='Entirely new finalized speech.'), data_protection_level=level)
+    incoming['transcript_segments'][0]['id'] = 'new'
+    incoming['_batch_replace_live'] = {'start': 1000, 'end': 1010}
+    incoming['_batch_require_live_target'] = True
+    if commit_rejection:
+        store.failures[:] = [True]
+    else:
+        monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 3500)
+    result, created, survivors = adapter.assign_sync_conversation(
+        'u', incoming, target_id='live', firestore_client=store
+    )
+    assert created and result['id'] != 'live' and survivors
+    assert _row(store, 'live') == before
+    assert _texts(result) == ['Entirely new finalized speech.']
+    assert len(store.transactions) == (2 if commit_rejection else 1)
+    writes = store.transactions[-1].written
+    assert ('users', 'u', 'conversations', 'live') not in writes
+    assert 'outcome=rolled_over' in caplog.text
+    assert f"trigger={'commit_limit' if commit_rejection else 'estimate'}" in caplog.text
+    assert incoming['_batch_replace_live'] == {'start': 1000, 'end': 1010}
+
+
+def _many_segments(count=4):
+    incoming = chunk('large-input', 1060)
+    incoming['transcript_segments'] = [
+        {
+            'id': f'line-{i}',
+            'text': f'Unique line {i}. ' + 'x' * 900,
+            'start': i * 10.0,
+            'end': i * 10.0 + 9.5,
+            'speaker_id': 0,
+        }
+        for i in range(count)
+    ]
+    incoming['finished_at'] = chunk('finish', 1060 + (count - 1) * 10)['finished_at']
+    return incoming
+
+
+def test_incoming_alone_splits_in_order_without_loss_and_indexes_every_row(monkeypatch):
+    store = StrictFirestore()
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 2400)
+    incoming = _many_segments()
+    before = deepcopy(incoming)
+    result, created, survivors = intake(store, incoming)
+    rows = sorted(conversations(store), key=lambda row: row['started_at'])
+    assert created and len(rows) == 4
+    assert [text for row in rows for text in _texts(row)] == _texts(incoming)
+    assert len(survivors) == 4 and incoming == before
+    assert all(estimate_firestore_document_bytes(row, None) <= 2400 for row in rows)
+    recent = store.rows[('users', 'u', 'sync_assignment', 'recent')]['entries']
+    day = store.rows[('users', 'u', 'sync_assignment', '1970-01-01')]['entries']
+    assert {r['id'] for r in recent} == {r['id'] for r in day} == {r['id'] for r in rows}
+    replay, _, kept = intake(store, incoming)
+    assert not kept
+    assert [text for row in conversations(store) for text in _texts(row)] == [
+        text for row in rows for text in _texts(row)
+    ]
+
+
+def test_indivisible_oversized_segment_rejects_before_any_write_with_attribution(monkeypatch, caplog):
+    from uuid import uuid4
+    from config.sync_telemetry import bounded_correlation_ref
+    from utils.sync.size_telemetry import with_size_attribution
+
+    store = StrictFirestore()
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 2400)
+    incoming = _many_segments()
+    incoming['transcript_segments'][-1]['text'] = 'unlogged input ' * 1000
+    before = deepcopy(incoming)
+    job, attempt = str(uuid4()), str(uuid4())
+
+    @with_size_attribution
+    def invoke(*, job_id, attempt_ref):
+        return intake(store, incoming)
+
+    with pytest.raises(SyncAssignmentConflict, match='exceeds sync size budget'):
+        invoke(job_id=job, attempt_ref=attempt)
+    assert incoming == before and not store.rows
+    assert all(not tx.has_written for tx in store.transactions)
+    event = next(e for e in _events(caplog) if 'reason=size_rollover_unavailable' in e)
+    assert 'outcome=rejected' in event and 'rollover_target_kind=none' in event
+    assert f'job_ref={bounded_correlation_ref(job)} attempt_ref={bounded_correlation_ref(attempt)}' in event
+    assert 'segments_bucket=1' in event and 'speech_seconds_bucket=10' in event
+    assert job not in event and attempt not in event and 'unlogged input' not in event
+
+
+def test_cap_rollover_attributes_the_actual_sibling_destination(monkeypatch, caplog):
+    from uuid import uuid4
+    from config.sync_telemetry import bounded_correlation_ref
+    from utils.sync.size_telemetry import with_size_attribution
+
+    store = _receipt_bridge_store(850 * 1024)
+    # The donor itself is the incoming anchor. Removing it strands its early
+    # survivor, so the cap replan appends to the durable donor instead.
+    donor = _row(store, 'c')
+    donor['started_at'] = chunk('start', 1100)['started_at']
+    donor['finished_at'] = chunk('finish', 1500)['finished_at']
+    job, attempt = str(uuid4()), str(uuid4())
+
+    @with_size_attribution
+    def invoke(*, job_id, attempt_ref):
+        return intake(store, chunk('c', 1520, text='Unlogged new tail speech.'))
+
+    result, created, _ = invoke(job_id=job, attempt_ref=attempt)
+    assert result['id'] == 'c' and not created
+    event = next(e for e in _events(caplog) if 'reason=size_rollover ' in e)
+    assert 'trigger=size_cap' in event and 'outcome=rolled_over' in event
+    assert 'rollover_target_kind=sibling_row' in event
+    assert f'job_ref={bounded_correlation_ref(job)} attempt_ref={bounded_correlation_ref(attempt)}' in event
+    assert 'segments_bucket=3' in event and 'speech_seconds_bucket=30' in event
+    assert job not in event and attempt not in event and 'Unlogged' not in event
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_split_rollover_sizes_every_part_with_real_encoder_and_indexes_all(adapter, monkeypatch, level):
+    incoming = _many_segments()
+    incoming['data_protection_level'] = level
+    for i, segment in enumerate(incoming['transcript_segments']):
+        segment['text'] = ''.join(hashlib.sha256(f'{i}:{j}'.encode()).hexdigest() for j in range(30))
+    probe = StrictFirestore()
+    single = deepcopy(incoming)
+    single['transcript_segments'] = single['transcript_segments'][:1]
+    adapter.assign_sync_conversation('u', single, firestore_client=probe)
+    budget = estimate_firestore_document_bytes(_row(probe, single['id']), None) + 250
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', budget)
+    indexed = []
+    monkeypatch.setattr(adapter, 'index_sync_assignment', lambda uid, ids, donors: indexed.extend(ids))
+    store = StrictFirestore()
+    result, created, survivors = adapter.assign_sync_conversation('u', incoming, firestore_client=store)
+    assert created and len(survivors) == 4
+    rows = sorted(conversations(store), key=lambda row: row['started_at'])
+    assert len(rows) == 4
+    assert set(indexed) == {r['id'] for r in rows}
+    decoded = [
+        adapter.decode_transcript_segments_verified(
+            'u', r['transcript_segments'], r.get('transcript_segments_compressed', False)
+        )
+        for r in rows
+    ]
+    assert [s['text'] for segments in decoded for s in segments] == _texts(incoming)
+    assert all(estimate_firestore_document_bytes(row, None) <= budget for row in rows)
+    assert all(
+        estimate_firestore_document_bytes(payload, None) <= budget
+        for tx in store.transactions
+        for path, payload in tx.sets
+        if path[2] == 'conversations'
+    )
+
+
+def test_split_rollover_legacy_completion_finishes_every_row_before_acknowledging(monkeypatch):
+    import threading
+    from utils.sync.intake_completion import complete_sync_intake
+
+    store = StrictFirestore()
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 2400)
+    incoming = _many_segments()
+    result, created, survivors = intake(store, incoming)
+    ids = {row['id'] for row in conversations(store)}
+    effects = []
+    response = {'new_memories': set(), 'updated_memories': set()}
+    complete_sync_intake(
+        uid='u',
+        assigned=result,
+        created=created,
+        survivors=survivors,
+        response=response,
+        lock=threading.Lock(),
+        language='en',
+        audio_enabled=True,
+        store_audio=lambda cid: effects.append(('audio', cid)),
+        finish=lambda uid, row, *args, **kwargs: effects.append(('finish', row['id'])),
+        mark_finalize=lambda: None,
+        acknowledge=lambda: effects.append(('ack', None)),
+    )
+    assert {cid for kind, cid in effects if kind == 'audio'} == ids
+    assert {cid for kind, cid in effects if kind == 'finish'} == ids
+    assert response['new_memories'] == ids
+    assert effects[-1] == ('ack', None)
+    assert sum(kind == 'ack' for kind, _ in effects) == 1
+    assert '_sync_size_rollover_rows' not in result

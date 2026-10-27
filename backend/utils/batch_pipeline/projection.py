@@ -953,15 +953,19 @@ class Projector:
                         silent=receipt.get('silent_redrive') is True,
                     )
                 )
-            if receipt.get('audio_required') and not binding.native_record:
-                with projection_phase('playback', policy):
-                    if self.playback is not None:
-                        self.playback(item, canonical)
-                    else:
-                        self.persist_playback(item, binding, canonical, receipt)
+            outputs = receipt.get('size_rollover_outputs') or [{'conversation_id': canonical}]
+            for output in outputs:
+                output_id = output['conversation_id']
+                if receipt.get('audio_required') and not binding.native_record:
+                    with projection_phase('playback', policy):
+                        if self.playback is not None:
+                            self.playback(item, output_id)
+                        else:
+                            self.persist_playback(item, binding, output_id, receipt)
             if receipt['enrichment_required']:
                 if (receipt.get('speaker_scope') or '').startswith('final:batch:'):
-                    prepare_voice_evidence(self, item, binding, canonical)
+                    for output in outputs:
+                        prepare_voice_evidence(self, item, binding, output['conversation_id'])
                 with projection_phase('enrichment', policy):
                     self.store.mark_enrichment(
                         item.segment_id,

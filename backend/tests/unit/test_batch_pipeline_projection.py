@@ -852,3 +852,48 @@ def test_stamp_gap_reroute_reports_lineage_telemetry_after_batch_commit(binding,
     assert 'event=sync_lineage_stamp_append outcome=stamp_gap_refused span_delta_bucket=0' in caplog.text
     assert 'synthetic-neighbour' not in caplog.text
     assert '_sync_lineage_stamp_gap_refused' not in assigned
+
+
+def test_split_rollover_enqueues_every_output_before_acknowledging_and_resumes(monkeypatch, binding):
+    from utils.sync import reprocess
+
+    client = StrictFirestore()
+    store = ProjectionStore(Mock(client=client))
+    receipt_ref = client.collection('receipts').document('segment')
+    receipt_ref.create(
+        {
+            'state': 'persisted',
+            'conversation_id': 'part-0',
+            'size_rollover_outputs': [{'conversation_id': f'part-{i}', 'created': True} for i in range(3)],
+        }
+    )
+    session = Mock(job={'priority': 0})
+    session.prepare.side_effect = lambda transaction, **_: receipt_ref.get(transaction=transaction)
+    session.guard.side_effect = lambda transaction, _: receipt_ref.get(transaction=transaction)
+    session.receipt.side_effect = lambda: receipt_ref.get().to_dict()
+    session.write_receipt.side_effect = lambda transaction, receipt: transaction.set(receipt_ref, receipt)
+    monkeypatch.setattr(store, 'session', lambda *a, **k: session)
+    monkeypatch.setattr(store, 'run', lambda operation, **kwargs: operation(client.transaction()))
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    calls = []
+
+    def wake(row):
+        calls.append(row['conversation_id'])
+        if len(calls) == 1:
+            assert receipt_ref.get().to_dict()['state'] == 'persisted'
+            raise RuntimeError('interrupted after first durable enqueue')
+
+    monkeypatch.setattr(reprocess, '_enqueue', wake)
+    with pytest.raises(RuntimeError, match='interrupted'):
+        store.mark_enrichment('segment', binding, 0, 'part-0', 'en', policy=ProjectionPolicy())
+    store.mark_enrichment('segment', binding, 1, 'part-0', 'en', policy=ProjectionPolicy())
+    assert calls == ['part-0', 'part-1', 'part-2']
+    assert receipt_ref.get().to_dict()['state'] == 'ready'
+    assert receipt_ref.get().to_dict()['size_rollover_enriched'] == calls
+    assert all(
+        client.collection(reprocess.COLLECTION).document(reprocess.key(binding.owner_id, cid)).get().exists
+        for cid in calls
+    )

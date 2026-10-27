@@ -201,6 +201,22 @@ def complete_sync_intake(
     episode covering it before anything downstream can fail; it never raises
     and never changes the intake result.
     """
+    for row, row_created in assigned.pop('_sync_size_rollover_rows', []):
+        complete_sync_intake(
+            uid=uid,
+            assigned=row,
+            created=row_created,
+            survivors=[],
+            response=response,
+            lock=lock,
+            language=language,
+            audio_enabled=audio_enabled,
+            store_audio=store_audio,
+            finish=finish,
+            mark_finalize=mark_finalize,
+            acknowledge=lambda: None,
+            attach_episode=attach_episode,
+        )
     repeat_only = bool(assigned.pop('_sync_lineage_repeat_only', False))
     completion_pending = bool(assigned.pop('_sync_lineage_completion_pending', False))
     stats = assigned.pop('_sync_lineage_dedupe', None)

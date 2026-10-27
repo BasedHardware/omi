@@ -491,10 +491,11 @@ def test_receipt_only_append_past_an_oversized_donor_rolls_over_safely(monkeypat
     prove(chunk, row)
     store = seeded_store_with_donor([row])
     donor_stored = store.rows[('users', 'u', 'conversations', 'DONOR-1')]
-    donor_stored['structured'] = {'title': '', 'overview': 'x' * 8192}
+    donor_stored['structured'] = {'title': '', 'overview': 'x' * 16000}
     donor_before = deepcopy(donor_stored)
-    live_size = estimate_firestore_document_bytes(store.rows[('users', 'u', 'conversations', LIVE_ID)], None)
-    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', live_size + 64)
+    # Both existing rows are full; a fresh receipt-bearing input still fits.
+    store.rows[('users', 'u', 'conversations', LIVE_ID)]['structured'] = {'overview': 'x' * 16000}
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 12000)
     with caplog.at_level(logging.WARNING):
         assigned, created, survivors = intake(store, chunk, target_id=LIVE_ID)
     assert created is True and [s['text'] for s in survivors] == texts

@@ -51,7 +51,9 @@ def size_fields(payload: dict | None = None, *, cid: str | None = None, target_k
     return f'job_ref={current.job_ref} attempt_ref={current.attempt_ref} {shape} ' f'rollover_target_kind={target_kind}'
 
 
-def log_size_rollover(log: Logger, message: str) -> None:
+def log_size_rollover(log: Logger, message: str, *args: object) -> None:
+    if args:
+        message = message % args
     current = _current.get()
     if current is not None and current.backstop:
         current.rollover = message
