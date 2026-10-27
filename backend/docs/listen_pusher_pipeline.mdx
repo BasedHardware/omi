@@ -4464,7 +4464,7 @@ neither a provider death nor a recovery episode or router health observation.
 
 On the next onset, VAD returns its retained original PCM pre-roll followed by the
 onset chunk. The serving send boundary holds that packet until the old receive
-loop has finished. With default-on `STT_IDLE_REOPEN_COST_RESELECT_ENABLED`, a
+loop has finished. With `STT_IDLE_REOPEN_COST_RESELECT_ENABLED` set true, a
 managed recovery-enabled leg requests a planned `normal_close` handoff instead
 of invoking its stored Soniox factory. The ordinary configured chain rechecks
 cost stages/bench, user allocation, language capability, account health and cap
@@ -4479,7 +4479,11 @@ vendor; the selected successor owns the one funded dispatch. The decision is
 pinned with that onset, so an in-flight switch change cannot leave a deferred
 charge on the stored-factory path. The exact remaining allowance still delivers
 its last admitted chunk, and switch-off keeps the existing debit boundary.
-`false`, `0` or `off` restores the same captured Soniox endpoint/config. Legacy
+The flag is default off since the 2026-10-27 first-text regression: at fleet
+scale the per-onset teardown/rebuild churn saturated the window cap, exhausted
+recovery chains and terminated sessions, and first text moved to the user's
+next utterance (listenlat RCA; unset or `false`/`0`/`off` keeps the in-place
+reopen through the same captured Soniox endpoint/config). Legacy
 unmanaged and recovery-disabled legs retain their existing raw reopen.
 Dial time adds transcript onset latency; capture keeps
 its original positions. Provider timestamps restart at zero on the new socket;

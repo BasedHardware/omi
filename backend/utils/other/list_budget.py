@@ -386,15 +386,16 @@ def budgeted_get_all(client: Any, refs: Iterable[Any], budget: Optional[ListRead
     return snapshots
 
 
-def budgeted_document_get(reference: Any, budget: Optional[ListReadBudget]) -> Any:
+def budgeted_document_get(reference: Any, budget: Optional[ListReadBudget], *, transaction: Any = None) -> Any:
     """``reference.get()`` under the budget."""
+    read_options = {'transaction': transaction} if transaction is not None else {}
     if budget is None:
-        return reference.get()
+        return reference.get(**read_options)
     timeout = budget.rpc_timeout()
     try:
-        snapshot = reference.get(timeout=timeout, retry=FIRESTORE_NO_RETRY)
+        snapshot = reference.get(**read_options, timeout=timeout, retry=FIRESTORE_NO_RETRY)
     except TypeError:
-        snapshot = reference.get()
+        snapshot = reference.get(**read_options)
     except _FirestoreDeadlineExceeded as exc:
         budget.mark_exhausted('deadline')
         raise ListReadBudgetExhausted('deadline') from exc
