@@ -878,12 +878,13 @@ def _citation_nodes(nodes_ref: Any, memory_ids: List[str]) -> List[Any]:
     if not kg_citation_index_enabled():
         return list(nodes_ref.stream())
     ids = sorted(set(memory_ids))
-    rows: Dict[str, Any] = {}
+    # A node can match every chunk of a large retraction. Keep the original
+    # single scan for bulk work rather than multiply billed reads for it.
+    if len(ids) > 30:
+        return list(nodes_ref.stream())
     try:
-        for start in range(0, len(ids), 30):
-            query = nodes_ref.where(filter=FieldFilter('memory_ids', 'array_contains_any', ids[start : start + 30]))
-            for doc in query.stream():
-                rows[doc.id] = doc
+        query = nodes_ref.where(filter=FieldFilter('memory_ids', 'array_contains_any', ids))
+        return list(query.stream())
     except FailedPrecondition as error:
         if 'index' not in str(error).lower():
             raise
@@ -896,7 +897,6 @@ def _citation_nodes(nodes_ref: Any, memory_ids: List[str]) -> List[Any]:
             log=logger,
         )
         return list(nodes_ref.stream())
-    return list(rows.values())
 
 
 @read_origin('task:kg_citation_prune')

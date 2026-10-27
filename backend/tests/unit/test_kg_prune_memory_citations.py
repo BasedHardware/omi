@@ -214,16 +214,43 @@ def test_reverse_index_reduces_reads_and_preserves_global_orphan_cleanup(kg_modu
     assert legacy.reads == 206
 
 
-def test_chunked_citations_deduplicate_nodes_and_fallback_before_writes(kg_module):
+def test_bulk_citations_retain_legacy_scan_without_read_amplification(kg_module, monkeypatch):
+    kg_mod, store = kg_module
+    uid = 'synthetic-kg'
+    prefix = f'users/{uid}/knowledge_nodes'
+    path = f'{prefix}/node'
+    ids = [f'memory-{i:02d}' for i in range(65)]
+    store.docs[path] = {'id': 'node', 'memory_ids': ids + ['keep']}
+    store.docs[f'{prefix}/unrelated'] = {'id': 'unrelated', 'memory_ids': ['keep']}
+    legacy = _KgFakeDb({path: dict(row) for path, row in store.docs.items()})
+    assert kg_mod.prune_memory_citations_from_kg(uid, ids, db_client=store) == 1
+    monkeypatch.setenv('FSR_KG_CITATION_INDEX', 'off')
+    assert kg_mod.prune_memory_citations_from_kg(uid, ids, db_client=legacy) == 1
+    for db in (store, legacy):
+        for row in db.docs.values():
+            row.pop('updated_at', None)
+    assert store.docs == legacy.docs
+    assert store.query_count == 0
+    assert store.reads == legacy.reads == 4
+
+
+def test_thirty_distinct_citations_use_one_query_even_with_duplicate_inputs(kg_module):
     kg_mod, store = kg_module
     uid = 'synthetic-kg'
     path = f'users/{uid}/knowledge_nodes/node'
-    ids = [f'memory-{i:02d}' for i in range(65)]
-    store.docs[path] = {'id': 'node', 'memory_ids': ids}
-    assert kg_mod.prune_memory_citations_from_kg(uid, ids) == 1
-    assert store.query_count == 3
-    assert path not in store.docs
-    store.docs[path] = {'id': 'node', 'memory_ids': ids}
-    store.fail_query_at = store.query_count + 2
-    assert kg_mod.prune_memory_citations_from_kg(uid, ids) == 1
+    ids = [f'memory-{i:02d}' for i in range(30)]
+    store.docs[path] = {'id': 'node', 'memory_ids': ids + ['keep']}
+    assert kg_mod.prune_memory_citations_from_kg(uid, ids + ids, db_client=store) == 1
+    assert store.query_count == 1
+    assert store.docs[path]['memory_ids'] == ['keep']
+
+
+def test_missing_native_index_falls_back_before_writes(kg_module):
+    kg_mod, store = kg_module
+    uid = 'synthetic-kg'
+    path = f'users/{uid}/knowledge_nodes/node'
+    store.docs[path] = {'id': 'node', 'memory_ids': ['old']}
+    store.fail_query_at = 1
+    assert kg_mod.prune_memory_citations_from_kg(uid, ['old'], db_client=store) == 1
+    assert store.query_count == 1
     assert path not in store.docs

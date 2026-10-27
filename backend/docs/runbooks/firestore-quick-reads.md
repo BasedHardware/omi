@@ -26,9 +26,9 @@ rebasing, source/lineage checks, open-loop extraction and retirement paths remai
 
 Firestore's native `memory_ids` array index is the reverse-citation writer: it
 updates with existing node writes and covers historical data before serving.
-There is no separate side collection or backfill. At most 30 memory IDs per query
-are materialized and nodes deduplicated before mutations. A missing index falls
-back before any write. Global surviving-node and orphan-edge scans remain: the
+There is no separate side collection or backfill. One query for at most 30 distinct memory IDs is materialized before mutations.
+Larger retractions keep the original single scan, so overlapping citation chunks
+cannot amplify reads. A missing index falls back before any write. Global surviving-node and orphan-edge scans remain: the
 operation must still remove unrelated pre-existing dangling edges. No canonical
 promotion, deletion/hold authority, transcription, speaker or Free-plan change.
 
@@ -45,7 +45,7 @@ The 10-26 fleet caller pools are **16.749388M reads/day** for
   121-to-1 lookup is mechanism evidence, not the fleet traffic mix.
 - KG removes only the first of two full node scans; the edge scan remains. Its
   full caller pool is $115–126/month, but this change's structural ceiling is
-  **$0–63/month**, before empty-query floors and chunk overlap. The 206-to-106
+  **$0–63/month**, before empty-query floors and the unknown fraction of bulk retractions. The 206-to-106
   synthetic fixture corresponds to $56–61/month only if that graph shape holds
   fleet-wide; it is not a measured forecast.
 
