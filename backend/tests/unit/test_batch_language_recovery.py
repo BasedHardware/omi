@@ -920,3 +920,26 @@ def test_operator_repair_census_selects_only_the_soniox_empty_cohort(setup, monk
         operator.paid_digest('census', 1, 4),
         operator.paid_digest('census', 1, 4, independent=True),
     }
+
+
+@pytest.mark.parametrize('fault', ['decoded_over_cap', 'missing_audio_uri'])
+def test_words_repair_bounds_decoded_audio_and_fails_closed_on_malformed_jobs(
+    setup, monkeypatch, legacy_dependencies, fault
+):
+    from config.batch_language_recovery import words_repair_eligible
+
+    client, store, binding, artifacts, modulate, soniox, old = settled_words_without_vad(
+        setup, monkeypatch, legacy_dependencies
+    )
+    if fault == 'missing_audio_uri':
+        job = deepcopy(row(client))
+        job.pop('audio_uri')
+        assert not words_repair_eligible(job)
+        return
+    monkeypatch.setattr('utils.batch_pipeline.speech_redrive.MAX_AUDIO_SECONDS', 4.99)
+    outcome = redrive_one(
+        store, artifacts, 'bad', binding.owner_id, 'repair-plan', old, server_flags=SERVING_ENV, repair=True
+    )
+    assert outcome == 'repair_budget_held'
+    assert row(client)['speech_redrive']['state'] == 'prepared'
+    assert modulate.call_count == 1

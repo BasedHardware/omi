@@ -62,7 +62,10 @@ def words_repair_eligible(job):
         and modulate['word_count'] > 0
         and soniox.get('outcome') == 'empty'
         and soniox.get('word_count') == 0
-        and 0 < job.get('duration_seconds', 0) <= MAX_AUDIO_SECONDS
+        # Malformed jobs fail closed here, never inside a retention transaction.
+        and isinstance(job.get('audio_uri'), str)
+        and type(job.get('duration_seconds')) in {int, float}
+        and 0 < job['duration_seconds'] <= MAX_AUDIO_SECONDS
         and worker_vad_speech(job) is not None
     )
 

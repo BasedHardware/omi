@@ -15,6 +15,7 @@ from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independe
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from config.batch_language_recovery import (
     allowed as independent_allowed,
+    MAX_AUDIO_SECONDS,
     below_silence_threshold,
     prior_modulate_empty,
     words_repair_eligible,
@@ -152,9 +153,18 @@ def redrive_one(
         raise RecoveryFailure('strict_vad', 'no_speech')
     if independent and not independent_allowed(duration):
         return 'independent_budget_held'
+    # The decoded audio (up to 0.1 s past the declared duration) bounds the repair call.
+    if repair and duration > MAX_AUDIO_SECONDS:
+        return 'repair_budget_held'
     if admitted_as_byok(job) and not independent and not repair:
         record_decision(DispatchPath.SPEECH_REDRIVE, True, DispatchReason.BYOK)
-    elif not sync_allowed(uid, item.duration_seconds, provider, lane='batch', path=DispatchPath.SPEECH_REDRIVE):
+    elif not sync_allowed(
+        uid,
+        max(duration, item.duration_seconds) if repair else item.duration_seconds,
+        provider,
+        lane='batch',
+        path=DispatchPath.SPEECH_REDRIVE,
+    ):
         return 'allowance_held'
     # Check deployment dependencies before spending the sole intent. No fallback
     # to Parakeet is permitted if the alternate provider is unconfigured.
