@@ -30,9 +30,9 @@
       "source": "screencapture"
     },
     {
-      "file": "005-mobile-ios-reconnect-opens-connection-guide.png",
+      "file": "005-mobile-ios-reconnect-raises-bluetooth-prompt.png",
       "platform": "mobile-ios",
-      "description": "AFTER: Reconnect tapped. The real paired-device connect runs and the Omi does not come back (the simulator has no Bluetooth), so the existing Connection Guide opens.",
+      "description": "AFTER: Reconnect tapped a second time after the launch prompt and the first one were acknowledged. The simulator has no Bluetooth, so the app's existing Bluetooth prompt opens again; no connect and no device guide.",
       "captured_by": "agent",
       "source": "screencapture"
     },
