@@ -50,9 +50,10 @@ done
 # file keeps its own process. Files are dealt heaviest-first to the least
 # loaded shard using measured per-file weights (backend_unit_shard_weights.tsv;
 # unlisted files weigh DEFAULT_WEIGHT). A round-robin slice let one inserted
-# file shift every later file and left shard walls 433-754s on PR #23767
-# (run 40435691671); the weighted deal projects 641-660s on the same
-# measurements. Without weights every file ties and the deal is round-robin.
+# file shift every later file and left shard walls 433-754s on PR #23767; in
+# leave-one-run-out checks over three full-suite runs the weighted deal cut
+# the worst projected shard from 725-757s to 653-708s. Without weights every
+# file ties and the deal is round-robin.
 shard_total=0
 shard_index=0
 if [ -n "$shard_spec" ]; then
@@ -97,7 +98,7 @@ if [ "$shard_total" -ge 2 ]; then
 import os
 import sys
 
-DEFAULT_WEIGHT = 1.8  # mean measured seconds of the files below the table's 5s floor
+DEFAULT_WEIGHT = 1.1  # mean measured seconds of the files below the table's 2s floor
 selection, total, shard, table = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
 with open(selection, encoding='utf-8') as handle:
     paths = [line.rstrip('\n') for line in handle if line.strip()]
