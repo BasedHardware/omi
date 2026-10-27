@@ -28,10 +28,14 @@ class SyncUploadRefusalBody {
     if (detail == 'Uploaded file is missing a filename' || detail == 'Invalid sync file format') return 'invalid_file';
     if (detail == 'Missing boundary in multipart.' ||
         detail == 'Malformed multipart body' ||
-        detail == 'The Content-Disposition header field "name" must be provided.') return 'malformed_multipart';
+        detail == 'The Content-Disposition header field "name" must be provided.') {
+      return 'malformed_multipart';
+    }
     if (detail?.startsWith('Part exceeded maximum size of ') ?? false) return 'too_large';
     if ((detail?.startsWith('Too many files. Maximum number of files is ') ?? false) ||
-        (detail?.startsWith('Too many fields. Maximum number of fields is ') ?? false)) return 'too_many_parts';
+        (detail?.startsWith('Too many fields. Maximum number of fields is ') ?? false)) {
+      return 'too_many_parts';
+    }
     return 'server_refused';
   }
 }

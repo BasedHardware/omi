@@ -234,7 +234,7 @@ void main() {
 
   testWidgets('a persisted HTTP refusal hides Retry and keeps Share Recording reachable', (tester) async {
     final wals = _tooOldAfternoon().take(2).toList();
-    final wal = wals.first
+    wals.first
       ..status = WalStatus.uploadRejected
       ..filePath = 'audio_refused.bin';
     final sync = await _pump(tester, wals);

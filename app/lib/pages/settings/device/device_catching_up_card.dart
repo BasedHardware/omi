@@ -52,7 +52,9 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now}) {
     // before they can claim a capture range in Right now.
     if (w.status == WalStatus.uploaded &&
         w.uploadedAt < nowSeconds - 86400 &&
-        w.jobPendingConfirmedAt < nowSeconds - 300) continue;
+        w.jobPendingConfirmedAt < nowSeconds - 300) {
+      continue;
+    }
     // A recording time before the plausibility floor is a device clock that was
     // never set; the seconds still count, but the range must not stretch to it.
     if (!walTimerStartPlausible(w.timerStart)) {

@@ -135,6 +135,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   List<Wal>? _syncedWalsCache;
   List<Wal>? _corruptedWalsCache;
   int _filteredWalsCacheStamp = 0;
+  int _quietRefusedWalsCount = 0;
 
   void _ensureFilteredCaches() {
     final stamp = identityHashCode(_allWals) ^ _allWals.length;
@@ -142,13 +143,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     final pending = <Wal>[];
     final synced = <Wal>[];
     final corrupted = <Wal>[];
+    var refusedCount = 0;
     for (final w in _allWals) {
       if (w.status == WalStatus.synced) {
         synced.add(w);
+      } else if (w.status == WalStatus.uploadRejected) {
+        refusedCount++;
       } else if (w.status == WalStatus.corrupted ||
           w.status == WalStatus.outsideRecoveryWindow ||
-          w.status == WalStatus.unsupportedAudio ||
-          w.status == WalStatus.uploadRejected) {
+          w.status == WalStatus.unsupportedAudio) {
         corrupted.add(w);
       } else if (_isPending(w)) {
         pending.add(w);
@@ -157,6 +160,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _pendingWalsCache = pending;
     _syncedWalsCache = synced;
     _corruptedWalsCache = corrupted;
+    _quietRefusedWalsCount = refusedCount;
     _filteredWalsCacheStamp = stamp;
   }
 
@@ -202,7 +206,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   /// Recordings that the storage sheet's Clear All action can remove.
-  int get clearableWalsCount => syncedWals.length + pendingDeletableWals.length + corruptedWals.length;
+  int get clearableWalsCount {
+    _ensureFilteredCaches();
+    return syncedWals.length + pendingDeletableWals.length + corruptedWals.length + _quietRefusedWalsCount;
+  }
 
   bool get isRateLimited => SyncRateLimiter.instance.isLimited;
   DateTime? get rateLimitedUntil => SyncRateLimiter.instance.until;
