@@ -551,7 +551,10 @@ class Scheduler:
         decision that caused the defer; it records the latest decision in the
         same transaction, so an outside reader can classify the wait without
         a second round-trip. Refund defers (shutdown, GPU abort) pass none and
-        preserve the previously recorded decision.
+        preserve the previously recorded decision. ``last_policy_hold`` keeps
+        the latest hold across an unevaluated re-evaluation (which clears the
+        decision to BLIND) until an allow is sealed or another hold replaces
+        it, so the uncommitted-age proxy does not flap on a parked job.
         """
 
         def commit(tx):
@@ -579,6 +582,7 @@ class Scheduler:
             )
             if held_reason:
                 job['compute_decision'] = {'reason': held_reason, 'outcome': 'held', 'at': now}
+                job['last_policy_hold'] = {'reason': held_reason, 'at': now}
             tx.put('jobs', segment_id, job)
             return True
 
