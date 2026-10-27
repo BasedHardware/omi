@@ -254,3 +254,14 @@ def test_missing_native_index_falls_back_before_writes(kg_module):
     assert kg_mod.prune_memory_citations_from_kg(uid, ['old'], db_client=store) == 1
     assert store.query_count == 1
     assert path not in store.docs
+
+
+@pytest.mark.parametrize('memory_id', ['a' * 1501, '\u00e9' * 751])
+def test_oversized_citation_id_retains_legacy_pruning_without_index_truncation(kg_module, memory_id):
+    kg_mod, store = kg_module
+    uid = 'synthetic-kg'
+    path = f'users/{uid}/knowledge_nodes/node'
+    store.docs[path] = {'id': 'node', 'memory_ids': [memory_id, 'keep']}
+    assert kg_mod.prune_memory_citations_from_kg(uid, [memory_id], db_client=store) == 1
+    assert store.query_count == 0
+    assert store.docs[path]['memory_ids'] == ['keep']

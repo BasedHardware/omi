@@ -21,7 +21,12 @@ errors propagate. Both attempts retain the caller's transaction.
 
 The finite predecessor lookup keeps its global six-row window. Missing or empty
 device IDs retain the old scan so absent fields remain visible. Discarded barriers
-stay unbounded within the same device, including deleted barriers. Main's donor
+stay unbounded within the same device, including deleted barriers. Only values
+fully represented by the index are eligible: device and citation identifiers
+over 1,500 UTF-8 bytes retain the original scan. Firestore documents
+[index-value truncation and inconsistent query results](https://docs.cloud.google.com/firestore/quotas)
+above that limit; this is optimization eligibility, not a new input restriction.
+Main's donor
 rebasing, source/lineage checks, open-loop extraction and retirement paths remain.
 
 Firestore's native `memory_ids` array index is the reverse-citation writer: it

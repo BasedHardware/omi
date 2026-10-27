@@ -11,7 +11,7 @@ from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
 
 from ._client import db
 from .read_boundary import parse_snapshot_or_none
-from config.firestore_quick_reads import kg_citation_index_enabled
+from config.firestore_quick_reads import kg_citation_index_enabled, indexed_string_value_safe
 from database.firestore_read_origin import read_origin
 from google.api_core.exceptions import FailedPrecondition
 from utils.observability.fallback import record_fallback
@@ -877,13 +877,13 @@ def _citation_nodes(nodes_ref: Any, memory_ids: List[str]) -> List[Any]:
     """
     if not kg_citation_index_enabled():
         return list(nodes_ref.stream())
-    ids = sorted(set(memory_ids))
+    ids = set(memory_ids)
     # A node can match every chunk of a large retraction. Keep the original
     # single scan for bulk work rather than multiply billed reads for it.
-    if len(ids) > 30:
+    if len(ids) > 30 or not all(indexed_string_value_safe(value) for value in ids):
         return list(nodes_ref.stream())
     try:
-        query = nodes_ref.where(filter=FieldFilter('memory_ids', 'array_contains_any', ids))
+        query = nodes_ref.where(filter=FieldFilter('memory_ids', 'array_contains_any', sorted(ids)))
         return list(query.stream())
     except FailedPrecondition as error:
         if 'index' not in str(error).lower():

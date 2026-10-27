@@ -71,3 +71,19 @@ def test_unrelated_precondition_error_is_not_swallowed(sdk_world):
     sdk_world.api.run_query.side_effect = FailedPrecondition('transaction is no longer active')
     with pytest.raises(FailedPrecondition, match='transaction'):
         _lookup(sdk_world, client_device_id='pendant-1')
+
+
+@pytest.mark.parametrize('device', ['a' * 1501, '\u00e9' * 751])
+def test_oversized_device_retains_barriers_without_truncated_index_lookup(sdk_world, device):
+    test = sdk_world
+    test.world.add('barrier', 11, 2, discarded=True, deleted=True, client_device_id=device)
+    assert [row['id'] for row in _lookup(test, client_device_id=device)] == ['barrier']
+    assert not any(field == 'client_device_id' for field, _, _ in _field_filters(test.queries[-1], test.client))
+
+
+@pytest.mark.parametrize('device', ['a' * 1500, '\u00e9' * 750])
+def test_device_at_index_byte_limit_can_use_partition_query(sdk_world, device):
+    test = sdk_world
+    test.world.add('barrier', 11, 2, discarded=True, client_device_id=device)
+    assert [row['id'] for row in _lookup(test, client_device_id=device)] == ['barrier']
+    assert ('client_device_id', 'EQUAL', device) in _field_filters(test.queries[-1], test.client)

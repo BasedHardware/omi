@@ -39,7 +39,7 @@ from utils.conversations.smart_merge_policy import rebase_donor_segments
 from utils.sync.bridge_observation import log_bridge_observation
 from config import merge_ancestry
 from config.conversation_smart_merge import smart_merge_flatten_enabled
-from config.firestore_quick_reads import smart_merge_partition_enabled
+from config.firestore_quick_reads import smart_merge_partition_enabled, indexed_string_value_safe
 from database.firestore_read_origin import read_origin
 from utils.observability.fallback import record_fallback
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD, OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD
@@ -154,7 +154,13 @@ def find_preceding_conversations(
     # A filter before a finite limit changes the global six-row window. Keep
     # that lookup unchanged; the expensive discarded-barrier scan is unbounded.
     # Missing device fields are not matched by equality-to-null in Firestore.
-    if limit is None and isinstance(client_device_id, str) and client_device_id and smart_merge_partition_enabled():
+    if (
+        limit is None
+        and isinstance(client_device_id, str)
+        and client_device_id
+        and smart_merge_partition_enabled()
+        and indexed_string_value_safe(client_device_id)
+    ):
         with read_origin('task:smart_merge_partition_lookup'):
             try:
                 partition_query = (
