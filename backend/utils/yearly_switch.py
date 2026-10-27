@@ -160,6 +160,19 @@ def switch_refusal(sub: Any, target_price_id: str, now: Optional[int] = None) ->
     return None
 
 
+def request_refusal(
+    sub: Any,
+    target_price_id: str,
+    promotion_code: Optional[str] = None,
+    proration_date: Optional[int] = None,
+    now: Optional[int] = None,
+) -> Optional[str]:
+    """Why POST upgrade-subscription with ``switch_now`` must refuse; None when the switch may run."""
+    if promotion_code:
+        return 'promotion_code'  # no new discounts
+    return switch_refusal(sub, target_price_id, now) or proration_date_refusal(sub, proration_date, now)
+
+
 def proration_date_refusal(sub: Any, proration_date: Optional[int], now: Optional[int] = None) -> Optional[str]:
     """A preview's proration date is honored only inside the current period and for an hour."""
     if proration_date is None:

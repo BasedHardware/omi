@@ -114,9 +114,7 @@ class CreateCheckoutRequest(BaseModel):
 class UpgradeSubscriptionRequest(BaseModel):
     price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
-    # Monthly to yearly on the same plan, charged now with proration instead of scheduled for the end
-    # of the month (utils/yearly_switch.py). proration_date is the one GET /v1/payments/yearly-switch
-    # previewed, so the charge matches what the reader confirmed.
+    # Monthly to yearly on the same plan, charged now at the previewed proration_date (utils/yearly_switch.py).
     switch_now: bool = False
     proration_date: Optional[int] = None
 
@@ -901,21 +899,13 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         if desktop_change_error:
             raise HTTPException(status_code=400, detail=desktop_change_error)
 
-        if request.switch_now:
-            # The yearly switch offer's own rules: no trial (#23298), past_due, scheduled cancel or
-            # change, or discount, and no promotion code (no new discounts).
-            refusal = (
-                'promotion_code'
-                if request.promotion_code
-                else yearly_switch.switch_refusal(stripe_sub, request.price_id)
-                or yearly_switch.proration_date_refusal(stripe_sub, request.proration_date)
-            )
-            if refusal:
-                logger.info(f"Yearly switch refused for user {uid}: {refusal}")
-                raise HTTPException(
-                    status_code=409,
-                    detail="Switching to yearly is not available for this subscription right now.",
-                )
+        # The yearly switch offer's rules: no trial (#23298), past_due, scheduled change or discount.
+        refusal = request.switch_now and yearly_switch.request_refusal(
+            stripe_sub, request.price_id, request.promotion_code, request.proration_date
+        )
+        if refusal:
+            logger.info(f"Yearly switch refused for user {uid}: {refusal}")
+            raise HTTPException(status_code=409, detail="Switching to yearly is not available for this subscription.")
 
         # Validate and resolve promotion code if provided
         resolved_promo_id = None
@@ -982,11 +972,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
             return {
                 "status": "success",
-                "message": (
-                    "You're on yearly billing now."
-                    if request.switch_now
-                    else f"You've been upgraded to {target_plan.value.title()}! Your new plan is active now."
-                ),
+                "message": f"You've been upgraded to {target_plan.value.title()}! Your new plan is active now.",
                 "subscription": (
                     new_subscription.model_dump() if new_subscription else current_subscription.model_dump()
                 ),
