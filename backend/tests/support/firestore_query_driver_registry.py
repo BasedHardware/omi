@@ -174,7 +174,8 @@ BODY_DIGEST = {
     'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'edf090b47ae28c017f15251bc0c9a4fe6d92445745f3b89f585159ac51f0c8d1',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
-    'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
+    # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
+    'database.sync_backfill_sequencer._pending_for_uid': 'fc7bb91a5b03e84f63950c00ca896eaadcd97f055c571fac6a761e4d6bb4fa1d',
     # Re-reviewed: the post-commit task-list cache invalidation adds no query.
     'database.workstreams.import_task_goal_links': '5d2384ad2102107cc487d29c18a47204f5d5fea0201c9ae0d2a56f5959b91971',
     # Re-reviewed: public size guard rename and correction-parent rejection add
