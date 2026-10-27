@@ -2130,7 +2130,7 @@ environments:
           AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
-          AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '5'}
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '25'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: ''}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
@@ -2513,7 +2513,7 @@ environments:
           AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
-          AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '5'}
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '25'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: ''}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
@@ -2913,7 +2913,7 @@ environments:
             AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
-            AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '5'}
+            AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '25'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
@@ -3269,7 +3269,7 @@ environments:
             AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
-            AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '5'}
+            AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '25'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
@@ -3646,7 +3646,7 @@ environments:
             AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
-            AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '5'}
+            AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '25'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
@@ -4003,7 +4003,7 @@ environments:
             AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
-            AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '5'}
+            AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '25'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
