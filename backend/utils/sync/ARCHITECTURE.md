@@ -24,6 +24,14 @@ frame interiors after assignment. Shadow retains the legacy paths described
 below and reports would-skip audio and dedupe disagreements. Known capture
 positions never use speaker labels or wall time as coverage evidence.
 
+**Hard serve-ramp gate (lead ruling):** CAPTURE_COVERAGE_MODE must not move from shadow to serve unless capture-proven drops (incoming and donor) require the lexical novelty/protected-token checks: #23811 and this PR both serving.
+This also applies to a serve cohort configured while the mode is shadow.
+Capture proof qualifies transcript segments for the Residual overlap lexical
+checks below; it never bypasses them, including through the fuzzy fallback.
+There is no capture-coverage startup/configuration guard; this cross-PR release
+prerequisite is documented here and in the flag registry rather than inferred
+from the generic mode parser.
+
 Serve can bind a ledger-derived same-key owner and accepts discovered open
 same-key live rows before their first transcript. The database discovery layer
 still needs the integration change described in the L1 report for unledgered
