@@ -521,7 +521,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                         border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
                         enabledBorder:
                             const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
-                        focusedBorder: const OutlineInputBorder(
+                        focusedBorder: OutlineInputBorder(
                           borderRadius: OmiRadius.smAll,
                           borderSide: BorderSide(color: OmiColors.textTertiary),
                         ),
