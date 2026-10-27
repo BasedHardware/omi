@@ -1374,7 +1374,12 @@ already-connected prefix and tail delivery, queued wire writes, EOS, and final
 provider callbacks inside a 28-second delivery budget, then allows up to 2
 seconds of bounded cancellation/abort cleanup, while the transcript consumer
 stays alive until the bounded STT drain completes so last provider callbacks
-persist before finalization. That overall ~30-second bound is shared by the
+persist before finalization. Every wrapper in that drain chain answers
+`drain_and_close` — including `GatedSTTSocket`, which finalizes the gate's
+held utterance to the provider before awaiting the provider's own tail drain
+(a provider without an async tail gets its synchronous `finish()`), so a
+recovery-adopted leg whose `connection` is gated drains end to end instead of
+raising `AttributeError` and skipping the provider tail. That overall ~30-second bound is shared by the
 monitored persistence drain and the cancellation-acknowledgement wait on the
 session supervisor, and teardown plus conversation finalization always run
 afterwards; flag-off sessions keep the legacy supervision order unchanged. See

@@ -739,6 +739,10 @@ class GatedSTTSocket(STTSocket):
         # Audio-timeline v2: the provider epoch's translator. Accepted sends
         # are recorded on it; a failed send does not consume provider time.
         self._send_tracker = send_tracker
+        # drain_and_close() ran: a second drain or a finish() after it must not
+        # re-flush or re-close the provider (the providers' own guards cover
+        # their transports; this covers the gate's flush).
+        self._drained = False
         # Audio capture for transcript quality validation (off by default)
         self._capture_dir = os.getenv('VAD_GATE_AUDIO_CAPTURE_DIR', '')
         self._raw_file = None
@@ -898,6 +902,55 @@ class GatedSTTSocket(STTSocket):
     def finalize(self) -> None:
         """Flush pending transcript."""
         self._conn.finalize()
+
+    async def drain_and_close(self) -> None:
+        """Await the wrapped provider's tail drain after flushing held speech.
+
+        Every other socket in the serving chain answers ``drain_and_close``
+        (``SafeSonioxSocket``, the parakeet window socket, ``LiveChainSession``,
+        ``ReplayTailSocket``), so the recovery-adopted leg's teardown calls this
+        wrapper's ``connection.drain_and_close()`` unconditionally — an
+        ``AttributeError`` here skipped the provider's tail drain on every
+        gated session that reached that boundary (prod backend-listen since
+        2026-10-22: ``'GatedSTTSocket' object has no attribute
+        'drain_and_close'`` ×362, each one also a ``Listen STT drain failure``
+        and a lost transcript tail). The gate owns one ordering obligation the
+        plain provider does not: its held utterance must reach the provider
+        before the provider's own drain cuts the stream, so finalize first,
+        then drain through the same tolerant fallback the shared drain helper
+        uses — every provider drain closes its own transport, and a provider
+        without an async tail still gets its synchronous close. The flush duty
+        is what ``finish()`` would have done, so a caller that drains instead
+        of finishing loses nothing; a second drain is a no-op, exactly like
+        the providers' own closed-guards.
+        """
+        if self._drained:
+            return
+        self._drained = True
+        if self._gate is not None and self._gate.mode == 'active':
+            try:
+                self._conn.finalize()
+            except Exception:
+                self._gate._finalize_errors += 1  # type: ignore[reportPrivateUsage]
+                logger.warning(
+                    'finalize in drain_and_close failed uid=%s session=%s', self._gate.uid, self._gate.session_id
+                )
+        try:
+            drain_and_close = getattr(self._conn, 'drain_and_close', None)
+            if callable(drain_and_close):
+                await cast(Callable[[], Awaitable[None]], drain_and_close)()
+                return
+            logger.warning('STT provider lacks async tail drain')
+            self._conn.finish()
+        finally:
+            for f in (self._raw_file, self._gated_file):
+                if f:
+                    try:
+                        f.close()
+                    except Exception:
+                        pass
+            self._raw_file = None
+            self._gated_file = None
 
     def finish(self) -> None:
         """Close STT connection. Flushes first if gate is active."""

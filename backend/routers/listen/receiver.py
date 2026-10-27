@@ -1134,7 +1134,18 @@ class ListenReceiver(ReplayFilterMixin):
             ring.close()
         sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
         for socket in sockets:
-            target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
+            # Unwrap to the outermost wrapper that owns the provider transport.
+            # Recovery adoption nests a GatedSTTSocket inside a ReplayTailSocket
+            # (``delivery.connection``), and the delivery's own drain calls
+            # ``connection.drain_and_close()`` — so draining the delivery while
+            # targeting the gated wrapper's transport left the one wrapper
+            # without a drain holding the transport, and the AttributeError
+            # skipped the provider tail (lost transcript tail plus a paired
+            # ERROR pair per session). The delivery stays the drain owner;
+            # unwrap only a top-level gated wrapper.
+            target = socket
+            if not isinstance(target, ReplayTailSocket) and isinstance(target, GatedSTTSocket):
+                target = socket._conn  # type: ignore[reportPrivateUsage]
             if target is None:
                 release_live_stt_socket(socket)
                 continue
