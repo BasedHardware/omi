@@ -58,7 +58,6 @@ from database.sync_assignment import (
 from database.sync_conversation_snapshot import read_redirected, resolve_snapshot
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
-from utils.sync.bridge_observation import log_bridge_observation
 from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, preserve_duplicate_hint, transcript_fingerprint
 from .firestore_index_registry import (
@@ -4273,7 +4272,7 @@ def assign_sync_conversation(
     """
     from utils.sync.assignment import assign_in_transaction
     from config.sync_lineage import sync_lineage_resolve_enabled
-    from utils.sync.intake_completion import log_sync_lineage_created
+    from utils.sync.intake_completion import log_assignment_observations
 
     # The coordinator/projection already validated S1 and cohort admission.
     # Rechecking membership here can refresh its Firestore cache on the hot path.
@@ -4367,14 +4366,9 @@ def assign_sync_conversation(
                 discover_live_candidates,
             )
         conversation = result[0]
-        bridge = conversation.pop('_sync_lineage_bridge', None)
-        if bridge is not None:
-            log_bridge_observation(bridge)
+        log_assignment_observations(conversation, lineage_eligible=lineage_eligible)
         for retired_id in sorted({conversation['id'], *absorbed}):
             stop_quiet_check_for_conversation(uid, retired_id, firestore_client=client)
-        observation = conversation.pop('_sync_lineage_created', None)
-        if lineage_eligible and observation is not None:
-            log_sync_lineage_created(observation)
         if defer_index is not None:
             # Coalesce the lineage's retryable donor deletes once per flush.
             clock.donors = len(absorbed)

@@ -25,6 +25,7 @@ from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.stt.outcomes import TranscriptionOutcome
 from utils.sync.assignment_telemetry import CREATED_UNKNOWN_REASONS
+from utils.sync.bridge_observation import log_bridge_observation
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,16 @@ def log_sync_lineage_created(observation: dict) -> None:
         )
     except Exception:
         pass
+
+
+def log_assignment_observations(conversation: dict, *, lineage_eligible: bool) -> None:
+    """Consume only the successful assignment result, before external effects."""
+    bridge = conversation.pop('_sync_lineage_bridge', None)
+    if bridge is not None:
+        log_bridge_observation(bridge)
+    created = conversation.pop('_sync_lineage_created', None)
+    if lineage_eligible and created is not None:
+        log_sync_lineage_created(created)
 
 
 def acknowledge_processed_segment(
