@@ -147,7 +147,7 @@ enum LivePreviewNotesPolicy {
         }
         for index in text.indices {
             let character = text[index]
-            let nextUnspaced = isUnspaced(character.unicodeScalars.first!.value)
+            let nextUnspaced = character.unicodeScalars.first.map { isUnspaced($0.value) } ?? false
             if character.isWhitespace {
                 flush(index)
             } else {
