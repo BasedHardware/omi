@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "Dalam perjalanan",
     "onTheWayAlmostReady": "Hampir siap",
     "onTheWayRecordingCount": "{count, plural, =1{1 rakaman} other{{count} rakaman}}",
-    "onTheWaySummary": "{totals} dalam perjalanan",
-    "onTheWayUploadingCount": "{count} sedang dimuat naik",
-    "onTheWayAlmostReadyCount": "{count} hampir siap",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 memerlukan perhatian} other{{count} memerlukan perhatian}}",
     "activityEmpty": "Belum ada aktiviti",
     "activityNewSemantics": "Aktiviti, item baharu",
     "activityLoadFailed": "Tidak dapat memuatkan semua aktiviti anda",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Perkataan anda muncul di sini satu hingga dua minit selepas anda menuturkannya.",
     "livePreviewNoEngineTitle": "Merakam dengan selamat",
     "livePreviewOnPhoneDivider": "Langsung di telefon ini",
-    "livePreviewTurnOnLiveText": "Hidupkan teks langsung"
+    "livePreviewTurnOnLiveText": "Hidupkan teks langsung",
+    "deviceCatchUpOnItsWay": "dalam perjalanan",
+    "deviceCatchUpWhenOnline": "apabila dalam talian",
+    "onTheWayCatchingUp": "{duration} sedang diproses",
+    "onTheWayUploadsByItself": "Dimuat naik secara automatik. Perbualan akan terisi apabila rakaman tiba.",
+    "onTheWayUploadsWhenOnline": "Dimuat naik secara automatik sebaik anda kembali dalam talian. Perbualan akan terisi apabila rakaman tiba.",
+    "onTheWayDayUploading": "Sedang dimuat naik",
+    "onTheWayDayNext": "Seterusnya",
+    "onTheWayDayQueued": "Menunggu giliran",
+    "onTheWayNoDate": "Tiada tarikh",
+    "onTheWayFootnote": "Rakaman yang gagal akan terus dicuba semula di latar belakang. Apa-apa yang tidak dapat kami transkripsi akan dilaporkan kepada kami secara automatik.",
+    "onTheWayDetailsForSupport": "Butiran untuk sokongan"
 }

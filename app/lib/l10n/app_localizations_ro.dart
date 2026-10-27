@@ -13684,32 +13684,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals pe drum';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Se încarcă: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Aproape gata: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Necesită atenție: $count',
-      one: '1 necesită atenție',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Nicio activitate încă';
 
   @override
@@ -14711,4 +14685,41 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Activează textul live';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'se încarcă';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'când ești online';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration se încarcă';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Se încarcă automat. Conversațiile apar pe măsură ce înregistrările ajung.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Se încarcă automat când revii online. Conversațiile apar pe măsură ce înregistrările ajung.';
+
+  @override
+  String get onTheWayDayUploading => 'Se încarcă';
+
+  @override
+  String get onTheWayDayNext => 'Urmează';
+
+  @override
+  String get onTheWayDayQueued => 'În coadă';
+
+  @override
+  String get onTheWayNoDate => 'Fără dată';
+
+  @override
+  String get onTheWayFootnote =>
+      'Înregistrările care eșuează continuă să fie reîncercate în fundal. Orice nu putem transcrie ni se raportează automat.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detalii pentru suport';
 }

@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "Unterwegs",
     "onTheWayAlmostReady": "Fast fertig",
     "onTheWayRecordingCount": "{count, plural, =1{1 Aufnahme} other{{count} Aufnahmen}}",
-    "onTheWaySummary": "{totals} unterwegs",
-    "onTheWayUploadingCount": "{count} im Upload",
-    "onTheWayAlmostReadyCount": "{count} fast fertig",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 benötigt Aufmerksamkeit} other{{count} benötigen Aufmerksamkeit}}",
     "activityEmpty": "Noch keine Aktivität",
     "activityNewSemantics": "Aktivität, neue Einträge",
     "activityLoadFailed": "Nicht alle Aktivitäten konnten geladen werden",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Deine Worte erscheinen hier ein bis zwei Minuten nachdem du sie gesagt hast.",
     "livePreviewNoEngineTitle": "Nimmt sicher auf",
     "livePreviewOnPhoneDivider": "Live auf diesem Telefon",
-    "livePreviewTurnOnLiveText": "Live-Text aktivieren"
+    "livePreviewTurnOnLiveText": "Live-Text aktivieren",
+    "deviceCatchUpOnItsWay": "unterwegs",
+    "deviceCatchUpWhenOnline": "wenn wieder online",
+    "onTheWayCatchingUp": "Noch {duration} werden hochgeladen",
+    "onTheWayUploadsByItself": "Wird von selbst hochgeladen. Die Unterhaltungen entstehen, sobald die Aufnahmen ankommen.",
+    "onTheWayUploadsWhenOnline": "Wird von selbst hochgeladen, wenn Sie wieder online sind. Die Unterhaltungen entstehen, sobald die Aufnahmen ankommen.",
+    "onTheWayDayUploading": "Wird hochgeladen",
+    "onTheWayDayNext": "Als Nächstes",
+    "onTheWayDayQueued": "In der Warteschlange",
+    "onTheWayNoDate": "Ohne Datum",
+    "onTheWayFootnote": "Bei fehlgeschlagenen Aufnahmen wird im Hintergrund immer wieder versucht, sie hochzuladen. Alles, was wir nicht transkribieren können, wird uns automatisch gemeldet.",
+    "onTheWayDetailsForSupport": "Details für den Support"
 }

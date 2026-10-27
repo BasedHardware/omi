@@ -13662,32 +13662,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals na putu';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Slanje: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Gotovo spremno: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Zahtijeva pažnju: $count',
-      one: '1 zahtijeva pažnju',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Još nema aktivnosti';
 
   @override
@@ -14685,4 +14659,41 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Uključi tekst uživo';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'na putu';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'kad ima interneta';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration se nadoknađuje';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Slanje ide samo. Razgovori se dopunjuju kako stigne.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Slanje ide samo kad ponovno budeš online. Razgovori se dopunjuju kako stigne.';
+
+  @override
+  String get onTheWayDayUploading => 'Šalje se';
+
+  @override
+  String get onTheWayDayNext => 'Na redu';
+
+  @override
+  String get onTheWayDayQueued => 'U redu čekanja';
+
+  @override
+  String get onTheWayNoDate => 'Bez datuma';
+
+  @override
+  String get onTheWayFootnote =>
+      'Snimci koji ne uspiju i dalje se pokušavaju u pozadini. Sve što ne možemo transkribirati automatski nam se prijavljuje.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detalji za podršku';
 }

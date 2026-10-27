@@ -13734,32 +13734,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals paparating';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count ina-upload';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count halos handa na';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ang kailangang asikasuhin',
-      one: '1 ang kailangang asikasuhin',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Wala pang aktibidad';
 
   @override
@@ -14766,4 +14740,41 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'I-on ang live text';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'paparating na';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'kapag online na';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Humahabol pa ng $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Mag-a-upload mag-isa. Nabubuo ang mga pag-uusap habang dumarating.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Mag-a-upload mag-isa kapag online ka na ulit. Nabubuo ang mga pag-uusap habang dumarating.';
+
+  @override
+  String get onTheWayDayUploading => 'Nag-a-upload';
+
+  @override
+  String get onTheWayDayNext => 'Susunod';
+
+  @override
+  String get onTheWayDayQueued => 'Nakapila';
+
+  @override
+  String get onTheWayNoDate => 'Walang petsa';
+
+  @override
+  String get onTheWayFootnote =>
+      'Ang mga recording na nabigo ay patuloy na susubukan ulit sa background. Awtomatikong maiuulat sa amin ang mga hindi namin matranscribe.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Mga detalye para sa support';
 }

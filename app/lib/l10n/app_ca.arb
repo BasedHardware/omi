@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "En camí",
     "onTheWayAlmostReady": "Gairebé a punt",
     "onTheWayRecordingCount": "{count, plural, =1{1 gravació} other{{count} gravacions}}",
-    "onTheWaySummary": "{totals} en camí",
-    "onTheWayUploadingCount": "{count} pujant",
-    "onTheWayAlmostReadyCount": "Gairebé a punt: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 requereix atenció} other{{count} requereixen atenció}}",
     "activityEmpty": "Encara no hi ha activitat",
     "activityNewSemantics": "Activitat, elements nous",
     "activityLoadFailed": "No s'ha pogut carregar tota la teva activitat",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Les teves paraules apareixen aquí un o dos minuts després de dir-les.",
     "livePreviewNoEngineTitle": "Enregistrant de forma segura",
     "livePreviewOnPhoneDivider": "En directe en aquest telèfon",
-    "livePreviewTurnOnLiveText": "Activa el text en directe"
+    "livePreviewTurnOnLiveText": "Activa el text en directe",
+    "deviceCatchUpOnItsWay": "en camí",
+    "deviceCatchUpWhenOnline": "quan hi hagi connexió",
+    "onTheWayCatchingUp": "Falten {duration} per pujar",
+    "onTheWayUploadsByItself": "Es puja automàticament. Les converses es van creant a mesura que arriben les gravacions.",
+    "onTheWayUploadsWhenOnline": "Es puja automàticament quan torneu a tenir connexió. Les converses es van creant a mesura que arriben les gravacions.",
+    "onTheWayDayUploading": "S'està pujant",
+    "onTheWayDayNext": "Següents",
+    "onTheWayDayQueued": "A la cua",
+    "onTheWayNoDate": "Sense data",
+    "onTheWayFootnote": "Els enregistraments que fallin es tornen a provar en segon pla. Tot allò que no puguem transcriure se'ns notifica automàticament.",
+    "onTheWayDetailsForSupport": "Detalls per al suport"
 }

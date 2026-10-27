@@ -13659,32 +13659,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals ceļā';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Augšupielādē: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Gandrīz gatavi: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Nepieciešama uzmanība: $count',
-      one: '1 nepieciešama uzmanība',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Vēl nav aktivitātes';
 
   @override
@@ -14681,4 +14655,42 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Ieslēgt tiešraides tekstu';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'ceļā';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'kad būsiet tiešsaistē';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration tiek apstrādāts';
+  }
+
+  @override
+  String get onTheWayUploadsByItself =>
+      'Augšupielāde notiek automātiski. Sarunas parādīsies, tiklīdz ieraksti būs klāt.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Augšupielāde notiek automātiski, kad atkal būsiet tiešsaistē. Sarunas parādīsies, tiklīdz ieraksti būs klāt.';
+
+  @override
+  String get onTheWayDayUploading => 'Notiek augšupielāde';
+
+  @override
+  String get onTheWayDayNext => 'Nākamais rindā';
+
+  @override
+  String get onTheWayDayQueued => 'Gaida rindā';
+
+  @override
+  String get onTheWayNoDate => 'Bez datuma';
+
+  @override
+  String get onTheWayFootnote =>
+      'Ieraksti, kas neizdodas, turpina mēģināt fonā. Viss, ko nevaram transkribēt, mums tiek ziņots automātiski.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Informācija atbalsta komandai';
 }

@@ -4209,10 +4209,6 @@
     "onTheWayTitle": "В пути",
     "onTheWayAlmostReady": "Почти готово",
     "onTheWayRecordingCount": "{count, plural, =1{1 запись} other{Записей: {count}}}",
-    "onTheWaySummary": "{totals} в пути",
-    "onTheWayUploadingCount": "Загружается: {count}",
-    "onTheWayAlmostReadyCount": "Почти готово: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 требует внимания} other{Требуют внимания: {count}}}",
     "activityEmpty": "Пока нет активности",
     "activityNewSemantics": "Активность, новые элементы",
     "activityLoadFailed": "Не удалось загрузить всю активность",
@@ -4487,5 +4483,16 @@
     "livePreviewNoEngineBody": "Ваши слова появятся здесь через минуту-две после того, как вы их произнесли.",
     "livePreviewNoEngineTitle": "Безопасная запись",
     "livePreviewOnPhoneDivider": "Прямой эфир на этом телефоне",
-    "livePreviewTurnOnLiveText": "Включить текст прямой трансляции"
+    "livePreviewTurnOnLiveText": "Включить текст прямой трансляции",
+    "deviceCatchUpOnItsWay": "в пути",
+    "deviceCatchUpWhenOnline": "когда появится сеть",
+    "onTheWayCatchingUp": "{duration} в пути",
+    "onTheWayUploadsByItself": "Загрузка идёт автоматически. Разговоры появятся по мере поступления записей.",
+    "onTheWayUploadsWhenOnline": "Загрузка возобновится автоматически, когда вы снова будете онлайн. Разговоры появятся по мере поступления записей.",
+    "onTheWayDayUploading": "Загружается",
+    "onTheWayDayNext": "Следующие",
+    "onTheWayDayQueued": "В очереди",
+    "onTheWayNoDate": "Без даты",
+    "onTheWayFootnote": "Если загрузка записи завершится сбоем, попытки продолжатся в фоновом режиме. Всё, что мы не сможем расшифровать, будет автоматически отправляться нам.",
+    "onTheWayDetailsForSupport": "Подробности для поддержки"
 }

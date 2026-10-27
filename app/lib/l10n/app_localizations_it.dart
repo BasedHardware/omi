@@ -13699,32 +13699,6 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals in arrivo';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count in caricamento';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Quasi pronte: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count richiedono attenzione',
-      one: '1 richiede attenzione',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Ancora nessuna attività';
 
   @override
@@ -14725,4 +14699,40 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Attiva il testo in diretta';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'in arrivo';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'quando torni online';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Ancora $duration da elaborare';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Si carica da solo. Le conversazioni arrivano man mano.';
+
+  @override
+  String get onTheWayUploadsWhenOnline => 'Si carica da solo appena torni online. Le conversazioni arrivano man mano.';
+
+  @override
+  String get onTheWayDayUploading => 'In caricamento';
+
+  @override
+  String get onTheWayDayNext => 'A seguire';
+
+  @override
+  String get onTheWayDayQueued => 'In coda';
+
+  @override
+  String get onTheWayNoDate => 'Nessuna data';
+
+  @override
+  String get onTheWayFootnote =>
+      'Le registrazioni che falliscono continuano a riprovare in background. Tutto ciò che non riusciamo a trascrivere ci viene segnalato automaticamente.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Dettagli per l\'assistenza';
 }

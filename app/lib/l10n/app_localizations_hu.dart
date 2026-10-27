@@ -13680,32 +13680,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals úton';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count feltöltés alatt';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count majdnem kész';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count figyelmet igényel',
-      one: '1 figyelmet igényel',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Még nincs tevékenység';
 
   @override
@@ -14707,4 +14681,41 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Élő szöveg bekapcsolása';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'úton van';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'ha van internet';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration behozása folyamatban';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Önmagától feltöltődik. Ahogy megérkezik, úgy készülnek el a beszélgetések.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Önmagától feltöltődik, amint újra online vagy. Ahogy megérkezik, úgy készülnek el a beszélgetések.';
+
+  @override
+  String get onTheWayDayUploading => 'Feltöltés alatt';
+
+  @override
+  String get onTheWayDayNext => 'Következik';
+
+  @override
+  String get onTheWayDayQueued => 'Várakozik';
+
+  @override
+  String get onTheWayNoDate => 'Dátum nélkül';
+
+  @override
+  String get onTheWayFootnote =>
+      'A sikertelen felvételek a háttérben újra és újra próbálkoznak. Amit nem tudunk átírni, arról automatikusan értesítést kapunk.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Részletek az ügyfélszolgálatnak';
 }

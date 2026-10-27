@@ -13444,32 +13444,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '준비 중: $totals';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '업로드 중 $count개';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '거의 완료 $count개';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '확인 필요 $count개',
-      one: '확인 필요 1개',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => '아직 활동이 없습니다';
 
   @override
@@ -14449,4 +14423,39 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => '실시간 텍스트 켜기';
+
+  @override
+  String get deviceCatchUpOnItsWay => '전송 중';
+
+  @override
+  String get deviceCatchUpWhenOnline => '온라인 시';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration 처리 중';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => '자동으로 업로드됩니다. 도착하는 대로 대화가 채워집니다.';
+
+  @override
+  String get onTheWayUploadsWhenOnline => '온라인에 다시 연결되면 자동으로 업로드됩니다. 도착하는 대로 대화가 채워집니다.';
+
+  @override
+  String get onTheWayDayUploading => '업로드 중';
+
+  @override
+  String get onTheWayDayNext => '다음';
+
+  @override
+  String get onTheWayDayQueued => '대기 중';
+
+  @override
+  String get onTheWayNoDate => '날짜 없음';
+
+  @override
+  String get onTheWayFootnote => '실패한 녹음은 백그라운드에서 계속 다시 시도합니다. 전사할 수 없는 내용은 자동으로 저희에게 보고됩니다.';
+
+  @override
+  String get onTheWayDetailsForSupport => '고객지원용 세부 정보';
 }

@@ -13713,32 +13713,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals καθ\' οδόν';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Μεταφόρτωση: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Σχεδόν έτοιμες: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count χρειάζονται προσοχή',
-      one: '1 χρειάζεται προσοχή',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Δεν υπάρχει δραστηριότητα ακόμα';
 
   @override
@@ -14745,4 +14719,42 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Ενεργοποίηση ζωντανού κειμένου';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'στο δρόμο';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'μόλις επανέλθει η σύνδεση';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Απομένουν $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself =>
+      'Μεταφορτώνεται από μόνο του. Οι συνομιλίες συμπληρώνονται μόλις φτάσουν οι ηχογραφήσεις.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Μεταφορτώνεται από μόνο του μόλις επανέλθει η σύνδεσή σας. Οι συνομιλίες συμπληρώνονται μόλις φτάσουν οι ηχογραφήσεις.';
+
+  @override
+  String get onTheWayDayUploading => 'Γίνεται μεταφόρτωση';
+
+  @override
+  String get onTheWayDayNext => 'Ακολουθεί';
+
+  @override
+  String get onTheWayDayQueued => 'Σε αναμονή';
+
+  @override
+  String get onTheWayNoDate => 'Χωρίς ημερομηνία';
+
+  @override
+  String get onTheWayFootnote =>
+      'Οι ηχογραφήσεις που αποτυγχάνουν συνεχίζουν να δοκιμάζουν στο παρασκήνιο. Οτιδήποτε δεν μπορούμε να μεταγράψουμε αναφέρεται αυτόματα σε εμάς.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Λεπτομέρειες για την υποστήριξη';
 }

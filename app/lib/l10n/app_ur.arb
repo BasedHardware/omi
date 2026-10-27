@@ -11597,10 +11597,6 @@
     "onTheWayTitle": "راستے میں",
     "onTheWayAlmostReady": "تقریباً تیار",
     "onTheWayRecordingCount": "{count, plural, =1{1 ریکارڈنگ} other{{count} ریکارڈنگز}}",
-    "onTheWaySummary": "{totals} راستے میں",
-    "onTheWayUploadingCount": "اپ لوڈ ہو رہی ہیں: {count}",
-    "onTheWayAlmostReadyCount": "تقریباً تیار: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 پر توجہ درکار ہے} other{{count} پر توجہ درکار ہے}}",
     "activityEmpty": "ابھی تک کوئی سرگرمی نہیں",
     "activityNewSemantics": "سرگرمی، نئے آئٹمز",
     "activityLoadFailed": "آپ کی تمام سرگرمی لوڈ نہیں ہو سکی",
@@ -11878,5 +11874,16 @@
     "livePreviewNoEngineBody": "آپ کے الفاظ کہنے کے ایک دو منٹ بعد یہاں ظاہر ہوتے ہیں۔",
     "livePreviewNoEngineTitle": "محفوظ طریقے سے ریکارڈ ہو رہا ہے",
     "livePreviewOnPhoneDivider": "اس فون پر براہِ راست",
-    "livePreviewTurnOnLiveText": "براہِ راست متن آن کریں"
+    "livePreviewTurnOnLiveText": "براہِ راست متن آن کریں",
+    "deviceCatchUpOnItsWay": "راستے میں ہے",
+    "deviceCatchUpWhenOnline": "آن لائن ہونے پر",
+    "onTheWayCatchingUp": "{duration} کا کام مکمل ہو رہا ہے",
+    "onTheWayUploadsByItself": "خود بخود اپ لوڈ ہو جاتا ہے۔ جیسے ہی یہ پہنچتا ہے، بات چیتیں بنتی جاتی ہیں۔",
+    "onTheWayUploadsWhenOnline": "جیسے ہی آپ دوبارہ آن لائن ہوں گے، خود بخود اپ لوڈ ہو جائے گا۔ جیسے ہی یہ پہنچتا ہے، بات چیتیں بنتی جاتی ہیں۔",
+    "onTheWayDayUploading": "اپ لوڈ ہو رہا ہے",
+    "onTheWayDayNext": "اگلا",
+    "onTheWayDayQueued": "قطار میں",
+    "onTheWayNoDate": "کوئی تاریخ نہیں",
+    "onTheWayFootnote": "ناکام ہونے والی ریکارڈنگز پس منظر میں دوبارہ کوشش کرتی رہتی ہیں۔ جو ہم ٹرانسکرائب نہیں کر سکتے وہ خود بخود ہمیں رپورٹ ہو جاتا ہے۔",
+    "onTheWayDetailsForSupport": "سپورٹ کے لیے تفصیلات"
 }

@@ -289,11 +289,10 @@ final offlineProcessingScenarios = <AuditScenario>[
             _wal(_at(0, 15, 0), 70, WalStatus.miss, storage: WalStorage.sdcard),
             _wal(_at(0, 11, 0), 110, WalStatus.miss, storage: WalStorage.sdcard),
           ]));
-      expect(find.text('Catching up'), findsOneWidget);
-      expect(find.byKey(const Key('device_catching_up_status')), findsOneWidget);
+      expect(find.byKey(const Key('device_stat_catching_up')), findsOneWidget);
       expect(find.byType(LinearProgressIndicator), findsNothing);
-      expect(find.byKey(const Key('device_catching_up_span')), findsOneWidget);
-      await a.shot('Large backlog lives on Device with its status and audio span');
+      expect(find.text('3h'), findsOneWidget);
+      await a.shot('Large backlog is the Catching up tile: a duration, no stage or span');
     },
   ),
   for (final multiple in [false, true])
@@ -312,14 +311,13 @@ final offlineProcessingScenarios = <AuditScenario>[
               startedAt: _at(0, 11, 0),
               durationSeconds: 720),
         ]);
-        expect(find.text('Catching up'), findsOneWidget);
-        expect(find.text('Processing'), findsOneWidget);
-        expect(find.byKey(const Key('device_catching_up_on_the_way')), findsOneWidget);
-        await a.shot('Server work stays visible on Device until it finishes');
-        await a.tester.tap(find.byKey(const Key('device_catching_up_on_the_way')));
+        expect(find.byKey(const Key('device_stat_catching_up')), findsOneWidget);
+        expect(find.text('12m'), findsOneWidget);
+        await a.shot('Server work stays on the Catching up tile until it finishes');
+        await a.tester.tap(find.byKey(const Key('device_stat_catching_up')));
         await a.settle();
         expect(find.byType(OnTheWayPage), findsOneWidget);
-        await a.shot('The card opens On the Way', step: 'on-the-way');
+        await a.shot('The tile opens On the Way', step: 'on-the-way');
       },
     ),
   AuditScenario(
@@ -346,8 +344,8 @@ final offlineProcessingScenarios = <AuditScenario>[
         providers: [ChangeNotifierProvider<SyncProvider>.value(value: sync)],
       );
       expect(find.text('On the Way'), findsOneWidget);
-      expect(find.text('Sync details'), findsOneWidget);
-      await a.shot('Open On the Way from the device catch-up card');
+      expect(find.text('Details for support'), findsOneWidget);
+      await a.shot('Open On the Way from the device Catching up tile');
     },
   ),
   AuditScenario(

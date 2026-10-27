@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "Onderweg",
     "onTheWayAlmostReady": "Bijna klaar",
     "onTheWayRecordingCount": "{count, plural, =1{1 opname} other{{count} opnamen}}",
-    "onTheWaySummary": "{totals} onderweg",
-    "onTheWayUploadingCount": "Uploaden: {count}",
-    "onTheWayAlmostReadyCount": "Bijna klaar: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 vraagt aandacht} other{{count} vragen aandacht}}",
     "activityEmpty": "Nog geen activiteit",
     "activityNewSemantics": "Activiteit, nieuwe items",
     "activityLoadFailed": "Niet al je activiteit kon worden geladen",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Je woorden verschijnen hier een à twee minuten nadat je ze hebt gezegd.",
     "livePreviewNoEngineTitle": "Neemt veilig op",
     "livePreviewOnPhoneDivider": "Live op deze telefoon",
-    "livePreviewTurnOnLiveText": "Live-tekst inschakelen"
+    "livePreviewTurnOnLiveText": "Live-tekst inschakelen",
+    "deviceCatchUpOnItsWay": "onderweg",
+    "deviceCatchUpWhenOnline": "als je online bent",
+    "onTheWayCatchingUp": "Nog {duration} te verwerken",
+    "onTheWayUploadsByItself": "Uploadt vanzelf. Gesprekken verschijnen zodra de opnames binnenkomen.",
+    "onTheWayUploadsWhenOnline": "Uploadt vanzelf zodra je weer online bent. Gesprekken verschijnen zodra de opnames binnenkomen.",
+    "onTheWayDayUploading": "Wordt geüpload",
+    "onTheWayDayNext": "Hierna",
+    "onTheWayDayQueued": "In de wachtrij",
+    "onTheWayNoDate": "Geen datum",
+    "onTheWayFootnote": "Opnames die mislukken, blijven op de achtergrond opnieuw proberen. Alles wat we niet kunnen transcriberen, wordt automatisch aan ons gemeld.",
+    "onTheWayDetailsForSupport": "Details voor support"
 }

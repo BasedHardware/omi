@@ -13615,32 +13615,6 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals på vej';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count uploades';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count næsten klar';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count kræver opmærksomhed',
-      one: '1 kræver opmærksomhed',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Ingen aktivitet endnu';
 
   @override
@@ -14640,4 +14614,42 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Aktivér live-tekst';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'på vej';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'når du er online igen';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Der uploades stadig $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself =>
+      'Uploader af sig selv. Samtalerne udfyldes, efterhånden som optagelserne lander.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Uploader af sig selv, når du er online igen. Samtalerne udfyldes, efterhånden som optagelserne lander.';
+
+  @override
+  String get onTheWayDayUploading => 'Uploader';
+
+  @override
+  String get onTheWayDayNext => 'Næste';
+
+  @override
+  String get onTheWayDayQueued => 'I kø';
+
+  @override
+  String get onTheWayNoDate => 'Ingen dato';
+
+  @override
+  String get onTheWayFootnote =>
+      'Optagelser, der fejler, bliver ved med at prøve igen i baggrunden. Alt, hvad vi ikke kan transskribere, bliver automatisk rapporteret til os.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detaljer til support';
 }

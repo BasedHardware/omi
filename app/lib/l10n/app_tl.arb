@@ -11597,10 +11597,6 @@
     "onTheWayTitle": "Paparating",
     "onTheWayAlmostReady": "Halos handa na",
     "onTheWayRecordingCount": "{count, plural, =1{1 recording} other{{count} recording}}",
-    "onTheWaySummary": "{totals} paparating",
-    "onTheWayUploadingCount": "{count} ina-upload",
-    "onTheWayAlmostReadyCount": "{count} halos handa na",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 ang kailangang asikasuhin} other{{count} ang kailangang asikasuhin}}",
     "activityEmpty": "Wala pang aktibidad",
     "activityNewSemantics": "Aktibidad, mga bagong item",
     "activityLoadFailed": "Hindi ma-load ang lahat ng iyong aktibidad",
@@ -11878,5 +11874,16 @@
     "livePreviewNoEngineBody": "Lalabas ang mga salita mo dito isa hanggang dalawang minuto pagkatapos mong sabihin.",
     "livePreviewNoEngineTitle": "Ligtas na nagre-record",
     "livePreviewOnPhoneDivider": "Live sa phone na ito",
-    "livePreviewTurnOnLiveText": "I-on ang live text"
+    "livePreviewTurnOnLiveText": "I-on ang live text",
+    "deviceCatchUpOnItsWay": "paparating na",
+    "deviceCatchUpWhenOnline": "kapag online na",
+    "onTheWayCatchingUp": "Humahabol pa ng {duration}",
+    "onTheWayUploadsByItself": "Mag-a-upload mag-isa. Nabubuo ang mga pag-uusap habang dumarating.",
+    "onTheWayUploadsWhenOnline": "Mag-a-upload mag-isa kapag online ka na ulit. Nabubuo ang mga pag-uusap habang dumarating.",
+    "onTheWayDayUploading": "Nag-a-upload",
+    "onTheWayDayNext": "Susunod",
+    "onTheWayDayQueued": "Nakapila",
+    "onTheWayNoDate": "Walang petsa",
+    "onTheWayFootnote": "Ang mga recording na nabigo ay patuloy na susubukan ulit sa background. Awtomatikong maiuulat sa amin ang mga hindi namin matranscribe.",
+    "onTheWayDetailsForSupport": "Mga detalye para sa support"
 }

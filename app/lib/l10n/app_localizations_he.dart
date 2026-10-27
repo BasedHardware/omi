@@ -13533,32 +13533,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals בדרך';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'בהעלאה: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'כמעט מוכנות: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count דורשות תשומת לב',
-      one: 'אחת דורשת תשומת לב',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'אין פעילות עדיין';
 
   @override
@@ -14545,4 +14519,39 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'הפעל טקסט חי';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'בדרך';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'כשיש חיבור';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'נותרו $duration לעיבוד';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'מעלה לבד. השיחות מושלמות בהדרגה כשההקלטות מגיעות.';
+
+  @override
+  String get onTheWayUploadsWhenOnline => 'מעלה לבד ברגע שתחזור החיבור. השיחות מושלמות בהדרגה כשההקלטות מגיעות.';
+
+  @override
+  String get onTheWayDayUploading => 'מועלה';
+
+  @override
+  String get onTheWayDayNext => 'הבא בתור';
+
+  @override
+  String get onTheWayDayQueued => 'בתור';
+
+  @override
+  String get onTheWayNoDate => 'ללא תאריך';
+
+  @override
+  String get onTheWayFootnote => 'הקלטות שנכשלות ממשיכות לנסות שוב ברקע. כל מה שלא ניתן לתמלול מדווח לנו אוטומטית.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'פרטים לתמיכה';
 }

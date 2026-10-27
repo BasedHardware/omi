@@ -13697,32 +13697,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals en camí';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count pujant';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Gairebé a punt: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count requereixen atenció',
-      one: '1 requereix atenció',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Encara no hi ha activitat';
 
   @override
@@ -14723,4 +14697,42 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Activa el text en directe';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'en camí';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'quan hi hagi connexió';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Falten $duration per pujar';
+  }
+
+  @override
+  String get onTheWayUploadsByItself =>
+      'Es puja automàticament. Les converses es van creant a mesura que arriben les gravacions.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Es puja automàticament quan torneu a tenir connexió. Les converses es van creant a mesura que arriben les gravacions.';
+
+  @override
+  String get onTheWayDayUploading => 'S\'està pujant';
+
+  @override
+  String get onTheWayDayNext => 'Següents';
+
+  @override
+  String get onTheWayDayQueued => 'A la cua';
+
+  @override
+  String get onTheWayNoDate => 'Sense data';
+
+  @override
+  String get onTheWayFootnote =>
+      'Els enregistraments que fallin es tornen a provar en segon pla. Tot allò que no puguem transcriure se\'ns notifica automàticament.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detalls per al suport';
 }

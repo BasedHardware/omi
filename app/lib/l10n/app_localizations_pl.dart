@@ -13668,32 +13668,6 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals w drodze';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Przesyłanie: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Prawie gotowe: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Wymaga uwagi: $count',
-      one: '1 wymaga uwagi',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Brak aktywności';
 
   @override
@@ -14692,4 +14666,41 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Włącz tekst na żywo';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'w drodze';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'gdy będziesz online';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration w drodze';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Wgrywa się samo. Rozmowy uzupełniają się w miarę napływania nagrań.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Wgrywa się samo po powrocie do sieci. Rozmowy uzupełniają się w miarę napływania nagrań.';
+
+  @override
+  String get onTheWayDayUploading => 'Wgrywanie';
+
+  @override
+  String get onTheWayDayNext => 'Następne';
+
+  @override
+  String get onTheWayDayQueued => 'W kolejce';
+
+  @override
+  String get onTheWayNoDate => 'Brak daty';
+
+  @override
+  String get onTheWayFootnote =>
+      'Nagrania, których nie uda się wgrać, będą ponawiane w tle. Wszystko, czego nie potrafimy transkrybować, zostanie automatycznie zgłoszone.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Szczegóły dla działu wsparcia';
 }

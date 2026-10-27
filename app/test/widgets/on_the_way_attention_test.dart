@@ -10,8 +10,8 @@ import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/wal.dart';
 
-/// Deterministic refusals recover quietly. Actionable transient failures keep
-/// recording-level Retry and Delete, preserving parts still uploading.
+/// Option B: failures and refusals recover in the background. Neither On the Way nor its
+/// support details offers Retry or Delete; those stay on the Offline Sync page.
 
 class _FakeSync extends ChangeNotifier implements SyncProvider {
   _FakeSync(this.wals);
@@ -82,10 +82,25 @@ Future<_FakeSync> _pump(WidgetTester tester, List<Wal> wals) async {
 Finder _row(String text) =>
     find.byWidgetPredicate((w) => w is Text && w.data?.replaceAll('\u202f', ' ') == text, description: text);
 
-void main() {
-  setUp(OnTheWayPage.resetFolds);
+Future<void> _openSupport(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('on_the_way_details_for_support')));
+  await tester.pumpAndSettle();
+}
 
-  testWidgets('deterministic refusals stay outside user attention', (tester) async {
+/// No recovery gesture on either view, and the audio is never touched.
+Future<void> _expectNoActions(WidgetTester tester, _FakeSync sync, int walCount) async {
+  for (var view = 0; view < 2; view++) {
+    expect(find.text('Try Again'), findsNothing);
+    expect(find.text('Delete'), findsNothing);
+    if (view == 0) await _openSupport(tester);
+  }
+  expect(sync.retried, isEmpty);
+  expect(sync.deleted, isEmpty);
+  expect(sync.allWals, hasLength(walCount));
+}
+
+void main() {
+  testWidgets('deterministic refusals stay off the page and quiet in support', (tester) async {
     final sync = await _pump(tester, [
       _wal(DateTime(2026, 10, 18, 8), 240, WalStatus.uploadRejected,
           rejectionReason: WalUploadRejection.invalidCaptureTime),
@@ -95,74 +110,46 @@ void main() {
     expect(find.text('Invalid recording date'), findsNothing);
     expect(find.text('Too large'), findsNothing);
     expect(find.text('Rejected by server'), findsNothing);
-    expect(find.text('Try Again'), findsNothing);
-    expect(find.text('Delete'), findsNothing);
-    expect(sync.allWals, hasLength(3));
-    expect(sync.deleted, isEmpty);
+    expect(find.byKey(const Key('on_the_way_user_action')), findsNothing,
+        reason: 'the refusal aggregate says no user action can help');
+    await _expectNoActions(tester, sync, 3);
+    // Support sees each refusal and its token.
+    expect(find.text('Invalid recording date'), findsOneWidget);
+    expect(find.textContaining('too_large'), findsOneWidget);
   });
 
-  testWidgets('an exhausted transient failure keeps the Sync Details actions', (tester) async {
-    final wal = _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.miss)..retryCount = walMaxAutoRetries;
-    final sync = await _pump(tester, [wal]);
-
-    await tester.tap(find.text('Try Again'));
-    await tester.pump();
-    expect(sync.retried, [wal]);
-
-    await tester.tap(find.text('Delete'));
-    await tester.pump(const Duration(milliseconds: 400));
-    // The confirmation the Offline Sync page's Delete uses.
-    await tester.tap(find.text('Delete').last);
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(sync.deleted, [wal]);
+  testWidgets('an exhausted transient failure is not a row and offers no action', (tester) async {
+    final sync =
+        await _pump(tester, [_wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.miss)..retryCount = walMaxAutoRetries]);
+    expect(find.text('Failed — tap Retry'), findsNothing);
+    await _expectNoActions(tester, sync, 1);
+    expect(find.text('Failed — tap Retry'), findsOneWidget);
+    expect(find.text('failed'), findsOneWidget);
   });
 
-  testWidgets('a too-large refusal stays quiet and retained', (tester) async {
-    final sync = await _pump(tester, [
-      _wal(DateTime(2026, 10, 18, 7), 2 * 60, WalStatus.uploadRejected, rejectionReason: WalUploadRejection.tooLarge),
-    ]);
-
-    expect(find.text('Too large'), findsNothing);
-    expect(find.text('Try Again'), findsNothing);
-    expect(find.text('Delete'), findsNothing);
-    expect(sync.retried, isEmpty);
-    expect(sync.deleted, isEmpty);
-    expect(sync.allWals.single.status, WalStatus.uploadRejected);
+  testWidgets('a recording that cannot be retried offers no Delete here either', (tester) async {
+    final sync = await _pump(tester, [_wal(DateTime(2026, 10, 18, 7), 60, WalStatus.outsideRecoveryWindow)]);
+    await _expectNoActions(tester, sync, 1);
   });
 
-  testWidgets('a row that cannot be retried offers only Delete', (tester) async {
-    final sync = await _pump(tester, [
-      _wal(DateTime(2026, 10, 18, 7), 60, WalStatus.outsideRecoveryWindow),
-    ]);
-
-    expect(find.text('Try Again'), findsNothing);
-    expect(find.text('Delete'), findsOneWidget);
-    expect(sync.retried, isEmpty);
-  });
-
-  testWidgets('a recording made of several WALs acts as one row over every member', (tester) async {
+  testWidgets('a recording made of several WALs is one support row with its whole length', (tester) async {
     // One 75-second-chunk recording the pendant handed over in three files:
     // 7:56, 7:57:15, 7:58:30, each exhausted its transient retry budget.
-    final wals = [
+    final sync = await _pump(tester, [
       _wal(DateTime(2026, 10, 18, 7, 58, 30), 75, WalStatus.miss)..retryCount = walMaxAutoRetries,
       _wal(DateTime(2026, 10, 18, 7, 57, 15), 75, WalStatus.miss)..retryCount = walMaxAutoRetries,
       _wal(DateTime(2026, 10, 18, 7, 56), 75, WalStatus.miss)..retryCount = walMaxAutoRetries,
-    ];
-    final sync = await _pump(tester, wals);
-
-    expect(find.text('Try Again'), findsOneWidget, reason: 'the block has one recovery action');
+    ]);
+    await _expectNoActions(tester, sync, 3);
     expect(_row('7:56 AM · 3m 45s'), findsOneWidget, reason: 'the row names the whole recording\'s length');
+  });
 
-    await tester.tap(find.text('Try Again'));
-    await tester.pump();
-    expect(sync.retried, containsAll(wals), reason: 'Retry goes over every member WAL');
-    expect(sync.retried, hasLength(3));
-
-    await tester.tap(find.text('Delete'));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Delete').last); // one confirmation for the whole block
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(sync.deleted, containsAll(wals), reason: 'Delete removes every member WAL');
+  testWidgets('a block with one member still uploading keeps that part on the page', (tester) async {
+    final failed = _wal(DateTime(2026, 10, 18, 7, 58, 30), 75, WalStatus.miss)..retryCount = walMaxAutoRetries;
+    final uploading = _wal(DateTime(2026, 10, 18, 7, 57, 15), 75, WalStatus.miss)..isSyncing = true;
+    final sync = await _pump(tester, [failed, uploading]);
+    expect(find.text('Uploading'), findsOneWidget, reason: 'the moving part still counts on Today');
+    await _expectNoActions(tester, sync, 2);
   });
 
   testWidgets('an undated refusal also stays quiet and retained', (tester) async {
@@ -170,30 +157,8 @@ void main() {
         rejectionReason: WalUploadRejection.invalidCaptureTime);
     final sync = await _pump(tester, [wal]);
     expect(find.text('Invalid recording date'), findsNothing);
-    expect(find.text('Try Again'), findsNothing);
-    expect(find.text('Delete'), findsNothing);
-    expect(sync.retried, isEmpty);
-    expect(sync.deleted, isEmpty);
-    expect(sync.allWals, [wal]);
-  });
-
-  testWidgets('a block Delete never removes a member that is still uploading', (tester) async {
-    // Deleting an actionable failed block preserves its uploading member.
-    final failed = _wal(DateTime(2026, 10, 18, 7, 58, 30), 75, WalStatus.miss)..retryCount = walMaxAutoRetries;
-    final uploading = _wal(DateTime(2026, 10, 18, 7, 57, 15), 75, WalStatus.miss)..isSyncing = true;
-    final sync = await _pump(tester, [failed, uploading]);
-
-    expect(find.text('Try Again'), findsOneWidget);
-    expect(find.text('Delete'), findsOneWidget);
-
-    await tester.tap(find.text('Delete'));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Delete').last); // one confirmation for the whole block
-    await tester.pump(const Duration(milliseconds: 400));
-
-    expect(sync.deleted, [failed], reason: 'only the idle failed member is deleted');
-    expect(sync.deleted, isNot(contains(uploading)), reason: 'the uploading member is kept');
-    expect(find.text('Some parts are still uploading and were kept'), findsOneWidget,
-        reason: 'the row says what was skipped, in the app\'s toast style');
+    expect(find.text('No date'), findsNothing);
+    await _expectNoActions(tester, sync, 1);
+    expect(find.textContaining('1985'), findsNothing);
   });
 }

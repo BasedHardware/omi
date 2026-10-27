@@ -11597,10 +11597,6 @@
     "onTheWayTitle": "Na poti",
     "onTheWayAlmostReady": "Skoraj pripravljeno",
     "onTheWayRecordingCount": "{count, plural, =1{1 posnetek} other{Posnetkov: {count}}}",
-    "onTheWaySummary": "{totals} na poti",
-    "onTheWayUploadingCount": "Nalaganje: {count}",
-    "onTheWayAlmostReadyCount": "Skoraj pripravljeno: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 potrebuje pozornost} other{Potrebuje pozornost: {count}}}",
     "activityEmpty": "Še ni dejavnosti",
     "activityNewSemantics": "Dejavnost, novi elementi",
     "activityLoadFailed": "Ni bilo mogoče naložiti vse vaše dejavnosti",
@@ -11878,5 +11874,16 @@
     "livePreviewNoEngineBody": "Tvoje besede se tu pokažejo eno do dve minuti po izreku.",
     "livePreviewNoEngineTitle": "Varno snema",
     "livePreviewOnPhoneDivider": "V živo v tem telefonu",
-    "livePreviewTurnOnLiveText": "Vklopi besedilo v živo"
+    "livePreviewTurnOnLiveText": "Vklopi besedilo v živo",
+    "deviceCatchUpOnItsWay": "na poti",
+    "deviceCatchUpWhenOnline": "ko boste povezani",
+    "onTheWayCatchingUp": "{duration} na poti",
+    "onTheWayUploadsByItself": "Nalaga se samodejno. Pogovori se dopolnjujejo, ko posnetki prihajajo.",
+    "onTheWayUploadsWhenOnline": "Nalaga se samodejno, ko boste spet povezani. Pogovori se dopolnjujejo, ko posnetki prihajajo.",
+    "onTheWayDayUploading": "Nalaganje",
+    "onTheWayDayNext": "Naslednji",
+    "onTheWayDayQueued": "V čakalni vrsti",
+    "onTheWayNoDate": "Brez datuma",
+    "onTheWayFootnote": "Posnetki, katerih nalaganje spodleti, se v ozadju poskušajo znova. Vse, česar ne moremo transkribirati, nam bo samodejno sporočeno.",
+    "onTheWayDetailsForSupport": "Podrobnosti za podporo"
 }

@@ -1,18 +1,17 @@
-import 'package:flutter/material.dart';
+import 'dart:math';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/services/wals/wal.dart';
-import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/sync/offline_sync_amounts.dart';
 
-/// One snapshot shared by the device stats and the catch-up card. Read the WAL inventory once,
+/// One snapshot shared by the device stats and the Catching up tile. Read the WAL inventory once,
 /// outside capture/episode listeners, so streaming metrics never rescan recording history.
 typedef DeviceCatchUpLocal = ({
   int onDeviceSeconds,
   int onPhoneSeconds,
+  int pendingSeconds,
   bool hasPending,
   bool hasUploaded,
   DateTime? start,
@@ -35,11 +34,13 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now}) {
   final rows = [...uploaded, ...SyncPendingWork.syncingOf(wals)];
   var onDeviceSeconds = 0;
   var onPhoneSeconds = 0;
+  var pendingSeconds = 0;
   final spans = <(DateTime, DateTime)>[];
   final ids = <String>{};
   for (final w in rows) {
     if (w.conversationId case final id? when id.isNotEmpty) ids.add(id);
     if (w.seconds <= 0) continue;
+    pendingSeconds += w.seconds;
     if (walIsOnDevice(w)) {
       onDeviceSeconds += w.seconds;
     } else if (w.status == WalStatus.miss) {
@@ -70,6 +71,7 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now}) {
   final result = (
     onDeviceSeconds: onDeviceSeconds,
     onPhoneSeconds: onPhoneSeconds,
+    pendingSeconds: pendingSeconds,
     hasPending: rows.isNotEmpty,
     hasUploaded: uploaded.isNotEmpty,
     start: start,
@@ -97,13 +99,12 @@ final Expando<(int, int, DeviceCatchUpLocal)> _catchUpMemo = Expando('deviceCatc
   return (start, end);
 }
 
-/// Local transfers and server work share a card, even after upload or before targets are known.
-/// Progress is deliberately indeterminate: a device drain's pieces, virtual source timestamps and
-/// shrinking on-device lengths make inventory arithmetic unreliable, so the card shows where the
-/// work is, not how far along it is.
+/// Local transfers and server work share one catch-up figure, even after upload or before targets
+/// are known. The stat tile shows only how much audio is still on its way; On the Way says where.
 class DeviceCatchUpSummary {
   const DeviceCatchUpSummary({
     required this.status,
+    this.seconds = 0,
     this.start,
     this.end,
     this.targetIds = const {},
@@ -123,6 +124,20 @@ class DeviceCatchUpSummary {
       if (local.start != null && local.end != null) (local.start!, local.end!),
     ];
     final ids = {if (local.targetIds.isNotEmpty) ...local.targetIds.split('\n')};
+    // The same audio On the Way totals: a processing conversation whose recordings are still
+    // listed locally is counted once, by its recordings, and a server sync job the phone is
+    // running itself is already covered by them.
+    var seconds = local.pendingSeconds;
+    final processingIds = {for (final c in processing) c.id};
+    for (final conversation in processing) {
+      if (!ids.contains(conversation.id)) seconds += max(0, conversation.getDurationInSeconds());
+    }
+    final phoneSyncing = local.hasPending || serverProcessing;
+    for (final work in pending) {
+      if (work.conversationIds.any(processingIds.contains)) continue;
+      if (work.kind == 'sync_job' && phoneSyncing) continue;
+      seconds += max(0, work.durationSeconds ?? 0);
+    }
     void include(DateTime? from, int seconds, String id) {
       if (from == null || seconds <= 0) return;
       from = from.toLocal();
@@ -153,6 +168,7 @@ class DeviceCatchUpSummary {
     final (start, end) = pendingCatchUpSpan(spans);
     return DeviceCatchUpSummary(
       status: status,
+      seconds: seconds,
       start: start,
       end: end,
       targetIds: ids,
@@ -162,60 +178,11 @@ class DeviceCatchUpSummary {
 
   /// Where the work is right now, in On the Way's words.
   final String status;
+
+  /// Audio still catching up, in seconds: the stat tile's value.
+  final int seconds;
   final DateTime? start;
   final DateTime? end;
   final Set<String> targetIds;
   final List<String> targetTitles;
-}
-
-class DeviceCatchingUpCard extends StatelessWidget {
-  const DeviceCatchingUpCard({super.key, required this.summary, this.onOpen});
-
-  final DeviceCatchUpSummary summary;
-  final VoidCallback? onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final dates = OmiDateFormat.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(l10n.deviceCatchingUp, style: OmiType.callout),
-          const SizedBox(height: OmiSpacing.xxs),
-          Text(
-            summary.status,
-            key: const Key('device_catching_up_status'),
-            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-          ),
-          if (summary.start != null && summary.end != null) ...[
-            const SizedBox(height: OmiSpacing.xs),
-            Text(
-              '${dates.dayHeader(summary.start!)} · ${dates.timeRange(summary.start!, summary.end!)}',
-              key: const Key('device_catching_up_span'),
-              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-            ),
-          ],
-          if (summary.targetIds.isNotEmpty) ...[
-            const SizedBox(height: OmiSpacing.xs),
-            Text(
-              [l10n.conversationCount(summary.targetIds.length), ...summary.targetTitles].join(' · '),
-              key: const Key('device_catching_up_targets'),
-              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-            ),
-          ],
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton(
-              key: const Key('device_catching_up_on_the_way'),
-              onPressed: onOpen,
-              child: Text(l10n.onTheWayTitle),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

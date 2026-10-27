@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "Pe drum",
     "onTheWayAlmostReady": "Aproape gata",
     "onTheWayRecordingCount": "{count, plural, =1{1 înregistrare} other{Înregistrări: {count}}}",
-    "onTheWaySummary": "{totals} pe drum",
-    "onTheWayUploadingCount": "Se încarcă: {count}",
-    "onTheWayAlmostReadyCount": "Aproape gata: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 necesită atenție} other{Necesită atenție: {count}}}",
     "activityEmpty": "Nicio activitate încă",
     "activityNewSemantics": "Activitate, elemente noi",
     "activityLoadFailed": "Nu am putut încărca toată activitatea ta",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Cuvintele tale apar aici la unul sau două minute după ce le rostești.",
     "livePreviewNoEngineTitle": "Se înregistrează în siguranță",
     "livePreviewOnPhoneDivider": "Live pe acest telefon",
-    "livePreviewTurnOnLiveText": "Activează textul live"
+    "livePreviewTurnOnLiveText": "Activează textul live",
+    "deviceCatchUpOnItsWay": "se încarcă",
+    "deviceCatchUpWhenOnline": "când ești online",
+    "onTheWayCatchingUp": "{duration} se încarcă",
+    "onTheWayUploadsByItself": "Se încarcă automat. Conversațiile apar pe măsură ce înregistrările ajung.",
+    "onTheWayUploadsWhenOnline": "Se încarcă automat când revii online. Conversațiile apar pe măsură ce înregistrările ajung.",
+    "onTheWayDayUploading": "Se încarcă",
+    "onTheWayDayNext": "Urmează",
+    "onTheWayDayQueued": "În coadă",
+    "onTheWayNoDate": "Fără dată",
+    "onTheWayFootnote": "Înregistrările care eșuează continuă să fie reîncercate în fundal. Orice nu putem transcrie ni se raportează automat.",
+    "onTheWayDetailsForSupport": "Detalii pentru suport"
 }

@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "Tulossa",
     "onTheWayAlmostReady": "Melkein valmis",
     "onTheWayRecordingCount": "{count, plural, =1{1 tallenne} other{{count} tallennetta}}",
-    "onTheWaySummary": "{totals} tulossa",
-    "onTheWayUploadingCount": "Lähetetään: {count}",
-    "onTheWayAlmostReadyCount": "Melkein valmiina: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 vaatii huomiota} other{{count} vaatii huomiota}}",
     "activityEmpty": "Ei vielä toimintaa",
     "activityNewSemantics": "Toiminta, uusia kohteita",
     "activityLoadFailed": "Kaikkea toimintaa ei voitu ladata",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Sanasi näkyvät tässä yhdestä kahteen minuuttia sen jälkeen, kun olet sanonut ne.",
     "livePreviewNoEngineTitle": "Tallentaa turvallisesti",
     "livePreviewOnPhoneDivider": "Live tässä puhelimessa",
-    "livePreviewTurnOnLiveText": "Ota live-teksti käyttöön"
+    "livePreviewTurnOnLiveText": "Ota live-teksti käyttöön",
+    "deviceCatchUpOnItsWay": "matkalla",
+    "deviceCatchUpWhenOnline": "verkon palattua",
+    "onTheWayCatchingUp": "{duration} saadaan kiinni",
+    "onTheWayUploadsByItself": "Latautuu itsestään. Keskustelut täydentyvät äänien saapuessa.",
+    "onTheWayUploadsWhenOnline": "Latautuu itsestään, kun olet taas yhteydessä. Keskustelut täydentyvät äänien saapuessa.",
+    "onTheWayDayUploading": "Ladataan",
+    "onTheWayDayNext": "Seuraavaksi",
+    "onTheWayDayQueued": "Jonossa",
+    "onTheWayNoDate": "Ei päivämäärää",
+    "onTheWayFootnote": "Nauhoitukset, jotka epäonnistuvat, yritetään yhä uudelleen taustalla. Kaikki, mitä emme pysty transkriboimaan, ilmoitetaan meille automaattisesti.",
+    "onTheWayDetailsForSupport": "Tiedot tukea varten"
 }

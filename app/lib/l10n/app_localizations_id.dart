@@ -13638,32 +13638,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals dalam perjalanan';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count sedang diunggah';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count hampir siap';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count perlu perhatian',
-      one: '1 perlu perhatian',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Belum ada aktivitas';
 
   @override
@@ -14662,4 +14636,41 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Aktifkan teks langsung';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'dalam perjalanan';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'saat online';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Masih memproses $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Mengunggah sendiri. Percakapan terisi seiring datangnya.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Mengunggah sendiri setelah Anda kembali online. Percakapan terisi seiring datangnya.';
+
+  @override
+  String get onTheWayDayUploading => 'Mengunggah';
+
+  @override
+  String get onTheWayDayNext => 'Berikutnya';
+
+  @override
+  String get onTheWayDayQueued => 'Dalam antrean';
+
+  @override
+  String get onTheWayNoDate => 'Tanpa tanggal';
+
+  @override
+  String get onTheWayFootnote =>
+      'Rekaman yang gagal terus dicoba ulang di latar belakang. Apa pun yang tidak bisa kami transkripsikan akan otomatis dilaporkan ke kami.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detail untuk dukungan';
 }

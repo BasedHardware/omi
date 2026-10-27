@@ -2,31 +2,93 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:omi/backend/schema/bt_device/bt_device.dart' show BleAudioCodec;
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
-import 'package:omi/pages/settings/device/device_live_sections.dart';
-import 'package:omi/pages/settings/device/device_catching_up_card.dart';
+import 'package:omi/pages/settings/device_settings.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart';
-import 'package:omi/ui/omi_theme.dart';
 import 'package:omi/ui/ui.dart';
 
 import '../../helpers/sfpro_font_fixtures.dart';
 
-// Renders the sync-attention surfaces this PR made honest: On the Way rows
-// with deterministic refusals outside attention, and
-// the Device stats that count a running episode and name the phone queue. The
-// layout assertions run everywhere; with
-// --dart-define=SYNC_ATTENTION_EVIDENCE_OUTPUT=<dir> the PNGs used as PR
-// evidence are written there too (the pattern of open_loop_evidence_test).
+// Renders the sync-attention surfaces David chose on 10-27: the Catching up stat tile (option C),
+// On the Way by day (option B) and its support details. The layout assertions run everywhere;
+// with --dart-define=SYNC_ATTENTION_EVIDENCE_OUTPUT=<dir> the PNGs used as PR evidence are
+// written there too.
+
+class _Device extends ChangeNotifier implements DeviceProvider {
+  final device = BtDevice(id: 'omi-evidence', name: 'Omi', type: DeviceType.omi, rssi: -40);
+  @override
+  BtDevice? get connectedDevice => device;
+  @override
+  BtDevice? get pairedDevice => null; // No BLE feature discovery in a hermetic test.
+  @override
+  bool get isConnected => true;
+  @override
+  bool get isConnecting => false;
+  @override
+  int get batteryLevel => 72;
+  @override
+  bool get isCharging => false;
+  @override
+  bool get havingNewFirmware => false;
+  @override
+  String get latestStableFirmwareVersion => '';
+  @override
+  Future<void> getDeviceInfo() async {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _Capture extends ChangeNotifier implements CaptureProvider {
+  @override
+  bool get pendantCaptureActionRequired => false;
+  @override
+  bool get pendantCaptureVerified => true;
+  @override
+  bool get pendantReconnectInFlight => false;
+  @override
+  BtDevice? get recordingDevice => null;
+  @override
+  double get bleReceiveRateKbps => 0;
+  @override
+  double get wsSendRateKbps => 0;
+  @override
+  String? get liveCaptureSource => null;
+  @override
+  bool get isPaused => false;
+  @override
+  bool get havingRecordingDevice => false;
+  @override
+  List<TranscriptSegment> get segments => const [];
+  @override
+  DateTime? get liveCaptureStartedAt => null;
+  @override
+  void addMetricsListener() {}
+  @override
+  void removeMetricsListener() {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 class _FakeSync extends ChangeNotifier implements SyncProvider {
   _FakeSync(this.wals);
@@ -39,6 +101,8 @@ class _FakeSync extends ChangeNotifier implements SyncProvider {
   bool get isSyncing => false;
   @override
   bool get isRateLimited => false;
+  @override
+  int get missingWalsInSeconds => 0;
   @override
   List<Wal> get allWals => wals;
   @override
@@ -61,14 +125,27 @@ Wal _wal(DateTime start, int minutes, WalStatus status,
   );
 }
 
-// 9:10 AM local: every fixture is local time so the day split does not depend
-// on the machine's time zone.
+// 9:10 AM local on a Sunday: every fixture is local time so the day split does not depend on the
+// machine's time zone.
 final _now = DateTime(2026, 10, 18, 9, 10);
-DateTime _at(int hour, int minute) => DateTime(2026, 10, 18, hour, minute);
+DateTime _at(int daysAgo, int hour, int minute) => DateTime(2026, 10, 18 - daysAgo, hour, minute);
+
+/// Mixed days: today uploading, yesterday on the server, two older days waiting, plus failures and
+/// refusals that stay off the page and show only in support.
+List<Wal> _mixedDays() => [
+      _wal(_at(0, 8, 41), 14, WalStatus.miss)..isSyncing = true,
+      _wal(_at(0, 7, 58), 23, WalStatus.miss),
+      _wal(_at(1, 19, 5), 96, WalStatus.uploaded),
+      _wal(_at(1, 12, 30), 41, WalStatus.uploaded),
+      _wal(_at(2, 15, 0), 128, WalStatus.miss, storage: WalStorage.sdcard),
+      _wal(_at(3, 10, 0), 166, WalStatus.miss, storage: WalStorage.sdcard),
+      _wal(_at(3, 9, 0), 5, WalStatus.outsideRecoveryWindow),
+      _wal(_at(2, 8, 30), 2, WalStatus.uploadRejected, rejectionReason: WalUploadRejection.invalidCaptureTime),
+      _wal(_at(1, 8, 0), 4, WalStatus.uploadRejected, rejectionReason: WalUploadRejection.tooLarge),
+    ];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  OmiColors.active = OmiColors.forBrightness(Brightness.dark);
 
   setUpAll(() async {
     final manifest = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List;
@@ -98,158 +175,166 @@ void main() {
     }
   });
 
-  const output = String.fromEnvironment('SYNC_ATTENTION_EVIDENCE_OUTPUT');
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+  });
 
-  Future<void> writeFrame(WidgetTester tester, Key frame, String name) async {
+  const output = String.fromEnvironment('SYNC_ATTENTION_EVIDENCE_OUTPUT');
+  const frame = Key('sync_attention_frame');
+
+  Future<void> writeFrame(WidgetTester tester, String name) async {
+    expect(tester.takeException(), isNull);
+    debugDefaultTargetPlatformOverride = null;
     if (output.isEmpty) return;
     await tester.runAsync(() async {
       final render = tester.renderObject<RenderRepaintBoundary>(find.byKey(frame));
-      final image = await render.toImage(pixelRatio: 2);
+      final image = await render.toImage(pixelRatio: 3);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
       await Directory(output).create(recursive: true);
       await File('$output/$name.png').writeAsBytes(bytes!.buffer.asUint8List());
     });
   }
 
-  Widget app({required Widget home}) {
-    final theme = buildOmiTheme(brightness: Brightness.dark);
-    return MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      // AppBar supplies a non-inheriting style; pin the loaded fixture font
-      // rather than letting the test engine render its default block glyphs.
-      theme: theme.copyWith(
-          appBarTheme: theme.appBarTheme.copyWith(
-        titleTextStyle: theme.appBarTheme.titleTextStyle?.copyWith(fontFamily: 'Roboto'),
-      )),
-      home: Scaffold(
-        backgroundColor: OmiColors.surface0,
-        body: home,
+  /// iPhone viewport with iOS widgets and metrics; [writeFrame] resets the platform at the end of
+  /// each test body.
+  void phone(WidgetTester tester) {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+  }
+
+  Widget app(Widget home, {Brightness brightness = Brightness.light, double textScale = 1}) {
+    OmiColors.active = OmiColors.forBrightness(brightness);
+    final theme = buildOmiTheme(brightness: brightness);
+    return RepaintBoundary(
+      key: frame,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        // AppBar supplies a non-inheriting style; pin the loaded fixture font rather than letting
+        // the test engine render its default block glyphs.
+        theme: theme.copyWith(
+            appBarTheme: theme.appBarTheme.copyWith(
+          titleTextStyle: theme.appBarTheme.titleTextStyle?.copyWith(fontFamily: 'Roboto'),
+        )),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: home,
       ),
     );
   }
 
-  testWidgets('On the Way rows show length, reason and actions', (tester) async {
-    tester.view.physicalSize = const Size(390 * 2, 844 * 2);
-    tester.view.devicePixelRatio = 2;
-    addTearDown(tester.view.reset);
-
-    OnTheWayPage.resetFolds();
-    final sync = _FakeSync([
-      _wal(_at(8, 41), 14, WalStatus.uploaded),
-      _wal(_at(7, 58), 3, WalStatus.miss)..isSyncing = true,
-      _wal(_at(7, 40), 1, WalStatus.miss, storage: WalStorage.sdcard),
-      _wal(_at(9, 0), 5, WalStatus.outsideRecoveryWindow),
-      _wal(_at(8, 30), 2, WalStatus.uploadRejected, rejectionReason: WalUploadRejection.invalidCaptureTime),
-      _wal(_at(8, 0), 4, WalStatus.uploadRejected, rejectionReason: WalUploadRejection.tooLarge),
-      // A pendant clock that was never set: no plausible time, but the length
-      // and the refusal still read.
-      _wal(DateTime(1985, 9, 5, 16, 17), 3, WalStatus.uploadRejected,
-          rejectionReason: WalUploadRejection.invalidCaptureTime),
-    ]);
-    await tester.pumpWidget(
-      ChangeNotifierProvider<SyncProvider>.value(
-        value: sync,
-        child: app(
-          home: RepaintBoundary(
-            key: const Key('sync_attention_on_the_way'),
-            child: OnTheWayPage(syncProvider: sync, multiFileSync: true, clock: () => _now),
-          ),
-        ),
-      ),
+  Future<void> pumpDevice(WidgetTester tester, _FakeSync sync) async {
+    phone(tester);
+    final store = PendingWorkStore(
+      loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+      loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
     );
+    final device = _Device();
+    final capture = _Capture();
+    final conversations = ConversationProvider(isSignedIn: () => false);
+    final home = HomeProvider();
+    for (final d in [
+      store.dispose,
+      device.dispose,
+      capture.dispose,
+      conversations.dispose,
+      home.dispose,
+      sync.dispose
+    ]) {
+      addTearDown(d);
+    }
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<DeviceProvider>.value(value: device),
+        ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+        ChangeNotifierProvider<SyncProvider>.value(value: sync),
+        ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+        ChangeNotifierProvider<HomeProvider>.value(value: home),
+      ],
+      child: app(DeviceSettings(pendingWork: store)),
+    ));
     await tester.pump(const Duration(milliseconds: 120));
+  }
 
+  Future<void> pumpOnTheWay(WidgetTester tester,
+      {Brightness brightness = Brightness.light, double textScale = 1}) async {
+    phone(tester);
+    final sync = _FakeSync(_mixedDays());
+    addTearDown(sync.dispose);
+    await tester.pumpWidget(ChangeNotifierProvider<SyncProvider>.value(
+      value: sync,
+      child: app(
+        OnTheWayPage(syncProvider: sync, multiFileSync: true, clock: () => _now),
+        brightness: brightness,
+        textScale: textScale,
+      ),
+    ));
+    await tester.pump(const Duration(milliseconds: 120));
+  }
+
+  testWidgets('Device Settings with catch-up pending: the third tile is Catching up', (tester) async {
+    await pumpDevice(
+        tester,
+        _FakeSync([
+          _wal(_at(0, 7, 0), 300, WalStatus.miss, storage: WalStorage.sdcard),
+          _wal(_at(0, 3, 0), 194, WalStatus.miss, storage: WalStorage.sdcard),
+        ]));
+    final tile = find.byKey(const Key('device_stat_catching_up'));
+    expect(tile, findsOneWidget);
+    expect(find.descendant(of: tile, matching: find.text('8h 14m')), findsOneWidget);
+    expect(find.byKey(const Key('device_stat_on_device')), findsNothing);
+    expect(find.text('Waiting to sync'), findsNothing, reason: 'no stage words');
+    expect(find.byKey(const Key('device_catching_up_span')), findsNothing, reason: 'no date range');
+    await writeFrame(tester, '001-mobile-ios-device-catching-up-pending');
+  });
+
+  testWidgets('Device Settings with nothing pending: the tile is On Device again', (tester) async {
+    await pumpDevice(tester, _FakeSync([_wal(_at(0, 7, 0), 30, WalStatus.synced)]));
+    expect(find.byKey(const Key('device_stat_catching_up')), findsNothing);
+    expect(find.byKey(const Key('device_stat_on_device')), findsOneWidget);
+    expect(find.text('Catching up'), findsNothing);
+    await writeFrame(tester, '002-mobile-ios-device-nothing-pending');
+  });
+
+  testWidgets('On the Way with mixed days', (tester) async {
+    await pumpOnTheWay(tester);
+    expect(find.text('7h 48m catching up'), findsOneWidget);
+    for (final status in ['Uploading', 'Transcribing…', 'Next', 'Queued']) {
+      expect(find.text(status), findsOneWidget, reason: status);
+    }
+    expect(find.text('Try Again'), findsNothing);
+    expect(find.text('Delete'), findsNothing);
     expect(find.text('Invalid recording date'), findsNothing);
-    expect(find.text('Too large'), findsNothing);
-    expect(find.text('Too old to sync — Omi can\'t accept it'), findsOneWidget);
-    expect(find.text('Try Again'), findsNothing, reason: 'deterministic refusals belong to automatic recovery');
-    expect(find.text('3m'), findsNothing, reason: 'undated refused audio stays out of user attention');
-    expect(WalRefusalSummary.from(sync.allWals).count, 3);
-    expect(WalRefusalSummary.from(sync.allWals).userActionCanHelp, isFalse);
-
-    await writeFrame(tester, const Key('sync_attention_on_the_way'), 'on-the-way-rows');
+    await writeFrame(tester, '003-mobile-ios-on-the-way-mixed-days');
   });
 
-  testWidgets('Device stats count the live episode and name the phone queue', (tester) async {
-    tester.view.physicalSize = const Size(390 * 2, 400 * 2);
-    tester.view.devicePixelRatio = 2;
-    addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(
-      app(
-        // Shrink-wrapped so the captured frame is the tiles' real height, not
-        // the viewport: the body's tight constraints would otherwise stretch
-        // the boundary to full height with empty space under the tiles.
-        home: const Align(
-          alignment: Alignment.topCenter,
-          child: RepaintBoundary(
-            key: Key('sync_attention_device_stats'),
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: DeviceStatsRow(
-                batteryLevel: 72,
-                isCharging: true,
-                heardTodaySeconds: 33 * 60,
-                onDeviceSeconds: 0,
-                phoneQueueSeconds: 7 * 3600 + 45 * 60,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 120));
-
-    expect(find.text('33m'), findsOneWidget);
-    expect(find.text('7h 45m on phone'), findsOneWidget);
-    expect(find.text('0s'), findsOneWidget, reason: 'on-device audio reads 0s only when none is left');
-
-    final statsHeight =
-        tester.renderObject<RenderBox>(find.byKey(const Key('sync_attention_device_stats'))).size.height;
-    expect(statsHeight, lessThan(200), reason: 'the captured frame is the tiles, not the viewport');
-
-    // One row height: the On Device tile's two caption lines raise the whole
-    // row, not just their own tile — no tile stands shorter beside a taller one.
-    final heights = [
-      for (final key in ['device_stat_battery', 'device_stat_heard_today', 'device_stat_on_device'])
-        tester.renderObject<RenderBox>(find.byKey(Key(key))).size.height,
-    ];
-    expect(heights.toSet(), hasLength(1), reason: 'the three tiles share one height: $heights');
-    expect(heights.first, greaterThanOrEqualTo(84), reason: 'the 84pt minimum still holds');
-
-    await writeFrame(tester, const Key('sync_attention_device_stats'), 'device-stats');
+  testWidgets('On the Way details for support', (tester) async {
+    await pumpOnTheWay(tester);
+    await tester.tap(find.byKey(const Key('on_the_way_details_for_support')));
+    await tester.pumpAndSettle();
+    expect(find.text('Invalid recording date'), findsOneWidget);
+    expect(find.text('uploadRejected · invalid_capture_time · 400'), findsOneWidget);
+    expect(find.text('Try Again'), findsNothing);
+    expect(find.text('Delete'), findsNothing);
+    await writeFrame(tester, '004-mobile-ios-on-the-way-support-details');
   });
-  testWidgets('Catching up span shows the current pending run without historical union', (tester) async {
-    tester.view.physicalSize = const Size(390 * 2, 300 * 2);
-    tester.view.devicePixelRatio = 2;
-    addTearDown(tester.view.reset);
-    final now = DateTime(2026, 10, 28, 23, 47);
-    final (start, end) = pendingCatchUpSpan([
-      (DateTime(2026, 10, 5, 20, 40), DateTime(2026, 10, 5, 20, 41)),
-      (now.subtract(const Duration(minutes: 5)), now),
-    ]);
-    await tester.pumpWidget(app(
-        home: Align(
-      alignment: Alignment.topCenter,
-      child: RepaintBoundary(
-          key: const Key('sync_attention_span'),
-          child: DeviceCatchingUpCard(
-              summary: DeviceCatchUpSummary(
-                  status: 'Transcribing...',
-                  start: start,
-                  end: end,
-                  targetIds: const {'current'},
-                  targetTitles: const ['Current recording']),
-              onOpen: () {})),
-    )));
-    await tester.pump(const Duration(milliseconds: 120));
-    final span = tester.widget<Text>(find.byKey(const Key('device_catching_up_span'))).data!;
-    expect(span, contains('11:42'));
-    expect(span, contains('11:47'));
-    expect(span, isNot(contains('Oct 5')));
-    expect(span.split(' · ').last, isNot(contains('2026')), reason: 'same-day range uses times beneath its day header');
-    expect(tester.takeException(), isNull);
-    await writeFrame(tester, const Key('sync_attention_span'), 'catching-up-span');
+
+  testWidgets('On the Way in dark mode', (tester) async {
+    await pumpOnTheWay(tester, brightness: Brightness.dark);
+    expect(find.text('7h 48m catching up'), findsOneWidget);
+    await writeFrame(tester, '005-mobile-ios-on-the-way-dark');
+  });
+
+  testWidgets('On the Way at the largest text size', (tester) async {
+    // iOS's largest accessibility size (AX5) sets body text at about 3.1x.
+    await pumpOnTheWay(tester, textScale: 3.1);
+    expect(find.text('7h 48m catching up'), findsOneWidget);
+    await writeFrame(tester, '006-mobile-ios-on-the-way-largest-text');
   });
 }

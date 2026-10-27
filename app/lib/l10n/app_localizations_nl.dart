@@ -13664,32 +13664,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals onderweg';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Uploaden: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Bijna klaar: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count vragen aandacht',
-      one: '1 vraagt aandacht',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Nog geen activiteit';
 
   @override
@@ -14688,4 +14662,41 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Live-tekst inschakelen';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'onderweg';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'als je online bent';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Nog $duration te verwerken';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Uploadt vanzelf. Gesprekken verschijnen zodra de opnames binnenkomen.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Uploadt vanzelf zodra je weer online bent. Gesprekken verschijnen zodra de opnames binnenkomen.';
+
+  @override
+  String get onTheWayDayUploading => 'Wordt geüpload';
+
+  @override
+  String get onTheWayDayNext => 'Hierna';
+
+  @override
+  String get onTheWayDayQueued => 'In de wachtrij';
+
+  @override
+  String get onTheWayNoDate => 'Geen datum';
+
+  @override
+  String get onTheWayFootnote =>
+      'Opnames die mislukken, blijven op de achtergrond opnieuw proberen. Alles wat we niet kunnen transcriberen, wordt automatisch aan ons gemeld.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Details voor support';
 }

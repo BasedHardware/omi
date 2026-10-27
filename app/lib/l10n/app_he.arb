@@ -11597,10 +11597,6 @@
     "onTheWayTitle": "בדרך",
     "onTheWayAlmostReady": "כמעט מוכן",
     "onTheWayRecordingCount": "{count, plural, =1{הקלטה אחת} other{{count} הקלטות}}",
-    "onTheWaySummary": "{totals} בדרך",
-    "onTheWayUploadingCount": "בהעלאה: {count}",
-    "onTheWayAlmostReadyCount": "כמעט מוכנות: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{אחת דורשת תשומת לב} other{{count} דורשות תשומת לב}}",
     "activityEmpty": "אין פעילות עדיין",
     "activityNewSemantics": "פעילות, פריטים חדשים",
     "activityLoadFailed": "לא ניתן היה לטעון את כל הפעילות שלך",
@@ -11878,5 +11874,16 @@
     "livePreviewNoEngineBody": "המילים שלך מופיעות כאן דקה או שתיים אחרי שאמרת אותן.",
     "livePreviewNoEngineTitle": "מקליט בבטחה",
     "livePreviewOnPhoneDivider": "בשידור חי בטלפון הזה",
-    "livePreviewTurnOnLiveText": "הפעל טקסט חי"
+    "livePreviewTurnOnLiveText": "הפעל טקסט חי",
+    "deviceCatchUpOnItsWay": "בדרך",
+    "deviceCatchUpWhenOnline": "כשיש חיבור",
+    "onTheWayCatchingUp": "נותרו {duration} לעיבוד",
+    "onTheWayUploadsByItself": "מעלה לבד. השיחות מושלמות בהדרגה כשההקלטות מגיעות.",
+    "onTheWayUploadsWhenOnline": "מעלה לבד ברגע שתחזור החיבור. השיחות מושלמות בהדרגה כשההקלטות מגיעות.",
+    "onTheWayDayUploading": "מועלה",
+    "onTheWayDayNext": "הבא בתור",
+    "onTheWayDayQueued": "בתור",
+    "onTheWayNoDate": "ללא תאריך",
+    "onTheWayFootnote": "הקלטות שנכשלות ממשיכות לנסות שוב ברקע. כל מה שלא ניתן לתמלול מדווח לנו אוטומטית.",
+    "onTheWayDetailsForSupport": "פרטים לתמיכה"
 }

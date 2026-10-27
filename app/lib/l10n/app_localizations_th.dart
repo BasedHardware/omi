@@ -13561,32 +13561,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals กำลังมา';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'กำลังอัปโหลด $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'ใกล้เสร็จแล้ว $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ต้องการความสนใจ $count',
-      one: 'ต้องการความสนใจ 1',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'ยังไม่มีกิจกรรม';
 
   @override
@@ -14577,4 +14551,41 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'เปิดข้อความสด';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'กำลังจะมาถึง';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'เมื่อกลับมาออนไลน์';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'กำลังไล่ตามอีก $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'อัปโหลดเองอัตโนมัติ เมื่อถึงแล้ว การสนทนาจะเติมเต็มให้เอง';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'จะอัปโหลดเองอัตโนมัติเมื่อคุณกลับมาออนไลน์ เมื่อถึงแล้ว การสนทนาจะเติมเต็มให้เอง';
+
+  @override
+  String get onTheWayDayUploading => 'กำลังอัปโหลด';
+
+  @override
+  String get onTheWayDayNext => 'ถัดไป';
+
+  @override
+  String get onTheWayDayQueued => 'อยู่ในคิว';
+
+  @override
+  String get onTheWayNoDate => 'ไม่มีวันที่';
+
+  @override
+  String get onTheWayFootnote =>
+      'การบันทึกที่ล้มเหลวจะลองใหม่ต่อในเบื้องหลัง ส่วนสิ่งที่เราถอดเสียงไม่ได้จะถูกรายงานถึงเราโดยอัตโนมัติ';
+
+  @override
+  String get onTheWayDetailsForSupport => 'รายละเอียดสำหรับฝ่ายสนับสนุน';
 }

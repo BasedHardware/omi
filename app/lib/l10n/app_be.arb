@@ -11597,10 +11597,6 @@
     "onTheWayTitle": "У дарозе",
     "onTheWayAlmostReady": "Амаль гатова",
     "onTheWayRecordingCount": "{count, plural, =1{1 запіс} other{Запісаў: {count}}}",
-    "onTheWaySummary": "{totals} у дарозе",
-    "onTheWayUploadingCount": "Запампоўваецца: {count}",
-    "onTheWayAlmostReadyCount": "Амаль гатова: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 патрабуе ўвагі} other{Патрабуюць увагі: {count}}}",
     "activityEmpty": "Пакуль няма актыўнасці",
     "activityNewSemantics": "Актыўнасць, новыя элементы",
     "activityLoadFailed": "Не ўдалося загрузіць усю вашу актыўнасць",
@@ -11878,5 +11874,16 @@
     "livePreviewNoEngineBody": "Вашы словы з’явяцца тут праз хвіліну-две пасля таго, як вы іх вымовіце.",
     "livePreviewNoEngineTitle": "Бяспечны запіс",
     "livePreviewOnPhoneDivider": "Нажыва на гэтым тэлефоне",
-    "livePreviewTurnOnLiveText": "Уключыць жывы тэкст"
+    "livePreviewTurnOnLiveText": "Уключыць жывы тэкст",
+    "deviceCatchUpOnItsWay": "у дарозе",
+    "deviceCatchUpWhenOnline": "пры злучэнні з інтэрнэтам",
+    "onTheWayCatchingUp": "{duration} яшчэ загружаецца",
+    "onTheWayUploadsByItself": "Загрузка ідзе аўтаматычна. Размовы з'яўляюцца па меры прыбыцця запісаў.",
+    "onTheWayUploadsWhenOnline": "Загрузка ідзе аўтаматычна, калі вы зноў будзеце онлайн. Размовы з'яўляюцца па меры прыбыцця запісаў.",
+    "onTheWayDayUploading": "Загружаецца",
+    "onTheWayDayNext": "Наступныя",
+    "onTheWayDayQueued": "У чарзе",
+    "onTheWayNoDate": "Без даты",
+    "onTheWayFootnote": "Запісы, якія не ўдалося загрузіць, працягнуць спробы ў фонавым рэжыме. Пра ўсё, што мы не зможам пераўтварыць у тэкст, нам паведамяць аўтаматычна.",
+    "onTheWayDetailsForSupport": "Падрабязнасці для падтрымкі"
 }

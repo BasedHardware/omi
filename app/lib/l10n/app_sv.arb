@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "På väg",
     "onTheWayAlmostReady": "Nästan klart",
     "onTheWayRecordingCount": "{count, plural, =1{1 inspelning} other{{count} inspelningar}}",
-    "onTheWaySummary": "{totals} på väg",
-    "onTheWayUploadingCount": "{count} laddas upp",
-    "onTheWayAlmostReadyCount": "Nästan klart: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 behöver uppmärksamhet} other{{count} behöver uppmärksamhet}}",
     "activityEmpty": "Ingen aktivitet än",
     "activityNewSemantics": "Aktivitet, nya objekt",
     "activityLoadFailed": "Kunde inte läsa in all din aktivitet",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "Dina ord visas här en till två minuter efter att du sagt dem.",
     "livePreviewNoEngineTitle": "Spelar in säkert",
     "livePreviewOnPhoneDivider": "Live på den här telefonen",
-    "livePreviewTurnOnLiveText": "Aktivera live-text"
+    "livePreviewTurnOnLiveText": "Aktivera live-text",
+    "deviceCatchUpOnItsWay": "på väg",
+    "deviceCatchUpWhenOnline": "när du är online",
+    "onTheWayCatchingUp": "{duration} på väg",
+    "onTheWayUploadsByItself": "Laddar upp automatiskt. Konversationer fylls i allteftersom inspelningarna kommer fram.",
+    "onTheWayUploadsWhenOnline": "Laddar upp automatiskt när du är online igen. Konversationer fylls i allteftersom inspelningarna kommer fram.",
+    "onTheWayDayUploading": "Laddar upp",
+    "onTheWayDayNext": "Nästa",
+    "onTheWayDayQueued": "I kö",
+    "onTheWayNoDate": "Inget datum",
+    "onTheWayFootnote": "Inspelningar som misslyckas försöker igen i bakgrunden. Allt som vi inte kan transkribera rapporteras automatiskt till oss.",
+    "onTheWayDetailsForSupport": "Detaljer för support"
 }

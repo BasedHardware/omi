@@ -11597,10 +11597,6 @@
     "onTheWayTitle": "మార్గంలో ఉంది",
     "onTheWayAlmostReady": "దాదాపు సిద్ధం",
     "onTheWayRecordingCount": "{count, plural, =1{1 రికార్డింగ్} other{{count} రికార్డింగ్‌లు}}",
-    "onTheWaySummary": "{totals} మార్గంలో ఉంది",
-    "onTheWayUploadingCount": "అప్‌లోడ్ అవుతోంది: {count}",
-    "onTheWayAlmostReadyCount": "దాదాపు సిద్ధం: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 రికార్డింగ్‌కు శ్రద్ధ అవసరం} other{{count} రికార్డింగ్‌లకు శ్రద్ధ అవసరం}}",
     "activityEmpty": "ఇంకా కార్యాచరణ లేదు",
     "activityNewSemantics": "కార్యాచరణ, కొత్త అంశాలు",
     "activityLoadFailed": "మీ మొత్తం కార్యాచరణను లోడ్ చేయలేకపోయాం",
@@ -11878,5 +11874,16 @@
     "livePreviewNoEngineBody": "మీరు చెప్పిన ఒకటి రెణ्टు నిమిషాల్లో మీ మాటలు ఇక్కడ కనిపిస్తాయి.",
     "livePreviewNoEngineTitle": "సురక్షితంగా రికార్డ్ అవుతోంది",
     "livePreviewOnPhoneDivider": "ఈ ఫోన్‌లో లైవ్",
-    "livePreviewTurnOnLiveText": "లైవ్ టెక్స్ట్ ఆన్ చేయండి"
+    "livePreviewTurnOnLiveText": "లైవ్ టెక్స్ట్ ఆన్ చేయండి",
+    "deviceCatchUpOnItsWay": "వచ్చుతోంది",
+    "deviceCatchUpWhenOnline": "ఆన్‌లైన్‌కి వచ్చాక",
+    "onTheWayCatchingUp": "{duration} పూర్తి అవుతోంది",
+    "onTheWayUploadsByItself": "తానంతట తానే అప్‌లోడ్ అవుతుంది. చేరుకున్న కొద్దీ సంభాషణలు ఏర్పడతాయి.",
+    "onTheWayUploadsWhenOnline": "మీరు తిరిగి ఆన్‌లైన్‌కి వచ్చాక తానంతట తానే అప్‌లోడ్ అవుతుంది. చేరుకున్న కొద్దీ సంభాషణలు ఏర్పడతాయి.",
+    "onTheWayDayUploading": "అప్‌లోడ్ అవుతోంది",
+    "onTheWayDayNext": "తర్వాతిది",
+    "onTheWayDayQueued": "క్యూలో ఉంది",
+    "onTheWayNoDate": "తేదీ లేదు",
+    "onTheWayFootnote": "విఫలమైన రికార్డింగ్‌లు నేపథ్యంలో మళ్లీ ప్రయత్నిస్తూనే ఉంటాయి. మేము ట్రాన్స్‌క్రైబ్ చేయలేనివి ఆటోమేటిక్‌గా మాకు నివేదించబడతాయి.",
+    "onTheWayDetailsForSupport": "సపోర్ట్ కోసం వివరాలు"
 }

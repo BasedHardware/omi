@@ -13624,32 +13624,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals na ceste';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Nahráva sa: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Takmer hotovo: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Vyžaduje pozornosť: $count',
-      one: '1 si vyžaduje pozornosť',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Zatiaľ žiadna aktivita';
 
   @override
@@ -14644,4 +14618,41 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Zapnúť živý text';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'na ceste';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'keď budete online';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration na ceste';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Nahráva sa samo. Konverzácie sa dopĺňajú, ako nahrávky prichádzajú.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Nahráva sa samo, keď budete opäť online. Konverzácie sa dopĺňajú, ako nahrávky prichádzajú.';
+
+  @override
+  String get onTheWayDayUploading => 'Nahráva sa';
+
+  @override
+  String get onTheWayDayNext => 'Nasledujúce';
+
+  @override
+  String get onTheWayDayQueued => 'Vo fronte';
+
+  @override
+  String get onTheWayNoDate => 'Bez dátumu';
+
+  @override
+  String get onTheWayFootnote =>
+      'Nahrávky, ktorých odosielanie zlyhá, sa budú na pozadí opakovať. Všetko, čo nedokážeme prepísať, sa nám automaticky nahlási.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detaily pre podporu';
 }

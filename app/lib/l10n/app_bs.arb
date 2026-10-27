@@ -11597,10 +11597,6 @@
     "onTheWayTitle": "Na putu",
     "onTheWayAlmostReady": "Skoro spremno",
     "onTheWayRecordingCount": "{count, plural, =1{1 snimak} other{Snimaka: {count}}}",
-    "onTheWaySummary": "{totals} na putu",
-    "onTheWayUploadingCount": "Slanje: {count}",
-    "onTheWayAlmostReadyCount": "Skoro spremno: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 zahtijeva pažnju} other{Zahtijeva pažnju: {count}}}",
     "activityEmpty": "Još nema aktivnosti",
     "activityNewSemantics": "Aktivnost, nove stavke",
     "activityLoadFailed": "Nismo mogli učitati svu vašu aktivnost",
@@ -11878,5 +11874,16 @@
     "livePreviewNoEngineBody": "Tvoje riječi se ovdje pojavljuju minutu ili dvije nakon što ih izgovoriš.",
     "livePreviewNoEngineTitle": "Sigurno snima",
     "livePreviewOnPhoneDivider": "Uživo na ovom telefonu",
-    "livePreviewTurnOnLiveText": "Uključi tekst uživo"
+    "livePreviewTurnOnLiveText": "Uključi tekst uživo",
+    "deviceCatchUpOnItsWay": "na putu",
+    "deviceCatchUpWhenOnline": "kada bude online",
+    "onTheWayCatchingUp": "Još {duration} za slanje",
+    "onTheWayUploadsByItself": "Šalje se samo. Razgovori se popunjavaju čim snimke stignu.",
+    "onTheWayUploadsWhenOnline": "Šalje se samo kada ponovo budete online. Razgovori se popunjavaju čim snimke stignu.",
+    "onTheWayDayUploading": "Slanje u toku",
+    "onTheWayDayNext": "Sljedeće",
+    "onTheWayDayQueued": "U redu čekanja",
+    "onTheWayNoDate": "Bez datuma",
+    "onTheWayFootnote": "Snimci koji ne uspiju nastavljaju s pokušajima u pozadini. Za sve što ne možemo pretvoriti u tekst automatski nam se prijavljuje.",
+    "onTheWayDetailsForSupport": "Detalji za podršku"
 }

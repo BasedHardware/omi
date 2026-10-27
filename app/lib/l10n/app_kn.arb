@@ -11597,10 +11597,6 @@
     "onTheWayTitle": "ದಾರಿಯಲ್ಲಿದೆ",
     "onTheWayAlmostReady": "ಬಹುತೇಕ ಸಿದ್ಧ",
     "onTheWayRecordingCount": "{count, plural, =1{1 ರೆಕಾರ್ಡಿಂಗ್} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು}}",
-    "onTheWaySummary": "{totals} ದಾರಿಯಲ್ಲಿದೆ",
-    "onTheWayUploadingCount": "ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ: {count}",
-    "onTheWayAlmostReadyCount": "ಬಹುತೇಕ ಸಿದ್ಧ: {count}",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{ಗಮನ ಅಗತ್ಯ: 1} other{ಗಮನ ಅಗತ್ಯ: {count}}}",
     "activityEmpty": "ಇನ್ನೂ ಯಾವುದೇ ಚಟುವಟಿಕೆ ಇಲ್ಲ",
     "activityNewSemantics": "ಚಟುವಟಿಕೆ, ಹೊಸ ಐಟಂಗಳು",
     "activityLoadFailed": "ನಿಮ್ಮ ಎಲ್ಲಾ ಚಟುವಟಿಕೆಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
@@ -11878,5 +11874,16 @@
     "livePreviewNoEngineBody": "ನೀವು ಹೇಳಿದ ಒಂದೆರಡು ನಿಮಿಷಗಳಲ್ಲಿ ನಿಮ್ಮ ಮಾತುಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.",
     "livePreviewNoEngineTitle": "ಸುರಕ್ಷಿತವಾಗಿ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ",
     "livePreviewOnPhoneDivider": "ಈ ಫೋನ್‌ನಲ್ಲಿ ಲೈವ್",
-    "livePreviewTurnOnLiveText": "ಲೈವ್ ಪಠ್ಯ ಆನ್ ಮಾಡಿ"
+    "livePreviewTurnOnLiveText": "ಲೈವ್ ಪಠ್ಯ ಆನ್ ಮಾಡಿ",
+    "deviceCatchUpOnItsWay": "ದಾರಿಯಲ್ಲಿದೆ",
+    "deviceCatchUpWhenOnline": "ಆನ್‌ಲೈನ್ ಆದಾಗ",
+    "onTheWayCatchingUp": "{duration} ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ",
+    "onTheWayUploadsByItself": "ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತದೆ. ಬಂದ ತಕ್ಷಣ ಸಂವಾದಗಳು ಸೇರುತ್ತವೆ.",
+    "onTheWayUploadsWhenOnline": "ನೀವು ಮತ್ತೆ ಆನ್‌ಲೈನ್ ಆದಾಗ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತದೆ. ಬಂದ ತಕ್ಷಣ ಸಂವಾದಗಳು ಸೇರುತ್ತವೆ.",
+    "onTheWayDayUploading": "ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ",
+    "onTheWayDayNext": "ಮುಂದಿನದು",
+    "onTheWayDayQueued": "ಸರದಿಯಲ್ಲಿದೆ",
+    "onTheWayNoDate": "ದಿನಾಂಕವಿಲ್ಲ",
+    "onTheWayFootnote": "ವಿಫಲವಾದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಮರುಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತವೆ. ನಾವು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗದ ವಿಷಯಗಳು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ನಮಗೆ ವರದಿಯಾಗುತ್ತವೆ.",
+    "onTheWayDetailsForSupport": "ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳು"
 }

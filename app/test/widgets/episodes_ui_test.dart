@@ -23,7 +23,6 @@ import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/pages/episodes/previous_episode_link.dart';
 import 'package:omi/pages/settings/device/device_live_sections.dart';
-import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -1126,7 +1125,7 @@ void main() {
       expect(find.text('to sync'), findsNothing);
     });
 
-    testWidgets('right now shows the live episode and catching-up progress', (tester) async {
+    testWidgets('right now shows only the live episode', (tester) async {
       var opened = 0;
       await tester.pumpWidget(
         wrap(
@@ -1134,12 +1133,11 @@ void main() {
             liveTitle: 'Lunch plans with Maya',
             liveLength: '24m',
             onOpenLive: () => opened++,
-            catchingUp: const DeviceCatchUpSummary(status: 'Waiting to sync'),
           ),
         ),
       );
       expect(find.text('Live episode · 24m'), findsOneWidget);
-      expect(find.text('Waiting to sync'), findsOneWidget);
+      expect(find.text('Catching up'), findsNothing);
       await tester.tap(find.byKey(const Key('device_right_now_live')));
       expect(opened, 1);
     });

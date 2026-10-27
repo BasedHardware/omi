@@ -13420,32 +13420,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '处理中：$totals';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count 条正在上传';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count 条即将完成';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 条需要关注',
-      one: '1 条需要关注',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => '暂无活动';
 
   @override
@@ -14424,4 +14398,39 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => '打开实况文本';
+
+  @override
+  String get deviceCatchUpOnItsWay => '在路上';
+
+  @override
+  String get deviceCatchUpWhenOnline => '联网后';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '还有 $duration 的录音待处理';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => '自动上传。录音到达后，对话会自动补全。';
+
+  @override
+  String get onTheWayUploadsWhenOnline => '恢复网络后自动上传。录音到达后，对话会自动补全。';
+
+  @override
+  String get onTheWayDayUploading => '上传中';
+
+  @override
+  String get onTheWayDayNext => '下一个';
+
+  @override
+  String get onTheWayDayQueued => '排队中';
+
+  @override
+  String get onTheWayNoDate => '无日期';
+
+  @override
+  String get onTheWayFootnote => '失败的录音会在后台持续重试。我们无法转录的内容会自动报告给我们。';
+
+  @override
+  String get onTheWayDetailsForSupport => '支持详情';
 }

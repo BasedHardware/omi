@@ -13626,32 +13626,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals đang đến';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count đang tải lên';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count sắp xong';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count cần chú ý',
-      one: '1 cần chú ý',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Chưa có hoạt động';
 
   @override
@@ -14650,4 +14624,41 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Bật văn bản trực tiếp';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'đang trên đường gửi lên';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'khi có mạng';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Đang xử lý nốt $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Tự động tải lên. Cuộc trò chuyện sẽ hiện dần khi dữ liệu đến nơi.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Tự động tải lên khi bạn có lại kết nối mạng. Cuộc trò chuyện sẽ hiện dần khi dữ liệu đến nơi.';
+
+  @override
+  String get onTheWayDayUploading => 'Đang tải lên';
+
+  @override
+  String get onTheWayDayNext => 'Tiếp theo';
+
+  @override
+  String get onTheWayDayQueued => 'Trong hàng đợi';
+
+  @override
+  String get onTheWayNoDate => 'Không có ngày';
+
+  @override
+  String get onTheWayFootnote =>
+      'Các bản ghi âm bị lỗi sẽ tiếp tục được thử lại trong nền. Những gì chúng tôi không thể phiên âm sẽ tự động được báo cáo cho chúng tôi.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Chi tiết cho bộ phận hỗ trợ';
 }

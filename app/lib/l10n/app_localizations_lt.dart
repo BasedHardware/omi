@@ -13652,32 +13652,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals pakeliui';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Įkeliama: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Beveik paruošta: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Reikia dėmesio: $count',
-      one: '1 reikia dėmesio',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Veiklos dar nėra';
 
   @override
@@ -14672,4 +14646,41 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Įjungti tiesioginį tekstą';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'pakeliui';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'prisijungus';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration apdorojama';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Įkeliama automatiškai. Pokalbiai atsiras, vos įrašams pasiekus serverį.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Įkeliama automatiškai, kai vėl būsite prisijungę. Pokalbiai atsiras, vos įrašams pasiekus serverį.';
+
+  @override
+  String get onTheWayDayUploading => 'Įkeliama';
+
+  @override
+  String get onTheWayDayNext => 'Kitas eilėje';
+
+  @override
+  String get onTheWayDayQueued => 'Laukia eilėje';
+
+  @override
+  String get onTheWayNoDate => 'Be datos';
+
+  @override
+  String get onTheWayFootnote =>
+      'Nepavykę įrašai toliau bandomi fone. Viskas, ko nepavyksta transkribuoti, mums automatiškai pranešama.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Išsami informacija palaikymo komandai';
 }

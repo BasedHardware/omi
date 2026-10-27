@@ -13632,32 +13632,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals tulossa';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Lähetetään: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Melkein valmiina: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count vaatii huomiota',
-      one: '1 vaatii huomiota',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Ei vielä toimintaa';
 
   @override
@@ -14654,4 +14628,41 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get livePreviewTurnOnLiveText => 'Ota live-teksti käyttöön';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'matkalla';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'verkon palattua';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration saadaan kiinni';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Latautuu itsestään. Keskustelut täydentyvät äänien saapuessa.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Latautuu itsestään, kun olet taas yhteydessä. Keskustelut täydentyvät äänien saapuessa.';
+
+  @override
+  String get onTheWayDayUploading => 'Ladataan';
+
+  @override
+  String get onTheWayDayNext => 'Seuraavaksi';
+
+  @override
+  String get onTheWayDayQueued => 'Jonossa';
+
+  @override
+  String get onTheWayNoDate => 'Ei päivämäärää';
+
+  @override
+  String get onTheWayFootnote =>
+      'Nauhoitukset, jotka epäonnistuvat, yritetään yhä uudelleen taustalla. Kaikki, mitä emme pysty transkriboimaan, ilmoitetaan meille automaattisesti.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Tiedot tukea varten';
 }

@@ -24231,30 +24231,6 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 recording} other{{count} recordings}}'**
   String onTheWayRecordingCount(int count);
 
-  /// On the Way summary line at the top. totals is the recording count and total length, e.g. '45 recordings · 8h 54m'
-  ///
-  /// In en, this message translates to:
-  /// **'{totals} on the way'**
-  String onTheWaySummary(String totals);
-
-  /// On the Way summary and day header: how many recordings are still syncing to Omi
-  ///
-  /// In en, this message translates to:
-  /// **'{count} uploading'**
-  String onTheWayUploadingCount(int count);
-
-  /// On the Way summary and day header: how many recordings are being turned into conversations
-  ///
-  /// In en, this message translates to:
-  /// **'{count} almost ready'**
-  String onTheWayAlmostReadyCount(int count);
-
-  /// On the Way summary and day header, in warning colour: how many recordings Omi refused or could not sync
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 needs attention} other{{count} need attention}}'**
-  String onTheWayNeedsAttentionCount(int count);
-
   /// Empty state of the Activity page
   ///
   /// In en, this message translates to:
@@ -25904,6 +25880,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Turn on live text'**
   String get livePreviewTurnOnLiveText;
+
+  /// Lowercase caption on the Device Settings 'Catching up' stat tile, under a duration like '8h 14m': the recordings are uploading by themselves. A chevron follows; tapping opens the On the Way page.
+  ///
+  /// In en, this message translates to:
+  /// **'on its way'**
+  String get deviceCatchUpOnItsWay;
+
+  /// Lowercase caption on the Device Settings 'Catching up' stat tile, under a duration like '8h 14m', while the phone has no internet: the recordings will upload once it is back online. A chevron follows.
+  ///
+  /// In en, this message translates to:
+  /// **'when online'**
+  String get deviceCatchUpWhenOnline;
+
+  /// Headline of the On the Way page: how much recorded audio is still uploading or being turned into conversations. {duration} is like '8h 14m'.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} catching up'**
+  String onTheWayCatchingUp(String duration);
+
+  /// One quiet line under the On the Way headline and progress bar: the user does not need to do anything; conversations appear as the audio arrives on the server.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads by itself. Conversations fill in as it lands.'**
+  String get onTheWayUploadsByItself;
+
+  /// The same line under the On the Way headline while the phone has no internet connection.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads by itself once you\'re back online. Conversations fill in as it lands.'**
+  String get onTheWayUploadsWhenOnline;
+
+  /// Short status at the right of one day's row on On the Way: that day's recordings are uploading right now.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading'**
+  String get onTheWayDayUploading;
+
+  /// Short status at the right of one day's row on On the Way: that day's recordings upload next (next in line, not a 'Next' button).
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get onTheWayDayNext;
+
+  /// Short status at the right of one day's row on On the Way: that day's recordings are waiting their turn to upload.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued'**
+  String get onTheWayDayQueued;
+
+  /// Title of the On the Way row for recordings whose recording time is unknown (for example a device clock that was never set), in place of 'Today' or a weekday.
+  ///
+  /// In en, this message translates to:
+  /// **'No date'**
+  String get onTheWayNoDate;
+
+  /// Footnote under the list of days on the On the Way page. 'We/us' is the Omi team.
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings that fail keep retrying in the background. Anything we can\'t transcribe is reported to us automatically.'**
+  String get onTheWayFootnote;
+
+  /// Small text link at the bottom of On the Way, and the title of the page it opens: a plain technical list of every pending recording with its status codes, meant for the support team.
+  ///
+  /// In en, this message translates to:
+  /// **'Details for support'**
+  String get onTheWayDetailsForSupport;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -4174,10 +4174,6 @@
     "onTheWayTitle": "準備中",
     "onTheWayAlmostReady": "まもなく完了",
     "onTheWayRecordingCount": "{count, plural, =1{1件の録音} other{{count}件の録音}}",
-    "onTheWaySummary": "準備中: {totals}",
-    "onTheWayUploadingCount": "アップロード中 {count}件",
-    "onTheWayAlmostReadyCount": "まもなく完了 {count}件",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{要確認 1件} other{要確認 {count}件}}",
     "activityEmpty": "アクティビティはまだありません",
     "activityNewSemantics": "アクティビティ、新着あり",
     "activityLoadFailed": "アクティビティの一部を読み込めませんでした",
@@ -4452,5 +4448,16 @@
     "livePreviewNoEngineBody": "発言は話してから1〜2分後にここに表示されます。",
     "livePreviewNoEngineTitle": "安全に録音しています",
     "livePreviewOnPhoneDivider": "この端末でライブ",
-    "livePreviewTurnOnLiveText": "ライブテキストをオンにする"
+    "livePreviewTurnOnLiveText": "ライブテキストをオンにする",
+    "deviceCatchUpOnItsWay": "送信中",
+    "deviceCatchUpWhenOnline": "オンライン時に",
+    "onTheWayCatchingUp": "{duration} を処理中",
+    "onTheWayUploadsByItself": "自動でアップロードされます。届き次第、会話が追加されます。",
+    "onTheWayUploadsWhenOnline": "オンラインに戻ると自動でアップロードされます。届き次第、会話が追加されます。",
+    "onTheWayDayUploading": "アップロード中",
+    "onTheWayDayNext": "次",
+    "onTheWayDayQueued": "順番待ち",
+    "onTheWayNoDate": "日付なし",
+    "onTheWayFootnote": "失敗した録音はバックグラウンドで再試行を続けます。文字起こしできなかったものは自動的に報告されます。",
+    "onTheWayDetailsForSupport": "サポート用の詳細"
 }

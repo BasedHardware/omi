@@ -4209,10 +4209,6 @@
     "onTheWayTitle": "Yolda",
     "onTheWayAlmostReady": "Neredeyse hazır",
     "onTheWayRecordingCount": "{count, plural, =1{1 kayıt} other{{count} kayıt}}",
-    "onTheWaySummary": "{totals} yolda",
-    "onTheWayUploadingCount": "{count} yükleniyor",
-    "onTheWayAlmostReadyCount": "{count} neredeyse hazır",
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 ilgi bekliyor} other{{count} ilgi bekliyor}}",
     "activityEmpty": "Henüz etkinlik yok",
     "activityNewSemantics": "Etkinlik, yeni öğeler",
     "activityLoadFailed": "Etkinliğinizin tamamı yüklenemedi",
@@ -4487,5 +4483,16 @@
     "livePreviewNoEngineBody": "Sözlerin, söyledikten bir iki dakika sonra burada görünür.",
     "livePreviewNoEngineTitle": "Güvenle kaydediyor",
     "livePreviewOnPhoneDivider": "Bu telefonda canlı",
-    "livePreviewTurnOnLiveText": "Canlı metni aç"
+    "livePreviewTurnOnLiveText": "Canlı metni aç",
+    "deviceCatchUpOnItsWay": "yolda",
+    "deviceCatchUpWhenOnline": "çevrimiçi olunca",
+    "onTheWayCatchingUp": "{duration} hâlâ işleniyor",
+    "onTheWayUploadsByItself": "Kendiliğinden yüklenir. Ulaştıkça görüşmeler tamamlanır.",
+    "onTheWayUploadsWhenOnline": "Tekrar çevrimiçi olduğunuzda kendiliğinden yüklenir. Ulaştıkça görüşmeler tamamlanır.",
+    "onTheWayDayUploading": "Yükleniyor",
+    "onTheWayDayNext": "Sırada",
+    "onTheWayDayQueued": "Kuyrukta",
+    "onTheWayNoDate": "Tarih yok",
+    "onTheWayFootnote": "Başarısız olan kayıtlar arka planda yeniden denenmeye devam eder. Transkriptini çıkaramadığımız her şey bize otomatik olarak bildirilir.",
+    "onTheWayDetailsForSupport": "Destek için ayrıntılar"
 }
