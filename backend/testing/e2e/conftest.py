@@ -86,10 +86,11 @@ def _set_e2e_env():
     os.environ["TYPESENSE_HOST"] = "localhost"
     os.environ["TYPESENSE_HOST_PORT"] = "8108"
     os.environ["TYPESENSE_API_KEY"] = "fake-typesense-key"
-    # The hermetic harness runs no Typesense server: an enabled first-party
-    # conversation index writer would block ~5s per durable conversation write
-    # on refused localhost:8108 retries and blow the e2e timing budget. The
-    # projection is covered by tests/unit/test_conversation_typesense_index.py.
+    # The hermetic harness runs no Typesense server: the write gate below
+    # stops index upserts, and the runtime seam routing in
+    # _create_backend_app keeps the ungated privacy deletes and lazy keyword
+    # searches off the refused dummy port too. The projection is covered by
+    # tests/unit/test_conversation_typesense_index.py.
     os.environ["TYPESENSE_CONVERSATION_INDEX_WRITES"] = "0"
     os.environ["BUCKET_SPEECH_PROFILES"] = "speech-profiles"
     os.environ["BUCKET_POSTPROCESSING"] = "postprocessing"
@@ -407,6 +408,30 @@ def _create_backend_app(fake_firestore_instance, fake_redis_instance, fake_stora
 
     # Import the real FastAPI app (triggers all backend module imports)
     import main as backend_main
+
+    # The hermetic stack runs no Typesense server, but the dummy env kept for
+    # import-time client construction makes `typesense_configured()` true, so
+    # every ungated index delete (conversation delete/finalize syncs) and lazy
+    # keyword-search call attempted real HTTP against refused localhost:8108;
+    # urllib3's retry ladder cost ~4s per attempt (~60s across the suite, the
+    # bulk of the 112.74s CI session that outgrew the E2E_PYTEST_TIMEOUT
+    # budget). Route the three runtime seams to instant hermetic behavior:
+    # the two configured-guards take their designed `skipped_unconfigured`
+    # branches, and the shared lazy client raises the same transient
+    # `connection refused` the dead port produced, so fail-open keyword
+    # search keeps its exact semantics. Typesense behavior itself is covered
+    # by tests/unit/test_conversation_typesense_index.py.
+    import utils.conversations.search as conversation_search
+    import utils.conversations.typesense_index as conversation_index
+    import utils.memory.atom_keyword_index as atom_keyword_index
+
+    class _HermeticTypesenseClient:
+        def __getattr__(self, name: str):
+            raise ConnectionError(f"connection refused: hermetic e2e runs no Typesense server ({name})")
+
+    conversation_search.client = _HermeticTypesenseClient()
+    conversation_index.typesense_configured = lambda: False
+    atom_keyword_index.typesense_configured = lambda: False
 
     _install_hermetic_privacy_projection_fakes()
 
