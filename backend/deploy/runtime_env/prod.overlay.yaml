@@ -53,12 +53,16 @@ overlay:
           value: based-hardware-batch-pipeline-staging
         AUDIO_ARCHIVE_STOP_PCM_ENABLED:
           value: 'true'
+        AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
+          value: 'true'
+        BUCKET_AUDIO_DERIVED:
+          value: 'omi-audio-derived-uc1'
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
-          value: '0'
+          value: '5'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
@@ -228,12 +232,16 @@ overlay:
         FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
         AUDIO_ARCHIVE_STOP_PCM_ENABLED:
           value: 'true'
+        AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
+          value: 'true'
+        BUCKET_AUDIO_DERIVED:
+          value: 'omi-audio-derived-uc1'
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
-          value: '0'
+          value: '5'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
@@ -480,12 +488,16 @@ overlay:
             value: syncing-local
           AUDIO_ARCHIVE_STOP_PCM_ENABLED:
             value: 'true'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
+            value: 'true'
+          BUCKET_AUDIO_DERIVED:
+            value: 'omi-audio-derived-uc1'
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
-            value: '0'
+            value: '5'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -804,13 +816,16 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_STOP_PCM_ENABLED:
             value: 'true'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
+            value: 'true'
+          BUCKET_AUDIO_DERIVED:
+            value: 'omi-audio-derived-uc1'
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
-            value: '0'
-            value: '0'
+            value: '5'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
             category: rollout
@@ -1162,13 +1177,16 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_STOP_PCM_ENABLED:
             value: 'true'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
+            value: 'true'
+          BUCKET_AUDIO_DERIVED:
+            value: 'omi-audio-derived-uc1'
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
-            value: '0'
-            value: '0'
+            value: '5'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
             category: rollout
@@ -1524,12 +1542,16 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_STOP_PCM_ENABLED:
             value: 'true'
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
+            value: 'true'
+          BUCKET_AUDIO_DERIVED:
+            value: 'omi-audio-derived-uc1'
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
-            value: '0'
+            value: '5'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
