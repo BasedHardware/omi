@@ -866,4 +866,3 @@ def search_screen_activity_tool(
             how_to_get_more="Narrow the date range or use a more specific query to inspect additional matches.",
         )
     return result.strip()
-
