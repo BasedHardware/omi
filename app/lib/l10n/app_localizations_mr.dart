@@ -712,7 +712,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get remembering => 'लक्षात ठेवत आहे';
 
   @override
-  String get unlimitedPlan => 'मर्यादित योजना';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'योजना व्यवस्थापित करा';
@@ -734,7 +734,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get upgrade => 'अपग्रेड करा';
 
   @override
-  String get upgradeToUnlimited => 'मर्यादित अपग्रेड करा';
+  String get upgradeToUnlimited => 'Omi Pro मध्ये अपग्रेड करा';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3162,7 +3162,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Pro मध्ये अपग्रेड करा';
+  String get upgradeToPro => 'Omi Pro मध्ये अपग्रेड करा';
 
   @override
   String get getOmiDevice => 'Omi डिव्हाइस मिळवा';
@@ -4283,8 +4283,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get trainingDataProgram => 'प्रशिक्षण डेटा कार्यक्रम';
 
   @override
-  String get getOmiUnlimitedFree =>
-      'AI मॉडेल प्रशिक्षण साठी आपल्या डेटा योगदान करून Omi Unlimited विनामूल्य प्राप्त करा.';
+  String get getOmiUnlimitedFree => 'AI मॉडेल प्रशिक्षण साठी आपल्या डेटा योगदान करून Omi Pro विनामूल्य प्राप्त करा.';
 
   @override
   String get trainingDataBullets =>
@@ -9670,7 +9669,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get downgradeToFreemiumAction => 'मोफत आवृत्तीवर जा';
 
   @override
-  String get getFreeUnlimitedAccess => 'मोफत अमर्यादित प्रवेश मिळवा';
+  String get getFreeUnlimitedAccess => 'Omi Pro मोफत मिळवा';
 
   @override
   String get shareDataForTraining => 'प्रशिक्षणासाठी डेटा सामायिक करा';
@@ -12862,7 +12861,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'व्हॉइस नोट पाठवा आणि Omi त्याला उत्तर देईल.';
 
   @override
-  String get chatAppsPartOfPro => 'चॅट अॅप्स Pro चा भाग आहेत';
+  String get chatAppsPartOfPro => 'चॅट अॅप्स Omi Pro चा भाग आहेत';
 
   @override
   String get chatAppsMessagesApp => 'संदेश';
@@ -13494,7 +13493,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get syncDetailsCopy => 'सपोर्टसाठी तपशील कॉपी करा';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator आणि Architect वर उपलब्ध';
+  String get chatAppsChannelPlanRequired => 'Omi Pro वर उपलब्ध';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14009,7 +14008,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'फोन चार्ज होत असताना चालते.';
 
   @override
-  String get onDeviceUpgradeBody => 'वक्ते वेगळे ओळखण्यासाठी आणि अधिक अचूकतेसाठी Pro वर अपग्रेड करा';
+  String get onDeviceUpgradeBody => 'वक्ते वेगळे ओळखण्यासाठी आणि अधिक अचूकतेसाठी Omi Pro वर अपग्रेड करा';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14194,7 +14193,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud सह पुन्हा करा';
 
   @override
-  String get onDeviceRedoHint => 'वक्ते वेगळे ओळखण्यासाठी आणि अधिक अचूकतेसाठी Pro वर अपग्रेड करा';
+  String get onDeviceRedoHint => 'वक्ते वेगळे ओळखण्यासाठी आणि अधिक अचूकतेसाठी Omi Pro वर अपग्रेड करा';
 
   @override
   String get onDeviceKeepEverything => 'सर्व काही या फोनवर ठेवा';

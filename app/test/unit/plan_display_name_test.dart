@@ -20,15 +20,17 @@ void main() {
 
     test('uses the canonical name even with a stale backend title', () {
       expect(planDisplayName(PlanType.unlimited, catalog, l10n), 'Neo');
-      expect(planDisplayName(PlanType.operator, catalog, l10n), 'Pro');
+      expect(planDisplayName(PlanType.operator, catalog, l10n), 'Operator');
       // The legacy `pro` id is canonicalized to Architect.
       expect(planDisplayName(PlanType.fromWire('pro'), catalog, l10n), 'Architect');
     });
 
     test('falls back to the known product name when the backend does not list the tier', () {
       expect(planDisplayName(PlanType.plus, const [], l10n), 'Plus');
-      expect(planDisplayName(PlanType.operator, const [], l10n), 'Pro');
-      expect(planDisplayName(PlanType.unlimitedV2, const [], l10n), 'Unlimited');
+      expect(planDisplayName(PlanType.operator, const [], l10n), 'Operator');
+      expect(planDisplayName(PlanType.unlimitedV2, const [], l10n), 'Omi Pro');
+      expect(planDisplayName(PlanType.unlimitedV2, [SubscriptionPlan(id: 'unlimited_v2', title: 'Unlimited')], l10n),
+          'Omi Pro');
       expect(planDisplayName(PlanType.unlimited, const [], l10n), 'Neo');
     });
 

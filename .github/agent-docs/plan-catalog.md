@@ -51,6 +51,8 @@ never a new-user SKU on any real client platform.
    subscriber opening iOS/Android sees **only** their current plan
    (Active, cancel, portal). They cannot Continue onto Plus / Unlimited /
    Neo. Immediate Stripe proration would strip desktop entitlement.
+   Exception (2026-10-26): Omi Pro (`unlimited_v2`) also grants desktop, so
+   the mobile sheet allows the switch onto it.
    Operator ↔ Architect stays allowed on desktop and web.
    The upgrade API (`desktop_to_consumer_plan_change_error`) is the
    same boundary: confirmation in the app is not an exception.

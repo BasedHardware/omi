@@ -254,6 +254,24 @@ void main() {
       );
     });
 
+    test('shows desktop-plan Continue onto Omi Pro, which also grants desktop', () {
+      for (final current in ['operator', 'architect']) {
+        expect(
+          shouldShowPlanContinueButton(
+            isOnAnnualPlan: true,
+            hasScheduledUpgrade: false,
+            isCancelled: false,
+            plansLoaded: true,
+            selectedTierId: 'unlimited_v2',
+            currentTierId: current,
+            currentGrantsDesktop: true,
+          ),
+          isTrue,
+          reason: current,
+        );
+      }
+    });
+
     test('still shows monthly→annual Continue on a desktop plan', () {
       expect(
         shouldShowPlanContinueButton(

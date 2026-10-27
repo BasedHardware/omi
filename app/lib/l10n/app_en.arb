@@ -935,9 +935,9 @@
     "@remembering": {
         "description": "Remembering stat title"
     },
-    "unlimitedPlan": "Unlimited Plan",
+    "unlimitedPlan": "Omi Pro",
     "@unlimitedPlan": {
-        "description": "Unlimited plan name"
+        "description": "Plan name shown after a successful purchase; Omi Pro is a product name and is not translated"
     },
     "managePlan": "Manage Plan",
     "@managePlan": {
@@ -975,7 +975,7 @@
     "@upgrade": {
         "description": "Upgrade button"
     },
-    "upgradeToUnlimited": "Upgrade to Unlimited",
+    "upgradeToUnlimited": "Upgrade to Omi Pro",
     "@upgradeToUnlimited": {
         "description": "Message shown on locked memory items"
     },
@@ -3693,7 +3693,7 @@
     "@pro": {
         "description": "Badge label for pro/unlimited users"
     },
-    "upgradeToPro": "Upgrade to Pro",
+    "upgradeToPro": "Upgrade to Omi Pro",
     "@upgradeToPro": {
         "description": "Subscription banner button text"
     },
@@ -4982,9 +4982,9 @@
     "@trainingDataProgram": {
         "description": "Label for training data program"
     },
-    "getOmiUnlimitedFree": "Get Omi Unlimited for free by contributing your data to train AI models.",
+    "getOmiUnlimitedFree": "Get Omi Pro for free by contributing your data to train AI models.",
     "@getOmiUnlimitedFree": {
-        "description": "Description for getting Omi Unlimited free by contributing data"
+        "description": "Description for getting Omi Pro free by contributing data"
     },
     "trainingDataBullets": "• Your data helps improve AI models\n• Only non-sensitive data is shared",
     "@trainingDataBullets": {
@@ -11496,9 +11496,9 @@
     "@downgradeToFreemiumAction": {
         "description": "Button that moves the user from a paid plan to the free tier"
     },
-    "getFreeUnlimitedAccess": "Get Free Unlimited Access",
+    "getFreeUnlimitedAccess": "Get Omi Pro Free",
     "@getFreeUnlimitedAccess": {
-        "description": "Title of the training-data opt-in card offering free unlimited access"
+        "description": "Title of the training-data opt-in card offering free Omi Pro"
     },
     "shareDataForTraining": "Share data for training",
     "@shareDataForTraining": {
@@ -15486,7 +15486,7 @@
     },
     "chatAppsProPerkText": "Text Omi from Telegram and iMessage",
     "chatAppsVoiceNotesSubtitle": "Send a voice note and Omi will answer it.",
-    "chatAppsPartOfPro": "Chat apps are part of Pro",
+    "chatAppsPartOfPro": "Chat apps are part of Omi Pro",
     "chatAppsMessagesApp": "Messages",
     "@chatAppsShowInApp": {
         "description": "Switch title"
@@ -16269,9 +16269,9 @@
     "@syncDetailsCopy": {
         "description": "Sync details button that copies the diagnostics text to the clipboard."
     },
-    "chatAppsChannelPlanRequired": "Available on Operator and Architect",
+    "chatAppsChannelPlanRequired": "Available on Omi Pro",
     "@chatAppsChannelPlanRequired": {
-        "description": "Chat apps row subtitle when the channel (iMessage) needs the Operator or Architect plan; plan names are not translated"
+        "description": "Chat apps row subtitle when the channel (iMessage) needs the Omi Pro plan; the plan name is not translated"
     },
     "chatAppsAtCapacity": "{app} is at capacity",
     "@chatAppsAtCapacity": {
@@ -16969,7 +16969,7 @@
     "@onDeviceOptionChargingBody": {
         "description": "Explains the on-phone transcription option that runs while the phone charges"
     },
-    "onDeviceUpgradeBody": "Upgrade to Pro for speaker separation and higher accuracy",
+    "onDeviceUpgradeBody": "Upgrade to Omi Pro for speaker separation and higher accuracy",
     "@onDeviceUpgradeBody": {
         "description": "Explains what upgrading the plan gives"
     },
@@ -17229,7 +17229,7 @@
     "@onDeviceRedoWithCloud": {
         "description": "Button: transcribe and summarize this conversation again in Omi's cloud"
     },
-    "onDeviceRedoHint": "Upgrade to Pro for speaker separation and higher accuracy",
+    "onDeviceRedoHint": "Upgrade to Omi Pro for speaker separation and higher accuracy",
     "@onDeviceRedoHint": {
         "description": "Hint under the Redo with Omi Cloud button"
     },

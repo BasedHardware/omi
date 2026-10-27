@@ -917,7 +917,7 @@
     "@remembering": {
         "description": "Remembering stat title"
     },
-    "unlimitedPlan": "Неограничен план",
+    "unlimitedPlan": "Omi Pro",
     "@unlimitedPlan": {
         "description": "Unlimited plan name"
     },
@@ -957,7 +957,7 @@
     "@upgrade": {
         "description": "Upgrade button"
     },
-    "upgradeToUnlimited": "Надгради на неограничено",
+    "upgradeToUnlimited": "Надгради на Omi Pro",
     "@upgradeToUnlimited": {
         "description": "Message shown on locked memory items"
     },
@@ -3652,7 +3652,7 @@
     "@pro": {
         "description": "Badge label for pro/unlimited users"
     },
-    "upgradeToPro": "Надгради на Pro",
+    "upgradeToPro": "Надгради на Omi Pro",
     "@upgradeToPro": {
         "description": "Subscription banner button text"
     },
@@ -4941,7 +4941,7 @@
     "@trainingDataProgram": {
         "description": "Label for training data program"
     },
-    "getOmiUnlimitedFree": "Добиј Omi неограничено бесплатно со допринесување твои податоци за обука на AI модели.",
+    "getOmiUnlimitedFree": "Добиј Omi Pro бесплатно со допринесување твои податоци за обука на AI модели.",
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
@@ -10536,7 +10536,7 @@
     "freemiumLimitsIntro": "Omi е бесплатен, но бесплатната верзија има ограничувања што влијаат на вашето искуство:",
     "downgradeLimitDelayNotRealTime": "Доцнење од 5-7 секунди (не во реално време)",
     "downgradeToFreemiumAction": "Префрлете се на бесплатна верзија",
-    "getFreeUnlimitedAccess": "Добијте бесплатен неограничен пристап",
+    "getFreeUnlimitedAccess": "Добијте Omi Pro бесплатно",
     "shareDataForTraining": "Споделете податоци за обука",
     "yourRequestUnderReview": "Вашето барање се разгледува",
     "pinAsBaseline": "Закачи како основа",
@@ -11370,7 +11370,7 @@
     "chatAppsShowInAppOff": "Исклучено: ги гледате само во {app}.",
     "chatAppsProPerkText": "Пишувајте му на Omi од Telegram и iMessage",
     "chatAppsVoiceNotesSubtitle": "Испратете гласовна белешка и Omi ќе одговори.",
-    "chatAppsPartOfPro": "Апликациите за разговор се дел од Pro",
+    "chatAppsPartOfPro": "Апликациите за разговор се дел од Omi Pro",
     "chatAppsMessagesApp": "Пораки",
     "chatAppsTelegramOtherDevice": "Telegram на друг уред?",
     "chatAppsHeroMessage": "Прашувајте за вашиот ден, зачувувајте спомени и управувајте со задачи од Telegram или iMessage. Вашите разговори остануваат во апликацијата што ја користите, а Omi помни за што сте зборувале насекаде.",
@@ -11555,7 +11555,7 @@
     "syncDetailsAudioFiles": "Аудио датотеки",
     "syncDetailsServerJobs": "Задачи на серверот (завршени / вкупно)",
     "syncDetailsCopy": "Копирај ги деталите за поддршка",
-    "chatAppsChannelPlanRequired": "Достапно со Operator и Architect",
+    "chatAppsChannelPlanRequired": "Достапно со Omi Pro",
     "chatAppsAtCapacity": "{app} е пополнет",
     "chatAppsJoinWaitlist": "Приклучи се на листата на чекање",
     "chatAppsOnWaitlist": "Вие сте на листата на чекање",
@@ -11706,7 +11706,7 @@
     "onDeviceTranscribeOnPhone": "Транскрибирај на овој телефон",
     "onDeviceIncluded": "Вклучено",
     "onDeviceOptionChargingBody": "Работи додека телефонот се полни.",
-    "onDeviceUpgradeBody": "Надградете на Pro за раздвојување на говорниците и поголема точност",
+    "onDeviceUpgradeBody": "Надградете на Omi Pro за раздвојување на говорниците и поголема точност",
     "onDeviceAtCapFooter": "Ништо не се губи. Ова може да го промените во Поставки › Трансрипција.",
     "onDeviceStepOf": "Чекор {step} од {total}",
     "onDeviceSetupBody": "Omi еднаш го презема говорниот модел. Потоа вашите снимки се претвораат во текст токму тука, без да се бројат во користењето.",
@@ -11759,7 +11759,7 @@
     "onDeviceWhyCloudIphone": "Овој iPhone не може сам да прави резиме (за тоа е потребен iPhone 15 Pro или понов). Преписот е направен на вашиот телефон, а до Omi е испратен само неговиот текст за резиме. Не се брои во вашето користење.",
     "onDeviceWhyCloudPhone": "Овој телефон не може сам да прави резиме. Преписот е направен на вашиот телефон, а до Omi е испратен само неговиот текст за резиме. Не се брои во вашето користење.",
     "onDeviceRedoWithCloud": "Повтори со Omi Cloud",
-    "onDeviceRedoHint": "Надградете на Pro за раздвојување на говорниците и поголема точност",
+    "onDeviceRedoHint": "Надградете на Omi Pro за раздвојување на говорниците и поголема точност",
     "onDeviceKeepEverything": "Чувај сè на овој телефон",
     "onDeviceKeepEverythingSubtitle": "Само преписи, без резимеа",
     "onDeviceAfterLiveHours": "Кога ќе ја достигнете границата",

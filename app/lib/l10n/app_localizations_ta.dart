@@ -716,7 +716,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get remembering => 'நினைவு';
 
   @override
-  String get unlimitedPlan => 'வரம்பற்ற திட்டம்';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'திட்டத்தை நிர்வகிக்கவும்';
@@ -738,7 +738,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get upgrade => 'மேம்படுத்தவும்';
 
   @override
-  String get upgradeToUnlimited => 'வரம்பற்ற மேம்படுத்தவும்';
+  String get upgradeToUnlimited => 'Omi Pro க்கு மேம்படுத்து';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3180,7 +3180,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Pro க்கு மேம்படுத்து';
+  String get upgradeToPro => 'Omi Pro க்கு மேம்படுத்து';
 
   @override
   String get getOmiDevice => 'Omi சாதனத்தைப் பெறுக';
@@ -4311,7 +4311,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'AI மாதிரികளை பயிற்சி செய்ய உங்கள் தரவு பங்களிப்பதன் மூலம் Omi Unlimited ஐ இலவசமாகப் பெறவும்.';
+      'AI மாதிரികளை பயிற்சி செய்ய உங்கள் தரவு பங்களிப்பதன் மூலம் Omi Pro ஐ இலவசமாகப் பெறவும்.';
 
   @override
   String get trainingDataBullets =>
@@ -9734,7 +9734,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get downgradeToFreemiumAction => 'இலவச பதிப்புக்கு மாறவும்';
 
   @override
-  String get getFreeUnlimitedAccess => 'இலவச வரம்பற்ற அணுகலைப் பெறுங்கள்';
+  String get getFreeUnlimitedAccess => 'Omi Pro-ஐ இலவசமாகப் பெறுங்கள்';
 
   @override
   String get shareDataForTraining => 'பயிற்சிக்காக தரவைப் பகிரவும்';
@@ -12944,7 +12944,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'குரல் குறிப்பை அனுப்புங்கள், Omi பதிலளிக்கும்.';
 
   @override
-  String get chatAppsPartOfPro => 'சாட் ஆப்ஸ் Pro-வின் ஒரு பகுதி';
+  String get chatAppsPartOfPro => 'சாட் ஆப்ஸ் Omi Pro-வின் ஒரு பகுதி';
 
   @override
   String get chatAppsMessagesApp => 'செய்திகள்';
@@ -13579,7 +13579,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncDetailsCopy => 'ஆதரவுக்காக விவரங்களை நகலெடுக்கவும்';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator மற்றும் Architect இல் கிடைக்கும்';
+  String get chatAppsChannelPlanRequired => 'Omi Pro இல் கிடைக்கும்';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14099,7 +14099,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'தொலைபேசி சார்ஜ் ஆகும்போது இயங்கும்.';
 
   @override
-  String get onDeviceUpgradeBody => 'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Pro-க்கு மேம்படுத்தவும்';
+  String get onDeviceUpgradeBody => 'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Omi Pro-க்கு மேம்படுத்தவும்';
 
   @override
   String get onDeviceAtCapFooter => 'எந்த வழியிலும் எதுவும் இழக்கப்படாது. இதை அமைப்புகள் › பேச்சு என்பதில் மாற்றலாம்.';
@@ -14281,7 +14281,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud மூலம் மீண்டும் செய்';
 
   @override
-  String get onDeviceRedoHint => 'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Pro-க்கு மேம்படுத்தவும்';
+  String get onDeviceRedoHint => 'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Omi Pro-க்கு மேம்படுத்தவும்';
 
   @override
   String get onDeviceKeepEverything => 'எல்லாவற்றையும் இந்த ஃபோனிலேயே வை';

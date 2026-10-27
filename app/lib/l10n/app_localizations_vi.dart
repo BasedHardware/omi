@@ -714,7 +714,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get remembering => 'Ghi nhớ';
 
   @override
-  String get unlimitedPlan => 'Gói không giới hạn';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Quản lý gói';
@@ -736,7 +736,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get upgrade => 'Nâng cấp';
 
   @override
-  String get upgradeToUnlimited => 'Nâng cấp lên không giới hạn';
+  String get upgradeToUnlimited => 'Nâng cấp lên Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3163,7 +3163,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Nâng cấp lên Pro';
+  String get upgradeToPro => 'Nâng cấp lên Omi Pro';
 
   @override
   String get getOmiDevice => 'Nhận Thiết bị Omi';
@@ -4285,7 +4285,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'Nhận Omi Unlimited miễn phí bằng cách đóng góp dữ liệu của bạn để huấn luyện các mô hình AI.';
+      'Nhận Omi Pro miễn phí bằng cách đóng góp dữ liệu của bạn để huấn luyện các mô hình AI.';
 
   @override
   String get trainingDataBullets =>
@@ -9660,7 +9660,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Chuyển xuống bản miễn phí';
 
   @override
-  String get getFreeUnlimitedAccess => 'Nhận quyền truy cập không giới hạn miễn phí';
+  String get getFreeUnlimitedAccess => 'Nhận Omi Pro miễn phí';
 
   @override
   String get shareDataForTraining => 'Chia sẻ dữ liệu để huấn luyện';
@@ -12853,7 +12853,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Gửi ghi chú thoại và Omi sẽ trả lời.';
 
   @override
-  String get chatAppsPartOfPro => 'Ứng dụng trò chuyện nằm trong gói Pro';
+  String get chatAppsPartOfPro => 'Ứng dụng trò chuyện nằm trong gói Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Tin nhắn';
@@ -13486,7 +13486,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncDetailsCopy => 'Sao chép chi tiết cho bộ phận hỗ trợ';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Có trên gói Operator và Architect';
+  String get chatAppsChannelPlanRequired => 'Có trên gói Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -14000,7 +14000,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Chạy khi điện thoại đang sạc.';
 
   @override
-  String get onDeviceUpgradeBody => 'Nâng cấp lên Pro để phân biệt người nói và tăng độ chính xác';
+  String get onDeviceUpgradeBody => 'Nâng cấp lên Omi Pro để phân biệt người nói và tăng độ chính xác';
 
   @override
   String get onDeviceAtCapFooter => 'Chọn cách nào cũng không mất gì. Bạn có thể thay đổi trong Cài đặt › Phiên âm.';
@@ -14183,7 +14183,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Làm lại với Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Nâng cấp lên Pro để phân biệt người nói và tăng độ chính xác';
+  String get onDeviceRedoHint => 'Nâng cấp lên Omi Pro để phân biệt người nói và tăng độ chính xác';
 
   @override
   String get onDeviceKeepEverything => 'Giữ mọi thứ trên điện thoại này';

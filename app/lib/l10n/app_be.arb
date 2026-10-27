@@ -917,7 +917,7 @@
     "@remembering": {
         "description": "Remembering stat title"
     },
-    "unlimitedPlan": "Неабмежаваны план",
+    "unlimitedPlan": "Omi Pro",
     "@unlimitedPlan": {
         "description": "Unlimited plan name"
     },
@@ -957,7 +957,7 @@
     "@upgrade": {
         "description": "Upgrade button"
     },
-    "upgradeToUnlimited": "Абнавіць на неабмежаваны",
+    "upgradeToUnlimited": "Абнавіць да Omi Pro",
     "@upgradeToUnlimited": {
         "description": "Message shown on locked memory items"
     },
@@ -3652,7 +3652,7 @@
     "@pro": {
         "description": "Badge label for pro/unlimited users"
     },
-    "upgradeToPro": "Абнавіць да Pro",
+    "upgradeToPro": "Абнавіць да Omi Pro",
     "@upgradeToPro": {
         "description": "Subscription banner button text"
     },
@@ -4941,7 +4941,7 @@
     "@trainingDataProgram": {
         "description": "Label for training data program"
     },
-    "getOmiUnlimitedFree": "Атрымайце Omi Unlimited бясплатна, удзельнічаючы ў даных для навучання мадэляў ШІ.",
+    "getOmiUnlimitedFree": "Атрымайце Omi Pro бясплатна, удзельнічаючы ў даных для навучання мадэляў ШІ.",
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
@@ -10536,7 +10536,7 @@
     "freemiumLimitsIntro": "Omi бясплатны, але бясплатная версія мае абмежаванні, якія ўплываюць на ваш вопыт:",
     "downgradeLimitDelayNotRealTime": "Затрымка 5-7 секунд (не ў рэальным часе)",
     "downgradeToFreemiumAction": "Перайсці на бясплатны план",
-    "getFreeUnlimitedAccess": "Атрымайце бязмежны доступ бясплатна",
+    "getFreeUnlimitedAccess": "Атрымайце Omi Pro бясплатна",
     "shareDataForTraining": "Дзяліцца дадзенымі для навучання",
     "yourRequestUnderReview": "Ваш запыт разглядаецца",
     "pinAsBaseline": "Замацаваць як базавае",
@@ -11370,7 +11370,7 @@
     "chatAppsShowInAppOff": "Выключана: ты бачыш іх толькі ў {app}.",
     "chatAppsProPerkText": "Пішы Omi з Telegram і iMessage",
     "chatAppsVoiceNotesSubtitle": "Адпраў галасавое паведамленне, і Omi адкажа на яго.",
-    "chatAppsPartOfPro": "Чат-праграмы ўваходзяць у Pro",
+    "chatAppsPartOfPro": "Чат-праграмы ўваходзяць у Omi Pro",
     "chatAppsMessagesApp": "Паведамленні",
     "chatAppsTelegramOtherDevice": "Telegram на іншай прыладзе?",
     "chatAppsHeroMessage": "Пытайся пра свой дзень, захоўвай памяці і кіруй задачамі з Telegram або iMessage. Твае чаты застаюцца ў праграме, якой ты карыстаешся, а Omi памятае, пра што вы размаўлялі, усюды.",
@@ -11555,7 +11555,7 @@
     "syncDetailsAudioFiles": "Аўдыяфайлы",
     "syncDetailsServerJobs": "Заданні сервера (гатова / усяго)",
     "syncDetailsCopy": "Скапіяваць дэталі для падтрымкі",
-    "chatAppsChannelPlanRequired": "Даступна ў Operator і Architect",
+    "chatAppsChannelPlanRequired": "Даступна ў Omi Pro",
     "chatAppsAtCapacity": "{app} цалкам запоўнены",
     "chatAppsJoinWaitlist": "Далучыцца да спісу чакання",
     "chatAppsOnWaitlist": "Вы ў спісе чакання",
@@ -11706,7 +11706,7 @@
     "onDeviceTranscribeOnPhone": "Транскрыбаваць на гэтым тэлефоне",
     "onDeviceIncluded": "Уключана",
     "onDeviceOptionChargingBody": "Працуе, пакуль тэлефон зараджаецца.",
-    "onDeviceUpgradeBody": "Перайдзіце на Pro для падзелу суразмоўцаў і большай дакладнасці",
+    "onDeviceUpgradeBody": "Перайдзіце на Omi Pro для падзелу суразмоўцаў і большай дакладнасці",
     "onDeviceAtCapFooter": "У любым выпадку нічога не страціцца. Гэта можна змяніць у Параметры › Транскрыпцыя.",
     "onDeviceStepOf": "Крок {step} з {total}",
     "onDeviceSetupBody": "Omi аднойчы спампоўвае маўленчую мадэль. Пасля гэтага вашы запісы ператвараюцца ў тэкст прама тут і не ўлічваюцца ў выкарыстанне.",
@@ -11759,7 +11759,7 @@
     "onDeviceWhyCloudIphone": "Гэты iPhone не можа сам ствараць зводкі (для гэтага патрэбны iPhone 15 Pro або навейшы). Стэнаграма створана на вашым тэлефоне, і ў Omi для зводкі адпраўлены толькі яе тэкст. Гэта не ўлічваецца ў ваша выкарыстанне.",
     "onDeviceWhyCloudPhone": "Гэты тэлефон не можа сам ствараць зводкі. Стэнаграма створана на вашым тэлефоне, і ў Omi для зводкі адпраўлены толькі яе тэкст. Гэта не ўлічваецца ў ваша выкарыстанне.",
     "onDeviceRedoWithCloud": "Перарабіць у Omi Cloud",
-    "onDeviceRedoHint": "Перайдзіце на Pro для падзелу суразмоўцаў і большай дакладнасці",
+    "onDeviceRedoHint": "Перайдзіце на Omi Pro для падзелу суразмоўцаў і большай дакладнасці",
     "onDeviceKeepEverything": "Захоўваць усё на гэтым тэлефоне",
     "onDeviceKeepEverythingSubtitle": "Толькі стэнаграмы, без зводак",
     "onDeviceAfterLiveHours": "Калі вы дасягнеце ліміту",
