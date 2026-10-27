@@ -666,7 +666,29 @@ guarded redirect chain. A donor refusal alone never authorizes dropping input.
 The final part advances the owner watermark; unrelated later captures continue.
 An ID-free completion carries `reason_code=conversation_deleted`. Settlement
 rechecks immutable binding, ledger ownership, predecessor, account and privacy
-generation, and rejects every other privacy reason. No deleted source is projected.
+generation. No deleted source is projected.
+
+Other recognized mutation privacy refusals (account deletion/missing account,
+protection or generation changes, recording consent, redirect cycle/missing
+target and the 256-document fence budget) settle as a separate **held ordering
+receipt**. The same transaction rechecks the actual refusal, immutable result
+binding, ledger owner and predecessor. It writes only batch control metadata,
+retires follow-ups and advances ordering once; it cannot write conversations,
+the user ledger, usage, derived content or audio. The original worker result,
+audio identity and existing part progress remain. Unknown reasons and lost
+result leases still fail closed. An unrelated donor graph/budget refusal first
+tries an isolated input-only plan under all ordinary privacy fences.
+
+Privacy holds retain `quarantine_held`, so the existing unfinished-obligation age
+metric includes them. They are not client success or measured silence; unknown
+held speech remains unknown. Protocol 2 plus a versioned privacy checkpoint
+fences older projectors, and persisted part states retain their previous values
+for repair. The owner repair planner discovers these holds and binds their
+control state into its reviewed digest; unpinned policy still refuses operator
+apply. After the fence is repaired, ordinary serving projection rechecks all
+privacy/ownership fences, restores prior progress and reuses the retained result
+without another recognizer call. Replaying an older held unit never rewinds a
+newer owner watermark. No admission or runtime flag is changed by this logic.
 
 Cascade DELETE acquires the account destructive-operation gate before writing
 the conversation tombstone. Its post-intent retraction check and nested memory
