@@ -79,6 +79,24 @@ def test_cursor_covers_old_history_and_survives_deleted_bookmark_and_new_arrival
     assert rest.exhausted
 
 
+def test_continuation_keeps_exact_subsecond_date_bounds(data):
+    start = NOW - timedelta(days=64, microseconds=123456)
+    end = NOW + timedelta(microseconds=654321)
+    first = service.search_saved_transcripts_text('u1', 'invoice', start_date=start, end_date=end, limit=1)
+    args = continuation(first)
+    assert datetime.fromisoformat(args['start_date']) == start
+    assert datetime.fromisoformat(args['end_date']) == end
+    second = service.search_saved_transcripts_text(
+        'u1',
+        args['transcript_query'],
+        start_date=datetime.fromisoformat(args['start_date']),
+        end_date=datetime.fromisoformat(args['end_date']),
+        cursor=args['transcript_cursor'],
+        limit=1,
+    )
+    assert '48 dollars' in second and not second.startswith('Error:')
+
+
 @pytest.mark.parametrize('change', ['owner', 'query', 'dates', 'signature'])
 def test_cursor_rejects_scope_changes_before_reading(data, change):
     _, query = data

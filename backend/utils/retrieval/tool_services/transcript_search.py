@@ -20,6 +20,7 @@ from utils.conversations.transcript_for_llm import owner_safe_transcript_segment
 from utils.model_text import DisplayClock, UNTRUSTED_LEGEND, format_date, untrusted_block
 from utils.observability.fallback import record_fallback
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
+from utils.retrieval.safety import safe_isoformat
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,7 @@ def search_saved_transcripts_text(
                                     conversation.structured.title if conversation.structured else 'Conversation'
                                 )[:160],
                                 'preview': ' '.join(excerpt.split())[:600],
-                                'created_at': conversation.created_at.isoformat(),
+                                'created_at': safe_isoformat(conversation.created_at),
                             }
                         )
         examined += 1
@@ -181,9 +182,9 @@ def search_saved_transcripts_text(
         if next_cursor:
             args['transcript_cursor'] = next_cursor
         if start_date:
-            args['start_date'] = start_date.isoformat()
+            args['start_date'] = safe_isoformat(start_date)
         if end_date:
-            args['end_date'] = end_date.isoformat()
+            args['end_date'] = safe_isoformat(end_date)
         coverage += '\nSearch incomplete. Continue the same search with: ' + json.dumps(args)
     else:
         coverage += '\nEnd of this scan. A literal-word miss is not proof that the underlying fact was never recorded.'
