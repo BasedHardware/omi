@@ -51,11 +51,12 @@ overlay:
           value: https://backend-sync-hhibjajaja-uc.a.run.app
         BUCKET_BATCH_PIPELINE:
           value: based-hardware-batch-pipeline-staging
+        AUDIO_ARCHIVE_STOP_PCM_ENABLED:
+          value: 'true'
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-          value: '0'
-          value: '0'
+          value: '5'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
@@ -225,11 +226,12 @@ overlay:
       env:
         FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
         FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
+        AUDIO_ARCHIVE_STOP_PCM_ENABLED:
+          value: 'true'
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-          value: '0'
-          value: '0'
+          value: '5'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
@@ -476,11 +478,12 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           BUCKET_TEMPORAL_SYNC_LOCAL:
             value: syncing-local
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED:
+            value: 'true'
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
-            value: '0'
+            value: '5'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
           HOSTED_PARAKEET_API_URL:
@@ -799,10 +802,12 @@ overlay:
             category: service_auth
           BUCKET_BATCH_PIPELINE:
             value: based-hardware-batch-pipeline-staging
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED:
+            value: 'true'
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
+            value: '5'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
             value: '0'
@@ -1155,10 +1160,12 @@ overlay:
             category: service_discovery
           BUCKET_BATCH_PIPELINE:
             value: based-hardware-batch-pipeline-staging
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED:
+            value: 'true'
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
+            value: '5'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
             value: '0'
@@ -1515,11 +1522,12 @@ overlay:
             category: service_discovery
           BUCKET_BATCH_PIPELINE:
             value: based-hardware-batch-pipeline-staging
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED:
+            value: 'true'
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
-            value: '0'
+            value: '5'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
           HOSTED_PARAKEET_API_URL:

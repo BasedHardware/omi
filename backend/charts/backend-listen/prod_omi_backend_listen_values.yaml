@@ -195,7 +195,7 @@ env:
   - name: AUDIO_ARCHIVE_READ_ENABLED
     value: "true"
   - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_SYNC_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
@@ -207,7 +207,7 @@ env:
   - name: AUDIO_ARCHIVE_PERCENT
     value: "100"
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
-    value: "0"
+    value: "5"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
