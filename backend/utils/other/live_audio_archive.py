@@ -283,16 +283,24 @@ class LiveAudioArchive:
                 metadata,
                 frames,
             )
-            if (
-                getattr(self.host, 'server_batch_only', False)
-                and pack.conversation_id
-                and pack.end is not None
-                and pack.end > pack.start
-            ):
-                if not await run_blocking(
-                    db_executor, note_server_batch_audio, request.uid, pack.conversation_id, pack.start, pack.end
-                ):
-                    raise RuntimeError('desktop batch capture owner unavailable')
+            if getattr(self.host, 'server_batch_only', False) is True and pack.conversation_id:
+                # Zero-sample originals are retained above, but their arrival
+                # clocks cannot expand or shrink the decoded-audio obligation.
+                spans = [
+                    (frame['start'], frame['start'] + frame['samples'] / request.sample_rate)
+                    for frame in frames
+                    if frame['samples'] > 0
+                ]
+                if spans:
+                    if not await run_blocking(
+                        db_executor,
+                        note_server_batch_audio,
+                        request.uid,
+                        pack.conversation_id,
+                        min(start for start, _ in spans),
+                        max(end for _, end in spans),
+                    ):
+                        raise RuntimeError('desktop batch capture owner unavailable')
             # A failed/disconnected delivery leaves the producer unacknowledged;
             # receipt loss is safe because the immutable media remains indexed.
             query = getattr(request.websocket, 'query_params', {})

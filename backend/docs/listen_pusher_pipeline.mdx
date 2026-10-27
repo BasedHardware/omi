@@ -39,7 +39,9 @@ than accepting provider-free audio without a batch owner.
 Original audio commits through `LiveAudioArchive` -> `commit_capture` (immutable
 media plus manifest). Only after that commit does a transaction record monotonic
 capture bounds and `has_content`; empty cleanup also fences the reservation so
-zero live segments cannot delete it. Pusher opcode 101 still commits PCM through
+zero live segments cannot delete it. Positive-sample frame intervals alone set batch bounds; zero-sample originals
+remain in custody without expanding or shrinking the decoded-audio obligation.
+Pusher opcode 101 still commits PCM through
 `_commit_durable_audio_window` -> `commit_pcm_window`, including silent frames.
 The lifecycle loop uses accepted local audio activity while capture continues,
 then flushes original custody before finalization. The raw-only finalizer writes

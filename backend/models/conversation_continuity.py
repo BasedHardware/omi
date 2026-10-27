@@ -4,6 +4,8 @@ from datetime import datetime, timedelta, timezone
 from math import isfinite
 from typing import Any, Mapping
 
+from config.server_batch import language_compatible, owned
+
 DEFAULT_GAP_SECONDS = 120
 MAX_CONVERSATION_TIMEOUT_SECONDS = 4 * 60 * 60
 MEETING_END_GRACE_SECONDS = 120
@@ -109,13 +111,9 @@ def resumable_continuation(
     """Unknown device is a partition, not permission to join another device."""
     finish = row.get('finished_at')
     if not allow_server_batch:
-        from config.server_batch import owned
-
         if owned(row):
             return False
     if language is not None:
-        from config.server_batch import language_compatible
-
         if not language_compatible(row, language):
             return False
     return (

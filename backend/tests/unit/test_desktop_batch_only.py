@@ -28,6 +28,14 @@ from utils.other.audio_outbox import AudioReceipt, read_pcm
 from utils.other.live_audio_archive import LiveAudioArchive
 import routers.pusher as pusher
 
+from database import llm_usage
+from database.listen_continuations import resolve_live_continuation
+from database.sync_ledger import sync_content_ledger_ref
+from tests.unit.test_recording_sessions import _FakeFirestore, _DocumentRef, _CollectionRef
+from utils import fair_use
+from utils.batch_pipeline.contracts import ProjectionBinding
+from utils.batch_pipeline.projection import record_speech
+
 ROW = ('users', 'owner', 'conversations', 'conversation')
 
 
@@ -339,6 +347,57 @@ async def test_zero_sample_original_keeps_custody_without_poisoning_later_captur
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('zero_times', [(), (999,), (1002,), (999, 1002), (1000.5,)])
+async def test_zero_sample_packets_do_not_expand_or_shrink_batch_span(remote, monkeypatch, zero_times):
+    db = StrictFirestore({ROW: capture()})
+    h = archive_host()
+    h.server_batch_only = True
+    archive = LiveAudioArchive(h)
+    monkeypatch.setattr(
+        live_audio_archive,
+        'note_server_batch_audio_received',
+        lambda owner, conversation: server_batch_audio.note_server_batch_audio_received(
+            owner, conversation, firestore_client=db
+        ),
+    )
+    monkeypatch.setattr(
+        live_audio_archive,
+        'note_server_batch_audio',
+        lambda owner, conversation, start, end: server_batch_audio.note_server_batch_audio(
+            owner, conversation, start, end, firestore_client=db
+        ),
+    )
+    packet = b'\x01\x00' * 16000
+    originals = []
+    for timestamp in zero_times:
+        if timestamp < 1000:
+            await archive.append(b'\xff', 'conversation', timestamp, 0)
+            originals.append(b'\xff')
+    await archive.append(packet, 'conversation', 1000, 16000, decoded=packet)
+    originals.append(packet)
+    for timestamp in zero_times:
+        if timestamp >= 1000:
+            await archive.append(b'\xff', 'conversation', timestamp, 0)
+            originals.append(b'\xff')
+    await archive.close()
+    receipt = AudioReceipt(**h.events[0].receipt)
+    assert remote.blob(receipt.path).data == b''.join(originals)
+    manifest = json.loads(remote.blob(receipt.manifest_path).data)
+    assert len(manifest['frames']) == len(originals)
+    assert sum(frame['samples'] for frame in manifest['frames']) == 16000
+    assert sum(frame['bytes'] for frame in manifest['frames']) == len(b''.join(originals))
+    row = db.rows[ROW]
+    assert row['server_batch_audio_start'] == row['started_at'].timestamp() == 1000
+    assert row['server_batch_audio_end'] == row['finished_at'].timestamp() == 1001
+    store = MemoryStore()
+    assert register_recording('owner', row, store=store, now=1002)
+    _, segment = record_identity('owner', 'conversation')
+    snapshot = store.rows['jobs', segment]['record_snapshot']
+    assert snapshot['started_at'].timestamp() == 1000
+    assert snapshot['finished_at'].timestamp() == 1001
+
+
+@pytest.mark.asyncio
 async def test_first_audio_marker_failure_keeps_buffered_original_for_shutdown_commit(remote, monkeypatch):
     h = archive_host()
     h.server_batch_only = True
@@ -443,8 +502,6 @@ def test_no_audio_server_capture_cannot_register_batch_even_from_another_caller(
 @pytest.mark.asyncio
 @pytest.mark.parametrize('active', [False, True])
 async def test_real_controller_closes_empty_archive_and_only_removes_inactive_no_input_generation(monkeypatch, active):
-    import routers.listen.conversations as controller_module
-    from tests.unit.test_recording_sessions import _FakeFirestore
 
     db = _FakeFirestore({ROW: capture()})
     monkeypatch.setattr(recording_sessions.firestore, 'transactional', lambda fn: fn)
@@ -466,7 +523,7 @@ async def test_real_controller_closes_empty_archive_and_only_removes_inactive_no
         return fn(*args, **kwargs)
 
     h.persistence = SimpleNamespace(call=call)
-    controller = controller_module.LiveConversationController(h)
+    controller = LiveConversationController(h)
     controller.schedule_finalization = AsyncMock()
     assert await controller.process_conversation('conversation') is (not active)
     assert (ROW in db.documents) is active
@@ -476,7 +533,6 @@ async def test_real_controller_closes_empty_archive_and_only_removes_inactive_no
 
 @pytest.mark.asyncio
 async def test_late_first_frame_after_close_cannot_delete_capture_before_commit(remote, monkeypatch):
-    from tests.unit.test_recording_sessions import _FakeFirestore
 
     db = _FakeFirestore({ROW: capture()})
     monkeypatch.setattr(recording_sessions.firestore, 'transactional', lambda fn: fn)
@@ -562,7 +618,6 @@ def test_empty_server_batch_display_cleanup_never_erases_original_custody(monkey
 @pytest.mark.parametrize('received', [False, True, None])
 @pytest.mark.parametrize('expired', [True, False])
 def test_lease_cleanup_requires_proven_no_audio_and_expired_bound_session(monkeypatch, received, expired):
-    from tests.unit.test_recording_sessions import _FakeFirestore, _DocumentRef, _CollectionRef
 
     monkeypatch.setattr(
         _DocumentRef, 'parent', property(lambda r: _CollectionRef(r.firestore, r.path[:-1])), raising=False
@@ -627,7 +682,6 @@ async def test_legacy_resume_rolls_incompatible_policy_into_fresh_capture(change
 
 @pytest.mark.parametrize('change', ['language', 'byok'])
 def test_incompatible_policy_replaces_continuation_pointer_without_rebinding_original(change):
-    from database.listen_continuations import resolve_live_continuation
 
     now = datetime.now(timezone.utc)
     old = {
@@ -665,11 +719,6 @@ def test_incompatible_policy_replaces_continuation_pointer_without_rebinding_ori
 @pytest.mark.parametrize('server_only', [True, False])
 def test_batch_accounting_replaces_live_charge_only_for_server_only_capture(monkeypatch, server_only):
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
-    from database import llm_usage
-    from utils import fair_use
-    from utils.batch_pipeline.contracts import ProjectionBinding
-    from utils.batch_pipeline.projection import record_speech
-    from database.sync_ledger import sync_content_ledger_ref
 
     binding = ProjectionBinding('owner', 'job', 'content', ('unit',), native_record=True)
     db = StrictFirestore(
@@ -713,7 +762,6 @@ def test_batch_accounting_replaces_live_charge_only_for_server_only_capture(monk
 
 @pytest.mark.parametrize('status', ['in_progress', 'processing'])
 def test_closed_empty_cleanup_fences_unclosed_and_committed_audio(monkeypatch, status):
-    from tests.unit.test_recording_sessions import _FakeFirestore
 
     db = _FakeFirestore({ROW: capture()})
     rows = db.documents
@@ -733,7 +781,6 @@ def test_closed_empty_cleanup_fences_unclosed_and_committed_audio(monkeypatch, s
 
 @pytest.mark.parametrize('received', [True, None, False])
 def test_closed_empty_cleanup_requires_explicit_never_received_proof(monkeypatch, received):
-    from tests.unit.test_recording_sessions import _FakeFirestore
 
     row = capture()
     row.update(server_batch_audio_closed=True, server_batch_audio_received=received)
