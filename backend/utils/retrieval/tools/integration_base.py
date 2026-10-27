@@ -1,6 +1,7 @@
 import contextvars
 from datetime import datetime
 import logging
+import sys
 from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 
 import database.users as users_db
@@ -17,7 +18,8 @@ def resolve_config_uid(config: Optional[Any] = None) -> Tuple[Optional[str], Opt
     raw: Any = config
     if raw is None:
         try:
-            raw = agent_config_context.get()
+            ctx_var = getattr(sys.modules.get("utils.retrieval.agentic"), "agent_config_context", agent_config_context)
+            raw = ctx_var.get()
         except LookupError:
             raw = None
     if not isinstance(raw, dict):

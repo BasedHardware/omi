@@ -63,7 +63,7 @@ def traverse_knowledge_graph_tool(
     # Clamp hops to [1, 2], matching MAX_TRAVERSAL_HOPS in utils.memory.kg_graph_traversal.
     parsed_hops = max(1, min(parsed_hops, 2))
 
-    uid, _ = resolve_config_uid(config)
+    uid = _resolve_uid(config)
     if not uid:
         return "Error: User ID not found in configuration"
 

@@ -70,11 +70,14 @@ def manage_daily_summary_tool(
     """
     logger.info(f"🔧 manage_daily_summary_tool called - action: {action}, hour: {hour}")
 
-    uid, err = resolve_config_uid(config)
-    if err is not None:
-        if "not available" in err:
+    if config is None:
+        uid = _resolve_uid(None)
+        if not uid:
             return "Error: Configuration not available"
-        return "Error: User ID not found"
+    else:
+        uid = _resolve_uid(config)
+        if not uid:
+            return "Error: User ID not found"
     assert uid is not None
 
     action_str = str(action or "").lower().strip()
