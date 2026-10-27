@@ -41,7 +41,9 @@ EndingStyle = Literal['none', 'period', 'exclamation', 'question']
 _MEMORY_CACHE: Dict[str, Tuple[float, str]] = {}
 _MEMORY_OPT_IN: Dict[str, Any] = {}
 _CONTACT_HANDLE_TO_PERSON: Dict[Tuple[str, str], str] = {}
-_LAST_RESOLVED_PROFILE: Dict[str, 'UserVoiceProfile'] = {}
+_DISABLED_OPT_IN_UNTIL: Dict[str, float] = {}
+_CONTACT_HANDLE_LIMIT = 1024
+_DISABLED_OPT_IN_TTL_SECONDS = 30
 
 _EMOJI_RE = re.compile(
     '['
@@ -154,12 +156,19 @@ def _load_user_voice_settings(uid: str, *, firestore_client: Any = None) -> Dict
             logger.debug('Could not read user_voice settings uid=%s err=%s', uid, type(exc).__name__)
         return {}
 
+    if _DISABLED_OPT_IN_UNTIL.get(uid, 0) > time.monotonic():
+        return {}
+
     try:
         from database import users as users_db
 
         doc = users_db.get_user_profile(uid)
-        if doc:
-            return dict(doc)
+        data = dict(doc or {})
+        if not data.get('user_voice_enabled') and not any((data.get('user_voice_people') or {}).values()):
+            if len(_DISABLED_OPT_IN_UNTIL) >= _CONTACT_HANDLE_LIMIT:
+                _DISABLED_OPT_IN_UNTIL.pop(next(iter(_DISABLED_OPT_IN_UNTIL)), None)
+            _DISABLED_OPT_IN_UNTIL[uid] = time.monotonic() + _DISABLED_OPT_IN_TTL_SECONDS
+        return data
     except Exception as exc:
         logger.debug('Could not read user_voice settings uid=%s err=%s', uid, type(exc).__name__)
 
@@ -277,6 +286,7 @@ def set_user_voice_enabled(
     else:
         entry['user_voice_enabled'] = bool(enabled)
     _MEMORY_OPT_IN[uid] = entry
+    _DISABLED_OPT_IN_UNTIL.pop(uid, None)
 
     if firestore_client is not None:
         try:
@@ -291,6 +301,13 @@ def set_user_voice_enabled(
                 getattr(doc_ref, 'set')(update, merge=True)
         except Exception as exc:
             logger.warning('Could not persist user_voice opt-in uid=%s err=%s', uid, type(exc).__name__)
+
+
+def _remember_contact_handle(uid: str, handle: str, name: str) -> None:
+    key = (uid, _normalize_person_key(handle))
+    if key not in _CONTACT_HANDLE_TO_PERSON and len(_CONTACT_HANDLE_TO_PERSON) >= _CONTACT_HANDLE_LIMIT:
+        _CONTACT_HANDLE_TO_PERSON.pop(next(iter(_CONTACT_HANDLE_TO_PERSON)), None)
+    _CONTACT_HANDLE_TO_PERSON[key] = name
 
 
 def record_contact_handles_for_user_voice(uid: str, query: Optional[str], result: Any) -> None:
@@ -312,11 +329,11 @@ def record_contact_handles_for_user_voice(uid: str, query: Optional[str], result
             if isinstance(items, list):
                 for handle in items:
                     if isinstance(handle, str) and handle.strip():
-                        _CONTACT_HANDLE_TO_PERSON[(uid, _normalize_person_key(handle))] = clean_name
+                        _remember_contact_handle(uid, handle, clean_name)
         for single_field in ('phone', 'email', 'handle'):
             handle = contact.get(single_field)
             if isinstance(handle, str) and handle.strip():
-                _CONTACT_HANDLE_TO_PERSON[(uid, _normalize_person_key(handle))] = clean_name
+                _remember_contact_handle(uid, handle, clean_name)
 
 
 def clear_user_voice_state_for_tests() -> None:
@@ -324,7 +341,7 @@ def clear_user_voice_state_for_tests() -> None:
     _MEMORY_CACHE.clear()
     _MEMORY_OPT_IN.clear()
     _CONTACT_HANDLE_TO_PERSON.clear()
-    _LAST_RESOLVED_PROFILE.clear()
+    _DISABLED_OPT_IN_UNTIL.clear()
 
 
 def cache_user_voice_profile(
@@ -967,7 +984,6 @@ def get_or_build_user_voice_profile(
         if candidate_key and str(candidate_key).strip():
             cached = get_cached_user_voice_profile(uid, str(candidate_key), now_fn=now_fn)
             if cached is not None:
-                _LAST_RESOLVED_PROFILE[uid] = cached
                 return cached
 
     if conversations is None:
@@ -985,7 +1001,6 @@ def get_or_build_user_voice_profile(
     person_key = _normalize_person_key(person_id=person_id, person_name=person_name, recipient=recipient)
     cached = get_cached_user_voice_profile(uid, person_key, now_fn=now_fn)
     if cached is not None:
-        _LAST_RESOLVED_PROFILE[uid] = cached
         return cached
 
     profile = build_user_voice_profile(
@@ -997,7 +1012,6 @@ def get_or_build_user_voice_profile(
     )
     if profile.sample_count > 0:
         cache_user_voice_profile(uid, person_key, profile, ttl_seconds=ttl_seconds, now_fn=now_fn)
-        _LAST_RESOLVED_PROFILE[uid] = profile
     return profile
 
 
@@ -1155,13 +1169,6 @@ def apply_user_voice_to_proposed_message(
         user_settings=user_settings,
         firestore_client=firestore_client,
     )
-    if (profile is None or profile.sample_count <= 0) and uid in _LAST_RESOLVED_PROFILE:
-        last_profile = _LAST_RESOLVED_PROFILE[uid]
-        if last_profile.sample_count > 0:
-            profile = last_profile
-            if recipient:
-                cache_user_voice_profile(uid, recipient, profile)
-
     if profile is None or profile.sample_count <= 0:
         return text
     return polish_draft_in_user_voice(text, profile)

@@ -1663,7 +1663,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
             try:
                 from utils.llm.user_voice import build_propose_message_voice_prompt_for_turn
 
-                voice_prompt = build_propose_message_voice_prompt_for_turn(uid, messages=messages)
+                voice_prompt = await run_blocking(
+                    db_executor, build_propose_message_voice_prompt_for_turn, uid, messages=messages
+                )
                 if voice_prompt:
                     voice_block = f'\n\n{voice_prompt}'
             except Exception as error:

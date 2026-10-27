@@ -344,8 +344,8 @@ async def test_propose_message_applies_user_voice_polish_before_opening_sheet(tw
 
     fake_redis = FakeRedis()
 
-    async def _inline(_executor, fn, *args):
-        return fn(*args)
+    async def _inline(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
 
     with (
         patch.object(device_tools, 'redis_client', fake_redis),
@@ -405,8 +405,8 @@ async def test_end_to_end_call_site_loads_stored_conversations_and_polishes_with
 
     fake_redis = FakeRedis()
 
-    async def _inline(_executor, fn, *args):
-        return fn(*args)
+    async def _inline(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
 
     turn_messages = [
         {'sender': 'human', 'text': 'Can you text Alex that I am running 5 mins late?'},
@@ -488,3 +488,53 @@ def test_blind_eval_fixtures():
     assert summary['total_cases'] == 3
     assert summary['unstyled_detected_as_ai'] == 3
     assert summary['polished_indistinguishable_from_real'] == 3
+
+
+def test_missing_recipient_profile_never_reuses_another_person(two_person_fixtures):
+    conversations, messages = two_person_fixtures
+    set_user_voice_enabled('uid-isolation', True)
+    alex = get_or_build_user_voice_profile(
+        'uid-isolation', person_name='Alex', conversations=conversations, messages=messages
+    )
+    assert alex.sample_count > 0
+    draft = 'Hello Dr. Unknown, thank you for your help.'
+    actual = user_voice.apply_user_voice_to_proposed_message(
+        'uid-isolation',
+        to=['unknown@example.test'],
+        text=draft,
+        conversations=conversations,
+        messages=[],
+    )
+    assert actual == draft
+    cached = get_cached_user_voice_profile('uid-isolation', 'unknown@example.test')
+    assert cached is None or cached.sample_count == 0
+
+
+def test_contact_handle_cache_has_a_fixed_bound():
+    for index in range(user_voice._CONTACT_HANDLE_LIMIT + 20):
+        user_voice.record_contact_handles_for_user_voice(
+            'uid-limit', None, {'contacts': [{'name': str(index), 'emails': [f'person{index}@example.test']}]}
+        )
+    assert len(user_voice._CONTACT_HANDLE_TO_PERSON) == user_voice._CONTACT_HANDLE_LIMIT
+    assert ('uid-limit', 'person0@example.test') not in user_voice._CONTACT_HANDLE_TO_PERSON
+
+
+def test_disabled_opt_in_lookup_is_bounded_and_expiring():
+    import sys
+    from types import ModuleType
+    import database
+
+    users = ModuleType('database.users')
+    calls = []
+    users.get_user_profile = lambda uid: calls.append(uid) or {}
+    with patch.object(database, 'users', users, create=True), patch.dict(sys.modules, {'database.users': users}), patch(
+        'time.monotonic', return_value=100
+    ):
+        assert user_voice._load_user_voice_settings('disabled') == {}
+        assert user_voice._load_user_voice_settings('disabled') == {}
+    assert calls == ['disabled']
+    with patch.object(database, 'users', users, create=True), patch.dict(sys.modules, {'database.users': users}), patch(
+        'time.monotonic', return_value=131
+    ):
+        user_voice._load_user_voice_settings('disabled')
+    assert calls == ['disabled', 'disabled']

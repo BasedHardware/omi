@@ -297,7 +297,9 @@ def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: 
             try:
                 from utils.llm.user_voice import apply_user_voice_to_proposed_message
 
-                kwargs['text'] = apply_user_voice_to_proposed_message(
+                kwargs['text'] = await run_blocking(
+                    db_executor,
+                    apply_user_voice_to_proposed_message,
                     uid,
                     to=kwargs.get('to'),
                     text=kwargs['text'],
