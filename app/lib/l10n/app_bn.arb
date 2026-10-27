@@ -11865,5 +11865,13 @@
     "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
     "openLoopAnswerDone": "সম্পন্ন",
     "openLoopAnswerRemind": "পরে মনে করিয়ে দিন",
-    "openLoopAnswerDrop": "বাদ দিন"
+    "openLoopAnswerDrop": "বাদ দিন",
+    "singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized."
 }
