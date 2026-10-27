@@ -133,7 +133,20 @@
     "onboardingSetupRatingPromptShown",
     "onboardingSetupRatingPromptAnswered",
     "firstSummaryRatingPromptShown",
-    "firstSummaryRatingPromptAnswered"
+    "firstSummaryRatingPromptAnswered",
+    "onboardingFirstCaptureShown",
+    "onboardingFirstCaptureChoiceSelected",
+    "onboardingFirstCaptureRecordingStarted",
+    "onboardingFirstCaptureRecordingCompleted",
+    "onboardingFirstCaptureConversationShown",
+    "onboardingFirstCaptureEmptyResult",
+    "onboardingFirstCaptureSkipped",
+    "onboardingStepCompleted",
+    "paywallVariantShown",
+    "paywallVariantFallback",
+    "onboardingWebviewShown",
+    "onboardingWebviewCompleted",
+    "onboardingWebviewFallback"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [

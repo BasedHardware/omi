@@ -58,7 +58,7 @@ SENTINEL_TEXT = 'synthetic secret probe text never logged'
 @pytest.fixture(autouse=True)
 def default_flags(monkeypatch):
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
     monkeypatch.delenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, raising=False)
 
 
@@ -404,7 +404,7 @@ def _stamp_incoming(texts, skew=40, *, binding='stamp_fallback'):
     return incoming
 
 
-@pytest.mark.parametrize(('extra_seconds', 'bucket'), [(0, '0'), (30, '0_60'), (100, '60_300'), (400, 'gt_300')])
+@pytest.mark.parametrize(('extra_seconds', 'bucket'), [(0, '0'), (30, '0_60'), (100, '60_300'), (300, '60_300')])
 def test_stamp_fallback_live_append_reports_extent_growth(extra_seconds, bucket):
     store = seeded_store([live_row()])
     incoming = _stamp_incoming(NEW)
@@ -567,12 +567,12 @@ def coordinator():
 async def test_coordinator_forwards_stamp_fallback_to_assignment(coordinator, monkeypatch):
     module, stubs = coordinator
     pipeline = stubs['pipeline']
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
+
     chunks = [sync_chunk(gen_start(L) + 61, gen_start(L) + 69, SENTINEL_TEXT)]
     paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
     pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/job-lineage/w.wav'])
     pipeline._cleanup_files = MagicMock()
-    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors: segmented.update(paths)
+    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors, **_kwargs: segmented.update(paths)
     pipeline.get_timestamp_from_path = lambda path: paths[path]['started_at'].timestamp()
     pipeline.get_wav_duration = lambda path: (paths[path]['finished_at'] - paths[path]['started_at']).total_seconds()
     pipeline.users_db = MagicMock()
@@ -597,7 +597,28 @@ async def test_coordinator_forwards_stamp_fallback_to_assignment(coordinator, mo
         '_candidate_rows',
         lambda *_args, **_kwargs: [generation(0)],
     )
+    claims = {
+        'f.opus': {
+            'capture_root': '12345678-1234-4234-8234-123456789abc',
+            'clock_epoch': 0,
+            'source_frame_start': 0,
+            'frame_count': 1,
+            'rate_hz': 16000,
+            'channel': 'mono',
+            'codec': 'opus',
+        }
+    }
+
+    async def observed_maps(_uid, _source, _lock, _device, _session, _claims, wav_paths, _frames, **_kwargs):
+        return (
+            wav_paths,
+            {path: {'claim': claims['f.opus'], 'offsets': [0, 16000], 'incomplete': False} for path in wav_paths},
+            False,
+        )
+
+    monkeypatch.setattr(pipeline, 'apply_sync_wal_audio_coverage', observed_maps)
     kwargs = SimpleNamespace(
+        capture_evidence_claims=claims,
         target_conversation_id='STAMP',
         client_device_id='pendant',
         recording_session_id=ORIGIN,
@@ -650,3 +671,159 @@ async def test_coordinator_lineage_off_passes_no_binding_kwarg(coordinator, monk
         'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
     )
     assert captured[chunks[0]['id']] == (None, False)
+
+
+@pytest.mark.parametrize('status', ['in_progress', 'completed'])
+@pytest.mark.parametrize('growth', [300, 300.001, 400])
+@pytest.mark.parametrize('binding', ['stamp_fallback', 'bound', None])
+def test_stamp_gap_threshold_preserves_proven_targets_and_routes_unproven_speech(growth, binding, status):
+    row = live_row(status=status)
+    store = seeded_store([row])
+    # Real gap: incoming speech ends growth seconds after the live row.
+    incoming = _stamp_incoming(NEW[:1], skew=60 + growth, binding=binding)
+    before = deepcopy(store.rows[('users', 'u', 'conversations', LIVE_ID)])
+    assigned, created, survivors = intake(store, incoming, target_id=LIVE_ID)
+    if binding == 'stamp_fallback' and growth > 300:
+        assert created and assigned['id'] != LIVE_ID
+        assert store.rows[('users', 'u', 'conversations', LIVE_ID)] == before
+        assert assigned['_sync_lineage_stamp_gap_refused'] is True
+        assert len(survivors) == 1
+        assert '_sync_lineage_stamp_gap_refused' not in store.rows[('users', 'u', 'conversations', assigned['id'])]
+        # Lost acknowledgment: same speech finds its ordinary row, never moves live speech.
+        retried, retry_created, _ = intake(store, incoming, target_id=LIVE_ID)
+        assert retried['id'] == assigned['id'] and not retry_created
+        assert store.rows[('users', 'u', 'conversations', LIVE_ID)] == before
+    else:
+        assert assigned['id'] == LIVE_ID and not created
+        assert '_sync_lineage_stamp_gap_refused' not in assigned
+
+
+def test_stamp_gap_routes_to_existing_temporal_neighbour():
+    store = seeded_store([live_row()])
+    neighbour = wal(450, NEW[:1], row_id='NEIGHBOUR')
+    intake(store, neighbour)
+    incoming = _stamp_incoming(NEW[1:2], skew=470)
+    before = deepcopy(store.rows[('users', 'u', 'conversations', LIVE_ID)])
+    assigned, created, _ = intake(store, incoming, target_id=LIVE_ID)
+    assert not created and assigned['id'] == 'NEIGHBOUR'
+    assert store.rows[('users', 'u', 'conversations', LIVE_ID)] == before
+
+
+def test_stamp_gap_completion_logs_closed_outcome_and_consumes_marker(caplog):
+    from utils.sync.intake_completion import complete_sync_intake
+    import threading
+
+    assigned = {'id': SENTINEL_ID, 'sync_relevance': 'keep', '_sync_lineage_stamp_gap_refused': True}
+    finish = MagicMock()
+    with caplog.at_level(logging.INFO):
+        complete_sync_intake(
+            uid='synthetic-owner',
+            assigned=assigned,
+            created=True,
+            survivors=[],
+            response={'new_memories': set(), 'updated_memories': set()},
+            lock=threading.Lock(),
+            language='en',
+            audio_enabled=True,
+            store_audio=MagicMock(),
+            finish=finish,
+            mark_finalize=MagicMock(),
+            acknowledge=MagicMock(),
+        )
+    lines = [r.getMessage() for r in caplog.records if 'event=sync_lineage_stamp_append' in r.getMessage()]
+    assert lines == ['event=sync_lineage_stamp_append outcome=stamp_gap_refused span_delta_bucket=0']
+    assert SENTINEL_ID not in caplog.text and SENTINEL_TEXT not in caplog.text
+    assert '_sync_lineage_stamp_gap_refused' not in assigned
+    finish.assert_called_once()
+
+
+@pytest.mark.parametrize('dedupe', ['true', 'false'])
+def test_stamp_gap_guard_is_independent_of_lexical_dedupe_switch(monkeypatch, dedupe):
+    monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, dedupe)
+    store = seeded_store([live_row()])
+    incoming = _stamp_incoming(NEW[:1], skew=500)
+    before = deepcopy(store.rows[('users', 'u', 'conversations', LIVE_ID)])
+    assigned, _, survivors = intake(store, incoming, target_id=LIVE_ID)
+    assert assigned['id'] != LIVE_ID and len(survivors) == 1
+    assert store.rows[('users', 'u', 'conversations', LIVE_ID)] == before
+
+
+def test_clock_mismatch_rejects_target_before_stamp_gap_guard(caplog):
+    from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD
+
+    row = live_row(**{SYNC_CLOCK_RUN_FIELD: 'run-a'})
+    incoming = _stamp_incoming(NEW[:1], skew=500)
+    incoming[SYNC_CLOCK_RUN_FIELD] = 'run-b'
+    assert assignment.capture_mismatch(row, incoming) == 'clock'
+    store = seeded_store([row])
+    before = deepcopy(store.rows[('users', 'u', 'conversations', LIVE_ID)])
+    with caplog.at_level(logging.INFO):
+        assigned, created, survivors = intake(store, incoming, target_id=LIVE_ID)
+    assert created and len(survivors) == 1 and assigned['id'] != LIVE_ID
+    assert store.rows[('users', 'u', 'conversations', LIVE_ID)] == before
+    assert 'outcome=temporal_recovery mismatch=clock' in caplog.text
+    assert '_sync_lineage_stamp_gap_refused' not in assigned
+    assert 'stamp_gap_refused' not in caplog.text
+
+
+@pytest.mark.parametrize('retry_anchor', [False, True])
+def test_fully_deduped_stamp_gap_keeps_live_and_landed_sync_row_unchanged(monkeypatch, retry_anchor):
+    """Live 0–100, duplicate WAL lines 150/160, and indexed sync speech 250–700."""
+    monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', 'true')
+    texts = LIVE[:2]
+    row = live_row(started_at=at(0), finished_at=at(100))
+    row['transcript_segments'] = [
+        {'start': 60 + i * 10, 'end': 70 + i * 10, 'text': text, 'speaker_id': 0, 'is_user': True}
+        for i, text in enumerate(texts)
+    ]
+    store = seeded_store([row])
+    landed = wal(0, NEW[:1], row_id='LANDED-SYNC')
+    landed.update(started_at=at(250), finished_at=at(700))
+    landed['transcript_segments'][0].update(start=0, end=450)
+    intake(store, landed)  # Real indexed row, eligible for the temporal bridge.
+    incoming = wal(0, texts)
+    incoming.update(started_at=at(150), finished_at=at(170), _sync_lineage_binding='stamp_fallback')
+    if retry_anchor:
+        incoming['id'] = landed['id']
+    for i, segment in enumerate(incoming['transcript_segments']):
+        segment.update(start=i * 10, end=(i + 1) * 10, is_user=True)
+    before = deepcopy(store.rows)
+    assigned, created, survivors = intake(store, incoming, target_id=LIVE_ID)
+    assert survivors == []  # Both exact anchors corroborate the same -90s clock offset.
+    assert store.rows == before  # No extent growth, donor tombstone, rebasing or index mutation.
+    assert assigned['id'] == (landed['id'] if retry_anchor else LIVE_ID) and not created
+    assert assigned['_sync_lineage_repeat_only'] is True
+    assert assigned['_sync_lineage_stamp_gap_refused'] is True
+
+
+@pytest.mark.parametrize('repeat_only', [False, True])
+def test_complete_sync_intake_folds_a_landed_row_into_the_live_episode_before_downstream_work(repeat_only):
+    import threading
+
+    from utils.sync.intake_completion import complete_sync_intake
+
+    order = []
+    assigned = {'id': SENTINEL_ID, 'sync_relevance': 'keep'}
+    if repeat_only:
+        assigned['_sync_lineage_repeat_only'] = True
+    complete_sync_intake(
+        uid='synthetic-owner',
+        assigned=assigned,
+        created=not repeat_only,
+        survivors=[],
+        response={'new_memories': set(), 'updated_memories': set()},
+        lock=threading.Lock(),
+        language='en',
+        audio_enabled=True,
+        store_audio=lambda cid: order.append(('store_audio', cid)),
+        finish=lambda *a, **k: order.append(('finish',)),
+        mark_finalize=lambda: None,
+        acknowledge=lambda: None,
+        attach_episode=lambda uid, cid, row: order.append(('attach', uid, cid)) or 'joined',
+    )
+    # Membership exists before audio storage or enrichment can stall behind it;
+    # a transient repeat-only intake wrote nothing and owes no membership work.
+    if repeat_only:
+        assert order == [('store_audio', SENTINEL_ID)]
+    else:
+        assert order == [('attach', 'synthetic-owner', SENTINEL_ID), ('store_audio', SENTINEL_ID), ('finish',)]

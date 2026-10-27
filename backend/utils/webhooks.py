@@ -230,7 +230,7 @@ async def _post_dev_webhook(
                 last_response = response
                 last_exception = None
                 if 200 <= response.status_code < 300:
-                    logger.info(
+                    logger.debug(
                         f'{webhook_name}: delivery succeeded status={response.status_code} '
                         f'attempt={attempt_number}/{attempts} url={log_url}'
                     )
@@ -427,7 +427,7 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
 
 
 async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind: ClientKind = 'unknown'):
-    logger.info(f"realtime_transcript_webhook {uid}")
+    logger.debug(f"realtime_transcript_webhook {uid}")
     toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.realtime_transcript)
 
     if toggled:
@@ -507,7 +507,7 @@ def get_audio_bytes_webhook_seconds(uid: str):
 
 
 async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: bytearray):
-    logger.info(f"send_audio_bytes_developer_webhook {uid}")
+    logger.debug(f"send_audio_bytes_developer_webhook {uid}")
     if not data:
         return
     if not _is_valid_audio_bytes_payload_fields(uid, sample_rate):

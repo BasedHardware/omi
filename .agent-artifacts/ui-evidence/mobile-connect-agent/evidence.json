@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-connect-an-agent.png",
+      "platform": "mobile-ios",
+      "description": "Connect an Agent: ChatGPT connected, Muse key active, other agents offer Connect",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-chatgpt-connect-sheet.png",
+      "platform": "mobile-ios",
+      "description": "One-tap ChatGPT sheet over the list",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-chatgpt-connected.png",
+      "platform": "mobile-ios",
+      "description": "ChatGPT page once connected: questions to try and Disconnect",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-agent-prompt-preview.png",
+      "platform": "mobile-ios",
+      "description": "Instinct sheet before Copy Prompt: preview only, no key created",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-agent-prompt-copied.png",
+      "platform": "mobile-ios",
+      "description": "Instinct sheet after Copy Prompt: key created, prompt carries a one-time link",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-active-agent-revoke.png",
+      "platform": "mobile-ios",
+      "description": "An agent holding a key: last used and Revoke",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-ask-about-conversation.png",
+      "platform": "mobile-ios",
+      "description": "Ask About This Conversation with ChatGPT connected",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-ask-connect-chatgpt-first.png",
+      "platform": "mobile-ios",
+      "description": "Ask About This Conversation before ChatGPT is connected",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

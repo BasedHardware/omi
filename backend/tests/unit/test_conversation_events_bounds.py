@@ -141,6 +141,7 @@ def router():
         # database (parent package faked; _client is the rich stub)
         "database": _pkg("database"),
         "database._client": client_mod,
+        "database.legal_holds": _pkg("database.legal_holds"),
         "database.conversations": _pkg("database.conversations"),
         "database.conversation_scan": _pkg("database.conversation_scan"),
         "database.screen_frames": _pkg("database.screen_frames"),
@@ -185,7 +186,11 @@ def router():
         # utils.* -- intermediate packages faked; ``utils`` itself stays real.
         "utils.other": _pkg("utils.other"),
         "utils.other.endpoints": endpoints,
+        "utils.other.account_gate_http": _pkg("utils.other.account_gate_http"),
         "utils.other.list_budget": list_budget_real,
+        # These tests exercise event/speaker handlers, not list serving. Keep
+        # the new router collaborator inside this fixture's existing isolation.
+        "utils.list_version_check": _pkg("utils.list_version_check"),
         "utils.other.storage": _pkg("utils.other.storage"),
         # utils.conversations.* is DERIVED, not listed: a new module in that package
         # must not break this suite at collection. See package_submodule_stubs.

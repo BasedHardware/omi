@@ -1,3 +1,4 @@
+from utils.generated_compute import generated_compute_allowed, require_generated_compute, generated_compute_configured
 import json
 import logging
 import os
@@ -30,6 +31,8 @@ from utils.http_client import (
     safe_request_targets,
 )
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
+from utils.plugin_transport import authorize_app_setup, plugin_transport, strip_launch_credentials
+from utils.plugin_backup_audio import backup_audio_manifest
 from utils.mcp_client import (
     discover_oauth_metadata,
     register_oauth_client,
@@ -38,8 +41,8 @@ from utils.mcp_client import (
     refresh_oauth_token,
     discover_mcp_tools,
     fetch_brandfetch_logo,
-    generate_state_token,
-    parse_state_token,
+    create_mcp_oauth_state,
+    consume_mcp_oauth_state,
     generate_pkce_pair,
 )
 
@@ -49,6 +52,8 @@ from database.apps import (
     get_app_by_id_db,
     add_app_to_db,
     update_app_in_db,
+    set_mcp_code_verifier,
+    complete_mcp_oauth_authorization,
     delete_app_from_db,
     update_app_visibility_in_db,
     get_personas_by_username_db,
@@ -213,6 +218,10 @@ class McpAddServerResponse(PydanticBaseModel):
     auth_url: Optional[str] = None
     tools_count: Optional[int] = None
     tool_names: List[str] = Field(default_factory=list)
+
+
+class McpAuthorizeResponse(PydanticBaseModel):
+    auth_url: str
 
 
 class McpRefreshToolsResponse(PydanticBaseModel):
@@ -925,6 +934,8 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 async def create_persona(
     persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)
 ):
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'persona_clone')
     data = parse_form_json(dict, persona_data, 'persona_data')
     data['approved'] = False
     data['status'] = 'under-review'
@@ -973,11 +984,26 @@ async def update_persona(
     uid=Depends(auth.get_current_user_uid),
 ):
     data = parse_form_json(dict, persona_data, 'persona_data')
+    # Released clients serialize an omitted field as null, not absent. For these two, null
+    # must mean "not sent": `'omi' in data.get('connected_accounts', [])` raised TypeError on
+    # null, and writing null over the stored handle both cleared it and made the response
+    # model (username: str) fail with a 500 after the write.
+    for field in ('username', 'connected_accounts'):
+        if data.get(field) is None:
+            data.pop(field, None)
+
     persona = await run_blocking(db_executor, get_available_app_by_id, persona_id, uid)
     if not persona:
         raise HTTPException(status_code=404, detail='Persona not found')
     if persona['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
+    needs_generation = (
+        'name' in data and data['name'] and data['name'] != persona.get('name') and 'description' not in data
+    ) or ('omi' in data.get('connected_accounts', []) and 'omi' not in persona.get('connected_accounts', []))
+    if needs_generation:
+        if generated_compute_configured():
+            await run_blocking(db_executor, require_generated_compute, uid, 'persona_clone')
 
     # Image
     if file:
@@ -1060,6 +1086,8 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
             return safe_persona
         logger.warning('Existing persona for uid=%s is malformed; regenerating clean persona', uid)
 
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'persona_clone')
     # Create a new persona for the user
     user = await run_blocking(db_executor, get_user_from_uid, uid) or {}
 
@@ -1130,6 +1158,7 @@ def update_app(
 
     # Backfill app_home_url from auth steps; explicit null clears the integration, non-dicts fail validation.
     if isinstance(data.get('external_integration'), dict):
+        strip_launch_credentials(app_id, data['external_integration'])
         backfill_app_home_url_from_auth_steps(data['external_integration'])
         _set_instructions_url_flag(data['external_integration'])
 
@@ -1272,7 +1301,19 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if app.thumbnails:
         app.thumbnail_urls = [get_app_thumbnail_url(thumbnail_id) for thumbnail_id in app.thumbnails]
 
-    return app
+    try:
+        return authorize_app_setup(app, uid)
+    except ValueError:
+        raise HTTPException(
+            status_code=503, detail='This app connection is not configured correctly. Please try later.'
+        )
+
+
+@router.get('/v1/apps/{app_id}/backup-audio/{conversation_id}', include_in_schema=False)
+@router.head('/v1/apps/{app_id}/backup-audio/{conversation_id}', include_in_schema=False)
+def get_plugin_backup_audio(app_id: str, conversation_id: str, request: Request, authorization: str = Header('')):
+    """Internal, conversation-scoped plugin read; never accepts a query UID."""
+    return backup_audio_manifest(app_id, conversation_id, authorization, include_audio=request.method == 'GET')
 
 
 @router.get('/v1/app-categories', tags=['v1'], response_model=List[AppSelectOption])
@@ -1535,6 +1576,7 @@ def generate_description_endpoint(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    require_generated_compute(uid, 'app_integration')
     enforce_chat_quota(uid, platform=x_app_platform)
     if data.name == '':
         raise HTTPException(status_code=422, detail='App Name is required')
@@ -1557,6 +1599,7 @@ def generate_description_and_emoji_endpoint(
     Generate an app description and representative emoji.
     Used by the quick template creator feature.
     """
+    require_generated_compute(uid, 'app_integration')
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
     enforce_chat_quota(uid, platform=x_app_platform)
     if not data.name:
@@ -1583,6 +1626,8 @@ async def generate_sample_prompts_endpoint(
     Generate sample app prompts for the AI app generator.
     Uses a fast model to generate creative suggestions.
     """
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'app_integration')
     from utils.llm.clients import get_llm
     import json
 
@@ -1639,6 +1684,8 @@ async def generate_app_endpoint(
     Generate an app configuration from a natural language prompt.
     This is an experimental feature that uses AI to create app configurations.
     """
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'app_generator')
     from utils.llm.app_generator import generate_app_from_prompt
 
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
@@ -1687,6 +1734,8 @@ async def generate_app_icon_endpoint(
     Generate an app icon using AI (DALL-E).
     Returns the icon as a base64 encoded PNG image.
     """
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'app_generator', allow_byok=False)
     from utils.llm.app_generator import generate_app_icon
     import base64
 
@@ -1795,6 +1844,7 @@ def get_twitter_initial_message(
     username: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:twitter_initial_message")),
 ):
+    require_generated_compute(uid, 'persona_clone')
     persona = get_persona_by_username_db(username)
     if persona:
         with track_usage(uid, Features.PERSONA):
@@ -1852,6 +1902,10 @@ async def migrate_app_owner(
 
 
 async def update_omi_persona_connected_accounts(uid: str):
+    if generated_compute_configured() and not await run_blocking(
+        db_executor, generated_compute_allowed, uid, 'persona_clone'
+    ):
+        return
     try:
         personas = await run_blocking(db_executor, get_omi_persona_apps_by_uid_db, uid)
 
@@ -1954,7 +2008,13 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
                 detail='MCP server requires OAuth but does not support dynamic client registration',
             )
 
-        state = generate_state_token(app_id, uid)
+        # Single-use server-side state: the callback trusts only a state this server issued,
+        # so a caller cannot forge one that binds the connection to another account.
+        try:
+            state = await run_blocking(db_executor, create_mcp_oauth_state, app_id, uid)
+        except Exception as e:
+            logger.error(f'[MCP OAuth] Failed to store state in Redis: {e}')
+            raise HTTPException(status_code=500, detail='Failed to initialize OAuth flow')
 
         # Generate PKCE pair (required by MCP OAuth 2.1 spec)
         code_verifier, code_challenge = generate_pkce_pair()
@@ -2059,14 +2119,16 @@ async def mcp_oauth_callback(code: str, state: str):
     Exchanges the authorization code for tokens, discovers tools, updates the app.
     Returns an HTML success/failure page.
     """
-    try:
-        app_id, uid = parse_state_token(state)
-    except ValueError:
-        return HTMLResponse('<html><body><h1>Invalid state parameter</h1></body></html>', status_code=400)
+    subject = await run_blocking(db_executor, consume_mcp_oauth_state, state)
+    if not subject:
+        return HTMLResponse('<html><body><h1>Invalid or expired state parameter</h1></body></html>', status_code=400)
+    app_id, uid = subject
 
     app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
     if not app_data:
         return HTMLResponse('<html><body><h1>App not found</h1></body></html>', status_code=404)
+    if app_data.get('uid') != uid:
+        return HTMLResponse('<html><body><h1>OAuth state does not match app owner</h1></body></html>', status_code=403)
 
     ext = app_data.get('external_integration', {})
     oauth_tokens = ext.get('mcp_oauth_tokens', {})
@@ -2111,17 +2173,22 @@ async def mcp_oauth_callback(code: str, state: str):
     # Use the resolved URL from the first tool (discover_mcp_tools stores the working URL)
     resolved_url = tools[0].endpoint if tools else server_url
 
-    # Update app with tokens and tools
-    update_dict = {
-        'id': app_id,
-        'status': 'approved',
-        'external_integration': {
-            'mcp_server_url': resolved_url,
-            'mcp_oauth_tokens': oauth_tokens,
-        },
-        'chat_tools': _serialize_chat_tools_for_firestore(tools),
-    }
-    await run_blocking(db_executor, update_app_in_db, update_dict)
+    # A newer retry can rotate PKCE while exchange/discovery is in flight.
+    # Compare and commit atomically; a stale callback must not approve or enable.
+    committed = await run_blocking(
+        db_executor,
+        complete_mcp_oauth_authorization,
+        app_id,
+        uid,
+        oauth_tokens,
+        resolved_url,
+        _serialize_chat_tools_for_firestore(tools),
+    )
+    if not committed:
+        return HTMLResponse(
+            '<html><body><h1>Authorization superseded</h1><p>Return to the app and finish the latest connection attempt.</p></body></html>',
+            status_code=409,
+        )
     await run_blocking(db_executor, delete_app_cache_by_id, app_id)
 
     # Auto-enable the app for the user
@@ -2148,6 +2215,49 @@ async def mcp_oauth_callback(code: str, state: str):
         <p style="margin-top:24px;color:#666;">You can close this window and return to the app.</p>
     </div></body></html>
     """)
+
+
+@router.post('/v1/apps/{app_id}/mcp/authorize', tags=['v1'], response_model=McpAuthorizeResponse)
+async def authorize_mcp_server(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Issue fresh OAuth authorization for an existing MCP server registration.
+
+    Authorization state is single-use and expires, so retrying a connection needs a new
+    state and PKCE pair for the same registration rather than the original URL. Only the
+    stored code verifier changes; an earlier URL then fails its token exchange.
+    """
+    app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
+    if not app_data:
+        raise HTTPException(status_code=404, detail='App not found')
+    if app_data.get('uid') != uid:
+        raise HTTPException(status_code=403, detail='Not authorized')
+    ext = app_data.get('external_integration') or {}
+    tokens = ext.get('mcp_oauth_tokens') or {}
+    server_url = ext.get('mcp_server_url')
+    if not server_url or not tokens.get('client_id') or not tokens.get('redirect_uri'):
+        raise HTTPException(status_code=422, detail='App is not an OAuth MCP server app')
+
+    oauth_meta = await discover_oauth_metadata(server_url)
+    if not oauth_meta or not oauth_meta.get('authorization_endpoint'):
+        raise HTTPException(status_code=502, detail='MCP server authorization is unavailable')
+    try:
+        state = await run_blocking(db_executor, create_mcp_oauth_state, app_id, uid)
+    except Exception as e:
+        logger.error(f'[MCP OAuth] Failed to store state in Redis: {type(e).__name__}')
+        raise HTTPException(status_code=500, detail='Failed to initialize OAuth flow')
+    code_verifier, code_challenge = generate_pkce_pair()
+    # Only the verifier changes: the app record read above may be stale by now (a callback
+    # can save tokens while discovery runs), so never write the token map back from it.
+    await run_blocking(db_executor, set_mcp_code_verifier, app_id, code_verifier)
+    await run_blocking(db_executor, delete_app_cache_by_id, app_id)
+    auth_url = build_authorization_url(
+        oauth_meta['authorization_endpoint'],
+        tokens['client_id'],
+        tokens['redirect_uri'],
+        state,
+        scopes=oauth_meta.get('scopes_supported'),
+        code_challenge=code_challenge,
+    )
+    return {'auth_url': auth_url}
 
 
 @router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'], response_model=McpRefreshToolsResponse)
@@ -2281,6 +2391,14 @@ async def enable_app_endpoint(app_id: str, request: Request, uid: str = Depends(
         if app.external_integration.setup_completed_url:
             client = get_pinned_delivery_client()
             setup_url = app.external_integration.setup_completed_url
+            try:
+                transport = plugin_transport(app.id)
+                if transport:
+                    setup_url = transport.setup_url(setup_url, uid, 'status')
+            except ValueError:
+                raise HTTPException(
+                    status_code=503, detail='This app connection is not configured correctly. Please try later.'
+                )
             # Developer-controlled URL: validate and pin it exactly like the OAuth setup check.
             # Resolve once, reject private/loopback/reserved targets, then connect to the resolved
             # IP while presenting the original Host/SNI, so a DNS record swapped between check and
@@ -2393,7 +2511,7 @@ def disable_app_endpoint(app_id: str, request: Request, uid: str = Depends(auth.
 
 @router.post('/v1/apps/tester', tags=['v1'], response_model=AppMutationResponse)
 def add_new_tester(data: AddTesterRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
@@ -2407,7 +2525,7 @@ def add_new_tester(data: AddTesterRequest, secret_key: str = Header(...)):
 
 @router.post('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
 def add_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
@@ -2419,7 +2537,7 @@ def add_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(..
 
 @router.delete('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
 def remove_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
@@ -2438,7 +2556,7 @@ def check_is_tester(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v1/apps/public/unapproved', tags=['v1'], response_model=List[UnapprovedPublicAppResponse])
 def get_unapproved_public_apps(secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     apps = get_unapproved_public_apps_db()
     return apps
@@ -2446,7 +2564,7 @@ def get_unapproved_public_apps(secret_key: str = Header(...)):
 
 @router.patch('/v1/apps/{app_id}/popular', tags=['v1'], response_model=AppMutationResponse)
 def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     set_app_popular_db(app_id, value)
     delete_app_cache_by_id(app_id)
@@ -2456,7 +2574,7 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
 
 @router.post('/v1/apps/{app_id}/approve', tags=['v1'], response_model=AppMutationResponse)
 def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, True)
     invalidate_approved_apps_cache()  # App is now public, invalidate cache
@@ -2472,7 +2590,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 @router.post('/v1/apps/{app_id}/reject', tags=['v1'], response_model=AppMutationResponse)
 def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
     invalidate_approved_apps_cache()  # App removed from public list, invalidate cache
@@ -2522,7 +2640,7 @@ async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str =
 
 @router.delete('/v1/personas/{persona_id}', tags=['v1'], response_model=AppMutationResponse)
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     personas = get_persona_by_id_db(persona_id)
     if not personas:
@@ -2533,7 +2651,7 @@ def delete_persona(persona_id: str, secret_key: str = Header(...)):
 
 @router.get('/v1/personas/{persona_id}', tags=['v1'], response_model=List[PersonaRecordResponse])
 def get_personas(persona_id: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     persona = get_personas_by_username_db(persona_id)
     if not persona:
@@ -2598,7 +2716,7 @@ def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current
 @router.get('/v1/summary-app-ids', tags=['v1'], response_model=ConversationSummaryAppIdsResponse)
 def get_summary_app_ids(secret_key: str = Header(...)):
     """Get all conversation summary app IDs from Redis"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     app_ids = get_conversation_summary_app_ids()
@@ -2609,7 +2727,7 @@ def get_summary_app_ids(secret_key: str = Header(...)):
 @router.post('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Add an app ID to the conversation summary apps list"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     success = add_conversation_summary_app_id(app_id)
@@ -2622,7 +2740,7 @@ def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
 @router.delete('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def delete_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Remove an app ID from the conversation summary apps list"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     success = remove_conversation_summary_app_id(app_id)

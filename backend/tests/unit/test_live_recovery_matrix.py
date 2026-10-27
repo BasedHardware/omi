@@ -35,7 +35,14 @@ from utils.stt import live_session, streaming as st
 from utils.stt.resilient_stream import ResilientAudio
 import json
 
-from config.live_stt_replay import ReplayLimits, parse_replay_limits
+from config.live_stt_replay import (
+    DEFAULT_LIVE_TAIL_CATCHUP_RATE,
+    DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS,
+    LIVE_TAIL_CATCHUP_RATE_ENV,
+    REPLAY_PREFIX_MARGIN_ENV,
+    ReplayLimits,
+    parse_replay_limits,
+)
 from routers.listen.runtime import ListenSessionRuntime
 from tests.unit.test_live_cost_router import MemoryRedis
 from tests.unit.test_live_replay_provider_pairs import Transport
@@ -71,10 +78,18 @@ from utils.stt.send_queue import AudioSendQueue, audio_send_deadline
 @pytest.fixture(autouse=True)
 def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+    # The matrix pins source->successor replay across providers. A serving
+    # source that dies before text would first get its one same-target
+    # retry; that policy has its own tests (test_live_stt_restart_burst_sim,
+    # test_live_replay_provider_pairs::test_serving_soniox_pre_text_*).
+    monkeypatch.setenv('LISTEN_STT_SAME_TARGET_RETRY_ENABLED', 'false')
 
 
 BYTES_PER_SECOND = 16000 * 2
-PREFIX_SECONDS = 20
+PREFIX_WALL_SECONDS = 20
+# Audio retained for the prefix under shipped defaults: the wall less the
+# margin held back so 1x delivery lands inside it.
+PREFIX_SECONDS = PREFIX_WALL_SECONDS - int(DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS)
 SAMPLE_RATE = 16000
 
 
@@ -83,7 +98,9 @@ def shipped_defaults(monkeypatch):
     """Ordinary qualification always runs the shipped 20s/60s/28s budgets;
     full-span stress opts in explicitly inside the test that needs it."""
 
-    monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
+    assert DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS == int(DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS)
+    monkeypatch.delenv(REPLAY_PREFIX_MARGIN_ENV, raising=False)
+    monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', float(PREFIX_WALL_SECONDS))
     monkeypatch.setattr(replay_delivery, 'TAIL_RESIDENCE_SECONDS', 28.0)
     monkeypatch.setattr(recovery_state, 'RECOVERY_EPISODE_SECONDS', 60.0)
 
@@ -282,16 +299,28 @@ async def test_directed_recovery_matrix(monkeypatch, source, successor, duration
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', [SafeSonioxSocket, SafeModulateSocket])
 @pytest.mark.parametrize('frame_bytes', [960, 16 * 1024])
-async def test_writer_pause_resume_paces_real_wire_timestamps(virtual_clock, kind, frame_bytes):
+@pytest.mark.parametrize('catchup_env', [None, '1'])
+async def test_writer_pause_resume_paces_real_wire_timestamps(
+    monkeypatch, virtual_clock, kind, frame_bytes, catchup_env
+):
     """A genuinely stalled transport cannot burst on resume: writes restart at
     previous_start + audio_duration on the wire clock, the declared
-    queue+in-flight bound is never exceeded, and the leg stays alive."""
+    queue+in-flight bound is never exceeded, and the leg stays alive. The
+    writer runs at the leg's tail catch-up ceiling, so only the packets the
+    queue already held may close up at that rate; with the switch off the
+    cadence is exactly 1x."""
 
+    if catchup_env is None:
+        monkeypatch.delenv(LIVE_TAIL_CATCHUP_RATE_ENV, raising=False)
+    else:
+        monkeypatch.setenv(LIVE_TAIL_CATCHUP_RATE_ENV, catchup_env)
     transport = Transport()
     transport.timer = virtual_clock
     raw = kind(transport, lambda _: None, asyncio.get_running_loop())
     limits = ReplayLimits()
     enable_recovery_writer_pace(raw, SAMPLE_RATE, limits, lambda: None)
+    writer_rate = raw._writer_pace.rate
+    assert writer_rate == (1.0 if catchup_env == '1' else DEFAULT_LIVE_TAIL_CATCHUP_RATE)
     raw.replay_send = lambda data, start: raw.send(data)
     pacer = ReplayPacer(SAMPLE_RATE, 'soniox', raw, limits=limits)
     frame = b'\x01\x00' * (frame_bytes // 2)
@@ -313,7 +342,8 @@ async def test_writer_pause_resume_paces_real_wire_timestamps(virtual_clock, kin
         await until(lambda: producer.done() and len(transport.sent_at) >= total)
         starts = transport.sent_at
         assert starts[0] >= 0.6
-        assert starts[-1] - starts[0] >= (total - limits.queue_packets) * frame_seconds - 1e-9
+        queued_credit = limits.queue_packets * frame_seconds * (1 - 1 / writer_rate)
+        assert starts[-1] - starts[0] >= (total - limits.queue_packets) * frame_seconds - queued_credit - 1e-9
         assert raw._send_queue.high_water <= limits.queue_packets
         assert not raw.is_connection_dead
         await abort_replay_socket(raw)
@@ -433,7 +463,7 @@ async def test_four_distinct_modulate_targets_reach_healthy_fourth(monkeypatch, 
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
@@ -509,7 +539,7 @@ async def test_episode_deadline_clamps_dials_then_exhausts(monkeypatch, virtual_
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
@@ -581,7 +611,7 @@ async def test_ptt_and_initial_legs_never_get_recovery_pacing():
 
 def test_terminal_after_text_counter_only_when_delivered_then_failed():
 
-    soniox_counter = LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider='soniox')
+    soniox_counter = LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider='soniox', demand_cohort='ineligible')
     before = soniox_counter._value.get()
     runtime = _runtime(delivered=True, terminal=True)
     runtime.stt_service = st.STTService.soniox
@@ -782,7 +812,7 @@ async def test_directed_recovery_under_burst_closing_transport(monkeypatch, virt
         raw = raws[-1]
         await until(lambda: raw._ws.byte_count == len(kept) + len(tail))
         assert raw._ws.pcm == kept + tail
-        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(115.0)
+        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(135.0 - PREFIX_SECONDS)
         assert not raw.is_connection_dead
         actual.host.request.websocket.close.assert_not_awaited()
         await actual._drain_stt_sockets()
@@ -903,7 +933,7 @@ async def test_real_dials_each_get_the_full_per_dial_budget(monkeypatch, virtual
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
@@ -961,7 +991,7 @@ async def test_wall_dial_cap_cancels_hung_connect_and_walks(monkeypatch, virtual
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
@@ -1026,7 +1056,7 @@ async def test_connect_reject_settles_every_constructed_leg_once(monkeypatch, vi
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
@@ -1106,7 +1136,7 @@ async def test_selected_target_declared_limits_shape_prefix(monkeypatch, virtual
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
@@ -1155,10 +1185,13 @@ async def test_selected_target_declared_limits_shape_prefix(monkeypatch, virtual
     try:
         assert await actual._failover_stt_socket()
         raw = dialed[-1]
-        expected = captured[-10 * BYTES_PER_SECOND :]
+        # (wall - margin) wall seconds at the declared 0.5x rate.
+        expected = captured[-int(PREFIX_SECONDS * 0.5 * BYTES_PER_SECOND) :]
         await until(lambda: raw._ws.byte_count == len(expected))
         assert raw._ws.pcm == expected
-        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(125.0)
+        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(
+            135.0 - PREFIX_SECONDS * 0.5
+        )
         assert all(len(frame) <= 8192 for frame in raw._ws.sent if isinstance(frame, bytes))
         assert raw._send_queue.high_water <= 1
         assert raw._ws.sent_at[1] - raw._ws.sent_at[0] >= 0.5
@@ -1278,17 +1311,66 @@ async def test_queued_live_frame_never_writes_past_capture_age_deadline(monkeypa
         await until(lambda: raw._send_queue.inflight == 1)
         asyncio.create_task(virtual_clock.sleep(1.0))
         await asyncio.sleep(0.7)
-        assert raw.typed_death_reason == 'capacity_full'
+        # The frame's absolute capture-age delivery deadline passed mid-write:
+        # a local delivery bound (delivery_expired), never destination capacity.
+        assert raw.typed_death_reason == 'delivery_expired'
         assert transport.pcm == b''
         assert all(stamp <= 28.0 for stamp in transport.sent_at)
         assert raw.is_connection_dead
-        assert live_stt_terminal_reason(raw, 'send_failed') == 'capacity_full'
-        assert provider_observation('failover', 'capacity_full') is None
+        assert live_stt_terminal_reason(raw, 'send_failed') == 'delivery_expired'
+        assert provider_observation('failover', 'delivery_expired') is None
     finally:
         transport.gate.set()
         await abort_replay_socket(delivery)
         assert transport.closed
         assert raw._send_task.done() and raw._recv_task.done()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', [SafeSonioxSocket, SafeModulateSocket])
+async def test_unpaced_tail_write_blocked_through_residence_deadline_is_local_not_provider_death(
+    monkeypatch, virtual_clock, kind
+):
+    """An initial paid leg has no writer pace, so a blocked ``ws.send`` never
+    raises AudioDeliveryExpired. When the frame is inside the last 2s of its 28s
+    residence, the tail's write bound IS the residence deadline; the stall
+    surfaces through ``await_frozen_writes`` with the vendor socket open. That
+    is the tail's own bound (delivery_expired): it must never read as the
+    default connection_lost, which votes on the provider circuit and counts as
+    provider failure (review of #23074; lead ruling 603b95)."""
+
+    monkeypatch.setattr(st, 'clock', lambda: virtual_clock.now)
+    monkeypatch.setattr(soniox_module, 'clock', lambda: virtual_clock.now)
+    transport = Transport()
+    transport.timer = virtual_clock
+    raw = kind(transport, lambda _: None, asyncio.get_running_loop())
+    live_send_compat(raw)
+    birth = BirthLedger()
+    delivery = ReplayTailSocket(
+        raw,
+        ReplayPacer(SAMPLE_RATE, 'soniox' if kind is SafeSonioxSocket else 'modulate', raw),
+        deque(),
+        tail_host(),
+        birth=birth,
+    )
+    try:
+        assert birth.note(0, 1600) == 0.0
+        virtual_clock.now = 27.5
+        transport.gate.clear()
+        assert delivery.send(b'\x01\x00' * 1600, 0)
+        delivery.start_tail()
+        await until(lambda: raw._send_queue.inflight == 1)
+        asyncio.create_task(virtual_clock.sleep(1.0))
+        await until(lambda: delivery.is_connection_dead)
+        assert not raw.is_connection_dead  # the vendor socket never closed
+        assert delivery.typed_death_reason == 'delivery_expired'
+        assert delivery.normalized_death_reason == 'delivery_expired'
+        assert live_stt_terminal_reason(delivery, 'send_failed') == 'delivery_expired'
+        assert provider_observation('failover', 'delivery_expired') is None
+    finally:
+        transport.gate.set()
+        await abort_replay_socket(delivery)
+        assert transport.closed
 
 
 @pytest.mark.asyncio
@@ -1934,6 +2016,17 @@ async def test_soniox_429_surge_rejected_sessions_walk_once_without_shared_bench
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
     monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    # Deepgram retired 2026-08-27; these storm regressions pin the pre-retirement
+    # seams so the post-soniox hop still exists under a listed dg deployment.
+    _policy_enabled = st.provider_is_enabled
+
+    def _admit_dg(provider, surface):
+        if provider in ('deepgram_cloud', 'deepgram_self_hosted') and surface is st.STTServingSurface.STREAMING:
+            return True
+        return _policy_enabled(provider, surface)
+
+    monkeypatch.setattr(st, 'provider_is_enabled', _admit_dg)
+    monkeypatch.setattr(st, 'deepgram_fallback_model', lambda language: 'nova-3')
     monkeypatch.setattr(live_chain.health, 'has_fresh_fleet_snapshot', lambda: False)
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *args: {})
     monkeypatch.setattr(live_router, '_capacity_until', {})
@@ -2060,6 +2153,17 @@ async def test_sustained_soniox_429_storm_skips_then_probe_recovers(monkeypatch,
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
     monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    # Deepgram retired 2026-08-27; these storm regressions pin the pre-retirement
+    # seams so the post-soniox hop still exists under a listed dg deployment.
+    _policy_enabled = st.provider_is_enabled
+
+    def _admit_dg(provider, surface):
+        if provider in ('deepgram_cloud', 'deepgram_self_hosted') and surface is st.STTServingSurface.STREAMING:
+            return True
+        return _policy_enabled(provider, surface)
+
+    monkeypatch.setattr(st, 'provider_is_enabled', _admit_dg)
+    monkeypatch.setattr(st, 'deepgram_fallback_model', lambda language: 'nova-3')
     monkeypatch.setattr(live_chain.health, 'has_fresh_fleet_snapshot', lambda: False)
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *args: {})
     monkeypatch.setattr(live_router, '_capacity_until', {})

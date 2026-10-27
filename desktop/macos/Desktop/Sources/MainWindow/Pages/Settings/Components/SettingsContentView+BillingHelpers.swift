@@ -4,16 +4,103 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
-/// Single edit point for the Operator price quoted in the deprecation-banner
+/// Omi Pro (`unlimited_v2`) is the only plan sold. Retired plans render only as
+/// the subscriber's own current plan.
+let omiProPlanId = "unlimited_v2"
+
+/// Single edit point for the Omi Pro price quoted in the deprecation-banner
 /// fallback (used only when the backend omits `deprecationMessage`).
-let operatorDeprecationFallbackPrice = "$49/mo"
+let omiProDeprecationFallbackPrice = "$29.99/mo"
 
 enum SubscriptionPlanPresentation {
+  static let resubscribeFirst = "Resubscribe first to change plans."
+
+  /// The two routes use 409 for different refusals: upgrade means a pending
+  /// cancellation, checkout means the account already has a subscription.
+  static func upgradeErrorMessage(_ error: APIError) -> String {
+    if case .httpError(let statusCode, _) = error, statusCode == 409 { return resubscribeFirst }
+    return error.detail ?? "Failed to schedule plan change."
+  }
+
+  static func checkoutErrorMessage(_ error: APIError) -> String {
+    error.detail ?? "Failed to open checkout."
+  }
+
+  enum Purchase {
+    case resubscribe
+    case blocked
+    case proceed
+  }
+
+  static func purchase(cancelAtPeriodEnd: Bool, currentPriceId: String?, priceId: String) -> Purchase {
+    guard cancelAtPeriodEnd else { return .proceed }
+    if let currentPriceId, !currentPriceId.isEmpty, priceId == currentPriceId {
+      return .resubscribe
+    }
+    return .blocked
+  }
+
+  static func endsLine(plan: String, date: String) -> String {
+    "Your \(plan) plan ends \(date)."
+  }
+
+  static func renewsLine(plan: String, date: String) -> String {
+    "Your \(plan) plan will renew on \(date)."
+  }
+
   static func selectionLabel(planTitle: String, startingPrice: String?) -> String {
     guard let startingPrice, !startingPrice.isEmpty else {
       return "Select \(planTitle)"
     }
     return "Select \(planTitle) · \(startingPrice)"
+  }
+}
+
+/// Trailing actions on the current-plan card. The catalog hides the plan the
+/// reader is already on, so Resubscribe has to live here while a cancellation
+/// is pending. Manage stays available either way.
+struct CurrentPlanCardActions: View {
+  let cancelAtPeriodEnd: Bool
+  let currentPriceId: String?
+  let checkoutBusy: Bool
+  let portalBusy: Bool
+  let onResubscribe: (String) -> Void
+  let onManage: () -> Void
+
+  var resubscribePriceId: String? {
+    guard cancelAtPeriodEnd, let currentPriceId, !currentPriceId.isEmpty else { return nil }
+    return currentPriceId
+  }
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      if let priceId = resubscribePriceId {
+        Button(action: { onResubscribe(priceId) }) {
+          if checkoutBusy {
+            ProgressView()
+              .controlSize(.small)
+          } else {
+            Text("Resubscribe")
+              .scaledFont(size: OmiType.body, weight: .semibold)
+          }
+        }
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+        .disabled(checkoutBusy)
+        .accessibilityIdentifier("current-plan-resubscribe")
+      }
+
+      Button(action: onManage) {
+        if portalBusy {
+          ProgressView()
+            .controlSize(.small)
+        } else {
+          Text("Manage")
+            .scaledFont(size: OmiType.body, weight: .semibold)
+        }
+      }
+      .buttonStyle(OmiButtonStyle(resubscribePriceId == nil ? .primary : .secondary, size: .compact))
+      .disabled(portalBusy)
+    }
   }
 }
 
@@ -45,14 +132,21 @@ extension SettingsContentView {
     !subscriptionPlansForDisplay.isEmpty
   }
 
+  static let retiredPlanIds: Set<String> = ["plus", "operator", "architect", "pro", "unlimited"]
+
   var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
-    // Operator (mass-market, green) on the left, Architect (premium, white accent)
-    // on the right. Hide the user's current plan — they already see it above.
-    // Neo ($20) | Operator ($49) | Architect ($200) — cheapest to premium
-    let order = ["unlimited": 0, "operator": 1, "architect": 2]
+    Self.purchasablePlans(mergedPlanCatalog, isCurrent: isCurrentSubscriptionPlan)
+  }
+
+  /// Omi Pro first. Retired plans are never offered; the user's own current plan
+  /// is already shown in the current-plan card above, so it is hidden here too.
+  static func purchasablePlans(
+    _ catalog: [SubscriptionPlanOption], isCurrent: (SubscriptionPlanOption) -> Bool
+  ) -> [SubscriptionPlanOption] {
+    let order = [omiProPlanId: 0]
     return
-      mergedPlanCatalog
-      .filter { !isCurrentSubscriptionPlan($0) }
+      catalog
+      .filter { !retiredPlanIds.contains($0.id) && !isCurrent($0) }
       .sorted { lhs, rhs in
         let lhsOrder = order[lhs.id, default: Int.max]
         let rhsOrder = order[rhs.id, default: Int.max]
@@ -83,15 +177,15 @@ extension SettingsContentView {
       // `operator` enum. Distinguish by matching current_price_id against
       // an Operator-titled plan in the catalog.
       if isCurrentSubscriptionOperator() {
-        return "Pro"
+        return "Operator"
       }
       return "Neo"
     case .unlimitedV2:
-      return "Unlimited"
+      return "Omi Pro"
     case .architect, .pro:
       return "Architect"
     case .operator:
-      return "Pro"
+      return "Operator"
     case .unknown:
       return subscription.plan.displayName
     }
@@ -153,12 +247,24 @@ extension SettingsContentView {
     let formatter = DateFormatter()
     formatter.dateStyle = .medium
     formatter.timeStyle = .none
-    let prefix = subscription.cancelAtPeriodEnd ? "Access ends" : "Renews"
-    return "\(prefix) on \(formatter.string(from: date))"
+    let formatted = formatter.string(from: date)
+    if subscription.cancelAtPeriodEnd {
+      return SubscriptionPlanPresentation.endsLine(plan: subscription.plan.displayName, date: formatted)
+    }
+    return "Renews on \(formatted)"
+  }
+
+  func mediumPeriodDate(_ periodEnd: Int) -> String {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .none
+    return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(periodEnd)))
   }
 
   static func planSubtitle(for planId: String) -> String? {
     switch planId {
+    case omiProPlanId:
+      return "1,000 questions per month"
     case "unlimited":
       return "200 questions per month"
     case "operator":
@@ -171,8 +277,7 @@ extension SettingsContentView {
   }
 
   func planAccentColor(for planId: String) -> Color {
-    // Architect is the premium white-accent tier; Operator + legacy Unlimited
-    // are the mass-market green tier.
+    // Retired Architect keeps its white accent; Omi Pro and the rest are green.
     planId == "architect" ? Ink.accent : Ink.listeningGreen
   }
 
@@ -200,6 +305,8 @@ extension SettingsContentView {
 
   static func planEyebrow(for planId: String) -> String {
     switch planId {
+    case omiProPlanId:
+      return "Mac + mobile + web"
     case "unlimited":
       return "Starter"
     case "operator":
@@ -213,6 +320,8 @@ extension SettingsContentView {
 
   static func planDescription(for planId: String) -> String {
     switch planId {
+    case omiProPlanId:
+      return "1,000 chat questions per month. Works on Mac, mobile, and web."
     case "unlimited":
       return "200 chat questions per month. Shared with mobile and web."
     case "operator":
@@ -261,6 +370,13 @@ extension SettingsContentView {
 
   static func fallbackFeatures(for planId: String) -> [String] {
     switch planId {
+    case omiProPlanId:
+      return [
+        "Unlimited listening and transcription",
+        "1,000 chat questions per month",
+        "Unlimited memories and insights",
+        "Works on Mac, mobile, and web",
+      ]
     case "architect":
       return [
         "Automations and vibe coding",
@@ -293,7 +409,7 @@ extension SettingsContentView {
 
   func planCatalog(from prices: [AvailablePlanPriceOption]) -> [SubscriptionPlanOption] {
     let groupedPrices = Dictionary(grouping: prices) { price in
-      normalizedPlanId(from: price.title) ?? "unknown"
+      price.planId ?? normalizedPlanId(from: price.title) ?? "unknown"
     }
 
     return groupedPrices.compactMap { planId, options in
@@ -304,13 +420,13 @@ extension SettingsContentView {
       case "unlimited":
         title = "Neo"
       case "operator":
-        title = "Pro"
+        title = "Operator"
       case "architect":
         title = "Architect"
       case "plus":
         title = "Plus"
-      case "unlimited_v2":
-        title = "Unlimited"
+      case omiProPlanId:
+        title = "Omi Pro"
       default:
         title = options.first?.title ?? "Plan"
       }
@@ -343,6 +459,10 @@ extension SettingsContentView {
       || userSubscription?.subscription.plan == .pro
     let isDowngrade = isArchitectUser && plan.id == "unlimited"
     let canPurchase = !isCurrentPlan && !isDowngrade
+    let cancelPending = userSubscription?.subscription.cancelAtPeriodEnd == true
+    let ownsCurrentPrice = plan.prices.contains {
+      $0.id == userSubscription?.subscription.currentPriceId
+    }
 
     VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
@@ -417,7 +537,11 @@ extension SettingsContentView {
         }
       }
 
-      if isSelected && canPurchase {
+      if isSelected && canPurchase && cancelPending && !ownsCurrentPrice {
+        Text(SubscriptionPlanPresentation.resubscribeFirst)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(SettingsInk.notice)
+      } else if isSelected && canPurchase {
         GlassSeparator()
 
         VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -494,18 +618,35 @@ extension SettingsContentView {
           }
         }
       } else if isCurrentPlan {
-        HStack {
-          Text("Current Plan")
-            .scaledFont(size: OmiType.caption, weight: .bold)
-            .foregroundColor(Ink.primary)
-          Spacer()
-          // The glyph keeps the tint — it is a graphical object, which is a 3:1 bar rather than a
-          // 4.5:1 one — and the words next to it stop being set in a hue that cannot clear either.
-          Image(systemName: "checkmark.circle.fill")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(accent)
+        if cancelPending, let priceId = userSubscription?.subscription.currentPriceId, !priceId.isEmpty {
+          Button(action: { startCheckout(for: priceId) }) {
+            Group {
+              if activeCheckoutPriceId == priceId {
+                ProgressView()
+                  .controlSize(.small)
+                  .frame(maxWidth: .infinity)
+              } else {
+                Text("Resubscribe")
+                  .frame(maxWidth: .infinity)
+              }
+            }
+          }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          .disabled(activeCheckoutPriceId != nil)
+        } else {
+          HStack {
+            Text("Current Plan")
+              .scaledFont(size: OmiType.caption, weight: .bold)
+              .foregroundColor(Ink.primary)
+            Spacer()
+            // The glyph keeps the tint — it is a graphical object, which is a 3:1 bar rather than a
+            // 4.5:1 one — and the words next to it stop being set in a hue that cannot clear either.
+            Image(systemName: "checkmark.circle.fill")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(accent)
+          }
+          .padding(.vertical, OmiSpacing.sm)
         }
-        .padding(.vertical, OmiSpacing.sm)
       } else {
         Button(action: {
           selectedPlanIdForCheckout = plan.id
@@ -744,6 +885,7 @@ extension SettingsContentView {
     transcriptionLanguage = AssistantSettings.shared.transcriptionLanguage
     transcriptionAutoDetect = AssistantSettings.shared.transcriptionAutoDetect
     vocabularyList = AssistantSettings.shared.transcriptionVocabulary
+    vocabularyLoadedFromAccount = false
     let transcriptionVocabularyRevisionAtLoadStart =
       AssistantSettings.shared.transcriptionVocabularyRevision
     let dailySummaryDepthRevisionAtLoadStart = dailySummaryDepthRevision
@@ -773,6 +915,8 @@ extension SettingsContentView {
 
         await MainActor.run {
           dailySummaryEnabled = dailySummary.enabled
+          savedDailySummaryEnabled = dailySummary.enabled
+          dailySummaryEnabledError = nil
           dailySummaryHour = dailySummary.hour
           if dailySummaryDepthRevision == dailySummaryDepthRevisionAtLoadStart {
             savedDailySummaryDepth = dailySummary.depth
@@ -786,7 +930,11 @@ extension SettingsContentView {
           notificationFrequency = NotificationService.currentFrequencyLevel()
           userLanguage = language.language
           recordingPermissionEnabled = recording.enabled
+          savedRecordingPermissionEnabled = recording.enabled
+          recordingPermissionError = nil
           privateCloudSyncEnabled = cloudSync.enabled
+          savedPrivateCloudSyncEnabled = cloudSync.enabled
+          privateCloudSyncError = nil
           singleLanguageMode = transcription.singleLanguageMode
           // Do not let a GET that began before a local/PATCH mutation overwrite
           // the newer vocabulary when it finally completes.
@@ -795,9 +943,11 @@ extension SettingsContentView {
           ) {
             vocabularyList = transcription.vocabulary
             AssistantSettings.shared.transcriptionVocabulary = transcription.vocabulary
+            savedVocabularyList = transcription.vocabulary
           } else {
             vocabularyList = AssistantSettings.shared.transcriptionVocabulary
           }
+          vocabularyLoadedFromAccount = true
 
           // Sync backend language to local if different (backend is source of truth for language)
           let normalizedLanguage = AssistantSettings.normalizeTranscriptionLanguageCode(language.language)
@@ -836,7 +986,12 @@ extension SettingsContentView {
 
     Task {
       do {
-        let subscription = try await APIClient.shared.getUserSubscription()
+        let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+        let subscription = try await APIClient.shared.getUserSubscription(authorizationSnapshot: authorization)
+        if let authorization {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+          ScreenCloudEntitlementService.shared.accept(subscription, authorization: authorization)
+        }
         let availablePlans = try? await APIClient.shared.getAvailablePlans()
         await MainActor.run {
           userSubscription = subscription
@@ -953,12 +1108,25 @@ extension SettingsContentView {
     return ("unknown", "unknown")
   }
 
-  func startCheckout(for priceId: String) {
+  /// `selection` names the plan and interval when the caller already knows them (the
+  /// storefront payload); otherwise they are looked up in the local catalog.
+  func startCheckout(for priceId: String, selection known: (plan: String, interval: String)? = nil) {
     guard activeCheckoutPriceId == nil else { return }
+    if let subscription = userSubscription?.subscription,
+      SubscriptionPlanPresentation.purchase(
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+        currentPriceId: subscription.currentPriceId,
+        priceId: priceId
+      ) == .blocked
+    {
+      subscriptionError = SubscriptionPlanPresentation.resubscribeFirst
+      return
+    }
     activeCheckoutPriceId = priceId
     pendingSubscriptionPriceId = priceId
     subscriptionError = nil
-    let selection = checkoutSelection(for: priceId)
+    subscriptionConfirmation = nil
+    let selection = known ?? checkoutSelection(for: priceId)
     pendingCheckoutPlanId = selection.plan
     pendingCheckoutInterval = selection.interval
     AnalyticsManager.shared.upgradePlanSelected(
@@ -991,7 +1159,7 @@ extension SettingsContentView {
           await MainActor.run {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
-            subscriptionError = apiError.detail ?? "Failed to schedule plan change."
+            subscriptionError = SubscriptionPlanPresentation.upgradeErrorMessage(apiError)
           }
         } catch {
           logError("Failed to schedule plan change", error: error)
@@ -1017,6 +1185,11 @@ extension SettingsContentView {
 
         if response.status == "reactivated" {
           await MainActor.run {
+            let planName = userSubscription?.subscription.plan.displayName ?? "plan"
+            if let periodEnd = userSubscription?.subscription.currentPeriodEnd {
+              subscriptionConfirmation = SubscriptionPlanPresentation.renewsLine(
+                plan: planName, date: mediumPeriodDate(periodEnd))
+            }
             subscriptionError = nil
             pendingSubscriptionPriceId = nil
             pendingCheckoutSessionId = nil
@@ -1046,7 +1219,7 @@ extension SettingsContentView {
           activeCheckoutPriceId = nil
           pendingSubscriptionPriceId = nil
           pendingCheckoutSessionId = nil
-          subscriptionError = apiError.detail ?? "Failed to open checkout."
+          subscriptionError = SubscriptionPlanPresentation.checkoutErrorMessage(apiError)
         }
       } catch {
         logError("Failed to create checkout session", error: error)
@@ -1115,7 +1288,12 @@ extension SettingsContentView {
     Task {
       for attempt in 0..<8 {
         do {
-          let subscription = try await APIClient.shared.getUserSubscription()
+          let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+          let subscription = try await APIClient.shared.getUserSubscription(authorizationSnapshot: authorization)
+          if let authorization {
+            guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+            ScreenCloudEntitlementService.shared.accept(subscription, authorization: authorization)
+          }
           let matchedPrice =
             expectedPriceId == nil || subscription.subscription.currentPriceId == expectedPriceId
           let hasPaidPlan =

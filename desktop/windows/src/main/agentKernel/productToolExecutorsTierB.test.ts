@@ -7,7 +7,7 @@
 // BEFORE the injected runQuery, so the injection assertions are exhaustive without
 // a real DB.
 
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import type {
   ActionItemRecord,
   FocusSessionRecord,
@@ -415,12 +415,15 @@ describe('get_daily_recap', () => {
       actionItem({ description: 'old task', createdAt: 100 })
     ]),
     focusSessions: vi.fn(() => [] as FocusSessionRecord[]),
-    memories: vi.fn(() => [{ content: 'likes tea', category: 'preference' }]),
+    memories: vi.fn((_from: number, _to: number, _limit: number) => [
+      { content: 'likes tea', category: 'preference' }
+    ]),
     insights: vi.fn(() => [] as InsightRecord[])
   })
 
   it('renders a Today recap and windows out old rows', async () => {
-    const exec = createGetDailyRecapExecutor(deps())
+    const d = deps()
+    const exec = createGetDailyRecapExecutor(d)
     const out = await exec({ days_ago: 0 }, ctx())
     expect(out).toContain('# Today Recap')
     // Chrome A+B counts merge → 180 captures ≈ 3 min.
@@ -432,6 +435,8 @@ describe('get_daily_recap', () => {
     expect(out).toContain('today task')
     expect(out).not.toContain('old task')
     expect(out).toContain('## Memories (1 recent)')
+    // Today's window: [startToday, now), same as the other sections.
+    expect(d.memories).toHaveBeenCalledWith(startToday, now, 10)
   })
 
   it('labels Yesterday and passes the day window to appActivity', async () => {
@@ -444,6 +449,73 @@ describe('get_daily_recap', () => {
     expect(to).toBe(startToday)
     // sanity: yesterdayMorning is inside [from,to)
     expect(yesterdayMorning >= from && yesterdayMorning < to).toBe(true)
+  })
+
+  describe('across a daylight-saving change', () => {
+    // CI runs in UTC, which never changes its clocks, so pin a zone that does: in
+    // New York, Sun 2026-03-08 lasts 23 h and Sun 2026-11-01 lasts 25 h. On the
+    // Monday after each, today's midnight minus 24 h is not Sunday's midnight.
+    // Times are built inside each test, after the zone pin, not at collection time.
+    beforeEach(() => {
+      vi.stubEnv('TZ', 'America/New_York')
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    // Length of a local calendar day in hours; proves the pinned zone took effect.
+    const dayHours = (y: number, m: number, d: number): number =>
+      (new Date(y, m, d + 1).getTime() - new Date(y, m, d).getTime()) / 3_600_000
+
+    const recapDeps = (nowMs: number, tasks: ActionItemRecord[]) => ({
+      now: () => nowMs,
+      appActivity: vi.fn((_from: number, _to: number) => []),
+      actionItems: vi.fn(() => tasks)
+    })
+
+    it('starts "Yesterday" at Sunday midnight after clocks spring forward', async () => {
+      expect(dayHours(2026, 2, 8)).toBe(23)
+      const lateSaturday = new Date(2026, 2, 7, 23, 30).getTime()
+      const earlySunday = new Date(2026, 2, 8, 0, 30).getTime()
+      const d = recapDeps(new Date(2026, 2, 9, 12).getTime(), [
+        actionItem({ description: 'late saturday task', createdAt: lateSaturday }),
+        actionItem({ description: 'early sunday task', createdAt: earlySunday })
+      ])
+      const exec = createGetDailyRecapExecutor(d)
+      const out = await exec({ days_ago: 1 }, ctx())
+      const [from, to] = d.appActivity.mock.calls[0]
+      expect(from).toBe(new Date(2026, 2, 8).getTime())
+      expect(to).toBe(new Date(2026, 2, 9).getTime())
+      expect(out).toContain('## Tasks (1)')
+      expect(out).toContain('early sunday task')
+      expect(out).not.toContain('late saturday task')
+    })
+
+    it('starts "Yesterday" at Sunday midnight after clocks fall back', async () => {
+      expect(dayHours(2026, 10, 1)).toBe(25)
+      const earlySunday = new Date(2026, 10, 1, 0, 30).getTime()
+      const d = recapDeps(new Date(2026, 10, 2, 12).getTime(), [
+        actionItem({ description: 'early sunday task', createdAt: earlySunday })
+      ])
+      const exec = createGetDailyRecapExecutor(d)
+      const out = await exec({ days_ago: 1 }, ctx())
+      const [from, to] = d.appActivity.mock.calls[0]
+      expect(from).toBe(new Date(2026, 10, 1).getTime())
+      expect(to).toBe(new Date(2026, 10, 2).getTime())
+      expect(out).toContain('## Tasks (1)')
+      expect(out).toContain('early sunday task')
+    })
+
+    it('starts "Past 7 days" at a local midnight across the change', async () => {
+      expect(dayHours(2026, 2, 8)).toBe(23)
+      const d = recapDeps(new Date(2026, 2, 9, 12).getTime(), [])
+      const exec = createGetDailyRecapExecutor(d)
+      expect(await exec({ days_ago: 7 }, ctx())).toContain('# Past 7 days Recap')
+      const [from, to] = d.appActivity.mock.calls[0]
+      expect(from).toBe(new Date(2026, 2, 2).getTime())
+      expect(to).toBe(new Date(2026, 2, 9).getTime())
+    })
   })
 })
 
@@ -536,9 +608,7 @@ describe('Tier-B tools are registered + serviceable', () => {
     'get_goals',
     'get_work_context',
     'get_daily_recap',
-    'save_knowledge_graph',
-    'get_jit_knowledge',
-    'query_jit_history'
+    'save_knowledge_graph'
   ]
 
   it('every Tier-B tool is in the default registry and the serviceable allowlist', () => {

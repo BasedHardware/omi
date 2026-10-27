@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-merge-completion-depends-on-push",
+  "violated_contract": "A client must settle an admitted manual merge from authoritative server state even if its best-effort completion push is lost. The new target has a distinct identity; a completed source is not that target, and a read failure is not proof of source deletion. A confirmed replacement must also remove sources from cached and in-flight list projections.",
+  "canonical_prevention": "Return the stable admitted target, journal source/target IDs within account and backend scope, and use one bounded typed observer plus one list/cache commit for push and polling. Serialize cache reconciliation and await journal retirement so concurrent completions preserve every replacement across offline reopen. Require authoritative source absence and target readiness; fence stale reads and never resubmit destructive work to recover observation.",
+  "canonical_prevention_artifact": [
+    "app/test/providers/conversation_provider_merge_watch_test.dart",
+    "app/test/providers/conversation_provider_merge_cache_test.dart",
+    "app/integration_test/journeys/j7_conversation_merge_recovery_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/services/conversation_merge_watch.dart", "app/lib/providers/conversation_provider.dart"],
+  "status": "open"
+}

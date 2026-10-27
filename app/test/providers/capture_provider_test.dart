@@ -168,6 +168,7 @@ class _GatedSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     final gate = Completer<void>();
     gates.add(gate);
@@ -198,6 +199,7 @@ class _NullSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async =>
       null;
 }
@@ -217,6 +219,7 @@ class _CountingSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
+    bool localPreview = false,
   }) async {
     openCalls++;
     return null;
@@ -397,6 +400,46 @@ void main() {
   // Existing tests (preserved verbatim from the original file)          //
   // ------------------------------------------------------------------ //
 
+  test('held audio event reaches capture state and never changes WAL custody', () async {
+    final provider = CaptureProvider(
+      externalActions: MockCaptureExternalActions(),
+      inProgressConversationLoader: () async {},
+      conversationLocationCapture: _CountingConversationLocationCapture(),
+    );
+    provider.onMessageEventReceived(MessageEvent.fromJson({
+      'type': 'stt_cap_live_held',
+      'session_id': 'connection-1',
+      'held_seconds': 125,
+      'paused': true,
+    }));
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.liveHeldAudio.heldSeconds, 125);
+    expect(provider.liveHeldAudio.paused, isTrue);
+    provider.onMessageEventReceived(MessageEvent.fromJson({
+      'type': 'stt_cap_live_held',
+      'session_id': 'connection-1',
+      'held_seconds': 125,
+      'paused': false,
+    }));
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.liveHeldAudio.paused, isFalse);
+    expect(provider.liveHeldAudio.heldSeconds, 125);
+    provider.onConnected();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.liveHeldAudio.sessionId, isNull);
+    expect(provider.liveHeldAudio.heldSeconds, 0);
+    provider.onMessageEventReceived(MessageEvent.fromJson({
+      'type': 'stt_cap_live_held',
+      'session_id': 'connection-2',
+      'held_seconds': 3,
+      'paused': true,
+    }));
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.liveHeldAudio.sessionId, 'connection-2');
+    expect(provider.liveHeldAudio.heldSeconds, 3);
+    provider.dispose();
+  });
+
   test('manual save requires acknowledgment and respects selected scope', () async {
     final actions = MockCaptureExternalActions();
     final conversation = ServerConversation.fromJson({
@@ -424,6 +467,10 @@ void main() {
     expect(provider.segments.first.personId, 'new');
     expect(provider.segments.last.personId, isNull);
     expect(actions.assignedSpeaker, isNull);
+    provider.onSegmentReceived([_segment('a', 'individual revision')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.first.personId, 'new');
+    expect(provider.segments.last.personId, isNull);
     expect(await provider.assignSpeakerToConversation(0, 'user', 'Me', ['a', 'b'], applyToSpeaker: true), isTrue);
     expect(actions.assignedSpeaker, 0);
     expect(provider.segments.every((s) => s.isUser && s.personId == null), isTrue);
@@ -431,6 +478,44 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(provider.segments.last.isUser, isTrue);
     expect(provider.segments.last.personId, isNull);
+    // The newest live line is revised after its first delivery. A stale wire
+    // label must not replace the manual choice made for this voice.
+    provider.onSegmentReceived([_segment('c', 'later revised')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.last.text, 'later revised');
+    expect(provider.segments.last.isUser, isTrue);
+    expect(provider.segments.last.speakerLabelSource, 'manual');
+    provider.onMessageEventReceived(TranslationEvent(segments: [_segment('c', 'translated')]));
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.last.isUser, isTrue);
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'manual-conversation',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'transcript_segments': [_segment('c', 'server refresh').toJson()],
+    }));
+    expect(provider.segments.single.isUser, isTrue);
+    provider.onSegmentReceived([
+      _segment('c', 'another acknowledged manual edit')
+        ..personId = 'another-person'
+        ..speakerLabelSource = 'manual'
+    ]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.single.isUser, isFalse);
+    expect(provider.segments.single.personId, 'another-person');
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'next-conversation',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'transcript_segments': [_segment('different-scope', 'another voice').toJson()],
+    }));
+    provider.onSegmentReceived([_segment('next-line', 'new scope')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.every((s) => !s.isUser && s.personId == null), isTrue);
     provider.dispose();
   });
 

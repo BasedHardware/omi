@@ -5,15 +5,41 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals/wal.dart';
 
 /// One batch is one server-side sync job, and a job must finish inside the
-/// backend's 600s stale guard (backend/database/sync_jobs.py).
-const _syncUploadBatchLimit = 5;
+/// backend's 600s stale guard (backend/database/sync_jobs.py). The job's cost
+/// follows its audio, so the batch is bounded by audio seconds: the 300s that
+/// five 60s chunks always carried. Pendant ring custody drains audio into
+/// ~10s WALs, and a five-file limit then shrank every job to 50s, so the same
+/// audio needed six times the jobs against the same rate limiter.
+const _syncUploadBatchAudioSeconds = 5 * chunkSizeInSeconds;
 
-const _captureEvidenceV1DarkWrite = bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE');
+/// A batch that claims a live-capture manifest sends every file in it to
+/// `/v2/sync-capture-manifest`, whose request accepts at most 20 files
+/// (`SyncCaptureManifestRequest.files`, published as `maxItems` in
+/// docs/api-reference/app-client-openapi.json). A larger batch would pass the
+/// whole-conversation claim check and then be refused by the server. With
+/// this ceiling, a conversation too large for one batch never claims at all.
+const syncUploadBatchMaxFiles = 20;
+
+bool _batchHasRoom(int batchFiles, int batchSeconds, Wal next) =>
+    batchFiles == 0 ||
+    (batchFiles < syncUploadBatchMaxFiles && batchSeconds + next.seconds <= _syncUploadBatchAudioSeconds);
+
+List<Wal> _takeWithinBudget(Iterable<Wal> wals) {
+  final batch = <Wal>[];
+  var seconds = 0;
+  for (final wal in wals) {
+    if (!_batchHasRoom(batch.length, seconds, wal)) break;
+    batch.add(wal);
+    seconds += wal.seconds;
+  }
+  return batch;
+}
 
 const _captureEvidenceHeaderMaxBytes = 4096;
 
-final _captureClaimRootPattern =
-    RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+final _captureClaimRootPattern = RegExp(
+  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+);
 final _captureClaimNamePattern = RegExp(r'^[A-Za-z0-9_.\-]{1,255}$');
 
 String _walUploadFileName(Wal wal) =>
@@ -48,13 +74,14 @@ Map<String, dynamic>? _captureEvidenceClaim(Wal wal, String name) {
   };
 }
 
-bool captureEvidenceWalClaimable(Wal wal) =>
-    _captureEvidenceV1DarkWrite && _captureEvidenceClaim(wal, _walUploadFileName(wal)) != null;
+bool captureEvidenceWalClaimable(Wal wal) => _captureEvidenceClaim(wal, _walUploadFileName(wal)) != null;
 
 final _syncTimestampTokenPattern = RegExp(r'_([0-9]+(?:\.[0-9]+)?)\.bin$');
 
+bool isMobileStandardBatchWal(Wal wal) => _walUploadFileName(wal).startsWith('audio_omimobilebatch');
+
 double _syncWalAudioStart(Wal wal) {
-  if (captureEvidenceWalClaimable(wal)) {
+  if (captureEvidenceWalClaimable(wal) || isMobileStandardBatchWal(wal)) {
     final match = _syncTimestampTokenPattern.firstMatch(_walUploadFileName(wal));
     final parsed = match == null ? null : double.tryParse(match.group(1)!);
     if (parsed != null && parsed.isFinite) return parsed;
@@ -68,7 +95,7 @@ double _syncWalAudioStart(Wal wal) {
   var end = double.negativeInfinity;
   for (final wal in wals) {
     final walStart = _syncWalAudioStart(wal);
-    final walEnd = captureEvidenceWalClaimable(wal)
+    final walEnd = captureEvidenceWalClaimable(wal) || isMobileStandardBatchWal(wal)
         ? walStart + wal.totalFrames / wal.codec.getFramesPerSecond()
         : (wal.timerStart + wal.seconds).toDouble();
     if (walStart < start) start = walStart;
@@ -86,7 +113,7 @@ String? _encodeCaptureEvidenceClaims(List<Map<String, dynamic>> claims) {
 /// mixed batch cannot make a single bounded claim; the server then records
 /// unknown coverage instead of inventing positions from timestamps.
 String? captureEvidenceUploadHeader(List<Wal> wals, List<File> files) {
-  if (!_captureEvidenceV1DarkWrite || wals.length != files.length || wals.isEmpty) {
+  if (wals.length != files.length || wals.isEmpty) {
     return null;
   }
   final claims = <Map<String, dynamic>>[];
@@ -104,25 +131,24 @@ String? _walLocationBatchKey(Wal wal) {
   return '${geolocation.time?.toUtc().toIso8601String()}|${geolocation.latitude}|${geolocation.longitude}';
 }
 
+/// Upload priority for a pending set: live capture first (newest first), then
+/// the historical backlog oldest first.
+///
+/// Live capture keeps newest-first because only it can still claim a capture
+/// manifest and reach its still-running conversation. Everything older is
+/// racing a hard server deadline — `SYNC_BACKFILL_MAX_AGE_SECONDS` (30 days),
+/// after which the upload is refused with `backfill_lookback_exceeded` and the
+/// recording can never sync. A drain that is interrupted (rate-limit break,
+/// cancelled run, app backgrounding) truncates from the tail, so ordering
+/// history newest-first starved exactly the recordings with the least recovery
+/// time left; oldest-first makes every interruption cost the newest audio,
+/// which has the most slack, instead.
 List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
-  if (!_captureEvidenceV1DarkWrite) {
-    final ordered = List<Wal>.from(pending)..sort((a, b) => b.timerStart.compareTo(a.timerStart));
-    if (ordered.isEmpty) return const [];
-    final conversationId = ordered.first.conversationId;
-    final recordingSessionId = ordered.first.recordingSessionId;
-    final locationKey = _walLocationBatchKey(ordered.first);
-    return ordered
-        .where(
-          (wal) =>
-              wal.conversationId == conversationId &&
-              wal.recordingSessionId == recordingSessionId &&
-              _walLocationBatchKey(wal) == locationKey,
-        )
-        .take(_syncUploadBatchLimit)
-        .toList();
-  }
   final indexed = [for (var i = 0; i < pending.length; i++) (pending[i], i)]..sort((a, b) {
-      final byStart = b.$1.timerStart.compareTo(a.$1.timerStart);
+      final aLive = isLiveCaptureWal(a.$1, nowSeconds);
+      final bLive = isLiveCaptureWal(b.$1, nowSeconds);
+      if (aLive != bLive) return aLive ? -1 : 1;
+      final byStart = aLive ? b.$1.timerStart.compareTo(a.$1.timerStart) : a.$1.timerStart.compareTo(b.$1.timerStart);
       return byStart != 0 ? byStart : a.$2.compareTo(b.$2);
     });
   if (indexed.isEmpty) return const [];
@@ -135,20 +161,19 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
         (wal) =>
             wal.conversationId == conversationId &&
             wal.recordingSessionId == recordingSessionId &&
+            isMobileStandardBatchWal(wal) == isMobileStandardBatchWal(ordered.first) &&
             _walLocationBatchKey(wal) == locationKey,
       )
       .toList();
   if (_captureEvidenceClaim(group.first, _walUploadFileName(group.first)) == null) {
-    return group
-        .where((wal) => _captureEvidenceClaim(wal, _walUploadFileName(wal)) == null)
-        .take(_syncUploadBatchLimit)
-        .toList();
+    return _takeWithinBudget(group.where((wal) => _captureEvidenceClaim(wal, _walUploadFileName(wal)) == null));
   }
   final batch = <Wal>[];
   final claims = <Map<String, dynamic>>[];
   final names = <String>{};
+  var batchSeconds = 0;
   for (final wal in group) {
-    if (batch.length >= _syncUploadBatchLimit) break;
+    if (!_batchHasRoom(batch.length, batchSeconds, wal)) break;
     final name = _walUploadFileName(wal);
     final claim = _captureEvidenceClaim(wal, name);
     if (claim == null) continue;
@@ -157,6 +182,7 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
     claims.add(claim);
     names.add(name);
     batch.add(wal);
+    batchSeconds += wal.seconds;
   }
   return batch;
 }

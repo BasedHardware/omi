@@ -3,12 +3,16 @@
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple, cast
 
+from utils.conversations.datetime_utils import coerce_utc_datetime
+
 
 def parse_event_times(event: Dict[str, Any]) -> Tuple[Optional[datetime], Optional[datetime]]:
     """Parse start and end times from a Google Calendar event dict.
 
     Handles both dateTime (specific time) and date (all-day) formats.
-    Returns (None, None) if parsing fails.
+    Returns (None, None) if parsing fails. Always returns timezone-aware UTC
+    datetimes — a floating-time or ICS-imported event's dateTime has no UTC
+    offset, and callers compare the result against timezone-aware bounds.
     """
     start_raw: object = event.get('start', {})
     end_raw: object = event.get('end', {})
@@ -30,7 +34,7 @@ def parse_event_times(event: Dict[str, Any]) -> Tuple[Optional[datetime], Option
         else:
             return None, None
 
-        return start_dt, end_dt
+        return coerce_utc_datetime(start_dt), coerce_utc_datetime(end_dt)
     except (ValueError, KeyError):
         return None, None
 

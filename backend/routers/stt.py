@@ -30,6 +30,7 @@ from utils.subscription import resolve_transcription_allowance, TRANSCRIPTION_AL
 from utils.observability.fallback import record_fallback
 from utils.async_tasks import create_named_task
 from utils.stt import duration_probe
+from utils.stt.parakeet_request_metrics import observe_parakeet_request
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +205,8 @@ async def stt_transcribe(
         files = {'file': (_safe_upstream_filename(file.filename), audio_bytes, file.content_type or 'audio/wav')}
         data = {'diarize': 'true' if diarize else 'false'}
         try:
-            resp = await client.post(upstream_url, files=files, data=data)
+            with observe_parakeet_request('v2', caller='app_proxy'):
+                resp = await client.post(upstream_url, files=files, data=data)
         except httpx.HTTPError as e:
             logger.error(f'stt_transcribe: parakeet request failed uid={uid}: {sanitize(str(e))}')
             raise HTTPException(status_code=502, detail='Transcription upstream unavailable')
@@ -237,7 +239,13 @@ async def stt_transcribe(
         # Keep completed-but-unaccounted calls inside the four-slot bound too.
         # This is not a distributed monthly-quota reservation.
         try:
-            await run_blocking(db_executor, record_usage, uid, transcription_seconds=seconds)
+            await run_blocking(
+                db_executor,
+                record_usage,
+                uid,
+                transcription_seconds=seconds,
+                usage_metadata={'funding': 'omi', 'provider': 'parakeet', 'source': 'parakeet_proxy'},
+            )
         except Exception as error:
             # No idempotency key: withholding a completed transcript encourages
             # a retry and another paid provider call. Do not log exception text.

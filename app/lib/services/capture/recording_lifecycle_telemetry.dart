@@ -1,3 +1,4 @@
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:uuid/uuid.dart';
 
@@ -6,6 +7,16 @@ typedef RecordingIdFactory = String Function();
 typedef RecordingClock = DateTime Function();
 
 /// Owns the analytics identity and timing for one mobile capture session.
+///
+/// [RecordingLifecycleTelemetry.requestedEvent] is capture-session preparation.
+/// It is minted before audio exists, including when a session rolls, so it is
+/// not by itself the user-attempt funnel. `request_origin` records only proven
+/// caller intent:
+/// - `explicit_user` for a user start (`PhoneStartRequested`) or an explicit
+///   Transcribe Later start (`PhoneBatchStartRequested(auto: false)`).
+/// - `automatic_roll` when a batch-mode change rolls an in-progress phone session.
+/// - `unknown` for device connect, handoff resume, offline fallback, and every
+///   path that does not prove intent. Do not invent user intent.
 ///
 /// Preparing a session mints the ID early enough to send it to `/v4/listen`,
 /// but does not claim that recording started until the capture source confirms
@@ -79,8 +90,21 @@ class RecordingLifecycleTelemetry {
   String? _source;
   DateTime? _startedAt;
   bool _startedEmitted = false;
+  RecordingCompletionFacts? _lastCompletion;
 
   String? get recordingId => _recordingId;
+
+  /// Facts for the live session, or the session that most recently completed.
+  RecordingCompletionFacts? completionFacts() {
+    if (_recordingId != null && _startedEmitted && _startedAt != null && _source != null) {
+      return RecordingCompletionFacts(
+        source: _source!,
+        durationSeconds: _wholeSeconds(_startedAt!),
+        transcriptObserved: _transcriptObserved,
+      );
+    }
+    return _lastCompletion;
+  }
 
   /// When this recording started capturing, or null before it has.
   DateTime? get startedAt => _startedAt;
@@ -91,29 +115,39 @@ class RecordingLifecycleTelemetry {
     AnalyticsManager().track(eventName, properties: properties);
   }
 
-  String prepare({required String source}) {
+  String prepare({required String source, String requestOrigin = 'unknown'}) {
     if (_recordingId != null) return _recordingId!;
     _recordingId = _idFactory();
     _ownerEpoch = _identityEpoch();
     _preparedAt = _clock();
     _source = source;
-    _emit(requestedEvent, {'recording_id': _recordingId, 'recording_source': _source});
+    _emit(requestedEvent, {
+      'recording_id': _recordingId,
+      'recording_source': _source,
+      'request_origin': _requestOrigin(requestOrigin),
+    });
     return _recordingId!;
   }
+
+  static String _requestOrigin(String origin) => switch (origin) {
+        'explicit_user' || 'automatic_roll' || 'unknown' => origin,
+        _ => 'unknown',
+      };
+
+  void subscriptionFailed() => _emit('Recording Subscription Failed', {
+        'recording_id': _recordingId,
+        'recording_source': _source,
+      });
 
   void captureGap({required String reason, required String phase}) => _emit('Capture Gap Detected', {
         'recording_id': _recordingId,
         'recording_source': _source,
         'reason': reason,
         'phase': phase,
-        'recovery': 'wal_boundary',
       });
 
-  void subscriptionFailed() =>
-      _emit('Recording Subscription Failed', {'recording_id': _recordingId, 'recording_source': _source});
-
-  void markStarted({String? evidence}) {
-    if (_recordingId == null || _source == null || _startedEmitted) return;
+  bool markStarted({String? evidence}) {
+    if (_recordingId == null || _source == null || _startedEmitted) return false;
     _startedAt = _clock();
     _startedEmitted = true;
     _emit(startedEvent, {
@@ -121,15 +155,21 @@ class RecordingLifecycleTelemetry {
       'recording_id': _recordingId,
       'recording_source': _source,
     });
+    return true;
   }
 
-  void complete({String reason = 'user_stopped'}) {
-    if (_recordingId == null) return;
+  bool complete({String reason = 'user_stopped'}) {
+    if (_recordingId == null) return false;
     if (!_startedEmitted) {
       failStart(failureClass: 'pipeline_closed');
-      return;
+      return false;
     }
-    if (_startedAt != null) {
+    if (_startedAt != null && _source != null) {
+      _lastCompletion = RecordingCompletionFacts(
+        source: _source!,
+        durationSeconds: _wholeSeconds(_startedAt!),
+        transcriptObserved: _transcriptObserved,
+      );
       _emit(completedEvent, {
         'recording_id': _recordingId,
         'recording_source': _source,
@@ -146,6 +186,7 @@ class RecordingLifecycleTelemetry {
       });
     }
     _clear();
+    return true;
   }
 
   void failStart({required String failureClass}) {
@@ -165,6 +206,12 @@ class RecordingLifecycleTelemetry {
   double _durationSeconds(DateTime startedAt) {
     final milliseconds = _clock().difference(startedAt).inMilliseconds;
     return (milliseconds < 0 ? 0 : milliseconds) / 1000.0;
+  }
+
+  int _wholeSeconds(DateTime startedAt) {
+    final seconds = _durationSeconds(startedAt).round();
+    if (seconds < 0) return 0;
+    return seconds;
   }
 
   void _emit(String eventName, Map<String, dynamic> properties) {

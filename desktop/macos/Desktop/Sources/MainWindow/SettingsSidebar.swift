@@ -139,6 +139,15 @@ struct SettingsSearchItem: Identifiable {
       section: .notifications, icon: "bell",
       settingId: "notifications.integrationsuggestions"),
     SettingsSearchItem(
+      name: "Connect an Agent",
+      subtitle: "Setup prompts plus MCP and Developer API keys for Claude, ChatGPT, Codex, Cursor",
+      keywords: [
+        "agent", "mcp", "api key", "developer", "claude", "chatgpt", "codex", "cursor", "openclaw",
+        "hermes",
+      ],
+      section: .advanced, icon: "point.3.connected.trianglepath.dotted",
+      settingId: "advanced.connectagent"),
+    SettingsSearchItem(
       name: "Reset Integration Suggestions",
       subtitle: "Clear every integration's suggestion history so Omi can offer them again",
       keywords: ["reset", "integration", "suggestions", "history", "again"],
@@ -189,20 +198,20 @@ struct SettingsSearchItem: Identifiable {
     // Plan and Usage
     SettingsSearchItem(
       name: "Plan and Usage", subtitle: "Subscription status and usage limits",
-      keywords: ["subscription", "billing", "plan", "usage", "stripe", "architect", "unlimited"],
+      keywords: ["subscription", "billing", "plan", "usage", "stripe", "omi pro", "pro"],
       section: .planUsage, icon: "creditcard", settingId: "planusage.overview"),
     SettingsSearchItem(
       name: "Current Plan", subtitle: "See your current subscription and renewal status",
       keywords: ["current plan", "renewal", "billing"], section: .planUsage, icon: "creditcard",
       settingId: "planusage.current"),
     SettingsSearchItem(
-      name: "Upgrade Plan", subtitle: "Buy Operator or Architect",
-      keywords: ["upgrade", "buy", "pricing", "checkout", "architect", "operator", "unlimited"], section: .planUsage,
+      name: "Upgrade Plan", subtitle: "Buy Omi Pro",
+      keywords: ["upgrade", "buy", "pricing", "checkout", "omi pro", "pro"], section: .planUsage,
       icon: "creditcard", settingId: "planusage.purchase"),
 
     // Referral
     SettingsSearchItem(
-      name: "Refer a Friend", subtitle: "Share one free month of Operator",
+      name: "Refer a Friend", subtitle: "Share one free month of Omi Pro",
       keywords: ["refer", "referral", "friend", "gift", "free month", "share link"],
       section: .referral, icon: "gift", settingId: "referral.link"),
 
@@ -329,7 +338,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["startup", "login", "boot"], section: .advanced, icon: "slider.horizontal.3",
       settingId: "advanced.preferences.launchatlogin"),
     SettingsSearchItem(
-      name: "Report an Issue", subtitle: "Send app logs and report a problem",
+      name: "Report an Issue", subtitle: "Save a redacted report on this Mac to share manually",
       keywords: ["bug", "feedback", "logs", "report", "issue"], section: .advanced,
       icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.reportissue"),
     SettingsSearchItem(

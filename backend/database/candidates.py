@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from database.dream_dirty import after_write
+from database.s5_candidates_cache import invalidate_after_write
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
 from uuid import uuid4
@@ -13,7 +14,9 @@ from google.cloud.firestore_v1 import FieldFilter
 
 import database.action_items as action_items_db
 from database._client import db
+from database.action_items_cache import bump_action_items_list_version
 from database.firestore_index_registry import CANDIDATES_COMPATIBILITY_QUERY
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
 from database.summary_task_links import read_summary_task_row, SummaryTaskConflictError, SummaryTaskNotFoundError
 from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskPriority, TaskStatus
@@ -491,6 +494,7 @@ def stored_candidate_has_lapsed(candidate: dict[str, Any], *, now: datetime) -> 
 
 
 @after_write('candidates')
+@invalidate_after_write
 def create_candidate(
     uid: str,
     proposal: CandidateCreate,
@@ -521,7 +525,6 @@ def create_candidate(
     ref = _candidate_ref(uid, candidate_id)
     alias_ref = _candidate_idempotency_alias_ref(uid, key_hash)
     semantic_claim_ref = _candidate_pending_claim_ref(uid, semantic_claim_id) if semantic_claim_id is not None else None
-    transaction = db.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -691,7 +694,7 @@ def create_candidate(
             )
         return record
 
-    return apply(transaction)
+    return run_with_transaction_contention_retry(db.transaction, apply, operation_name='candidate_create')
 
 
 def get_candidate(uid: str, candidate_id: str) -> Optional[CandidateRecord]:
@@ -701,6 +704,7 @@ def get_candidate(uid: str, candidate_id: str) -> Optional[CandidateRecord]:
     return parse_snapshot_or_none(CandidateRecord, snapshot)
 
 
+@invalidate_after_write
 def update_candidate_compatibility_score(
     uid: str,
     candidate_id: str,
@@ -850,6 +854,7 @@ def _task_update_storage(candidate: CandidateRecord, *, current_task: dict[str, 
     return patch
 
 
+@invalidate_after_write
 def resolve_task_candidate(
     uid: str,
     candidate_id: str,
@@ -863,7 +868,6 @@ def resolve_task_candidate(
     """Atomically accept a task Candidate and create/update exactly one task."""
 
     candidate_ref = _candidate_ref(uid, candidate_id)
-    transaction = db.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -1031,9 +1035,14 @@ def resolve_task_candidate(
             resolved_at=resolved_at,
         )
 
-    return apply(transaction)
+    receipt = run_with_transaction_contention_retry(db.transaction, apply, operation_name='candidate_accept')
+    # Accepting creates or updates the task directly (not through database.action_items),
+    # so invalidate the cached GET /v1/action-items pages here too.
+    bump_action_items_list_version(uid)
+    return receipt
 
 
+@invalidate_after_write
 def resolve_candidate_without_mutation(
     uid: str,
     candidate_id: str,
@@ -1092,6 +1101,7 @@ def resolve_candidate_without_mutation(
     return apply(transaction)
 
 
+@invalidate_after_write
 def reconcile_migrated_candidate(
     uid: str,
     candidate_id: str,

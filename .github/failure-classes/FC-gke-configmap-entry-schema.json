@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-gke-configmap-entry-schema",
+  "violated_contract": "Every GKE backend ConfigMap entry in the runtime manifest must declare a supported source (literal or environment), so the deploy-time render cannot fail after Cloud Run promotion.",
+  "canonical_prevention": "Validate every checked-in dev and prod gke.config_map entry's source in unit tests, so a Cloud Run-shaped {value, category} entry fails CI instead of the deploy's ConfigMap step.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/deploy/runtime_env/_base.yaml",
+    "backend/deploy/runtime_env.yaml",
+    "backend/scripts/render_gke_backend_config.py",
+    "backend/tests/unit/test_render_gke_backend_config.py"
+  ],
+  "status": "open"
+}

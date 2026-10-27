@@ -27,8 +27,8 @@ def test_action_item_transcript_includes_stable_segment_ids(monkeypatch):
 
     rendered, speaker_map = transcript_for_llm.conversation_transcript_and_speaker_map('uid-1', conversation)
 
-    assert rendered == '[seg-1 0] I will send the proposal.'
-    assert speaker_map == {0: 'Archit'}
+    assert rendered == '[seg-1 c0] I will send the proposal.'
+    assert speaker_map == {'c0': 'Archit'}
 
 
 def test_extracted_segment_ids_survive_into_grounded_task_provenance():

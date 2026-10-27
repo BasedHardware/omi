@@ -8,6 +8,8 @@ import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 void main() {
@@ -25,6 +27,7 @@ void main() {
       buildSignature: '',
     );
     await PlatformManager.initializeServices();
+    AuthService.installLocalHarnessTokenGateway(_RetryTokenGateway());
   });
 
   group('expensive read retry policy', () {
@@ -32,11 +35,12 @@ void main() {
 
     setUp(() async {
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      env.routeNextRequestTo('http://${server.address.host}:${server.port}/');
+      Env.overrideApiBaseUrl('http://${server.address.host}:${server.port}/');
     });
 
     tearDown(() async {
       await server.close(force: true);
+      Env.clearApiBaseUrlOverride();
     });
 
     test('tryGetActionItems makes one request when the backend returns 504', () async {
@@ -67,26 +71,41 @@ void main() {
 
       expect(attempts, 1);
     });
+
+    test('canonical recovery makes no retries when that read returns 504', () async {
+      final paths = <String>[];
+      server.listen((request) async {
+        paths.add(request.uri.path);
+        if (request.uri.path == '/v1/knowledge-graph') {
+          request.response.write('{"nodes":[],"edges":[]}');
+        } else {
+          request.response.statusCode = HttpStatus.gatewayTimeout;
+        }
+        await request.response.close();
+      });
+
+      await expectLater(KnowledgeGraphApi.getKnowledgeGraph(), throwsA(isA<Exception>()));
+
+      expect(paths, ['/v1/knowledge-graph', '/v1/knowledge-graph/canonical']);
+    });
   });
 }
 
-class _TestEnvFields implements EnvFields {
-  String _requestBaseUrl = '';
-  var _apiBaseUrlReads = 0;
-
-  void routeNextRequestTo(String baseUrl) {
-    _requestBaseUrl = baseUrl;
-    _apiBaseUrlReads = 0;
-  }
+class _RetryTokenGateway implements AuthTokenGateway {
+  @override
+  AuthUserSnapshot get currentUser => const AuthUserSnapshot(uid: 'retry-test-user');
 
   @override
-  String? get apiBaseUrl {
-    _apiBaseUrlReads++;
-    // The production API uses the first read to build the request URL and the
-    // second to decide whether auth is required. Returning a distinct base on
-    // the second read keeps this loopback test focused on retry behavior.
-    return _apiBaseUrlReads.isOdd ? _requestBaseUrl : 'https://auth-not-required.invalid/';
-  }
+  Future<RefreshedAuthToken?> forceRefresh() async =>
+      RefreshedAuthToken(token: 'retry-test-token', expirationTime: DateTime.now().add(const Duration(hours: 1)));
+
+  @override
+  Future<void> signOut() async {}
+}
+
+class _TestEnvFields implements EnvFields {
+  @override
+  String? get apiBaseUrl => 'https://api.test.invalid/';
 
   @override
   String? get googleClientId => null;
@@ -94,7 +113,6 @@ class _TestEnvFields implements EnvFields {
   @override
   String? get googleClientSecret => null;
 
-  @override
   @override
   String? get intercomAppId => null;
 

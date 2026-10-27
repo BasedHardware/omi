@@ -138,11 +138,11 @@ export function planDisplayName(plan: PlanIdentity): string {
     case 'basic':
       return 'Free';
     case 'operator':
-      return 'Pro';
+      return 'Operator';
     case 'unlimited':
       return 'Neo';
     case 'unlimited_v2':
-      return 'Unlimited';
+      return 'Omi Pro';
     default:
       return plan.id.charAt(0).toUpperCase() + plan.id.slice(1);
   }
@@ -216,6 +216,9 @@ export interface UserSubscription {
   plan_identity?: PlanIdentity;
   status: string;
   is_unlimited: boolean;
+  // Server-resolved legacy monthly allowance; zero means no transcription cap.
+  transcription_seconds_used?: number;
+  transcription_seconds_limit?: number;
   current_period_end?: number;
   stripe_subscription_id?: string;
   cancel_at_period_end?: boolean;
@@ -270,6 +273,14 @@ export interface UpgradeSubscriptionResponse {
   message?: string;
   days_remaining?: number;
   scheduled_start?: number;
+}
+
+export interface RedeemCodeResponse {
+  status: string;
+  percent_off?: number | null;
+  amount_off?: number | null;
+  currency?: string | null;
+  applies_at?: number | null;
 }
 
 export interface Person {

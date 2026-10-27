@@ -228,6 +228,7 @@ actor SystemCalendarMeetingContextService {
   private let uploader: any DesktopMeetingUploading
   private var requestedAccessThisLaunch = false
   private var uploadedEventIDs = Set<String>()
+  private var activeEventsCache: (at: Date, events: [SystemCalendarEventSnapshot])?
 
   init(
     provider: any SystemCalendarEventProviding = EventKitSystemCalendarProvider(),
@@ -237,7 +238,8 @@ actor SystemCalendarMeetingContextService {
     self.uploader = uploader
   }
 
-  /// Called asynchronously when a meeting is detected. This is the only path that can prompt.
+  /// Called asynchronously when a meeting is detected. This recording-context path can prompt;
+  /// the meeting-brief setting also has an explicit user-initiated request path.
   /// A denied/restricted decision is terminal until macOS reports a different authorization state.
   func prepareAroundNow(now: Date = Date()) async {
     switch await provider.authorizationState() {
@@ -258,6 +260,47 @@ actor SystemCalendarMeetingContextService {
   func syncAuthorizedEvents(overlapping recordingInterval: DateInterval) async {
     guard await provider.authorizationState() == .allowed else { return }
     await sync(interval: Self.queryInterval(overlapping: recordingInterval))
+  }
+
+  /// Local continuity evidence only: never prompts or uploads. Short caching keeps the
+  /// one-second audio probe from repeatedly querying EventKit; end times are checked every call.
+  func activeEventIDs(now: Date = Date(), covering previousCaptureEnd: Date? = nil) async -> Set<String> {
+    guard await provider.authorizationState() == .allowed else {
+      activeEventsCache = nil
+      return []
+    }
+    let events: [SystemCalendarEventSnapshot]
+    if let cache = activeEventsCache, now >= cache.at, now.timeIntervalSince(cache.at) < 15 {
+      events = cache.events
+    } else {
+      events = await provider.events(
+        in: DateInterval(start: now.addingTimeInterval(-1), end: now.addingTimeInterval(1)))
+      activeEventsCache = (now, events)
+    }
+    return Set(
+      events.filter { event in
+        !event.isAllDay && !event.isCanceled && !event.calendarEventID.isEmpty
+          && event.startTime <= now && event.endTime > now
+          && (previousCaptureEnd.map { end in event.startTime <= end && event.endTime > end } ?? true)
+      }.map(\.calendarEventID))
+  }
+
+  /// A deliberate settings gesture may request Calendar access for the local meeting-brief pilot.
+  /// Reading upcoming events never uploads them or triggers the recording-context sync path.
+  func requestBriefAccess() async -> Bool {
+    switch await provider.authorizationState() {
+    case .allowed: return true
+    case .notDetermined: return await provider.requestAccess()
+    case .unavailable: return false
+    }
+  }
+
+  func upcomingAuthorizedEvents(now: Date, horizon: TimeInterval) async -> [SystemCalendarEventSnapshot] {
+    guard await provider.authorizationState() == .allowed, horizon > 0 else { return [] }
+    let interval = DateInterval(start: now, end: now.addingTimeInterval(horizon))
+    return await provider.events(in: interval)
+      .filter { !$0.isAllDay && !$0.isCanceled && $0.startTime > now && $0.startTime <= interval.end }
+      .sorted { $0.startTime < $1.startTime }
   }
 
   /// Local trigger observations consume an existing calendar grant only. This

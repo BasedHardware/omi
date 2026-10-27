@@ -118,6 +118,16 @@ existing keepalive. A new scope re-fences the attempt and records demand again.
 Reconciliation never writes policy, mints a session, or adds a retry timer.
 Disposal or a newer paused/non-pendant state cancels admission.
 
+Only the OS-granted periodic window raises a scope (2026-10-20 incident: a
+pendant reconnect inside its own reconnect sync pass skipped capture for 4 h,
+and a connected, unsubscribed legacy pendant discards audio). A pendant start
+swallowed by a scope is replayed when the scope drops, every pass has a hard
+time limit (10 min when fenced), and foreground resume starts a connected idle
+pendant. Pendant audio that reaches the transport with no capture listener is
+persisted to the safety WAL unless the policy is muted or a caller stopped the
+pendant (`capture_live_recovery.dart`). Each skip, replay, orphan episode and
+pass timeout emits `Capture Recovery Observed`.
+
 The first successful charging observation inherits its connection's initial
 resume gate. A connection admitted only for sync observes without resuming;
 an authorized connection retains its charge edge even if another scope has

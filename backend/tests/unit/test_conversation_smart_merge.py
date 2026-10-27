@@ -7,12 +7,16 @@ logic run for real. All text is synthetic.
 """
 
 from datetime import datetime, timedelta, timezone
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
 
 from config import conversation_smart_merge as config
+from database import conversation_quiet_checks as quiet_checks
+from google.cloud import firestore
 from database import conversation_finalization_jobs as jobs_db
+from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
 from database import smart_merge as smart_merge_db
 from database import sync_bridges, action_item_refresh as refresh_db
@@ -195,7 +199,6 @@ class World:
 @pytest.fixture
 def world(monkeypatch):
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
-    monkeypatch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
     return World(monkeypatch)
 
 
@@ -228,13 +231,6 @@ def test_unset_mode_is_merge_by_default(monkeypatch):
     monkeypatch.delenv(config.SMART_MERGE_MODE_ENV, raising=False)
     assert config.smart_merge_mode() is config.SmartMergeMode.MERGE
     assert config.DEFAULT_SMART_MERGE_MODE is config.SmartMergeMode.MERGE
-
-
-def test_uid_allowlist(monkeypatch):
-    monkeypatch.setenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, 'a, b')
-    assert config.smart_merge_uid_allowed('a') and not config.smart_merge_uid_allowed('c')
-    monkeypatch.setenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, '')
-    assert config.smart_merge_uid_allowed('c')
 
 
 def test_metric_reason_is_bounded_to_known_values(monkeypatch):
@@ -383,8 +379,19 @@ def test_merge_at_threshold_absorbs_redirects_and_refreshes_once(world):
     world.add('p', 0, 10)
     world.add('n', 15, 10, private_cloud_sync_enabled=True)
     world.jev_answers = [0.35]
+    quiet_paths = [('conversation_finalization_jobs', quiet_checks.quiet_check_id(UID, cid)) for cid in ('p', 'n')]
+    for path in quiet_paths:
+        world.store.rows[path] = {
+            'kind': 'listen_quiet_check',
+            'status': 'waiting_quiet',
+            'dispatch_generation': 1,
+            'reconcile_after_at': T0,
+        }
 
     assert world.finish('n') is True
+    for path in quiet_paths:
+        assert world.store.rows[path]['status'] == 'quiet_done'
+        assert world.store.rows[path]['reconcile_after_at'] is firestore.DELETE_FIELD
 
     donor = world.raw('n')
     assert donor['deleted'] is True and donor['discarded'] is True and donor['sync_merged_into'] == 'p'
@@ -402,6 +409,31 @@ def test_merge_at_threshold_absorbs_redirects_and_refreshes_once(world):
     assert donor['sync_bridge_audio_target'] == 'p'
     # Owner detail reads follow the existing redirect contract to the survivor.
     assert conversations_db.resolve_sync_conversation_redirect(UID, 'n') == 'p'
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('upgrade', [False, True])
+def test_absorb_preserves_open_loop_blobs_and_upgrades_retained_content(world, level, upgrade):
+    field, marker = 'open_loop_extractions', 'open_loop_extractions_compressed'
+    extracted = {'version': 1, 'delegated_by_user': [], 'commitments_by_others': []}
+    survivor = world.add('p', 0, 10)
+    survivor.update(data_protection_level=level, **{field: extracted})
+    world.store.rows[_path('p')] = conversations_db.encode_conversation_for_write(UID, survivor, level)
+    donor_level = 'enhanced' if upgrade else level
+    donor = world.add('n', 15, 10)
+    donor.update(data_protection_level=donor_level, **{field: extracted})
+    world.store.rows[_path('n')] = conversations_db.encode_conversation_for_write(UID, donor, donor_level)
+    before_survivor, before_donor = deepcopy(world.raw('p')), deepcopy(world.raw('n'))
+    world.jev_answers = [0.35]
+
+    assert world.finish('n') is True
+    saved, donor = world.raw('p'), world.raw('n')
+    assert saved['data_protection_level'] == donor_level
+    assert isinstance(saved[field], str if donor_level == 'enhanced' else bytes)
+    assert conversations_db.decode_open_loop_extractions(UID, saved[field], saved[marker]) == extracted
+    if level == donor_level:
+        assert saved[field] == before_survivor[field]
+    assert donor[field] == before_donor[field] and donor[marker] == before_donor[marker]
 
 
 def test_merge_below_threshold_keeps_both(world):
@@ -959,3 +991,21 @@ def test_preceding_query_uses_the_registered_spec_and_an_existing_index():
     assert ('limit', (6,), {}) in log
     selected = next(args[0] for name, args, _ in log if name == 'select')
     assert 'transcript_segments' not in selected
+
+
+@pytest.mark.parametrize('protected', ['p', 'n'])
+def test_transaction_never_rekeys_corrected_capture_anchors(world, protected):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    world.raw(protected)['has_transcript_corrections'] = True
+    before = deepcopy(world.store.rows)
+    result = smart_merge_db.absorb_conversation(
+        UID,
+        'p',
+        'n',
+        expected_revision=0,
+        plan=lambda *_: (_ for _ in ()).throw(AssertionError('corrected captures must not reach the merge planner')),
+        firestore_client=world.store,
+    )
+    assert result.outcome == 'rejected'
+    assert world.store.rows == before

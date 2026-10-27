@@ -65,6 +65,36 @@ actor RewindIndexer {
 
   private init() {}
 
+  /// Both capture variants use this boundary after storing OCR. The caller schedules
+  /// it off the capture path; no plan fetch or engine asset request blocks capture.
+  nonisolated static func indexScreenshotEmbeddings(
+    id: Int64, timestamp: Date, ocrText: String, appName: String, windowTitle: String?,
+    ownerSnapshot: RewindCaptureOwnerSnapshot,
+    runtime: LocalEmbeddingRuntime = .makeDefault(),
+    policy: @Sendable (LocalEmbeddingRuntime.Selection, LocalEmbeddingKillSwitches) -> ScreenEmbeddingPolicy = {
+      ScreenEmbeddingPolicy.cached(localRoute: $0, killSwitches: $1)
+    },
+    cloud: OCREmbeddingService = .shared,
+    localIndexer: LocalEmbeddingIndexer = .shared,
+    record: @Sendable (ScreenEmbeddingPolicy) -> Void = { $0.recordRoute() }
+  ) async {
+    guard ownerSnapshot.isCurrent() else { return }
+    let selection = await runtime.selectEngine()
+    guard ownerSnapshot.isCurrent(), !Task.isCancelled else { return }
+    let decision = policy(selection, runtime.killSwitches)
+    record(decision)
+    if decision.shouldEmbedWithGemini {
+      await cloud.embedScreenshot(
+        id: id, timestamp: timestamp, ocrText: ocrText, appName: appName,
+        windowTitle: windowTitle, ownerSnapshot: ownerSnapshot)
+    }
+    if decision.shouldIndexLocally, case .engine(let engine) = selection {
+      await localIndexer.indexScreenshot(
+        id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle,
+        owner: ownerSnapshot, runtime: runtime, engine: engine)
+    }
+  }
+
   /// Reset the indexer state so it re-initializes on the next frame.
   /// Called during sign-out to avoid stale `isInitialized = true` after the database is closed.
   func reset() {
@@ -165,8 +195,8 @@ actor RewindIndexer {
       let backoffSeconds = min(pow(2.0, Double(initFailureCount)), Self.maxBackoffSeconds)
       nextRetryTime = Date().addingTimeInterval(backoffSeconds)
 
-      // First 3 failures: send to Sentry for diagnostics (logError).
-      // After that: log locally only (log) to avoid flooding Sentry with a known-dead DB.
+      // First 3 failures: log as errors (logError) for diagnostics.
+      // After that: log locally only (log) to avoid flooding the log with a known-dead DB.
       if initFailureCount <= 3 {
         logError(
           "RewindIndexer: Failed to initialize (attempt \(initFailureCount), next retry in \(Int(backoffSeconds))s): \(error)"
@@ -340,7 +370,7 @@ actor RewindIndexer {
       // Embed OCR text for semantic search (non-blocking)
       if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
         Task(priority: .utility) {
-          await OCREmbeddingService.shared.embedScreenshot(
+          await Self.indexScreenshotEmbeddings(
             id: id, timestamp: frame.captureTime, ocrText: ocrText, appName: frame.appName,
             windowTitle: frame.windowTitle,
             ownerSnapshot: snapshot.ownerSnapshot)
@@ -461,7 +491,7 @@ actor RewindIndexer {
       // Embed OCR text for semantic search (non-blocking)
       if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
         Task(priority: .utility) {
-          await OCREmbeddingService.shared.embedScreenshot(
+          await Self.indexScreenshotEmbeddings(
             id: id, timestamp: captureTime, ocrText: ocrText, appName: appName, windowTitle: windowTitle,
             ownerSnapshot: snapshot.ownerSnapshot)
         }

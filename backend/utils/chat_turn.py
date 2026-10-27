@@ -9,6 +9,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, cast
 import logging
 import asyncio
+import time
 import json
 import uuid
 import base64
@@ -446,6 +447,8 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                     'kind': 'conversation',
                     'id': memory['id'],
                     'title': memory.get('structured', {}).get('title', 'Conversation'),
+                    # The answer cited these by number, so they link even when prose paraphrases the title.
+                    'cited': True,
                 }
                 for memory in memories
                 if memory.get('id')
@@ -492,7 +495,14 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                 from utils.messaging.undo import UndoStore
 
                 UndoStore().bind_message(uid, receipt.id, ai_message.id)
-        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
+        ai_message.memories = MessageConversation.safe_build_many(
+            memories if len(memories) < 5 else memories[:5],
+            on_error=lambda member, exc: logger.warning(
+                'Skipping malformed memory conversation %s: %s',
+                member.get('id') if isinstance(member, dict) else getattr(member, 'id', None),
+                type(exc).__name__,
+            ),
+        )
         usage_app_id = app_id_from_app or compat_app_id
         if usage_app_id and runtime is None:
             try:
@@ -513,13 +523,34 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
 
         return ai_message, ask_for_nps
 
-    journey_attempt = JourneyAttempt('chat_response')
+    # Client acceptance remains at the HTTP response boundary; chat_response below
+    # is lazy because it measures server work only once the body is consumed.
     mobile_journey_attempt = ClientJourneyAttempt(
         'mobile_chat',
         resolve_client_kind_from_headers(options.headers),
     )
 
     async def generate_stream():
+        journey_attempt = None
+        try:
+            # Accept only once the response body is consumed, and pair every
+            # accepted server journey even if stream setup fails before its body try.
+            journey_attempt = JourneyAttempt('chat_response')
+            async for chunk in generate_stream_body(journey_attempt):
+                yield chunk
+        except (asyncio.CancelledError, GeneratorExit):
+            if journey_attempt is not None and not journey_attempt.finished:
+                journey_attempt.finish('cancelled')
+            raise
+        except Exception:
+            if journey_attempt is not None and not journey_attempt.finished:
+                journey_attempt.finish('failure')
+            raise
+        finally:
+            if journey_attempt is not None and not journey_attempt.finished:
+                journey_attempt.finish('failure')
+
+    async def generate_stream_body(journey_attempt):
         callback_data = {}
         app_context = None
         app_store = None
@@ -710,24 +741,57 @@ class _LeasedReplySink:
     def __init__(self, delegate, store, uid, token):
         self.delegate, self.store, self.uid, self.token = delegate, store, uid, token
 
+    def _release_after_stop(self):
+        try:
+            self.store.release(self.uid, 'app', self.token)
+        except PermissionError:
+            # A newer turn already took the lease over: nothing of ours to free.
+            logger.info('App turn lease already taken over at stop')
+
     def response(self, stream, *, media_type):
         async def leased():
             source = stream if hasattr(stream, '__aiter__') else iterate_in_threadpool(stream)
-            async for frame in source:
-                yield frame
-            await run_blocking(db_executor, self.store.release, self.uid, 'app', self.token)
+            finished = False
+            try:
+                async for frame in source:
+                    yield frame
+                finished = True
+            finally:
+                if finished:
+                    await run_blocking(db_executor, self.store.release, self.uid, 'app', self.token)
+                else:
+                    # A stopped or failed reply (client Stop, or a new message replacing it) must
+                    # free the turn now, not when the lease goes stale. Submitted rather than
+                    # awaited: this runs while the stream is being cancelled.
+                    from utils.executors import submit_with_context  # lazy: tests stub utils.executors
+
+                    submit_with_context(db_executor, self._release_after_stop)
 
         return self.delegate.response(leased(), media_type=media_type)
+
+
+# A message sent right after Stop races the stopped turn's lease release, which runs
+# once the server notices the disconnect. Wait briefly before answering 409.
+APP_TURN_ACQUIRE_ATTEMPTS = 4
+APP_TURN_ACQUIRE_WAIT_SECONDS = 0.25
+
+
+def _acquire_app_turn(uid, sleep=time.sleep):
+    for attempt in range(APP_TURN_ACQUIRE_ATTEMPTS):
+        try:
+            return app_awareness.acquire(uid)
+        except RuntimeError:
+            if attempt + 1 == APP_TURN_ACQUIRE_ATTEMPTS:
+                raise HTTPException(status_code=409, detail='A chat turn is already running') from None
+            sleep(APP_TURN_ACQUIRE_WAIT_SECONDS)
+    raise AssertionError('unreachable')
 
 
 def run_chat_turn(uid, surface, session, message, reply_sink, *, principal, options=None):
     principal.authorize(uid)
     options = options or TurnOptions()
     if surface == 'app' and cohort_enabled(uid):
-        try:
-            store, lease = app_awareness.acquire(uid)
-        except RuntimeError:
-            raise HTTPException(status_code=409, detail='A chat turn is already running') from None
+        store, lease = _acquire_app_turn(uid)
         if store is not None:
             options = replace(options, app_store=store, app_lease=lease)
             reply_sink = _LeasedReplySink(reply_sink, store, uid, lease)

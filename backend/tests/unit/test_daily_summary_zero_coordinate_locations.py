@@ -74,11 +74,12 @@ def ext():
         "utils": _real_pkg("utils", "utils"),
         "utils.llm": _real_pkg("utils", "llm"),
         "utils.llms": _real_pkg("utils", "llms"),
-        "utils.observability": _real_pkg("utils", "observability"),
-        "utils.conversations": _real_pkg("utils", "conversations"),
+        "utils.observability": _real_pkg("utils.observability", "utils", "observability"),
+        "utils.conversations": _real_pkg("utils.conversations", "utils", "conversations"),
         "models": _real_pkg("models", "models"),
         "database": _real_pkg("database", "database"),
         "database.action_items": _leaf("database.action_items"),
+        "database.screen_activity": _leaf("database.screen_activity"),
         "database.daily_summaries": _leaf("database.daily_summaries"),
         "database.goals": _leaf("database.goals"),
         "database.memories": _leaf("database.memories"),
@@ -132,6 +133,8 @@ def _configure(ext):
     ext.users_db.get_user_profile = MagicMock(return_value={"time_zone": "UTC", "language": "en"})
     ext.users_db.get_people_by_ids = MagicMock(return_value=[])
     ext.action_items_db.get_action_items = MagicMock(return_value=[])
+    ext.screen_activity_db.get_screen_activity = MagicMock(return_value=[])
+    ext.daily_summaries_db.get_day_recording_count = MagicMock(return_value=1)
     ext.memories_db.count_memories_created = MagicMock(return_value=0)
     ext.daily_summaries_db.get_desktop_daily_usage = MagicMock(
         return_value={
@@ -213,11 +216,17 @@ def test_daily_summary_populates_new_stats_and_prompt_context(ext):
     assert result["stats"] == {
         "total_conversations": 1,
         "total_duration_minutes": 35,
-        "action_items_count": 1,
+        "action_items_count": 2,
         "memories_created": 4,
         "action_items_created": 2,
-        "watching_minutes": 6,
+        "watching_minutes": 0,
         "proactive_moments": 7,
+        "memories_learned_count": 0,
+        "summarized_conversations": 1,
+        "watching_minutes_unit": "minutes",
+        "watching_minutes_basis": "screen_observation_interval_union",
+        "watching_coverage": "synced_observations_only; capture_completeness_unknown",
+        "reported_device_watching_minutes": 6,
     }
     prompt = ext.get_llm.return_value.invoke.call_args.args[0]
-    assert "Daily stats: 4 memories created, 2 action items created, 6 minutes watched, 7 proactive moments." in prompt
+    assert "Daily stats: 4 memories created, 2 action items created, 0 minutes watched, 7 proactive moments." in prompt

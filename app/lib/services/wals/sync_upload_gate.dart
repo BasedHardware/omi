@@ -6,6 +6,8 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_job_poller.dart';
@@ -29,7 +31,7 @@ typedef UploadTelemetryEmitter = void Function(String eventName, Map<String, dyn
 typedef UploadAttemptIdFactory = String Function();
 typedef UploadClock = DateTime Function();
 
-/// Account-global admission gate for every `/v2/sync-local-files` upload.
+/// Account-global admission gate for every `custody upload` upload.
 ///
 /// Uploads are serialized so independent WAL, live-capture, and Transcribe
 /// Later loops cannot race past a newly established cooldown. Persisted fair-
@@ -43,12 +45,14 @@ class SyncUploadGate {
     UploadTelemetryEmitter? telemetryEmitter,
     UploadAttemptIdFactory? attemptIdFactory,
     UploadClock? clock,
+    ClientTelemetry? clientTelemetry,
   })  : _limiter = limiter,
         _uploader = uploader,
         _fairUseStatusLoader = fairUseStatusLoader,
         _telemetryEmitter = telemetryEmitter,
         _attemptIdFactory = attemptIdFactory ?? _defaultAttemptId,
-        _clock = clock ?? DateTime.now;
+        _clock = clock ?? DateTime.now,
+        _clientTelemetry = clientTelemetry;
 
   static final SyncUploadGate instance = SyncUploadGate(
     limiter: SyncRateLimiter.instance,
@@ -65,12 +69,14 @@ class SyncUploadGate {
   final UploadTelemetryEmitter? _telemetryEmitter;
   final UploadAttemptIdFactory _attemptIdFactory;
   final UploadClock _clock;
+  final ClientTelemetry? _clientTelemetry;
   final Mutex _uploadMutex = Mutex();
   Future<bool>? _reconciliation;
 
   static String _defaultAttemptId() => const Uuid().v4();
 
   static void _emitProductionTelemetry(String eventName, Map<String, dynamic> properties) {
+    if (ClientTelemetryFlags.posthogRetirementEnabled) return;
     final analytics = AnalyticsManager();
     switch (eventName) {
       case RecordingUploadTelemetry.startedEvent:
@@ -159,6 +165,7 @@ class SyncUploadGate {
     double? audioEndSeconds,
     bool claimLiveCapture = false,
     Geolocation? geolocation,
+    String telemetrySource = 'unknown',
   }) async {
     await _uploadMutex.acquire();
     try {
@@ -173,13 +180,15 @@ class SyncUploadGate {
         allowed = await reconcileFairUseStatus();
       }
       if (!allowed) {
+        final reason = _limiter.reason;
         throw SyncRateLimitedException(
-          kind: switch (_limiter.reason) {
-            RateLimitReason.backendBusy => SyncRateLimitKind.backendCapacity,
+          kind: switch (reason) {
+            RateLimitReason.backendBusy || RateLimitReason.dispatchHold => SyncRateLimitKind.backendCapacity,
             RateLimitReason.edgeThrottle => SyncRateLimitKind.edgeThrottle,
             _ => SyncRateLimitKind.fairUse,
           },
           retryAfterSeconds: _limiter.activeRetryAfterSeconds,
+          reasonCode: reason == RateLimitReason.dispatchHold ? 'dispatch_hold' : null,
         );
       }
 
@@ -196,6 +205,12 @@ class SyncUploadGate {
           claimsLiveCapture: claimLiveCapture,
         ),
       );
+      _mirrorUpload(
+        attemptId: attemptId,
+        phase: 'started',
+        source: telemetrySource,
+        occurredAt: startedAt,
+      );
 
       try {
         final result = await _uploader(
@@ -211,6 +226,7 @@ class SyncUploadGate {
         );
         SyncJobPoller.instance.validateOwner(result);
         if (_limiter.reason != RateLimitReason.edgeThrottle) _limiter.clear();
+        final queued = result.isQueued;
         _emitTelemetry(
           RecordingUploadTelemetry.completedEvent,
           RecordingUploadTelemetry.completedPayload(
@@ -220,19 +236,32 @@ class SyncUploadGate {
             totalBytes: totalBytes,
             claimsLiveCapture: claimLiveCapture,
             durationSeconds: _durationSeconds(startedAt),
-            result: result.isQueued ? 'accepted' : 'completed',
+            result: queued ? 'accepted' : 'completed',
           ),
+        );
+        _mirrorUpload(
+          attemptId: attemptId,
+          phase: queued ? 'accepted' : 'completed',
+          source: telemetrySource,
+          occurredAt: _clock(),
+          latencyMs: _latencyMs(startedAt),
+          httpStatus: queued ? 202 : 200,
+          jobId: result.jobId,
         );
         return result;
       } on SyncRateLimitedException catch (error) {
-        _limiter.markLimited(
-          retryAfterSeconds: error.retryAfterSeconds,
-          reason: error.kind.cooldownReason,
-        );
-        // Paced historical recovery is the server asking us to wait. The WAL
+        if (error.reasonCode == 'dispatch_hold') {
+          _limiter.markDispatchHoldLimited(retryAfterSeconds: error.retryAfterSeconds);
+        } else {
+          _limiter.markLimited(
+            retryAfterSeconds: error.retryAfterSeconds,
+            reason: error.kind.cooldownReason,
+          );
+        }
+        // Paced admission is the server asking this account to wait. The WAL
         // stays pending and retries on Retry-After; it is not a user-visible
         // upload failure. Fair-use and unscoped 429s still are.
-        if (!isPacedBackfillReasonCode(error.reasonCode) && error.reasonCode != 'sync_content_in_progress') {
+        if (!isPacedSyncAdmissionReasonCode(error.reasonCode) && error.reasonCode != 'sync_content_in_progress') {
           _recordUploadFailure(
             error,
             attemptId: attemptId,
@@ -241,10 +270,32 @@ class SyncUploadGate {
             totalBytes: totalBytes,
             claimsLiveCapture: claimLiveCapture,
             startedAt: startedAt,
+            telemetrySource: telemetrySource,
+          );
+        } else {
+          _mirrorUpload(
+            attemptId: attemptId,
+            phase: 'deferred',
+            source: telemetrySource,
+            occurredAt: _clock(),
+            latencyMs: _latencyMs(startedAt),
+            httpStatus: error.statusCode ?? 429,
           );
         }
         rethrow;
       } catch (error) {
+        if (error is SyncUploadHttpException && error.statusCode >= 500 && (error.retryAfterSeconds ?? 0) > 0) {
+          // An unscoped 5xx with an explicit Retry-After (sync dispatch
+          // unavailable while an account gate holds, ledger-fence cutover) is
+          // the server asking this account to pause — the same instruction a
+          // scoped 503/429 encodes. Without this, a drain keeps failing every
+          // remaining batch against the same gate for as long as it holds.
+          // backendBusy is in-memory, so an app restart re-probes immediately.
+          _limiter.markLimited(
+            retryAfterSeconds: error.retryAfterSeconds,
+            reason: RateLimitReason.backendBusy,
+          );
+        }
         _recordUploadFailure(
           error,
           attemptId: attemptId,
@@ -253,6 +304,7 @@ class SyncUploadGate {
           totalBytes: totalBytes,
           claimsLiveCapture: claimLiveCapture,
           startedAt: startedAt,
+          telemetrySource: telemetrySource,
         );
         rethrow;
       }
@@ -262,8 +314,17 @@ class SyncUploadGate {
   }
 
   double _durationSeconds(DateTime startedAt) {
+    final milliseconds = _latencyMs(startedAt) ?? 0;
+    return milliseconds / 1000.0;
+  }
+
+  int? _latencyMs(DateTime startedAt) {
+    // sol blocker: wall-clock deltas fabricate latency across NTP steps. The
+    // gate records latency only when it is within the credible window
+    // (ClientTelemetrySchema.maxLatencyMs); otherwise omit it.
     final milliseconds = _clock().difference(startedAt).inMilliseconds;
-    return (milliseconds < 0 ? 0 : milliseconds) / 1000.0;
+    if (milliseconds < 0 || milliseconds > 86400000) return null;
+    return milliseconds;
   }
 
   void _recordUploadFailure(
@@ -274,6 +335,7 @@ class SyncUploadGate {
     required int totalBytes,
     required bool claimsLiveCapture,
     required DateTime startedAt,
+    required String telemetrySource,
   }) {
     _emitTelemetry(
       RecordingUploadTelemetry.failedEvent,
@@ -287,6 +349,47 @@ class SyncUploadGate {
         failureClass: RecordingUploadTelemetry.failureClass(error),
       ),
     );
+    _mirrorUpload(
+      attemptId: attemptId,
+      phase: 'failed',
+      source: telemetrySource,
+      occurredAt: _clock(),
+      latencyMs: _latencyMs(startedAt),
+      httpStatus: error is SyncUploadHttpException
+          ? error.statusCode
+          : error is SyncRateLimitedException
+              ? error.statusCode
+              : null,
+      failureClass: RecordingUploadTelemetry.failureClass(error),
+    );
+  }
+
+  void _mirrorUpload({
+    required String attemptId,
+    required String phase,
+    required String source,
+    required DateTime occurredAt,
+    int? latencyMs,
+    int? httpStatus,
+    String? failureClass,
+    String? jobId,
+  }) {
+    try {
+      (_clientTelemetry ?? ClientTelemetry.instance).observeUpload(
+        UploadMirror(
+          attemptId: attemptId,
+          phase: phase,
+          source: source,
+          occurredAt: occurredAt,
+          latencyMs: latencyMs,
+          httpStatus: httpStatus,
+          failureClass: failureClass,
+          jobId: jobId,
+        ),
+      );
+    } catch (_) {
+      // Replacement telemetry must never change upload admission or retry.
+    }
   }
 
   void _emitTelemetry(String eventName, Map<String, dynamic> properties) {
@@ -384,7 +487,7 @@ class RecordingUploadTelemetry {
 
   static String failureClass(Object error) {
     // Expected backfill backoff never reaches here: the gate does not mint
-    // Recording Upload Failed for [isPacedBackfillReasonCode]. An unscoped
+    // Recording Upload Failed for [isPacedSyncAdmissionReasonCode]. An unscoped
     // rate limit is still `rate_limited`.
     if (error is SyncRateLimitedException) return 'rate_limited';
     if (error is TimeoutException) return 'timeout';

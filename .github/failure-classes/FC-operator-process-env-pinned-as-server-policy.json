@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-operator-process-env-pinned-as-server-policy",
+  "violated_contract": "A persisted policy snapshot must be resolved from the serving role's configuration. An operator process (a script on a laptop or VM) that reaches a resolve-on-first-claim path must not resolve and persist the snapshot from its own environment: it must reuse the stored snapshot, take the serving role's live settings explicitly, or refuse the unit before any write. On 2026-10-20, batch_pipeline_policy.stage_in_transaction resolved an unpinned unit's recovery part from os.environ, and the held-unit speech redrive, silence disposition and terminal-empty operator paths all reached it, so an operator run could write its laptop settings into prod batch jobs.",
+  "canonical_prevention": "Policy resolution helpers take an explicit server-settings argument whose default means 'this process is the serving role'. Operator-only stores and entrypoints require that argument with no default (None refuses an unpinned unit), so a new operator caller cannot silently inherit its own environment.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_operator_policy_source.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/batch_pipeline_*.py",
+    "backend/scripts/batch_pipeline_*.py",
+    "backend/utils/batch_pipeline/**"
+  ],
+  "status": "open"
+}

@@ -60,10 +60,6 @@ interface PiMonoRelayContext {
   requestId: string;
   /** Per-turn effort lane ("adaptive" | "fast") relayed to the gateway. */
   reasoningEffort?: string;
-  /** Qualification-only JIT budget; never present on normal chat. */
-  jitBudget?: PiJitBudget;
-  /** Parent-owned JSONL side channel for trusted gateway receipts. */
-  jitReceiptPath?: string;
   /** Kernel-derived adapter-native capability policy. */
   builtInToolPolicy: "default" | "read_only";
 }
@@ -122,32 +118,6 @@ interface PiUsage {
     cacheWrite: number;
     total: number;
   };
-}
-
-interface PiJitBudget {
-  contractVersion: string;
-  executionID: string;
-  maxProviderAttempts: number;
-  maxOutputTokensPerAttempt: number;
-  maxNormalizedInputTokensPerAttempt: number;
-  maxEstimatedSpendMicroUSD: number;
-}
-
-interface PiJitUsageTotals {
-  attempts: number;
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  costUsd: number | null;
-  providerAttempts: number;
-  receiptCostMicroUSD: number | null;
-  receiptInput: number;
-  receiptOutput: number;
-  receiptCacheRead: number;
-  receiptCacheWrite: number;
-  receiptAttemptIDs: Set<string>;
-  receiptSeen: boolean;
 }
 
 function normalizeProviderHTTPErrorMessage(message: string): string {
@@ -256,13 +226,6 @@ function resolveBundledExtension(): string {
 }
 
 const PUBLIC_WEB_ROUTING_INSTRUCTION = "<omi_retrieval_policy>Web search is required and available for this fresh public request. Use a live public-web or search tool before answering. Base time-sensitive claims only on that lookup and identify the source. Never say, imply, or hedge that you lack internet, web-search, real-time-data, or tool access; if the lookup itself fails, state that the lookup failed instead. Do not use private Omi context unless the user explicitly asks for it.</omi_retrieval_policy>";
-
-// EXP-002 `memory_v1`: Omi is the user's memory, not their assistant. The arm
-// starves generic public-web routing — no turn may be flagged as requiring a
-// live web lookup, so the backend keeps the turn on the chat-agent lane
-// instead of swapping to the web-search lane. Personal retrieval is unaffected:
-// it flows through context sources and Omi tools, not this routing prefix.
-const MEMORY_IDENTITY_VARIANT = "memory_v1";
 
 const EXPLICIT_WEB_REQUESTS = [
   "search the web", "search web", "search the internet", "search online",
@@ -508,10 +471,6 @@ export class PiMonoAdapter implements HarnessAdapter {
   private requiredAgentControlFailures = new Map<string, string>();
   private requiredControlInputs = new Map<string, Record<string, unknown>>();
   private currentAbortController: AbortController | null = null;
-  /** Aggregate every provider turn in an explicitly bounded JIT execution.
-   * Normal chat keeps its existing final-message result semantics. */
-  private activeJitBudget: PiJitBudget | undefined;
-  private activeJitUsage: PiJitUsageTotals | undefined;
   /** State for projecting gateway-owned public-web progress without waiting for
    * the terminal turn before forwarding model text. */
   private activePublicWebTurn: PublicWebTurnState | null = null;
@@ -534,7 +493,6 @@ export class PiMonoAdapter implements HarnessAdapter {
     tmpdir(),
     `omi-pi-mono-context-${process.pid}-${Math.random().toString(36).slice(2)}.json`
   );
-  private readonly jitReceiptFilePath = `${this.contextFilePath}.receipts`;
   /** Current system prompt baked into the spawned pi process via --system-prompt.
    *  Pi has no set_system_prompt RPC, so changing this requires a subprocess restart. */
   private currentSystemPrompt: string | undefined;
@@ -546,9 +504,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     surfaceKind?: string;
     chatFirstUi: boolean;
     controlGeneration: number | null;
-    jitKnowledgeToolsEnabled: boolean;
-    jitProactivity: boolean;
-  } = { chatFirstUi: false, controlGeneration: null, jitKnowledgeToolsEnabled: false, jitProactivity: false };
+  } = { chatFirstUi: false, controlGeneration: null };
   private readonly sessionPrefix: string;
   /** Numeric HTTP classification correlated with the active provider request. */
   private providerFailureCode: RuntimeFailureCode | undefined;
@@ -631,17 +587,6 @@ export class PiMonoAdapter implements HarnessAdapter {
       delete env.OMI_CHAT_FIRST_UI;
       delete env.OMI_CHAT_FIRST_CONTROL_GENERATION;
     }
-    // JIT knowledge-ledger tools are projected into Pi's process-local
-    // extension at spawn time. Always scrub the inherited environment first:
-    // an ambient true value must never survive a false per-turn gate.
-    delete env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED;
-    if (this.currentToolProjection.jitKnowledgeToolsEnabled) {
-      env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED = "true";
-    }
-    delete env.OMI_JIT_PROACTIVITY_MODE;
-    if (this.currentToolProjection.jitProactivity) {
-      env.OMI_JIT_PROACTIVITY_MODE = "true";
-    }
     env.OMI_CONTEXT_FILE = this.contextFilePath;
     // User-authored skills from the Apps page: point pi's agent dir at the
     // managed plugin root so pi's native skill catalog discovers
@@ -690,7 +635,6 @@ export class PiMonoAdapter implements HarnessAdapter {
       }
       this.pendingRequests.clear();
       this.activePromptGeneration = 0;
-      this.clearJitUsage();
       this.finishPublicWebProgress(this.activePublicWebTurn, "failed");
       this.activePublicWebTurn = null;
       rmSync(this.contextFilePath, { force: true });
@@ -719,7 +663,6 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.sessions.clear();
     this.pendingRequests.clear();
     this.activePromptGeneration = 0;
-    this.clearJitUsage();
     this.finishPublicWebProgress(this.activePublicWebTurn, "failed");
     this.activePublicWebTurn = null;
     rmSync(this.contextFilePath, { force: true });
@@ -791,15 +734,11 @@ export class PiMonoAdapter implements HarnessAdapter {
     surfaceKind?: string;
     chatFirstUi: boolean;
     controlGeneration: number | null;
-    jitKnowledgeToolsEnabled?: boolean;
-    jitProactivity?: boolean;
   }): Promise<void> {
     const normalized: {
       surfaceKind?: string;
       chatFirstUi: boolean;
       controlGeneration: number | null;
-      jitKnowledgeToolsEnabled: boolean;
-      jitProactivity: boolean;
     } = projection.surfaceKind === "main_chat" || projection.surfaceKind === "floating_chat"
       ? {
           surfaceKind: projection.surfaceKind,
@@ -811,21 +750,15 @@ export class PiMonoAdapter implements HarnessAdapter {
             && (projection.controlGeneration ?? -1) >= 0
             ? projection.controlGeneration
             : null,
-          jitKnowledgeToolsEnabled: projection.jitKnowledgeToolsEnabled === true,
-          jitProactivity: projection.jitProactivity === true,
         }
       : {
           chatFirstUi: false,
           controlGeneration: null,
-          jitKnowledgeToolsEnabled: projection.jitKnowledgeToolsEnabled === true,
-          jitProactivity: projection.jitProactivity === true,
         };
     if (
       normalized.surfaceKind === this.currentToolProjection.surfaceKind
       && normalized.chatFirstUi === this.currentToolProjection.chatFirstUi
       && normalized.controlGeneration === this.currentToolProjection.controlGeneration
-      && normalized.jitKnowledgeToolsEnabled === this.currentToolProjection.jitKnowledgeToolsEnabled
-      && normalized.jitProactivity === this.currentToolProjection.jitProactivity
     ) return;
     this.currentToolProjection = normalized;
     if (this.process) await this.stop();
@@ -858,26 +791,6 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.toolExecutor = onToolCall;
     this.requiredAgentControlFailures.clear();
     this.requiredControlInputs.clear();
-    this.activeJitBudget = relayContext?.jitBudget;
-    this.activeJitUsage = this.activeJitBudget
-      ? {
-          attempts: 0,
-          input: 0,
-          output: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-          costUsd: null,
-          providerAttempts: 0,
-          receiptCostMicroUSD: 0,
-          receiptInput: 0,
-          receiptOutput: 0,
-          receiptCacheRead: 0,
-          receiptCacheWrite: 0,
-          receiptAttemptIDs: new Set(),
-          receiptSeen: false,
-        }
-      : undefined;
-    if (this.activeJitBudget) writeFileSync(this.jitReceiptFilePath, "", { encoding: "utf8", mode: 0o600 });
     this.currentAbortController = new AbortController();
     this.writeRelayContext(relayContext);
 
@@ -930,7 +843,6 @@ export class PiMonoAdapter implements HarnessAdapter {
       this.activePublicWebTurn = null;
       this.activePromptGeneration = 0;
       this.currentAbortController = null;
-      this.clearJitUsage();
       this.eventHandler = null;
       this.toolExecutor = null;
       this.clearRelayContext(relayContext?.capabilityRef);
@@ -967,29 +879,15 @@ export class PiMonoAdapter implements HarnessAdapter {
     const pending = this.pendingRequests.get(generation);
     if (pending) {
       this.pendingRequests.delete(generation);
-      const jitUsage = this.activeJitBudget ? this.activeJitUsage : undefined;
-      // Abort can race a provider response, so consume any receipt already
-      // written before clearing the accumulator. The result is deliberately
-      // unknown: a cancelled turn cannot prove that all provider work settled.
-      if (jitUsage) this.recordJitGatewayReceipts();
       pending.resolve({
         text: "",
         sessionId: pending.sessionId || sessionId,
         costUsd: 0,
-        inputTokens: jitUsage?.input ?? 0,
-        outputTokens: jitUsage?.output ?? 0,
-        cacheReadTokens: jitUsage?.cacheRead ?? 0,
-        cacheWriteTokens: jitUsage?.cacheWrite ?? 0,
-        ...(jitUsage ? {
-          jitCostStatus: "unknown" as const,
-          jitEstimatedCostUsd: null,
-          jitProviderAttempts: jitUsage.providerAttempts,
-          jitReceiptAttemptIDs: [...jitUsage.receiptAttemptIDs],
-        } : {}),
+        inputTokens: 0,
+        outputTokens: 0,
       });
     }
     this.activePromptGeneration = 0;
-    this.clearJitUsage();
   }
 
   clearRelayContextForCapability(capabilityRef: string): void {
@@ -1162,8 +1060,6 @@ export class PiMonoAdapter implements HarnessAdapter {
         capabilityRef: context.capabilityRef,
         requestId: context.requestId,
         ...(context.reasoningEffort ? { reasoningEffort: context.reasoningEffort } : {}),
-        ...(context.jitBudget ? { jitBudget: context.jitBudget } : {}),
-        ...(context.jitBudget ? { jitReceiptPath: this.jitReceiptFilePath } : {}),
         builtInToolPolicy: context.builtInToolPolicy,
       })
     );
@@ -1480,112 +1376,6 @@ export class PiMonoAdapter implements HarnessAdapter {
     });
   }
 
-  /** Consume only gateway-signed receipt lines; pi's configured zero-rate
-   * model usage is never used as a JIT money estimate. */
-  private recordJitGatewayReceipts(): boolean {
-    const budget = this.activeJitBudget;
-    const totals = this.activeJitUsage;
-    if (!budget || !totals || !existsSync(this.jitReceiptFilePath)) return false;
-    let lines: string[];
-    try {
-      lines = readFileSync(this.jitReceiptFilePath, "utf8").split(/\r?\n/).filter(Boolean);
-    } catch {
-      return false;
-    }
-    let added = 0;
-    for (const line of lines) {
-      let receipt: any;
-      try { receipt = JSON.parse(line); } catch { return false; }
-      if (receipt?.schema_version !== "jit-gateway-receipt-v1"
-        || receipt.run_id !== budget.executionID
-        || receipt.contract_version !== budget.contractVersion
-        || !Array.isArray(receipt.attempts)
-        || !receipt.aggregate
-        || receipt.aggregate.attempt_count !== receipt.attempts.length) return false;
-      for (const attempt of receipt.attempts) {
-        const attemptID = attempt?.attempt_id;
-        if (typeof attemptID !== "string" || totals.receiptAttemptIDs.has(attemptID)) continue;
-        const numeric = [
-          attempt.normalized_uncached_input_tokens,
-          attempt.cached_input_tokens,
-          attempt.cache_write_tokens,
-          attempt.output_tokens,
-        ];
-        if (!numeric.every((value: unknown) => Number.isSafeInteger(value) && Number(value) >= 0)) return false;
-        totals.receiptAttemptIDs.add(attemptID);
-        totals.providerAttempts += 1;
-        totals.receiptInput += Number(attempt.normalized_uncached_input_tokens);
-        totals.receiptCacheRead += Number(attempt.cached_input_tokens);
-        totals.receiptCacheWrite += Number(attempt.cache_write_tokens);
-        totals.receiptOutput += Number(attempt.output_tokens);
-        if (attempt.cost_status === "estimated" && Number.isSafeInteger(attempt.estimated_cost_micro_usd)
-          && Number(attempt.estimated_cost_micro_usd) >= 0 && totals.receiptCostMicroUSD !== null) {
-          totals.receiptCostMicroUSD += Number(attempt.estimated_cost_micro_usd);
-        } else {
-          totals.receiptCostMicroUSD = null;
-        }
-        added += 1;
-      }
-    }
-    if (added === 0) return false;
-    totals.receiptSeen = true;
-    totals.attempts = totals.providerAttempts;
-    totals.input = totals.receiptInput;
-    totals.output = totals.receiptOutput;
-    totals.cacheRead = totals.receiptCacheRead;
-    totals.cacheWrite = totals.receiptCacheWrite;
-    totals.costUsd = totals.receiptCostMicroUSD === null
-      ? null : totals.receiptCostMicroUSD / 1_000_000;
-    return totals.providerAttempts <= budget.maxProviderAttempts
-      && (totals.receiptCostMicroUSD === null || totals.receiptCostMicroUSD <= budget.maxEstimatedSpendMicroUSD)
-      && totals.receiptCostMicroUSD !== null;
-  }
-
-  private rejectJitGatewayReceipt(
-    generation: number,
-    pending: { sessionId: string; reject: (err: Error) => void },
-  ): void {
-    const message = "JIT gateway receipt unavailable or unpriced";
-    try { this.sendCommand({ type: "abort" }); } catch { /* process may be exiting */ }
-    this.currentAbortController?.abort();
-    this.eventHandler?.({ type: "error", message, adapterSessionId: pending.sessionId });
-    this.pendingRequests.delete(generation);
-    this.activePromptGeneration = 0;
-    this.activePublicWebTurn = null;
-    pending.reject(new Error(message));
-    this.clearJitUsage();
-    this.eventHandler = null;
-    this.toolExecutor = null;
-  }
-
-  private clearJitUsage(): void {
-    this.activeJitBudget = undefined;
-    this.activeJitUsage = undefined;
-    rmSync(this.jitReceiptFilePath, { force: true });
-  }
-
-  private rejectJitAttemptBudget(
-    generation: number,
-    pending: { sessionId: string; reject: (err: Error) => void },
-  ): void {
-    const message = "JIT provider attempt budget exhausted";
-    try {
-      this.sendCommand({ type: "abort" });
-    } catch {
-      // The process may already be exiting; the generation fence below is
-      // sufficient to drop a late turn_end.
-    }
-    this.currentAbortController?.abort();
-    this.eventHandler?.({ type: "error", message, adapterSessionId: pending.sessionId });
-    this.pendingRequests.delete(generation);
-    this.activePromptGeneration = 0;
-    this.activePublicWebTurn = null;
-    pending.reject(new Error(message));
-    this.clearJitUsage();
-    this.eventHandler = null;
-    this.toolExecutor = null;
-  }
-
   private handleTurnEnd(event: PiRpcEvent): void {
     // Drop stray turn_end events that don't belong to an in-flight prompt.
     // This happens after abort() or when the subprocess emits a late
@@ -1609,12 +1399,6 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
 
     const message = event.message as PiAssistantMessage | undefined;
-    if (this.activeJitBudget) {
-      if (!this.recordJitGatewayReceipts()) {
-        this.rejectJitGatewayReceipt(generation, pending);
-        return;
-      }
-    }
     const errorMessage = typeof message?.errorMessage === "string" && message.errorMessage.trim()
       ? normalizeProviderHTTPErrorMessage(message.errorMessage)
       : undefined;
@@ -1639,7 +1423,6 @@ export class PiMonoAdapter implements HarnessAdapter {
         retryable: !["authentication", "provider_setup_needed", "quota_exceeded"].includes(this.providerFailureCode),
       }) : new Error(errorMessage));
       this.providerFailureCode = undefined;
-      this.clearJitUsage();
       this.eventHandler = null;
       this.toolExecutor = null;
       return;
@@ -1653,11 +1436,6 @@ export class PiMonoAdapter implements HarnessAdapter {
     // snake_case "tool_use". Check both for robustness.
     const stopReason = message?.stopReason;
     if (stopReason === "toolUse" || stopReason === "tool_use") {
-      if (this.activeJitBudget && this.activeJitUsage
-        && this.activeJitUsage.attempts >= this.activeJitBudget.maxProviderAttempts) {
-        this.rejectJitAttemptBudget(generation, pending);
-        return;
-      }
       // The continuation's text opens a new provider iteration. If text was
       // already forwarded this prompt, the two sides must not render as one
       // run-on line — the next text delta carries the separator.
@@ -1680,7 +1458,6 @@ export class PiMonoAdapter implements HarnessAdapter {
       this.activePromptGeneration = 0;
       this.activePublicWebTurn = null;
       pending.reject(new Error(controlFailure));
-      this.clearJitUsage();
       this.eventHandler = null;
       this.toolExecutor = null;
       return;
@@ -1708,30 +1485,22 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     // Extract usage
     const usage = message?.usage;
-    const jitUsage = this.activeJitUsage;
-    const costUsd = jitUsage ? (jitUsage.costUsd ?? 0) : (usage?.cost?.total ?? 0);
+    const costUsd = usage?.cost?.total ?? 0;
 
     const result: PromptResult = {
       text,
       sessionId: pending.sessionId,
       costUsd,
-      inputTokens: jitUsage?.input ?? usage?.input ?? 0,
-      outputTokens: jitUsage?.output ?? usage?.output ?? 0,
-      cacheReadTokens: jitUsage?.cacheRead ?? usage?.cacheRead ?? 0,
-      cacheWriteTokens: jitUsage?.cacheWrite ?? usage?.cacheWrite ?? 0,
-      ...(jitUsage ? {
-        jitCostStatus: jitUsage.costUsd === null ? "unknown" : "estimated",
-        jitEstimatedCostUsd: jitUsage.costUsd,
-        jitProviderAttempts: jitUsage.providerAttempts,
-        jitReceiptAttemptIDs: [...jitUsage.receiptAttemptIDs],
-      } : {}),
+      inputTokens: usage?.input ?? 0,
+      outputTokens: usage?.output ?? 0,
+      cacheReadTokens: usage?.cacheRead ?? 0,
+      cacheWriteTokens: usage?.cacheWrite ?? 0,
     };
 
     // Resolve + clear the in-flight state
     this.pendingRequests.delete(generation);
     this.activePromptGeneration = 0;
     pending.resolve(result);
-    this.clearJitUsage();
 
     this.eventHandler = null;
     this.toolExecutor = null;
@@ -1792,37 +1561,10 @@ function relayReasoningEffort(metadata: Record<string, unknown> | undefined): st
   return raw === "adaptive" || raw === "fast" ? raw : undefined;
 }
 
-function relayJitBudget(metadata: Record<string, unknown> | undefined): PiJitBudget | undefined {
-  const value = metadata?.jitBudget;
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const budget = value as Record<string, unknown>;
-  const strings = ["contractVersion", "executionID"];
-  if (!strings.every((key) => typeof budget[key] === "string" && (budget[key] as string).length > 0)) {
-    return undefined;
-  }
-  const numbers = [
-    "maxProviderAttempts",
-    "maxOutputTokensPerAttempt",
-    "maxNormalizedInputTokensPerAttempt",
-    "maxEstimatedSpendMicroUSD",
-  ];
-  if (!numbers.every((key) => Number.isSafeInteger(budget[key]) && Number(budget[key]) > 0)) return undefined;
-  return {
-    contractVersion: budget.contractVersion as string,
-    executionID: budget.executionID as string,
-    maxProviderAttempts: Number(budget.maxProviderAttempts),
-    maxOutputTokensPerAttempt: Number(budget.maxOutputTokensPerAttempt),
-    maxNormalizedInputTokensPerAttempt: Number(budget.maxNormalizedInputTokensPerAttempt),
-    maxEstimatedSpendMicroUSD: Number(budget.maxEstimatedSpendMicroUSD),
-  };
-}
-
 export function toolProjectionFromMetadata(metadata: Record<string, unknown> | undefined): {
   surfaceKind?: string;
   chatFirstUi: boolean;
   controlGeneration: number | null;
-  jitKnowledgeToolsEnabled: boolean;
-  jitProactivity: boolean;
 } {
   const generation = Number(metadata?.chatFirstControlGeneration);
   const typedSurface = metadata?.surfaceKind === "main_chat"
@@ -1834,20 +1576,15 @@ export function toolProjectionFromMetadata(metadata: Record<string, unknown> | u
     && metadata?.chatFirstUi === true
     && Number.isSafeInteger(generation)
     && generation >= 0;
-  const jitProactivity = relayJitBudget(metadata) !== undefined;
   return typedSurface
     ? {
         surfaceKind: typedSurface,
         chatFirstUi: enabled,
         controlGeneration: enabled ? generation : null,
-        jitKnowledgeToolsEnabled: metadata?.jitKnowledgeToolsEnabled === true,
-        jitProactivity,
       }
     : {
         chatFirstUi: false,
         controlGeneration: null,
-        jitKnowledgeToolsEnabled: metadata?.jitKnowledgeToolsEnabled === true,
-        jitProactivity,
       };
 }
 
@@ -1926,7 +1663,6 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
           capabilityRef: context.toolCapabilityRef,
           requestId: context.requestId,
           reasoningEffort: relayReasoningEffort(context.metadata),
-          jitBudget: relayJitBudget(context.metadata),
           builtInToolPolicy: context.builtInToolPolicy,
         }
       );
@@ -1938,10 +1674,6 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         outputTokens: result.outputTokens,
         cacheReadTokens: result.cacheReadTokens,
         cacheWriteTokens: result.cacheWriteTokens,
-        jitCostStatus: result.jitCostStatus,
-        jitEstimatedCostUsd: result.jitEstimatedCostUsd,
-        jitProviderAttempts: result.jitProviderAttempts,
-        jitReceiptAttemptIDs: result.jitReceiptAttemptIDs,
         providerTargets: [...providerTargets],
         modelsUsed: [...modelsUsed],
         adapterSessionId: result.sessionId,

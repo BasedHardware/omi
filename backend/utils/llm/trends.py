@@ -1,3 +1,4 @@
+from utils.generated_compute import generated_compute_allowed
 from typing import Any, List, Optional, cast
 from pydantic import BaseModel, Field
 
@@ -34,6 +35,8 @@ class ExpectedOutput(BaseModel):
 
 
 def trends_extractor(uid: str, transcript_segments: List[TranscriptSegment], person_ids: List[str]) -> List[Item]:
+    if not generated_compute_allowed(uid, 'trends'):
+        return []
     people: list[Person] = []
     if person_ids:
         people_data: list[PersonRecord] = users_db.get_people_by_ids(uid, list(set(person_ids)))

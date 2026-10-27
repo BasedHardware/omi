@@ -7,8 +7,8 @@ payloads. The Firestore transaction in ``database/smart_merge.py`` calls
 precondition is checked against current data, not the caller's snapshot.
 
 Partition, exclusions and gap arithmetic follow the sync bridge
-(``utils/sync/assignment.compatible_capture`` / ``auto_mergeable`` and
-``utils/conversation_continuity``) so the two merge paths agree on what a
+(``utils/sync/live_overlap.compatible_capture`` / ``assignment.auto_mergeable`` and
+``models/conversation_continuity``) so the two merge paths agree on what a
 device partition and a user-managed row are.
 """
 
@@ -37,6 +37,7 @@ from config.conversation_smart_merge import (
 )
 from utils.conversations.smart_merge_state import Fragment
 from utils.conversations.wake_word import find_wake_word_matches
+from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 
 SMART_MERGE_FIELD = 'smart_merge'
@@ -53,6 +54,7 @@ _USER_MANAGED_FLAGS = (
     'has_photos',
     'is_locked',
     'manual_speaker_assignments',
+    'has_transcript_corrections',
     'capture_group',
 )
 
@@ -60,7 +62,6 @@ _USER_MANAGED_FLAGS = (
 class SkipReason:
     """Bounded reasons a pair never reaches Jev (metric label values)."""
 
-    UID_NOT_ALLOWED = 'uid_not_allowed'
     NOT_ELIGIBLE_SOURCE = 'not_eligible_source'
     NOT_CAPTURE_END = 'not_capture_end'
     CONVERSATION_NOT_ELIGIBLE = 'conversation_not_eligible'
@@ -107,9 +108,17 @@ def refresh_owed(row: Mapping[str, Any]) -> bool:
     return refreshed_revision(row) < revision(row)
 
 
-def partition(row: Mapping[str, Any]) -> tuple[Any, Any, bool]:
-    """Unknown device is its own partition, never a wildcard (same rule as sync)."""
-    return (row.get('source'), row.get('client_device_id'), bool(row.get('is_locked')))
+def partition(row: Mapping[str, Any]) -> tuple[Any, Any, bool, Any]:
+    """Unknown device is its own partition, never a wildcard (same rule as sync).
+
+    So is an estimated-clock run: its recorded gap to any other row is fiction.
+    """
+    return (
+        row.get('source'),
+        row.get('client_device_id'),
+        bool(row.get('is_locked')),
+        row.get(SYNC_CLOCK_RUN_FIELD),
+    )
 
 
 def user_managed(row: Mapping[str, Any]) -> bool:
@@ -267,6 +276,7 @@ def new_conversation_skip(
         row.get('status') != 'completed'
         or row.get('deleted')
         or row.get('discarded')
+        or row.get('processing_deferred')
         or smart_merge_state(row)
         or (row.get('sync_merged_from') and not smart_merge_flatten_enabled())
         or not segments
@@ -285,7 +295,7 @@ def predecessor_status_skip(row: Mapping[str, Any]) -> Optional[str]:
     """Checks that need only the projected metadata row."""
     if row.get('deleted') or row.get('discarded') or is_donor(row):
         return SkipReason.PREDECESSOR_NOT_COMPLETED
-    if row.get('status') != 'completed':
+    if row.get('status') != 'completed' or row.get('processing_deferred'):
         return SkipReason.PREDECESSOR_NOT_COMPLETED
     if row.get('uses_custom_stt'):
         return SkipReason.REFRESH_UNAVAILABLE

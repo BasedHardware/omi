@@ -10,7 +10,6 @@ from unittest.mock import patch
 
 import pytest
 
-from utils import executors
 from utils.executors import (
     MonitoredThreadPoolExecutor,
     _background_tasks,
@@ -28,24 +27,35 @@ _test_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="test")
 _test_ctxvar = contextvars.ContextVar("test_key", default=None)
 
 
-def test_shadow_pool_is_lazy_propagates_context_and_shuts_down_with_registered_pools(monkeypatch):
-    monkeypatch.setattr(executors, '_jev_shadow_executor', None)
-    monkeypatch.setattr(executors, '_ALL_EXECUTORS', [])
-    assert executors._ALL_EXECUTORS == []
-    pool = executors.get_jev_shadow_executor()
-    assert executors.get_jev_shadow_executor() is pool
-    assert pool._max_workers == 10 and executors._ALL_EXECUTORS == [pool]
-    token = _test_ctxvar.set('shadow-context')
-    try:
-        future = submit_with_context(pool, lambda: (_test_ctxvar.get(), threading.current_thread().name))
-        value, thread = future.result(timeout=2)
-        assert value == 'shadow-context' and thread.startswith('jev-shadow')
-    finally:
-        _test_ctxvar.reset(token)
-        executors.shutdown_executors()
-        pool.shutdown(wait=True)
-    with pytest.raises(RuntimeError, match='shutdown'):
-        pool.submit(lambda: None)
+@pytest.mark.asyncio
+async def test_cancelled_db_call_never_starts_late_post_commit_io(monkeypatch):
+    from utils import executors
+
+    started = asyncio.Event()
+    release = threading.Event()
+    called = []
+    loop = asyncio.get_running_loop()
+
+    async def provider():
+        called.append('provider')
+
+    def late_commit():
+        loop.call_soon_threadsafe(started.set)
+        assert release.wait(10)
+        assert executors.after_db_call(provider)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(executors, 'db_executor', pool)
+        task = asyncio.create_task(run_blocking(pool, late_commit))
+        try:
+            await asyncio.wait_for(started.wait(), 5)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        finally:
+            release.set()
+        await run_blocking(pool, lambda: None)
+    assert not called
 
 
 @pytest.mark.asyncio
@@ -198,6 +208,7 @@ def test_get_executor_metrics_returns_all_pools():
     assert len(metrics) == len(_ALL_EXECUTORS)
     names = {m['name'] for m in metrics}
     expected = {
+        'quiet_replay',
         'critical',
         'db',
         'llm',
@@ -208,6 +219,7 @@ def test_get_executor_metrics_returns_all_pools():
         'storage',
         'speaker_tag_verify',
         'cimd',
+        'open_loops',
     }
     assert names == expected
 
@@ -282,16 +294,23 @@ async def test_start_background_task_tracks_and_removes():
     assert task not in _background_tasks
 
 
-def test_submit_with_context_defers_destructive_operation_fence_without_traceback(caplog):
-    """A live account gate refuses the write. That is not a background crash."""
+@pytest.fixture
+def destructive_operation_error():
+    # Dependency initialization is setup, outside the fast-unit call budget.
     from database.legal_holds import DestructiveOperationInProgress
 
+    return DestructiveOperationInProgress
+
+
+def test_submit_with_context_defers_destructive_operation_fence_without_traceback(caplog, destructive_operation_error):
+    """A live account gate refuses the write. That is not a background crash."""
+
     def blocked():
-        raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+        raise destructive_operation_error('external data write blocked by destructive operation')
 
     with caplog.at_level(logging.INFO, logger='utils.executors'):
         future = submit_with_context(_test_executor, blocked)
-        with pytest.raises(DestructiveOperationInProgress):
+        with pytest.raises(destructive_operation_error):
             future.result(timeout=2)
         time.sleep(0.05)
 
@@ -461,3 +480,94 @@ async def test_log_executor_health_swallows_exceptions(caplog):
             except asyncio.CancelledError:
                 pass
     assert call_count == 2, f"Expected 2 calls before cancel, got {call_count}"
+
+
+def test_task_gauges_include_queued_cancelled_and_failed_work():
+    from utils.executors import EXECUTOR_ACTIVE, EXECUTOR_QUEUED
+
+    pool = MonitoredThreadPoolExecutor('test-task-gauges', max_workers=1, max_queue_size=1)
+    started, release = threading.Event(), threading.Event()
+
+    def record_moment():
+        started.set()
+        release.wait(5)
+        raise ValueError('fixture failure')
+
+    active = EXECUTOR_ACTIVE.labels(executor=pool.name, task='record_moment')
+    queued = EXECUTOR_QUEUED.labels(executor=pool.name, task='record_moment')
+    try:
+        first = pool.submit(record_moment)
+        assert started.wait(2)
+        second = pool.submit(record_moment)
+        assert active._value.get() == 1
+        assert queued._value.get() == 1
+        assert second.cancel()
+        assert queued._value.get() == 0
+        release.set()
+        with pytest.raises(ValueError):
+            first.result(2)
+        assert active._value.get() == 0
+    finally:
+        release.set()
+        pool.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_backpressure_waits_for_capacity_and_preserves_work():
+    pool = MonitoredThreadPoolExecutor('test-backpressure', max_workers=1, max_queue_size=0, wait_on_saturation=True)
+    release, started = threading.Event(), threading.Event()
+
+    def hold():
+        started.set()
+        release.wait(5)
+
+    try:
+        first = pool.submit(hold)
+        assert started.wait(2)
+        waiting = asyncio.create_task(run_blocking(pool, lambda: 42))
+        await asyncio.sleep(0.06)
+        assert not waiting.done()
+        assert pool._work_queue.qsize() == 0
+        release.set()
+        assert await asyncio.wait_for(waiting, 2) == 42
+        first.result(2)
+    finally:
+        release.set()
+        pool.shutdown()
+
+
+def test_lifecycle_pool_isolation_and_shadow_rollback(monkeypatch):
+    from utils.executors import lifecycle_executor, postprocess_executor
+
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'off')
+    assert lifecycle_executor('test-account', episode=True) is postprocess_executor
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'shadow')
+    assert lifecycle_executor('test-account', episode=True) is postprocess_executor
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    episode = lifecycle_executor('test-account', episode=True)
+    postprocess = lifecycle_executor('test-account')
+    assert episode is not postprocess
+    assert (episode._max_workers, episode.max_queue_size) == (2, 8)
+    assert (postprocess._max_workers, postprocess.max_queue_size) == (24, 96)
+
+
+def test_cancelled_queue_payloads_do_not_escape_the_bound():
+    pool = MonitoredThreadPoolExecutor('test-cancel-bound', max_workers=1, max_queue_size=1)
+    release, started = threading.Event(), threading.Event()
+
+    def hold():
+        started.set()
+        release.wait(5)
+
+    try:
+        running = pool.submit(hold)
+        assert started.wait(2)
+        for _ in range(100):
+            queued = pool.submit(lambda: None)
+            assert queued.cancel()
+            assert pool._work_queue.qsize() == 0
+        release.set()
+        running.result(2)
+    finally:
+        release.set()
+        pool.shutdown()

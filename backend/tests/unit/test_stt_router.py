@@ -83,7 +83,11 @@ def test_success_charges_media_duration_even_without_transcript(monkeypatch, met
     fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
     response = _upload(_make_client(monkeypatch, fake))
     assert response.status_code == 200
-    record.assert_called_once_with(_UID, transcription_seconds=10)
+    record.assert_called_once_with(
+        _UID,
+        transcription_seconds=10,
+        usage_metadata={'funding': 'omi', 'provider': 'parakeet', 'source': 'parakeet_proxy'},
+    )
     assert allowance.call_args_list == [call(_UID, source=None, byok_active=False)] * 2
 
 
@@ -360,6 +364,17 @@ def test_success_passthrough(monkeypatch):
     assert call['data'] == {'diarize': 'true'}
 
 
+def test_upstream_request_time_is_attributed_to_app_proxy(monkeypatch):
+    from prometheus_client import REGISTRY
+
+    labels = {'caller': 'app_proxy', 'route': 'v2'}
+    before = REGISTRY.get_sample_value('omi_parakeet_request_seconds_count', labels) or 0.0
+    fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
+    response = _upload(_make_client(monkeypatch, fake))
+    assert response.status_code == 200
+    assert REGISTRY.get_sample_value('omi_parakeet_request_seconds_count', labels) == before + 1
+
+
 def test_diarize_false_forwarded(monkeypatch):
     fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
     client = _make_client(monkeypatch, fake)
@@ -525,7 +540,11 @@ def test_real_probe_rewinds_upload_for_provider(monkeypatch, metering):
     fake = _FakeSttClient(response=_FakeResponse(json_data={'text': 'ok'}))
     assert _upload(_make_client(monkeypatch, fake), content=body).status_code == 200
     assert fake.calls[0]['files']['file'][1] == body
-    metering[1].assert_called_once_with(_UID, transcription_seconds=2)
+    metering[1].assert_called_once_with(
+        _UID,
+        transcription_seconds=2,
+        usage_metadata={'funding': 'omi', 'provider': 'parakeet', 'source': 'parakeet_proxy'},
+    )
 
 
 async def test_child_probe_suppresses_native_playlist_logs_without_changing_parent():

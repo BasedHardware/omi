@@ -1,0 +1,7 @@
+{
+  "version": "0.12.543",
+  "date": "2026-10-26",
+  "changes": [
+    "Fixed browser control failing with \"unsupported protocol version\" by updating the bundled Playwright MCP server"
+  ]
+}

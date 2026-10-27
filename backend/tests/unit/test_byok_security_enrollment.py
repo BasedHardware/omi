@@ -179,6 +179,8 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
         monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
 
+        monkeypatch.setattr(users.users_db, 'get_user_valid_subscription', lambda *a, **k: None)
+
         response = users.get_user_subscription_endpoint(
             request=Request({'type': 'http', 'headers': []}), uid='validated-byok-user'
         )
@@ -243,7 +245,7 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(enforcement, 'get_byok_key', lambda _provider: None)
         monkeypatch.setattr(enforcement, 'is_marketplace_reviewer', lambda _uid: False)
         monkeypatch.setattr(enforcement, 'is_trial_paywalled', lambda *_args, **_kwargs: False)
-        monkeypatch.setattr(enforcement.users_db, 'get_user_valid_subscription', lambda _uid: paid)
+        monkeypatch.setattr(enforcement.users_db, 'get_user_valid_subscription', lambda _uid, **kwargs: paid)
         monkeypatch.setattr(users, 'get_monthly_usage_for_subscription', lambda _uid: {'transcription_seconds': used})
         monkeypatch.setattr(users, 'resolve_transcription_allowance', enforcement.resolve_transcription_allowance)
         # A divergent free-tier overlay must not replace the actual paid budget.
@@ -407,8 +409,12 @@ class TestBYOKMiddlewareValidation:
         assert response.status_code == 403
         assert not called
 
-    def test_mismatched_keys_reach_byok_recovery_routes_without_keys(self, monkeypatch):
-        from utils.byok import BYOKMiddleware, get_byok_keys
+    @pytest.mark.parametrize(
+        'path', ['/v1/users/me/subscription', '/v1/payments/available-plans', '/v1/users/budget-choice']
+    )
+    @pytest.mark.parametrize('header', ['X-BYOK-OpenAI', 'X-BYOK-Deepgram'])
+    def test_mismatched_keys_reach_byok_recovery_routes_without_keys(self, monkeypatch, path, header):
+        from utils.byok import BYOKMiddleware, get_byok_keys, get_byok_key
 
         async def run_blocking(_executor, function, *args):
             if function.__name__ == 'verify_token':
@@ -418,12 +424,13 @@ class TestBYOKMiddlewareValidation:
         monkeypatch.setattr('utils.byok.run_blocking', run_blocking)
         middleware = BYOKMiddleware(MagicMock())
         request = self._request(
-            {'Authorization': 'Bearer token', 'X-BYOK-OpenAI': 'sk-invalid'},
-            path='/v1/users/me/subscription',
+            {'Authorization': 'Bearer token', header: 'invalid-key'},
+            path=path,
         )
 
         async def call_next(_request):
             assert get_byok_keys() == {}
+            assert get_byok_key('deepgram') is None
             return 'recovery'
 
         assert __import__('asyncio').run(middleware.dispatch(request, call_next)) == 'recovery'

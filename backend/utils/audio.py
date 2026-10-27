@@ -7,6 +7,17 @@ from typing import Deque, Optional, Tuple
 MAX_RING_BUFFER_SAMPLE_RATE = 48000
 
 
+class ExtractedPCM(bytes):
+    """PCM bytes plus a count of samples restored at known full-span ends."""
+
+    restored_samples: int
+
+    def __new__(cls, pcm: bytearray, restored_samples: int) -> 'ExtractedPCM':
+        result = super().__new__(cls, pcm)
+        result.restored_samples = restored_samples
+        return result
+
+
 class AudioRingBuffer:
     """Circular buffer storing last N seconds of PCM16 mono audio.
 
@@ -101,6 +112,19 @@ class AudioRingBuffer:
         back_ts, back_bytes, _ = self._spans[-1]
         return (front_ts, back_ts + back_bytes / self.bytes_per_second)
 
+    def _byte_window(self, lo: float, hi: float, span_start: float, span_bytes: int) -> tuple[int, int, int]:
+        offset = int((lo - span_start) * self.bytes_per_second)
+        offset -= offset % 2
+        end_offset = int((hi - span_start) * self.bytes_per_second)
+        old_length = ((end_offset - offset) // 2) * 2
+        # An exact stored span end names its physical byte count. Subtracting
+        # epoch floats and truncating can otherwise discard a whole sample.
+        # Interior ends keep the existing floor; no tolerance or padding.
+        if hi == span_start + span_bytes / self.bytes_per_second:
+            end_offset = span_bytes
+        length = ((end_offset - offset) // 2) * 2
+        return offset, length, max(0, length - old_length) // 2
+
     def extract(self, start_ts: float, end_ts: float) -> Optional[bytes]:
         """Extract the audio overlapping ``[start_ts, end_ts)`` by walking the span ledger.
 
@@ -113,22 +137,15 @@ class AudioRingBuffer:
         if not self._spans:
             return None
         result = bytearray()
+        restored_samples = 0
         for span_start_ts, n_bytes, start_abs in self._spans:
             span_end_ts = span_start_ts + n_bytes / self.bytes_per_second
             lo = max(start_ts, span_start_ts)
             hi = min(end_ts, span_end_ts)
             if hi <= lo:
                 continue
-            lo_off = int((lo - span_start_ts) * self.bytes_per_second)
-            hi_off = int((hi - span_start_ts) * self.bytes_per_second)
-            # Align the start to the PCM16 2-byte sample boundary. lo is an
-            # arbitrary float timestamp, so lo_off is odd roughly half the
-            # time; an odd offset begins the copy on a sample's high byte and
-            # byte-shifts every int16 sample into noise. Flooring to an even
-            # offset is what keeps whole samples intact.
-            lo_off -= lo_off % 2
-            # Ensure even number of bytes (PCM16)
-            length = ((hi_off - lo_off) // 2) * 2
+            lo_off, length, restored = self._byte_window(lo, hi, span_start_ts, n_bytes)
+            restored_samples += restored
             if length <= 0:
                 continue
             src = (start_abs + lo_off) % self.capacity
@@ -140,7 +157,7 @@ class AudioRingBuffer:
                 result += self.buffer[: length - first]
         if not result:
             return None
-        return bytes(result)
+        return ExtractedPCM(result, restored_samples)
 
     def proven_byte_ranges(self, start_ts: float, end_ts: float) -> list[tuple[int, int]]:
         """Physical PCM positions intersecting a window; timestamps cannot invent bytes.
@@ -154,9 +171,7 @@ class AudioRingBuffer:
             lo, hi = max(cursor, span_start), min(end_ts, span_start + n_bytes / self.bytes_per_second)
             if hi <= lo:
                 continue
-            offset = int((lo - span_start) * self.bytes_per_second)
-            offset -= offset % 2
-            length = ((int((hi - span_start) * self.bytes_per_second) - offset) // 2) * 2
+            offset, length, _ = self._byte_window(lo, hi, span_start, n_bytes)
             if length > 0:
                 result.append((start_abs + offset, start_abs + offset + length))
                 cursor = hi

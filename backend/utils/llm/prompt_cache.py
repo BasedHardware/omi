@@ -1,4 +1,8 @@
-"""Shared explicit prompt-cache primitives for the GPT-5.6 family.
+"""Shared prompt-cache markings for agent harnesses and gateway providers.
+
+The gateway translates these same boundaries into Vertex cachedContents, with
+owner isolation and model-specific thresholds. The helpers below retain the
+OpenAI-compatible wire contract for existing callers.
 
 The provider only serves a cache READ from a prefix that ends on a message
 boundary or on an explicit ``prompt_cache_breakpoint``. A prompt whose stable
@@ -151,14 +155,15 @@ def bind_explicit_cache(runnable: Any, *, cache_key: str | None = None) -> Any:
     return runnable.bind(**params)
 
 
-def prefix_cache_key(namespace: str, stable_text: str) -> str:
+def prefix_cache_key(namespace: str, stable_text: str, *, owner_uid: str | None = None) -> str:
     """Routing key derived from the prefix bytes themselves.
 
     Same bytes -> same key, so two callers that build an identical prefix land
     on the same cache entry, and an edit to the prefix can never route onto the
     entry its previous wording wrote. Carries no prompt content.
     """
-    return f'{namespace}-{hashlib.sha256(stable_text.encode("utf-8")).hexdigest()[:32]}'
+    identity = stable_text if owner_uid is None else f'{len(owner_uid)}:{owner_uid}{stable_text}'
+    return f'{namespace}-{hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]}'
 
 
 def content_parts_with_breakpoint(stable_text: str, volatile_text: str) -> list[dict[str, Any]]:
@@ -226,3 +231,20 @@ def marked_prefix_request(namespace: str, stable_text: str, volatile_text: str) 
         return None, None
     parts = content_parts_with_breakpoint(stable_text, volatile_text)
     return prefix_cache_key(namespace, stable_text), [{'role': 'user', 'content': parts}]
+
+
+def chat_cache_options():
+    """Chat TTL config is constrained to the gateway/provider's supported contract."""
+    import os
+
+    ttl = os.getenv('OMI_CHAT_PROMPT_CACHE_TTL', '30m')
+    if ttl != '30m':
+        import logging
+        from utils.observability.fallback import record_fallback
+
+        logging.getLogger(__name__).warning('Unsupported chat cache TTL; explicit caching disabled')
+        record_fallback(
+            component='other', from_mode='explicit_cache', to_mode='none', reason='other', outcome='degraded'
+        )
+        return None
+    return {'mode': 'explicit', 'ttl': ttl}

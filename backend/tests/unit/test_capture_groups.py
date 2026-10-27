@@ -6,6 +6,7 @@ after the first write fail exactly as they would in production.
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -139,6 +140,37 @@ def test_pair_founds_a_group_with_independent_id_and_longest_primary(store):
     assert store.rows[path('pendant')]['capture_group']['revision'] == 1
 
 
+def test_legacy_call_group_is_readable_and_never_relinked_or_migrated(store):
+    members = [
+        {'id': 'desktop', 'source': 'desktop', 'started_at': T0, 'finished_at': T0 + timedelta(seconds=600)},
+        {'id': 'pendant', 'source': 'omi', 'started_at': T0, 'finished_at': T0 + timedelta(seconds=300)},
+        {'id': 'extra', 'source': 'omi', 'started_at': T0, 'finished_at': T0 + timedelta(seconds=100)},
+    ]
+    legacy_group = {
+        'id': 'stored-call-group',
+        'kind': 'desktop_pendant_call',
+        'primary_id': 'desktop',
+        'revision': 4,
+        'members': members,
+    }
+    store.rows.update(
+        {
+            path(member['id']): row(member['id'], member['source'], capture_group=deepcopy(legacy_group))
+            for member in members
+        }
+    )
+    before = deepcopy(store.rows)
+
+    assert groups_db.join_capture_group(UID, 'desktop', 'pendant', evidence()) is None
+    assert store.rows == before
+    assert groups_db.leave_capture_group(UID, 'extra', sticky=False) is True
+    retained = store.rows[path('desktop')]['capture_group']
+    assert retained['id'] == 'stored-call-group'
+    assert retained['kind'] == 'desktop_pendant_call'
+    assert retained['primary_id'] == 'desktop'
+    assert {member['id'] for member in retained['members']} == {'desktop', 'pendant'}
+
+
 def test_third_capture_joins_through_a_member_and_primary_moves_without_new_id(store):
     store.rows.update(
         {
@@ -231,12 +263,20 @@ def test_delete_conversation_leaves_its_group_first(monkeypatch):
     fake_ref = MagicMock()
     fake_ref.collections.return_value = []
     fake_db = MagicMock()
-    fake_db.collection.return_value.document.return_value.collection.return_value.document.return_value = fake_ref
+    overlay_ref = MagicMock()
+    owner = fake_db.collection.return_value.document.return_value
+    captures, overlays = MagicMock(), MagicMock()
+    captures.document.return_value = fake_ref
+    overlays.document.return_value = overlay_ref
+    owner.collection.side_effect = lambda name: {'conversations': captures, 'transcript_corrections': overlays}.get(
+        name, MagicMock()
+    )
     monkeypatch.setattr(conversations_db, 'db', fake_db)
     monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda *a: None)
     conversations_db.delete_conversation(UID, 'desktop')
     assert calls == [((UID, 'desktop'), {'sticky': False, 'close': True, 'firestore_client': fake_db})]
     fake_ref.delete.assert_called_once()
+    overlay_ref.delete.assert_called_once()
 
 
 def test_processing_writes_never_clobber_membership(monkeypatch):
@@ -296,29 +336,6 @@ def test_confirmed_overlap_is_grouped_and_linked(store, seam):
     assert desktop['external_data']['duplicate_capture_of'] == 'pendant'
     assert desktop['capture_group'] == pendant['capture_group']
     assert ('capture_group_joined', 'applied') in seam
-
-
-def test_shadow_enabled_keeps_grouping_unchanged(store, seam, monkeypatch):
-    monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
-    shadow_pairs = []
-    monkeypatch.setattr(policy, 'submit_same_scene', lambda *args: shadow_pairs.append(args))
-    monkeypatch.setattr(policy, 'submit_resummary', lambda *args: None)
-    store.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
-    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('desktop')]))
-    assert store.rows[path('desktop')]['capture_group'] == store.rows[path('pendant')]['capture_group']
-    assert shadow_pairs
-
-
-def test_later_capture_join_submits_resummary_with_existing_primary(store, seam, monkeypatch):
-    submitted = []
-    monkeypatch.setattr(policy, 'submit_same_scene', lambda *args: None)
-    monkeypatch.setattr(policy, 'submit_resummary', lambda *args: submitted.append(args))
-    store.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
-    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('desktop')]))
-    store.rows[path('late')] = row('late', 'phone', 150, 580)
-    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('late')]))
-    assert (UID, 'pendant', 'late') in submitted
-    assert store.rows[path('late')]['capture_group'] == store.rows[path('pendant')]['capture_group']
 
 
 def test_window_overlap_without_shared_speech_is_linked_but_not_grouped(store, seam):
@@ -430,8 +447,6 @@ def test_separate_route_is_sticky_and_idempotent(monkeypatch):
         lambda uid, cid: {'id': cid, 'capture_group': {'members': [{'id': cid}, {'id': 'pendant'}]}},
     )
     calls = []
-    outcomes = []
-    monkeypatch.setattr(router, 'record_capture_outcome', lambda *args, **kwargs: outcomes.append((args, kwargs)))
     results = iter([True, False])
     monkeypatch.setattr(
         router.conversations_db, 'leave_capture_group', lambda *a, **kw: calls.append((a, kw)) or next(results)
@@ -439,4 +454,46 @@ def test_separate_route_is_sticky_and_idempotent(monkeypatch):
     assert router.separate_conversation_from_capture_group('desktop', uid=UID).status == 'ok'
     assert router.separate_conversation_from_capture_group('desktop', uid=UID).status == 'unchanged'
     assert calls[0] == ((UID, 'desktop'), {'sticky': True})
-    assert outcomes == [((UID, 'separate', ['desktop', 'pendant']), {'separated_id': 'desktop'})]
+
+
+@pytest.mark.parametrize('stale_external', [None, {}, {'integration': 'kept'}])
+def test_from_segments_repersist_keeps_the_link_written_during_processing(store, seam, monkeypatch, stale_external):
+    # from-segments: process_conversation links the upload, then the router merges its
+    # pre-link in-memory conversation (external_data None for a desktop upload) again.
+    store.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('desktop')]))
+    linked = deepcopy(store.rows[path('desktop')]['external_data'])
+    assert linked['duplicate_capture_of'] == 'pendant'
+    monkeypatch.setattr(conversations_db, 'db', store)
+    original_set = StrictFirestoreTransaction.set
+
+    def merge_set(self, ref, data, merge=False):
+        # Top-level merge: a dumped external_data replaces the stored map, the worst case.
+        return original_set(self, ref, {**store.rows.get(ref.path, {}), **data} if merge else data)
+
+    monkeypatch.setattr(StrictFirestoreTransaction, 'set', merge_set)
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(conversations_db, '_reapply_current_manual_assignments', lambda *a: None)
+    stale = {
+        'id': 'desktop',
+        'status': 'completed',
+        'data_protection_level': 'standard',
+        'external_data': deepcopy(stale_external),
+        'structured': {'title': 'x'},
+    }
+    assert conversations_db.persist_processing_result_with_lifecycle(UID, stale)
+    external = store.rows[path('desktop')]['external_data']
+    assert {key: external[key] for key in groups_db.DUPLICATE_HINT_FIELDS} == {
+        key: linked[key] for key in groups_db.DUPLICATE_HINT_FIELDS
+    }
+    assert external.get('integration') == (stale_external or {}).get('integration')
+    assert store.rows[path('desktop')]['structured'] == {'title': 'x'}
+
+
+def test_hint_preservation_leaves_writes_without_external_data_alone():
+    write = {'id': 'desktop'}
+    groups_db.preserve_duplicate_hint(write, {'external_data': {'duplicate_capture_of': 'pendant'}})
+    assert write == {'id': 'desktop'}
+    write = {'external_data': None}
+    groups_db.preserve_duplicate_hint(write, {'external_data': {}})
+    assert write == {'external_data': None}

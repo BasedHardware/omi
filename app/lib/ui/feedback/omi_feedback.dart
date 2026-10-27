@@ -47,14 +47,29 @@ abstract final class OmiFeedback {
   /// bar, and the chat bar on Home). The shell sets this in `initState` and clears it in `dispose`;
   /// it is ignored whenever another route is on top.
   static double Function(BuildContext context)? bottomClearance;
+  static int _infoOwners = 0;
+
+  /// A guided surface renders explanatory notices itself. The release is
+  /// idempotent so disposing that surface always restores normal info feedback.
+  static VoidCallback ownInfoFeedback() {
+    _infoOwners++;
+    var released = false;
+    return () {
+      if (released) return;
+      released = true;
+      _infoOwners--;
+    };
+  }
 
   /// Confirms something the reader just did. 1.5 s.
   static void confirm(BuildContext context, String message) =>
       _show(context, message, kind: OmiFeedbackKind.confirm, duration: OmiFeedbackTiming.confirm);
 
   /// Tells the reader something they did not directly cause. 4 s.
-  static void info(BuildContext context, String message) =>
-      _show(context, message, kind: OmiFeedbackKind.info, duration: OmiFeedbackTiming.info);
+  static void info(BuildContext context, String message) {
+    if (_infoOwners > 0) return;
+    _show(context, message, kind: OmiFeedbackKind.info, duration: OmiFeedbackTiming.info);
+  }
 
   /// Reports a failure. Stays 8 s with a close button, or until [onAction] ("Try Again").
   static void error(BuildContext context, String message, {String? actionLabel, VoidCallback? onAction}) => _show(

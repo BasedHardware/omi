@@ -15,7 +15,7 @@ import typer
 from rich.markup import escape
 
 from omi_cli import config as cfg
-from omi_cli.errors import UsageError
+from omi_cli.errors import CliError, UsageError
 from omi_cli.json_input import load_json_input
 from omi_cli.local_client import existing_path
 
@@ -207,7 +207,7 @@ def delete_task(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete task {task_id}?", abort=True)
+        typer.confirm(f"Delete task {task_id}?", abort=True, err=ctx.renderer.json_mode)
     _emit_tool(ctx, "delete_task", {"task_id": task_id}, success=f"Deleted task [bold]{escape(task_id)}[/bold].")
 
 
@@ -379,7 +379,16 @@ def _normalize_screen_search(result: Any, arguments: Mapping[str, Any]) -> Any:
     app_filter = arguments.get("app_filter")
     limit = int(arguments.get("limit") or 15)
 
-    if result.startswith("No matching screen-history results") or result.startswith("No screen history is available"):
+    # Desktop's emptySemanticSearchMessage (ChatToolExecutor.swift) formats four
+    # no-hit messages: no history captured, screenshots not indexed yet, no matches
+    # among indexed frames, and no matches when reading index stats failed.
+    if result.startswith(
+        (
+            "No matching screen-history results",
+            "No screen history is available",
+            "No screenshots found matching ",
+        )
+    ) or (result.startswith("Omi has ") and "not ready to search yet" in result):
         suggestions = [
             "Try a broader query",
             "Increase --days",
@@ -399,8 +408,10 @@ def _normalize_screen_search(result: Any, arguments: Mapping[str, Any]) -> Any:
 
     results: list[dict[str, Any]] = []
     current: Optional[dict[str, Any]] = None
+    # Desktop labels each hit with its similarity score (Gemini route) or with how it
+    # matched: "hybrid: keyword|vector|both" (on-device route), "match: text" (text fallback).
     result_line = re.compile(
-        r"^\s*(\d+)\. \[(.*?)\] (.*?)(?: - (.*?))? \(screenshot_id: (\d+), similarity: ([0-9.]+)\)$"
+        r"^\s*(\d+)\. \[(.*?)\] (.*?)(?: - (.*?))? \(screenshot_id: (\d+), (?:similarity: ([0-9.]+)|\w+: (\w+))\)$"
     )
     for line in result.splitlines():
         match = result_line.match(line)
@@ -411,7 +422,8 @@ def _normalize_screen_search(result: Any, arguments: Mapping[str, Any]) -> Any:
                 "app_name": match.group(3),
                 "window_title": match.group(4) or None,
                 "screenshot_id": int(match.group(5)),
-                "similarity": float(match.group(6)),
+                "similarity": float(match.group(6)) if match.group(6) else None,
+                "matched_by": match.group(7),
             }
             results.append(current)
             continue
@@ -460,7 +472,14 @@ def _add_exact_screen_fallback(
         "ORDER BY timestamp DESC "
         f"LIMIT {limit}"
     )
-    fallback = _normalize_sql_result(client.call_tool("execute_sql", {"query": sql}))
+    try:
+        raw_fallback = client.call_tool("execute_sql", {"query": sql})
+    except CliError as exc:
+        fallback: Any = {"error": exc.message}
+        if exc.detail:
+            fallback["detail"] = exc.detail
+    else:
+        fallback = _normalize_sql_result(raw_fallback)
     next_payload["exact_fallback"] = {
         "query": sql,
         "source": "app_window_ocr_sql",
@@ -491,6 +510,13 @@ def _decode_base64_payload(value: str) -> bytes:
     payload = value
     if "," in payload and payload.lstrip().startswith("data:"):
         payload = payload.split(",", 1)[1]
+    # Drop ASCII whitespace before validating. Line-wrapped base64 is ordinary
+    # output - it is what base64.encodebytes and most MIME encoders produce -
+    # but validate=True rejects every character outside the alphabet, newlines
+    # included, so a correct payload would otherwise be refused as corrupt.
+    # Stripping only whitespace keeps validate=True strict about everything
+    # else, which is what catches a truncated or non-base64 screenshot.
+    payload = "".join(payload.split())
     try:
         return base64.b64decode(payload, validate=True)
     except (binascii.Error, ValueError) as exc:

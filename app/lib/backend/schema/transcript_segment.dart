@@ -15,6 +15,7 @@ class TranscriptSegment {
   late int idx;
 
   String text;
+  String? originalText;
   String? speaker;
   late int speakerId;
   bool isUser;
@@ -31,6 +32,7 @@ class TranscriptSegment {
   TranscriptSegment({
     required this.id,
     required this.text,
+    this.originalText,
     required this.speaker,
     required this.isUser,
     required this.personId,
@@ -67,6 +69,7 @@ class TranscriptSegment {
     return TranscriptSegment(
       id: generated.id ?? '',
       text: generated.text,
+      originalText: generated.originalText,
       speakerId: generated.speakerId,
       speaker: generated.speaker ?? 'SPEAKER_00',
       isUser: generated.isUser,
@@ -84,6 +87,7 @@ class TranscriptSegment {
     return wire.GeneratedTranscriptSegment(
       id: id,
       text: text,
+      originalText: originalText,
       speaker: speaker,
       speakerId: speakerId,
       isUser: isUser,
@@ -202,19 +206,25 @@ class TranscriptSegment {
     includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
     for (final segment in segments) {
       final timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
-      buffer.write('$timestampStr ${names.forSegment(segment)}: ${segment.text.trim()} ');
+      final name = names.forSegment(segment);
+      final label = name.isEmpty ? '' : '$name: ';
+      buffer.write('$timestampStr $label${segment.text.trim()} ');
       buffer.write('\n\n');
     }
     return buffer.toString().trim();
   }
 
+  /// Whether no segment starts or ends after a later one: the pairwise check
+  /// `a.start > b.end || a.end > b.start` for every earlier `a`, in one pass
+  /// against the largest earlier start and end (opening a 1,200-line
+  /// conversation used to cost 720k pair comparisons on the UI isolate).
   static bool canDisplaySeconds(List<TranscriptSegment> segments) {
-    for (var i = 0; i < segments.length; i++) {
-      for (var j = i + 1; j < segments.length; j++) {
-        if (segments[i].start > segments[j].end || segments[i].end > segments[j].start) {
-          return false;
-        }
-      }
+    var maxStart = double.negativeInfinity;
+    var maxEnd = double.negativeInfinity;
+    for (final segment in segments) {
+      if (maxStart > segment.end || maxEnd > segment.start) return false;
+      if (segment.start > maxStart) maxStart = segment.start;
+      if (segment.end > maxEnd) maxEnd = segment.end;
     }
     return true;
   }

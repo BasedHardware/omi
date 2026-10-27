@@ -1,5 +1,6 @@
 from config.proactivity_v2 import producer_for
 from database.proactivity import metric_verdict
+from tests.support.synthetic_proactivity_producers import synthetic_producers  # noqa: F401
 
 
 def test_maturity_sample_cost_and_unknown_guards():

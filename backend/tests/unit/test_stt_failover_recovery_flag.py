@@ -328,7 +328,7 @@ async def test_off_429_records_failure_on_releases(monkeypatch):
     circuit = streaming._circuit_for_primary(STTService.modulate)
     recorded: list[bool] = []
     released: list[bool] = []
-    monkeypatch.setattr(circuit, 'record_failure', lambda: recorded.append(True))
+    monkeypatch.setattr(circuit, 'record_failure', lambda **kw: recorded.append(True))
     monkeypatch.setattr(circuit, 'release_probe', lambda: released.append(True))
     monkeypatch.setattr(circuit, 'allow_request', lambda **kw: True)
 
@@ -361,7 +361,7 @@ async def test_on_429_releases_probe(monkeypatch):
     circuit = streaming._circuit_for_primary(STTService.modulate)
     recorded: list[bool] = []
     released: list[bool] = []
-    monkeypatch.setattr(circuit, 'record_failure', lambda: recorded.append(True))
+    monkeypatch.setattr(circuit, 'record_failure', lambda **kw: recorded.append(True))
     monkeypatch.setattr(circuit, 'release_probe', lambda: released.append(True))
     monkeypatch.setattr(circuit, 'allow_request', lambda **kw: True)
 
@@ -777,7 +777,7 @@ async def test_off_chain_429_walks_to_capable_provider_without_backoff(monkeypat
 
 
 def test_terminal_after_text_gated_by_pin(monkeypatch):
-    counter = live_metrics.LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider='soniox')
+    counter = live_metrics.LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider='soniox', demand_cohort='ineligible')
     before = counter._value.get()
     monkeypatch.delenv(ENV, raising=False)
     runtime_off = _runtime(delivered=True, terminal=True)

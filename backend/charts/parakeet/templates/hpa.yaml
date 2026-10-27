@@ -51,7 +51,7 @@ spec:
           type: AverageValue
           averageValue: "{{ .Values.autoscaling.requestsPerPod }}"
     {{- end }}
-    {{- if .Values.autoscaling.targetGPUUtilization }}
+    {{- if and .Values.autoscaling.targetGPUUtilization (not .Values.autoscaling.demand.enabled) }}
     - type: External
       external:
         metric:
@@ -60,7 +60,7 @@ spec:
           type: Value
           value: "{{ .Values.autoscaling.targetGPUUtilization }}"
     {{- end }}
-    {{- if .Values.autoscaling.requestLatencyP99 }}
+    {{- if and .Values.autoscaling.requestLatencyP99 (not .Values.autoscaling.workloadOnly) (not .Values.autoscaling.demand.enabled) }}
     - type: External
       external:
         metric:
@@ -68,5 +68,16 @@ spec:
         target:
           type: Value
           value: "{{ .Values.autoscaling.requestLatencyP99 }}"
+    {{- end }}
+    {{- if .Values.autoscaling.demand.enabled }}
+    {{- range $lane, $target := dict "live" .Values.autoscaling.demand.liveQueueAgeSeconds "backfill" .Values.autoscaling.demand.backfillQueueAgeSeconds }}
+    - type: Pods
+      pods:
+        metric:
+          name: parakeet_{{ $lane }}_queue_age_seconds
+        target:
+          type: AverageValue
+          averageValue: "{{ $target }}"
+    {{- end }}
     {{- end }}
 {{- end }}

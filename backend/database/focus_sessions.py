@@ -21,9 +21,17 @@ def _user_col(uid: str, collection: str) -> Any:
     return db.collection('users').document(uid).collection(collection)
 
 
-def _typed_doc(doc: Any) -> Dict[str, Any]:
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+def _typed_doc(doc: Any) -> Optional[Dict[str, Any]]:
+    doc_id = getattr(doc, 'id', 'unknown')
+    try:
+        raw: object = doc.to_dict()
+    except Exception as exc:
+        logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
+        return None
+    if not isinstance(raw, dict) or not raw:
+        logger.warning("Skipping malformed focus session %s: EmptyOrNonDictDocument", doc_id)
+        return None
+    return cast(Dict[str, Any], raw)
 
 
 def create_focus_session(uid: str, status: str, app_or_site: str, description: str, **kwargs: Any) -> Dict[str, Any]:
@@ -95,6 +103,11 @@ def _normalize_focus_session_doc(doc_id: str, data: Dict[str, Any]) -> Dict[str,
     }
 
 
+#: Upper bound on stored rows one read may walk while refilling a page around
+#: poison documents. Matches the history cap ``get_focus_stats`` already reads.
+_MAX_FOCUS_SESSION_SCAN_ROWS = 5000
+
+
 def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
     col = _user_col(uid, 'focus_sessions')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
@@ -105,11 +118,40 @@ def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, o
         query = query.where(filter=FieldFilter('created_at', '>=', day_start))
         query = query.where(filter=FieldFilter('created_at', '<', day_end))
 
-    query = query.offset(offset).limit(limit)
+    # Skipped poison rows used to shrink the page without saying so: a caller
+    # asking for `limit` rows got fewer, and the rows that fell off the end were
+    # never returned by a later `offset` page. Scan forward until the page is
+    # full or the collection is exhausted, so `offset` keeps counting stored
+    # rows while callers still receive `limit` readable ones.
     items: List[Dict[str, Any]] = []
-    for doc in query.stream():
-        data = _typed_doc(doc)
-        items.append(_normalize_focus_session_doc(doc.id, data))
+    window = max(limit, 1)
+    cursor = max(offset, 0)
+    scanned = 0
+
+    while len(items) < limit and scanned < _MAX_FOCUS_SESSION_SCAN_ROWS:
+        page = list(query.offset(cursor).limit(window).stream())
+        if not page:
+            break
+        scanned += len(page)
+        cursor += len(page)
+
+        for doc in page:
+            raw = _typed_doc(doc)
+            if raw is None:
+                continue
+
+            doc_id = getattr(doc, 'id', 'unknown')
+            try:
+                items.append(_normalize_focus_session_doc(str(doc_id), raw))
+            except Exception as exc:
+                logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
+                continue
+            if len(items) >= limit:
+                break
+
+        if len(page) < window:
+            break
+
     return items
 
 

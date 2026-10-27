@@ -1,6 +1,14 @@
 name: Backend Hermetic E2E
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   pull_request:
     branches: main
   push:
@@ -16,8 +24,27 @@ permissions:
   issues: read
 
 concurrency:
-  group: backend-hermetic-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  # PRs cancel their own older runs. Main pushes share one ref-keyed group
+  # with cancel-in-progress false: the running gauntlet finishes and only the
+  # newest pending main SHA runs next, so a burst of merges no longer queues
+  # a full superseded suite for every intermediate SHA. The daily cron,
+  # manual dispatches and merge-queue attempts keep per-run groups: sharing
+  # the push group would let a cron evict the newest pending push run (or a
+  # push evict the day's gauntlet), and a cancelled push check fails
+  # scripts/pre_push_ci_verified.py for that SHA.
+  group: backend-hermetic-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || (github.event_name == 'push' && github.ref) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Abort a stalled git HTTP transfer instead of hanging. Hosted-runner fetches
+  # from github.com intermittently stop receiving data for 7-10 minutes before
+  # the connection resets (Backend Hermetic E2E run 39435458398 spent 498 s in
+  # "Checkout code" and hit its 10-minute cap). With these set, git aborts any
+  # transfer that stays under 1 KB/s for 60 s, and actions/checkout retries the
+  # fetch (its built-in 3 attempts); a healthy depth-1 fetch takes ~20 s.
+  # Applies to every git network call in the workflow, including script steps.
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   scope:
@@ -33,14 +60,16 @@ jobs:
     # diffs against the live base SHA.
     timeout-minutes: 10
     outputs:
-      applies: ${{ steps.scope.outputs.applies }}
-      full_ci: ${{ steps.scope.outputs.full_ci }}
-      run_listen: ${{ steps.scope.outputs.run_listen }}
-      run_sync: ${{ steps.scope.outputs.run_sync }}
+      applies: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.scope.outputs.applies) }}
+      full_ci: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.scope.outputs.full_ci) }}
+      run_listen: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.scope.outputs.run_listen) }}
+      run_sync: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.scope.outputs.run_sync) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        timeout-minutes: 5
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
           filter: blob:none
 
@@ -105,7 +134,7 @@ jobs:
           else
             echo "run_listen=false" >> "$GITHUB_OUTPUT"
           fi
-          if [[ "$EVENT_NAME" == 'merge_group' || "$EVENT_NAME" == 'push' ]] || grep -Eq '^(backend/(utils/cloud_tasks|routers/.*(task|sync)|testing/e2e/|scripts/.*(cloud_tasks|sync)|pylock)|package(-lock)?\.json$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then
+          if [[ "$EVENT_NAME" == 'merge_group' || "$EVENT_NAME" == 'push' ]] || grep -Eq '^(backend/(utils/cloud_tasks|utils/batch_pipeline/|diarizer/|routers/.*(task|sync)|testing/(e2e|sync_cloud_tasks_stack)/|scripts/.*(cloud_tasks|sync)|pylock)|package(-lock)?\.json$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then
             echo "run_sync=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_sync=false" >> "$GITHUB_OUTPUT"
@@ -114,13 +143,21 @@ jobs:
   hermetic-e2e:
     name: Hermetic Backend E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 10 minutes for setup + tests, plus the 5-minute checkout backstop below,
+    # so a slow-but-recovering checkout no longer eats the test budget.
+    timeout-minutes: 15
     needs: scope
     if: needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
+        # Healthy checkout is ~25 s. The workflow-level GIT_HTTP_LOW_SPEED_*
+        # env aborts a stalled fetch after 60 s so checkout's own retry runs;
+        # this caps the worst case (3 stalled attempts plus backoff).
+        timeout-minutes: 5
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -169,6 +206,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
+        timeout-minutes: 5
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -260,6 +300,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
+        timeout-minutes: 5
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -336,11 +379,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: scope
-    if: needs.scope.outputs.applies == 'true' && (github.event_name == 'push' || github.event_name == 'schedule')
+    if: needs.scope.outputs.applies == 'true' && (inputs.nightly_main_sha != '' || github.event_name == 'push' || github.event_name == 'schedule')
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
+        timeout-minutes: 5
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -492,7 +538,7 @@ jobs:
   post-merge-failure-issues:
     name: Post-merge hermetic failure issues
     needs: [scope, hermetic-e2e, listen-pusher-stack-gauntlet, sync-cloud-tasks-stack-gauntlet, replay-harness-phase0a-gauntlet]
-    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    if: ${{ always() && inputs.nightly_main_sha == '' && (github.event_name == 'push' || github.event_name == 'schedule') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -1,11 +1,12 @@
 """Review v1 wire contract shared with the mobile client."""
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal, Optional, get_args
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator, model_serializer
 
-from models.dream_edit import Edit, Term
+from models.dream_edit import Edit, MemoryHygieneEdit, Term
+from models.agent_edit import HarnessEdit
 
 EntityType = Literal['person', 'organization', 'project']
 ReviewKind = Literal['speaker', 'task', 'same_person', 'spelling']
@@ -71,35 +72,107 @@ class SamePersonItem(BaseModel):
     reason: str
 
 
-class SpellingItem(BaseModel):
+class SpellingContextSegment(BaseModel):
+    text: str
+    speaker_label: Optional[str] = None
+    is_user: bool = False
+
+
+class SpellingContext(BaseModel):
+    conversation_title: str
+    conversation_date: Optional[datetime] = None
+    segments: list[SpellingContextSegment] = Field(min_length=1, max_length=3)
+    main_index: int = Field(ge=0, le=2)
+    quote_start: Optional[int] = Field(default=None, ge=0, description='Inclusive UTF-16 offset in the main segment.')
+    quote_end: Optional[int] = Field(default=None, ge=0, description='Exclusive UTF-16 offset in the main segment.')
+
+
+class SpellingQuestionPayload(BaseModel):
     term_id: str
     options: list[str] = Field(min_length=2, max_length=3)
     allow_custom: bool
 
 
+class SpellingItem(SpellingQuestionPayload):
+    context: Optional[SpellingContext] = Field(
+        default=None, description='Server-computed surrounding speech for this question.'
+    )
+
+
 class AgentProposalItem(BaseModel):
     target_label: str = ''
     other_label: Optional[str] = None
+    # Validated full fact contents for hygiene proposals so approval surfaces
+    # show the real row, not the 180-character label prefix. None = not sent.
+    target_content: Optional[str] = None
+    other_content: Optional[str] = None
+    # Retain the existing wire arm: older mobile decoders read `edit` and its
+    # string kind, and would drop proposals sent under a new sibling arm.
     edit: Optional[Edit] = None
+    operation: Optional[HarnessEdit | MemoryHygieneEdit] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def additive_operation(cls, value):
+        if not isinstance(value, dict):
+            return value
+        value = dict(value)
+        edit = value.get('operation') or value.get('edit')
+        payload = edit.model_dump() if isinstance(edit, BaseModel) else edit
+        if payload and (
+            isinstance(edit, (HarnessEdit, MemoryHygieneEdit))
+            or payload.get('kind') not in get_args(Edit.model_fields['kind'].annotation)
+        ):
+            value['operation'] = edit
+            kind = payload['kind']
+            legacy = {
+                'retire_memory': 'memory',
+                'supersede_memory': 'memory',
+                'dismiss_person': 'merge_people',
+                'merge_tasks': 'retire_task',
+                'merge_conversations': 'overview',
+                'set_language': 'overview',
+            }.get(kind, kind)
+            # Preserve the released response branch and enum. Rich new operation
+            # data is additive; acceptance resolves the server-owned operation.
+            mirror = {key: payload[key] for key in Edit.model_fields if key in payload}
+            mirror['kind'] = legacy
+            mirror['other'] = mirror.get('other', '') if legacy in {'merge_people', 'merge_memories'} else ''
+            if legacy in {'overview', 'title'}:
+                mirror['target'] = payload['target'].split('#')[0]
+                mirror['evidence'] = [mirror['target']]
+                mirror['before'] = ''
+                mirror['after'] = payload.get('after') or payload['reason'][:1000]
+            value['edit'] = mirror
+        return value
+
     vocabulary: Optional[Term] = None
+
+    @model_serializer(mode='wrap')
+    def preserve_existing_wire(self, handler):
+        data = handler(self)
+        for field in ('target_content', 'other_content', 'operation'):
+            if getattr(self, field) is None:
+                data.pop(field, None)
+        return data
 
     @model_validator(mode='after')
     def single_operation(self):
-        if (self.edit is not None) + (self.vocabulary is not None) != 1:
+        if sum(item is not None for item in (self.edit, self.vocabulary)) != 1:
             raise ValueError('Exactly one agent operation is required')
         return self
 
 
-class ReviewItem(BaseModel):
+class ReviewQuestionBase(BaseModel):
+    """Shared question payload, without choosing a legacy or Dream evidence contract."""
+
     item_id: str
     kind: ReviewKind
     title: str
-    quote: Optional[str] = None
     created_at: datetime
     speaker: Optional[SpeakerItem] = None
     task: Optional[TaskItem] = None
     same_person: Optional[SamePersonItem] = None
-    spelling: Optional[SpellingItem] = None
 
     @model_validator(mode='after')
     def matching_payload(self):
@@ -109,11 +182,22 @@ class ReviewItem(BaseModel):
         return self
 
 
+class ReviewQuestionPayload(ReviewQuestionBase):
+    spelling: Optional[SpellingQuestionPayload] = None
+
+
+class ReviewItem(ReviewQuestionBase):
+    spelling: Optional[SpellingItem] = None
+    quote: Optional[str] = None
+    source_ref: Optional[str] = None
+
+
 class ReviewItemV2(BaseModel):
     item_id: str
     kind: ReviewKindV2
     title: str
     quote: Optional[str] = None
+    source_ref: Optional[str] = None
     created_at: datetime
     speaker: Optional[SpeakerItem] = None
     task: Optional[TaskItem] = None
@@ -226,6 +310,30 @@ class ChangeRef(BaseModel):
     label: str
 
 
+class ReviewChangeDiff(BaseModel):
+    """Bounded before/after excerpt. Released clients ignore this object.
+
+    ``group_key`` is stable for the same term change across conversations so a
+    client can group by change, by conversation, or by term.
+    """
+
+    target_label: Optional[str] = Field(default=None, max_length=180)
+    field: Optional[str] = Field(default=None, max_length=64)
+    before: Optional[str] = Field(default=None, max_length=500)
+    after: Optional[str] = Field(default=None, max_length=500)
+    context_before: Optional[str] = Field(default=None, max_length=120)
+    context_after: Optional[str] = Field(default=None, max_length=120)
+    occurrences: Optional[int] = Field(default=None, ge=0, le=10000)
+    source_title: Optional[str] = Field(default=None, max_length=200)
+    source_started_at: Optional[datetime] = None
+    group_key: Optional[str] = Field(default=None, max_length=128)
+
+    @model_serializer(mode='wrap')
+    def omit_empty(self, handler):
+        data = handler(self)
+        return {key: value for key, value in data.items() if value is not None}
+
+
 class ReviewChange(BaseModel):
     change_id: str
     kind: Literal[
@@ -234,9 +342,27 @@ class ReviewChange(BaseModel):
     title: str
     reason: Optional[str] = None
     snippet: Optional[str] = None
+    edit_kind: Optional[str] = Field(default=None, max_length=64)
+    before: Optional[str] = Field(default=None, max_length=4000)
+    after: Optional[str] = Field(default=None, max_length=4000)
+    context: Optional[SpellingContext] = None
     refs: list[ChangeRef] = Field(default_factory=list)
     created_at: datetime
     undone: bool = False
+    diff: Optional[ReviewChangeDiff] = Field(
+        default=None,
+        description=(
+            'Optional before/after excerpt with surrounding context. '
+            'Released clients ignore it. Never a whole transcript.'
+        ),
+    )
+
+    @model_serializer(mode='wrap')
+    def omit_empty_diff(self, handler):
+        data = handler(self)
+        if data.get('diff') is None:
+            data.pop('diff', None)
+        return data
 
 
 class ReviewChangesResponse(BaseModel):

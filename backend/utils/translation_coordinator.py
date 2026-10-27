@@ -31,14 +31,18 @@ from utils.translation import (
 )
 from utils.translation_core.metrics import get_translation_metrics
 from config.translation import (
+    TranslationProvider,
     resolve_ondemand_config,
     resolve_translation_profile,
-    translation_profile_gate_enabled,
     viewed_translation_profile,
 )
 from utils.translation_core.planner import TranslationMode
 from utils.translation_demand import DemandPolicy, TranslationDemand
-from utils.translation_language import detect_language_with_confidence, expected_foreign_language
+from utils.translation_language import (
+    NLLB_SUPPORTED_TARGET_LANGUAGES,
+    detect_language_with_confidence,
+    expected_foreign_language,
+)
 from utils.executors import db_executor, sync_executor, run_blocking
 from utils.translation_cache import ConversationLanguageState, should_persist_translation, _normalize_base_language  # type: ignore[reportPrivateUsage]  # internal helper, intentional cross-module use
 
@@ -166,6 +170,7 @@ class TranslationCoordinator:
         self._result_context: dict[tuple[str, str], tuple[str, str, object | None]] = {}
         self._decision_metrics = get_translation_metrics()
         self._conversation_id: Optional[str] = None
+        self._unsupported_target_logged = False
 
         self._segment_states: Dict[str, SegmentState] = {}
         self._version_counter = 0
@@ -197,9 +202,23 @@ class TranslationCoordinator:
 
     def _admission(self) -> DemandPolicy:
         config = resolve_ondemand_config()
-        if self.realtime_interpreter or not config.gate_enabled or not config.admits(self.uid) or self.demand is None:
+        if self.realtime_interpreter or not config.gate_enabled or self.demand is None:
             return DemandPolicy.legacy_unknown
-        return self.demand.snapshot(lease_v1_enabled=config.lease_v1_enabled).policy
+        return self.demand.snapshot().policy
+
+    def _target_language_supported(self) -> bool:
+        """Whether the active provider lane can serve this session's target.
+
+        The viewed policy is Luna-only and serves any target; every other lane
+        dispatches to the session service's primary provider, and an NLLB
+        primary rejects targets outside NLLB_SUPPORTED_TARGET_LANGUAGES with a
+        400 on every call.
+        """
+        if self.target_base in NLLB_SUPPORTED_TARGET_LANGUAGES:
+            return True
+        if self._admission() == DemandPolicy.viewed:
+            return True
+        return self.translation_service.primary_provider() != TranslationProvider.nllb
 
     def result_context(self, segment_id: str, conversation_id: str) -> tuple[str, str, object | None] | None:
         return self._result_context.get((conversation_id, segment_id))
@@ -222,6 +241,17 @@ class TranslationCoordinator:
             removed_ids: Segment IDs that were removed (merged away).
             conversation_id: Current conversation ID.
         """
+        if updated_segments and not self._target_language_supported():
+            self._decision_metrics.decision(self.target_language, 'skip', 'unsupported_target')
+            if not self._unsupported_target_logged:
+                logger.warning(
+                    'Skipping live translation for this session: target language %r is not supported'
+                    ' by the NLLB provider chain',
+                    self.target_language,
+                )
+                self._unsupported_target_logged = True
+            return
+
         if not self._active and not self._flushing:
             return
 
@@ -277,11 +307,7 @@ class TranslationCoordinator:
         state.latest_text = text
         state.last_update_at = now
 
-        foreign_clause = (
-            expected_foreign_language(new_text, self.target_language, self.expected_languages)
-            if translation_profile_gate_enabled()
-            else None
-        )
+        foreign_clause = expected_foreign_language(new_text, self.target_language, self.expected_languages)
         skip_mono = (
             self.language_state.observe_detection(foreign_clause, 1.0, speaker_id=segment.speaker_id)
             if foreign_clause
@@ -333,7 +359,7 @@ class TranslationCoordinator:
         text_hash = hashlib.md5(text.encode()).hexdigest()
         cached = (
             None
-            if self._admission() == DemandPolicy.viewed and resolve_ondemand_config().gemini_enabled
+            if self._admission() == DemandPolicy.viewed
             else await run_blocking(
                 db_executor,
                 self.translation_service.get_cached_translation,
@@ -408,7 +434,7 @@ class TranslationCoordinator:
         state.committed_text = text
         text_hash = hashlib.md5(text.encode()).hexdigest()
         config = resolve_ondemand_config()
-        if self._admission() == DemandPolicy.viewed and config.gemini_enabled:
+        if self._admission() == DemandPolicy.viewed:
             await run_blocking(
                 db_executor,
                 self.translation_service.set_negative_cache,
@@ -505,7 +531,7 @@ class TranslationCoordinator:
         if admission in {DemandPolicy.hidden, DemandPolicy.lease_expired, DemandPolicy.closed}:
             return
         config = resolve_ondemand_config()
-        viewed = admission == DemandPolicy.viewed and config.gemini_enabled
+        viewed = admission == DemandPolicy.viewed
         if viewed and not config.spend_configured:
             self._decision_metrics.decision(self.target_language, 'defer', 'budget_denied')
             return
@@ -558,9 +584,8 @@ class TranslationCoordinator:
             current_config = resolve_ondemand_config()
             if (
                 not current_config.gate_enabled
-                or not current_config.admits(self.uid)
                 or self.demand is None
-                or self.demand.snapshot(lease_v1_enabled=current_config.lease_v1_enabled).policy != DemandPolicy.viewed
+                or self.demand.snapshot().policy != DemandPolicy.viewed
             ):
                 await run_blocking(db_executor, release_translation, reservation, 0)
                 self._decision_metrics.decision(self.target_language, 'defer', 'no_demand')

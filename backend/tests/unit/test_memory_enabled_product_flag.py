@@ -39,7 +39,7 @@ def test_retired_aliases_do_not_enable_memory():
 def test_dev_and_prod_overlays_pin_memory_enabled_on():
     import yaml
 
-    composed = yaml.safe_load((BACKEND / "deploy/runtime_env.yaml").read_text(encoding="utf-8"))
+    composed = yaml.load((BACKEND / "deploy/runtime_env.yaml").read_text(encoding="utf-8"), Loader=yaml.CSafeLoader)
     dev = composed["environments"]["dev"]
     prod = composed["environments"]["prod"]
 
@@ -53,13 +53,9 @@ def test_dev_and_prod_overlays_pin_memory_enabled_on():
     ):
         assert "MEMORY_MODE" not in env_map and "MEMORY_V3_GET_ENABLED" not in env_map, scope
         assert _value(env_map, "MEMORY_ENABLED") == "on", scope
-        assert _value(env_map, "MEMORY_CANONICAL_MAINTENANCE_ENABLED") in {"", "false"}
+        assert "MEMORY_CANONICAL_MAINTENANCE_ENABLED" not in env_map, scope
 
-    dev_job = dev["cloud_run"]["jobs"]["memory-maintenance-job"]["env"]
-    assert "MEMORY_MODE" not in dev_job and "MEMORY_V3_GET_ENABLED" not in dev_job
-    assert _value(dev_job, "MEMORY_ENABLED") == "on"
-    assert _value(dev_job, "MEMORY_CANONICAL_MAINTENANCE_ENABLED") == "true"
-    assert _value(dev_job, "MEMORY_CANONICAL_MAINTENANCE_FLEX") == "true"
+    assert "memory-maintenance-job" not in dev["cloud_run"]["jobs"]
 
     for scope, env_map in (
         ("prod/gke/backend-listen", prod["gke"]["backend-listen"]["env"]),
@@ -69,19 +65,15 @@ def test_dev_and_prod_overlays_pin_memory_enabled_on():
         # next deploy cannot silently pause fleet memory writes again.
         assert "MEMORY_MODE" not in env_map and "MEMORY_V3_GET_ENABLED" not in env_map, scope
         assert _value(env_map, "MEMORY_ENABLED") == "on", scope
-        assert _value(env_map, "MEMORY_CANONICAL_MAINTENANCE_ENABLED") in {"", "false"}
+        assert "MEMORY_CANONICAL_MAINTENANCE_ENABLED" not in env_map, scope
 
-    prod_job = prod["cloud_run"]["jobs"]["memory-maintenance-job"]["env"]
-    assert "MEMORY_MODE" not in prod_job and "MEMORY_V3_GET_ENABLED" not in prod_job
-    assert _value(prod_job, "MEMORY_ENABLED") == "on"
-    assert _value(prod_job, "MEMORY_CANONICAL_MAINTENANCE_ENABLED") == "true"
-    assert _value(prod_job, "MEMORY_CANONICAL_MAINTENANCE_FLEX") == "true"
+    assert "memory-maintenance-job" not in prod["cloud_run"]["jobs"]
 
 
 def test_memory_enabled_on_does_not_require_maintenance():
     from scripts.runtime_env_validation import manifest as validator
 
-    errors = validator._validate_memory_maintenance_job_contract(
+    errors = validator._validate_memory_job_retirement(
         "dev",
         validator._load_yaml(validator.DEFAULT_MANIFEST)["environments"]["dev"],
     )

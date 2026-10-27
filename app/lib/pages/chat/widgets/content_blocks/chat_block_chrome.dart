@@ -4,8 +4,8 @@ import 'package:omi/ui/ui.dart';
 
 /// Shared visual chrome for chat content-block components.
 ///
-/// Deliberately mirrors [ChatEvidenceReferenceCard]'s paddings, radius, and
-/// colors so structured blocks read as one family inside the transcript.
+/// Deliberately uses compact link-card paddings, radius, and colors so
+/// structured blocks read as one family inside the transcript.
 class ChatBlockCard extends StatelessWidget {
   const ChatBlockCard({
     super.key,

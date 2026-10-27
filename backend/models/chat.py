@@ -35,6 +35,30 @@ class MessageConversation(BaseModel):
     structured: MessageConversationStructured
     created_at: datetime
 
+    @classmethod
+    def safe_build_many(cls, items, on_error=None) -> list['MessageConversation']:
+        """Build members without raising on a malformed item.
+
+        Chat callers hand in memory docs as dicts, partially-filled documents,
+        or live pydantic objects, and run this AFTER the chat message is already
+        persisted — a throw there orphans the persisted id while a fresh
+        in-memory id desyncs the client. Bad members skip; ``on_error(member,
+        exc)`` is invoked per skip so drops stay visible in logs.
+        """
+        out: list['MessageConversation'] = []
+        for m in items:
+            try:
+                if isinstance(m, cls):
+                    out.append(m)
+                elif isinstance(m, dict):
+                    out.append(cls.model_validate(m))
+                else:
+                    out.append(cls.model_validate(m.model_dump() if hasattr(m, 'model_dump') else vars(m)))
+            except Exception as exc:
+                if on_error is not None:
+                    on_error(m, exc)
+        return out
+
 
 # Chat Completions `file` content parts (purpose=user_data) accept these document
 # types. Images stay on the separate vision / image_url path and are not listed here.
@@ -337,6 +361,23 @@ def chat_file_is_document(name: str, mime_type: Optional[str]) -> bool:
     return bool(mime) and mime in CHAT_FILE_DOCUMENT_MIME_TYPES
 
 
+class ChatFileVideo(BaseModel):
+    """A video attachment stored as stills (utils.media.video_frames); the clip itself is not kept.
+
+    The FileChat's own file is the overview contact sheet. The filmstrip holds every sampled
+    frame for closer looks at a time window. ``transcript`` is encrypted at rest like chat text.
+    """
+
+    duration_seconds: float
+    frame_times: List[float] = Field(default_factory=list)
+    strip_file_id: str = ''
+    strip_times: List[float] = Field(default_factory=list)
+    strip_columns: int = 0
+    strip_cell_width: int = 0
+    strip_cell_height: int = 0
+    transcript: str = ''
+
+
 class FileChat(BaseModel):
     id: str
     name: str
@@ -345,6 +386,7 @@ class FileChat(BaseModel):
     openai_file_id: str
     created_at: datetime
     thumb_name: Optional[str] = ""
+    video: Optional[ChatFileVideo] = None
 
     def is_image(self):
         return self.mime_type.startswith("image")
@@ -355,6 +397,13 @@ class FileChat(BaseModel):
     def model_dump(self, **kwargs):
         exclude_fields = {'thumb_name'}
         return super().model_dump(exclude=exclude_fields, **kwargs)
+
+    def client_dump(self) -> Dict[str, Any]:
+        """Upload response: clients get the video length, never the transcript or filmstrip ids."""
+        row = self.model_dump()
+        if self.video:
+            row['video'] = {'duration_seconds': self.video.duration_seconds}
+        return row
 
 
 class ChartDataPoint(BaseModel):

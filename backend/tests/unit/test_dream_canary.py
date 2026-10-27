@@ -1,320 +1,259 @@
-"""Real dirty hook, encrypted storage, transport lanes and canary failure attribution offline."""
+"""Synthetic canary traverses seed, tools, two verifiers and encrypted dry effects."""
 
 import asyncio
+from copy import deepcopy
 import json
 from pathlib import Path
+import re
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
 import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from llm_gateway.gateway.config_loader import load_gateway_config
-from llm_gateway.gateway.executor import ProviderRegistry, provider_request_for
-from llm_gateway.gateway.providers import VertexGeminiProvider, OpenAICompatibleChatCompletionProvider
-from llm_gateway.gateway.resolver import resolve_chat_completion_route
-from llm_gateway.gateway.vertex_wire import _vertex_request
-from llm_gateway.main import app as gateway_app
-from llm_gateway.routers import dependencies
-from config.vertex_reservations import State
-from utils.llm import vertex_pt_routing as ptr
-
-from config.dream_agent import eligible
-from database import dream_canary as storage, dream_store, conversations
-from routers import dream_sweep
+from config.dream_session import SessionLimits
+from database import dream_canary as storage, dream_store, conversations, review_store
+from models.agent_tools import VerificationBatch, Verification
 from tests.support.dream_firestore import DreamFirestore
-from tests.support.vertex_contract import assert_vertex_subset, assert_local_references
-from utils import dream_canary, dream_reads, dream_transport, dream_agent
+from tests.unit.test_dream_session import call, turn
+from utils.agent_capabilities import tools as dream_tools
+from utils import dream_canary, dream_agent, dream_seed
+from utils.agent_capabilities.evidence import EvidenceRecords
+from utils.dream_harness_transport import MAIN_LANE, VERIFY_LANE
+from utils.llm.shaped_agent import Turn
+from routers import dream_sweep
 
 UID = 'dream-canary-synthetic'
 
 
 @pytest.fixture
-def store(monkeypatch):
+def canary(monkeypatch):
     db = DreamFirestore()
-    monkeypatch.setenv('DREAM_AGENT_MODE', 'on')
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setenv('DREAM_AGENT_CANARY_UID', UID)
-    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
-    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'off')
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setattr(dream_store, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(storage, 'get_firestore_client', lambda: db)
+    monkeypatch.setattr(review_store, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(conversations, 'db', db)
     monkeypatch.setattr(conversations, 'get_firestore_client', lambda: db)
-    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *a: None)
-    monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *a: None)
-    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
-    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
-    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
+    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *args: None)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *args: None)
     monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
-    monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
-    monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
-    monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
-    monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **k: [])
+    monkeypatch.setattr(dream_store, 'demoted_types', lambda *args: set())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('synthetic', 'slot')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    ref = 'conversations/' + storage.RECORD_ID
 
-    async def post(url, **kwargs):
-        body = kwargs['json']
-        assert body['max_completion_tokens'] <= 256
-        model = body['model']
-        evidence = json.loads(body['messages'][-1]['content'])['records']
-        projected = evidence['conversations/' + storage.RECORD_ID]
-        assert 'SPEAKER_00: Robot Qorbi' in projected
-        assert 'Qorby is a misspelling of Qorbi' in projected
-        assert 'transcript_segments' not in projected
-        value = (
-            {'clusters': [{'refs': ['conversations/' + storage.RECORD_ID], 'problem': 'spelling'}]}
-            if model == dream_transport.TRIAGE_LANE
-            else {}
+    def load(uid, caps):
+        raw = db.rows[('users', uid, 'conversations', storage.RECORD_ID)]
+        row = conversations.prepare_conversation_for_read(deepcopy(raw), uid)
+        dirty = [snapshot.to_dict() for snapshot in dream_store.dirty_refs(uid)]
+        return {'targets': [ref], 'vocabulary': []}, EvidenceRecords({ref: row}), dirty, SessionLimits(edits=1)
+
+    monkeypatch.setattr(dream_seed, 'load', load)
+    monkeypatch.setattr(dream_tools, 'proposal_record', lambda uid, key, snapshot: load(uid, None)[1][key])
+    lanes = []
+
+    async def model(uid, lane, mount, messages, **kwargs):
+        lanes.append(lane)
+        if lane == MAIN_LANE:
+            return turn(
+                [
+                    call(
+                        'propose_edit',
+                        {
+                            'edit': {
+                                'kind': 'spelling',
+                                'target': ref,
+                                'before': 'Qorby',
+                                'after': 'Qorbi',
+                                'reason': 'Synthetic explicitly spelled name',
+                                'evidence': [ref],
+                            }
+                        },
+                    ),
+                    call('finish', {'summary': 'Synthetic check'}, 2),
+                ]
+            )
+        import json
+
+        batch = json.loads(messages[-1]['content'].split('\n', 1)[1])
+        return Turn(
+            tokens=10,
+            value=VerificationBatch(
+                decisions=[
+                    Verification(id=row['id'], agree=True, reason='Explicit spelling in synthetic evidence')
+                    for row in batch
+                ]
+            ),
         )
-        return httpx.Response(
-            200,
-            request=httpx.Request('POST', url),
-            json={
-                'usage': {'prompt_tokens': 30, 'completion_tokens': 20},
-                'choices': [{'message': {'content': json.dumps(value)}}],
-            },
-        )
 
-    client = type('Client', (), {'post': AsyncMock(side_effect=post)})()
-    monkeypatch.setattr(dream_transport, 'get_llm_gateway_client', lambda: client)
-    monkeypatch.setattr(dream_transport, 'get_llm_gateway_base_url', lambda: 'https://synthetic.invalid')
-    monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **k: {})
-    monkeypatch.setattr(dream_transport, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
-    return db, client
+    monkeypatch.setattr(dream_agent.dream_harness_transport, 'model_turn', model)
+
+    # Scripted turns still exercise the transport usage observer contract.
+    async def observed(uid, lane, mount, messages, **kwargs):
+        result = await model(uid, lane, mount, messages)
+        await kwargs['on_usage'](result)
+        return result
+
+    monkeypatch.setattr(dream_agent.dream_harness_transport, 'model_turn', observed)
+    return db, lanes
 
 
-def test_canary_full_loop_real_serialization_and_transport_shadow_in_on(store, caplog):
-    db, client = store
-    with caplog.at_level('INFO', logger='utils.dream_canary'):
-        result = asyncio.run(dream_canary.check())
-    assert result == {'status': 'pass', 'stage': 'report', 'error_type': 'none', 'consecutive_failures': 0}
-    calls = [call.kwargs['json']['model'] for call in client.post.call_args_list]
-    assert calls == [dream_transport.TRIAGE_LANE, dream_transport.MAIN_LANE]
-    assert dream_store.dirty_count(UID) == 0
-    doc = dream_store.own_runs(UID)[0][1]
-    assert doc['mode'] == 'shadow' and doc['tokens'] == 100
-    assert doc['records_read'] == 1 and doc['records_queued_after'] == 0
-    assert 'review_encrypted_v1' in doc['source']
-    assert db.rows[('dream_spend', doc['created_at'].date().isoformat())]['reserved_usd'] == pytest.approx(0.16)
-    assert not eligible(UID, db.rows[('users', UID)])
-    assert not dream_store.mark_dirty(UID, [('conversations', 'other')])
-    assert UID not in caplog.text and 'Qorbi' not in caplog.text
-    assert 'Dream canary status=pass stage=report error_type=none' in caplog.text
+def test_canary_deterministic_tools_real_verifier_seam_journal_undo_and_report(canary):
+    db, lanes = canary
+    result = asyncio.run(dream_canary.check())
+    assert result['status'] == 'pass', result
+    assert lanes == [VERIFY_LANE, VERIFY_LANE]
+    runs = dream_store.own_runs(UID)
+    assert len(runs) == 1 and runs[0][1]['mode'] == 'shadow'
+    assert set(runs[0][1]['source']) == {'review_encrypted_v1'}
+    decoded = review_store.decode_doc(UID, runs[0][1])['source']
+    assert decoded['outcomes'][0]['status'] == 'dry_run'
+    assert decoded['verifier_valid_responses'] == 2 and decoded['tool_counts']['propose_edit'] == 1
+    assert not any(path[2:3] in [('review_changes',), ('review_proposals',)] for path in db.rows)
+    row = conversations.prepare_conversation_for_read(db.rows[('users', UID, 'conversations', storage.RECORD_ID)], UID)
+    assert 'Qorby' in row['transcript_segments'][0]['text']
+    overlay = review_store.decode_doc(UID, db.rows[('users', UID, 'transcript_corrections', storage.RECORD_ID)])
+    assert overlay['source'][0]['undone'] is True
+    assert any(path[2:3] == ('review_changes',) for tx in db.transactions for path, _ in tx.sets)
 
 
-@pytest.mark.parametrize('stage', ['enqueue', 'admit', 'model', 'report'])
-def test_canary_failures_identify_stage_and_reset_streak(store, monkeypatch, stage):
-    db, client = store
-
-    def broken(*a, **k):
-        raise RuntimeError('private provider body')
-
-    if stage == 'enqueue':
-        monkeypatch.setattr(dream_canary.lifecycle, 'create_completed_conversation', broken)
-    elif stage == 'admit':
-        monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: None)
-    elif stage == 'model':
-        client.post.side_effect = httpx.ReadError('private provider body')
-    else:
-        monkeypatch.setattr(dream_store, 'own_run', lambda *a: None)
-    first = asyncio.run(dream_canary.check())
-    second = asyncio.run(dream_canary.check())
-    assert first['status'] == second['status'] == 'fail'
-    assert first['stage'] == second['stage'] == stage
-    assert second['consecutive_failures'] == 2
-    assert storage.record_result(True) == 0
-    assert storage.record_result(False) == 1
-    assert 'private' not in json.dumps(first)
-
-
-def test_existing_owner_is_never_overwritten(store):
-    db, client = store
-    db.rows[('users', UID)] = {'name': 'existing'}
+def test_canary_refuses_existing_unmarked_owner(canary):
+    db, lanes = canary
+    db.rows[('users', UID)] = {'name': 'existing synthetic owner'}
     result = asyncio.run(dream_canary.check())
     assert result['status'] == 'fail' and result['stage'] == 'enqueue'
-    assert db.rows[('users', UID)] == {'name': 'existing'}
-    assert not dream_store.own_runs(UID)
-    client.post.assert_not_called()
+    assert db.rows[('users', UID)] == {'name': 'existing synthetic owner'} and not lanes
 
 
-def test_canary_uses_same_oidc_guard_as_sweep(store):
+def test_canary_repeats_without_model_target_selection_or_suppression_leak(canary):
+    db, lanes = canary
+    results = [asyncio.run(dream_canary.check()) for _ in range(3)]
+    assert [result['status'] for result in results] == ['pass'] * 3
+    assert lanes == [VERIFY_LANE] * 6
+    assert len(dream_store.own_runs(UID)) == 3
+    assert not any(path[2:3] in [('review_changes',), ('review_do_not_redo',)] for path in db.rows)
+
+
+def test_verifier_disagreement_does_not_decide_pipeline_health(canary, monkeypatch):
+    _, lanes = canary
+    original = dream_agent.dream_harness_transport.model_turn
+
+    async def disagree(uid, lane, mount, messages, **kwargs):
+        result = await original(uid, lane, mount, messages, **kwargs)
+        for decision in result.value.decisions:
+            decision.agree = False
+            decision.reason = 'Synthetic semantic disagreement; the wire is healthy'
+        return result
+
+    monkeypatch.setattr(dream_agent.dream_harness_transport, 'model_turn', disagree)
+    result = asyncio.run(dream_canary.check())
+    assert result['status'] == 'pass', result
+    assert lanes == [VERIFY_LANE, VERIFY_LANE]
+
+
+def test_failed_undo_does_not_poison_next_canary(canary, monkeypatch):
+    db, _ = canary
+    original = dream_canary.review_changes.set_undone
+    monkeypatch.setattr(
+        dream_canary.review_changes,
+        'set_undone',
+        lambda *args: (_ for _ in ()).throw(RuntimeError('Synthetic failure')),
+    )
+    assert asyncio.run(dream_canary.check())['status'] == 'fail'
+    assert any(path[2:3] == ('review_changes',) for path in db.rows)
+    monkeypatch.setattr(dream_canary.review_changes, 'set_undone', original)
+    assert asyncio.run(dream_canary.check())['status'] == 'pass'
+    assert not any(path[2:3] in [('review_changes',), ('review_do_not_redo',)] for path in db.rows)
+
+
+def test_operator_env_kill_skips_without_counting_a_failure(canary, monkeypatch):
+    db, lanes = canary
+    db.rows[('dream_canary_health', 'current')] = {'canary_failures': 2}
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'false')
+    called = []
+    monkeypatch.setattr(dream_canary, 'seed', lambda uid: called.append(uid))
+    result = asyncio.run(dream_canary.check())
+    assert result == {
+        'status': 'skipped',
+        'stage': 'enqueue',
+        'error_type': 'disabled',
+        'consecutive_failures': 0,
+    }
+    assert called == [] and not lanes
+    assert db.rows[('dream_canary_health', 'current')]['canary_failures'] == 0
+
+
+def test_dynamic_kill_skips_without_counting_a_failure(canary, monkeypatch):
+    db, lanes = canary
+    db.rows[('dream_canary_health', 'current')] = {'canary_failures': 2}
+    monkeypatch.setattr('config.dream_control.allowed', lambda: False)
+    called = []
+    monkeypatch.setattr(dream_canary, 'seed', lambda uid: called.append(uid))
+    result = asyncio.run(dream_canary.check())
+    assert result['status'] == 'skipped' and result['error_type'] == 'disabled'
+    assert result['consecutive_failures'] == 0 and called == [] and not lanes
+    assert db.rows[('dream_canary_health', 'current')]['canary_failures'] == 0
+
+
+def test_missing_canary_uid_is_a_real_failure(canary, monkeypatch):
+    db, lanes = canary
+    monkeypatch.delenv('DREAM_AGENT_CANARY_UID')
+    result = asyncio.run(dream_canary.check())
+    assert result['status'] == 'fail' and result['stage'] == 'enqueue' and not lanes
+    assert result['consecutive_failures'] == 1
+    assert db.rows[('dream_canary_health', 'current')]['canary_failures'] == 1
+
+
+def test_canary_alert_counts_failures_and_ignores_skips():
+    metric = json.loads(
+        (Path(__file__).resolve().parents[2] / 'deploy/monitoring/dream-canary-failures.metric.json').read_text()
+    )
+    pattern = r'Dream canary status=fail .*consecutive_failures=([2-9]|[1-9][0-9]+)( |$)'
+    skipped = 'Dream canary status=skipped stage=enqueue error_type=disabled consecutive_failures=0'
+    failed = 'Dream canary status=fail stage=enqueue error_type=CanaryFailure consecutive_failures=2'
+    assert re.search(pattern, skipped) is None
+    assert re.search(pattern, failed)
+    assert pattern in metric['filter']
+    assert 'status=skipped' not in metric['filter']
+
+
+def test_canary_uses_scheduler_oidc_and_long_declared_deadline():
     app = FastAPI()
     app.include_router(dream_sweep.router)
-    response = TestClient(app).post('/v2/dream-agent/canary')
-    assert response.status_code == 403
-
-
-def test_scheduler_prod_and_paused_dev_auth_match_sweep():
-    root = Path(__file__).resolve().parents[3]
-    config = yaml.safe_load((root / 'backend/deploy/scheduler/jobs.yaml').read_text())
+    assert TestClient(app).post('/v2/dream-agent/canary').status_code == 403
+    config = yaml.safe_load((Path(__file__).resolve().parents[3] / 'backend/deploy/scheduler/jobs.yaml').read_text())
     prod = config['environments']['prod']['jobs']
-    sweep = next(row for row in prod if row['name'] == 'dream-agent-sweep-hourly')
     canary = next(row for row in prod if row['name'] == 'dream-agent-canary-half-hourly')
-    assert canary['schedule'] == '*/30 * * * *' and canary['state'] == 'ENABLED'
-    assert canary['target']['oidc'] == sweep['target']['oidc'] and canary['retry'] == sweep['retry']
-    assert canary['target']['uri'] == sweep['target']['uri'].replace('/sweep', '/canary')
-    dev = next(row for row in config['environments']['dev']['jobs'] if row['name'] == canary['name'])
-    assert dev['state'] == 'PAUSED'
+    sweep = next(row for row in prod if row['name'] == 'dream-agent-sweep-hourly')
+    assert canary['target']['oidc'] == sweep['target']['oidc']
+    assert int(canary['attempt_deadline'][:-1]) > dream_canary.DEADLINE_SECONDS
 
 
-@pytest.mark.parametrize('reject_vertex', [False, True])
-@pytest.mark.parametrize('oversized', [False, True])
-def test_real_canary_requests_through_gateway_vertex_contract(store, monkeypatch, capsys, reject_vertex, oversized):
-    """Seed/read/shape/transport/resolve/translate both lanes with no provider IO.
+def test_empty_verifier_decisions_are_a_healthy_non_apply(canary, monkeypatch):
+    from models.agent_tools import VerificationBatch
 
-    Reasoning's selected records depend on triage output; force a valid spelling
-    cluster rather than claiming to reproduce the lost production response.
-    """
-    db, original_client = store
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
-    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'synthetic-token')
-    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
-    monkeypatch.delenv('OMI_VERTEX_RESERVATION_STATES', raising=False)
-    monkeypatch.setattr(
-        dream_transport,
-        'llm_gateway_headers',
-        lambda **k: {
-            'Authorization': 'Bearer synthetic-token',
-            'x-omi-service-caller': 'backend',
-            'x-omi-request-id': '00000000-0000-4000-8000-000000000001',
-        },
-    )
-    requests, vertex_bodies = [], []
-    config = load_gateway_config()
-    triage = {'clusters': [{'refs': ['conversations/' + storage.RECORD_ID], 'problem': 'spelling'}]}
-    plan = {}
-    if oversized:
-        triage = {'clusters': [{'refs': ['conversations/' + storage.RECORD_ID], 'problem': 'spelling'}] * 13}
-        plan = {
-            'vocabulary': [
-                {
-                    'kind': 'jargon',
-                    'spelling': 'synthetic',
-                    'aliases': ['synthetic'] * 6,
-                    'evidence': ['conversations/' + storage.RECORD_ID] * 11,
-                }
-            ]
-            * 101
-        }
+    original = dream_agent.dream_harness_transport.model_turn
 
-    def upstream(request):
-        body = json.loads(request.content)
-        if request.url.host == 'us-central1-aiplatform.googleapis.com':
-            vertex_bodies.append(body)
-            assert request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
-            assert 'gemini-2.5-flash:generateContent' in request.url.path
-            if reject_vertex:
-                return httpx.Response(
-                    400,
-                    json={
-                        'error': {
-                            'status': 'INVALID_ARGUMENT',
-                            'message': 'The specified schema produces a constraint that has too many states for serving. '
-                            'Typical causes include long array length limits (especially when nested). private-user-content',
-                            'details': [
-                                {
-                                    '@type': 'type.googleapis.com/google.rpc.BadRequest',
-                                    'fieldViolations': [
-                                        {
-                                            'field': 'generation_config.response_json_schema.properties.private-name',
-                                            'description': 'private-user-content',
-                                        }
-                                    ],
-                                }
-                            ],
-                        }
-                    },
-                )
-            return httpx.Response(
-                200,
-                json={
-                    'candidates': [{'content': {'parts': [{'text': json.dumps(plan)}]}, 'finishReason': 'STOP'}],
-                    'usageMetadata': {'promptTokenCount': 30, 'candidatesTokenCount': 20, 'totalTokenCount': 50},
-                },
-            )
-        # Both the actual Luna triage and a recovered reasoning call run through
-        # the real OpenAI adapter. The main schema stays unchanged on fallback.
-        assert body['model'] == 'gpt-6-luna'
-        value = triage if body['response_format']['json_schema']['name'] == 'Triage' else plan
-        return httpx.Response(
-            200,
-            json={
-                'object': 'chat.completion',
-                'id': 'synthetic',
-                'model': 'gpt-6-luna',
-                'choices': [{'message': {'role': 'assistant', 'content': json.dumps(value)}, 'finish_reason': 'stop'}],
-                'usage': {'prompt_tokens': 30, 'completion_tokens': 20, 'total_tokens': 50},
-            },
-        )
+    async def empty(uid, lane, mount, messages, **kwargs):
+        result = await original(uid, lane, mount, messages, **kwargs)
+        result.value = VerificationBatch(decisions=[])
+        return result
 
-    async def run():
-        async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as provider_client:
-            vertex = VertexGeminiProvider(
-                http_client=provider_client, access_token_supplier=AsyncMock(return_value='synthetic')
-            )
-            monkeypatch.setattr(
-                vertex._reservations, 'refresh', AsyncMock(return_value={ptr.PT_MODEL_CURRENT: State.ACTIVE})
-            )
-            registry = ProviderRegistry(
-                {'gemini': vertex, 'openai': OpenAICompatibleChatCompletionProvider(http_client=provider_client)}
-            )
-            gateway_app.dependency_overrides[dependencies.get_provider_registry] = lambda: registry
-            gateway_app.dependency_overrides[dependencies.get_gateway_config] = lambda: config
-            try:
-                async with httpx.AsyncClient(
-                    transport=httpx.ASGITransport(app=gateway_app), base_url='http://synthetic'
-                ) as local:
+    monkeypatch.setattr(dream_agent.dream_harness_transport, 'model_turn', empty)
+    assert asyncio.run(dream_canary.check())['status'] == 'pass'
 
-                    async def post(url, **kwargs):
-                        requests.append(kwargs['json'])
-                        return await local.post('/v1/chat/completions', **kwargs)
 
-                    monkeypatch.setattr(
-                        dream_transport,
-                        'get_llm_gateway_client',
-                        lambda: type('Client', (), {'post': staticmethod(post)})(),
-                    )
-                    return await dream_canary.check()
-            finally:
-                gateway_app.dependency_overrides.clear()
+def test_completed_malformed_verifier_payload_is_a_healthy_non_apply(canary, monkeypatch):
+    original = dream_agent.dream_harness_transport.model_turn
 
-    result = asyncio.run(run())
-    assert result['status'] == 'pass', result
-    assert [row['model'] for row in requests] == [dream_transport.TRIAGE_LANE, dream_transport.MAIN_LANE]
-    assert len(vertex_bodies) == 1  # Triage is Luna, reasoning is reserved Gemini.
-    for request in requests:
-        assert set(request) == {'model', 'messages', 'stream', 'max_completion_tokens', 'response_format'}
-        assert request['stream'] is False and request['max_completion_tokens'] == 256
-        resolved = resolve_chat_completion_route(config, request)
-        provider_request = provider_request_for(resolved, resolved.active_route.primary)
-        payload = ptr.model_payload(_vertex_request(provider_request), ptr.PT_MODEL_CURRENT)
-        assert set(payload) == {'contents', 'systemInstruction', 'generationConfig'}
-        assert len(payload['contents']) == 1 and payload['contents'][0]['role'] == 'user'
-        assert payload['systemInstruction']['parts'][0]['text']
-        assert all(part['text'] for part in payload['contents'][0]['parts'])
-        generation = payload['generationConfig']
-        assert set(generation) == {'maxOutputTokens', 'responseMimeType', 'responseJsonSchema', 'thinkingConfig'}
-        assert generation['maxOutputTokens'] == 256
-        assert generation['thinkingConfig'] == {'thinkingBudget': 0}
-        assert generation['responseMimeType'] == 'application/json'
-        assert generation['responseJsonSchema']['type'] == 'object'
-        assert_vertex_subset(generation['responseJsonSchema'])
-        assert_local_references(generation['responseJsonSchema'])
-        assert 'maxItems' not in json.dumps(generation['responseJsonSchema'])
-        assert 'minItems' not in json.dumps(generation['responseJsonSchema'])
-        if request['model'] == dream_transport.MAIN_LANE:
-            assert payload == vertex_bodies[0]
-    logs = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith('{')]
-    rejections = [line for line in logs if line.get('event') == 'vertex_provider_rejection']
-    assert len(rejections) == int(reject_vertex)
-    if reject_vertex:
-        assert rejections[0]['request_id'] == '00000000-0000-4000-8000-000000000001'
-        assert rejections[0]['lane'] == dream_transport.MAIN_LANE
-        assert rejections[0]['route'] == 'route.dream_reasoning.001'
-        assert rejections[0]['failure_class'] == 'provider_invalid_request'
-        assert rejections[0]['vertex_status'] == 'INVALID_ARGUMENT'
-        assert rejections[0]['vertex_field'] == 'generationConfig.responseJsonSchema'
-        assert rejections[0]['reason'] == 'schema_too_many_states'
-    assert 'private-user-content' not in json.dumps(logs)
-    assert 'private-name' not in json.dumps(logs)
+    async def malformed(uid, lane, mount, messages, **kwargs):
+        await original(uid, lane, mount, messages, **kwargs)
+        kwargs['usage_sink']['transport_complete'] = True
+        raise ValueError('Synthetic malformed decision payload')
+
+    monkeypatch.setattr(dream_agent.dream_harness_transport, 'model_turn', malformed)
+    assert asyncio.run(dream_canary.check())['status'] == 'pass'

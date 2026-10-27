@@ -47,6 +47,27 @@ def bounded_exception_type(error: BaseException) -> str:
     return name if name.replace('_', '').isalnum() and len(name) <= 64 else 'Exception'
 
 
+# The Firestore SDK reports its own transaction failures as ValueError, not as
+# api_core errors. Match bounded message prefixes only; never emit the message.
+# Mirrors database._client's commit-exhausted prefix (utils cannot import database).
+_SDK_COMMIT_EXHAUSTED_PREFIX = 'failed to commit transaction'
+_SDK_NO_TRANSACTION_ID = 'the transaction has no transaction id'
+
+
+def value_error_reason(error: BaseException) -> str:
+    """Closed diagnostic tokens only; never copy exception text into telemetry."""
+    if not isinstance(error, ValueError):
+        return 'none'
+    if error.args == ('open_loop_extractions must be an object',):
+        return 'open_loop_extractions_not_object'
+    text = str(error).lower()
+    if text.startswith(_SDK_COMMIT_EXHAUSTED_PREFIX):
+        return 'sdk_commit_attempts_exhausted'
+    if _SDK_NO_TRANSACTION_ID in text:
+        return 'sdk_transaction_not_in_progress'
+    return 'other_value_error'
+
+
 def bounded_exception_reason(error: BaseException) -> str:
     """Log-safe exception text so a bare ``assert`` is visible as ``empty``."""
     text = ' '.join(str(error).split())
@@ -55,3 +76,28 @@ def bounded_exception_reason(error: BaseException) -> str:
     cleaned = ''.join(ch if ch.isalnum() or ch in ' ._:-=' else '_' for ch in text)
     cleaned = cleaned.strip(' _')[:120]
     return cleaned or 'empty'
+
+
+_FINALIZE_SITES = {
+    'database/action_item_refresh.py': 'action_item_refresh',
+    'database/sync_bridges.py': 'bridge_receipt',
+    'database/conversations.py': 'conversation_store',
+    'utils/sync/fsr_metadata.py': 'bridge_metadata',
+    'utils/conversations/merge_conversations.py': 'bridge_effects',
+    'utils/other/storage.py': 'audio_storage',
+    'utils/sync/bridge.py': 'bridge',
+    'utils/sync/intake_completion.py': 'intake_completion',
+}
+
+
+def finalize_exception_site(error: BaseException) -> str:
+    """Deepest known code boundary, without emitting paths, locals or exception text."""
+    site = 'other'
+    traceback = error.__traceback__
+    while traceback is not None:
+        filename = traceback.tb_frame.f_code.co_filename.replace('\\', '/')
+        for suffix, token in _FINALIZE_SITES.items():
+            if filename.endswith('/' + suffix):
+                site = token
+        traceback = traceback.tb_next
+    return site

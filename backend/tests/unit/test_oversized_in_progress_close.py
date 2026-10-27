@@ -167,6 +167,10 @@ def test_failure_reason_tokens_are_bounded_and_carry_no_message():
         firestore_failure_reason(InvalidArgument('The referenced transaction has expired or is no longer valid.'))
         == 'expired_transaction'
     )
+    assert (
+        firestore_failure_reason(Aborted('409 The referenced transaction has expired or is no longer valid.'))
+        == 'expired_transaction'
+    )
     assert firestore_failure_reason(ValueError('Failed to commit transaction in 5 attempts.')) == 'contention'
     assert firestore_failure_reason(Aborted('Too much contention on these documents.')) == 'contention'
     assert firestore_failure_reason(FirestoreContentionExhausted('exhausted')) == 'contention'
@@ -187,3 +191,52 @@ def test_only_a_rejection_of_the_rows_own_document_is_its_size_limit():
     assert not classify_finalization_failure(own, 'conv-2').conversation_at_size_limit
     contention = classify_finalization_failure(ValueError('Failed to commit transaction in 5 attempts.'), 'conv-1')
     assert contention == FinalizationFailure(reason='contention', document='none', names_conversation=False)
+
+
+def test_permanent_rejection_classifier_splits_the_write_classes():
+    """The live loop's permanent-rejection boundary must keep the split exact: the size
+    400, permission-denied and failed-precondition policy refusals are permanent for
+    the row, while contention, expired transactions and other 400s stay transient."""
+    from database._client import is_document_size_limit_error, is_permanent_firestore_write_rejection
+
+    size = InvalidArgument(
+        "Document 'projects/p/databases/(default)/documents/users/uid/conversations/conv' cannot be "
+        'written because its size (1,069,442 bytes) exceeds the maximum allowed size of 1,048,576 bytes.'
+    )
+    permission = InvalidArgument('403 The caller does not have permission for the requested document.')
+    precondition = InvalidArgument('400 The request must be modified to be a valid request.')
+    expired = InvalidArgument('400 The referenced transaction has expired or is no longer valid.')
+    other_400 = InvalidArgument('400 some other 400')
+
+    assert is_document_size_limit_error(size)
+    assert is_permanent_firestore_write_rejection(size)
+    assert is_permanent_firestore_write_rejection(permission), 'a denied row never accepts the same write'
+    assert is_permanent_firestore_write_rejection(precondition), 'a policy refusal never accepts the same write'
+    assert not is_permanent_firestore_write_rejection(expired), 'the storage boundary restarts expired ids'
+    assert not is_permanent_firestore_write_rejection(
+        Aborted('409 The referenced transaction has expired or is no longer valid.')
+    ), 'a streaming read reports the same retired id as Aborted 409'
+    assert not is_permanent_firestore_write_rejection(other_400)
+    assert not is_permanent_firestore_write_rejection(Aborted('Too much contention on these documents.'))
+    assert not is_permanent_firestore_write_rejection(RuntimeError('boom'))
+
+
+def test_typed_firestore_exceptions_are_classified_by_contract_not_type():
+    """Google ships dedicated exception types for these codes; the classifier must
+    recognise their messages wherever the envelope type lands, and must not wave
+    through unrelated codes just because they are also 4xx."""
+    from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFound, PermissionDenied
+
+    from database._client import is_permanent_firestore_write_rejection
+
+    assert is_permanent_firestore_write_rejection(
+        FailedPrecondition('The request must be modified to be a valid request.')
+    ), 'the typed failed-precondition envelope is permanent'
+    assert is_permanent_firestore_write_rejection(
+        PermissionDenied('The caller does not have permission for the requested document.')
+    ), 'the typed permission-denied envelope is permanent'
+    # A missing row is not a permanent rejection of the write: the transaction
+    # exists-check already answers it, and the rollover path creates a fresh
+    # generation the same payload can land on.
+    assert not is_permanent_firestore_write_rejection(NotFound('no such document'))
+    assert not is_permanent_firestore_write_rejection(AlreadyExists('already exists'))

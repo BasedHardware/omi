@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 from enum import Enum
+import os
 from typing import Any, Final
+from config.refactor_switches import default_off
 
 
 class PlanType(str, Enum):
@@ -18,6 +20,8 @@ class PlanType(str, Enum):
 
     @classmethod
     def _missing_(cls, value: object):
+        if value == 'pro' and default_off('LADDER_V1_RETIRE_PRO_ALIAS_ENABLED', os.getenv('LADDER_V1_RETIRE_PRO_ALIAS_ENABLED', 'false') == 'true'):
+            return None
         return WIRE_PLAN_ALIASES.get(value) if isinstance(value, str) else None
 
 
@@ -25,8 +29,8 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = 'f32e383c33fd49df6610373101cb3ceb2c013bf53560f6b2d3a0d2d263a642e5'
-CATALOG_REVISION: Final = 6
+CATALOG_SHA256: Final = 'ffc47f59113f510e04b187c499122ceeaf626e810d72f433484b7281ca00c579'
+CATALOG_REVISION: Final = 12
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
  'price_amount': 'stripe_live',
@@ -41,6 +45,81 @@ PROACTIVITY_V2_BUDGET: Final[dict[str, Any]] = {'fraction_basis_points': 1000,
                              'unlimited_v2': 2999,
                              'unlimited': 2000,
                              'plus': 2000}}
+ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'legacy': {'budget': None,
+            'capabilities': {'basic': {'cloud_screen_vectors': False},
+                             'plus': {'cloud_screen_vectors': True},
+                             'unlimited': {'cloud_screen_vectors': True},
+                             'unlimited_v2': {'cloud_screen_vectors': True},
+                             'operator': {'cloud_screen_vectors': True},
+                             'architect': {'cloud_screen_vectors': True}}},
+ 'ladder_v1': {'rate_card_version': 'v1',
+               'unit_usd_micros': 1000,
+               'monthly_budgets': {'basic': {'kind': 'rate_card_mix',
+                                             'speech_seconds': 18000,
+                                             'chat_messages': 30,
+                                             'chat_tier': 'standard'},
+                                   'plus': {'kind': 'units', 'value': 16360},
+                                   'operator': {'kind': 'units', 'value': 44090},
+                                   'architect': {'kind': 'units', 'value': 189463}},
+               'mcp_daily_caps': {'basic': 100, 'plus': 500, 'operator': 5000, 'architect': 5000},
+               'api_max_reads_per_request': {'basic': 2000, 'plus': 5000, 'operator': 25000, 'architect': 25000},
+               'capabilities': {'basic': {'cloud_screen_vectors': False},
+                                'plus': {'cloud_screen_vectors': False},
+                                'operator': {'cloud_screen_vectors': True},
+                                'architect': {'cloud_screen_vectors': True}}}}
+LADDER_V1_PRICE_BINDINGS: Final[dict[str, Any]] = {'ladder_v1_plus_month': {'plan_id': 'plus', 'interval': 'month', 'env_var': 'LADDER_V1_PLUS_MONTH_PRICE_ID'},
+ 'ladder_v1_plus_year': {'plan_id': 'plus', 'interval': 'year', 'env_var': 'LADDER_V1_PLUS_YEAR_PRICE_ID'},
+ 'ladder_v1_pro_month': {'plan_id': 'operator', 'interval': 'month', 'env_var': 'LADDER_V1_PRO_MONTH_PRICE_ID'},
+ 'ladder_v1_pro_year': {'plan_id': 'operator', 'interval': 'year', 'env_var': 'LADDER_V1_PRO_YEAR_PRICE_ID'},
+ 'ladder_v1_architect_month': {'plan_id': 'architect',
+                               'interval': 'month',
+                               'env_var': 'LADDER_V1_ARCHITECT_MONTH_PRICE_ID'},
+ 'ladder_v1_architect_year': {'plan_id': 'architect',
+                              'interval': 'year',
+                              'env_var': 'LADDER_V1_ARCHITECT_YEAR_PRICE_ID'}}
+LADDER_V1_STRIPE_PRICES: Final[list[str]] = []
+MANAGEMENT_CURRENCY_PRICES: Final[dict[str, Any]] = {'price_1ULq6b1F8wnoWYvwtchjjNqq': {'price_id': 'price_1ULq6b1F8wnoWYvwtchjjNqq',
+                                    'plan_id': 'plus',
+                                    'interval': 'month',
+                                    'currency': 'jpy'},
+ 'price_1ULq7H1F8wnoWYvwC1poOtd5': {'price_id': 'price_1ULq7H1F8wnoWYvwC1poOtd5',
+                                    'plan_id': 'plus',
+                                    'interval': 'year',
+                                    'currency': 'jpy'},
+ 'price_1ULq501F8wnoWYvwwN56CHzO': {'price_id': 'price_1ULq501F8wnoWYvwwN56CHzO',
+                                    'plan_id': 'unlimited_v2',
+                                    'interval': 'month',
+                                    'currency': 'jpy'},
+ 'price_1ULq5e1F8wnoWYvwQT8XQ4Uw': {'price_id': 'price_1ULq5e1F8wnoWYvwQT8XQ4Uw',
+                                    'plan_id': 'unlimited_v2',
+                                    'interval': 'year',
+                                    'currency': 'jpy'}}
+
+RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'price_1RrxXL1F8wnoWYvwIddzR902': 'legacy',
+ 'price_1RrxXL1F8wnoWYvw3kDbWmjs': 'legacy',
+ 'price_1RtJPm1F8wnoWYvwhVJ38kLb': 'legacy',
+ 'price_1RtJQ71F8wnoWYvwKMPaGlGY': 'legacy',
+ 'price_1TNIHd1F8wnoWYvwkIrekcQZ': 'legacy',
+ 'price_1TNIHd1F8wnoWYvwlKywJ8TO': 'legacy',
+ 'price_1RrFym1F8wnoWYvwQgIFhRWD': 'legacy',
+ 'price_1RrG6k1F8wnoWYvwORsU26Mr': 'legacy',
+ 'price_1TLFXK1F8wnoWYvwG1TaUkZ3': 'legacy',
+ 'price_1TN7s21F8wnoWYvwG6JuEFm6': 'legacy',
+ 'price_1TN7sF1F8wnoWYvwd0QaLZNA': 'legacy',
+ 'price_1TAfBB1F8wnoWYvw8XBFM1dX': 'legacy',
+ 'price_1TLFac1F8wnoWYvwtPxZhtzE': 'legacy',
+ 'price_1TN7jS1F8wnoWYvwM5GqfxDw': 'legacy',
+ 'price_1TN7jo1F8wnoWYvw6Xu1zAtC': 'legacy',
+ 'price_1TMxVM1F8wnoWYvw9uaoYX7V': 'legacy',
+ 'price_1TMxVM1F8wnoWYvwNfXdF6LW': 'legacy',
+ 'price_1TuH6z1F8wnoWYvw7Siv61SX': 'legacy',
+ 'price_1TuHCw1F8wnoWYvwZvKu86sI': 'legacy',
+ 'price_1TuIa81F8wnoWYvw0iX0j5M8': 'legacy',
+ 'price_1TuIap1F8wnoWYvwHWq0EvNU': 'legacy',
+ 'price_1ULq501F8wnoWYvwwN56CHzO': 'legacy',
+ 'price_1ULq5e1F8wnoWYvwQT8XQ4Uw': 'legacy',
+ 'price_1ULq6b1F8wnoWYvwtchjjNqq': 'legacy',
+ 'price_1ULq7H1F8wnoWYvwC1poOtd5': 'legacy'}
 MEASUREMENT_CONTRACTS: Final = {'transcription': {'usage_status': 'complete',
                    'usage_source': 'backend/database/user_usage.py:hourly_usage.plan_usage.<plan_id>.transcription_seconds',
                    'cost_status': 'missing',
@@ -133,7 +212,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
                'display_name': 'Architect',
                'wire_aliases': ['pro'],
                'wire_fallback_plan': None,
-               'lifecycle': 'current',
+               'lifecycle': 'deprecated',
                'is_paid': True,
                'storefronts': ['macos', 'web', 'windows'],
                'desktop_profile': 'desktop_architect',
@@ -166,7 +245,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
               'display_name': 'Pro',
               'wire_aliases': [],
               'wire_fallback_plan': None,
-              'lifecycle': 'current',
+              'lifecycle': 'deprecated',
               'is_paid': True,
               'storefronts': ['macos', 'web', 'windows'],
               'desktop_profile': 'desktop_full',
@@ -193,7 +272,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
           'display_name': 'Plus',
           'wire_aliases': [],
           'wire_fallback_plan': 'unlimited',
-          'lifecycle': 'current',
+          'lifecycle': 'deprecated',
           'is_paid': True,
           'storefronts': ['android', 'ios', 'web'],
           'desktop_profile': 'desktop_free',
@@ -225,7 +304,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
                   'lifecycle': 'current',
                   'is_paid': True,
                   'storefronts': ['android', 'ios', 'web'],
-                  'desktop_profile': 'desktop_free',
+                  'desktop_profile': 'desktop_full',
                   'conditional_desktop_profiles': [],
                   'fair_use_profile': 'unlimited_transcription',
                   'phone_calls_profile': 'paid',
@@ -257,7 +336,7 @@ PLAN_TYPE_VALUES: Final[frozenset[str]] = frozenset(['basic', 'unlimited', 'arch
 PAID_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.unlimited, PlanType.architect, PlanType.operator, PlanType.plus, PlanType.unlimited_v2})
 PAID_PLAN_IDS: Final[frozenset[str]] = frozenset(plan.value for plan in PAID_PLAN_TYPES)
 MOBILE_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.plus, PlanType.unlimited_v2})
-DESKTOP_ENTITLED_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.architect, PlanType.operator})
+DESKTOP_ENTITLED_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.architect, PlanType.operator, PlanType.unlimited_v2})
 UNLIMITED_TRANSCRIPTION_PLAN_TYPES: Final[frozenset[PlanType]] = frozenset({PlanType.unlimited, PlanType.architect, PlanType.operator, PlanType.unlimited_v2})
 WIRE_FALLBACK_PLAN_TYPES: Final[dict[PlanType, PlanType]] = {
     PlanType.plus: PlanType.unlimited,
@@ -381,6 +460,11 @@ PHONE_CALL_PROFILE_DEFAULTS: Final[dict[str, dict[str, Any]]] = {'free': {'month
 
 
 __all__ = [
+    'ENTITLEMENT_VERSIONS',
+    'LADDER_V1_STRIPE_PRICES',
+    'LADDER_V1_PRICE_BINDINGS',
+    'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS',
+    'MANAGEMENT_CURRENCY_PRICES',
     'BILLING_ENV_VAR_PLAN_TYPES',
     'CATALOG_AUTHORITY',
     'CATALOG_REVISION',

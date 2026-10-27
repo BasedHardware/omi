@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 import database.action_items as action_items_db
+from config.action_item_reminder_triggers import action_item_write_affects_reminder
 from database.vector_db import (
     upsert_action_item_vector,
     delete_action_item_vector,
@@ -148,7 +149,7 @@ def create_action_item(
     completed: bool = False,
 ) -> Dict[str, Any]:
     """Create a task and return its cleaned MCP shape. Content-idempotent on
-    (uid, normalized description)."""
+    (uid, normalized description) while the matching task is still open."""
     text = _normalize_description(description)
     parsed_due = parse_due_at(due_at)
     data = {
@@ -158,19 +159,23 @@ def create_action_item(
         "conversation_id": None,
     }
     key = content_idempotency_key(uid, text)
-    item_id = action_items_db.create_action_item(uid, data, idempotency_key=key)
-
-    # Index for semantic search so an MCP-created task is discoverable the same
-    # way app-created tasks are. Best-effort: the task already persisted, so a
-    # missing vector only degrades search ranking and never loses the task.
-    try:
-        upsert_action_item_vector(uid, item_id, text)
-    except Exception:
-        logger.exception("MCP create_action_item: vector upsert failed uid=%s id=%s (task saved)", uid, item_id)
+    # The key comes from the title, so every later task with the same title shares it.
+    # A finished task holding it is an earlier task, not a retry of this call.
+    item_id = action_items_db.create_action_item(uid, data, idempotency_key=key, reuse_finished=False)
 
     item = action_items_db.get_action_item(uid, item_id)
     if not item:
         raise ActionItemError("Failed to load the created action item")
+
+    # Index the saved description so an idempotent match on a task edited since
+    # creation keeps its current search vector instead of reverting to the
+    # original title. Best-effort: the task already persisted, so a missing
+    # vector only degrades search ranking and never loses the task.
+    try:
+        upsert_action_item_vector(uid, item_id, item.get("description") or text)
+    except Exception:
+        logger.exception("MCP create_action_item: vector upsert failed uid=%s id=%s (task saved)", uid, item_id)
+
     if item.get("due_at") is not None and not item.get("completed"):
         _sync_reminder(uid, item)
     return clean_action_item(item)
@@ -223,7 +228,9 @@ def update_action_item(
                 "MCP update_action_item: vector upsert failed uid=%s id=%s (task updated)", uid, action_item_id
             )
     item = _reload(uid, action_item_id)
-    if "due_at" in update_data:
+    # The phone's scheduled reminder carries both the due time and the title, so either change
+    # re-arms it from the saved row.
+    if action_item_write_affects_reminder(update_data):
         _sync_reminder(uid, item)
     return clean_action_item(item)
 

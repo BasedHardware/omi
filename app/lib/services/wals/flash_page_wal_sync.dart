@@ -1,9 +1,7 @@
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -99,7 +97,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   Future<Map<String, int>?> _getStorageStatus(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) return null;
 
     try {
@@ -175,9 +173,14 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     int estimatedSeconds = (pageCount * secondsPerFlashPage).round();
 
     if (pageCount > 30) {
-      int timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
+      // Wal.id is device_timerStart, and this list is rebuilt on connect, on every
+      // discovery and after every sync pass. Keep the start estimated when this
+      // backlog (same pendant, same first page) was listed, so the recording keeps
+      // its id; a fresh estimate from the clock gave it a new id on every rebuild.
+      final listed = _wals.where((w) => w.device == deviceId && w.storageOffset == _oldestPage).firstOrNull;
+      int timerStart = listed?.timerStart ?? DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
 
-      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
       if (connection == null) return [];
       var pd = await device.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Limitless";
@@ -312,9 +315,12 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     _cancelRequested = false;
     _lastStallReason = FlashSyncStallReason.none;
-    final matches = _wals.where((w) => w == wal).toList();
-    if (matches.isEmpty) return null;
-    final walToSync = matches.first;
+    // The list is rebuilt with new Wal objects when the pendant connects, on every
+    // discovery wake and after each sync pass, while a recording page keeps the Wal
+    // it was opened with. Match by id, as deleteWal does; the listing keeps the id.
+    final walToSync = _wals.where((w) => w.storage == wal.storage && w.id == wal.id).firstOrNull;
+    // Transfer to Phone reports any normal return as complete.
+    if (walToSync == null) throw Exception('Device recording list changed; go back and try again');
 
     walToSync.isSyncing = true;
     walToSync.syncStartedAt = DateTime.now();
@@ -334,6 +340,11 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     walToSync.deviceDownloadFraction = null;
 
     listener.onWalUpdated();
+    // A stall or error leaves the rest of the audio on the pendant. Only a user
+    // cancel may return quietly; anything else would read as a finished transfer.
+    if (!completed && !_cancelRequested) {
+      throw Exception('Device transfer incomplete; recording kept on device');
+    }
     return null;
   }
 
@@ -714,95 +725,28 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     }
   }
 
-  /// Saves a batch of frames to disk and registers with LocalWalSync for later upload.
   Future<String> _saveBatchToFile(
-    List<List<int>> frames,
-    int timestampMs,
-    Wal sourceWal,
-    int admittedGeneration,
-  ) async {
-    if (frames.isEmpty) throw StateError('refusing to persist an empty batch');
-
+      List<List<int>> frames, int timestampMs, Wal sourceWal, int admittedGeneration) async {
     final localSync = _localSync;
-    if (localSync == null) {
-      throw StateError('LocalWalSync unavailable; batch cannot be proven durable');
-    }
-    var bytes = 0;
-    for (final f in frames) {
-      bytes += 4 + f.length;
-    }
-    if (!await localSync.ensureStorageAdmission(bytes: bytes, admittedGeneration: admittedGeneration)) {
-      throw StateError('storage admission refused (cap/disk reserve)');
-    }
-
-    try {
-      final tempDir = await getApplicationDocumentsDirectory();
-      String fileName;
-      var seq = 0;
-      do {
-        final random = DateTime.now().microsecondsSinceEpoch % 10000;
-        fileName = 'audio_limitless_opus_16000_1_fs320_r${random}_${seq++}_$timestampMs.bin';
-      } while (await File('${tempDir.path}/$fileName').exists());
-      final filePath = '${tempDir.path}/$fileName';
-
-      final data = BytesBuilder();
-      for (final frame in frames) {
-        data.add([
-          frame.length & 0xFF,
-          (frame.length >> 8) & 0xFF,
-          (frame.length >> 16) & 0xFF,
-          (frame.length >> 24) & 0xFF,
-        ]);
-        data.add(frame);
-      }
-      final file = File(filePath);
-      await file.writeAsBytes(data.toBytes(), flush: true);
-
-      await _registerChunkWithLocalSync(fileName, timestampMs, frames.length, sourceWal, admittedGeneration);
-
-      return filePath;
-    } catch (e) {
-      localSync.releaseStorageAdmission(bytes);
-      rethrow;
-    }
-  }
-
-  Future<void> _registerChunkWithLocalSync(
-    String fileName,
-    int timestampMs,
-    int frameCount,
-    Wal sourceWal,
-    int admittedGeneration,
-  ) async {
-    final localSync = _localSync;
-    if (localSync == null) {
-      throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
-    }
-
-    int seconds = (frameCount / 50).ceil();
-    if (seconds < 1) seconds = 1;
-
-    Wal localWal = Wal(
-      codec: BleAudioCodec.opus,
-      channel: 1,
-      sampleRate: 16000,
-      timerStart: timestampMs ~/ 1000,
-      filePath: fileName,
-      storage: WalStorage.disk,
-      status: WalStatus.miss,
-      device: sourceWal.device,
-      deviceModel: sourceWal.deviceModel ?? "Limitless",
-      seconds: seconds,
-      totalFrames: frameCount,
-      syncedFrameOffset: 0,
-      originalStorage: WalStorage.flashPage,
-    );
-
-    await localSync.addExternalWal(localWal, admittedGeneration: admittedGeneration);
-    if (!await localSync.hasDurableWal(localWal, admittedGeneration: admittedGeneration)) {
-      throw StateError('WAL not durable after registration');
-    }
-    Logger.debug("FlashPageSync: Registered chunk (ts: $timestampMs, ${seconds}s) with LocalWalSync");
+    if (localSync == null) throw StateError('LocalWalSync unavailable; batch cannot be proven durable');
+    var seq = 0;
+    final saved = await localSync.persistDeviceChunk(
+        source: sourceWal,
+        frames: frames,
+        timerStart: timestampMs ~/ 1000,
+        admittedGeneration: admittedGeneration,
+        nextCollisionSequence: () => seq++,
+        originalStorage: WalStorage.flashPage,
+        codec: BleAudioCodec.opus,
+        channel: 1,
+        sampleRate: 16000,
+        seconds: (frames.length / 50).ceil().clamp(1, 1 << 31),
+        deviceModel: sourceWal.deviceModel ?? 'Limitless',
+        fileName: () {
+          final random = DateTime.now().microsecondsSinceEpoch % 10000;
+          return 'audio_limitless_opus_16000_1_fs320_r${random}_${seq++}_$timestampMs.bin';
+        });
+    return (await Wal.getFilePath(saved.filePath))!;
   }
 
   @override

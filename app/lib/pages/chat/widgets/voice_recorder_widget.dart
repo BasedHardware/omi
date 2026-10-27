@@ -20,15 +20,10 @@ class VoiceRecorderWidget extends StatefulWidget {
   State<VoiceRecorderWidget> createState() => _VoiceRecorderWidgetState();
 }
 
-class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-
+class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))
-      ..repeat(reverse: true);
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final provider = context.read<VoiceRecorderProvider>();
@@ -41,12 +36,6 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
   }
 
   @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Consumer<VoiceRecorderProvider>(
       builder: (context, provider, child) {
@@ -54,9 +43,12 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
           case VoiceRecorderState.recording:
             return SizedBox(
               height: 44,
-              child: CustomPaint(
-                painter: AudioWavePainter(levels: provider.audioLevels),
-                child: const SizedBox.expand(),
+              child: ListenableBuilder(
+                listenable: provider.waveformTick,
+                builder: (context, _) => CustomPaint(
+                  painter: AudioWavePainter(levels: provider.audioLevels),
+                  child: const SizedBox.expand(),
+                ),
               ),
             );
 

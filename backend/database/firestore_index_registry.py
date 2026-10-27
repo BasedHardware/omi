@@ -6,8 +6,14 @@ Index-only requirements stay explicit until callers migrate to query specs.
 from __future__ import annotations
 
 from typing import Any
+from database.mcp_read_queries import (
+    MCP_DAILY_RECORDINGS_QUERY,
+    MCP_MEMORY_FILTER_QUERIES,
+    MCP_CONVERSATION_CARD_QUERY_SPECS,
+)
 from database.review_queries import REVIEW_QUERY_SPECS
-from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS
+from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
+from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
 from .firestore_query_types import (
     FieldIndexRequirement,
     FirestoreIndexField,
@@ -32,6 +38,25 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_ramp_owner_load',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('owner_id'), _asc('enqueued_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_ready_predecessor',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('owner_key'), _asc('priority'), _asc('state'), _asc('next'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *SYNC_PIPELINE_INDEX_REQUIREMENTS,
     *MESSAGING_INDEX_REQUIREMENTS,
     FirestoreIndexRequirement(
         'proactivity_followup_source_outcomes',
@@ -124,18 +149,6 @@ INDEX_ONLY_REQUIREMENTS = (
         'frame_requests',
         'COLLECTION',
         (_asc('account_generation'), _asc('dedupe_key'), _asc('device_id'), _desc('attempt_number'), _desc('__name__')),
-    ),
-    FirestoreIndexRequirement(
-        'sync_backfill_pending_uid_sort',
-        'sync_backfill_pending',
-        'COLLECTION',
-        (_asc('uid'), _asc('sort_at'), _asc('__name__')),
-    ),
-    FirestoreIndexRequirement(
-        'sync_backfill_pending_uid_accepted',
-        'sync_backfill_pending',
-        'COLLECTION',
-        (_asc('uid'), _asc('accepted_at'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
         'memory_items_collection_group_uid_generation_updated',
@@ -324,7 +337,7 @@ INDEX_ONLY_REQUIREMENTS = (
     # GET /v1/action-items?start_date=...&completed=... orders created_at
     # newest-first (``_apply_action_item_date_filters``). The ascending
     # composite above serves the ``get_scores`` count but not that ordering;
-    # a database provisioned from this manifest alone (isolated jit-qa,
+    # a database provisioned from this manifest alone (an isolated development database,
     # 2026-09-10) failed the read with FailedPrecondition until this existed.
     FirestoreIndexRequirement(
         'action_items_completed_created_newest_first',
@@ -405,7 +418,7 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('state'), _asc('cleanup_state'), _asc('cleanup_next_attempt_at'), _asc('__name__')),
     ),
-    # Adopted from the live prod inventory on 2026-09-30. These exist in prod (hand-created) but were never declared, so fresh databases (self-host, jit-qa) fail. Serving callers are mapped in a later wave.
+    # Adopted from the live prod inventory on 2026-09-30. These exist in prod (hand-created) but were never declared, so fresh databases fail. Serving callers are mapped in a later wave.
     # caller: database/action_items.py due-date reads
     FirestoreIndexRequirement(
         'action_items_completed_asc_due_at_desc_name_desc',
@@ -799,6 +812,34 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('source'), _asc('status'), _asc('created_at'), _asc('__name__')),
     ),
+    # Held-audio page: newest held manifests for one user. The exact total is a
+    # separate summary document, so this query stays bounded.
+    FirestoreIndexRequirement(
+        'stt_cap_holds_state_asc_listed_at_desc',
+        'stt_cap_holds',
+        'COLLECTION',
+        (_asc('state'), _desc('listed_at'), _desc('__name__')),
+    ),
+    # Redrive fleet snapshot. Collection-group count+sum of pending holds, the
+    # dated count plus oldest listed_at on one index, and the backlog item sum.
+    FirestoreIndexRequirement(
+        'stt_cap_holds_group_state_asc_seconds_asc',
+        'stt_cap_holds',
+        'COLLECTION_GROUP',
+        (_asc('state'), _asc('seconds'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'stt_cap_holds_group_state_asc_listed_at_asc',
+        'stt_cap_holds',
+        'COLLECTION_GROUP',
+        (_asc('state'), _asc('listed_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'processing_backlog_group_state_asc_count_asc',
+        'processing_backlog',
+        'COLLECTION_GROUP',
+        (_asc('state'), _asc('count'), _asc('__name__')),
+    ),
 )
 
 
@@ -988,6 +1029,50 @@ UNIVERSAL_CANONICAL_LIST_SCAN_QUERY = FirestoreQuerySpec(
     query_scope='COLLECTION',
     filters=(),
     index_fields=(_desc('updated_at'), _asc('__name__')),
+)
+
+# Released list candidates use existing required canonical fields. Each branch
+# is a necessary condition, never a replacement for the authority's row policy.
+# In particular processed Short-term remains readable after expiry (§1.3).
+UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_released_processed_list',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('source_state', 'in', 'source_states'),
+        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+        FirestoreQueryFilter('tier', 'in', 'tiers'),
+    ),
+    index_fields=(
+        _asc('status'),
+        _asc('source_state'),
+        _asc('processing_state'),
+        _asc('tier'),
+        _desc('updated_at'),
+        _asc('__name__'),
+    ),
+)
+UNIVERSAL_CANONICAL_RELEASED_PENDING_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_released_pending_list',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('source_state', '==', 'source_state'),
+        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('promotion.required', '==', 'required'),
+    ),
+    index_fields=(
+        _asc('status'),
+        _asc('source_state'),
+        _asc('processing_state'),
+        _asc('tier'),
+        _asc('promotion.required'),
+        _desc('updated_at'),
+        _asc('__name__'),
+    ),
 )
 
 # Bounded daily-sweep occupant lookups. The sweep must prove the active
@@ -1302,6 +1387,18 @@ REVIEW_QUEUE_BY_STATUS_ID_QUERY = FirestoreQuerySpec(
     ),
 )
 
+DUE_IN_PROGRESS_CONTENT_QUERY = FirestoreQuerySpec(
+    identifier='conversations_in_progress_content_due',
+    collection_group='conversations',
+    query_scope='COLLECTION_GROUP',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('has_content', '==', 'has_content'),
+        FirestoreQueryFilter('finished_at', '<=', 'content_due_before'),
+    ),
+    index_fields=(_asc('status'), _asc('has_content'), _asc('finished_at'), _asc('__name__')),
+)
+
 STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     identifier='conversations_in_progress_by_finished_at',
     collection_group='conversations',
@@ -1311,6 +1408,18 @@ STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
         _asc('status'),
         _asc('finished_at'),
         _asc('__name__'),
+    ),
+)
+
+STALE_RECOVERY_PAGE_QUERY = FirestoreQuerySpec(
+    identifier='conversations_stale_recovery_newest_page',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('status', '==', 'status'), FirestoreQueryFilter('finished_at', '<', 'cutoff')),
+    index_fields=(
+        _asc('status'),
+        _desc('finished_at'),
+        _desc('__name__'),
     ),
 )
 
@@ -1368,35 +1477,6 @@ CONVERSATIONS_COUNT_CREATED_RANGE_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('discarded'), _asc('created_at'), _asc('__name__')),
 )
 
-MCP_CONVERSATION_CARD_QUERY_SPECS: dict[tuple[bool, bool, bool], FirestoreQuerySpec] = {}
-for _has_categories in (False, True):
-    for _has_start_date in (False, True):
-        for _has_end_date in (False, True):
-            _suffixes = []
-            _filters = [
-                FirestoreQueryFilter('discarded', '==', 'discarded'),
-                FirestoreQueryFilter('status', '==', 'status'),
-            ]
-            _index_fields = [_asc('discarded'), _asc('status')]
-            if _has_categories:
-                _suffixes.append('category')
-                _filters.append(FirestoreQueryFilter('structured.category', 'in', 'categories'))
-                _index_fields.append(_asc('structured.category'))
-            if _has_start_date:
-                _suffixes.append('start')
-                _filters.append(FirestoreQueryFilter('created_at', '>=', 'start_date'))
-            if _has_end_date:
-                _suffixes.append('end')
-                _filters.append(FirestoreQueryFilter('created_at', '<=', 'end_date'))
-            _variant = '_'.join(_suffixes) or 'all'
-            MCP_CONVERSATION_CARD_QUERY_SPECS[(_has_categories, _has_start_date, _has_end_date)] = FirestoreQuerySpec(
-                identifier=f'mcp_conversation_cards_{_variant}',
-                collection_group='conversations',
-                query_scope='COLLECTION',
-                filters=tuple(_filters),
-                index_fields=tuple((*_index_fields, _desc('created_at'), _desc('__name__'))),
-            )
-
 # Sync safety-WAL binding: the newest rollover generations of one recording that
 # started before the upload's audio ends (utils/sync/recording_lineage.py).
 SYNC_RECORDING_LINEAGE_QUERY = FirestoreQuerySpec(
@@ -1412,44 +1492,6 @@ SYNC_RECORDING_LINEAGE_QUERY = FirestoreQuerySpec(
         _asc('external_data.recording_origin_id'),
         _desc('started_at'),
         _desc('finished_at'),
-        _desc('__name__'),
-    ),
-)
-
-ENTITY_TIMELINE_CONVERSATIONS_QUERY = FirestoreQuerySpec(
-    identifier='conversations_entity_timeline_completed',
-    collection_group='conversations',
-    query_scope='COLLECTION',
-    filters=(
-        FirestoreQueryFilter('discarded', '==', 'discarded'),
-        FirestoreQueryFilter('status', '==', 'status'),
-    ),
-    index_fields=(
-        _asc('discarded'),
-        _asc('status'),
-        _desc('created_at'),
-        _desc('__name__'),
-    ),
-)
-
-ENTITY_TIMELINE_MEETINGS_QUERY = FirestoreQuerySpec(
-    identifier='meetings_entity_timeline',
-    collection_group='meetings',
-    query_scope='COLLECTION',
-    filters=(),
-    index_fields=(
-        _desc('start_time'),
-        _desc('__name__'),
-    ),
-)
-
-ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY = FirestoreQuerySpec(
-    identifier='screen_activity_entity_timeline',
-    collection_group='screen_activity',
-    query_scope='COLLECTION',
-    filters=(),
-    index_fields=(
-        _desc('timestamp'),
         _desc('__name__'),
     ),
 )
@@ -1700,15 +1742,38 @@ FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('status'), _asc('created_at'), _asc('__name__')),
 )
 
-FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY = FirestoreQuerySpec(
-    identifier='conversations_first_open_folder_active_count',
-    collection_group='conversations',
+# WQ13: candidate filters are read-only and gated independently of loop leases.
+FINALIZATION_BYOK_ABANDONMENT_QUERY = FirestoreQuerySpec(
+    identifier='finalization_byok_active_candidates',
+    collection_group='conversation_finalization_jobs',
     query_scope='COLLECTION',
     filters=(
-        FirestoreQueryFilter('folder_id', '==', 'folder_id'),
-        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('requires_byok', '==', 'requires_byok'),
+        FirestoreQueryFilter('status', 'in', 'statuses'),
     ),
-    index_fields=(_asc('folder_id'), _asc('discarded'), _asc('__name__')),
+    index_fields=(_asc('requires_byok'), _asc('status'), _asc('__name__')),
+)
+
+FINALIZATION_BYOK_RECLAIM_QUERY = FirestoreQuerySpec(
+    identifier='finalization_byok_reclaim_candidates',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('requires_byok', '==', 'requires_byok'),
+        FirestoreQueryFilter('status', '==', 'status'),
+    ),
+    index_fields=(_asc('requires_byok'), _asc('status'), _asc('created_at'), _asc('__name__')),
+)
+
+FINALIZATION_STALE_IN_PROGRESS_QUERY = FirestoreQuerySpec(
+    identifier='finalization_stale_in_progress_candidates',
+    collection_group='conversations',
+    query_scope='COLLECTION_GROUP',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('finished_at', '<=', 'finished_before'),
+    ),
+    index_fields=(_asc('status'), _asc('finished_at'), _asc('__name__')),
 )
 
 CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY = FirestoreQuerySpec(
@@ -1883,6 +1948,8 @@ CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    MCP_DAILY_RECORDINGS_QUERY,
+    *MCP_MEMORY_FILTER_QUERIES.values(),
     *REVIEW_QUERY_SPECS,
     ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
     CONVERSATION_PHOTOS_NAME_RANGE_QUERY,
@@ -1908,6 +1975,8 @@ QUERY_SPECS = (
     CANONICAL_GRAPH_READ_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
+    UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY,
+    UNIVERSAL_CANONICAL_RELEASED_PENDING_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY,
@@ -1926,11 +1995,10 @@ QUERY_SPECS = (
     EXPIRY_URGENT_SHORT_TERM_BY_STORED_EXPIRY_QUERY,
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
+    DUE_IN_PROGRESS_CONTENT_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    STALE_RECOVERY_PAGE_QUERY,
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
-    ENTITY_TIMELINE_CONVERSATIONS_QUERY,
-    ENTITY_TIMELINE_MEETINGS_QUERY,
-    ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY,
     SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
@@ -1941,7 +2009,6 @@ QUERY_SPECS = (
     NEGATIVE_FEEDBACK_EVENTS_QUERY,
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
     HOURLY_USAGE_UTC_DAY_QUERY,
-    FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY,
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
@@ -1949,6 +2016,9 @@ QUERY_SPECS = (
     *MCP_CONVERSATION_CARD_QUERY_SPECS.values(),
     SYNC_RECORDING_LINEAGE_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
+    FINALIZATION_BYOK_ABANDONMENT_QUERY,
+    FINALIZATION_BYOK_RECLAIM_QUERY,
+    FINALIZATION_STALE_IN_PROGRESS_QUERY,
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
     FRAME_VISION_OUTPUT_EXPIRY_QUERY,
@@ -2071,7 +2141,13 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('conversations', 'owner_recognition_diagnostics'),
 )
 
-FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = (
+FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_REQUIREMENTS + (
+    FieldIndexRequirement('cap_redrive_processing_state', 'processing_backlog', 'state', ('ASCENDING',)),
+    FieldIndexRequirement('cap_redrive_hold_state', 'stt_cap_holds', 'state', ('ASCENDING',)),
+    FieldIndexRequirement('cap_redrive_staging_cleanup', 'stt_cap_holds', 'staging_cleanup', ('ASCENDING',)),
+    FieldIndexRequirement(
+        'conversations_summary_due_group_ascending', 'conversations', 'summary_due_at', ('ASCENDING',)
+    ),
     FieldIndexRequirement('conversations_id_group_ascending', 'conversations', 'id', ('ASCENDING',)),
     FieldIndexRequirement('conversations_source_group_ascending', 'conversations', 'source', ('ASCENDING',)),
     FieldIndexRequirement('conversations_status_group_ascending', 'conversations', 'status', ('ASCENDING',)),
@@ -2112,7 +2188,16 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = (
         ('ASCENDING',),
     ),
     FieldIndexRequirement('memory_outbox_status_group_ascending', 'memory_outbox', 'status', ('ASCENDING',)),
-    FieldIndexRequirement('projection_repairs_status_group_ascending', 'projection_repairs', 'status', ('ASCENDING',)),
+    # Legacy dark zero-lost census (scripts/legacy_dark/lost_recordings.py, soak check 5).
+    FieldIndexRequirement(
+        'sync_content_ledger_created_at_group_ascending', 'sync_content_ledger', 'created_at', ('ASCENDING',)
+    ),
+    # Legacy dark final-pass re-home sweep (scripts/legacy_dark/final_pass_rehome.py,
+    # the legacy_final_pass_rehomed draining precondition): every conversation still
+    # routed to legacy_final_pass_v1, across users.
+    FieldIndexRequirement(
+        'conversations_record_lane_owner_group_ascending', 'conversations', 'record_lane_owner', ('ASCENDING',)
+    ),
     FieldIndexRequirement(
         'task_recurrence_inbox_status_group_ascending', 'task_recurrence_inbox', 'status', ('ASCENDING',)
     ),

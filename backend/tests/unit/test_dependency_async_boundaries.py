@@ -140,52 +140,20 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
         ]
 
 
-def test_all_verified_owner_dependencies_reject_non_qa_uid_before_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every Firebase/API-key owner boundary must honor the QA plane fence."""
-    monkeypatch.setenv("OMI_JIT_QA_AUTH_ONLY", "true")
-    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
-    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware-dev")
-    monkeypatch.setenv("OMI_JIT_QA_UID_ALLOWLIST", "qa-user")
-    with _loaded_dependencies() as (dependencies, firebase_auth, mcp_api_key_db, dev_api_key_db):
-        firebase_auth.verify_id_token = lambda _token: {"uid": "other-user"}
-        mcp_api_key_db.get_api_key_auth_result = lambda _token: SimpleNamespace(
-            context={"user_id": "other-user", "scopes": [], "app_id": "mcp-app", "key_id": "mcp-key"},
-            repairs=frozenset(),
-        )
-        dev_api_key_db.get_api_key_auth_result = lambda _token: SimpleNamespace(
-            context={"user_id": "other-user", "scopes": [], "app_id": "dev-app", "key_id": "dev-key"},
-            repairs=frozenset(),
-        )
-        dependencies.enforce_account_deletion_http_access = lambda _uid: (_ for _ in ()).throw(
-            AssertionError("QA admission must run before account side effects")
-        )
-
-        awaitable_factories = (
-            lambda: dependencies.get_current_user_id(SimpleNamespace(credentials="firebase-token")),
-            lambda: dependencies.get_uid_from_mcp_api_key("Bearer omi_mcp_secret"),
-            lambda: dependencies.get_mcp_api_key_auth("Bearer omi_mcp_secret"),
-            lambda: dependencies.get_api_key_auth("Bearer omi_dev_secret"),
-        )
-        for make_awaitable in awaitable_factories:
-            with pytest.raises(HTTPException) as error:
-                asyncio.run(make_awaitable())
-            assert error.value.status_code == 403
-
-
 def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
     with _loaded_dependencies() as (dependencies, _firebase_auth, mcp_api_key_db, dev_api_key_db):
         calls: list[tuple[Any, Any, tuple[Any, ...], dict[str, Any]]] = []
         rate_limit_calls: list[dict[str, Any]] = []
 
         def lookup_mcp(token: str) -> SimpleNamespace:
-            assert token == 'omi_mcp_secret'
+            assert token == 'omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
             return SimpleNamespace(
                 context={'user_id': 'mcp-user', 'scopes': [], 'app_id': 'mcp-app', 'key_id': 'mcp-key'},
                 repairs=frozenset(),
             )
 
         def lookup_dev(token: str) -> SimpleNamespace:
-            assert token == 'omi_dev_secret'
+            assert token == 'omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
             return SimpleNamespace(
                 context={'user_id': 'dev-user', 'scopes': [], 'app_id': 'dev-app', 'key_id': 'dev-key'},
                 repairs=frozenset(),
@@ -203,8 +171,8 @@ def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
         dependencies.check_api_key_rate_limit = check_rate_limit
         dependencies.run_blocking = tracking_run_blocking
 
-        mcp_uid = asyncio.run(dependencies.get_uid_from_mcp_api_key('Bearer omi_mcp_secret'))
-        dev_auth = asyncio.run(dependencies.get_api_key_auth('Bearer omi_dev_secret'))
+        mcp_uid = asyncio.run(dependencies.get_uid_from_mcp_api_key('Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
+        dev_auth = asyncio.run(dependencies.get_api_key_auth('Bearer omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
 
         assert mcp_uid == 'mcp-user'
         assert dev_auth.uid == 'dev-user'
@@ -237,7 +205,7 @@ def test_auth_repair_metadata_is_emitted_from_the_dependency_layer() -> None:
         events: list[dict[str, Any]] = []
         dependencies.record_api_key_repairs = lambda **kwargs: events.append(kwargs)
 
-        auth = asyncio.run(dependencies.get_mcp_api_key_auth('Bearer omi_mcp_secret'))
+        auth = asyncio.run(dependencies.get_mcp_api_key_auth('Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
 
         assert auth.uid == 'mcp-user'
         assert events == [
@@ -431,7 +399,7 @@ def test_persisted_api_key_lookup_keeps_the_event_loop_responsive() -> None:
             safety_release.start()
             try:
                 result = await _assert_loop_responsive_while_worker_waits(
-                    dependencies.get_uid_from_mcp_api_key('Bearer omi_mcp_secret'),
+                    dependencies.get_uid_from_mcp_api_key('Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
                     entered,
                     release,
                 )

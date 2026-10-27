@@ -734,7 +734,7 @@ class TasksStore: ObservableObject {
     } catch {
       // Benign sign-out race: the isSignedIn guard above passed, but the
       // token was cleared by the time the request ran. Expected, not a bug
-      // — log quietly (breadcrumb only) instead of flooding Sentry.
+      // — log quietly instead of flooding the error log.
       guard isCurrent(lease) else { return }
       if case AuthError.notSignedIn = error {
         log("TasksStore: Auto-refresh skipped: signed out mid-cycle")

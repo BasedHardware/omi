@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from utils.conversation_continuity import calendar_continuity_identity, continuation_timeout, resumable_continuation
+from models.conversation_continuity import calendar_continuity_identity, continuation_timeout, resumable_continuation
 from utils.transcribe_decisions import MAX_CONVERSATION_TIMEOUT_SECONDS
 
 
@@ -63,3 +63,48 @@ def test_scheduled_end_wins_over_duration(duration):
 @pytest.mark.parametrize('duration', [True, -1, float('nan'), float('inf')])
 def test_invalid_duration_keeps_the_default_boundary(duration):
     assert continuation_timeout(meeting_row(duration_minutes=duration)) == 120
+
+
+def overrun_row(seconds_after_end):
+    """A 10:00-10:30 meeting whose latest speech is relative to its scheduled end."""
+    row = meeting_row(end_time='2026-10-07T10:30:00Z')
+    row['finished_at'] = datetime(2026, 10, 7, 10, 30, tzinfo=timezone.utc) + timedelta(seconds=seconds_after_end)
+    return row
+
+
+@pytest.mark.parametrize(
+    'timeout,seconds_after_end,expected',
+    [
+        # Well before the end, the window still extends the deadline.
+        (120, -1800, 1920),
+        (600, -1800, 1920),
+        # Speech after the scheduled end keeps the ordinary deadline.
+        (120, 60, 120),
+        (120, 110, 120),
+        (120, 119, 120),
+        # A longer user setting is never cut down to the meeting window.
+        (600, -60, 600),
+        (1800, -600, 1800),
+        (MAX_CONVERSATION_TIMEOUT_SECONDS, -1800, MAX_CONVERSATION_TIMEOUT_SECONDS),
+    ],
+)
+def test_meeting_window_never_shortens_the_silence_deadline(timeout, seconds_after_end, expected):
+    assert continuation_timeout(overrun_row(seconds_after_end), timeout) == expected
+
+
+def test_reconnect_after_the_scheduled_end_keeps_the_ordinary_deadline():
+    row = overrun_row(110)
+    assert resumable_continuation(
+        row,
+        source='omi',
+        device_id='phone',
+        now=row['finished_at'] + timedelta(seconds=119),
+        timeout=120,
+    )
+    assert not resumable_continuation(
+        row,
+        source='omi',
+        device_id='phone',
+        now=row['finished_at'] + timedelta(seconds=120),
+        timeout=120,
+    )

@@ -369,7 +369,7 @@ class AppState: ObservableObject {
   var recordingDuration: TimeInterval { RecordingTimer.shared.duration }
 
   var hasActiveConversationFilters: Bool {
-    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil
+    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil || showDiscardedConversations
   }
 
   // Live speaker segments moved to LiveTranscriptMonitor to avoid triggering global re-renders
@@ -383,9 +383,11 @@ class AppState: ObservableObject {
   @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
   @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
   let conversationRepository = ConversationRepository()
+  let conversationRestored = PassthroughSubject<ServerConversation, Never>()
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
+  @Published var showDiscardedConversations: Bool = false
   @Published var selectedDateFilter: Date? = nil
   @Published var selectedFolderId: String? = nil
 
@@ -500,13 +502,13 @@ class AppState: ObservableObject {
   }
   var captureGateInFlight = false
   var captureReconcilePending = false
-  var pendingCoreAudioCaptureRecoveryReason: String?
+  var pendingCoreAudioCaptureRecovery: CoreAudioCaptureRecoveryRequest?
   /// While ambient transcription is live, reapply a preferred mic when it reconnects (#10921).
   let preferredMicrophoneReconnectMonitor = PreferredMicrophoneReconnectMonitor()
-  /// Counts CoreAudio rebuilds caused by a zero-sample microphone during one
-  /// transcription session. This lives above `AudioCaptureService` because each
-  /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
+  /// Session-owned recovery budget survives microphone driver replacement.
   var silentMicRecoveryAttempts = 0
+  /// No microphone signal after bounded recovery; system audio can still be live.
+  @Published var isMicrophoneSignalMissing = false
   var armedMicrophoneTransitionInFlight = false
   @Published var isWaitingForMicrophone = false
   let armedMicrophoneRecovery = ArmedMicrophoneRecoveryCoordinator()
@@ -518,11 +520,17 @@ class AppState: ObservableObject {
   }
   /// A relaunch mid-meeting splits the call into two conversations; the updater defers on this.
   func publishMeetingCaptureActivity() {
-    UpdateInstallActivity.setMeetingCaptureActive(isLiveCapturing && currentConversationRole == .meeting)
+    UpdateInstallActivity.setMeetingCaptureActive(
+      isTranscribing && currentConversationRole == .meeting
+        && (isLiveCapturing || meetingDetector?.resumeOffAt != nil))
   }
   var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
-  var meetingBoundaryInProgress = false
+  var (meetingBoundaryInProgress, meetingBoundaryEvidence) = (false, MeetingBoundaryEvidence())
   var pendingMeetingState: Bool?
+  var pendingMeetingEndedAt: Date?
+  var meetingRelaunchChecked = false
+  var meetingRelaunchCheckGeneration: UInt64?
+  var meetingRelaunchCheckMode: AssistantSettings.AudioRecordingMode?
   /// True while `finishConversation` is rotating the logical conversation.
   /// Serializes ALL rotation callers — `handleMeetingObservation`'s boundary
   /// flag only covers detector edges; the deferred `.meetingEnded` finalizer,
@@ -705,11 +713,12 @@ class AppState: ObservableObject {
   /// switch posts only .runtimeOwnerDidChange, so without this the previous
   /// account's folders, filters, counts, and people kept rendering.
   func resetOwnerScopedContent() {
-    ownerScopeGeneration &+= 1
+    (ownerScopeGeneration, meetingBoundaryEvidence) = (ownerScopeGeneration &+ 1, MeetingBoundaryEvidence())
     folders = []
     selectedFolderId = nil
     selectedDateFilter = nil
     showStarredOnly = false
+    showDiscardedConversations = false
     totalConversationsCount = nil
     filteredConversationsCount = nil
     conversationsError = nil
@@ -877,12 +886,14 @@ class AppState: ObservableObject {
 
   /// Setup observers for app quit and system sleep to finalize conversations
   private func setupLifecycleObservers() {
+    ClientTelemetryFlags.installProductionRefresh()
     // App is about to quit
     willTerminateObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.willTerminateNotification,
       object: nil,
       queue: .main
     ) { [weak self] _ in
+      ClientTelemetryTransport.scheduleBestEffortFlush()
       guard let self = self else { return }
       Task { @MainActor in
         if self.isTranscribing {
@@ -908,6 +919,7 @@ class AppState: ObservableObject {
       object: nil,
       queue: .main
     ) { [weak self] _ in
+      ClientTelemetryTransport.scheduleBestEffortFlush()
       guard let self = self else { return }
       Task { @MainActor in
         self.wasTranscribingBeforeSleep = self.isTranscribing

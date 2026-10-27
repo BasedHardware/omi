@@ -88,8 +88,7 @@ def test_gateway_one_answer_per_message_and_only_stacked_earlier_answer_is_threa
 
         return stream()
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     path = store.enqueue(first)
     if stacked:
         path = store.enqueue(replace(first, provider_message_id='11', text='Question two'))

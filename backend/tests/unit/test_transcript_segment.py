@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 
 from models.transcript_segment import TranscriptSegment, transcript_segment_for_client
 
@@ -593,16 +594,24 @@ def test_segments_as_string_uses_configured_user_name():
 
     assert "Stephen: Hi, this is me." in rendered
     assert "User:" not in rendered
-    assert "Speaker 1: Nice to meet you." in rendered
+    assert "Speaker A: Nice to meet you." in rendered
 
 
 def test_segments_as_string_defaults_to_user_when_name_missing():
-    """No configured name (None) falls back to the generic 'User' label — unchanged behavior."""
+    """No configured name (None) falls back to the 'You' label."""
     segs = [_segment("Hello.", speaker="SPEAKER_00", is_user=True, start=0.0, end=1.0)]
 
     rendered = TranscriptSegment.segments_as_string(segs, user_name=None)
 
-    assert rendered.startswith("User: Hello.")
+    assert rendered.startswith("You: Hello.")
+
+
+def test_segments_as_string_labels_missing_speaker_id_as_unknown():
+    segment = SimpleNamespace(text='Unattributed words.', is_user=False, person_id=None, speaker_id=None)
+
+    rendered = TranscriptSegment.segments_as_string([segment])
+
+    assert rendered == 'Unknown speaker: Unattributed words.'
 
 
 def test_cross_speaker_repair_skipped_for_late_arriving_segment():

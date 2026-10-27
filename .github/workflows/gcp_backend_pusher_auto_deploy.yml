@@ -15,7 +15,9 @@ on:
       - 'backend/testing/parity_pack_v0/**'
       - 'backend/utils/**'
       - 'backend/pusher/**'
+      - 'backend/omi_logging.py'
       - 'backend/charts/pusher/**'
+      - 'backend/Dockerfile.roles'
       - '.dockerignore'
       - 'backend/scripts/verify_pusher_source_closure.py'
       - 'backend/scripts/verify_pusher_live_deployment_gate.py'
@@ -41,6 +43,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: pusher
   REGION: us-central1
 
@@ -149,8 +155,7 @@ jobs:
 
       - name: Verify live finalization alert route before publishing
         env:
-          # Dest ops Grafana (monitor.omiapi.com). Do not use GRAFANA_TOKEN; that
-          # token belongs to the TV Cloud Run instance.
+          # Dest ops Grafana (monitor.omiapi.com). Use the monitor token above.
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
           set -euo pipefail
@@ -270,26 +275,98 @@ jobs:
           umask 077
           python3 -m pip install -q websockets==12.0
           token_file="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-token.XXXXXX")"
-          cleanup() { rm -f "$token_file"; }
+          port_forward_log="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-forward.XXXXXX")"
+          cleanup() {
+            if [[ -n "${port_forward_pid:-}" ]]; then
+              kill "$port_forward_pid" 2>/dev/null || true
+              wait "$port_forward_pid" 2>/dev/null || true
+            fi
+            rm -f "$token_file" "$port_forward_log"
+          }
           trap cleanup EXIT
-          if [[ -z "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" ]]; then
-            echo "Development Pusher semantic probe requires FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:" >&2
-            echo "a based-hardware signer this lane's deploy identity may impersonate." >&2
+          # api.omiapi.com intentionally forwards Beta clients to production.
+          # Bind BOTH the WebSocket and readback to the authenticated dev cluster.
+          producer_context="$(kubectl config current-context)"
+          if [[ "${{ vars.GCP_PROJECT_ID }}" != based-hardware-dev || "${{ vars.ENV }}" != dev || "$producer_context" != gke_based-hardware-dev_* ]]; then
+            echo "Pusher semantic probe status=FAIL failure_stage=producer_environment_mismatch" >&2
             exit 1
           fi
-          python3 backend/scripts/firebase_release_probe_token.py \
-            --secret-project "${{ vars.GCP_PROJECT_ID }}" \
-            --firebase-project based-hardware \
-            --signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" \
-            --token-output "$token_file"
-          python3 backend/scripts/pusher_semantic_probe.py \
-            --api-url https://api.omiapi.com \
-            --bearer-token-file "$token_file" \
-            --deployment-receipt pusher-dev-deployment-receipt.json \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --namespace "${{ vars.ENV }}-omi-backend" \
-            --run-id "$GITHUB_RUN_ID" \
-            --output pusher-dev-semantic-probe.json
+          if [[ "$(kubectl --context "$producer_context" -n dev-omi-backend auth can-i create pods --subresource=portforward)" != yes ]]; then
+            echo "Development Pusher semantic probe requires pods/portforward permission." >&2
+            exit 1
+          fi
+          # Dev listen is one replica, and its rollouts (gcp_backend_auto_dev.yml,
+          # gcp_backend_listen_helm.yml) hold the deploy-backend-stack lock, not
+          # this one. A listen rollout that lands mid-probe terminates the pod this
+          # port-forward is pinned to, and the probe fails listen_closed_early
+          # (6 runs on 2026-10-19/20, each 15-17 s after a listen helm upgrade).
+          # Retry once, only for that stage and only when the generation of the listen
+          # Deployment changed during the attempt (both reads numeric); every other
+          # failure, including an unreadable generation, is final.
+          listen_generation() {
+            kubectl --context "$producer_context" -n dev-omi-backend get deploy/dev-omi-backend-listen \
+              --request-timeout=30s -o jsonpath='{.metadata.generation}' || echo unknown
+          }
+          probe_attempt() {
+            if [[ -n "${port_forward_pid:-}" ]]; then
+              kill "$port_forward_pid" 2>/dev/null || true
+              wait "$port_forward_pid" 2>/dev/null || true
+            fi
+            kubectl --context "$producer_context" -n dev-omi-backend port-forward \
+              --address=127.0.0.1 service/dev-omi-backend-listen 18080:8080 \
+              >"$port_forward_log" 2>&1 &
+            port_forward_pid=$!
+            ready=false
+            for _ in $(seq 1 30); do
+              if ! kill -0 "$port_forward_pid" 2>/dev/null; then break; fi
+              if grep -q '^Forwarding from 127.0.0.1:18080 -> 8080' "$port_forward_log" && \
+                curl --fail --silent --max-time 2 http://127.0.0.1:18080/health >/dev/null; then
+                ready=true
+                break
+              fi
+              sleep 1
+            done
+            # Setup failures exit the step outright: they are never retried.
+            if [[ "$ready" != true ]]; then
+              echo "Development listen port-forward did not become healthy." >&2
+              exit 1
+            fi
+            # Mint only after tunnel readiness; keep the five-minute token budget
+            # for paced audio and finalization rather than Kubernetes setup.
+            if [[ -z "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" ]]; then
+              echo "Development Pusher semantic probe requires FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:" >&2
+              echo "a based-hardware signer this lane's deploy identity may impersonate." >&2
+              exit 1
+            fi
+            python3 backend/scripts/firebase_release_probe_token.py \
+              --secret-project "${{ vars.GCP_PROJECT_ID }}" \
+              --firebase-project based-hardware \
+              --signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" \
+              --token-output "$token_file" || exit 1
+            python3 backend/scripts/pusher_semantic_probe.py \
+              --api-url http://127.0.0.1:18080 \
+              --allow-local-http \
+              --bearer-token-file "$token_file" \
+              --deployment-receipt pusher-dev-deployment-receipt.json \
+              --project "${{ vars.GCP_PROJECT_ID }}" \
+              --namespace "${{ vars.ENV }}-omi-backend" \
+              --run-id "$GITHUB_RUN_ID" \
+              --output pusher-dev-semantic-probe.json
+          }
+          kubectl --context "$producer_context" -n dev-omi-backend rollout status deploy/dev-omi-backend-listen --timeout=600s
+          generation_before="$(listen_generation)"
+          if ! probe_attempt; then
+            stage="$(jq -r '.failure_stage // "unknown"' pusher-dev-semantic-probe.json 2>/dev/null || echo unknown)"
+            close_code="$(jq -r '.listen_close_code // "none"' pusher-dev-semantic-probe.json 2>/dev/null || echo none)"
+            generation_after="$(listen_generation)"
+            if [[ "$stage" != listen_closed_early || ! "$generation_before" =~ ^[0-9]+$ || ! "$generation_after" =~ ^[0-9]+$ || "$generation_after" == "$generation_before" ]]; then
+              exit 1
+            fi
+            cp pusher-dev-semantic-probe.json pusher-dev-semantic-probe.attempt1.json
+            echo "::warning title=Pusher probe retried once::attempt 1 failure_stage=$stage listen_close_code=$close_code; dev listen rolled out mid-probe (generation $generation_before -> $generation_after)"
+            kubectl --context "$producer_context" -n dev-omi-backend rollout status deploy/dev-omi-backend-listen --timeout=600s
+            probe_attempt
+          fi
 
       - name: Upload development Pusher probe diagnostics
         if: always()
@@ -299,6 +376,7 @@ jobs:
           path: |
             pusher-dev-deployment-receipt.json
             pusher-dev-semantic-probe.json
+            pusher-dev-semantic-probe.attempt1.json
           if-no-files-found: ignore
           retention-days: 30
 

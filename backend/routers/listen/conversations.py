@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Optional
 
+from config.batch_live_preview import capture_snapshot
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database.firestore_read_metrics import FirestoreReadSite
+from database.stale_conversation_recovery import get_stale_recovery_page
+from utils.observability.stale_recovery import record_stale_recovery_outcome
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.message_event import ConversationEvent, ConversationSessionEvent, LastConversationEvent
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
+from routers.listen.policy import persist_conversation_policy
 from routers.listen.contracts import ConversationCaptureOrigin, persisted_started_seconds
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
@@ -20,9 +26,10 @@ from utils.live_speaker_carry import carried_receipt
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations import quiet_finalization
 from utils.conversations.live_continuation import resolve_live_continuation
 from database.listen_continuations import calendar_continuity_row
-from utils.conversation_continuity import calendar_continuity_identity, continuation_timeout, resumable_continuation
+from models.conversation_continuity import calendar_continuity_identity, continuation_timeout, resumable_continuation
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.finalization_failure import classify_finalization_failure
 from utils.conversations.projection_payload import omit_null_processing_state
@@ -39,6 +46,11 @@ from utils.transcribe_decisions import (
     should_attach_to_existing_in_progress,
 )
 from utils.transcribe_store import calendar_db, conversations_db, redis_db
+from config.occasion_conversations import OCCASION_MAX_SPAN_SECONDS
+from utils.conversations.lifecycle_clocks import speech_clock
+from utils.episodes import boundaries, boundary_runtime
+from routers.listen.occasion import occasion_attach_target
+from routers.listen.boundary_poll import poll_calendar, ingest_calendar, conversation_action
 
 logger = logging.getLogger(__name__)
 
@@ -47,15 +59,12 @@ logger = logging.getLogger(__name__)
 # conversation within the ~2-minute conversation timeout, so an hour of silence
 # proves no session owns the row — including one on another device.
 STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS = 3600
-# Per-session recovery bound: spreads a large backlog across sessions instead of
-# fanning dozens of LLM finalizations out of one reconnect.
-STALE_IN_PROGRESS_RECOVERY_BATCH = 10
 RECORDING_SESSION_LEASE_RENEW_INTERVAL = timedelta(minutes=1)
 
 
 def resolve_onboarding_provenance_marker(host: Any) -> Optional[str]:
     """The onboarding-provenance marker consumed by the daily memory sweep
-    (utils/memory/daily_memory_sweep.py) must reflect the runtime's own
+    (the conversation processor) must reflect the runtime's own
     onboarding-admission decision (``host.onboarding_session_id``), not
     ``OnboardingHandler.session_id``: the handler mints its own fallback id
     whenever none is supplied (utils/onboarding.py), so a Settings speech-
@@ -74,6 +83,24 @@ class LiveConversationController:
         self.host = host
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self._last_recording_session_lease_renewal: datetime | None = None
+
+    async def _persist_policy_and_arm_quiet_check(self, conversation_id: str) -> None:
+        await persist_conversation_policy(self.host, conversation_id)
+        if (
+            not getattr(self.host, 'is_multi_channel', False)
+            and normalize_listen_source(self.host.request.source) in {'omi', 'phone'}
+            and quiet_finalization.enabled()
+        ):
+            # Do not expose a new recording generation to ingress until its
+            # durable recovery obligation exists. Enqueue failure is safe: the
+            # check remains indexed for the independent reconciler.
+            await self.host.persistence.call(
+                quiet_finalization.arm,
+                self.host.request.uid,
+                conversation_id,
+                self.host.conversation_creation_timeout,
+                requires_byok=bool(get_byok_keys()),
+            )
 
     def note_audio_activity(self) -> None:
         """Renew the active recording fence at most once per minute."""
@@ -143,6 +170,8 @@ class LiveConversationController:
         ):
             return False
         self.host.recording_session_id = pointer['recording_session_id']
+        self.host.batch_record_capture = capture_snapshot(existing)
+        await self._persist_policy_and_arm_quiet_check(binding['conversation_id'])
         self.host.state.current_conversation_id = binding['conversation_id']
         self.host.recording_session_ids_by_conversation[binding['conversation_id']] = self.host.recording_session_id
         self._adopt_capture_timeline(binding['conversation_id'], (existing or {}).get('started_at'))
@@ -311,7 +340,23 @@ class LiveConversationController:
         if route in {'cloud_tasks', 'queued', 'blocked_byok'}:
             self.on_conversation_processing_started(conversation_id)
             return True
-        return route == 'noop'
+        status = finalization.get('status')
+        if status not in {
+            'missing',
+            'no_content',
+            'deferred',
+            'completed',
+            'dead_letter',
+            'terminal',
+            'duplicate_finalization',
+            'already_finalizing',
+            'restart_replays_state',
+            'reprocess_requires_new_generation',
+            'invalid_transition',
+        }:
+            status = 'other'
+        logger.info('Listen finalization not admitted conversation=%s outcome=%s', conversation_id, status)
+        return False
 
     def _should_report_no_audio_teardown(self) -> bool:
         """Multi-channel session (phone calls today) that never sent a first audio byte."""
@@ -329,7 +374,14 @@ class LiveConversationController:
             read_site=FirestoreReadSite.LISTEN_PROCESS_CONVERSATION,
         )
         if not data:
+            logger.info('Listen finalization skipped conversation=%s outcome=missing', conversation_id)
             return False
+        # Discarded empty generations are intentionally protected by the delete
+        # transaction. Detect that refusal before its write/reread round trip.
+        for guard in ('deleted', 'discarded', 'is_locked', 'deferred'):
+            if data.get(guard):
+                logger.info('Listen finalization skipped conversation=%s outcome=%s', conversation_id, guard)
+                return False
         if data.get('transcript_segments') or data.get('photos'):
             return await self.schedule_finalization(conversation_id)
         recording_session_id = recording_session_id_for_lifecycle_event(
@@ -366,9 +418,10 @@ class LiveConversationController:
             conversation_id,
             read_site=FirestoreReadSite.LISTEN_POST_DELETE_REREAD,
         )
-        return bool(
-            latest and (latest.get('transcript_segments') or latest.get('has_content') or latest.get('photos'))
-        ) and await self.schedule_finalization(conversation_id)
+        if latest and (latest.get('transcript_segments') or latest.get('has_content') or latest.get('photos')):
+            return await self.schedule_finalization(conversation_id)
+        logger.info('Listen finalization skipped conversation=%s outcome=empty_delete_refused', conversation_id)
+        return False
 
     def _active_speaker_scope(self) -> Optional[str]:
         epoch = getattr(getattr(self.host, 'receiver', None), 'speaker_provider_epoch', None)
@@ -385,6 +438,7 @@ class LiveConversationController:
             )
             candidates = []
             for meeting in meetings or []:
+                await ingest_calendar(self, meeting)
                 if meeting.get('calendar_source') == 'screen_activity':
                     continue
                 start = persisted_started_seconds(meeting.get('start_time'))
@@ -436,6 +490,11 @@ class LiveConversationController:
             source = ConversationSource.omi
         use_client_conversation_id = bool(self.host.client_conversation_id) and not rollover
         proposed_id = self.host.client_conversation_id if use_client_conversation_id else str(uuid.uuid4())
+        if use_client_conversation_id:
+            # Occasion conversations: a new recording id (a pendant reconnect, a new session) inside
+            # the occasion window continues the open conversation instead of starting another. An
+            # already-bound id ignores this proposal, so a true reconnect resumes as before.
+            proposed_id = await self._occasion_attach_target() or proposed_id
         proposed_id_is_server_generated = not use_client_conversation_id
         binding = await self.host.persistence.call(
             lifecycle_service.open_live_recording_session,
@@ -488,9 +547,13 @@ class LiveConversationController:
                             existing.get(key) for key in ('transcript_segments', 'photos', 'has_content', 'is_locked')
                         )
                     ):
-                        await self.process_conversation(conversation_id)
+                        await self._finalize_isolated(
+                            self.process_conversation, conversation_id, stage='reconnect_rollover'
+                        )
                     await self.create_new_in_progress_conversation(rollover=True)
                     return
+                self.host.batch_record_capture = capture_snapshot(existing)
+                await self._persist_policy_and_arm_quiet_check(conversation_id)
                 self.host.state.current_conversation_id = conversation_id
                 self._adopt_capture_timeline(conversation_id, existing.get('started_at'))
                 # Persist the custom-STT marker on resume so a conversation that
@@ -591,12 +654,28 @@ class LiveConversationController:
         payload = omit_null_processing_state(conversation.model_dump())
         if carry:
             payload['manual_speaker_assignments'] = carry
-        await self.host.persistence.call(
+        idempotent_create = bool(
+            self.host.client_conversation_id and conversation_id == self.host.client_conversation_id
+        )
+        created = await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
             request.uid,
             payload,
-            idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
+            idempotent=idempotent_create,
         )
+        if created or not idempotent_create:
+            self.host.batch_record_capture = capture_snapshot(payload)
+        else:
+            # An idempotent hit: another writer created this client id between the
+            # probe above and this create. Snapshot the stored row like the resume
+            # paths do; pinning None would hold a batch-owned recording ineligible.
+            stored = await self.host.persistence.call(
+                conversations_db.get_conversation,
+                request.uid,
+                conversation_id,
+                read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
+            )
+            self.host.batch_record_capture = capture_snapshot(stored) if stored else None
         if rollover:
             proposed = {'conversation_id': conversation_id, 'recording_session_id': self.host.recording_session_id}
             adopted = await self._continuation(proposed)
@@ -613,6 +692,7 @@ class LiveConversationController:
         await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
         if source == ConversationSource.desktop and meeting:
             await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, meeting['id'])
+        await self._persist_policy_and_arm_quiet_check(conversation_id)
         self.host.state.current_conversation_id = conversation_id
         # Fresh v2 generation: the origin is pinned by the receiver at the
         # first accepted audio frame associated with this conversation.
@@ -653,7 +733,11 @@ class LiveConversationController:
             # existing-conversation behavior instead of dodging it.
             await self.create_new_in_progress_conversation()
             return None
-        existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
+        if hasattr(self.host, '_policy_resume_candidate'):
+            existing = self.host._policy_resume_candidate
+            del self.host._policy_resume_candidate
+        else:
+            existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
         if not existing:
             await self.create_new_in_progress_conversation()
             return None
@@ -674,7 +758,7 @@ class LiveConversationController:
             await self.create_new_in_progress_conversation()
             return None
         existing = await self._continuity_row(existing)
-        finished_at = datetime.fromisoformat(existing['finished_at'].isoformat())
+        finished_at = speech_clock(self.host.request.uid, existing) or self.clock()
         seconds = (self.clock() - finished_at).total_seconds()
         if (
             decide_existing_conversation_action(
@@ -686,7 +770,7 @@ class LiveConversationController:
             # This runs before STT initialization: an outage cannot indefinitely
             # defer empty-generation cleanup. The transaction still lets content win.
             if not (existing.get('transcript_segments') or existing.get('photos') or existing.get('has_content')):
-                await self.process_conversation(existing['id'])
+                await self._finalize_isolated(self.process_conversation, existing['id'], stage='prepare_rollover')
             await self.create_new_in_progress_conversation()
             return existing['id']
         binding = await self.host.persistence.call(
@@ -708,6 +792,8 @@ class LiveConversationController:
                 await self.create_new_in_progress_conversation(rollover=True)
                 return None
             existing = current
+        self.host.batch_record_capture = capture_snapshot(existing)
+        await self._persist_policy_and_arm_quiet_check(existing['id'])
         self.host.state.current_conversation_id = existing['id']
         self.host.recording_session_ids_by_conversation[existing['id']] = self.host.recording_session_id
         self._adopt_capture_timeline(existing['id'], existing.get('started_at'))
@@ -743,11 +829,18 @@ class LiveConversationController:
         in the same sweep still run. A rejection at the 1 MiB ceiling is permanent, so that row
         goes to ``_close_oversized`` instead of being retried by every reconnect.
         """
+        outcome = 'not_admitted'
         try:
-            await finalize(conversation_id)
+            if await finalize(conversation_id):
+                outcome = 'accepted'
+        except asyncio.CancelledError:
+            outcome = 'cancelled'
+            raise
         except Exception as error:
+            outcome = 'error'
             failure = classify_finalization_failure(error, conversation_id)
             if failure.conversation_at_size_limit:
+                outcome = 'oversized_close_attempted'
                 await self._close_oversized(conversation_id, stage=stage)
                 return
             # Bounded tokens, never the message: Firestore names the rejected
@@ -760,6 +853,10 @@ class LiveConversationController:
                 failure.reason,
                 failure.document,
             )
+        finally:
+            if stage == 'stale_in_progress':
+                record_stale_recovery_outcome(outcome)
+                logger.info('Listen stale recovery outcome=%s conversation=%s', outcome, conversation_id)
 
     async def _close_oversized(self, conversation_id: str, *, stage: str) -> None:
         """Terminalize a row whose finalization can never commit because it is at the 1 MiB ceiling.
@@ -805,31 +902,34 @@ class LiveConversationController:
         self.on_conversation_processed(conversation_id)
 
     async def recover_stale_in_progress(self) -> None:
-        """Route orphaned `in_progress` conversations through normal finalization (#9809).
-
-        Conversations from sessions that died without processing sit invisible in
-        `in_progress` forever; the manual /finalize workaround proves their content
-        is intact. `process_conversation` already makes the right call per row —
-        content goes through the durable finalization seam, empty rows are
-        deleted — so recovery is exactly the path a live timeout takes. Bounded
-        and oldest-first so one session never stampedes the pipeline.
-        """
-        stale = await self.host.persistence.call(
-            conversations_db.get_stale_in_progress_conversations,
-            self.host.request.uid,
-            older_than_seconds=STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS,
-            limit=STALE_IN_PROGRESS_RECOVERY_BATCH,
-        )
+        """Recover one durable page; refusals never pin the reconnect queue."""
+        if os.getenv('STALE_IN_PROGRESS_RECOVERY_ENABLED', 'true').strip().lower() in {'0', 'false', 'off'}:
+            return
+        try:
+            stale = await self.host.persistence.call(
+                get_stale_recovery_page,
+                self.host.request.uid,
+                cutoff=self.clock() - timedelta(seconds=STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS),
+            )
+        except Exception as error:
+            # Recovery failure must not become a supervised-task socket crash.
+            logger.warning('Listen stale recovery scan failed type=%s', type(error).__name__)
+            return
         for conversation in stale or []:
             if conversation['id'] == self.host.state.current_conversation_id:
+                record_stale_recovery_outcome('current_session')
+                logger.info('Listen stale recovery outcome=current_session conversation=%s', conversation['id'])
                 continue
-            logger.info(
-                'recovering stale in_progress conversation uid=%s conversation=%s finished_at=%s',
-                self.host.request.uid,
-                conversation['id'],
-                conversation.get('finished_at'),
-            )
             await self._finalize_isolated(self.process_conversation, conversation['id'], stage='stale_in_progress')
+
+    def _occasion_span_exceeded(self, conversation: dict[str, Any]) -> bool:
+        if not getattr(self.host, 'occasion_mode', False):
+            return False
+        started = persisted_started_seconds(conversation.get('started_at'))
+        return started is not None and self.clock().timestamp() - started >= OCCASION_MAX_SPAN_SECONDS
+
+    async def _occasion_attach_target(self) -> Optional[str]:
+        return await occasion_attach_target(self)
 
     async def lifecycle_loop(self) -> None:
         while self.host.state.active:
@@ -838,6 +938,7 @@ class LiveConversationController:
             conversation_id = self.host.state.current_conversation_id
             if not conversation_id:
                 continue
+            await poll_calendar(self)
             conversation = await self.host.persistence.call(
                 conversations_db.get_conversation,
                 self.host.request.uid,
@@ -848,7 +949,7 @@ class LiveConversationController:
                 await self.create_new_in_progress_conversation(rollover=True)
                 continue
             conversation = await self._continuity_row(conversation)
-            finished_at = datetime.fromisoformat(conversation['finished_at'].isoformat())
+            finished_at = speech_clock(self.host.request.uid, conversation) or self.clock()
             action = decide_lifecycle_action(
                 conversation_exists=True,
                 status=conversation.get('status'),
@@ -858,6 +959,25 @@ class LiveConversationController:
                     conversation, self.host.conversation_creation_timeout
                 ),
             )
+            boundary_action = await conversation_action(self, conversation)
+            if boundary_action == 'hold':
+                action = ConversationLifecycleAction.continue_current
+            elif boundary_action == 'close':
+                await self.host.persistence.call(
+                    boundary_runtime.apply_signal_edges,
+                    self.host.request.uid,
+                    now=self.clock(),
+                    quiet=(self.clock() - finished_at).total_seconds() >= boundaries.QUIET_SECONDS,
+                )
+                action = ConversationLifecycleAction.process_and_create_new
+            if (
+                boundary_action != 'hold'
+                and action == ConversationLifecycleAction.continue_current
+                and self._occasion_span_exceeded(conversation)
+            ):
+                # One occasion is capped like a smart-merged chain: all-day capture still rolls over.
+                logger.info('event=occasion_span_rollover conversation=%s', conversation_id)
+                action = ConversationLifecycleAction.process_and_create_new
             if action == ConversationLifecycleAction.create_new:
                 await self.create_new_in_progress_conversation(rollover=True)
             elif action == ConversationLifecycleAction.process_and_create_new:

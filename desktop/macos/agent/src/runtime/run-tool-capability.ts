@@ -315,8 +315,6 @@ export class RunToolCapabilityBroker {
     const projectionContext = {
       executionRole: persisted.profile.executionRole,
       screenContext: persisted.screenContext,
-      jitKnowledgeToolsEnabled: persisted.jitKnowledgeToolsEnabled,
-      jitProactivity: persisted.jitProactivity,
       surfaceKind: persisted.surfaceKind,
       chatFirstUi: persisted.chatFirstUi,
       controlGeneration: persisted.chatFirstControlGeneration,
@@ -464,7 +462,14 @@ export class RunToolCapabilityBroker {
         grants,
       });
       if (policy.decision !== "allow") {
-        this.reject("approval_required", `Desktop tool approval was not granted: ${policy.reason}`);
+        // The model relays this text to the user. No production surface can grant
+        // approval yet (#20938), so it must not tell the user to approve anything.
+        this.reject(
+          "approval_required",
+          `Desktop tool approval was not granted: ${policy.reason.replace(/\.$/, "")}. `
+            + "This app has no approval prompt for this action, so do not ask the user to approve it, "
+            + "grant access, or change settings. Tell them it is not available here and continue without it.",
+        );
       }
     }
 
@@ -808,8 +813,6 @@ export class RunToolCapabilityBroker {
     runMode: RunMode;
     chatMode: string | null;
     screenContext: boolean;
-    jitKnowledgeToolsEnabled: boolean;
-    jitProactivity: boolean;
     chatFirstUi: boolean;
     chatFirstControlGeneration: number | null;
     /** Spawn-time child tool restriction; null = no policy, [] = no tools (fail closed). */
@@ -884,8 +887,6 @@ export class RunToolCapabilityBroker {
       runMode: text(row.mode) === "act" ? "act" : "ask",
       chatMode: typeof metadata.chatMode === "string" ? metadata.chatMode : null,
       screenContext: admittedScreenContext(runInput),
-      jitKnowledgeToolsEnabled: metadata.jitKnowledgeToolsEnabled === true,
-      jitProactivity: metadata.jitBudget !== undefined,
       chatFirstUi,
       chatFirstControlGeneration: chatFirstUi && Number.isSafeInteger(controlGeneration) && controlGeneration >= 0
         ? controlGeneration

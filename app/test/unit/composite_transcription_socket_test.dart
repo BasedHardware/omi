@@ -1,3 +1,4 @@
+import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -20,6 +21,22 @@ void main() {
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
       await SharedPreferencesUtil.init();
+    });
+
+    test('permanent local failure keeps capture forwarding and secondary socket alive', () async {
+      final primary = _FakeSocket();
+      final secondary = _FakeSocket();
+      final socket = CompositeTranscriptionSocket(
+          primarySocket: primary, secondarySocket: secondary, forwardRawAudioToSecondary: false);
+      await socket.connect();
+      primary.onError(const LocalSttFailure('permission_denied', canProbeRecovery: true), StackTrace.current);
+      expect(socket.status, PureSocketStatus.connected);
+      expect(secondary.status, PureSocketStatus.connected);
+      final audio = Uint8List.fromList([1, 2, 3]);
+      socket.send(audio);
+      expect(primary.sent, [same(audio)]);
+      expect(secondary.sent, isEmpty);
+      await socket.stop();
     });
 
     test('does not send input frames to the Omi socket when disabled', () async {

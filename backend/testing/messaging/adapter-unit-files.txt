@@ -15,7 +15,6 @@ tests/unit/test_chat_file_gateway_surface.py
 tests/unit/test_chat_file_skip_malformed.py
 tests/unit/test_chat_send_malformed_file_guard.py
 tests/unit/test_messaging_adapters.py
-tests/unit/test_knowledge_ledger_write_tools.py
 tests/unit/test_action_items_date_coercion.py
 tests/unit/test_action_items_patch_null_required_fields.py
 tests/unit/test_action_item_canonical_contract.py

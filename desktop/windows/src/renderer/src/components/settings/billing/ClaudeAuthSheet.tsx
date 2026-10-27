@@ -46,7 +46,7 @@ export function ClaudeAuthSheet(): React.JSX.Element {
         </>
       }
     >
-      <p className="text-text-secondary">Unlock Omi Pro for $199/month</p>
+      <p className="text-text-secondary">Unlock Omi Pro</p>
       <p className="mt-2 text-text-tertiary">
         Your browser will open to the Omi Pro checkout. After subscribing, return to omi.
       </p>

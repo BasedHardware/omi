@@ -366,6 +366,8 @@ class ConversationAudioInfo {
 
 class ServerConversation {
   final String id;
+  final Map<String, dynamic>? onDeviceProvenance;
+  final Map<String, dynamic>? clientProcessing;
   final DateTime createdAt;
   final DateTime? startedAt;
   final DateTime? finishedAt;
@@ -413,6 +415,7 @@ class ServerConversation {
   /// reprocess can still succeed. Absent (false) on every other row, including rows where the
   /// model ran and found nothing to summarize.
   final bool summaryRetryable;
+  final bool processingDeferred;
 
   /// Coverage projected from the server capture receipt; absent on legacy rows.
   final String? captureCoverage;
@@ -420,9 +423,16 @@ class ServerConversation {
   // local label
   bool isNew = false;
 
+  /// Local, never serialized: the transcript was kept from an earlier detail read because a list
+  /// refresh carried none (see [keepingTranscriptOf]). It may be out of date, so the detail page
+  /// re-reads the conversation instead of trusting it.
+  bool transcriptCarried = false;
+
   ServerConversation({
     required this.id,
     required this.createdAt,
+    this.onDeviceProvenance,
+    this.clientProcessing,
     required this.structured,
     this.startedAt,
     this.finishedAt,
@@ -449,8 +459,55 @@ class ServerConversation {
     this.captureGroup,
     this.speakerResolution,
     this.summaryRetryable = false,
+    this.processingDeferred = false,
     this.captureCoverage,
   });
+
+  /// List rows omit transcript_segments ("unknown/not loaded, not an empty transcript"), while the
+  /// detail page loads the transcript once and reads it back from the provider's list. A refreshed
+  /// row with no transcript therefore keeps the one [loaded] already has. A locked row is redacted
+  /// on purpose and keeps nothing.
+  ServerConversation keepingTranscriptOf(ServerConversation? loaded) {
+    if (transcriptSegments.isNotEmpty || isLocked) return this;
+    if (loaded == null || loaded.transcriptSegments.isEmpty) return this;
+    return withTranscriptSegments(loaded.transcriptSegments)..transcriptCarried = true;
+  }
+
+  /// This conversation with [segments] as its transcript; every other field is carried over.
+  ServerConversation withTranscriptSegments(List<TranscriptSegment> segments) => ServerConversation(
+        id: id,
+        createdAt: createdAt,
+        onDeviceProvenance: onDeviceProvenance,
+        clientProcessing: clientProcessing,
+        structured: structured,
+        startedAt: startedAt,
+        finishedAt: finishedAt,
+        transcriptSegments: segments,
+        appResults: appResults,
+        suggestedSummarizationApps: suggestedSummarizationApps,
+        geolocation: geolocation,
+        photos: photos,
+        audioFiles: audioFiles,
+        conversationAudio: conversationAudio,
+        discarded: discarded,
+        deleted: deleted,
+        source: source,
+        language: language,
+        externalIntegration: externalIntegration,
+        calendarEvent: calendarEvent,
+        status: status,
+        isLocked: isLocked,
+        starred: starred,
+        folderId: folderId,
+        visibility: visibility,
+        siriVisibilityValid: siriVisibilityValid,
+        matchSnippets: matchSnippets,
+        captureGroup: captureGroup,
+        speakerResolution: speakerResolution,
+        summaryRetryable: summaryRetryable,
+        processingDeferred: processingDeferred,
+        captureCoverage: captureCoverage,
+      )..isNew = isNew;
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
     final normalized = Map<String, dynamic>.from(json);
@@ -489,6 +546,10 @@ class ServerConversation {
       siriVisibilityValid: json['siri_visibility_valid'] != false &&
           (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
+      processingDeferred: json['processing_deferred'] == true,
+      onDeviceProvenance:
+          json['on_device_provenance'] is Map ? Map<String, dynamic>.from(json['on_device_provenance']) : null,
+      clientProcessing: json['client_processing'] is Map ? Map<String, dynamic>.from(json['client_processing']) : null,
     );
   }
 
@@ -498,11 +559,16 @@ class ServerConversation {
     Geolocation? geolocation,
     bool deleted = false,
     bool siriVisibilityValid = true,
+    bool? processingDeferred,
     List<TranscriptMatchSnippet>? matchSnippets,
+    Map<String, dynamic>? onDeviceProvenance,
+    Map<String, dynamic>? clientProcessing,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
     return ServerConversation(
       id: generated.id,
+      onDeviceProvenance: onDeviceProvenance,
+      clientProcessing: clientProcessing ?? generated.clientProcessing?.toJson(),
       createdAt: generated.createdAt,
       structured: structured ?? Structured.fromGenerated(generated.structured),
       startedAt: generated.startedAt,
@@ -540,6 +606,7 @@ class ServerConversation {
       speakerResolution:
           generated.speakerResolution == null ? null : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
       summaryRetryable: generated.summaryRetryable == true,
+      processingDeferred: processingDeferred ?? generated.toJson()['processing_deferred'] == true,
       captureCoverage: generated.captureCoverage,
     );
   }
@@ -547,6 +614,8 @@ class ServerConversation {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      if (onDeviceProvenance != null) 'on_device_provenance': onDeviceProvenance,
+      if (clientProcessing != null) 'client_processing': clientProcessing,
       'created_at': createdAt.toUtc().toIso8601String(),
       'structured': structured.toJson(),
       'started_at': startedAt?.toUtc().toIso8601String(),
@@ -576,6 +645,7 @@ class ServerConversation {
       'capture_group': captureGroup?.toJson(),
       'speaker_resolution': speakerResolution?.toJson(),
       if (summaryRetryable) 'summary_retryable': true,
+      if (processingDeferred) 'processing_deferred': true,
       if (captureCoverage != null) 'capture_coverage': captureCoverage,
     };
   }

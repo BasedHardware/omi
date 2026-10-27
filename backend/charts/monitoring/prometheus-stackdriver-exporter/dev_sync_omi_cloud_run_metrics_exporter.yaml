@@ -1,0 +1,75 @@
+fullnameOverride: "dev-omi-cloud-run-sync-metrics-exporter"
+
+# Cloud Run backend-sync, backend-sync-backfill and backend-integration run the
+# full backend codebase behind the GMP sidecar, so they publish every omi_* family
+# once per instance -- ~165k series per 10-minute window on 2026-10-16, almost all
+# of it families nothing reads from these services (omi_fallback_total 47k,
+# omi_stt_cost_routing_* 38k, omi_subscription_events_total 10k). Importing all of
+# it OOMKilled the shared exporter at 2Gi. This release imports only the families
+# an in-cluster alert or dashboard reads and that these services actually emit;
+# <env>-omi-cloud-run-metrics-exporter imports everything else from the other
+# Cloud Run services. Both are scraped as job cloud-run-application-metrics.
+#
+# Add a family here only with the consumer that reads it from these services:
+#   omi_sync_{dispatch_attempts,upload,transcription_job,intake}  backend-sync alerts, Core Features, resilience-fallbacks
+#   omi_journey_*, omi_client_journey_* journey SLO alerts, Core Features
+#   omi_owner_recognition_conversations owner-recognition alerts (surface="sync")
+#   omi_conversation_duration_seconds,
+#   omi_conversation_summary_vector_upserts  Core Features
+#   omi_firestore_documents_per_operation    Firestore read-amplification alert
+#   omi_capture_finalization_*          resilience alert, Core Features
+#   omi_held_content_*                  held-content ramp gates (#22840 runbook)
+#   omi_stt_cap_recovery_reconciliation_total  cap-hold recovery outcomes
+#   omi_queue_oldest_ready_*            resilience queue-age alert
+# A trailing slash pins one family (types are prometheus.googleapis.com/<name>/<kind>).
+# Measured 2026-10-16 with the omi_sync_ blanket prefix: 43 types, ~6.1k series
+# per collection; the omi_sync_ pin above removed omi_sync_phase_* (13.2k live
+# series on 2026-10-21) and ~5k live series of other unconsumed omi_sync_*,
+# while keeping every family the pinned list below documents a consumer for.
+stackdriver:
+  projectIds:
+    - "based-hardware-dev"
+  metrics:
+    prefixes:
+      # omi_sync_phase_* is deliberately absent: no in-cluster alert, dashboard
+      # or adapter rule reads it (checked 2026-10-21), the rightsizing runbook
+      # queries it from GMP, and both import paths (this sidecar copy per
+      # exported_instance and the custom-metric copy per instance uuid in the
+      # main release) were re-creating ~13k live series per instance generation
+      # -- 158k of the 2.27M-series Prometheus head on 2026-10-21.
+      - 'prometheus.googleapis.com/omi_sync_dispatch_attempts_total/'
+      - 'prometheus.googleapis.com/omi_sync_upload_total/'
+      - 'prometheus.googleapis.com/omi_sync_transcription_job_total/'
+      - 'prometheus.googleapis.com/omi_sync_intake'
+      - 'prometheus.googleapis.com/omi_journey_'
+      - 'prometheus.googleapis.com/omi_client_journey_'
+      - 'prometheus.googleapis.com/omi_owner_recognition_conversations_total/'
+      - 'prometheus.googleapis.com/omi_conversation_duration_seconds/'
+      - 'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/'
+      - 'prometheus.googleapis.com/omi_firestore_documents_per_operation/'
+      - 'prometheus.googleapis.com/omi_capture_finalization_'
+      - 'prometheus.googleapis.com/omi_held_content_'
+      - 'prometheus.googleapis.com/omi_stt_cap_recovery_reconciliation_total/'
+      - 'prometheus.googleapis.com/omi_queue_oldest_ready_'
+    filters:
+      - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend-sync","backend-sync-backfill","backend-integration")'
+    interval: '10m'
+    offset: '1m'
+
+serviceAccount:
+  create: false
+  name: "dev-omi-prometheus-stackdriver-exporter"
+
+# Same envelope as the main Cloud Run exporter: the collection is a few thousand
+# series, but the chart hardcodes 10s probes, so CPU headroom is what keeps a
+# collection in flight from starving them (see that file).
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: '2'
+    memory: 2Gi
+
+# Do not add livenessProbe/readinessProbe here: the chart hardcodes both and reads
+# no values key for them (see <env>_omi_cloud_run_metrics_exporter.yaml).

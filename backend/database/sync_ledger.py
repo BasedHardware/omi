@@ -15,6 +15,9 @@ from database.sync_jobs import get_sync_job
 from utils.sync import stage as sync_stage
 
 LEDGER_RETENTION_DAYS = 45
+# Terminal batch_v1 ledger state: every failed unit is held with no recovery
+# path left; projected siblings are published, the held span is counted.
+BATCH_PARTIAL_STATUS = 'partial'
 CLAIM_STALE_SECONDS = 2 * 24 * 60 * 60
 REPEAT_FAILURE_LIMIT = 3
 REPEAT_FAILURE_WINDOW = timedelta(hours=24)
@@ -73,6 +76,7 @@ class SyncContentRunBindingOutcome(str, Enum):
 
     BOUND = 'bound'
     COMPLETED = 'completed'
+    HELD = 'held'
     LOST = 'lost'
 
 
@@ -91,6 +95,10 @@ class SyncContentRunBinding:
     def completed(self) -> bool:
         return self.outcome is SyncContentRunBindingOutcome.COMPLETED
 
+    @property
+    def held(self) -> bool:
+        return self.outcome is SyncContentRunBindingOutcome.HELD
+
 
 def _ledger_ref(client: Any, uid: str, content_id: str) -> Any:
     collection = sync_stage.collection_name('sync_content_ledger')
@@ -102,6 +110,8 @@ def _ledger_owner_matches(
     job_id: str,
     run_token: str | None,
     run_epoch: int | None = None,
+    *,
+    allow_batch: bool = False,
 ) -> bool:
     """Return whether a worker still owns this ledger mutation boundary.
 
@@ -109,7 +119,12 @@ def _ledger_owner_matches(
     claim that has never been bound, but can never overwrite a live worker that
     has recorded a run token.
     """
-    if existing.get('status') != 'processing' or existing.get('job_id') != job_id:
+    if existing.get('dispatch_protocol') == 'batch_v1' and not allow_batch:
+        return False
+    # A batch partial is terminal for the client but still owned by its batch
+    # job: recovery, operator redrive and the ordinary completion upgrade it.
+    owned = {'processing', BATCH_PARTIAL_STATUS} if allow_batch else {'processing'}
+    if existing.get('status') not in owned or existing.get('job_id') != job_id:
         return False
     bound_token = existing.get('ledger_run_token')
     bound_epoch = existing.get('ledger_run_epoch')
@@ -118,9 +133,23 @@ def _ledger_owner_matches(
     return bound_token == run_token and bound_epoch == run_epoch
 
 
+def sync_content_reference(client: Any, uid: str, content_id: str) -> Any:
+    """Share the canonical owner-scoped reference with a custody transfer."""
+    return _ledger_ref(client, uid, content_id)
+
+
+def sync_content_owner_matches(
+    existing: Dict[str, Any], job_id: str, run_token: str | None, run_epoch: int | None = None
+) -> bool:
+    """Custody transfer uses the same token/epoch fence as normal completion."""
+    return _ledger_owner_matches(existing, job_id, run_token, run_epoch)
+
+
 def is_valid_completed_sync_content_result(result: Any) -> bool:
     """A ledger completion may converge Redis only for an all-success result."""
     if not isinstance(result, dict):
+        return False
+    if result.get('held_audio') is True:
         return False
     failed_segments = result.get('failed_segments')
     total_segments = result.get('total_segments')
@@ -146,6 +175,41 @@ def is_valid_completed_sync_content_result(result: Any) -> bool:
         # zero-segment records predate the silence-vs-decode-failure contract.
         return total_segments > 0
     return outcome in {'success', 'expected_silence'}
+
+
+def is_valid_partial_sync_content_result(result: Any) -> bool:
+    """A batch partial: every failed segment is a held unit, none is an error.
+
+    Never an all-success result, so no legacy path converges Redis from it.
+    """
+    if not isinstance(result, dict) or result.get('outcome') != 'partial' or result.get('held_audio') is True:
+        return False
+    failed, held, total = result.get('failed_segments'), result.get('held_segments'), result.get('total_segments')
+    if not all(isinstance(value, int) and not isinstance(value, bool) for value in (failed, held, total)):
+        return False
+    assert isinstance(failed, int) and isinstance(held, int) and isinstance(total, int)
+    return (
+        0 < held == failed <= total
+        and result.get('errors') == []
+        and all(isinstance(result.get(key), list) for key in ('new_memories', 'updated_memories'))
+    )
+
+
+def batch_ledger_owes_held_units(ledger: Dict[str, Any]) -> bool:
+    """Operator redrive precondition: nothing is charged yet, or a partial still counts held units.
+
+    A partial charged only its projected siblings, so a reviewed redrive of a
+    held unit stays allowed; its ordinary completion charges the remainder.
+    """
+    if ledger.get('status') == BATCH_PARTIAL_STATUS:
+        return is_valid_partial_sync_content_result(ledger.get('result'))
+    return ledger.get('status') != 'completed' and ledger.get('usage_committed_at') is None
+
+
+def is_valid_held_sync_content_result(result: Any) -> bool:
+    if not isinstance(result, dict) or result.get('held_audio') is not True:
+        return False
+    return is_valid_completed_sync_content_result({**result, 'held_audio': False})
 
 
 def _processing_claim_updates(
@@ -189,6 +253,20 @@ def _claim_transaction(
 ) -> Dict[str, Any]:
     snapshot = ref.get(transaction=transaction)
     existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    if existing.get('dispatch_protocol') == 'stt_cap_hold_v1' and existing.get('status') == 'held':
+        if is_valid_held_sync_content_result(existing.get('result')):
+            return {'outcome': 'held', 'result': existing['result'], 'job_id': existing.get('job_id')}
+        return {'outcome': 'busy', 'job_id': existing.get('job_id')}
+    if existing.get('dispatch_protocol') == 'batch_v1':
+        result = existing.get('result')
+        if existing.get('status') == 'completed' and is_valid_completed_sync_content_result(result):
+            return {'outcome': 'completed', 'result': result}
+        return {
+            'outcome': 'busy',
+            'job_id': existing.get('job_id'),
+            'dispatch_protocol': 'batch_v1',
+            'batch_pipeline': existing.get('batch_pipeline'),
+        }
     if existing.get('status') == 'completed':
         result = existing.get('result')
         if is_valid_completed_sync_content_result(result):
@@ -247,7 +325,12 @@ def claim_sync_content(
     now = datetime.now(timezone.utc)
     claim = _claim_transaction(client.transaction(), ref, job_id, lane, now)
     owner = claim.get('job_id')
-    if claim.get('outcome') == 'busy' and owner and get_sync_job(owner) is None:
+    if (
+        claim.get('outcome') == 'busy'
+        and claim.get('dispatch_protocol') != 'batch_v1'
+        and owner
+        and get_sync_job(owner) is None
+    ):
         # Redis expires at 24h, before the 48h ledger claim. Re-read the ledger
         # transactionally: only replace the owner whose absence we observed.
         # A concurrent completion/new owner wins; processing checkpoints survive
@@ -274,6 +357,15 @@ def _bind_run_token_transaction(
     """
     snapshot = ref.get(transaction=transaction)
     existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    if existing.get('dispatch_protocol') == 'stt_cap_hold_v1' and existing.get('status') == 'held':
+        if is_valid_held_sync_content_result(existing.get('result')):
+            return SyncContentRunBinding(SyncContentRunBindingOutcome.HELD, existing['result'])
+        return SyncContentRunBinding(SyncContentRunBindingOutcome.LOST)
+    if existing.get('dispatch_protocol') == 'batch_v1':
+        result = existing.get('result')
+        if existing.get('status') == 'completed' and is_valid_completed_sync_content_result(result):
+            return SyncContentRunBinding(SyncContentRunBindingOutcome.COMPLETED, result)
+        return SyncContentRunBinding(SyncContentRunBindingOutcome.LOST)
     if existing.get('status') == 'completed':
         result = existing.get('result')
         if is_valid_completed_sync_content_result(result):
@@ -546,6 +638,7 @@ def _mark_completed_transaction(
     now: datetime,
     run_token: str | None = None,
     run_epoch: int | None = None,
+    staging_custody: Dict[str, Any] | None = None,
 ) -> bool:
     """Publish completion only while ``job_id`` still owns the ledger entry."""
     # The caller-side pipeline checks this too, but completion is a durable
@@ -563,6 +656,7 @@ def _mark_completed_transaction(
         {
             'status': 'completed',
             'result': result,
+            **({'staging_custody': staging_custody} if staging_custody else {}),
             'updated_at': now,
             'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
         },
@@ -580,6 +674,7 @@ def mark_sync_content_completed(
     run_token: str | None = None,
     run_epoch: int | None = None,
     firestore_client: Any = None,
+    staging_custody: Dict[str, Any] | None = None,
 ) -> bool:
     """Atomically publish a completed result for the matching ledger owner."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -593,6 +688,7 @@ def mark_sync_content_completed(
         now,
         run_token,
         run_epoch,
+        staging_custody,
     )
 
 
@@ -677,6 +773,8 @@ def _release_claim_after_job_retired_transaction(
     """
     snapshot = ref.get(transaction=transaction)
     existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    if existing.get('dispatch_protocol') == 'batch_v1':
+        return False
     if existing.get('status') != 'processing' or existing.get('job_id') != job_id:
         return False
     transaction.set(
@@ -714,3 +812,86 @@ def release_sync_content_claim_after_job_retired(
         failure_key,
         failure_fingerprint,
     )
+
+
+def complete_batch_projection_in_transaction(
+    transaction: Any,
+    ref: Any,
+    existing: Dict[str, Any],
+    job_id: str,
+    result: Dict[str, Any],
+    now: datetime,
+    *,
+    run_token: str | None = None,
+    run_epoch: int | None = None,
+) -> None:
+    """Write-only completion after the caller reads all projected sibling receipts.
+
+    Kept here beside legacy completion validation/ownership; the batch consumer
+    supplies a snapshot from this same transaction, before assignment writes.
+    """
+    if (
+        existing.get('dispatch_protocol') != 'batch_v1'
+        or not is_valid_completed_sync_content_result(result)
+        or not _ledger_owner_matches(
+            existing,
+            job_id,
+            run_token,
+            run_epoch,
+            allow_batch=True,
+        )
+    ):
+        raise RuntimeError('batch projection lost content ledger ownership')
+    transaction.update(
+        ref,
+        {
+            'status': 'completed',
+            'result': result,
+            'updated_at': now,
+            'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
+        },
+    )
+
+
+def complete_batch_partial_in_transaction(
+    transaction: Any,
+    ref: Any,
+    existing: Dict[str, Any],
+    job_id: str,
+    result: Dict[str, Any],
+    now: datetime,
+    *,
+    run_token: str | None = None,
+    run_epoch: int | None = None,
+) -> None:
+    """Write-only partial completion; the batch owner keeps the row for an upgrade."""
+    if (
+        existing.get('dispatch_protocol') != 'batch_v1'
+        or not is_valid_partial_sync_content_result(result)
+        or not _ledger_owner_matches(existing, job_id, run_token, run_epoch, allow_batch=True)
+    ):
+        raise RuntimeError('batch partial lost content ledger ownership')
+    transaction.update(
+        ref,
+        {
+            'status': BATCH_PARTIAL_STATUS,
+            'result': result,
+            'updated_at': now,
+            'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
+        },
+    )
+
+
+def sync_content_ledger_ref(client: Any, uid: str, content_id: str) -> Any:
+    """Shared transaction address for atomic batch admission/projection."""
+    return _ledger_ref(client, uid, content_id)
+
+
+def batch_projection_ledger_owner_matches(
+    existing: Dict[str, Any],
+    job_id: str,
+    run_token: str | None,
+    run_epoch: int | None,
+) -> bool:
+    """Explicit batch owner check; ordinary legacy mutations never use it."""
+    return _ledger_owner_matches(existing, job_id, run_token, run_epoch, allow_batch=True)

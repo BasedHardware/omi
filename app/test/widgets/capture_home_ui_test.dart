@@ -5,19 +5,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
@@ -27,16 +35,30 @@ import 'package:omi/utils/enums.dart';
 enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantBatch, phone, phoneAfterPendant }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
+  @override
+  LivePreviewController? get livePreview => null;
+  @override
+  bool get localPreviewAdmitted => false;
+
   _Capture(this.live,
       {this.failure = false,
       this.batch = false,
       this.interrupted = false,
       this.callActive = false,
       this.readerPaused = false});
+  @override
+  LocalSttFailure? localSttFailure;
+  int localRetries = 0;
+  @override
+  Future<void> retryLocalTranscription() async => localRetries++;
   bool verified = true;
   int? offlineElapsedOverride;
   @override
   bool get pendantCaptureVerified => verified;
+  @override
+  bool get pendantCaptureActionRequired => false;
+  @override
+  bool get pendantReconnectInFlight => false;
 
   final _Live live;
   final bool failure;
@@ -86,8 +108,20 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   bool get isCallActive => callActive;
   @override
   bool get isPhoneMicBatchRecording => batch;
+  bool offlineMutedState = false;
+  int offlineMuteToggles = 0;
   @override
-  bool get offlineMuted => false;
+  bool get offlineMuted => offlineMutedState;
+  @override
+  Future<void> toggleOfflineMute() async {
+    offlineMuteToggles++;
+    offlineMutedState = !offlineMutedState;
+    if (offlineMutedState) {
+      offlineElapsedOverride = 125;
+    }
+    notifyListeners();
+  }
+
   @override
   int? get offlineRecordingElapsedSeconds => offlineElapsedOverride ?? (batch ? 125 : null);
   @override
@@ -169,8 +203,18 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   BtDevice? get pairedDevice => paired ? _pendant : null;
   @override
   bool get isConnecting => connecting ?? !connected;
+  // The header chip also watches these; no battery makes the connected pill glyph-only.
+  @override
+  int get batteryLevel => 0;
+  @override
+  bool get isCharging => false;
   void drop() {
     connected = false;
+    notifyListeners();
+  }
+
+  void reconnect() {
+    connected = true;
     notifyListeners();
   }
 
@@ -185,8 +229,34 @@ class _Connectivity extends ChangeNotifier implements ConnectivityProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _Sync extends ChangeNotifier implements SyncProvider {
+  @override
+  bool get isSyncing => false;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _Conversations extends ChangeNotifier implements ConversationProvider {
+  @override
+  List<ServerConversation> processingConversations = [];
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   final en = lookupAppLocalizations(const Locale('en'));
+
+  // The header chip's sync ring listens to the store; keep it inert for these tests.
+  final store = PendingWorkStore(
+    loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+    loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+  );
+  final previousStore = PendingWorkStore.instance;
+  setUpAll(() => PendingWorkStore.instance = store);
+  tearDownAll(() {
+    PendingWorkStore.instance = previousStore;
+    store.dispose();
+  });
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -194,23 +264,50 @@ void main() {
   });
 
   Future<void> pump(WidgetTester tester, Widget child,
-      {required _Capture capture, _Call? call, _Device? device}) async {
+      {required _Capture capture, _Call? call, _Device? device, bool withChip = false}) async {
     await tester.pumpWidget(MultiProvider(
       providers: [
         ChangeNotifierProvider<DeviceProvider>.value(value: device ?? _Device(paired: false)),
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
         ChangeNotifierProvider<PhoneCallProvider>.value(value: call ?? _Call(PhoneCallState.idle)),
         ChangeNotifierProvider<ConnectivityProvider>.value(value: _Connectivity()),
+        if (withChip) ...[
+          ChangeNotifierProvider<SyncProvider>.value(value: _Sync()),
+          ChangeNotifierProvider<ConversationProvider>.value(value: _Conversations()),
+          ChangeNotifierProvider(create: (_) => HomeProvider()),
+        ],
       ],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: buildOmiTheme(),
-        home: Scaffold(body: Center(child: child)),
+        home: Scaffold(
+          body: Column(children: [
+            // The header chip beside the capture row, as on Home: a dropped pendant is the
+            // chip's story ("Disconnected" / "Connecting…"), and the row must not repeat it.
+            if (withChip) const BatteryInfoWidget(),
+            Expanded(child: Center(child: child)),
+          ]),
+        ),
       ),
     ));
     await tester.pump();
   }
+
+  testWidgets('permanent local failure keeps phone capture visible with saved audio and a working retry',
+      (tester) async {
+    final capture = _Capture(_Live.phone)
+      ..localSttFailure = const LocalSttFailure('permission_denied', canProbeRecovery: true);
+    await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
+    expect(find.text(en.transcriptionUnavailableRecordingSaved), findsWidgets);
+    expect(find.text(en.openSettings), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('local_stt_retry')));
+    await tester.pumpAndSettle();
+    expect(capture.localRetries, 1);
+    expect(capture.recordingState, RecordingState.record);
+    expect(capture.liveCaptureSource, 'phone');
+    expect(tester.takeException(), isNull);
+  });
 
   group('live card', () {
     testWidgets('names the source as a glyph, the state and the latest line, with Pause', (tester) async {
@@ -242,6 +339,12 @@ void main() {
       await tester.tap(find.bySemanticsLabel(en.resume));
       await tester.pump();
       expect(capture.resumes, 1);
+    });
+
+    testWidgets('the phone mic recording still shows the Listening row', (tester) async {
+      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.phone));
+      expect(find.text(en.listening), findsOneWidget);
+      expect(find.bySemanticsLabel(en.pause), findsOneWidget);
     });
 
     testWidgets('the phone taking over from the pendant says the pendant waits', (tester) async {
@@ -402,46 +505,46 @@ void main() {
   });
 
   group('pendant disconnect', () {
-    testWidgets('a pendant that drops mid-capture shows Disconnected, not nothing', (tester) async {
+    // A dropped pendant needs no action (Omi reconnects on its own), so the header chip is the
+    // one place that says Disconnected / Connecting… — the capture row disappears instead of
+    // repeating the chip (David, 2026-10-24: Home showed both).
+    testWidgets('a pendant that drops mid-capture and reconnects shows only the header chip, not a second row',
+        (tester) async {
       final device = _Device();
       await pump(tester, const ConversationCaptureWidget(showsCall: true),
-          capture: _Capture(_Live.pendant), device: device);
+          capture: _Capture(_Live.pendant), device: device, withChip: true);
       expect(find.text(en.listening), findsOneWidget);
 
       // The controller forgets the device: no live source, the pendant is paired but not connected.
       device.drop();
       await pump(tester, const ConversationCaptureWidget(showsCall: true),
-          capture: _Capture(_Live.idleDeviceConnected), device: device);
-      expect(find.text(en.disconnected), findsOneWidget);
-      expect(find.textContaining(en.reconnecting), findsOneWidget);
-      // The session clock is gone, so a drop has nothing to freeze or advance.
-      expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, isNull);
-      expect(find.textContaining('12:04'), findsNothing);
-      await tester.pump(const Duration(seconds: 3));
-      expect(find.textContaining('12:04'), findsNothing);
-      await tester.tap(find.text(en.disconnected));
-      await tester.pumpAndSettle();
-      expect(find.text(en.capturePendantDisconnectedDetail), findsOneWidget);
+          capture: _Capture(_Live.idleDeviceConnected), device: device, withChip: true);
+      // The chip says Connecting… while the reconnect runs; the row is gone, not a duplicate.
+      expect(find.text(en.deviceConnecting), findsOneWidget);
+      expect(find.text(en.disconnected), findsNothing);
+      expect(find.byType(LiveCaptureCard), findsNothing);
+
+      // The pendant comes back: the Listening row returns, and the chip goes quiet.
+      device.reconnect();
+      await pump(tester, const ConversationCaptureWidget(showsCall: true),
+          capture: _Capture(_Live.pendant), device: device, withChip: true);
+      expect(find.text(en.listening), findsOneWidget);
+      expect(find.text(en.deviceConnecting), findsNothing);
     });
 
-    testWidgets('a dropped pendant that is not reconnecting yet still says what happens next', (tester) async {
+    testWidgets('a dropped pendant that is not reconnecting yet says Disconnected once, on the chip', (tester) async {
       final device = _Device(connecting: false);
       await pump(tester, const ConversationCaptureWidget(showsCall: true),
-          capture: _Capture(_Live.pendant), device: device);
+          capture: _Capture(_Live.pendant), device: device, withChip: true);
       expect(find.text(en.listening), findsOneWidget);
 
       device.drop();
       await pump(tester, const ConversationCaptureWidget(showsCall: true),
-          capture: _Capture(_Live.idleDeviceConnected), device: device);
+          capture: _Capture(_Live.idleDeviceConnected), device: device, withChip: true);
+      // Exactly one "Disconnected" (the chip); the row with its inline reassurance is gone.
       expect(find.text(en.disconnected), findsOneWidget);
-      // Not a bare "Disconnected": the row keeps its inline reassurance, the sheet keeps the why.
-      expect(find.text(en.capturePendantDisconnectedShort), findsOneWidget);
-      expect(find.textContaining(en.reconnecting), findsNothing);
-      await tester.tap(find.text(en.disconnected));
-      await tester.pumpAndSettle();
-      expect(find.text(en.capturePendantDisconnectedDetail), findsOneWidget);
-      await tester.tap(find.text(en.gotIt));
-      await tester.pumpAndSettle();
+      expect(find.byType(LiveCaptureCard), findsNothing);
+      expect(find.text(en.listening), findsNothing);
     });
 
     testWidgets('a paired pendant that was never capturing stays hidden', (tester) async {
@@ -579,7 +682,7 @@ void main() {
       await tester.pump();
       expect(capture.phoneStarts, 1);
       expect(find.text(en.somethingWentWrong), findsOneWidget);
-      expect(find.byType(ConversationCapturingPage), findsNothing);
+      expect(find.byType(LiveEpisodePage), findsNothing);
     });
 
     testWidgets('a start that resolves without phone ownership navigates nowhere', (tester) async {
@@ -588,7 +691,7 @@ void main() {
       await tester.tap(find.bySemanticsLabel(en.startRecording));
       await tester.pump();
       expect(capture.phoneStarts, 1);
-      expect(find.byType(ConversationCapturingPage), findsNothing);
+      expect(find.byType(LiveEpisodePage), findsNothing);
       expect(find.text(en.somethingWentWrong), findsNothing, reason: 'a refusal is not an error toast');
     });
 
@@ -628,6 +731,48 @@ void main() {
       final glyphs = tester.widgetList<BatteryGlyph>(find.byType(BatteryGlyph)).toList();
       expect(glyphs.map((g) => g.critical), [false, true]);
       expect(tester.getSize(find.byType(BatteryGlyph).first), const Size(20, 10));
+    });
+  });
+
+  group('Transcribe Later (batch) card controls', () {
+    testWidgets('tapping Pause in batch mode transitions button to Resume, clears spinner, and freezes elapsed timer',
+        (tester) async {
+      final capture = _Capture(_Live.pendantBatch, batch: true);
+      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
+      expect(find.text(en.recording), findsOneWidget);
+      expect(find.textContaining(en.captureAudioSavedTranscribesLater), findsOneWidget);
+      expect(find.text(en.pause), findsOneWidget);
+      expect(find.byType(OmiSpinner), findsNothing);
+
+      await tester.tap(find.text(en.pause));
+      await tester.pumpAndSettle();
+
+      expect(capture.offlineMuteToggles, 1);
+      expect(capture.offlineMuted, isTrue);
+      expect(find.text(en.paused), findsOneWidget);
+      expect(find.text(en.resume), findsOneWidget);
+      expect(find.byType(OmiSpinner), findsNothing);
+      expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, const Duration(seconds: 125));
+
+      // Advance time and verify timer remains frozen
+      await tester.pump(const Duration(seconds: 10));
+      expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, const Duration(seconds: 125));
+    });
+
+    testWidgets('tapping Resume in batch mode unpauses and restores recording state', (tester) async {
+      final capture = _Capture(_Live.pendantBatch, batch: true)..offlineMutedState = true;
+      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
+      expect(find.text(en.paused), findsOneWidget);
+      expect(find.text(en.resume), findsOneWidget);
+
+      await tester.tap(find.text(en.resume));
+      await tester.pumpAndSettle();
+
+      expect(capture.offlineMuteToggles, 1);
+      expect(capture.offlineMuted, isFalse);
+      expect(find.text(en.recording), findsOneWidget);
+      expect(find.text(en.pause), findsOneWidget);
+      expect(find.byType(OmiSpinner), findsNothing);
     });
   });
 }

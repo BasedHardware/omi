@@ -45,11 +45,9 @@ from config.conversation_smart_merge import (
     QUESTION_VERSION,
     REFRESH_LEASE_SECONDS,
     SmartMergeMode,
-    SmartMergeWallclockGapMode,
+    smart_merge_flatten_chain_repair_enabled,
     smart_merge_flatten_enabled,
     smart_merge_mode,
-    smart_merge_uid_allowed,
-    smart_merge_wallclock_gap_mode,
 )
 from config.jev_decisions import JEV_MODEL
 from database import conversations as conversations_db
@@ -59,6 +57,7 @@ from database.firestore_read_metrics import FirestoreReadSite
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable
 from database.sync_bridges import mark_sync_bridge_cleaned
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
+from utils.episodes.boundaries import merge_allowed
 from utils.conversations.action_item_refresh import transfer_donor
 from utils.conversations.factory import deserialize_conversation
 from config.merge_ancestry import flatten_updates
@@ -88,13 +87,12 @@ from utils.conversations.smart_merge_policy import (
     valid_fragment_id,
 )
 from utils.conversations.smart_merge_state import QUESTION_NAME, QUESTIONS, build_state, state_sha256
-from utils.executors import postprocess_executor, run_blocking
+from utils.executors import lifecycle_executor, run_blocking
 from utils.llm.jev_client import ask_jev
 from utils.metrics import (
     record_conversation_smart_merge,
     record_conversation_smart_merge_audit,
     record_conversation_smart_merge_refresh,
-    record_conversation_smart_merge_wallclock_shadow,
     record_smart_merge_flatten,
 )
 from utils.observability.fallback import record_fallback
@@ -130,14 +128,16 @@ async def smart_merge_step(
     ``initial_row`` is the finalizer's pre-processing read, used only for the
     free donor check, so ``off`` stays I/O-free.
     """
+    if initial_row.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}:
+        return False
     if is_donor(initial_row):
-        await run_blocking(postprocess_executor, finish_absorb, uid, conversation_id, owner=owner, resumed=True)
+        await run_blocking(lifecycle_executor(uid), finish_absorb, uid, conversation_id, owner=owner, resumed=True)
         return True
     mode = smart_merge_mode()
     if mode is SmartMergeMode.OFF:
         return False
     return await run_blocking(
-        postprocess_executor, decide_and_apply, uid, conversation_id, mode=mode, trigger=trigger, owner=owner
+        lifecycle_executor(uid), decide_and_apply, uid, conversation_id, mode=mode, trigger=trigger, owner=owner
     )
 
 
@@ -314,98 +314,10 @@ def _normalize_p_same(p_same: Any) -> Optional[float]:
     return p_same
 
 
-def _wallclock_shadow_emit(
-    would: str,
-    reason: str,
-    p_same: Optional[float],
-    gap_wall: Optional[float],
-    gap_legacy: Optional[float],
-    uid: str,
-    conversation_id: str,
-    survivor_id: str,
-) -> None:
-    record_conversation_smart_merge_wallclock_shadow(would, reason)
-    logger.info(
-        'event=smart_merge_wallclock_shadow would=%s reason=%s p_same=%s gap_wall_s=%s gap_legacy_s=%s uid=%s conversation=%s candidate=%s',
-        would,
-        reason,
-        p_same,
-        gap_wall,
-        gap_legacy,
-        uid,
-        conversation_id,
-        survivor_id,
-    )
-
-
-def _wallclock_shadow(
-    uid: str,
-    conversation_id: str,
-    survivor: Mapping[str, Any],
-    survivor_segments: Sequence[Mapping[str, Any]],
-    new_row: Mapping[str, Any],
-    new_segments: Sequence[Mapping[str, Any]],
-    rows: Sequence[Mapping[str, Any]],
-    survivor_id: str,
-    legacy_gap: Optional[float],
-    load_last_fragment_row: Any,
-) -> None:
-    """What the corrected wall-clock policy would do for a pair the legacy gate
-    skipped. Legacy stays authoritative: this only observes — one extra Jev
-    question at most, one bounded log line and counter, never a write."""
-    corrected: Optional[PairCheck] = None
-    last_fragment_row: Optional[Mapping[str, Any]] = None
-    try:
-        last_fragment_row = load_last_fragment_row()
-        corrected = check_pair(
-            survivor,
-            survivor_segments,
-            new_row,
-            new_segments,
-            wallclock_gap=True,
-            last_fragment_row=last_fragment_row,
-        )
-        if not corrected.same_recording:
-            return
-        if corrected.reason is not None:
-            _wallclock_shadow_emit(
-                'skip', corrected.reason, None, corrected.gap_seconds, legacy_gap, uid, conversation_id, survivor_id
-            )
-            return
-        built = _pair_state(
-            uid,
-            new_row,
-            new_segments,
-            survivor,
-            survivor_segments,
-            rows,
-            survivor_id,
-            same_recording=True,
-            last_fragment_row=last_fragment_row,
-        )
-        p_same = _normalize_p_same(_ask(built[0])) if built is not None else None
-    except Exception:
-        if corrected is not None and corrected.same_recording and corrected.reason is None:
-            _wallclock_shadow_emit(
-                'skip', 'jev_unavailable', None, corrected.gap_seconds, legacy_gap, uid, conversation_id, survivor_id
-            )
-        return
-    if p_same is None:
-        would, reason = 'skip', 'jev_unavailable'
-    elif p_same >= MERGE_THRESHOLD:
-        would, reason = 'merge', 'jev_same'
-    else:
-        would, reason = 'kept', 'jev_different'
-    _wallclock_shadow_emit(would, reason, p_same, corrected.gap_seconds, legacy_gap, uid, conversation_id, survivor_id)
-
-
 def _decide(
     uid: str, conversation_id: str, *, mode: SmartMergeMode, trigger: ProcessingTrigger, owner: str
 ) -> Optional[_MergePlan]:
     """Ask (or reuse) the decision; a plan only in merge mode at or above the threshold."""
-    if not smart_merge_uid_allowed(uid):
-        _skip(mode, SkipReason.UID_NOT_ALLOWED, uid, conversation_id)
-        return None
     new_row = conversations_db.get_conversation(uid, conversation_id, read_site=FirestoreReadSite.SMART_MERGE)
     if not new_row:
         return None
@@ -448,11 +360,13 @@ def _decide(
         return None
     survivor = dict(survivor, id=survivor_id)
     survivor_segments = _segments(survivor)
+    if not merge_allowed(uid, survivor, new_row):
+        _skip(mode, 'boundary', uid, conversation_id)
+        return None
     if smart_merge_db.has_intervening_discarded(uid, survivor, new_row):
         _skip(mode, SkipReason.INTERVENING_DISCARDED, uid, conversation_id)
         return None
-    wall_mode = smart_merge_wallclock_gap_mode()
-    newest = newest_wallclock_fragment(survivor) if wall_mode is not SmartMergeWallclockGapMode.OFF else None
+    newest = newest_wallclock_fragment(survivor)
     last_fragment_id = (
         newest.id if newest is not None and newest.id != survivor_id and valid_fragment_id(newest.id) else None
     )
@@ -466,29 +380,15 @@ def _decide(
     last_fragment_row: Optional[Mapping[str, Any]] = None
     check = check_pair(survivor, survivor_segments, new_row, new_segments)
     if check.reason is not None:
-        if wall_mode is SmartMergeWallclockGapMode.ON:
-            last_fragment_row = _last_fragment_row()
-            check = check_pair(
-                survivor,
-                survivor_segments,
-                new_row,
-                new_segments,
-                wallclock_gap=True,
-                last_fragment_row=last_fragment_row,
-            )
-        elif wall_mode is SmartMergeWallclockGapMode.SHADOW:
-            _wallclock_shadow(
-                uid,
-                conversation_id,
-                survivor,
-                survivor_segments,
-                new_row,
-                new_segments,
-                rows,
-                survivor_id,
-                check.gap_seconds,
-                _last_fragment_row,
-            )
+        last_fragment_row = _last_fragment_row()
+        check = check_pair(
+            survivor,
+            survivor_segments,
+            new_row,
+            new_segments,
+            wallclock_gap=True,
+            last_fragment_row=last_fragment_row,
+        )
     if check.reason is not None:
         _skip(mode, check.reason, uid, conversation_id, check.gap_seconds)
         return None
@@ -555,11 +455,7 @@ def _decide(
             gap_seconds=check.gap_seconds,
             p_same=None if reuse else p_same,
         )
-        gap_path = (
-            f" gap_path={'wallclock' if check.same_recording else 'legacy'}"
-            if wall_mode is SmartMergeWallclockGapMode.ON
-            else ''
-        )
+        gap_path = f" gap_path={'wallclock' if check.same_recording else 'legacy'}"
         logger.info(
             'event=smart_merge mode=%s decision=%s reason=%s p_same=%s gap_s=%s uid=%s conversation=%s candidate=%s%s',
             mode.value,
@@ -584,11 +480,9 @@ def _decide(
         expected_survivor_sync_revision=survivor.get('sync_content_revision'),
         expected_donor_sync_revision=new_row.get('sync_content_revision'),
         same_recording=check.same_recording,
-        last_fragment_id=last_fragment_id if wall_mode is SmartMergeWallclockGapMode.ON else None,
-        wallclock_gap=wall_mode is SmartMergeWallclockGapMode.ON,
-        admission_path=(
-            ('wallclock' if check.same_recording else 'legacy') if wall_mode is SmartMergeWallclockGapMode.ON else None
-        ),
+        last_fragment_id=last_fragment_id,
+        wallclock_gap=True,
+        admission_path='wallclock' if check.same_recording else 'legacy',
     )
 
 
@@ -630,7 +524,11 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         if not smart_merge_flatten_enabled():
             return None, survivor_update, donor_update, {}
         flat_reason, union, ancestor_updates = flatten_updates(
-            survivor, {str(donor['id']): donor}, ancestor_rows, user_managed=user_managed
+            survivor,
+            {str(donor['id']): donor},
+            ancestor_rows,
+            user_managed=user_managed,
+            chain_repair=smart_merge_flatten_chain_repair_enabled(),
         )
         if flat_reason is not None:
             return flat_reason, None, None, {}
@@ -914,7 +812,10 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str) ->
             raise SmartMergeIncomplete('processing_checkpoint_fenced')
     try:
         # Reprocess never re-embeds; the merged occasion must be findable as a whole.
-        save_structured_vector(uid, processed)
+        from utils.conversations.demand_processing import lazy_enrichment_enabled
+
+        if not lazy_enrichment_enabled(uid):
+            save_structured_vector(uid, processed)
     except Exception as error:
         logger.warning(
             'event=smart_merge outcome=vector_failed exception_type=%s uid=%s survivor=%s',

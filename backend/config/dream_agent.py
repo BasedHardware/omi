@@ -1,79 +1,163 @@
-"""Default-off dream admission and bounded budgets, read at invocation time."""
+"""Live global kill switch, eligibility and hard all-user Dream ceilings."""
+
+from config.refactor_switches import default_off as rollout_default_off
 
 import math
 import os
-from dataclasses import dataclass
 
-AUTO = frozenset({'title', 'overview', 'spelling'})
-SUGGEST = frozenset(
-    {'vocabulary', 'close_task', 'retire_task', 'merge_people', 'merge_memories', 'memory', 'entity_summary'}
-)
+from config.policy.batch import cohort_bucket
+
+from config.rollout_cohorts import in_rollout_cohort, rollout_cohort_members, RolloutCohortUnavailable
+from dataclasses import dataclass
+from datetime import timedelta
+from config.plan_catalog import PAID_PLAN_IDS
+
+from utils.agent_capabilities.registry import AUTO, KINDS
+
+SUGGEST = frozenset(name for name, spec in KINDS.items() if spec.default_policy == 'suggest')
 KNOWN_KINDS = AUTO | SUGGEST
 SUGGESTIONS_PER_DAY = 3
+PASS_TIMEOUT_SECONDS = 1620
+DRAIN_TIMEOUT_SECONDS = 1680
+HTTP_TIMEOUT_SECONDS = 1710
+LEASE_RECLAIM_MARGIN_SECONDS = 60
+FINISH_MARGIN_SECONDS = 30
 
 
-def auto_apply_kinds() -> frozenset[str]:
-    """An override may narrow safe automation; risky operations always require Review."""
-    value = os.getenv('DREAM_AGENT_AUTO_APPLY_KINDS')
-    if value is None:
-        return AUTO
-    requested = {kind.strip() for kind in value.split(',') if kind.strip()}
-    ignored = requested - AUTO
-    if ignored:
-        import logging
-        from utils.dream_metrics import POLICY_WARNINGS
+def enabled():
+    from config.dream_control import allowed
 
-        POLICY_WARNINGS.inc(len(ignored))
-        logging.getLogger(__name__).warning('Dream auto-apply policy ignored kinds count=%d', len(ignored))
-    return frozenset(requested & AUTO)
+    return (
+        rollout_default_off('DREAM_AGENT_ENABLED', os.getenv('DREAM_AGENT_ENABLED', 'false').strip().lower() == 'true')
+        and allowed()
+    )
 
 
-def apply_policy(kind: str, automatic: frozenset[str]) -> str:
+def mode():
+    return 'on' if enabled() else 'off'
+
+
+def eligibility():
+    value = os.getenv('DREAM_AGENT_ELIGIBILITY', 'all').strip().lower()
+    return value if value in {'all', 'paid', 'allowlist'} else 'invalid'
+
+
+def allowlisted(uid):
+    return in_rollout_cohort(uid, 'dream-agent')
+
+
+def _allowlisted(uid):
+    return allowlisted(uid)
+
+
+def allowlist_uids():
+    """Sorted allowlist; discovery reads only these owners under ``allowlist`` eligibility."""
+    try:
+        return list(rollout_cohort_members('dream-agent'))
+    except RolloutCohortUnavailable:
+        if eligibility() == 'allowlist':
+            raise
+        # A membership outage cannot veto declared all/paid eligibility. It
+        # also cannot manufacture an allowlist exception to a paid percentage.
+        return []
+
+
+def paid_percent():
+    """Share of paid owners in the Dream ramp; unset admits every paid owner, malformed admits none."""
+    raw = os.getenv('DREAM_AGENT_PAID_PERCENT', '100').strip()
+    if not raw.isascii() or not raw.isdigit() or int(raw) > 100:
+        return 0
+    return int(raw)
+
+
+def in_paid_ramp(uid):
+    """Stable per-owner bucket, so widening the percent only ever adds owners."""
+    bucket = cohort_bucket(uid, 'dream-agent-paid', formula='modulo')
+    return bucket < paid_percent()
+
+
+def _paid_cohort(uid):
+    # Listed owners stay in at any percent; the member list is cached, not read per owner.
+    return in_paid_ramp(uid) or uid in allowlist_uids()
+
+
+def hunt_interval(size_bucket):
+    """Idle time before a pass with no dirty work hunts again; 24h (6h heavy) unless overridden."""
+    default = 6.0 if size_bucket == 'heavy' else 24.0
+    raw = os.getenv('DREAM_AGENT_HUNT_INTERVAL_HOURS', '').strip()
+    try:
+        hours = float(raw) if raw else default
+    except ValueError:
+        hours = default
+    if not math.isfinite(hours) or hours <= 0:
+        hours = default
+    return timedelta(hours=min(hours, default))
+
+
+def on_demand_enabled():
+    return rollout_default_off(
+        'DREAM_ON_DEMAND_ENABLED', os.getenv('DREAM_ON_DEMAND_ENABLED', '').strip().lower() in {'1', 'true', 'yes'}
+    )
+
+
+def admission_for(uid):
+    """Gateway admission the backend asserts. Never taken from user input.
+
+    On-demand is only for an allowlisted owner while ``DREAM_ON_DEMAND_ENABLED``
+    is true. Every other owner, and allowlisted owners with the flag off, use
+    reserved capacity.
+    """
+    try:
+        listed = allowlisted(uid)
+    except RolloutCohortUnavailable:
+        listed = False  # Reserved capacity only; never invent spending authority.
+    if listed and on_demand_enabled():
+        return 'on_demand', True
+    return 'reserved', False
+
+
+def dream_journal_key(edit_key):
+    return isinstance(edit_key, str) and (edit_key.startswith('agent:') or edit_key.startswith('dream:'))
+
+
+def may_be_eligible(uid):
+    return (
+        bool(uid)
+        and not uid.startswith('dream-canary-')
+        and eligibility() != 'invalid'
+        and (eligibility() != 'allowlist' or _allowlisted(uid))
+        and (eligibility() != 'paid' or _paid_cohort(uid))
+    )
+
+
+def eligible(uid, user):
+    if not may_be_eligible(uid) or user.get('dream_canary') or user.get('deleted') or user.get('deletion_requested_at'):
+        return False
+    policy = eligibility()
+    return (
+        policy == 'all'
+        or (policy == 'allowlist' and _allowlisted(uid))
+        or (
+            policy == 'paid'
+            and (
+                uid in allowlist_uids()
+                or (
+                    in_paid_ramp(uid)
+                    and (user.get('subscription') or {}).get('plan', user.get('plan', '')) in PAID_PLAN_IDS
+                )
+            )
+        )
+    )
+
+
+def auto_apply_kinds(uid=None):
+    return AUTO
+
+
+def apply_policy(kind, automatic):
     if kind not in KNOWN_KINDS:
         raise ValueError('Unknown dream edit kind')
     return 'auto' if kind in automatic else 'suggest'
-
-
-def mode() -> str:
-    value = os.getenv('DREAM_AGENT_MODE', 'off').strip().lower()
-    return value if value in {'shadow', 'on'} else 'off'
-
-
-def _allowlisted(uid: str) -> bool:
-    return uid in {s.strip() for s in os.getenv('DREAM_AGENT_UID_ALLOWLIST', '').split(',') if s.strip()}
-
-
-def _testflight_minimum_build() -> int | None:
-    minimum_build = os.getenv('DREAM_AGENT_TESTFLIGHT_MIN_BUILD', '').strip()
-    if not minimum_build or os.getenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'false').lower() != 'true':
-        return None
-    try:
-        minimum = int(minimum_build)
-    except ValueError:
-        return None
-    return minimum if minimum >= 1 else None
-
-
-def may_be_eligible(uid: str) -> bool:
-    """Cheap pre-check before reading the user document; False means `eligible` is False."""
-    return uid != canary_uid() and (_allowlisted(uid) or _testflight_minimum_build() is not None)
-
-
-def eligible(uid: str, user: dict) -> bool:
-    if uid == canary_uid() or user.get('dream_canary'):
-        return False
-    if _allowlisted(uid):
-        return True
-    minimum = _testflight_minimum_build()
-    if minimum is None:
-        return False
-    app_build = user.get('dream_app_build')
-    return (
-        user.get('dream_release_channel') == 'testflight'
-        and isinstance(app_build, int)
-        and not isinstance(app_build, bool)
-        and app_build >= minimum
-    )
 
 
 def canary_uid() -> str:
@@ -87,7 +171,7 @@ def canary_eligible(uid: str, user: dict) -> bool:
 
 
 def self_report_enabled() -> bool:
-    return os.getenv('DREAM_SELF_REPORT_MODE', 'off').strip().lower() == 'on'
+    return enabled()
 
 
 def number(key: str, default: float) -> float:
@@ -99,43 +183,37 @@ def number(key: str, default: float) -> float:
 
 @dataclass(frozen=True)
 class Caps:
-    tokens: int = 24000
+    tokens: int = 1000000
     passes: int = 2
-    edits: int = 10
-    daily_usd: float = 20.0
-    max_usd_per_token: float = 0.00001
+    edits: int = 25
+    daily_usd: float = 10.0
+    expected_tokens: int = 12000
+    tokens_per_minute: int = 2000000
     undo_rate: float = 0.2
     undo_min_samples: int = 10
     anonymous_k: int = 20
     manual_runs: int = 3
-    completion_tokens: int = 4096
+    # Main-lane reply ceiling. Gemini 3.x counts thinking inside it, so 4096 truncated medium-effort turns.
+    completion_tokens: int = 32768
+    verifier_completion_tokens: int = 4096
 
     @classmethod
     def from_env(cls):
         return cls(
-            tokens=int(number('DREAM_AGENT_TOKENS_PER_PASS', 24000)),
+            tokens=int(number('DREAM_AGENT_TOKENS_PER_PASS', 1000000)),
             passes=int(number('DREAM_AGENT_PASSES_PER_DAY', 2)),
-            edits=int(number('DREAM_AGENT_EDITS_PER_PASS', 10)),
-            daily_usd=number('DREAM_AGENT_DAILY_USD', 20),
-            max_usd_per_token=number('DREAM_AGENT_MAX_USD_PER_TOKEN', 0.00001),
+            edits=int(number('DREAM_AGENT_EDITS_PER_PASS', 25)),
+            daily_usd=number('DREAM_AGENT_DAILY_USD', 10),
+            expected_tokens=int(number('DREAM_AGENT_EXPECTED_TOKENS', 12000)),
+            tokens_per_minute=int(number('DREAM_AGENT_TOKENS_PER_MINUTE', 2000000)),
             undo_rate=number('DREAM_AGENT_UNDO_RATE', 0.2),
             undo_min_samples=int(number('DREAM_AGENT_UNDO_MIN_SAMPLES', 10)),
             anonymous_k=max(2, int(number('DREAM_AGENT_FEEDBACK_K', 20))),
             manual_runs=int(number('DREAM_AGENT_MANUAL_RUNS_PER_DAY', 3)),
         )
 
-    @property
-    def reservation_usd(self) -> float:
-        return self.tokens * self.max_usd_per_token
 
-
-def backfill_share() -> float:
-    return min(1.0, number('DREAM_AGENT_BACKFILL_SHARE', 0.1))
-
-
-def random_seed_share() -> float:
-    return min(1.0, number('DREAM_AGENT_RANDOM_SEED_SHARE', 0.1))
-
-
-def concurrency() -> int:
-    return max(1, min(8, int(number('DREAM_AGENT_CONCURRENCY', 2))))
+def concurrency():
+    caps = Caps.from_env()
+    derived = math.ceil(caps.tokens_per_minute / max(1, caps.expected_tokens) * 2)
+    return max(1, min(512, int(number('DREAM_AGENT_CONCURRENCY', derived))))

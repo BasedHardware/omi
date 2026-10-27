@@ -7,7 +7,9 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/pages/settings/widgets/live_activity_settings.dart';
+import 'package:omi/pages/conversations/widgets/daily_recap_recovery_action.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
   const NotificationsSettingsPage({super.key});
@@ -108,6 +110,16 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   }
 
   Future<void> _updateNotificationFrequency(int value) async {
+    if (value > 0 &&
+        _notificationFrequency == 0 &&
+        await showProGateUpsell(
+          context,
+          feature: 'proactive_agent',
+          source: 'proactive_agent_gate',
+        )) {
+      return;
+    }
+    if (!mounted) return;
     PlatformManager.instance.analytics.notificationFrequencyChanged(
       oldFrequency: _notificationFrequency,
       newFrequency: value,
@@ -312,6 +324,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
             onTap: _dailySummaryEnabled ? _showHourPicker : null,
           ),
         ),
+        const DailyRecapRecoveryAction(settingsRow: true),
       ],
     );
   }

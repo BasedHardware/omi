@@ -483,6 +483,18 @@ def test_uid():
 
 
 @pytest.fixture()
+def live_user(fake_firestore, test_uid):
+    """Model the persisted account behind authenticated usage-producing requests.
+
+    Dev-token authentication alone does not create a user root. Seed it only
+    for tests that require a live account; missing-root tests stay explicit.
+    """
+    user = fake_firestore.collection("users").document(test_uid)
+    user.set({"id": test_uid})
+    return user
+
+
+@pytest.fixture()
 def conversation_fixture():
     """Load conversation fixture data from JSON."""
     fixture_path = E2E_DIR / "fixtures" / "conversations.json"

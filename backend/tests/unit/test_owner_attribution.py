@@ -146,8 +146,8 @@ def test_memory_render_warns_and_preserves_original_summary_render():
     rendered = memory_transcript_from_segments(segments, user_name='David')
     assert rendered.startswith('[Diarization marked 2 of 2 speaker clusters')
     assert 'UNTRUSTED' in rendered
-    assert 'Speaker 0: I will move to Boston.' in rendered
-    assert 'Speaker 1: I prefer tea.' in rendered
+    assert 'Speaker A: I will move to Boston.' in rendered
+    assert 'Speaker B: I prefer tea.' in rendered
     assert 'David:' not in rendered
     assert all(segment.is_user for segment in segments)
     assert TranscriptSegment.segments_as_string(segments, user_name='David').count('David:') == 2
@@ -195,7 +195,6 @@ def test_canonical_capture_owner_gate_and_shared_prefix(monkeypatch, pc, owners)
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_args, **_kwargs: 'David')
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda _uid: 'UTC')
     monkeypatch.setattr(pc, '_stored_meeting_context', lambda _conversation: None)
-    monkeypatch.setattr(pc, 'belief_model_enabled', lambda: False)
     monkeypatch.setattr(pc, 'build_conversation_prompt_prefix', lambda **kwargs: captured.update(kwargs) or object())
     monkeypatch.setattr(
         pc,

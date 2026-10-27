@@ -24,7 +24,7 @@ from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned
 from utils.stt import live_chain, live_failure, live_health, live_router, live_session, streaming as st
 from utils.stt.live_cost_health import CostHealthUnavailable
 from utils.stt.live_gate import GateState, transition
-from utils.stt.live_metrics import COST_DECISION, COST_LANGUAGE_STATE, COST_VOTES
+from utils.stt.live_metrics import COST_DECISION, COST_LANGUAGE_STATE, COST_VOTES, FLEET_HEALTH_WRITE_DROPPED
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 
 
@@ -141,7 +141,7 @@ def isolated(monkeypatch):
     monkeypatch.setattr(live_router, '_target_circuits', {})
     monkeypatch.setattr(live_router, '_capacity_until', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coroutine, **_labels: coroutine.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     return pod
 
@@ -153,8 +153,8 @@ def _circuit():
         deferred_result_callbacks=lambda: (lambda: None, lambda: None),
         account_cooldown_elapsed=lambda: True,
         account_cooldown_seconds_remaining=0.0,
-        record_failure=lambda: None,
-        record_account_failure=lambda _seconds: None,
+        record_failure=lambda **_kwargs: None,
+        record_account_failure=lambda *_args, **_kwargs: None,
     )
 
 
@@ -679,7 +679,9 @@ async def test_write_result_identity_change_stops_cleanup_and_new_scope_writes(m
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-credential')
     monkeypatch.setenv('SONIOX_WS_URL', 'wss://old.invalid/ws')
-    dropped = live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get()
+    reason = 'identity_changed' if pause_on == 'mget' else 'identity_changed_after_commit'
+    dropped_counter = FLEET_HEALTH_WRITE_DROPPED.labels(write_path='transcript_result', kind='result', reason=reason)
+    dropped = dropped_counter._value.get()
 
     class PausedRedis(MemoryRedis):
         def __init__(self, clock=None):
@@ -730,7 +732,7 @@ async def test_write_result_identity_change_stops_cleanup_and_new_scope_writes(m
         assert not written
     else:
         assert written and all(key.startswith(old_prefix) for key in written)
-    assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get() - dropped == 1
+    assert dropped_counter._value.get() - dropped == 1
     assert not pod._local and not pod._benches and not pod._cached_benches
 
 
@@ -1273,11 +1275,14 @@ async def test_write_result_malformed_state_batch_fails_to_local_retry(malformed
 
     redis = MalformedRedis(clock=lambda: now[0])
     pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
-    dropped = live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get()
+    dropped_counter = FLEET_HEALTH_WRITE_DROPPED.labels(
+        write_path='transcript_result', kind='result', reason='redis_error'
+    )
+    dropped = dropped_counter._value.get()
     await pod._write_result('soniox', 'en', 'text')
     assert not redis.executed
     assert not any(':score:' in key for key in redis.data)
-    assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get() - dropped == 1
+    assert dropped_counter._value.get() - dropped == 1
     assert pod._redis_retry_at == now[0] + 10.0
 
 
@@ -1546,7 +1551,7 @@ async def test_leg_transcript_outcome_scopes_custom_endpoint_only(monkeypatch, i
     endpoint = 'wss://endpoint-a.invalid/stream'
     scope = live_health.scoped_identity('modulate', endpoint)
     scheduled = []
-    monkeypatch.setattr(pod, 'schedule', scheduled.append)
+    monkeypatch.setattr(pod, 'schedule', lambda coroutine, **_labels: scheduled.append(coroutine))
     leg = _fake_leg_socket(endpoint=endpoint)
     leg._record_transcript_outcome('text')
     _fake_leg_socket(endpoint=endpoint)._record_transcript_outcome('no_text')
@@ -2229,7 +2234,7 @@ async def test_typed_custom_endpoint_serve_death_benches_only_that_endpoint(monk
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-credential')
     scheduled = []
-    monkeypatch.setattr(pod, 'schedule', scheduled.append)
+    monkeypatch.setattr(pod, 'schedule', lambda coroutine, **_labels: scheduled.append(coroutine))
     monkeypatch.setattr(st, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
 

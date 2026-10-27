@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from config.policy.listen import listen_value
+
 import asyncio
 import logging
-import os
 import threading
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Awaitable, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable, Mapping
 
 if TYPE_CHECKING:
     from utils.stt.streaming import STTService
@@ -18,8 +19,10 @@ from utils.observability.fallback import record_fallback
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_failure import PendingLiveFailover, fallback_metric_reason
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
-from utils.stt.live_reason import normalize_live_stt_reason
+from utils.stt.live_reason import LIVE_STT_REASONS, normalize_live_stt_reason
 from utils.stt.live_signal import provider_observation
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import demand_cohort
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY, WINDOW_ADMISSION
 from utils.stt.live_health import health, bounded_language, mode as routing_mode
 from utils.stt.live_router import (
@@ -41,6 +44,9 @@ from utils.stt.live_cost_health import CostHealthUnavailable
 from utils.stt.live_gate import GateState
 from utils.stt.connect_backoff import ConnectLease, connect_backoff
 from utils.stt.live_metrics import CONNECT_BACKOFF, COST_DECISION, COST_FAIL_OPEN, COST_NO_PERMITTED_TARGET
+from utils.stt.live_metrics import SAME_TARGET_RETRIES
+from utils.stt.live_retry import RETRY_JITTER_SECONDS, retry_jitter_seconds, same_target_retry_allowed
+from utils.stt.pod_drain import is_draining
 from utils.stt.provider_resilience import (
     EXPECTED_REJECTIONS,
     ProviderCircuitBreaker,
@@ -68,7 +74,7 @@ _recent_connect_failures: deque[tuple[float, str]] = deque(maxlen=1000)
 
 def _connect_failures_before_shed() -> int:
     try:
-        return min(1000, max(1, int(os.getenv('STT_SHED_CONNECT_FAILURES', '3'))))
+        return min(1000, max(1, int(listen_value('shed_connect_failures', 'STT_SHED_CONNECT_FAILURES', '3'))))
     except ValueError:
         return 3
 
@@ -81,18 +87,58 @@ def _note_connect_result(*, failed_provider: str | None) -> None:
             _recent_connect_failures.append((time.monotonic(), failed_provider))
 
 
+def _safe_cost_stage(identity: str, language: str | None) -> int:
+    """Gate stage for a static/shadow route; unknown state never blocks a retry."""
+    try:
+        return health.cost_stage(identity, bounded_language(language))
+    except Exception:
+        return 100
+
+
 def failure_reason(error: BaseException) -> str:
-    from utils.stt.streaming import DeepgramConnectionRejection, ParakeetConnectionError
+    from utils.stt.streaming import (
+        DeepgramConnectionRejection,
+        ModulateConnectionRejection,
+        ParakeetConnectionError,
+    )
 
     if isinstance(error, DeepgramConnectionRejection) or getattr(error, 'reason', None) == 'auth':
         return 'auth'
-    if isinstance(error, ParakeetConnectionError):
+    if isinstance(error, ModulateConnectionRejection):
+        # Velma answered the upgrade with account state (402 payment / 429
+        # insufficient credits) or a rate limit; .reason is already the bounded
+        # token, so provider_budget_exhausted reaches the ACCOUNT_REJECTION
+        # handling below instead of collapsing into provider_5xx.
         return error.reason
+    if isinstance(error, ParakeetConnectionError):
+        # The window leg's startup latch defaults to a typed token, but a
+        # wrapper that hands back an unlatched value would slip past the
+        # vocabulary here and resurface downstream as the ``other`` metric
+        # bucket (P59).
+        reason = error.reason
+        return reason if reason in LIVE_STT_REASONS else 'provider_5xx'
     if isinstance(error, TimeoutError):
         return 'timeout'
     if getattr(error, 'reason', None) == 'provider_rate_limited':
         return 'provider_429'
     return 'provider_5xx'
+
+
+def dial_failure_reason(error: BaseException) -> str:
+    """Typed reason for a candidate dial that raised, never a metric bucket.
+
+    ``RejectedStream`` carries our own refusal of the dial, so a reason the
+    live vocabulary cannot name (a selection sentinel raised through a nested
+    chain, any unclassified token) is our side of the fence, not the
+    provider's: it types as ``config_incomplete`` — censored for provider
+    evidence, exactly like the ``other`` bucket it replaces. The former
+    ``default='other'`` here latched the fallback metric's bucket token onto
+    leg outcomes, so a Soniox leg death surfaced as ``reason=other`` on every
+    later failover hop (2026-10-22 P59: 0.5 -> 37.5/h on the live-tail
+    catch-up train 72936c9).
+    """
+    raw = error.reason if isinstance(error, RejectedStream) else failure_reason(error)
+    return normalize_live_stt_reason(raw, default='config_incomplete')
 
 
 class RejectedStream(RuntimeError):
@@ -132,7 +178,7 @@ async def connect_configured_chain(
     *,
     primary_service: STTService,
     connect_primary: Connect,
-    callbacks: dict[STTService, Connect | None],
+    callbacks: Mapping[STTService, Connect | None],
     failed: set[str],
     models: list[str],
     routing_uid: str | None = None,
@@ -141,6 +187,7 @@ async def connect_configured_chain(
     routing_models: dict[str, str | None] | None = None,
     failed_targets: set[str] | None = None,
     _routing_static: bool = False,
+    optional_handover: bool = False,
 ) -> tuple[STTSocket, STTService]:
     from utils.stt.streaming import STTService, _circuit_for_primary  # type: ignore[reportPrivateUsage]  # shared circuit owner
 
@@ -268,6 +315,8 @@ async def connect_configured_chain(
         fallback.sort(key=lambda route: (conservative_stage(route) < 100, -conservative_stage(route)))
         return fallback, True
 
+    routing_decision: dict = {}
+    gate_states: dict[str, GateState] = {}
     if mode != 'off' and routing_uid and not _routing_static:
         try:
             canary = routing_on(routing_uid)
@@ -282,7 +331,9 @@ async def connect_configured_chain(
                 routing_languages,
                 routing_models,
                 last_resorts,
+                decision=routing_decision,
             )
+            gate_states = routing_decision.get('states') or {}
             if canary:
                 active = True
                 # An override endpoint does not replace the configured family
@@ -300,6 +351,15 @@ async def connect_configured_chain(
                     if any(s == service and (t is None or t.endpoint is None) for s, t in routes):
                         continue
                     target, _ = route_target(service)
+                    if (
+                        routing_decision.get('exclude_benched')
+                        and routes
+                        and gate_states.get(target.id, GateState()).stage == 0
+                    ):
+                        # The escape keeps a benched family out while a
+                        # stage>0 route can serve; it must not return as tail.
+                        COST_DECISION.labels(target=target.id, reason='benched_skip').inc()
+                        continue
                     routes.append((service, target if targets and target in targets else None))
         except CostHealthUnavailable as error:
             COST_FAIL_OPEN.labels(reason='cache_unavailable').inc()
@@ -380,12 +440,32 @@ async def connect_configured_chain(
     def backup(service: STTService, target) -> bool:
         return target.id != policy_primary if active and target is not None else active or service != primary_service
 
+    def note_skip(service: STTService, cause: str) -> None:
+        nonlocal origin_skip
+        token = f'{service.value}:{cause}'
+        if token not in skips and len(skips) < 12:
+            skips.append(token)
+        if origin_skip is None and prior_outcome is None and service.value == origin:
+            origin_skip = cause
+
+    def hop_reason() -> str:
+        # A dialed failure owns the hop (origin moved to it); otherwise the
+        # origin's own skip cause explains why it is not serving.
+        return prior_reason if prior_outcome is not None or origin_skip is None else origin_skip
+
     prior_reason = 'circuit_open'
     prior_capacity_subtype: str | None = None
     prior_outcome: LiveLegOutcome | None = None
+    # Why the origin route never served when it was never dialed. Without it
+    # the hop inherits the 'circuit_open' sentinel, which the live reason
+    # vocabulary normalized to connection_lost: a recovery chain that skipped
+    # a session-excluded Soniox logged an untyped Soniox death (prod
+    # 2026-10-20: 454 of 489 such lines had no Soniox dial).
+    origin_skip: str | None = None if any(service.value == origin for service, _ in routes) else 'policy'
+    skips: list[str] = []
     attempted = False
     primary_open = False
-    probes = max(1, int(os.getenv('STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
+    probes = max(1, int(listen_value('circuit_half_open_probes', 'STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
     capacity_blocked = set()
     capacity_resorts = []
     backoff_skipped = []
@@ -406,6 +486,11 @@ async def connect_configured_chain(
         if service.value == 'parakeet':
             return (routing_models or {}).get('parakeet') or 'parakeet'
         return DEFAULT_IDS.get(service.value) or service.value
+
+    def pin_dial_generations(socket, generations) -> None:
+        outcome = getattr(socket, 'leg_outcome', None)
+        if isinstance(outcome, LiveLegOutcome):
+            outcome.generations = generations
 
     async def _restore_configured_chain() -> tuple[STTSocket, STTService]:
         record_fallback(
@@ -463,6 +548,7 @@ async def connect_configured_chain(
                 backoff_skipped.append((service, connect, target, rescue))
             primary_open |= not backup(service, target)
             prior_reason, prior_capacity_subtype = 'circuit_open', None
+            note_skip(service, 'circuit_open')
             record_fallback(
                 component='stt_selection',
                 from_mode=origin,
@@ -479,6 +565,7 @@ async def connect_configured_chain(
             episode = current_recovery.get()
             if episode is not None and episode.dial_budget() <= 0:
                 on_close()
+                note_skip(service, 'recovery_budget')
                 return None
             if _paid_spillover_scope(service) and not await paid_admission.admit(service.value):
                 # Release any half-open probe acquired for this attempt.
@@ -500,10 +587,15 @@ async def connect_configured_chain(
         circuit = target_circuit(target, _circuit_for_primary(service))
         on_success, on_close = circuit.deferred_result_callbacks()
         socket = None
+        dial_generations = None
         try:
+            dial_generations = health.cost_generations(
+                attempt_identity(service, target), bounded_language(routing_language)
+            )
             token = connecting_target.set(target)
             try:
                 socket = await connect()
+                pin_dial_generations(socket, dial_generations)
             finally:
                 connecting_target.reset(token)
             if socket is None:
@@ -583,9 +675,7 @@ async def connect_configured_chain(
                     failed_targets=failed_targets,
                     _routing_static=True,
                 )
-            reason = normalize_live_stt_reason(
-                error.reason if isinstance(error, RejectedStream) else failure_reason(error), default='other'
-            )
+            reason = dial_failure_reason(error)
             if prior_outcome is not None:
                 PendingLiveFailover(
                     component='stt_selection',
@@ -606,10 +696,13 @@ async def connect_configured_chain(
                 ),
                 bounded_language(routing_language),
                 routing_uid,
-                None,
+                dial_generations,
                 health.record_session,
             )
+            rejected_outcome.generations = dial_generations
             rejected_outcome.claim(reason, connect=True)
+            if socket is not None and rejected_outcome.connection_cause is None:
+                rejected_outcome.connection_cause = getattr(socket, 'connection_cause', None)
             if socket is not None:
                 close_rejected_socket(socket)
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
@@ -628,7 +721,12 @@ async def connect_configured_chain(
             if active and target is not None and reason == 'capacity_full':
                 COST_DECISION.labels(target=target.id, reason='capacity_skip').inc()
             if reason == 'auth' or account_rejection:
-                circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+                circuit.record_account_failure(
+                    float(
+                        listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')
+                    ),
+                    error_class=reason,
+                )
                 health.quarantine(service.value, 'account', circuit.account_cooldown_seconds_remaining)
                 if active and target is not None:
                     health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
@@ -647,7 +745,7 @@ async def connect_configured_chain(
                     if identity is not None and identity in capacity_targets:
                         note_capacity_full(capacity_targets[identity].id)
             else:
-                circuit.record_failure()
+                circuit.record_failure(error_class=reason)
                 if circuit.state == 'open':
                     health.quarantine(
                         service.value,
@@ -674,7 +772,7 @@ async def connect_configured_chain(
                 component='stt_selection',
                 from_mode=origin,
                 to_mode=service.value,
-                reason=prior_reason,
+                reason=hop_reason(),
                 capacity_subtype=prior_capacity_subtype,
                 source_outcome=prior_outcome,
             )
@@ -697,6 +795,7 @@ async def connect_configured_chain(
     ) -> tuple[STTSocket, STTService] | None:
         nonlocal origin, prior_reason, prior_capacity_subtype, prior_outcome, attempted
         socket = None
+        dial_generations = None
         recovery = current_recovery.get()
         dial_budget = recovery.dial_budget() if recovery is not None else None
 
@@ -708,23 +807,43 @@ async def connect_configured_chain(
         if active and backup(service, target):
             target_id = target.id if target is not None else DEFAULT_IDS.get(service.value, service.value)
             COST_DECISION.labels(target=target_id, reason='failover').inc()
+        # A dial spending a same-target retry slot: its failure is the same blip
+        # the dead leg already voted for, so it must not vote again.
+        is_retry_dial = getattr(recovery, 'is_retry_dial', None)
+        retry_dial = bool(is_retry_dial(attempt_identity(service, target))) if callable(is_retry_dial) else False
         try:
             if recovery is not None and dial_budget is not None and dial_budget <= 0:
                 on_close()
                 backoff_lease.finish()
+                note_skip(service, 'recovery_budget')
                 return None
             if recovery is not None and not recovery.reserve(attempt_identity(service, target), service.value):
                 on_close()
                 backoff_lease.finish()
+                note_skip(service, 'recovery_budget')
                 return None
+            take_jitter = getattr(recovery, 'take_retry_jitter', None)
+            jitter = take_jitter(attempt_identity(service, target)) if callable(take_jitter) else 0.0
+            if isinstance(jitter, (int, float)) and jitter > 0:
+                # A same-target retry after a transport death: spread the
+                # redial so a fleet-wide drop does not reconnect in lockstep.
+                slept = min(float(jitter), (dial_budget or RETRY_JITTER_SECONDS[1]) / 4)
+                await asyncio.sleep(slept)
+                if dial_budget is not None:
+                    dial_budget = max(0.001, dial_budget - slept)
+            dial_generations = health.cost_generations(
+                attempt_identity(service, target), bounded_language(routing_language)
+            )
             token = connecting_target.set(target)
             try:
                 if dial_budget is not None:
                     async with asyncio.timeout(dial_budget):
                         socket = await connect()
+                        pin_dial_generations(socket, dial_generations)
                         serving = socket is not None and await fallback_socket_is_serving(socket)
                 else:
                     socket = await connect()
+                    pin_dial_generations(socket, dial_generations)
                     serving = socket is not None and await fallback_socket_is_serving(socket)
             finally:
                 connecting_target.reset(token)
@@ -820,9 +939,7 @@ async def connect_configured_chain(
                     failed_targets=failed_targets,
                     _routing_static=True,
                 )
-            reason = normalize_live_stt_reason(
-                error.reason if isinstance(error, RejectedStream) else failure_reason(error), default='other'
-            )
+            reason = dial_failure_reason(error)
             backoff_lease.finish(
                 refused=reason in ('provider_429', PROVIDER_RATE_LIMITED) or isinstance(error, ConnectionRefusedError)
             )
@@ -846,10 +963,15 @@ async def connect_configured_chain(
                 ),
                 bounded_language(routing_language),
                 routing_uid,
-                None,
+                dial_generations,
                 health.record_session,
             )
+            rejected_outcome.generations = dial_generations
             rejected_outcome.claim(reason, connect=True)
+            if retry_dial:
+                rejected_outcome.evidence = False
+            if socket is not None and rejected_outcome.connection_cause is None:
+                rejected_outcome.connection_cause = getattr(socket, 'connection_cause', None)
             if socket is not None:
                 await abort_replay_socket(socket, timeout=cleanup_budget())
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
@@ -868,7 +990,12 @@ async def connect_configured_chain(
             if active and target is not None and reason == 'capacity_full':
                 COST_DECISION.labels(target=target.id, reason='capacity_skip').inc()
             if reason == 'auth' or account_rejection:
-                circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+                circuit.record_account_failure(
+                    float(
+                        listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')
+                    ),
+                    error_class=reason,
+                )
                 health.quarantine(service.value, 'account', circuit.account_cooldown_seconds_remaining)
                 if active and target is not None:
                     health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
@@ -889,7 +1016,7 @@ async def connect_configured_chain(
                     if identity is not None and identity in capacity_targets:
                         note_capacity_full(capacity_targets[identity].id)
             else:
-                circuit.record_failure()
+                circuit.record_failure(error_class=reason)
                 if circuit.state == 'open':
                     health.quarantine(
                         service.value,
@@ -917,7 +1044,7 @@ async def connect_configured_chain(
                 component='stt_selection',
                 from_mode=origin,
                 to_mode=service.value,
-                reason=prior_reason,
+                reason=hop_reason(),
                 capacity_subtype=prior_capacity_subtype,
                 source_outcome=prior_outcome,
             )
@@ -928,6 +1055,65 @@ async def connect_configured_chain(
                 pending.note_transcript()
         record_managed_leg_handoff(socket)
         return socket, service
+
+    retried: set[str] = set()
+
+    async def _same_target_retry(
+        service: STTService, connect: Connect, target, identity: str
+    ) -> tuple[STTSocket, STTService] | None:
+        """One jittered redial of the route that just failed at connect."""
+        outcome = prior_outcome
+        if outcome is None or identity in retried:
+            return None
+        stage = gate_states[identity].stage if identity in gate_states else _safe_cost_stage(identity, routing_language)
+        circuit = target_circuit(target, _circuit_for_primary(service))
+        if not same_target_retry_allowed(
+            outcome.reason,
+            text_seen=False,
+            stage=stage,
+            circuit_open=circuit.state == 'open',
+            already_retried=False,
+            family=service.value,
+        ):
+            return None
+        if is_draining():
+            return None  # our own restart: let the client reconnect elsewhere
+        retried.add(identity)
+        episode = current_recovery.get() if recovery_on else None
+        dial_identity = attempt_identity(service, target)
+        delay = retry_jitter_seconds()
+        if episode is not None:
+            remaining = episode.remaining()
+            if remaining is not None:
+                delay = min(delay, max(0.0, remaining / 4))
+        await asyncio.sleep(delay)
+        if is_draining():
+            return None  # SIGTERM arrived during the jitter
+        if not circuit.allow_request(max_probes=probes):
+            SAME_TARGET_RETRIES.labels(provider=service.value, path='connect', outcome='refused').inc()
+            return None
+        # The redial is admitted; only now take this identity's own retry slot
+        # (never the Soniox rescue re-entry).
+        if (
+            episode is not None
+            and not episode.can_attempt(dial_identity)
+            and not episode.grant_transient_retry(dial_identity)
+        ):
+            _, release = circuit.deferred_result_callbacks()
+            release()
+            SAME_TARGET_RETRIES.labels(provider=service.value, path='connect', outcome='refused').inc()
+            return None
+        failed_targets.discard(identity)
+        failed.discard(provider_for_service(service) or service.value)
+        before = prior_outcome
+        result = await attempt(service, connect, target)
+        if result is None and prior_outcome is not None and prior_outcome is not before:
+            # The first failure already voted; one blip is one health vote.
+            prior_outcome.evidence = False
+        SAME_TARGET_RETRIES.labels(
+            provider=service.value, path='connect', outcome='served' if result is not None else 'failed'
+        ).inc()
+        return result
 
     recovery = current_recovery.get() if recovery_on else None
     for service, target in routes:
@@ -941,9 +1127,14 @@ async def connect_configured_chain(
                 else DEFAULT_IDS.get(service.value)
             )
         )
-        if connect is None or provider_for_service(service) in failed or identity in failed_targets:
+        if connect is None:
+            note_skip(service, 'unconfigured')
+            continue
+        if provider_for_service(service) in failed or identity in failed_targets:
+            note_skip(service, 'session_excluded')
             continue
         if recovery is not None and identity is not None and not recovery.can_attempt(identity):
+            note_skip(service, 'recovery_budget')
             continue
         capacity_target = target if target is not None else capacity_targets.get(identity or '')
         if (routing_models or {}).get(service.value) == 'parakeet-window':
@@ -951,6 +1142,7 @@ async def connect_configured_chain(
                 WINDOW_ADMISSION.labels(outcome='overflow').inc()
                 capacity_blocked.add(service)
                 prior_reason, prior_capacity_subtype = 'capacity_full', 'admission'
+                note_skip(service, 'capacity_full')
                 record_fallback(
                     component='stt_selection',
                     from_mode=origin,
@@ -964,9 +1156,11 @@ async def connect_configured_chain(
             capacity_blocked.add(service)
             capacity_resorts.append((service, target, capacity_target))
             COST_DECISION.labels(target=capacity_target.id, reason='capacity_skip').inc()
+            note_skip(service, 'capacity_full')
             continue
         circuit = target_circuit(target, _circuit_for_primary(service))
         if not circuit.allow_request(max_probes=probes):
+            note_skip(service, 'circuit_open')
             primary_open |= not backup(service, target)
             if backup(service, target):
                 record_fallback(
@@ -977,9 +1171,14 @@ async def connect_configured_chain(
                     outcome='degraded',
                 )
             continue
+        dialed_before = prior_outcome
         result = await attempt(service, connect, target)
         if result is not None:
             return result
+        if prior_outcome is not None and prior_outcome is not dialed_before and identity is not None:
+            result = await _same_target_retry(service, connect, target, identity)
+            if result is not None:
+                return result
 
     # Capacity is advisory when it would suppress every usable route. Dial only
     # one least-recently-refused candidate; retain account/local circuit gates.
@@ -1064,14 +1263,24 @@ async def connect_configured_chain(
             if result is not None:
                 return result
             break
-    CHAIN_EXHAUSTED.inc()
+    if optional_handover:
+        raise RejectedStream(prior_reason)
+    record_metric(CHAIN_EXHAUSTED, {'demand_cohort': demand_cohort()}, 1)
     pending = PendingLiveFailover(
         component='stt_selection',
         from_mode=origin,
         to_mode='unavailable',
-        reason=prior_reason,
+        reason=hop_reason(),
         capacity_subtype=prior_capacity_subtype,
         source_outcome=prior_outcome,
+    )
+    # Bounded tokens only (family:cause): why no successor was available. The
+    # reason is the hop's own, so a claimed dial death wins over a later skip.
+    logger.warning(
+        'live_stt_chain_exhausted origin=%s reason=%s skips=%s',
+        origin,
+        fallback_metric_reason(pending.reason),
+        ','.join(skips) or 'none',
     )
     pending.note_failure(None)
     if recovery_on:

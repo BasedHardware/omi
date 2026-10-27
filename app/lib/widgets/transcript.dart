@@ -4,7 +4,14 @@ import 'dart:math';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderBox, ScrollDirection;
+import 'package:flutter/rendering.dart'
+    show
+        RenderAbstractViewport,
+        RenderBox,
+        RenderObject,
+        RenderSliverMultiBoxAdaptor,
+        ScrollDirection,
+        SliverMultiBoxAdaptorParentData;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart' show kTouchSlop, PointerDownEvent, PointerMoveEvent;
@@ -214,6 +221,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   // Search result tracking
   final Map<String, GlobalKey> _segmentKeys = {};
+  final GlobalKey _listKey = GlobalKey();
   final List<GlobalKey> _matchKeys = [];
   int _previousSearchResultIndex = -1;
 
@@ -482,51 +490,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     }
   }
 
-  void _captureCurrentPosition({String? layoutIdentity}) {
-    if (!_scrollController.hasClients) return;
-
-    final currentScroll = _scrollController.offset;
-    final isAtBottom = _scrollController.position.maxScrollExtent - currentScroll <= 24;
-    _userHasScrolled = !isAtBottom;
-    if (isAtBottom && !_isUserScrolling) {
-      // Settled at the live edge: resume follow. Do not clear this during an
-      // active drag — a reader who has only moved a few pixels must still win.
-      _userInterruptedAutoScroll = false;
-    }
-    final scrollState = widget.scrollState;
-    if (scrollState != null) {
-      String? anchorId;
-      var anchorIndex = 0;
-      var anchorViewportOffset = 0.0;
-      if (!isAtBottom) {
-        var closestTop = double.infinity;
-        for (var index = 0; index < widget.segments.length; index++) {
-          final segment = widget.segments[index];
-          final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
-          if (renderObject is! RenderBox) continue;
-          final viewport = RenderAbstractViewport.of(renderObject);
-          final top = viewport.getOffsetToReveal(renderObject, 0).offset - currentScroll;
-          final bottom = top + renderObject.size.height;
-          if (bottom > 0 && top < _scrollController.position.viewportDimension && top < closestTop) {
-            closestTop = top;
-            anchorId = segment.id;
-            anchorIndex = index;
-            anchorViewportOffset = top;
-          }
-        }
-      }
-      scrollState.update(
-        offset: currentScroll,
-        isAtBottom: isAtBottom,
-        anchorSegmentId: anchorId,
-        anchorSegmentIndex: anchorIndex,
-        anchorViewportOffset: anchorViewportOffset,
-        layoutIdentity: layoutIdentity ?? widget.layoutIdentity,
-      );
-    }
-    _setIsAtBottom(isAtBottom);
-  }
-
   Future<void> _restoreAnchor() async {
     if (!_scrollController.hasClients) return;
     final scrollState = widget.scrollState;
@@ -596,7 +559,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   void _setIsAtBottom(bool value) {
     if (_isAtBottom == value || !mounted) return;
-    setState(() => _isAtBottom = value);
+    // Saved transcripts have no jump-to-latest control. Updating their scroll
+    // bookkeeping must not rebuild the list and its whole-transcript resolver.
+    if (widget.followLatest) {
+      setState(() => _isAtBottom = value);
+    } else {
+      _isAtBottom = value;
+    }
   }
 
   Future<void> _runFollowToBottom({required bool animated}) async {
@@ -840,6 +809,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       people: people,
       l10n: context.l10n,
       unresolved: widget.unresolvedSpeakers,
+      deferShortVoices: widget.followLatest,
     );
     final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
     final transcriptList = NotificationListener<ScrollMetricsNotification>(
@@ -859,6 +829,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               }
             },
             child: ListView.builder(
+              key: _listKey,
               controller: _scrollController,
               padding: EdgeInsets.only(top: searchBarHeight),
               itemCount: widget.leadingItems.length + widget.segments.length + 2,
@@ -1026,7 +997,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               child: Column(
                 crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
-                  if (!isUser) ...[
+                  if (!isUser && data.sttProvider?.startsWith('on_device:') != true) ...[
                     Padding(
                       padding: const EdgeInsets.only(left: 4, bottom: 2),
                       child: Row(

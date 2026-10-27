@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { posthogResults } from "@/lib/posthog";
 
 export const dynamic = "force-dynamic";
@@ -349,17 +349,17 @@ export async function computeDeviceHealth(
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
 
   const days = parseDeviceHealthDays(request.nextUrl.searchParams.get("days"));
   try {
-    return NextResponse.json(await computeDeviceHealth(days));
+    return authResult.json(await computeDeviceHealth(days));
   } catch (error) {
     console.error("Device health error:", error);
     const message =
       error instanceof Error ? error.message : "Failed to fetch device health";
-    return NextResponse.json(
+    return authResult.json(
       { error: message || "Failed to fetch device health" },
       { status: 500 }
     );

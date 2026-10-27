@@ -58,3 +58,65 @@ final class SpeechDeadline<Value> {
         complete(await onTimeout())
     }
 }
+
+/// Shared by the real channel and hermetic native tests. A fallback is only
+/// selected after its own permission/availability check, never assumed ready.
+@MainActor
+struct LocalSpeechReadiness {
+    let engine: String
+    let status: String
+    var ready: Bool { status == "ready" }
+    var wire: [String: String] { ["engine": engine, "status": status] }
+}
+
+@MainActor
+struct LocalSpeechUnavailable: Error {
+    let readiness: LocalSpeechReadiness
+    var cause: NSError? = nil
+
+    var wire: [String: Any] {
+        var details: [String: Any] = readiness.wire
+        if let cause {
+            details["nativeErrorDomain"] = cause.domain
+            details["nativeErrorCode"] = cause.code
+        }
+        return details
+    }
+}
+
+@MainActor
+struct SpeechFallbackCoordinator {
+    let analyzerReady: () async -> Bool
+    let legacyReady: () async -> LocalSpeechReadiness
+    let analyze: () async throws -> String
+    let legacy: () async throws -> String
+
+    func readiness(preferAnalyzer: Bool) async -> LocalSpeechReadiness {
+        if preferAnalyzer, await analyzerReady() {
+            return LocalSpeechReadiness(engine: "speech_analyzer", status: "ready")
+        }
+        return await legacyReady()
+    }
+
+    func transcribe(preferAnalyzer: Bool) async throws -> String {
+        if preferAnalyzer, await analyzerReady() {
+            do { return try await analyze() } catch { /* Check the fallback before using it. */ }
+        }
+        let readiness = await legacyReady()
+        guard readiness.ready else { throw LocalSpeechUnavailable(readiness: readiness) }
+        do {
+            return try await legacy()
+        } catch let error as LocalSpeechUnavailable {
+            throw error
+        } catch {
+            // Assets, permissions or Dictation can change after the probe.
+            // Recheck the actual recognizer before treating this as transient;
+            // never infer missing assets from a localized error message.
+            let current = await legacyReady()
+            guard current.ready else {
+                throw LocalSpeechUnavailable(readiness: current, cause: error as NSError)
+            }
+            throw error
+        }
+    }
+}

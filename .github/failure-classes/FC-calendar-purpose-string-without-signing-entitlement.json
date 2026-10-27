@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-calendar-purpose-string-without-signing-entitlement",
+  "violated_contract": "A macOS app that requests Calendar access under the hardened runtime must carry the Calendar resource entitlement in its signed bundle, not only a Calendar usage-description string in Info.plist. Without it, TCC refuses to display the permission prompt, the app never appears in System Settings > Privacy & Security > Calendars, and EventKit returns unavailable even when the user wants to grant access.",
+  "canonical_prevention": "Keep the Calendar entitlement in development and release signing inputs and assert that named-bundle fallback generation preserves it. Verify the installed hardened-runtime bundle's effective entitlement during pilot smoke testing before interpreting an absent Calendar prompt as a user denial.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/tests/test-prepare-local-dev-entitlements.sh"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Omi.entitlements",
+    "desktop/macos/Desktop/Omi-Release.entitlements",
+    "desktop/macos/Desktop/Info.plist",
+    "desktop/macos/scripts/prepare-local-dev-entitlements.sh"
+  ],
+  "status": "open"
+}
