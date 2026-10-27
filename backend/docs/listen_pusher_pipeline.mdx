@@ -7059,12 +7059,11 @@ preserve explicit policy delays and provider attempts, and allow same-owner
 siblings to progress. Deletion must cancel before paid work or result upload.
 
 The existing emulator-proof runner includes this suite. Local qualification
-requires `OMI_REQUIRE_STORE_BACKENDS=all`; skips do not prove parity. The
-simulator/Postgres deletion-cancellation cases are strict expected failures
-linked to [#23761](https://github.com/BasedHardware/omi/issues/23761): the current
-cancellation writer directly uses a Firestore client instead of the Store
-surface. They assert no provider/result-upload calls even on that failure and
-do not satisfy migration acceptance. Physical erasure and the serving privacy
+requires `OMI_REQUIRE_STORE_BACKENDS=all`; skips do not prove parity. Deletion
+cancellation operates through the bounded revocation `cancel_fenced_recovery`
+on the shared Store surface, ensuring parity across Firestore, Postgres, and the simulator
+(resolving [#23761](https://github.com/BasedHardware/omi/issues/23761)). No provider or
+result-upload calls are permitted on cancellation. Physical erasure and the serving privacy
 bridge remain separate gates. All content and external IO in this suite are
 synthetic; it does not qualify real ASR accuracy or vendor transport retries.
 

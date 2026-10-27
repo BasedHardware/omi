@@ -59,6 +59,7 @@ class Store(Protocol):
     ) -> str | None: ...
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
+    def cancel_fenced_recovery(self, segment_id: str) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
@@ -243,6 +244,36 @@ class FirestoreStore:
 
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         return quarantine_fenced(self.client, self.namespace, segment_id, now)
+
+    def cancel_fenced_recovery(self, segment_id: str) -> bool:
+        """Revocation-only write, allowed after privacy rejects ordinary job writes."""
+        from database.batch_pipeline_privacy import BatchPrivacyBlocked
+        from database.batch_pipeline_projection_protocol import normalized_binding
+
+        ref = self.client.collection(f'{self.namespace}_jobs').document(segment_id)
+
+        @firestore.transactional
+        def cancel(transaction):
+            job = ref.get(transaction=transaction).to_dict() or {}
+            if not job or not job.get('recovery'):
+                return False
+            binding = normalized_binding(job['projection_binding'])
+            ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
+            ids.extend(job.get('conversation_ids') or [])
+            try:
+                assert_batch_write_allowed(
+                    self.client,
+                    transaction,
+                    binding.owner_id,
+                    conversation_ids=ids,
+                    expected_generation=binding.privacy_generation,
+                )
+            except BatchPrivacyBlocked:
+                transaction.update(ref, {'recovery_state': 'cancelled'})
+                return True
+            return False
+
+        return cancel(self.client.transaction())
 
     def longest_ready_pending(self, owner_key: str) -> dict | None:
         # A hint read outside any transaction; the bypass transaction re-verifies it.
