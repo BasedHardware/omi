@@ -1341,8 +1341,7 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
     hosts += [(f'cloud_run/{name}', host['env']) for name, host in cloud_run.items()]
     hosts += [(f'job/{name}', host['env']) for name, host in config['cloud_run']['jobs'].items()]
     for name, env in hosts:
-        if 'FIRESTORE_READ_LEVERS' not in env:
-            continue
+        assert 'FIRESTORE_READ_LEVERS' in env, name
         enabled = environment == 'prod' and name.startswith('cloud_run/')
         literal = env['FIRESTORE_READ_LEVERS']
         assert set(literal) == {'value', 'category'}, name
