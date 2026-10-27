@@ -13,6 +13,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/settings/device/device_live_sections.dart';
+import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/omi_theme.dart';
@@ -21,7 +22,7 @@ import 'package:omi/ui/ui.dart';
 import '../../helpers/sfpro_font_fixtures.dart';
 
 // Renders the sync-attention surfaces this PR made honest: On the Way rows
-// that name their length and the refusal reason with Retry/Delete actions, and
+// with deterministic refusals outside attention, and
 // the Device stats that count a running episode and name the phone queue. The
 // layout assertions run everywhere; with
 // --dart-define=SYNC_ATTENTION_EVIDENCE_OUTPUT=<dir> the PNGs used as PR
@@ -111,10 +112,16 @@ void main() {
   }
 
   Widget app({required Widget home}) {
+    final theme = buildOmiTheme(brightness: Brightness.dark);
     return MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      theme: buildOmiTheme(brightness: Brightness.dark),
+      // AppBar supplies a non-inheriting style; pin the loaded fixture font
+      // rather than letting the test engine render its default block glyphs.
+      theme: theme.copyWith(
+          appBarTheme: theme.appBarTheme.copyWith(
+        titleTextStyle: theme.appBarTheme.titleTextStyle?.copyWith(fontFamily: 'Roboto'),
+      )),
       home: Scaffold(
         backgroundColor: OmiColors.surface0,
         body: home,
@@ -212,5 +219,37 @@ void main() {
     expect(heights.first, greaterThanOrEqualTo(84), reason: 'the 84pt minimum still holds');
 
     await writeFrame(tester, const Key('sync_attention_device_stats'), 'device-stats');
+  });
+  testWidgets('Catching up span shows the current pending run without historical union', (tester) async {
+    tester.view.physicalSize = const Size(390 * 2, 300 * 2);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    final now = DateTime(2026, 10, 28, 23, 47);
+    final (start, end) = pendingCatchUpSpan([
+      (DateTime(2026, 10, 5, 20, 40), DateTime(2026, 10, 5, 20, 41)),
+      (now.subtract(const Duration(minutes: 5)), now),
+    ]);
+    await tester.pumpWidget(app(
+        home: Align(
+      alignment: Alignment.topCenter,
+      child: RepaintBoundary(
+          key: const Key('sync_attention_span'),
+          child: DeviceCatchingUpCard(
+              summary: DeviceCatchUpSummary(
+                  status: 'Transcribing...',
+                  start: start,
+                  end: end,
+                  targetIds: const {'current'},
+                  targetTitles: const ['Current recording']),
+              onOpen: () {})),
+    )));
+    await tester.pump(const Duration(milliseconds: 120));
+    final span = tester.widget<Text>(find.byKey(const Key('device_catching_up_span'))).data!;
+    expect(span, contains('11:42'));
+    expect(span, contains('11:47'));
+    expect(span, isNot(contains('Oct 5')));
+    expect(span.split(' · ').last, isNot(contains('2026')), reason: 'same-day range uses times beneath its day header');
+    expect(tester.takeException(), isNull);
+    await writeFrame(tester, const Key('sync_attention_span'), 'catching-up-span');
   });
 }
