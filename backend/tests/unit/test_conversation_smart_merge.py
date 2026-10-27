@@ -1036,6 +1036,9 @@ def test_smart_absorb_encoded_cap_and_separate_finalization(world, monkeypatch, 
     assert measured[0][1]['data_protection_level'] == level
     projected = max(size for size, _ in measured)
     world.store.rows = deepcopy(snapshot)
+    monkeypatch.setattr(smart_merge_db, 'CONVERSATION_ABSORPTION_BYTE_CAP', projected)
+    assert world.finish('n')  # exactly the encoded cap fits, including encryption overhead
+    world.store.rows = deepcopy(snapshot)
     monkeypatch.setattr(smart_merge_db, 'CONVERSATION_ABSORPTION_BYTE_CAP', projected - 1)
     world.processed.clear()
     world.retracted.clear()

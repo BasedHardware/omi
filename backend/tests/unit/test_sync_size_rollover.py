@@ -688,8 +688,8 @@ def test_assignment_cap_measures_the_actual_encoder(adapter, monkeypatch, level)
     def assign(row):
         return adapter.assign_sync_conversation('u', dict(row, data_protection_level=level), firestore_client=store)
 
-    assign(chunk('a', 1000, text='synthetic speech ' * 10000))
-    assign(chunk('c', 1240, text='separate synthetic speech ' * 10000))
+    assign(chunk('a', 1000, text='synthetic speech ' * 1000))
+    assign(chunk('c', 1240, text='separate synthetic speech ' * 1000))
     before = deepcopy(store.rows)
     observed = []
     original = assignment.projected_document_bytes
@@ -705,8 +705,16 @@ def test_assignment_cap_measures_the_actual_encoder(adapter, monkeypatch, level)
     assert isinstance(_row(store, 'a')['transcript_segments'], str if level == 'enhanced' else bytes)
     assert observed
     # Replay the identical plan with the cap one byte below its actual encoded size.
-    actual = estimate_firestore_document_bytes(_row(store, 'a'), None)
-    store.rows = before
+    # StrictFirestore retains DELETE_FIELD sentinels literally. Remove them
+    # when measuring what the real update stores.
+    actual = original(
+        store.collection('users').document('u').collection('conversations').document('a'), _row(store, 'a')
+    )
+    store.rows = deepcopy(before)
+    monkeypatch.setattr(assignment, 'CONVERSATION_ABSORPTION_BYTE_CAP', actual)
+    assign(chunk('b', 1120))
+    assert _row(store, 'c')['deleted']  # encoded equality fits; plaintext is much larger
+    store.rows = deepcopy(before)
     monkeypatch.setattr(assignment, 'CONVERSATION_ABSORPTION_BYTE_CAP', actual - 1)
     assign(chunk('b', 1120))
     assert _row(store, 'c') == before[('users', 'u', 'conversations', 'c')]
