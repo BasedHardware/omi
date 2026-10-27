@@ -37,6 +37,30 @@ FIELDS: Tuple[str, ...] = (
 
 
 def escape_tsv_field(value: Any) -> str:
+    """Escape a field value for TSV output, stripping unpaired surrogates.
+
+    The function mirrors the original escaping logic but first removes any
+    unpaired UTF‑16 surrogate code points that would cause a ``UnicodeEncodeError``
+    when the TSV is written to disk.
+    """
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        if isinstance(value, (dict, list)):
+            text = json.dumps(value, ensure_ascii=False)
+        else:
+            text = str(value)
+    else:
+        text = value
+
+    # Remove unpaired surrogates that cannot be encoded as UTF‑8.
+    text = text.encode("utf-8", "ignore").decode("utf-8")
+
+    # Normalize CRLF and tabs to guarantee single-line record format
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\t", "\\t")
+    text = text.replace("\n", "\\n")
+    return text
     """Safely escape field value into plain text conforming to the TSV single-line constraint.
 
     Rules:
@@ -64,6 +88,51 @@ def escape_tsv_field(value: Any) -> str:
 
 
 def extract_transcript(item: Dict[str, Any]) -> str:
+    """Extract transcript text from a conversation item.
+
+    Handles plain string transcripts as well as segment arrays. The speaker
+    handling has been hardened to correctly preserve speaker identifiers that
+    evaluate to ``False`` in a boolean context (e.g. ``0``) while still ignoring
+    explicit ``False`` values.
+    """
+    transcript_val = item.get("transcript")
+    if isinstance(transcript_val, str) and transcript_val.strip():
+        return transcript_val
+
+    # Support segment/transcripts arrays
+    segments = item.get("segments") or item.get("transcripts")
+    if isinstance(segments, list):
+        parts: List[str] = []
+        for seg in segments:
+            if isinstance(seg, dict):
+                # Determine speaker, accepting numeric 0 and string "0".
+                speaker_raw = (
+                    seg.get("speaker")
+                    if "speaker" in seg
+                    else seg.get("speaker_label")
+                    if "speaker_label" in seg
+                    else seg.get("speaker_id")
+                    if "speaker_id" in seg
+                    else None
+                )
+                # ``False`` is treated as no speaker; any other non‑None value is kept.
+                if speaker_raw is not None and not isinstance(speaker_raw, bool):
+                    speaker = str(speaker_raw).strip()
+                else:
+                    speaker = ""
+                text = seg.get("text") or seg.get("content") or ""
+                if text:
+                    if speaker:
+                        parts.append(f"{speaker}: {text}")
+                    else:
+                        parts.append(str(text))
+            elif isinstance(seg, str) and seg.strip():
+                parts.append(seg.strip())
+        if parts:
+            return " ".join(parts)
+
+    return ""
+
     """Extract transcript text from conversation item, handling top-level strings or segments arrays."""
     transcript_val = item.get("transcript")
     if isinstance(transcript_val, str) and transcript_val.strip():
@@ -165,6 +234,9 @@ def convert(source: str, destination: Optional[str] = None, force: bool = False)
     """
     # 1. Read input data
     if source == "-":
+        raw_text = sys.stdin.read().lstrip("\ufeff")
+        source_name = "<stdin>"
+    else:
         raw_text = sys.stdin.read()
         source_name = "<stdin>"
     else:
@@ -191,6 +263,18 @@ def convert(source: str, destination: Optional[str] = None, force: bool = False)
         return tsv_content
 
     dest_path = validate_destination_path(destination, force=force)
+        # Write output atomically to avoid partial files on failure or interruption.
+        tmp_path = dest_path.with_name(f".{dest_path.name}.tmp.{os.getpid()}")
+        try:
+            tmp_path.write_text(tsv_content, encoding="utf-8")
+            os.replace(tmp_path, dest_path)
+        finally:
+            # Ensure the temporary file does not linger if something went wrong.
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except Exception:
+                pass
     # Create parent directories if needed
     if dest_path.parent and not dest_path.parent.exists():
         dest_path.parent.mkdir(parents=True, exist_ok=True)

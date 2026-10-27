@@ -192,6 +192,74 @@ class TestConversationsToTsv(unittest.TestCase):
             sys.stdin = saved_stdin
             sys.stdout = saved_stdout
 
+    def test_speaker_zero_and_alternate_keys_preserved(self):
+        conv = {
+            "id": "test-zero",
+            "segments": [
+                {"speaker": 0, "text": "zero int"},
+                {"speaker_label": "0", "text": "zero str"},
+                {"speaker": False, "text": "should be skipped"},
+            ],
+        }
+        tsv = c2tsv.conversations_to_tsv_string([conv])
+        # The transcript column is the last field.
+        transcript_field = tsv.strip().split("\n")[1].split("\t")[-1]
+        self.assertIn("0: zero int", transcript_field)
+        self.assertIn("0: zero str", transcript_field)
+        self.assertNotIn("should be skipped", transcript_field)
+
+    def test_lone_surrogates_stripped_without_encode_error(self):
+        # Insert an unpaired surrogate into the transcript.
+        conv = {
+            "id": "test-surrogate",
+            "transcript": "Hello \ud800 World",
+        }
+        # Should not raise UnicodeEncodeError.
+        tsv = c2tsv.conversations_to_tsv_string([conv])
+        # The surrogate should be removed.
+        self.assertNotIn("\ud800", tsv)
+        self.assertIn("Hello  World", tsv)
+
+    def test_cli_stdin_with_utf8_bom(self):
+        saved_stdin = sys.stdin
+        saved_stdout = sys.stdout
+        try:
+            bom_json = "\ufeff" + json.dumps([self.sample_conv_1])
+            sys.stdin = io.StringIO(bom_json)
+            sys.stdout = io.StringIO()
+            exit_code = c2tsv.main(["-"])
+            self.assertEqual(exit_code, 0)
+            output = sys.stdout.getvalue()
+            self.assertIn("Weekly Standup", output)
+        finally:
+            sys.stdin = saved_stdin
+            sys.stdout = saved_stdout
+
+    def test_atomic_write_creates_valid_file(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            in_file = Path(tmp_dir) / "input.json"
+            out_file = Path(tmp_dir) / "output.tsv"
+            in_file.write_text(json.dumps([self.sample_conv_1]), encoding="utf-8")
+            c2tsv.convert(str(in_file), str(out_file))
+            self.assertTrue(out_file.exists())
+            # Ensure no temporary files remain.
+            temp_files = list(Path(tmp_dir).glob(".*.tmp.*"))
+            self.assertEqual(len(temp_files), 0)
+
+        saved_stdin = sys.stdin
+        saved_stdout = sys.stdout
+        try:
+            sys.stdin = io.StringIO(json.dumps([self.sample_conv_2]))
+            sys.stdout = io.StringIO()
+            exit_code = c2tsv.main(["-"])
+            self.assertEqual(exit_code, 0)
+            output = sys.stdout.getvalue()
+            self.assertIn("Coffee Chat", output)
+            self.assertIn("c2222222-3333-4444-5555-666666666666", output)
+        finally:
+            sys.stdin = saved_stdin
+            sys.stdout = saved_stdout
+
 
 if __name__ == "__main__":
     unittest.main()
