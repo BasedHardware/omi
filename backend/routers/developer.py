@@ -101,7 +101,6 @@ from utils.conversations.projection_payload import (
 )
 from utils.conversations.transcript_hash import (
     stored_transcript_segment,
-    transcript_sha256,
     transcript_sha256_for_binding,
 )
 from utils.conversations import lifecycle as lifecycle_service
@@ -1880,16 +1879,13 @@ def _bind_projection_to_segments(
     row must bind through ``transcript_sha256_for_binding``, which refuses a
     legacy row whose identity was written before canonicalization: there, a
     matching digest would not imply matching rendered attribution. Request
-    segments are not stored yet -- they are canonicalized on write -- so they
-    bind with the plain client-reproducible digest.
+    segments have already been canonicalized by ingest. Both paths share the
+    fail-closed scope guard without changing the client-reproducible encoding.
     """
-    if stored:
-        expected = transcript_sha256_for_binding(segments or [])
-        if expected is None:
-            _log_client_projection_rejected('stored_transcript_not_canonical', raw)
-            return None
-    else:
-        expected = transcript_sha256(segments or [])
+    expected = transcript_sha256_for_binding(segments or [])
+    if expected is None:
+        _log_client_projection_rejected('stored_transcript_not_canonical' if stored else 'unsafe_ingest_binding', raw)
+        return None
     if expected != projection.transcript_sha256:
         _log_client_projection_rejected('hash_mismatch', raw)
         return None

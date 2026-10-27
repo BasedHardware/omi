@@ -43,3 +43,15 @@ def test_plan_write_spills_across_successive_small_batches():
     assert spilled == window[:300]
     fresh = [f'new-{step}-{i:05d}' for step in range(1, 4) for i in range(100)]
     assert payload['ids'] == window[300:] + fresh
+
+
+def test_large_donor_transfer_bounds_each_archive_and_retains_every_receipt():
+    existing = {'ids': ['already-present'], 'shards': 3}
+    receipts = [f'sync:{index:064x}' for index in range(50_000)]
+    payload, archives = episode_receipts.plan_write(existing, receipts, now=AT)
+    assert all(len(ids) <= episode_receipts.SHARD_SIZE for _, ids in archives)
+    assert len(payload['ids']) <= episode_receipts.SHARD_SIZE
+    assert [index for index, _ in archives] == list(range(3, 3 + len(archives)))
+    retained = [receipt for _, ids in archives for receipt in ids] + payload['ids']
+    assert retained == ['already-present', *receipts]
+    assert payload['shards'] == 3 + len(archives)

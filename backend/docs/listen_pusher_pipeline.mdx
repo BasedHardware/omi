@@ -7053,6 +7053,34 @@ permission and the normal lifecycle fences. Missing dispatch reserves a future
 successor without admitting processing; restoring dispatch lets replay recover
 the member exactly once, including after its episode has closed.
 
+WAL episode membership does not prove the live stream heard every recovered
+word. Intake and sync finalization merge retained member speech into the compact
+episode notes using transactional content receipts, including gaps behind an
+existing placed cursor. Close checks recovered member transcripts again, so
+speech retained after the last moment or during a provider outage can complete
+the recap. Recovery targets the member's existing episode and never opens a new
+one. Sync attachment retries version conflicts three times with jitter and
+fresh reads. Saturated sync intake/finalize hooks enter the same executor's
+bounded deferred admission queue; slot release retries them even after the last
+append. The 64-entry process-local queue backpressures synchronous producers
+when full and is cancelled at shutdown; existing episode/lifecycle flags remain
+unchanged.
+
+Live notes write complete-input content receipts into the same recovery receipt
+namespace. WAL appended to that canonical conversation therefore skips proven
+live speech and keeps novel gaps; donor merges transfer receipts with episode
+membership in the same CAS. Legacy placed cursor-only state has no exact content
+proof, so its first recovery conservatively merges the retained snapshot once.
+The background-task inventory documents the bounded queue's shutdown behavior;
+this remains a best-effort episode overlay over persisted conversations.
+
+Client projection binding keeps transcript hash encoding v5. Because v5 does
+not bind `speaker_id_scope`, the binding helper rejects a stored transcript
+whose unnamed voices span multiple scopes (including legacy unscoped voices).
+A scope-only correction that changes Speaker A/A to A/B therefore cannot keep a
+stale client projection. Owner and bound-person segments do not contribute to
+this unnamed-voice scope guard.
+
 `LISTEN_QUIET_FINALIZATION_ENABLED=true` is the default. Mono `omi` and `phone`
 recordings arm one opaque `quiet-*` check in `conversation_finalization_jobs`
 on session setup and every socket exit (including drain/network failure).
