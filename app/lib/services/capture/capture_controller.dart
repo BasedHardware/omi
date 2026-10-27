@@ -2892,6 +2892,8 @@ class CaptureController extends ChangeNotifier
     await _cancelUplinkAudio();
     await _blePhotoStream?.cancel();
     await _bleButtonStream?.cancel();
+    _pendingDoubleTapTimer?.cancel();
+    _pendingDoubleTapTimer = null;
     _stopMetricsTracking();
     if (disableNativeBackground) {
       await _preferences.saveBool('nativeBleForegroundReady', false);

@@ -14649,4 +14649,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get longPressPowerWarning => 'Long press powers the device on/off and cannot be customized.';
+
+  @override
+  String get triplePressDevKitOnly => 'DevKit Only';
+
+  @override
+  String get triplePressDevKitWarning => 'Triple press requires compatible DevKit firmware.';
 }

@@ -4447,5 +4447,7 @@
     "longPress": "Long Press",
     "turnOnOff": "Turn On/Off",
     "askQuestion": "Ask Question",
-    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized."
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized.",
+    "triplePressDevKitOnly": "DevKit Only",
+    "triplePressDevKitWarning": "Triple press requires compatible DevKit firmware."
 }

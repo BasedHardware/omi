@@ -25874,6 +25874,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Long press powers the device on/off and cannot be customized.'**
   String get longPressPowerWarning;
+
+  /// Value label for triple press when connected device is not a DevKit
+  ///
+  /// In en, this message translates to:
+  /// **'DevKit Only'**
+  String get triplePressDevKitOnly;
+
+  /// Warning snackbar explaining triple press is only supported on DevKit
+  ///
+  /// In en, this message translates to:
+  /// **'Triple press requires compatible DevKit firmware.'**
+  String get triplePressDevKitWarning;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

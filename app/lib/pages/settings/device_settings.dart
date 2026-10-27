@@ -438,6 +438,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final l10n = context.l10n;
     final isOmi = device?.type == DeviceType.omi;
     final supportsFind = isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
+    final supportsTripleTap = isOmi &&
+        DeviceUtils.isOmiDevKit(
+          modelNumber: device?.modelNumber,
+          deviceName: device?.name,
+        );
     final singleTapRow = OmiSettingsRow(
       key: const Key('single_tap_setting'),
       leading: const FaIcon(FontAwesomeIcons.handPointer),
@@ -458,9 +463,19 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       key: const Key('triple_tap_setting'),
       leading: const FaIcon(FontAwesomeIcons.handPointer),
       title: l10n.triplePress,
-      value: _buttonActionLabel(SharedPreferencesUtil().tripleTapAction),
-      onTap: _pickTripleTapAction,
-      showChevron: true,
+      value: supportsTripleTap
+          ? _buttonActionLabel(SharedPreferencesUtil().tripleTapAction)
+          : l10n.triplePressDevKitOnly,
+      showChevron: supportsTripleTap,
+      onTap: supportsTripleTap
+          ? _pickTripleTapAction
+          : () {
+              ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(SnackBar(
+                  content: Text(l10n.triplePressDevKitWarning),
+                ));
+            },
     );
     final longPressRow = OmiSettingsRow(
       key: const Key('long_press_setting'),
@@ -510,7 +525,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             tripleTapRow,
             longPressRow,
           ],
-        ] else ...[
+        ] else if (device == null) ...[
           singleTapRow,
           doubleTapRow,
           tripleTapRow,

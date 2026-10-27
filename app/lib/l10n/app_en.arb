@@ -17877,6 +17877,14 @@
     "longPressPowerWarning": "Long press powers the device on/off and cannot be customized.",
     "@longPressPowerWarning": {
         "description": "Warning snackbar explaining long press is fixed to power"
+    },
+    "triplePressDevKitOnly": "DevKit Only",
+    "@triplePressDevKitOnly": {
+        "description": "Value label for triple press when connected device is not a DevKit"
+    },
+    "triplePressDevKitWarning": "Triple press requires compatible DevKit firmware.",
+    "@triplePressDevKitWarning": {
+        "description": "Warning snackbar explaining triple press is only supported on DevKit"
     }
 }
 

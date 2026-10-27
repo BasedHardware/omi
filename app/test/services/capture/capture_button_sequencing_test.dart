@@ -98,6 +98,58 @@ void main() {
     expect(provider.hasPendingDoubleTapForTesting, isFalse);
   });
 
+  test('standalone double press executes action exactly once after 600ms boundary', () async {
+    final clock = VirtualClock(DateTime.utc(2026));
+    final scheduler = ManualScheduler(clock: clock);
+    final provider = _provider(scheduler: scheduler, now: clock.now);
+    addTearDown(provider.dispose);
+
+    expect(provider.hasPendingDoubleTapForTesting, isFalse);
+    expect(provider.isConversationMarkedForStarring, isFalse);
+
+    // Emit state 2 (double tap)
+    provider.handleButtonEventForTesting('test-device', 2);
+    expect(provider.hasPendingDoubleTapForTesting, isTrue);
+
+    // Boundary: at 599ms the timer is still armed and action has not fired
+    scheduler.elapse(const Duration(milliseconds: 599));
+    expect(provider.hasPendingDoubleTapForTesting, isTrue);
+    expect(provider.isConversationMarkedForStarring, isFalse);
+
+    // At 600ms the firmware DOUBLE_TAP_WINDOW boundary is reached and action executes
+    scheduler.elapse(const Duration(milliseconds: 1));
+    expect(provider.hasPendingDoubleTapForTesting, isFalse);
+    expect(provider.isConversationMarkedForStarring, isTrue);
+
+    // Later time advances produce no redundant executions
+    scheduler.elapse(const Duration(milliseconds: 500));
+    expect(provider.hasPendingDoubleTapForTesting, isFalse);
+    expect(provider.isConversationMarkedForStarring, isTrue);
+  });
+
+  test('late event arriving after 600ms classification window executes independently', () async {
+    final clock = VirtualClock(DateTime.utc(2026));
+    final scheduler = ManualScheduler(clock: clock);
+    final provider = _provider(scheduler: scheduler, now: clock.now);
+    addTearDown(provider.dispose);
+
+    // Emit state 2 and let it execute at 600ms
+    provider.handleButtonEventForTesting('test-device', 2);
+    scheduler.elapse(const Duration(milliseconds: 600));
+    expect(provider.hasPendingDoubleTapForTesting, isFalse);
+    expect(provider.isConversationMarkedForStarring, isTrue);
+
+    // Reset starring to observe late event effect
+    provider.unmarkConversationForStarring();
+    expect(provider.isConversationMarkedForStarring, isFalse);
+
+    // Late state 6 arriving at 750ms executes triple-tap independently
+    scheduler.elapse(const Duration(milliseconds: 150));
+    provider.handleButtonEventForTesting('test-device', 6);
+    expect(provider.hasPendingDoubleTapForTesting, isFalse);
+    expect(provider.isConversationMarkedForStarring, isTrue);
+  });
+
   test('double-tap debounce timer is cancelled on single tap or dispose', () async {
     final clock = VirtualClock(DateTime.utc(2026));
     final scheduler = ManualScheduler(clock: clock);
@@ -109,10 +161,14 @@ void main() {
     provider.handleButtonEventForTesting('test-device', 1);
     expect(provider.hasPendingDoubleTapForTesting, isFalse);
 
-    // State 2 followed by dispose cancels double-tap
+    // State 2 followed by dispose cancels double-tap and prevents delayed execution
     provider.handleButtonEventForTesting('test-device', 2);
     expect(provider.hasPendingDoubleTapForTesting, isTrue);
     provider.dispose();
+    expect(provider.hasPendingDoubleTapForTesting, isFalse);
+
+    // Virtual time advance after dispose does not execute action
+    scheduler.elapse(const Duration(milliseconds: 600));
     expect(provider.hasPendingDoubleTapForTesting, isFalse);
   });
 }

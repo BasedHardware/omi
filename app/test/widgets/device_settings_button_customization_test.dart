@@ -86,14 +86,14 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  testWidgets('renders all customizable button options with defaults', (tester) async {
+  testWidgets('renders all customizable button options with defaults on supported DevKit', (tester) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final provider = _StubDeviceProvider(
-      device: BtDevice(id: 'omi-test-1', name: 'Omi', type: DeviceType.omi, rssi: -40),
+      device: BtDevice(id: 'omi-devkit-1', name: 'Omi DevKit 2', type: DeviceType.omi, rssi: -40),
     );
     final pendingWork = _stubPendingWork();
     addTearDown(provider.dispose);
@@ -112,7 +112,7 @@ void main() {
     expect(find.text('Double Tap'), findsOneWidget);
     expect(find.text('Mute / Unmute'), findsOneWidget);
 
-    // Verify Triple Press row
+    // Verify Triple Press row (enabled on DevKit)
     expect(find.byKey(const Key('triple_tap_setting')), findsOneWidget);
     expect(find.text('Triple Press'), findsOneWidget);
     expect(find.text('End & Process Conversation'), findsOneWidget);
@@ -130,7 +130,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final provider = _StubDeviceProvider(
-      device: BtDevice(id: 'omi-test-1', name: 'Omi', type: DeviceType.omi, rssi: -40),
+      device: BtDevice(id: 'omi-devkit-1', name: 'Omi DevKit 2', type: DeviceType.omi, rssi: -40),
     );
     final pendingWork = _stubPendingWork();
     addTearDown(provider.dispose);
@@ -152,14 +152,14 @@ void main() {
     expect(SharedPreferencesUtil().singleTapAction, 1);
   });
 
-  testWidgets('triple press sheet updates preference when option selected', (tester) async {
+  testWidgets('triple press sheet updates preference when option selected on supported DevKit', (tester) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final provider = _StubDeviceProvider(
-      device: BtDevice(id: 'omi-test-1', name: 'Omi', type: DeviceType.omi, rssi: -40),
+      device: BtDevice(id: 'omi-devkit-1', name: 'Omi DevKit 2', type: DeviceType.omi, rssi: -40),
     );
     final pendingWork = _stubPendingWork();
     addTearDown(provider.dispose);
@@ -181,6 +181,87 @@ void main() {
     expect(SharedPreferencesUtil().tripleTapAction, 2);
   });
 
+  testWidgets('triple press is disabled and explains DevKit requirement on consumer CV1', (tester) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final provider = _StubDeviceProvider(
+      device: BtDevice(id: 'omi-cv1', name: 'Omi', modelNumber: 'Omi CV 1', type: DeviceType.omi, rssi: -40),
+    );
+    final pendingWork = _stubPendingWork();
+    addTearDown(provider.dispose);
+    addTearDown(pendingWork.dispose);
+
+    await tester.pumpWidget(_app(provider, pendingWork: pendingWork));
+    await tester.pumpAndSettle();
+
+    // Single press and double press are fully functional
+    expect(find.byKey(const Key('single_tap_setting')), findsOneWidget);
+    expect(find.byKey(const Key('double_tap_setting')), findsOneWidget);
+
+    // Triple press displays "DevKit Only"
+    expect(find.byKey(const Key('triple_tap_setting')), findsOneWidget);
+    expect(find.text('DevKit Only'), findsOneWidget);
+
+    // Tapping displays informative snackbar
+    await tester.tap(find.byKey(const Key('triple_tap_setting')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Triple press requires compatible DevKit firmware.'), findsOneWidget);
+  });
+
+  testWidgets('unknown capability conservatively disables triple press while preserving single/double', (tester) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final provider = _StubDeviceProvider(device: null);
+    final pendingWork = _stubPendingWork();
+    addTearDown(provider.dispose);
+    addTearDown(pendingWork.dispose);
+
+    await tester.pumpWidget(_app(provider, pendingWork: pendingWork));
+    await tester.pumpAndSettle();
+
+    // Single press and double press are preserved and functional
+    expect(find.byKey(const Key('single_tap_setting')), findsOneWidget);
+    expect(find.byKey(const Key('double_tap_setting')), findsOneWidget);
+
+    // Triple press is conservatively disabled
+    expect(find.byKey(const Key('triple_tap_setting')), findsOneWidget);
+    expect(find.text('DevKit Only'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('triple_tap_setting')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Triple press requires compatible DevKit firmware.'), findsOneWidget);
+  });
+
+  testWidgets('button controls are hidden on non-button device (e.g. OpenGlass)', (tester) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final provider = _StubDeviceProvider(
+      device: BtDevice(id: 'glass-1', name: 'OpenGlass', type: DeviceType.openglass, rssi: -40),
+    );
+    final pendingWork = _stubPendingWork();
+    addTearDown(provider.dispose);
+    addTearDown(pendingWork.dispose);
+
+    await tester.pumpWidget(_app(provider, pendingWork: pendingWork));
+    await tester.pumpAndSettle();
+
+    // Button customization rows must not be rendered on OpenGlass
+    expect(find.byKey(const Key('single_tap_setting')), findsNothing);
+    expect(find.byKey(const Key('double_tap_setting')), findsNothing);
+    expect(find.byKey(const Key('triple_tap_setting')), findsNothing);
+  });
+
   testWidgets('long press displays fixed warning snackbar', (tester) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
@@ -188,7 +269,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final provider = _StubDeviceProvider(
-      device: BtDevice(id: 'omi-test-1', name: 'Omi', type: DeviceType.omi, rssi: -40),
+      device: BtDevice(id: 'omi-devkit-1', name: 'Omi DevKit 2', type: DeviceType.omi, rssi: -40),
     );
     final pendingWork = _stubPendingWork();
     addTearDown(provider.dispose);
