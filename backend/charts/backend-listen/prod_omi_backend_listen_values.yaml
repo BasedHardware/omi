@@ -199,7 +199,7 @@ env:
   - name: AUDIO_ARCHIVE_SYNC_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_COALESCE_ENABLED
     value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
@@ -209,11 +209,11 @@ env:
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
     value: "100"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
-    value: "0"
+    value: "5"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: ""
   - name: BUCKET_AUDIO_DERIVED
-    value: ""
+    value: "omi-audio-derived-uc1"
   - name: AUDIO_MERGE_WORKER_URL
     value: ""
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
