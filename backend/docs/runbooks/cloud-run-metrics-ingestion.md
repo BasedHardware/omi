@@ -106,11 +106,14 @@ not absolute burst bounds or runtime acceptance at the smaller allocation.
 The application's matching CPU peak was 20.96 CPU-seconds/minute; do not reduce
 its 1 CPU or 1Gi memory from this evidence.
 
-The 10-24/25 desktop CPU bill averaged **$5.748/day** for app 1 CPU + collector
-1 CPU. At fixed instance time, `(1 - 0.25) / 2 * 5.748` models **$2.156/day,
-$64.7/30 days**. Smaller total CPU can trigger earlier autoscaling. This is an
-estimate; book only D+1 settled total service cost after checking instance time,
-CPU/memory and network give-back against that baseline.
+The 10-24/25 **production** desktop CPU bill averaged **$2.7009/day** for app
+1 CPU + collector 1 CPU. At fixed instance time,
+`(1 - 0.25) / 2 * 2.7009` models **$1.0128/day, $30.4/30 days**. The separate
+dev CPU bill averaged $3.0471/day, but its starting resource profile was not
+readable under ro-prod; no dev saving is sized here. Smaller total CPU can
+trigger earlier autoscaling. This is an estimate; book only D+1 settled total
+service cost after checking instance time, CPU/memory and network give-back
+against that baseline.
 
 The lead owns the first rollout, **after the 2026-10-27 batch soak freeze clears**.
 Merging the helper change triggers the existing desktop development workflow;
