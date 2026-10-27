@@ -701,7 +701,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remembering => '记忆';
 
   @override
-  String get unlimitedPlan => '无限套餐';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => '管理套餐';
@@ -723,7 +723,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get upgrade => '升级';
 
   @override
-  String get upgradeToUnlimited => '升级至无限制';
+  String get upgradeToUnlimited => '升级至Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3102,7 +3102,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pro => '专业版';
 
   @override
-  String get upgradeToPro => '升级至Pro';
+  String get upgradeToPro => '升级至Omi Pro';
 
   @override
   String get getOmiDevice => '获取 Omi 设备';
@@ -4206,7 +4206,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trainingDataProgram => '训练数据计划';
 
   @override
-  String get getOmiUnlimitedFree => '通过贡献数据来训练AI模型，免费获得Omi无限版。';
+  String get getOmiUnlimitedFree => '通过贡献数据来训练AI模型，免费获得Omi Pro。';
 
   @override
   String get trainingDataBullets => '• 你的数据有助于改进 AI 模型\n• 仅共享非敏感数据';
@@ -4824,7 +4824,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '继续即表示您的对话、录音和个人信息将安全存储在我们的服务器上。您的音频录音和转录由第三方AI服务处理（包括用于转录的Deepgram和用于分析的OpenAI），以为您提供AI驱动的洞察并启用所有应用功能。';
 
   @override
-  String get tasksEmptyStateMessage => '对话中的待办事项会显示在这里。';
+  String get tasksEmptyStateMessage => '开始对话以创建任务。';
 
   @override
   String get clearChatAction => '清除聊天';
@@ -9499,7 +9499,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downgradeToFreemiumAction => '降级到免费版';
 
   @override
-  String get getFreeUnlimitedAccess => '免费获取无限访问权限';
+  String get getFreeUnlimitedAccess => '免费获取 Omi Pro';
 
   @override
   String get shareDataForTraining => '共享数据用于训练';
@@ -12653,7 +12653,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => '发送语音备忘，Omi 会回复。';
 
   @override
-  String get chatAppsPartOfPro => '聊天应用是 Pro 的一部分';
+  String get chatAppsPartOfPro => '聊天应用是 Omi Pro 的一部分';
 
   @override
   String get chatAppsMessagesApp => '信息';
@@ -13282,7 +13282,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDetailsCopy => '复制详情以供支持团队使用';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator 和 Architect 套餐可用';
+  String get chatAppsChannelPlanRequired => 'Omi Pro 套餐可用';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13395,24 +13395,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => '点按以修复';
-
-  @override
-  String get voiceProfileCardDismissed => '你可以随时在设置中设置声音档案。';
-
-  @override
-  String get homeNewRecordingButton => '新录音';
-
-  @override
-  String get chatWelcomeMessage => '你好，我是 Omi。关于你聊过的任何事都可以问我：某人说了什么、你答应过什么，或者今天的总结。我还能帮你添加待办、记住重要的事。';
-
-  @override
-  String get onboardingStarterTaskAsk => '问问 Omi 你今天过得怎么样';
-
-  @override
-  String get onboardingStarterTaskRecord => '用 Omi 录一段对话';
-
-  @override
-  String get onboardingStarterTaskCheck => '勾选这项任务来完成它';
 
   @override
   String get homePendingTitle => '对话正在生成';
@@ -13804,7 +13786,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceOptionChargingBody => '在手机充电时运行。';
 
   @override
-  String get onDeviceUpgradeBody => '升级到 Pro，获得说话人分离和更高准确度';
+  String get onDeviceUpgradeBody => '升级到 Omi Pro，获得说话人分离和更高准确度';
 
   @override
   String get onDeviceAtCapFooter => '无论选哪种都不会丢失内容。你可以在 设置 › 转录 中更改。';
@@ -13982,7 +13964,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceRedoWithCloud => '用 Omi Cloud 重新处理';
 
   @override
-  String get onDeviceRedoHint => '升级到 Pro，获得说话人分离和更高准确度';
+  String get onDeviceRedoHint => '升级到 Omi Pro，获得说话人分离和更高准确度';
 
   @override
   String get onDeviceKeepEverything => '所有内容保留在本机';
@@ -14395,6 +14377,44 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => '放弃';
+
+  @override
+  String get syncRejectionInvalidDate => '录音日期无效';
+
+  @override
+  String get syncDeleteKeptUploading => '部分内容仍在上传中，已保留';
+
+  @override
+  String get syncRejectionServer => '被服务器拒绝';
+
+  @override
+  String get syncRejectionTooLarge => '过大';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '手机上还有$duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => '上传已暂停片刻 — 将自动恢复';
+
+  @override
+  String get voiceProfileCardDismissed => '你可以随时在设置中设置声音档案。';
+
+  @override
+  String get homeNewRecordingButton => '新录音';
+
+  @override
+  String get chatWelcomeMessage => '你好，我是 Omi。关于你聊过的任何事都可以问我：某人说了什么、你答应过什么，或者今天的总结。我还能帮你添加待办、记住重要的事。';
+
+  @override
+  String get onboardingStarterTaskAsk => '问问 Omi 你今天过得怎么样';
+
+  @override
+  String get onboardingStarterTaskRecord => '用 Omi 录一段对话';
+
+  @override
+  String get onboardingStarterTaskCheck => '勾选这项任务来完成它';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi 会自动重新连接';

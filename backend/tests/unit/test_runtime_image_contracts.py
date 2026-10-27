@@ -41,8 +41,9 @@ def _dockerfile_without(source: Path, omitted_line: str, destination: Path) -> P
     return destination
 
 
-def test_registered_runtime_image_sources_are_closed(contracts_module):
-    assert contracts_module.check_source_closures(contracts_module.load_contracts()) == []
+# The registered-source closure walk used to live here as one ~183s test; it
+# moved to test_runtime_image_source_closures_half_{a,b}.py (parity of the
+# sorted contract name) so no single shard lane carries the whole walk.
 
 
 def test_source_copy_skips_local_openapi_venv(contracts_module, tmp_path):

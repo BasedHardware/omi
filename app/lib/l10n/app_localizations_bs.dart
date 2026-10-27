@@ -711,7 +711,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get remembering => 'Pamćenje';
 
   @override
-  String get unlimitedPlan => 'Neograničeni plan';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Upravljaj planom';
@@ -733,7 +733,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get upgrade => 'Nadogradi';
 
   @override
-  String get upgradeToUnlimited => 'Nadogradi na neograničeno';
+  String get upgradeToUnlimited => 'Nadogradi na Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3160,7 +3160,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Nadogradi na Pro';
+  String get upgradeToPro => 'Nadogradi na Omi Pro';
 
   @override
   String get getOmiDevice => 'Nabavi Omi uređaj';
@@ -4280,8 +4280,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get trainingDataProgram => 'Program podataka za obuku';
 
   @override
-  String get getOmiUnlimitedFree =>
-      'Dobij Omi Unlimited besplatno doprinošenjem svojih podataka za treniranje AI modela.';
+  String get getOmiUnlimitedFree => 'Dobij Omi Pro besplatno doprinošenjem svojih podataka za treniranje AI modela.';
 
   @override
   String get trainingDataBullets => '• Vaši podaci pomažu poboljšanju AI modela\n• Dijele se samo neosjetljivi podaci';
@@ -4917,7 +4916,7 @@ class AppLocalizationsBs extends AppLocalizations {
       'Nastavljanjem, vaši razgovori, snimke i lični podaci bit će sigurno pohranjeni na našim serverima. Vaši audio zapisi i transkripti se obrađuju od strane AI usluga trećih strana (uključujući Deepgram za transkripciju i OpenAI za analizu) kako bi vam pružili uvide pokretane vještačkom inteligencijom i omogućili sve funkcije aplikacije.';
 
   @override
-  String get tasksEmptyStateMessage => 'Zadaci iz vaših razgovora pojavit će se ovdje.';
+  String get tasksEmptyStateMessage => 'Započnite razgovor da kreirate zadatak.';
 
   @override
   String get clearChatAction => 'Očisti razgovor';
@@ -9686,7 +9685,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Pređite na besplatnu verziju';
 
   @override
-  String get getFreeUnlimitedAccess => 'Ostvarite besplatan neograničen pristup';
+  String get getFreeUnlimitedAccess => 'Dobijte Omi Pro besplatno';
 
   @override
   String get shareDataForTraining => 'Dijelite podatke za treniranje';
@@ -12884,7 +12883,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Pošalji glasovnu poruku i Omi će odgovoriti na nju.';
 
   @override
-  String get chatAppsPartOfPro => 'Chat aplikacije su dio Proa';
+  String get chatAppsPartOfPro => 'Chat aplikacije su dio Omi Pro plana';
 
   @override
   String get chatAppsMessagesApp => 'Poruke';
@@ -13518,7 +13517,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get syncDetailsCopy => 'Kopiraj detalje za podršku';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Dostupno uz Operator i Architect';
+  String get chatAppsChannelPlanRequired => 'Dostupno uz Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13633,25 +13632,6 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Dodirnite da popravite';
-
-  @override
-  String get voiceProfileCardDismissed => 'Glasovni profil možete podesiti bilo kada u Postavkama.';
-
-  @override
-  String get homeNewRecordingButton => 'Novo snimanje';
-
-  @override
-  String get chatWelcomeMessage =>
-      'Zdravo, ja sam Omi. Pitaj me bilo šta o čemu si pričao: šta je neko rekao, šta si obećao ili sažetak tvog dana. Mogu i dodavati zadatke i pamtiti stvari za tebe.';
-
-  @override
-  String get onboardingStarterTaskAsk => 'Pitaj Omi o svom danu';
-
-  @override
-  String get onboardingStarterTaskRecord => 'Snimi razgovor uz Omi';
-
-  @override
-  String get onboardingStarterTaskCheck => 'Označi ovaj zadatak da ga završiš';
 
   @override
   String get homePendingTitle => 'Razgovori stižu';
@@ -14048,7 +14028,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Radi dok se telefon puni.';
 
   @override
-  String get onDeviceUpgradeBody => 'Nadogradite na Pro za razdvajanje govornika i veću preciznost';
+  String get onDeviceUpgradeBody => 'Nadogradite na Omi Pro za razdvajanje govornika i veću preciznost';
 
   @override
   String get onDeviceAtCapFooter => 'Ništa se ne gubi ni u jednom slučaju. Ovo možete promijeniti u Postavke › Prepis.';
@@ -14231,7 +14211,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Ponovi s Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Nadogradite na Pro za razdvajanje govornika i veću preciznost';
+  String get onDeviceRedoHint => 'Nadogradite na Omi Pro za razdvajanje govornika i veću preciznost';
 
   @override
   String get onDeviceKeepEverything => 'Čuvaj sve na ovom telefonu';
@@ -14649,6 +14629,45 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Odbaci';
+
+  @override
+  String get syncRejectionInvalidDate => 'Nevažeći datum snimanja';
+
+  @override
+  String get syncDeleteKeptUploading => 'Neki dijelovi se još uvijek prenose i zadržani su';
+
+  @override
+  String get syncRejectionServer => 'Server je odbio';
+
+  @override
+  String get syncRejectionTooLarge => 'Preveliko';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration na telefonu';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Otpremanje je kratko pauzirano — nastavit će se automatski';
+
+  @override
+  String get voiceProfileCardDismissed => 'Glasovni profil možete podesiti bilo kada u Postavkama.';
+
+  @override
+  String get homeNewRecordingButton => 'Novo snimanje';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Zdravo, ja sam Omi. Pitaj me bilo šta o čemu si pričao: šta je neko rekao, šta si obećao ili sažetak tvog dana. Mogu i dodavati zadatke i pamtiti stvari za tebe.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Pitaj Omi o svom danu';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Snimi razgovor uz Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Označi ovaj zadatak da ga završiš';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi će se sam ponovo povezati';

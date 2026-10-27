@@ -13,7 +13,11 @@ import 'package:omi/backend/preferences.dart';
 ///                   saturated and never picked it up. In-memory only — once
 ///                   the app restarts, the cooldown clears so the user sees
 ///                   fresh state if the server has since recovered.
-enum RateLimitReason { fairUse, backendBusy, edgeThrottle }
+/// - [dispatchHold]: a per-account maintenance fence asked this account to
+///                   wait. Not a capacity problem: uploads resume on their own
+///                   when the fence lifts, so its copy must not say the
+///                   servers are busy.
+enum RateLimitReason { fairUse, backendBusy, dispatchHold, edgeThrottle }
 
 /// Account-global cooldown for rate limiting (HTTP 429) on sync uploads.
 ///
@@ -163,7 +167,9 @@ class SyncRateLimiter extends ChangeNotifier {
     _dispatchHoldUntilMs = nowMs + _dispatchHoldLastCooldownMs;
     final untilMs = _dispatchHoldUntilMs;
     if (untilMs >= _backendBusyUntilMs) {
-      _inMemoryReason = RateLimitReason.backendBusy;
+      // The fence's own reason, so cooldown copy never blames server capacity
+      // for what is a per-account hold that lifts on its own.
+      _inMemoryReason = RateLimitReason.dispatchHold;
       _backendBusyUntilMs = untilMs;
     }
     _scheduleExpiryNotification();

@@ -714,7 +714,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get remembering => 'Ghi nhớ';
 
   @override
-  String get unlimitedPlan => 'Gói không giới hạn';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Quản lý gói';
@@ -736,7 +736,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get upgrade => 'Nâng cấp';
 
   @override
-  String get upgradeToUnlimited => 'Nâng cấp lên không giới hạn';
+  String get upgradeToUnlimited => 'Nâng cấp lên Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3163,7 +3163,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Nâng cấp lên Pro';
+  String get upgradeToPro => 'Nâng cấp lên Omi Pro';
 
   @override
   String get getOmiDevice => 'Nhận Thiết bị Omi';
@@ -4285,7 +4285,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'Nhận Omi Unlimited miễn phí bằng cách đóng góp dữ liệu của bạn để huấn luyện các mô hình AI.';
+      'Nhận Omi Pro miễn phí bằng cách đóng góp dữ liệu của bạn để huấn luyện các mô hình AI.';
 
   @override
   String get trainingDataBullets =>
@@ -4918,7 +4918,7 @@ class AppLocalizationsVi extends AppLocalizations {
       'Bằng cách tiếp tục, các cuộc trò chuyện, bản ghi âm và thông tin cá nhân của bạn sẽ được lưu trữ an toàn trên máy chủ của chúng tôi. Bản ghi âm và bản phiên âm của bạn được xử lý bởi các dịch vụ AI bên thứ ba (bao gồm Deepgram cho phiên âm và OpenAI cho phân tích) để cung cấp cho bạn thông tin chi tiết được hỗ trợ bởi AI và kích hoạt tất cả các tính năng ứng dụng.';
 
   @override
-  String get tasksEmptyStateMessage => 'Việc cần làm từ các cuộc trò chuyện của bạn sẽ hiện ở đây.';
+  String get tasksEmptyStateMessage => 'Bắt đầu cuộc trò chuyện để tạo nhiệm vụ.';
 
   @override
   String get clearChatAction => 'Xóa cuộc trò chuyện';
@@ -9660,7 +9660,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Chuyển xuống bản miễn phí';
 
   @override
-  String get getFreeUnlimitedAccess => 'Nhận quyền truy cập không giới hạn miễn phí';
+  String get getFreeUnlimitedAccess => 'Nhận Omi Pro miễn phí';
 
   @override
   String get shareDataForTraining => 'Chia sẻ dữ liệu để huấn luyện';
@@ -12853,7 +12853,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Gửi ghi chú thoại và Omi sẽ trả lời.';
 
   @override
-  String get chatAppsPartOfPro => 'Ứng dụng trò chuyện nằm trong gói Pro';
+  String get chatAppsPartOfPro => 'Ứng dụng trò chuyện nằm trong gói Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Tin nhắn';
@@ -13486,7 +13486,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncDetailsCopy => 'Sao chép chi tiết cho bộ phận hỗ trợ';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Có trên gói Operator và Architect';
+  String get chatAppsChannelPlanRequired => 'Có trên gói Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13601,25 +13601,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Nhấn để khắc phục';
-
-  @override
-  String get voiceProfileCardDismissed => 'Bạn có thể thiết lập Hồ sơ giọng nói bất cứ lúc nào trong Cài đặt.';
-
-  @override
-  String get homeNewRecordingButton => 'Ghi âm mới';
-
-  @override
-  String get chatWelcomeMessage =>
-      'Chào bạn, mình là Omi. Hỏi mình bất cứ điều gì bạn đã nói: ai đã nói gì, bạn đã hứa gì hay tóm tắt ngày của bạn. Mình cũng có thể thêm việc cần làm và ghi nhớ mọi thứ giúp bạn.';
-
-  @override
-  String get onboardingStarterTaskAsk => 'Hỏi Omi về ngày của bạn';
-
-  @override
-  String get onboardingStarterTaskRecord => 'Ghi âm một cuộc trò chuyện với Omi';
-
-  @override
-  String get onboardingStarterTaskCheck => 'Đánh dấu việc này để hoàn thành';
 
   @override
   String get homePendingTitle => 'Cuộc trò chuyện đang đến';
@@ -14019,7 +14000,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Chạy khi điện thoại đang sạc.';
 
   @override
-  String get onDeviceUpgradeBody => 'Nâng cấp lên Pro để phân biệt người nói và tăng độ chính xác';
+  String get onDeviceUpgradeBody => 'Nâng cấp lên Omi Pro để phân biệt người nói và tăng độ chính xác';
 
   @override
   String get onDeviceAtCapFooter => 'Chọn cách nào cũng không mất gì. Bạn có thể thay đổi trong Cài đặt › Phiên âm.';
@@ -14202,7 +14183,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Làm lại với Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Nâng cấp lên Pro để phân biệt người nói và tăng độ chính xác';
+  String get onDeviceRedoHint => 'Nâng cấp lên Omi Pro để phân biệt người nói và tăng độ chính xác';
 
   @override
   String get onDeviceKeepEverything => 'Giữ mọi thứ trên điện thoại này';
@@ -14621,6 +14602,45 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Bỏ qua';
+
+  @override
+  String get syncRejectionInvalidDate => 'Ngày ghi âm không hợp lệ';
+
+  @override
+  String get syncDeleteKeptUploading => 'Một số phần vẫn đang được tải lên và đã được giữ lại';
+
+  @override
+  String get syncRejectionServer => 'Bị máy chủ từ chối';
+
+  @override
+  String get syncRejectionTooLarge => 'Quá lớn';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration trên điện thoại';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Tải lên tạm dừng trong chốc lát — sẽ tự động tiếp tục';
+
+  @override
+  String get voiceProfileCardDismissed => 'Bạn có thể thiết lập Hồ sơ giọng nói bất cứ lúc nào trong Cài đặt.';
+
+  @override
+  String get homeNewRecordingButton => 'Ghi âm mới';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Chào bạn, mình là Omi. Hỏi mình bất cứ điều gì bạn đã nói: ai đã nói gì, bạn đã hứa gì hay tóm tắt ngày của bạn. Mình cũng có thể thêm việc cần làm và ghi nhớ mọi thứ giúp bạn.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Hỏi Omi về ngày của bạn';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Ghi âm một cuộc trò chuyện với Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Đánh dấu việc này để hoàn thành';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi sẽ tự kết nối lại';

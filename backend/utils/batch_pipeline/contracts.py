@@ -19,6 +19,8 @@ def projection_speech_spans(payload: dict, duration: float) -> list[dict[str, fl
     """Encrypted result contract: original sample-rounded, unpadded VAD union.
 
     No transcript-derived estimate may substitute for this production evidence.
+    ``worker_vad_word_spans`` only positions a bound worker VAD measure at word
+    clocks; its total is that acoustic measure, never the ASR duration.
     Parts/receipts stay embedded in the original result document for erasure.
     """
     raw = payload.get('speech_spans')
@@ -155,25 +157,88 @@ def vad_receipt(audio_uri, captured_samples, speech_seconds):
     }
 
 
+def bound_vad_receipt(job, receipt):
+    """A measured receipt bound to this job's immutable audio input."""
+    expected_keys = {'version', 'state', 'speech_samples', 'captured_samples', 'sample_rate_hz', 'input_uri_sha256'}
+    return (
+        isinstance(receipt, dict)
+        and set(receipt) == expected_keys
+        and type(receipt['version']) is int
+        and receipt['version'] == 1
+        and receipt['state'] == 'measured'
+        and type(receipt['sample_rate_hz']) is int
+        and receipt['sample_rate_hz'] == 16000
+        and type(receipt['speech_samples']) is int
+        and type(receipt['captured_samples']) is int
+        and receipt['captured_samples'] > 0
+        and 0 <= receipt['speech_samples'] <= receipt['captured_samples'] <= 7200 * 16000
+        and abs(receipt['captured_samples'] / 16000 - job['duration_seconds']) <= 0.1
+        and receipt['input_uri_sha256'] == hashlib.sha256(job['audio_uri'].encode()).hexdigest()
+    )
+
+
+def worker_vad_speech(job):
+    """Independent GPU VAD speech (seconds) of at least one full frame, else None."""
+    receipt = job.get('worker_vad_receipt')
+    if not bound_vad_receipt(job, receipt):
+        return None
+    seconds = receipt['speech_samples'] / 16000
+    return None if below_silence_threshold(seconds) else seconds
+
+
+def worker_vad_word_spans(words, duration, seconds):
+    """Place the worker's acoustic speech measure at validated word clocks.
+
+    Only for strict CPU VAD with no spans under a bound worker VAD receipt. Word
+    clocks license placement only: the spans always total the acoustic measure
+    (capped at the captured audio), never the ASR word duration, so settlement,
+    usage and ramp accounting stay acoustic. Point words carry no voice evidence.
+    """
+    rate = 16000
+    end_sample = math.floor(duration * rate)
+    regions = []
+    for word in words:
+        start, end = (min(end_sample, max(0, round(value * rate))) for value in word['timestamp'])
+        if end <= start:
+            continue
+        if regions and start <= regions[-1][1]:
+            regions[-1][1] = max(regions[-1][1], end)
+        else:
+            regions.append([start, end])
+    target = min(round(seconds * rate), end_sample)
+    if not regions or target <= 0:
+        return []
+    placed, remaining = [], target
+    for start, end in regions:  # The acoustic measure fills word clocks in order.
+        take = min(end - start, remaining)
+        if take > 0:
+            placed.append([start, start + take])
+            remaining -= take
+    for index, span in enumerate(placed):  # Then grows forward into following silence.
+        limit = placed[index + 1][0] if index + 1 < len(placed) else end_sample
+        grow = min(limit - span[1], remaining)
+        span[1] += grow
+        remaining -= grow
+    for index in range(len(placed) - 1, -1, -1):  # Then backward; target <= audio, so it fits.
+        limit = placed[index - 1][1] if index else 0
+        grow = min(placed[index][0] - limit, remaining)
+        placed[index][0] -= grow
+        remaining -= grow
+    merged = []
+    for start, end in placed:
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return [{'start': start / rate, 'end': end / rate} for start, end in merged]
+
+
 def attach_held_vad(job, seconds=None, receipt=None, *, receipt_field='worker_vad_receipt'):
     """Validate immutable input binding before a fenced job mutation."""
     measured = validate_measured_vad(seconds, job['duration_seconds'])
     if receipt is not None:
-        expected_keys = {'version', 'state', 'speech_samples', 'captured_samples', 'sample_rate_hz', 'input_uri_sha256'}
         if (
-            not isinstance(receipt, dict)
-            or set(receipt) != expected_keys
-            or type(receipt['version']) is not int
-            or receipt['version'] != 1
-            or receipt['state'] != 'measured'
-            or type(receipt['sample_rate_hz']) is not int
-            or receipt['sample_rate_hz'] != 16000
-            or type(receipt['speech_samples']) is not int
-            or type(receipt['captured_samples']) is not int
-            or receipt['captured_samples'] <= 0
-            or not 0 <= receipt['speech_samples'] <= receipt['captured_samples'] <= 7200 * 16000
-            or abs(receipt['captured_samples'] / 16000 - job['duration_seconds']) > 0.1
-            or receipt['input_uri_sha256'] != hashlib.sha256(job['audio_uri'].encode()).hexdigest()
+            not bound_vad_receipt(job, receipt)
             or measured is None
             or abs(receipt['speech_samples'] / 16000 - measured) > 1 / 16000
         ):

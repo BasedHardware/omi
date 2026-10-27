@@ -712,7 +712,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get remembering => 'Mengingati';
 
   @override
-  String get unlimitedPlan => 'Pelan Tanpa Had';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Urus Pelan';
@@ -734,7 +734,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get upgrade => 'Naik Taraf';
 
   @override
-  String get upgradeToUnlimited => 'Naik taraf kepada tanpa had';
+  String get upgradeToUnlimited => 'Naik taraf ke Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3161,7 +3161,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Naik taraf ke Pro';
+  String get upgradeToPro => 'Naik taraf ke Omi Pro';
 
   @override
   String get getOmiDevice => 'Dapatkan Peranti Omi';
@@ -4287,8 +4287,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get trainingDataProgram => 'Program Data Latihan';
 
   @override
-  String get getOmiUnlimitedFree =>
-      'Dapatkan Omi Unlimited percuma dengan menyumbang data anda untuk melatih model AI.';
+  String get getOmiUnlimitedFree => 'Dapatkan Omi Pro percuma dengan menyumbang data anda untuk melatih model AI.';
 
   @override
   String get trainingDataBullets => '• Data anda membantu menambah baik model AI\n• Hanya data tidak sensitif dikongsi';
@@ -4924,7 +4923,7 @@ class AppLocalizationsMs extends AppLocalizations {
       'Dengan meneruskan, perbualan, rakaman dan maklumat peribadi anda akan disimpan dengan selamat di pelayan kami. Rakaman audio dan transkrip anda diproses oleh perkhidmatan AI pihak ketiga (termasuk Deepgram untuk transkripsi dan OpenAI untuk analisis) untuk memberikan anda pandangan dikuasakan AI dan membolehkan semua ciri aplikasi.';
 
   @override
-  String get tasksEmptyStateMessage => 'Tugasan daripada perbualan anda akan dipaparkan di sini.';
+  String get tasksEmptyStateMessage => 'Mulakan perbualan untuk mencipta tugasan.';
 
   @override
   String get clearChatAction => 'Kosongkan sembang';
@@ -9681,7 +9680,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Turun ke versi percuma';
 
   @override
-  String get getFreeUnlimitedAccess => 'Dapatkan akses tanpa had secara percuma';
+  String get getFreeUnlimitedAccess => 'Dapatkan Omi Pro secara percuma';
 
   @override
   String get shareDataForTraining => 'Kongsi data untuk latihan';
@@ -12886,7 +12885,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Hantar nota suara dan Omi akan menjawabnya.';
 
   @override
-  String get chatAppsPartOfPro => 'Apl sembang adalah sebahagian daripada Pro';
+  String get chatAppsPartOfPro => 'Apl sembang adalah sebahagian daripada Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Mesej';
@@ -13520,7 +13519,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncDetailsCopy => 'Salin butiran untuk sokongan';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Tersedia pada Operator dan Architect';
+  String get chatAppsChannelPlanRequired => 'Tersedia pada Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13635,25 +13634,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Ketik untuk membetulkan';
-
-  @override
-  String get voiceProfileCardDismissed => 'Anda boleh menyediakan Profil Suara pada bila-bila masa dalam Tetapan.';
-
-  @override
-  String get homeNewRecordingButton => 'Rakaman Baharu';
-
-  @override
-  String get chatWelcomeMessage =>
-      'Hai, saya Omi. Tanya saya apa sahaja tentang perkara yang anda bualkan: apa yang dikatakan seseorang, apa yang anda janjikan atau ringkasan hari anda. Saya juga boleh menambah tugasan dan mengingati sesuatu untuk anda.';
-
-  @override
-  String get onboardingStarterTaskAsk => 'Tanya Omi tentang hari anda';
-
-  @override
-  String get onboardingStarterTaskRecord => 'Rakam perbualan dengan Omi';
-
-  @override
-  String get onboardingStarterTaskCheck => 'Tandakan tugasan ini untuk menyelesaikannya';
 
   @override
   String get homePendingTitle => 'Perbualan sedang diproses';
@@ -14052,7 +14032,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Berjalan semasa telefon anda dicas.';
 
   @override
-  String get onDeviceUpgradeBody => 'Naik taraf ke Pro untuk pemisahan penutur dan ketepatan lebih tinggi';
+  String get onDeviceUpgradeBody => 'Naik taraf ke Omi Pro untuk pemisahan penutur dan ketepatan lebih tinggi';
 
   @override
   String get onDeviceAtCapFooter => 'Tiada apa yang hilang. Anda boleh menukar ini dalam Tetapan › Transkripsi.';
@@ -14238,7 +14218,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Buat semula dengan Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Naik taraf ke Pro untuk pemisahan penutur dan ketepatan lebih tinggi';
+  String get onDeviceRedoHint => 'Naik taraf ke Omi Pro untuk pemisahan penutur dan ketepatan lebih tinggi';
 
   @override
   String get onDeviceKeepEverything => 'Simpan semuanya pada telefon ini';
@@ -14657,6 +14637,45 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Buang';
+
+  @override
+  String get syncRejectionInvalidDate => 'Tarikh rakaman tidak sah';
+
+  @override
+  String get syncDeleteKeptUploading => 'Beberapa bahagian masih dimuat naik dan disimpan';
+
+  @override
+  String get syncRejectionServer => 'Ditolak oleh pelayan';
+
+  @override
+  String get syncRejectionTooLarge => 'Terlalu besar';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration pada telefon';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Muat naik dijeda seketika — ia akan disambung semula secara automatik';
+
+  @override
+  String get voiceProfileCardDismissed => 'Anda boleh menyediakan Profil Suara pada bila-bila masa dalam Tetapan.';
+
+  @override
+  String get homeNewRecordingButton => 'Rakaman Baharu';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hai, saya Omi. Tanya saya apa sahaja tentang perkara yang anda bualkan: apa yang dikatakan seseorang, apa yang anda janjikan atau ringkasan hari anda. Saya juga boleh menambah tugasan dan mengingati sesuatu untuk anda.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Tanya Omi tentang hari anda';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Rakam perbualan dengan Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Tandakan tugasan ini untuk menyelesaikannya';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi akan bersambung semula sendiri';

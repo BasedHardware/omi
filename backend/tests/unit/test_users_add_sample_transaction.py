@@ -9,7 +9,7 @@ testing.import_isolation.load_module_fresh.
 
 import os
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -51,6 +51,7 @@ def users_db():
 
     firestore_stub.transactional = lambda func: func
     firestore_stub.DELETE_FIELD = object()
+    firestore_stub.Increment = MagicMock()
 
     fv1_stub = ModuleType("google.cloud.firestore_v1")
     fv1_stub.FieldFilter = MagicMock()
@@ -89,6 +90,7 @@ class _FakePersonRef:
     def __init__(self, data, exists=True):
         self._data = data
         self._exists = exists
+        self.parent = SimpleNamespace(parent=MagicMock())
 
     def get(self, transaction=None):
         return _FakeSnapshot(self._data, exists=self._exists)
@@ -109,9 +111,13 @@ class _FakeTransaction:
         self.updated_data = update_data
 
     def set(self, person_ref, update_data, merge=False):
-        self.updated_ref = person_ref
-        self.updated_data = update_data
-        self.merge = merge
+        if set(update_data) == {'generation'}:
+            self.generation_ref = person_ref
+            self.generation_data = update_data
+        else:
+            self.updated_ref = person_ref
+            self.updated_data = update_data
+            self.merge = merge
 
     def _clean_up(self):
         self._id = None
@@ -134,7 +140,7 @@ def test_add_sample_transaction_pads_transcripts_for_v1_samples(users_db):
     person_ref = _FakePersonRef(person_data)
     transaction = _FakeTransaction()
 
-    result = users_db._add_sample_transaction(
+    result = users_db.add_sample_transaction(
         transaction,
         person_ref,
         "sample-c.wav",
@@ -165,7 +171,7 @@ def test_add_sample_transaction_already_aligned_transcripts(users_db):
     person_ref = _FakePersonRef(person_data)
     transaction = _FakeTransaction()
 
-    result = users_db._add_sample_transaction(
+    result = users_db.add_sample_transaction(
         transaction,
         person_ref,
         "sample-c.wav",
@@ -213,7 +219,7 @@ def test_add_sample_transaction_max_samples_reached(users_db):
     person_ref = _FakePersonRef(person_data)
     transaction = _FakeTransaction()
 
-    result = users_db._add_sample_transaction(
+    result = users_db.add_sample_transaction(
         transaction,
         person_ref,
         "c.wav",
@@ -229,7 +235,7 @@ def test_add_sample_transaction_person_not_found(users_db):
     person_ref = _FakePersonRef({}, exists=False)
     transaction = _FakeTransaction()
 
-    result = users_db._add_sample_transaction(
+    result = users_db.add_sample_transaction(
         transaction,
         person_ref,
         "sample-x.wav",

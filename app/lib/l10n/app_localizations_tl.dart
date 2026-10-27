@@ -716,7 +716,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get remembering => 'Naaalala';
 
   @override
-  String get unlimitedPlan => 'Unlimited Plan';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Pamahalaan ang Plan';
@@ -738,7 +738,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get upgrade => 'I-upgrade';
 
   @override
-  String get upgradeToUnlimited => 'I-upgrade sa unlimited';
+  String get upgradeToUnlimited => 'Mag-upgrade sa Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3180,7 +3180,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Mag-upgrade sa Pro';
+  String get upgradeToPro => 'Mag-upgrade sa Omi Pro';
 
   @override
   String get getOmiDevice => 'Kumuha ng Omi Device';
@@ -4310,7 +4310,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'Makakuha ng Omi Unlimited nang libre sa pamamagitan ng pagbibigay ng iyong data upang magsanay sa AI models.';
+      'Makakuha ng Omi Pro nang libre sa pamamagitan ng pagbibigay ng iyong data upang magsanay sa AI models.';
 
   @override
   String get trainingDataBullets =>
@@ -4950,7 +4950,7 @@ class AppLocalizationsTl extends AppLocalizations {
       'Sa pagpapatuloy, ang iyong mga pag-uusap, recording, at personal na impormasyon ay ligtas na maiimbak sa aming mga server. Ang iyong mga audio recording at transcript ay pinoproseso ng third-party na mga serbisyo ng AI (kabilang ang Deepgram para sa transcription at OpenAI para sa analysis) upang mabigyan ka ng AI-powered na mga insight at ma-enable ang lahat ng feature ng app.';
 
   @override
-  String get tasksEmptyStateMessage => 'Lalabas dito ang mga gagawin mula sa iyong mga usapan.';
+  String get tasksEmptyStateMessage => 'Magsimula ng pag-uusap para gumawa ng gawain.';
 
   @override
   String get clearChatAction => 'Burahin ang Chat';
@@ -9747,7 +9747,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Lumipat sa libreng bersyon';
 
   @override
-  String get getFreeUnlimitedAccess => 'Kumuha ng libreng walang limitasyong access';
+  String get getFreeUnlimitedAccess => 'Kumuha ng Omi Pro nang libre';
 
   @override
   String get shareDataForTraining => 'Magbahagi ng data para sa training';
@@ -12960,7 +12960,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Magpadala ng voice note at sasagutin ito ni Omi.';
 
   @override
-  String get chatAppsPartOfPro => 'Bahagi ng Pro ang mga chat app';
+  String get chatAppsPartOfPro => 'Bahagi ng Omi Pro ang mga chat app';
 
   @override
   String get chatAppsMessagesApp => 'Messages';
@@ -13594,7 +13594,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncDetailsCopy => 'Kopyahin ang mga detalye para sa support';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Available sa Operator at Architect';
+  String get chatAppsChannelPlanRequired => 'Available sa Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13709,25 +13709,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'I-tap para ayusin';
-
-  @override
-  String get voiceProfileCardDismissed => 'Maaari mong i-set up ang Voice Profile anumang oras sa Settings.';
-
-  @override
-  String get homeNewRecordingButton => 'Bagong Recording';
-
-  @override
-  String get chatWelcomeMessage =>
-      'Hi, ako si Omi. Itanong mo sa akin ang kahit ano tungkol sa mga napag-usapan mo: ang sinabi ng isang tao, ang ipinangako mo, o buod ng araw mo. Kaya ko ring magdagdag ng mga gawain at tandaan ang mga bagay para sa iyo.';
-
-  @override
-  String get onboardingStarterTaskAsk => 'Tanungin si Omi tungkol sa araw mo';
-
-  @override
-  String get onboardingStarterTaskRecord => 'Mag-record ng usapan gamit ang Omi';
-
-  @override
-  String get onboardingStarterTaskCheck => 'Lagyan ng tsek ang gawaing ito para matapos';
 
   @override
   String get homePendingTitle => 'Paparating na ang mga usapan';
@@ -14129,7 +14110,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceUpgradeBody =>
-      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
+      'Mag-upgrade sa Omi Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14316,7 +14297,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceRedoHint =>
-      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
+      'Mag-upgrade sa Omi Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
 
   @override
   String get onDeviceKeepEverything => 'Itago ang lahat sa phone na ito';
@@ -14735,6 +14716,46 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Iwanan';
+
+  @override
+  String get syncRejectionInvalidDate => 'Di-wastong petsa ng pag-record';
+
+  @override
+  String get syncDeleteKeptUploading => 'Ang ilang bahagi ay kasalukuyang ina-upload at pinanatili';
+
+  @override
+  String get syncRejectionServer => 'Tinanggihan ng server';
+
+  @override
+  String get syncRejectionTooLarge => 'Masyadong malaki';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration sa telepono';
+  }
+
+  @override
+  String get syncCardUploadsPaused =>
+      'Pansamantalang naka-pause ang mga upload — awtomatikong magpapatuloy ang mga ito';
+
+  @override
+  String get voiceProfileCardDismissed => 'Maaari mong i-set up ang Voice Profile anumang oras sa Settings.';
+
+  @override
+  String get homeNewRecordingButton => 'Bagong Recording';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hi, ako si Omi. Itanong mo sa akin ang kahit ano tungkol sa mga napag-usapan mo: ang sinabi ng isang tao, ang ipinangako mo, o buod ng araw mo. Kaya ko ring magdagdag ng mga gawain at tandaan ang mga bagay para sa iyo.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Tanungin si Omi tungkol sa araw mo';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Mag-record ng usapan gamit ang Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Lagyan ng tsek ang gawaing ito para matapos';
 
   @override
   String get capturePendantDisconnectedShort => 'Kusang kokonekta muli ang Omi';

@@ -655,6 +655,24 @@ unit can become visible only after every committed predecessor has persisted
 later commit retain the existing explicit `late_capture` behavior. No disjoint
 segment independence is assumed.
 
+Assignment excludes `deleted_conversations` tombstones transactionally, even
+when a failed DELETE left the conversation row live. If plan validation finds
+deleted ancestry, one read-only re-plan excludes the denied source and its
+carriers. If donor ancestry still refuses, the input's complete speech is
+projected into a new deterministic identity with no inherited donor ancestry.
+A no-text, zero-speech superseded receipt with `privacy_reason=conversation_deleted`
+requires a transactional tombstone proof on the unit's own source/target or its
+guarded redirect chain. A donor refusal alone never authorizes dropping input.
+The final part advances the owner watermark; unrelated later captures continue.
+An ID-free completion carries `reason_code=conversation_deleted`. Settlement
+rechecks immutable binding, ledger ownership, predecessor, account and privacy
+generation, and rejects every other privacy reason. No deleted source is projected.
+
+Cascade DELETE acquires the account destructive-operation gate before writing
+the conversation tombstone. Its post-intent retraction check and nested memory
+retraction run under that gate. A busy gate returns the existing retryable 409
+before any intent or cleanup is written; successful DELETE remains HTTP 204.
+
 ### Bounded merge head wait
 
 David ruled on 2026-10-20 that catch-up uploads may publish newer parts of a

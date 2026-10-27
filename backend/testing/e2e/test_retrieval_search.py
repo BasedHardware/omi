@@ -9,9 +9,242 @@ hydration run through production code.
 """
 
 from datetime import datetime, timedelta, timezone
+import json
+import pytest
 
 from fakes.firestore import seed_conversation
 from fakes.vector_search import install_vector_search_fakes
+
+
+@pytest.mark.parametrize('refuse', [False, True], ids=['corrected-quote', 'correction-timeout'])
+def test_direct_transcript_review_regressions_through_http_and_scoped_mobile(
+    client, auth_headers, sample_conversation_data, monkeypatch, refuse
+):
+    from fake_firestore.document import FakeDocumentReference
+    from google.api_core.exceptions import DeadlineExceeded
+
+    from database import conversations, review_store
+    from database.firestore_retry import FIRESTORE_NO_RETRY
+    from fakes.firestore import get_mock_firestore
+    from utils.retrieval.tools import conversation_tools as mobile
+
+    key = 'corrected-review'
+    captured = dict(
+        sample_conversation_data,
+        id=key,
+        data_protection_level='enhanced',
+        has_transcript_corrections=True,
+        transcript_segments=[
+            dict(id='s0', text='Invoice note. ' + 'Unrelated preface. ' * 300, start=0, end=100, is_user=False),
+            dict(id='s1', text='The invoice total was 47 dollars.', start=100, end=103, is_user=False),
+        ],
+    )
+    db = get_mock_firestore()
+    owner = db.collection('users').document('123')
+    seed_conversation('123', conversations.encode_conversation_for_write('123', captured, 'enhanced'))
+    owner.collection('transcript_corrections').document(key).set(
+        review_store.encode_doc(
+            '123',
+            {
+                'source': [
+                    dict(
+                        undone=False,
+                        segment_index=1,
+                        segment_id='s1',
+                        start=100,
+                        kind='transcript',
+                        before='The invoice total was 47 dollars.',
+                        after='The invoice total was 83 dollars.',
+                    )
+                ]
+            },
+        )
+    )
+    calls = []
+    real_get = FakeDocumentReference.get
+
+    def observed_get(ref, *args, **kwargs):
+        if ref.path == f'users/123/transcript_corrections/{key}':
+            calls.append(kwargs)
+            if refuse:
+                raise DeadlineExceeded('synthetic correction deadline')
+        return real_get(ref, *args, **kwargs)
+
+    monkeypatch.setattr(FakeDocumentReference, 'get', observed_get)
+    response = client.post(
+        '/v1/tools/conversations/search',
+        headers=auth_headers,
+        json={'query': 'invoice total', 'transcript_query': 'invoice total'},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    cfg = {
+        'configurable': dict(
+            user_id='123', user_timezone='UTC', conversations_collected=[], chat_scope={'conversation_id': key}
+        )
+    }
+    scoped = mobile.search_conversations_tool.invoke(
+        {'query': 'invoice total', 'transcript_query': 'invoice total'}, config=cfg
+    )
+    assert len(calls) == 2, scoped
+    assert all(0 < call['timeout'] <= 4 and call['retry'] is FIRESTORE_NO_RETRY for call in calls)
+    assert '47 dollars' not in payload['result_text'] and '47 dollars' not in scoped
+    if refuse:
+        assert payload['sources'] == [] and cfg['configurable']['conversations_collected'] == []
+        assert '83 dollars' not in payload['result_text'] and '83 dollars' not in scoped
+        assert 'unavailable' in scoped
+    else:
+        assert '83 dollars' in payload['result_text'] and '83 dollars' in scoped
+        assert '83 dollars' in payload['sources'][0]['preview']
+        assert [card['id'] for card in cfg['configurable']['conversations_collected']] == [key]
+
+
+@pytest.mark.parametrize('needle', ['Halvorsen invoice', '4d0254f4-6043-47b6-a347-a05ad152baab'])
+def test_direct_transcript_recall_finds_unindexed_history_and_new_recording_with_citations(
+    client, auth_headers, sample_conversation_data, monkeypatch, needle
+):
+    """Real auth/HTTP, saved rows, bounded cursor, decryption and mobile citation path; no vector hits."""
+    from database import vector_db
+    from utils.retrieval.tool_services import conversations as shared
+    from utils.retrieval.tools import conversation_tools as mobile
+
+    monkeypatch.setattr(vector_db, 'index', None)
+    monkeypatch.setattr(shared, 'keyword_search_conversation_ids', lambda **k: [])
+    monkeypatch.setattr(mobile, 'keyword_search_conversation_ids', lambda **k: [])
+    now = datetime(2026, 10, 27, tzinfo=timezone.utc)
+    for i in range(53):
+        stamp = now - timedelta(days=i)
+        data = dict(
+            sample_conversation_data,
+            id=f'old-{i:03}',
+            created_at=stamp,
+            started_at=stamp,
+            finished_at=stamp + timedelta(seconds=4),
+            structured={**sample_conversation_data['structured'], 'title': 'Weekly sync', 'overview': 'Team catch-up.'},
+            transcript_segments=[
+                {
+                    'text': f'The {needle} total was 47 dollars.' if i == 52 else 'Weather and lunch.',
+                    'start': 0.0,
+                    'end': 4.0,
+                    'is_user': True,
+                }
+            ],
+        )
+        seed_conversation('123', data)
+
+    summary = client.post('/v1/tools/conversations/search', headers=auth_headers, json={'query': f'Find {needle}'})
+    assert summary.status_code == 200
+    assert '47 dollars' not in summary.json()['result_text']
+
+    first = client.post(
+        '/v1/tools/conversations/search',
+        headers=auth_headers,
+        json={'query': f'Find {needle}', 'transcript_query': needle},
+    )
+    assert first.status_code == 200, first.text
+    assert not first.json()['sources']
+    text = first.json()['result_text']
+    assert 'Search incomplete' in text and 'Do not invent an answer' in text
+    args = json.loads(
+        next(line for line in text.splitlines() if line.startswith('Search incomplete')).split('with: ', 1)[1]
+    )
+    second = client.post('/v1/tools/conversations/search', headers=auth_headers, json=args)
+    assert second.status_code == 200, second.text
+    assert '47 dollars' in second.json()['result_text']
+    assert second.json()['sources'][0]['source_id'] == 'old-052'
+    assert '47 dollars' in second.json()['sources'][0]['preview']
+
+    fresh = dict(
+        data,
+        id='new-today',
+        created_at=now + timedelta(seconds=1),
+        started_at=now,
+        finished_at=now + timedelta(seconds=4),
+        transcript_segments=[
+            {'text': 'The Pineloch invoice is 83 dollars.', 'start': 0.0, 'end': 4.0, 'is_user': False}
+        ],
+    )
+    seed_conversation('123', fresh)
+    cfg = {'configurable': {'user_id': '123', 'user_timezone': 'UTC', 'conversations_collected': []}}
+    result = mobile.search_conversations_tool.invoke(
+        {'query': 'Pineloch invoice', 'transcript_query': 'Pineloch invoice'}, config=cfg
+    )
+    assert '83 dollars' in result and 'Source [1]' in result
+    assert [card['id'] for card in cfg['configurable']['conversations_collected']] == ['new-today']
+    again = mobile.search_conversations_tool.invoke(
+        {'query': 'check again', 'transcript_query': 'Pineloch invoice'}, config=cfg
+    )
+    assert '83 dollars' in again and 'Source [1]' in again
+    assert len(cfg['configurable']['conversations_collected']) == 1
+
+
+def test_direct_transcript_recall_enforces_owner_visibility_dates_and_failed_search(
+    client, auth_headers, sample_conversation_data, monkeypatch
+):
+    from database import transcript_search as store
+    from utils.retrieval.tools import conversation_tools as mobile
+
+    now = datetime(2026, 10, 27, tzinfo=timezone.utc)
+    for uid, key, extra, amount in [
+        ('123', 'kept', {}, '47'),
+        ('other', 'foreign', {}, '987'),
+        ('123', 'locked', {'is_locked': True}, '999'),
+        ('123', 'deleted', {'deleted': True}, '888'),
+        ('123', 'discarded', {'discarded': True}, '777'),
+        ('123', 'consent-held', {'processing_deferred': True}, '666'),
+    ]:
+        seed_conversation(
+            uid,
+            dict(
+                sample_conversation_data,
+                id=key,
+                created_at=now,
+                started_at=now,
+                finished_at=now + timedelta(seconds=4),
+                transcript_segments=[
+                    {'text': f'The invoice was {amount} dollars.', 'start': 0.0, 'end': 4.0, 'is_user': False}
+                ],
+                **extra,
+            ),
+        )
+    response = client.post(
+        '/v1/tools/conversations/search', headers=auth_headers, json={'query': 'invoice', 'transcript_query': 'invoice'}
+    )
+    assert response.status_code == 200, response.text
+    text = response.json()['result_text']
+    assert '47 dollars' in text
+    assert all(amount + ' dollars' not in text for amount in ['987', '999', '888', '777', '666'])
+    assert [s['source_id'] for s in response.json()['sources']] == ['kept']
+
+    cfg = {
+        'configurable': {
+            'user_id': '123',
+            'user_timezone': 'UTC',
+            'conversations_collected': [],
+            'chat_scope': {'conversation_id': 'locked'},
+        }
+    }
+    scoped = mobile.search_conversations_tool.invoke({'query': 'invoice', 'transcript_query': 'invoice'}, config=cfg)
+    assert '47 dollars' not in scoped and '999 dollars' not in scoped
+    assert cfg['configurable']['conversations_collected'] == []
+
+    dated = client.post(
+        '/v1/tools/conversations/search',
+        headers=auth_headers,
+        json={'query': 'invoice', 'transcript_query': 'invoice', 'start_date': (now + timedelta(days=1)).isoformat()},
+    )
+    assert not dated.json()['sources'] and '47 dollars' not in dated.json()['result_text']
+
+    def unavailable():
+        raise RuntimeError('synthetic storage outage')
+
+    monkeypatch.setattr(store, 'get_firestore_client', unavailable)
+    failed = client.post(
+        '/v1/tools/conversations/search', headers=auth_headers, json={'query': 'invoice', 'transcript_query': 'invoice'}
+    )
+    assert failed.status_code == 200
+    assert failed.json()['is_error'] is True and not failed.json()['sources']
+    assert 'No absence conclusion' in failed.json()['result_text']
 
 
 def _install_fakes(monkeypatch):

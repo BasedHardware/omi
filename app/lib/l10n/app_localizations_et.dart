@@ -711,7 +711,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get remembering => 'Meelde jätmine';
 
   @override
-  String get unlimitedPlan => 'Piiramatu plaan';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Halda plaani';
@@ -733,7 +733,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get upgrade => 'Uuenda';
 
   @override
-  String get upgradeToUnlimited => 'Uuenda piiramatuks';
+  String get upgradeToUnlimited => 'Uuenda Omi Pro-le';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3153,7 +3153,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Uuenda Pro-le';
+  String get upgradeToPro => 'Uuenda Omi Pro-le';
 
   @override
   String get getOmiDevice => 'Hangi Omi seade';
@@ -4274,7 +4274,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get trainingDataProgram => 'Treeningandmete programm';
 
   @override
-  String get getOmiUnlimitedFree => 'Saage Omi Unlimited tasuta, panustades oma andmetega AI mudelite treenimisse.';
+  String get getOmiUnlimitedFree => 'Saage Omi Pro tasuta, panustades oma andmetega AI mudelite treenimisse.';
 
   @override
   String get trainingDataBullets =>
@@ -4905,7 +4905,7 @@ class AppLocalizationsEt extends AppLocalizations {
       'Jätkates salvestatakse teie vestlused, salvestised ja isikuandmed turvaliselt meie serverites. Teie helisalvestisi ja transkriptsioone töötlevad kolmandate osapoolte AI-teenused (sealhulgas Deepgram transkriptsiooni ja OpenAI analüüsi jaoks), et pakkuda teile AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.';
 
   @override
-  String get tasksEmptyStateMessage => 'Sinu vestlustest pärit ülesanded ilmuvad siia.';
+  String get tasksEmptyStateMessage => 'Ülesande loomiseks alusta vestlust.';
 
   @override
   String get clearChatAction => 'Tühjenda vestlus';
@@ -9653,7 +9653,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Mine üle tasuta versioonile';
 
   @override
-  String get getFreeUnlimitedAccess => 'Saa tasuta piiramatu juurdepääs';
+  String get getFreeUnlimitedAccess => 'Saa Omi Pro tasuta';
 
   @override
   String get shareDataForTraining => 'Jaga andmeid treenimiseks';
@@ -12850,7 +12850,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Saada häälsõnum ja Omi vastab sellele.';
 
   @override
-  String get chatAppsPartOfPro => 'Vestlusrakendused kuuluvad Pro juurde';
+  String get chatAppsPartOfPro => 'Vestlusrakendused kuuluvad Omi Pro juurde';
 
   @override
   String get chatAppsMessagesApp => 'Sõnumid';
@@ -13482,7 +13482,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncDetailsCopy => 'Kopeeri üksikasjad klienditoele';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Saadaval paketiga Operator ja Architect';
+  String get chatAppsChannelPlanRequired => 'Saadaval paketiga Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13597,25 +13597,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Puuduta parandamiseks';
-
-  @override
-  String get voiceProfileCardDismissed => 'Häälprofiili saad seadistada igal ajal seadetes.';
-
-  @override
-  String get homeNewRecordingButton => 'Uus salvestus';
-
-  @override
-  String get chatWelcomeMessage =>
-      'Tere, mina olen Omi. Küsi minult kõike, millest oled rääkinud: mida keegi ütles, mida sa lubasid või kokkuvõtet oma päevast. Saan ka ülesandeid lisada ja asju sinu eest meeles pidada.';
-
-  @override
-  String get onboardingStarterTaskAsk => 'Küsi Omilt oma päeva kohta';
-
-  @override
-  String get onboardingStarterTaskRecord => 'Salvesta Omiga üks vestlus';
-
-  @override
-  String get onboardingStarterTaskCheck => 'Märgi see ülesanne tehtuks';
 
   @override
   String get homePendingTitle => 'Vestlused teel';
@@ -14011,7 +13992,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Töötab, kui telefon laeb.';
 
   @override
-  String get onDeviceUpgradeBody => 'Mine üle Pro-le kõnelejate eristamiseks ja suurema täpsuse saamiseks';
+  String get onDeviceUpgradeBody => 'Mine üle Omi Pro-le kõnelejate eristamiseks ja suurema täpsuse saamiseks';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14195,7 +14176,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Tee uuesti Omi Cloudiga';
 
   @override
-  String get onDeviceRedoHint => 'Mine üle Pro-le kõnelejate eristamiseks ja suurema täpsuse saamiseks';
+  String get onDeviceRedoHint => 'Mine üle Omi Pro-le kõnelejate eristamiseks ja suurema täpsuse saamiseks';
 
   @override
   String get onDeviceKeepEverything => 'Hoia kõike selles telefonis';
@@ -14613,6 +14594,45 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Jäta ära';
+
+  @override
+  String get syncRejectionInvalidDate => 'Vigane salvestuse kuupäev';
+
+  @override
+  String get syncDeleteKeptUploading => 'Mõned osad on endiselt üleslaadimisel ja need jäeti alles';
+
+  @override
+  String get syncRejectionServer => 'Server lükkas tagasi';
+
+  @override
+  String get syncRejectionTooLarge => 'Liiga suur';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration telefonis';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Üleslaadimine on hetkeks peatatud — see jätkub automaatselt';
+
+  @override
+  String get voiceProfileCardDismissed => 'Häälprofiili saad seadistada igal ajal seadetes.';
+
+  @override
+  String get homeNewRecordingButton => 'Uus salvestus';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Tere, mina olen Omi. Küsi minult kõike, millest oled rääkinud: mida keegi ütles, mida sa lubasid või kokkuvõtet oma päevast. Saan ka ülesandeid lisada ja asju sinu eest meeles pidada.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Küsi Omilt oma päeva kohta';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Salvesta Omiga üks vestlus';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Märgi see ülesanne tehtuks';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi loob ühenduse ise uuesti';

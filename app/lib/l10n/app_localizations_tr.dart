@@ -713,7 +713,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get remembering => 'Hatırlama';
 
   @override
-  String get unlimitedPlan => 'Sınırsız Plan';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Planı Yönet';
@@ -735,7 +735,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get upgrade => 'Yükselt';
 
   @override
-  String get upgradeToUnlimited => 'Sınırsıza yükselt';
+  String get upgradeToUnlimited => 'Omi Pro\'ya Yükselt';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3160,7 +3160,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Pro\'ya Yükselt';
+  String get upgradeToPro => 'Omi Pro\'ya Yükselt';
 
   @override
   String get getOmiDevice => 'Omi Cihazı Edinin';
@@ -4284,7 +4284,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'Verilerinizi AI modellerini eğitmek için katkıda bulunarak Omi Unlimited\'ı ücretsiz alın.';
+      'Verilerinizi AI modellerini eğitmek için katkıda bulunarak Omi Pro\'yu ücretsiz alın.';
 
   @override
   String get trainingDataBullets =>
@@ -4917,7 +4917,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Devam ederek, konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz sunucularımızda güvenli bir şekilde saklanacaktır. Ses kayıtlarınız ve transkriptleriniz, size yapay zeka destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için üçüncü taraf yapay zeka hizmetleri (transkripsiyon için Deepgram ve analiz için OpenAI dahil) tarafından işlenir.';
 
   @override
-  String get tasksEmptyStateMessage => 'Konuşmalarındaki yapılacaklar burada görünecek.';
+  String get tasksEmptyStateMessage => 'Görev oluşturmak için bir konuşma başlatın.';
 
   @override
   String get clearChatAction => 'Sohbeti temizle';
@@ -9671,7 +9671,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Ücretsiz sürüme geç';
 
   @override
-  String get getFreeUnlimitedAccess => 'Ücretsiz sınırsız erişim kazan';
+  String get getFreeUnlimitedAccess => 'Omi Pro\'yu ücretsiz kazan';
 
   @override
   String get shareDataForTraining => 'Eğitim için veri paylaş';
@@ -12869,7 +12869,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Sesli not gönder, Omi yanıtlasın.';
 
   @override
-  String get chatAppsPartOfPro => 'Sohbet uygulamaları Pro\'nun bir parçasıdır';
+  String get chatAppsPartOfPro => 'Sohbet uygulamaları Omi Pro\'nun bir parçasıdır';
 
   @override
   String get chatAppsMessagesApp => 'Mesajlar';
@@ -13502,7 +13502,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncDetailsCopy => 'Destek için ayrıntıları kopyala';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator ve Architect planlarında kullanılabilir';
+  String get chatAppsChannelPlanRequired => 'Omi Pro planında kullanılabilir';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13617,25 +13617,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Düzeltmek için dokunun';
-
-  @override
-  String get voiceProfileCardDismissed => 'Ses profilini istediğin zaman Ayarlar\'dan kurabilirsin.';
-
-  @override
-  String get homeNewRecordingButton => 'Yeni Kayıt';
-
-  @override
-  String get chatWelcomeMessage =>
-      'Merhaba, ben Omi. Konuştuğun her şeyi bana sorabilirsin: birinin ne dediğini, ne söz verdiğini ya da gününün özetini. Görev de ekleyebilir ve senin için bir şeyleri hatırlayabilirim.';
-
-  @override
-  String get onboardingStarterTaskAsk => 'Omi\'ye gününü sor';
-
-  @override
-  String get onboardingStarterTaskRecord => 'Omi ile bir konuşma kaydet';
-
-  @override
-  String get onboardingStarterTaskCheck => 'Bu görevi tamamlamak için işaretle';
 
   @override
   String get homePendingTitle => 'Konuşmalar yolda';
@@ -14032,7 +14013,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Telefonunuz şarj olurken çalışır.';
 
   @override
-  String get onDeviceUpgradeBody => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
+  String get onDeviceUpgradeBody => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Omi Pro\'ya yükseltin';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14215,7 +14196,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud ile Yeniden Yap';
 
   @override
-  String get onDeviceRedoHint => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
+  String get onDeviceRedoHint => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Omi Pro\'ya yükseltin';
 
   @override
   String get onDeviceKeepEverything => 'Her şeyi bu telefonda tut';
@@ -14633,6 +14614,45 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Yoksay';
+
+  @override
+  String get syncRejectionInvalidDate => 'Geçersiz kayıt tarihi';
+
+  @override
+  String get syncDeleteKeptUploading => 'Bazı parçalar hâlâ yükleniyor ve tutuldu';
+
+  @override
+  String get syncRejectionServer => 'Sunucu tarafından reddedildi';
+
+  @override
+  String get syncRejectionTooLarge => 'Çok büyük';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'telefonda $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Yüklemeler kısa süreliğine duraklatıldı — otomatik olarak devam edecek';
+
+  @override
+  String get voiceProfileCardDismissed => 'Ses profilini istediğin zaman Ayarlar\'dan kurabilirsin.';
+
+  @override
+  String get homeNewRecordingButton => 'Yeni Kayıt';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Merhaba, ben Omi. Konuştuğun her şeyi bana sorabilirsin: birinin ne dediğini, ne söz verdiğini ya da gününün özetini. Görev de ekleyebilir ve senin için bir şeyleri hatırlayabilirim.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Omi\'ye gününü sor';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi ile bir konuşma kaydet';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Bu görevi tamamlamak için işaretle';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi kendiliğinden yeniden bağlanır';

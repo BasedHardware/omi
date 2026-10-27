@@ -130,6 +130,7 @@ def test_adapter_takeover_preserves_marker_without_retry(monkeypatch, loop):
 
 
 def test_conversation_delete_route_maps_takeover_to_409(monkeypatch):
+    from contextlib import nullcontext
     from unittest.mock import MagicMock
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -174,6 +175,7 @@ def test_conversation_delete_route_maps_takeover_to_409(monkeypatch):
     service = MagicMock()
     service.retract_conversation_memories.side_effect = DestructiveGateTakeover("peer completed before hold")
     monkeypatch.setattr(conversation_routes, "MemoryService", lambda **kwargs: service)
+    monkeypatch.setattr(conversation_routes, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
     monkeypatch.setattr(conversation_routes.conversation_tombstones, "record_deletion", lambda *args: None)
     monkeypatch.setattr(conversation_routes, "delete_owner_prompt_embedding_cache", lambda *args: None)
     monkeypatch.setattr(conversation_routes, "retraction_can_be_skipped", lambda *args, **kwargs: False)

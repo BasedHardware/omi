@@ -917,7 +917,7 @@
     "@remembering": {
         "description": "Remembering stat title"
     },
-    "unlimitedPlan": "תוכנית בלתי מוגבלת",
+    "unlimitedPlan": "Omi Pro",
     "@unlimitedPlan": {
         "description": "Unlimited plan name"
     },
@@ -957,7 +957,7 @@
     "@upgrade": {
         "description": "Upgrade button"
     },
-    "upgradeToUnlimited": "שדרג לבלתי מוגבל",
+    "upgradeToUnlimited": "שדרג ל-Omi Pro",
     "@upgradeToUnlimited": {
         "description": "Message shown on locked memory items"
     },
@@ -3652,7 +3652,7 @@
     "@pro": {
         "description": "Badge label for pro/unlimited users"
     },
-    "upgradeToPro": "שדרג ל-Pro",
+    "upgradeToPro": "שדרג ל-Omi Pro",
     "@upgradeToPro": {
         "description": "Subscription banner button text"
     },
@@ -4941,7 +4941,7 @@
     "@trainingDataProgram": {
         "description": "Label for training data program"
     },
-    "getOmiUnlimitedFree": "קבל Omi Unlimited בחינם על ידי תרומת הנתונים שלך לאימון מודלי AI.",
+    "getOmiUnlimitedFree": "קבל Omi Pro בחינם על ידי תרומת הנתונים שלך לאימון מודלי AI.",
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "משימות מהשיחות שלך יופיעו כאן.",
+    "tasksEmptyStateMessage": "התחילו שיחה כדי ליצור משימה.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -10536,7 +10536,7 @@
     "freemiumLimitsIntro": "Omi בחינם, אבל לגרסה החינמית יש מגבלות שמשפיעות על החוויה שלכם:",
     "downgradeLimitDelayNotRealTime": "עיכוב של 5-7 שניות (לא בזמן אמת)",
     "downgradeToFreemiumAction": "מעבר לגרסה החינמית",
-    "getFreeUnlimitedAccess": "קבלו גישה בלתי מוגבלת בחינם",
+    "getFreeUnlimitedAccess": "קבלו את Omi Pro בחינם",
     "shareDataForTraining": "שיתוף נתונים לאימון",
     "yourRequestUnderReview": "הבקשה שלכם בבדיקה",
     "pinAsBaseline": "הצמדה כבסיס",
@@ -11370,7 +11370,7 @@
     "chatAppsShowInAppOff": "כבוי: תראו אותם רק ב-{app}.",
     "chatAppsProPerkText": "שלחו הודעות ל-Omi מ-Telegram ומ-iMessage",
     "chatAppsVoiceNotesSubtitle": "שלחו הודעה קולית ו-Omi יענה עליה.",
-    "chatAppsPartOfPro": "אפליקציות צ'אט הן חלק מ-Pro",
+    "chatAppsPartOfPro": "אפליקציות צ'אט הן חלק מ-Omi Pro",
     "chatAppsMessagesApp": "הודעות",
     "chatAppsTelegramOtherDevice": "Telegram במכשיר אחר?",
     "chatAppsHeroMessage": "שאלו על היום שלכם, שמרו זכרונות ונהלו משימות מ-Telegram או מ-iMessage. הצ'אטים שלכם נשארים באפליקציה שבה אתם משתמשים, ו-Omi זוכר על מה דיברתם בכל מקום.",
@@ -11555,7 +11555,7 @@
     "syncDetailsAudioFiles": "קובצי אודיו",
     "syncDetailsServerJobs": "משימות שרת (הושלמו / סך הכול)",
     "syncDetailsCopy": "העתקת פרטים לתמיכה",
-    "chatAppsChannelPlanRequired": "זמין ב-Operator וב-Architect",
+    "chatAppsChannelPlanRequired": "זמין ב-Omi Pro",
     "chatAppsAtCapacity": "{app} מלא כרגע",
     "chatAppsJoinWaitlist": "הצטרפות לרשימת ההמתנה",
     "chatAppsOnWaitlist": "את/ה ברשימת ההמתנה",
@@ -11592,12 +11592,6 @@
     "onboardingOmiNotOrdered": "עוד לא הזמנתי",
     "onboardingOmiOrdered": "הזמנתי",
     "onboardingPermissionTapToFix": "הקישו לתיקון",
-    "voiceProfileCardDismissed": "אפשר להגדיר פרופיל קולי בכל עת בהגדרות.",
-    "homeNewRecordingButton": "הקלטה חדשה",
-    "chatWelcomeMessage": "היי, אני Omi. שאל אותי כל דבר על מה שדיברת: מה מישהו אמר, מה הבטחת או סיכום של היום שלך. אני יכול גם להוסיף משימות ולזכור דברים בשבילך.",
-    "onboardingStarterTaskAsk": "שאל את Omi על היום שלך",
-    "onboardingStarterTaskRecord": "הקלט שיחה עם Omi",
-    "onboardingStarterTaskCheck": "סמן משימה זו כדי לסיים אותה",
     "homePendingTitle": "שיחות בדרך",
     "homePendingCatchingUp": "משלימים אודיו קודם",
     "onTheWayTitle": "בדרך",
@@ -11712,7 +11706,7 @@
     "onDeviceTranscribeOnPhone": "תמלול בטלפון הזה",
     "onDeviceIncluded": "כלול",
     "onDeviceOptionChargingBody": "פועל בזמן שהטלפון נטען.",
-    "onDeviceUpgradeBody": "שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר",
+    "onDeviceUpgradeBody": "שדרגו ל-Omi Pro להפרדה בין דוברים ולדיוק גבוה יותר",
     "onDeviceAtCapFooter": "שום דבר לא הולך לאיבוד בכל מקרה. אפשר לשנות זאת בהגדרות › תמלול.",
     "onDeviceStepOf": "שלב {step} מתוך {total}",
     "onDeviceSetupBody": "Omi מוריד מודל דיבור פעם אחת. אחר כך ההקלטות שלך הופכות לטקסט ממש כאן, בלי להיכלל בשימוש שלך.",
@@ -11765,7 +11759,7 @@
     "onDeviceWhyCloudIphone": "ה-iPhone הזה לא יכול לסכם בעצמו (נדרש iPhone 15 Pro ואילך). התמלול נעשה בטלפון שלך, ורק הטקסט שלו נשלח ל-Omi לסיכום. זה לא נכלל בשימוש שלך.",
     "onDeviceWhyCloudPhone": "הטלפון הזה לא יכול לסכם בעצמו. התמלול נעשה בטלפון שלך, ורק הטקסט שלו נשלח ל-Omi לסיכום. זה לא נכלל בשימוש שלך.",
     "onDeviceRedoWithCloud": "ביצוע מחדש עם Omi Cloud",
-    "onDeviceRedoHint": "שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר",
+    "onDeviceRedoHint": "שדרגו ל-Omi Pro להפרדה בין דוברים ולדיוק גבוה יותר",
     "onDeviceKeepEverything": "לשמור הכול בטלפון הזה",
     "onDeviceKeepEverythingSubtitle": "תמלולים בלבד, בלי סיכומים",
     "onDeviceAfterLiveHours": "כשמגיעים למכסה",
@@ -11872,6 +11866,18 @@
     "openLoopAnswerDone": "בוצע",
     "openLoopAnswerRemind": "הזכר לי מאוחר יותר",
     "openLoopAnswerDrop": "ותר על זה",
+    "syncRejectionInvalidDate": "תאריך הקלטה לא תקין",
+    "syncDeleteKeptUploading": "חלקים מסוימים עדיין בהעלאה ונשמרו",
+    "syncRejectionServer": "נדחה על ידי השרת",
+    "syncRejectionTooLarge": "גדול מדי",
+    "deviceOnPhoneQueue": "{duration} בטלפון",
+    "syncCardUploadsPaused": "ההעלאות הושהו לרגע — הן יימשכו אוטומטית",
+    "voiceProfileCardDismissed": "אפשר להגדיר פרופיל קולי בכל עת בהגדרות.",
+    "homeNewRecordingButton": "הקלטה חדשה",
+    "chatWelcomeMessage": "היי, אני Omi. שאל אותי כל דבר על מה שדיברת: מה מישהו אמר, מה הבטחת או סיכום של היום שלך. אני יכול גם להוסיף משימות ולזכור דברים בשבילך.",
+    "onboardingStarterTaskAsk": "שאל את Omi על היום שלך",
+    "onboardingStarterTaskRecord": "הקלט שיחה עם Omi",
+    "onboardingStarterTaskCheck": "סמן משימה זו כדי לסיים אותה",
     "capturePendantDisconnectedShort": "Omi יתחבר מחדש מעצמו",
     "capturePendantDisconnectedDetail": "התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור."
 }

@@ -701,7 +701,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get remembering => '기억';
 
   @override
-  String get unlimitedPlan => '무제한 플랜';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => '플랜 관리';
@@ -723,7 +723,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get upgrade => '업그레이드';
 
   @override
-  String get upgradeToUnlimited => '무제한으로 업그레이드';
+  String get upgradeToUnlimited => 'Omi Pro로 업그레이드';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3106,7 +3106,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Pro로 업그레이드';
+  String get upgradeToPro => 'Omi Pro로 업그레이드';
 
   @override
   String get getOmiDevice => 'Omi 장치 받기';
@@ -4211,7 +4211,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get trainingDataProgram => '훈련 데이터 프로그램';
 
   @override
-  String get getOmiUnlimitedFree => '데이터를 제공하여 AI 모델 훈련에 기여하면 Omi Unlimited를 무료로 받으세요.';
+  String get getOmiUnlimitedFree => '데이터를 제공하여 AI 모델 훈련에 기여하면 Omi Pro를 무료로 받으세요.';
 
   @override
   String get trainingDataBullets => '• 여러분의 데이터는 AI 모델 개선에 도움이 돼요\n• 민감하지 않은 데이터만 공유돼요';
@@ -4829,7 +4829,7 @@ class AppLocalizationsKo extends AppLocalizations {
       '계속하면 대화, 녹음 및 개인 정보가 서버에 안전하게 저장됩니다. 오디오 녹음 및 텍스트 변환은 제3자 AI 서비스(전사를 위한 Deepgram 및 분석을 위한 OpenAI 포함)에 의해 처리되어 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화합니다.';
 
   @override
-  String get tasksEmptyStateMessage => '대화에서 나온 할 일이 여기에 표시돼요.';
+  String get tasksEmptyStateMessage => '대화를 시작하여 할 일을 만드세요.';
 
   @override
   String get clearChatAction => '채팅 삭제';
@@ -9514,7 +9514,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get downgradeToFreemiumAction => '무료 버전으로 변경';
 
   @override
-  String get getFreeUnlimitedAccess => '무제한 액세스를 무료로 받기';
+  String get getFreeUnlimitedAccess => 'Omi Pro 무료로 받기';
 
   @override
   String get shareDataForTraining => '학습을 위한 데이터 공유';
@@ -12674,7 +12674,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => '음성 메모를 보내면 Omi가 답합니다.';
 
   @override
-  String get chatAppsPartOfPro => '채팅 앱은 Pro에 포함됩니다';
+  String get chatAppsPartOfPro => '채팅 앱은 Omi Pro에 포함됩니다';
 
   @override
   String get chatAppsMessagesApp => '메시지';
@@ -13305,7 +13305,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncDetailsCopy => '지원팀용 상세 정보 복사';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator 및 Architect에서 사용 가능';
+  String get chatAppsChannelPlanRequired => 'Omi Pro에서 사용 가능';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13419,25 +13419,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => '탭하여 해결';
-
-  @override
-  String get voiceProfileCardDismissed => '음성 프로필은 설정에서 언제든지 설정할 수 있어요.';
-
-  @override
-  String get homeNewRecordingButton => '새 녹음';
-
-  @override
-  String get chatWelcomeMessage =>
-      '안녕하세요, Omi예요. 나눈 대화라면 무엇이든 물어보세요. 누가 무슨 말을 했는지, 무엇을 약속했는지, 하루 요약까지요. 할 일을 추가하고 기억해 둘 수도 있어요.';
-
-  @override
-  String get onboardingStarterTaskAsk => 'Omi에게 오늘 하루에 대해 물어보기';
-
-  @override
-  String get onboardingStarterTaskRecord => 'Omi로 대화 녹음하기';
-
-  @override
-  String get onboardingStarterTaskCheck => '이 할 일을 체크해서 완료하기';
 
   @override
   String get homePendingTitle => '대화 준비 중';
@@ -13830,7 +13811,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceOptionChargingBody => '휴대폰이 충전되는 동안 실행돼요.';
 
   @override
-  String get onDeviceUpgradeBody => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
+  String get onDeviceUpgradeBody => '화자 분리와 더 높은 정확도를 위해 Omi Pro로 업그레이드하세요';
 
   @override
   String get onDeviceAtCapFooter => '어느 쪽을 선택해도 잃는 건 없어요. 설정 › 음성 변환에서 변경할 수 있어요.';
@@ -14008,7 +13989,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud로 다시 하기';
 
   @override
-  String get onDeviceRedoHint => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
+  String get onDeviceRedoHint => '화자 분리와 더 높은 정확도를 위해 Omi Pro로 업그레이드하세요';
 
   @override
   String get onDeviceKeepEverything => '모두 이 휴대폰에 보관';
@@ -14421,6 +14402,45 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => '버리기';
+
+  @override
+  String get syncRejectionInvalidDate => '잘못된 녹음 날짜';
+
+  @override
+  String get syncDeleteKeptUploading => '일부 파트는 아직 업로드 중이며 유지되었습니다';
+
+  @override
+  String get syncRejectionServer => '서버가 거절함';
+
+  @override
+  String get syncRejectionTooLarge => '너무 큼';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '휴대전화에 $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => '업로드가 잠시 일시중지되었습니다 — 자동으로 다시 시작됩니다';
+
+  @override
+  String get voiceProfileCardDismissed => '음성 프로필은 설정에서 언제든지 설정할 수 있어요.';
+
+  @override
+  String get homeNewRecordingButton => '새 녹음';
+
+  @override
+  String get chatWelcomeMessage =>
+      '안녕하세요, Omi예요. 나눈 대화라면 무엇이든 물어보세요. 누가 무슨 말을 했는지, 무엇을 약속했는지, 하루 요약까지요. 할 일을 추가하고 기억해 둘 수도 있어요.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Omi에게 오늘 하루에 대해 물어보기';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi로 대화 녹음하기';
+
+  @override
+  String get onboardingStarterTaskCheck => '이 할 일을 체크해서 완료하기';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi가 자동으로 다시 연결해요';

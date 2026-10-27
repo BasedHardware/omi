@@ -712,7 +712,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get remembering => 'लक्षात ठेवत आहे';
 
   @override
-  String get unlimitedPlan => 'मर्यादित योजना';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'योजना व्यवस्थापित करा';
@@ -734,7 +734,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get upgrade => 'अपग्रेड करा';
 
   @override
-  String get upgradeToUnlimited => 'मर्यादित अपग्रेड करा';
+  String get upgradeToUnlimited => 'Omi Pro मध्ये अपग्रेड करा';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3162,7 +3162,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Pro मध्ये अपग्रेड करा';
+  String get upgradeToPro => 'Omi Pro मध्ये अपग्रेड करा';
 
   @override
   String get getOmiDevice => 'Omi डिव्हाइस मिळवा';
@@ -4283,8 +4283,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get trainingDataProgram => 'प्रशिक्षण डेटा कार्यक्रम';
 
   @override
-  String get getOmiUnlimitedFree =>
-      'AI मॉडेल प्रशिक्षण साठी आपल्या डेटा योगदान करून Omi Unlimited विनामूल्य प्राप्त करा.';
+  String get getOmiUnlimitedFree => 'AI मॉडेल प्रशिक्षण साठी आपल्या डेटा योगदान करून Omi Pro विनामूल्य प्राप्त करा.';
 
   @override
   String get trainingDataBullets =>
@@ -4919,7 +4918,7 @@ class AppLocalizationsMr extends AppLocalizations {
       'पुढे चालू ठेवल्यास, तुमच्या संभाषणा, रेकॉर्डिंग आणि वैयक्तिक माहिती आमच्या सर्व्हरवर सुरक्षितपणे साठवली जाईल. तुमच्या ऑडिओ रेकॉर्डिंग आणि ट्रान्सक्रिप्ट तृतीय-पक्ष AI सेवांद्वारे प्रक्रिया केली जातात (ट्रान्सक्रिप्शनसाठी Deepgram आणि विश्लेषणासाठी OpenAI सह) तुम्हाला AI-चालित अंतर्दृष्टी प्रदान करण्यासाठी आणि सर्व अॅप वैशिष्ट्ये सक्षम करण्यासाठी.';
 
   @override
-  String get tasksEmptyStateMessage => 'तुमच्या संभाषणांमधील कामे इथे दिसतील.';
+  String get tasksEmptyStateMessage => 'कार्य तयार करण्यासाठी संभाषण सुरू करा.';
 
   @override
   String get clearChatAction => 'चॅट साफ करा';
@@ -9670,7 +9669,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get downgradeToFreemiumAction => 'मोफत आवृत्तीवर जा';
 
   @override
-  String get getFreeUnlimitedAccess => 'मोफत अमर्यादित प्रवेश मिळवा';
+  String get getFreeUnlimitedAccess => 'Omi Pro मोफत मिळवा';
 
   @override
   String get shareDataForTraining => 'प्रशिक्षणासाठी डेटा सामायिक करा';
@@ -12862,7 +12861,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'व्हॉइस नोट पाठवा आणि Omi त्याला उत्तर देईल.';
 
   @override
-  String get chatAppsPartOfPro => 'चॅट अॅप्स Pro चा भाग आहेत';
+  String get chatAppsPartOfPro => 'चॅट अॅप्स Omi Pro चा भाग आहेत';
 
   @override
   String get chatAppsMessagesApp => 'संदेश';
@@ -13494,7 +13493,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get syncDetailsCopy => 'सपोर्टसाठी तपशील कॉपी करा';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator आणि Architect वर उपलब्ध';
+  String get chatAppsChannelPlanRequired => 'Omi Pro वर उपलब्ध';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13609,25 +13608,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'दुरुस्त करण्यासाठी टॅप करा';
-
-  @override
-  String get voiceProfileCardDismissed => 'सेटिंग्जमध्ये कधीही व्हॉइस प्रोफाइल सेट करू शकता.';
-
-  @override
-  String get homeNewRecordingButton => 'नवीन रेकॉर्डिंग';
-
-  @override
-  String get chatWelcomeMessage =>
-      'नमस्कार, मी Omi आहे. तुम्ही ज्याबद्दल बोललात त्याबद्दल काहीही विचारा: कोणी काय सांगितले, तुम्ही काय वचन दिले किंवा तुमच्या दिवसाचा सारांश. मी कामे जोडू शकतो आणि तुमच्यासाठी गोष्टी लक्षातही ठेवू शकतो.';
-
-  @override
-  String get onboardingStarterTaskAsk => 'Omi ला तुमच्या दिवसाबद्दल विचारा';
-
-  @override
-  String get onboardingStarterTaskRecord => 'Omi ने एक संभाषण रेकॉर्ड करा';
-
-  @override
-  String get onboardingStarterTaskCheck => 'पूर्ण करण्यासाठी हे काम टिक करा';
 
   @override
   String get homePendingTitle => 'संभाषणे येत आहेत';
@@ -14028,7 +14008,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'फोन चार्ज होत असताना चालते.';
 
   @override
-  String get onDeviceUpgradeBody => 'वक्ते वेगळे ओळखण्यासाठी आणि अधिक अचूकतेसाठी Pro वर अपग्रेड करा';
+  String get onDeviceUpgradeBody => 'वक्ते वेगळे ओळखण्यासाठी आणि अधिक अचूकतेसाठी Omi Pro वर अपग्रेड करा';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14213,7 +14193,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud सह पुन्हा करा';
 
   @override
-  String get onDeviceRedoHint => 'वक्ते वेगळे ओळखण्यासाठी आणि अधिक अचूकतेसाठी Pro वर अपग्रेड करा';
+  String get onDeviceRedoHint => 'वक्ते वेगळे ओळखण्यासाठी आणि अधिक अचूकतेसाठी Omi Pro वर अपग्रेड करा';
 
   @override
   String get onDeviceKeepEverything => 'सर्व काही या फोनवर ठेवा';
@@ -14631,6 +14611,45 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'टाकून द्या';
+
+  @override
+  String get syncRejectionInvalidDate => 'अवैध रेकॉर्डिंग तारीख';
+
+  @override
+  String get syncDeleteKeptUploading => 'काही भाग अजून अपलोड होत आहेत आणि ते ठेवले आहेत';
+
+  @override
+  String get syncRejectionServer => 'सर्व्हरने नकार दिला';
+
+  @override
+  String get syncRejectionTooLarge => 'खूप मोठे';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'फोनवर $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'अपलोड थोड्या वेळासाठी थांबले आहेत — ते आपोआप पुन्हा सुरू होतील';
+
+  @override
+  String get voiceProfileCardDismissed => 'सेटिंग्जमध्ये कधीही व्हॉइस प्रोफाइल सेट करू शकता.';
+
+  @override
+  String get homeNewRecordingButton => 'नवीन रेकॉर्डिंग';
+
+  @override
+  String get chatWelcomeMessage =>
+      'नमस्कार, मी Omi आहे. तुम्ही ज्याबद्दल बोललात त्याबद्दल काहीही विचारा: कोणी काय सांगितले, तुम्ही काय वचन दिले किंवा तुमच्या दिवसाचा सारांश. मी कामे जोडू शकतो आणि तुमच्यासाठी गोष्टी लक्षातही ठेवू शकतो.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Omi ला तुमच्या दिवसाबद्दल विचारा';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi ने एक संभाषण रेकॉर्ड करा';
+
+  @override
+  String get onboardingStarterTaskCheck => 'पूर्ण करण्यासाठी हे काम टिक करा';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi आपोआप पुन्हा कनेक्ट होईल';

@@ -711,7 +711,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get remembering => 'ನೆನಪುವಿಕೆ';
 
   @override
-  String get unlimitedPlan => 'ಸೀಮಾ ರಹಿತ ಯೋಜನೆ';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'ಯೋಜನೆ ನಿರ್ವಹಿಸಿ';
@@ -733,7 +733,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get upgrade => 'ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
 
   @override
-  String get upgradeToUnlimited => 'ಸೀಮಾ ರಹಿತಗೆ ಅಪ್‌ಗ್ರೇಡ್';
+  String get upgradeToUnlimited => 'Omi Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3167,7 +3167,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
+  String get upgradeToPro => 'Omi Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
 
   @override
   String get getOmiDevice => 'Omi ಯಂತ್ರ ಪಡೆಯಿರಿ';
@@ -4293,7 +4293,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'AI ಮಾದರಿಗಳನ್ನು ತರಾಜು ಮಾಡಲು ನಿಮ್ಮ ಡೇಟಾವನ್ನು ಕಾರ್ಯಕ್ರಮದಿಂದ ಉಚಿತ ಎಂದು Omi Unlimited ಪಡೆಯಿರಿ.';
+      'AI ಮಾದರಿಗಳನ್ನು ತರಾಜು ಮಾಡಲು ನಿಮ್ಮ ಡೇಟಾವನ್ನು ಕಾರ್ಯಕ್ರಮದಿಂದ ಉಚಿತ ಎಂದು Omi Pro ಪಡೆಯಿರಿ.';
 
   @override
   String get trainingDataBullets =>
@@ -4929,7 +4929,7 @@ class AppLocalizationsKn extends AppLocalizations {
       'ಮುಂದುವರಿಯುವ ಮೂಲಕ, ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು, ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ವೈಯಕ್ತಿಕ ಮಾಹಿತಿಯನ್ನು ನಮ್ಮ ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ. ನಿಮ್ಮ ಆಡಿಯೋ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್‌ಗಳನ್ನು ಮೂರನೇ ವ್ಯಕ್ತಿಯ AI ಸೇವೆಗಳಿಂದ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ (ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಷನ್‌ಗಾಗಿ Deepgram ಮತ್ತು ವಿಶ್ಲೇಷಣೆಗಾಗಿ OpenAI ಸೇರಿದಂತೆ) AI-ಚಾಲಿತ ಒಳನೋಟಗಳನ್ನು ಒದಗಿಸಲು ಮತ್ತು ಎಲ್ಲಾ ಅಪ್ಲಿಕೇಶನ್ ವೈಶಿಷ್ಟ್ಯಗಳನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಲು.';
 
   @override
-  String get tasksEmptyStateMessage => 'ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.';
+  String get tasksEmptyStateMessage => 'ಕಾರ್ಯವನ್ನು ರಚಿಸಲು ಸಂಭಾಷಣೆಯನ್ನು ಪ್ರಾರಂಭಿಸಿ.';
 
   @override
   String get clearChatAction => 'ಚ್ಯಾಟ್ ತೀಕ್ಷ್ಣ ಮಾಡಿ';
@@ -9693,7 +9693,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get downgradeToFreemiumAction => 'ಉಚಿತ ಆವೃತ್ತಿಗೆ ಬದಲಿಸಿ';
 
   @override
-  String get getFreeUnlimitedAccess => 'ಉಚಿತ ಅಮಿತ ಪ್ರವೇಶ ಪಡೆಯಿರಿ';
+  String get getFreeUnlimitedAccess => 'Omi Pro ಅನ್ನು ಉಚಿತವಾಗಿ ಪಡೆಯಿರಿ';
 
   @override
   String get shareDataForTraining => 'ತರಬೇತಿಗಾಗಿ ಡೇಟಾ ಹಂಚಿಕೊಳ್ಳಿ';
@@ -12895,7 +12895,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'ಧ್ವನಿ ಟಿಪ್ಪಣಿ ಕಳುಹಿಸಿ, Omi ಅದಕ್ಕೆ ಉತ್ತರಿಸುತ್ತದೆ.';
 
   @override
-  String get chatAppsPartOfPro => 'ಚಾಟ್ ಆ್ಯಪ್‌ಗಳು Pro ನ ಭಾಗವಾಗಿವೆ';
+  String get chatAppsPartOfPro => 'ಚಾಟ್ ಆ್ಯಪ್‌ಗಳು Omi Pro ನ ಭಾಗವಾಗಿವೆ';
 
   @override
   String get chatAppsMessagesApp => 'ಸಂದೇಶಗಳು';
@@ -13528,7 +13528,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get syncDetailsCopy => 'ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳನ್ನು ನಕಲಿಸಿ';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator ಮತ್ತು Architect ನಲ್ಲಿ ಲಭ್ಯವಿದೆ';
+  String get chatAppsChannelPlanRequired => 'Omi Pro ನಲ್ಲಿ ಲಭ್ಯವಿದೆ';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13643,25 +13643,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
-
-  @override
-  String get voiceProfileCardDismissed => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಧ್ವನಿ ಪ್ರೊಫೈಲ್ ಹೊಂದಿಸಬಹುದು.';
-
-  @override
-  String get homeNewRecordingButton => 'ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್';
-
-  @override
-  String get chatWelcomeMessage =>
-      'ನಮಸ್ಕಾರ, ನಾನು Omi. ನೀವು ಮಾತನಾಡಿದ ಯಾವುದರ ಬಗ್ಗೆಯೂ ಕೇಳಿ: ಯಾರು ಏನು ಹೇಳಿದರು, ನೀವು ಏನು ಭರವಸೆ ನೀಡಿದ್ದೀರಿ ಅಥವಾ ನಿಮ್ಮ ದಿನದ ಸಾರಾಂಶ. ನಾನು ಕಾರ್ಯಗಳನ್ನು ಸೇರಿಸಬಹುದು ಮತ್ತು ನಿಮಗಾಗಿ ವಿಷಯಗಳನ್ನು ನೆನಪಿಟ್ಟುಕೊಳ್ಳಬಹುದು.';
-
-  @override
-  String get onboardingStarterTaskAsk => 'ನಿಮ್ಮ ದಿನದ ಬಗ್ಗೆ Omi ಅನ್ನು ಕೇಳಿ';
-
-  @override
-  String get onboardingStarterTaskRecord => 'Omi ಮೂಲಕ ಒಂದು ಸಂಭಾಷಣೆಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ';
-
-  @override
-  String get onboardingStarterTaskCheck => 'ಮುಗಿಸಲು ಈ ಕಾರ್ಯವನ್ನು ಟಿಕ್ ಮಾಡಿ';
 
   @override
   String get homePendingTitle => 'ಸಂಭಾಷಣೆಗಳು ಬರುತ್ತಿವೆ';
@@ -14062,7 +14043,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'ಫೋನ್ ಚಾರ್ಜ್ ಆಗುವಾಗ ಚಾಲನೆಯಲ್ಲಿರುತ್ತದೆ.';
 
   @override
-  String get onDeviceUpgradeBody => 'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
+  String get onDeviceUpgradeBody => 'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Omi Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14249,7 +14230,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud ಮೂಲಕ ಮತ್ತೆ ಮಾಡಿ';
 
   @override
-  String get onDeviceRedoHint => 'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
+  String get onDeviceRedoHint => 'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Omi Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
 
   @override
   String get onDeviceKeepEverything => 'ಎಲ್ಲವನ್ನೂ ಈ ಫೋನ್‌ನಲ್ಲೇ ಇರಿಸಿ';
@@ -14668,6 +14649,45 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'ಬಿಡು';
+
+  @override
+  String get syncRejectionInvalidDate => 'ಅಮಾನ್ಯ ರೆಕಾರ್ಡಿಂಗ್ ದಿನಾಂಕ';
+
+  @override
+  String get syncDeleteKeptUploading => 'ಕೆಲವು ಭಾಗಗಳು ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿವೆ ಮತ್ತು ಅವನ್ನು ಇರಿಸಲಾಗಿದೆ';
+
+  @override
+  String get syncRejectionServer => 'ಸರ್ವರ್ ತಿರಸ್ಕರಿಸಿದೆ';
+
+  @override
+  String get syncRejectionTooLarge => 'ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'ಫೋನ್‌ನಲ್ಲಿ $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'ಅಪ್‌ಲೋಡ್‌ಗಳು ಕ್ಷಣಮಾತ್ರ ವಿರಾಮದಲ್ಲಿವೆ — ಅವು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮುಂದುವರಿಯುತ್ತವೆ';
+
+  @override
+  String get voiceProfileCardDismissed => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಧ್ವನಿ ಪ್ರೊಫೈಲ್ ಹೊಂದಿಸಬಹುದು.';
+
+  @override
+  String get homeNewRecordingButton => 'ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್';
+
+  @override
+  String get chatWelcomeMessage =>
+      'ನಮಸ್ಕಾರ, ನಾನು Omi. ನೀವು ಮಾತನಾಡಿದ ಯಾವುದರ ಬಗ್ಗೆಯೂ ಕೇಳಿ: ಯಾರು ಏನು ಹೇಳಿದರು, ನೀವು ಏನು ಭರವಸೆ ನೀಡಿದ್ದೀರಿ ಅಥವಾ ನಿಮ್ಮ ದಿನದ ಸಾರಾಂಶ. ನಾನು ಕಾರ್ಯಗಳನ್ನು ಸೇರಿಸಬಹುದು ಮತ್ತು ನಿಮಗಾಗಿ ವಿಷಯಗಳನ್ನು ನೆನಪಿಟ್ಟುಕೊಳ್ಳಬಹುದು.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'ನಿಮ್ಮ ದಿನದ ಬಗ್ಗೆ Omi ಅನ್ನು ಕೇಳಿ';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi ಮೂಲಕ ಒಂದು ಸಂಭಾಷಣೆಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ';
+
+  @override
+  String get onboardingStarterTaskCheck => 'ಮುಗಿಸಲು ಈ ಕಾರ್ಯವನ್ನು ಟಿಕ್ ಮಾಡಿ';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ';

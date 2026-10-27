@@ -14,7 +14,7 @@ from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore, independent_redrive
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from config.batch_language_recovery import allowed as independent_allowed, below_silence_threshold, prior_modulate_empty
-from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_result_allowed
+from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_result_allowed, worker_vad_speech
 from utils.batch_pipeline.quarantine_recovery import log_failure, log_terminal_empty
 from utils.batch_pipeline.recovery_recognizers import transcribe, second_transcribe
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -124,6 +124,8 @@ def redrive_one(
     audio = artifacts.fetch_audio(item)
     _, duration, spans = inspect_audio(item, audio)
     measured = sum(span['end'] - span['start'] for span in spans)
+    # Bound worker VAD may locate guarded words that strict CPU VAD missed.
+    worker = worker_vad_speech(job) if independent else None
     if independent and not protocol.observe_vad(sid, token, plan_digest, measured):
         return 'fenced'
     if not spans and not independent:
@@ -160,7 +162,7 @@ def redrive_one(
             return 'running_held'
     try:
         payload = (
-            independent_stt(item, audio, MultilingualEmpty(duration, spans))
+            independent_stt(item, audio, MultilingualEmpty(duration, spans, worker))
             if independent
             else stt(item, normalized_binding(job['projection_binding']), audio, multilingual=True)
         )

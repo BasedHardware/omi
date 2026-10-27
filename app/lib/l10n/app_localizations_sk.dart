@@ -714,7 +714,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get remembering => 'Pamätanie';
 
   @override
-  String get unlimitedPlan => 'Neobmedzený plán';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Spravovať plán';
@@ -736,7 +736,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get upgrade => 'Upgradovať';
 
   @override
-  String get upgradeToUnlimited => 'Upgradovať na neobmedzené';
+  String get upgradeToUnlimited => 'Upgrade na Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3158,7 +3158,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Upgrade na Pro';
+  String get upgradeToPro => 'Upgrade na Omi Pro';
 
   @override
   String get getOmiDevice => 'Získať zariadenie Omi';
@@ -4275,7 +4275,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get trainingDataProgram => 'Program tréningových dát';
 
   @override
-  String get getOmiUnlimitedFree => 'Získajte Omi Unlimited zadarmo prispením vašich dát na trénovanie AI modelov.';
+  String get getOmiUnlimitedFree => 'Získajte Omi Pro zadarmo prispením vašich dát na trénovanie AI modelov.';
 
   @override
   String get trainingDataBullets => '• Vaše dáta pomáhajú zlepšovať AI modely\n• Zdieľajú sa len necitlivé dáta';
@@ -4904,7 +4904,7 @@ class AppLocalizationsSk extends AppLocalizations {
       'Pokračovaním budú vaše konverzácie, nahrávky a osobné údaje bezpečne uložené na našich serveroch. Vaše audio nahrávky a prepisy sú spracovávané AI službami tretích strán (vrátane Deepgram na prepis a OpenAI na analýzu), aby vám poskytli poznatky založené na AI a umožnili všetky funkcie aplikácie.';
 
   @override
-  String get tasksEmptyStateMessage => 'Úlohy z vašich rozhovorov sa zobrazia tu.';
+  String get tasksEmptyStateMessage => 'Začnite konverzáciu a vytvorte úlohu.';
 
   @override
   String get clearChatAction => 'Vymazať chat';
@@ -9653,7 +9653,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Prejsť na bezplatnú verziu';
 
   @override
-  String get getFreeUnlimitedAccess => 'Získajte neobmedzený prístup zadarmo';
+  String get getFreeUnlimitedAccess => 'Získajte Omi Pro zadarmo';
 
   @override
   String get shareDataForTraining => 'Zdieľať údaje na trénovanie';
@@ -12850,7 +12850,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Pošlite hlasovú správu a Omi na ňu odpovie.';
 
   @override
-  String get chatAppsPartOfPro => 'Chatovacie aplikácie sú súčasťou Pro';
+  String get chatAppsPartOfPro => 'Chatovacie aplikácie sú súčasťou Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Správy';
@@ -13484,7 +13484,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncDetailsCopy => 'Kopírovať podrobnosti pre podporu';
 
   @override
-  String get chatAppsChannelPlanRequired => 'K dispozícii v Operator a Architect';
+  String get chatAppsChannelPlanRequired => 'K dispozícii v Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13599,25 +13599,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Ťuknutím opravíte';
-
-  @override
-  String get voiceProfileCardDismissed => 'Hlasový profil si môžete kedykoľvek nastaviť v Nastaveniach.';
-
-  @override
-  String get homeNewRecordingButton => 'Nový záznam';
-
-  @override
-  String get chatWelcomeMessage =>
-      'Ahoj, som Omi. Opýtaj sa ma na čokoľvek, o čom si hovoril: čo kto povedal, čo si sľúbil alebo zhrnutie tvojho dňa. Viem aj pridávať úlohy a pamätať si veci za teba.';
-
-  @override
-  String get onboardingStarterTaskAsk => 'Opýtaj sa Omi na svoj deň';
-
-  @override
-  String get onboardingStarterTaskRecord => 'Nahraj rozhovor s Omi';
-
-  @override
-  String get onboardingStarterTaskCheck => 'Odškrtni túto úlohu a dokonči ju';
 
   @override
   String get homePendingTitle => 'Konverzácie na ceste';
@@ -14014,7 +13995,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Beží, kým sa telefón nabíja.';
 
   @override
-  String get onDeviceUpgradeBody => 'Prejdite na Pro na rozlíšenie hovoriacich a vyššiu presnosť';
+  String get onDeviceUpgradeBody => 'Prejdite na Omi Pro na rozlíšenie hovoriacich a vyššiu presnosť';
 
   @override
   String get onDeviceAtCapFooter => 'Tak či tak sa nič nestratí. Môžete to zmeniť v Nastavenia › Prepis.';
@@ -14197,7 +14178,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Prerobiť cez Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Prejdite na Pro na rozlíšenie hovoriacich a vyššiu presnosť';
+  String get onDeviceRedoHint => 'Prejdite na Omi Pro na rozlíšenie hovoriacich a vyššiu presnosť';
 
   @override
   String get onDeviceKeepEverything => 'Uchovávať všetko v tomto telefóne';
@@ -14615,6 +14596,45 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Zahodiť';
+
+  @override
+  String get syncRejectionInvalidDate => 'Neplatný dátum nahrávky';
+
+  @override
+  String get syncDeleteKeptUploading => 'Niektoré časti sa stále nahrávajú a boli ponechané';
+
+  @override
+  String get syncRejectionServer => 'Server odmietol';
+
+  @override
+  String get syncRejectionTooLarge => 'Príliš veľké';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration v telefóne';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Nahrávanie je na chvíľu pozastavené — automaticky pokračuje';
+
+  @override
+  String get voiceProfileCardDismissed => 'Hlasový profil si môžete kedykoľvek nastaviť v Nastaveniach.';
+
+  @override
+  String get homeNewRecordingButton => 'Nový záznam';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Ahoj, som Omi. Opýtaj sa ma na čokoľvek, o čom si hovoril: čo kto povedal, čo si sľúbil alebo zhrnutie tvojho dňa. Viem aj pridávať úlohy a pamätať si veci za teba.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Opýtaj sa Omi na svoj deň';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Nahraj rozhovor s Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Odškrtni túto úlohu a dokonči ju';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi sa znova pripojí sám';

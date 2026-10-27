@@ -16,7 +16,7 @@ def claim_referral_trial(
     is_new_user: bool,
     firestore_client: Any | None = None,
 ) -> tuple[bool, str]:
-    """Atomically grant the referred account its one-time 30-day Operator entitlement."""
+    """Atomically grant the referred account its one-time 30-day Omi Pro entitlement."""
     client = firestore_client or get_customer_firestore_client()
     user_ref = client.collection('users').document(referred_uid)
 

@@ -35,7 +35,13 @@ from config.batch_language_recovery import allowed as independent_allowed, langu
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
-from utils.batch_pipeline.contracts import WorkItem, held_vad_census, held_silence_allowed, held_result_allowed
+from utils.batch_pipeline.contracts import (
+    WorkItem,
+    held_vad_census,
+    held_silence_allowed,
+    held_result_allowed,
+    worker_vad_speech,
+)
 from utils.batch_pipeline.recovery_recognizers import (
     transcribe,
     second_transcribe,
@@ -319,6 +325,9 @@ class QuarantineRecovery:
                 return 'held'
             # Existing guard-owned custody must drain safely even after the
             # new-admission guard is rolled back.
+            # The worker's bound VAD receipt is the only evidence that may
+            # locate recognized words when strict CPU VAD finds no speech.
+            worker = worker_vad_speech(job) if language_guarded(job) else None
             multilingual = (
                 safety_net_enabled()
                 or policy.speech_empty_multilingual
@@ -352,6 +361,7 @@ class QuarantineRecovery:
                             audio,
                             multilingual=multilingual,
                             force_recognition=language_guarded(job),
+                            worker_speech=worker,
                         )
                         if self.stt is transcribe
                         else self.stt(item, normalized_binding(job['projection_binding']), audio)
@@ -384,7 +394,7 @@ class QuarantineRecovery:
                     else {'stage': 'provider', 'reason': 'operation_failed'}
                 )
                 if multilingual and isinstance(error, MultilingualEmpty):
-                    empty = error
+                    empty = MultilingualEmpty(error.duration, error.spans, worker)
                     measured_vad = sum(span['end'] - span['start'] for span in error.spans)
                     if (
                         not language_guarded(job)
@@ -414,7 +424,7 @@ class QuarantineRecovery:
                     recognized_count,
                     measured_vad,
                 )
-                empty = MultilingualEmpty(duration, inspected_spans)
+                empty = MultilingualEmpty(duration, inspected_spans, worker)
             # Outside the handler: neither metering nor a second provider may chain the first.
             if empty is not None:
                 # A valid empty answer is still accepted, billed audio.

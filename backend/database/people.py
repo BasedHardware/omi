@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 
 from google.cloud import firestore
 
+from database.people_generation import bump_people_generation
 from ._client import get_firestore_client, run_transactional
 
 
@@ -26,6 +27,7 @@ def set_person_pinned(
             return {**person, 'id': person.get('id') or person_id}
         update = {'pinned': pinned, 'pinned_at': now if pinned else None, 'updated_at': now}
         transaction.update(ref, update)
+        bump_people_generation(transaction, ref)
         return {**person, **update, 'id': person.get('id') or person_id}
 
     return run_transactional(client, apply)
