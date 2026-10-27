@@ -21,7 +21,9 @@ def projected_size_bucket(size: int) -> str:
     return '900k_1m' if size <= 1024 * 1024 else 'gt_1m'
 
 
-def projected_document_bytes(reference: Any, payload: Mapping, current: Mapping | None = None) -> int:
+def projected_document_bytes(
+    reference: Any, payload: Mapping[str, Any], current: Mapping[str, Any] | None = None
+) -> int:
     """Size the stored row after an encoded top-level update, including removals.
 
     Call only after the real write encoder and its projection invalidations.

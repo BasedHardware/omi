@@ -809,7 +809,9 @@ def assign_in_transaction(
             if no_op['id'] == target_id and live_stats is not None and live_stats['sync_retry']:
                 no_op['_sync_lineage_completion_pending'] = True
             no_op['_sync_projected_size_bucket'] = projected_size_bucket(
-                projected_document_bytes(collection.document(no_op['id']), {}, read.get(no_op['id']))
+                projected_document_bytes(
+                    collection.document(no_op['id']), {}, own_anchor if own_anchor is not None else target
+                )
             )
             return no_op, False, []
         if discover_on_stamp_gap:
