@@ -1,3 +1,4 @@
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -28,7 +29,7 @@ import 'package:omi/ui/ui.dart';
 /// Capture problems (a stalled pendant link, a full phone disk, a stalled upload) live in
 /// Activity's Needs attention section and light the bell's warning dot, never a banner on Home.
 
-class _IdleSync extends ChangeNotifier implements SyncProvider {
+class _IdleSync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   @override
   List<Wal> get allWals => const [];
   @override
