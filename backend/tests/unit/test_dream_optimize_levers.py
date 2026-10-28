@@ -399,7 +399,7 @@ def _idle_reader(count):
 def test_no_progress_stop(runtime, monkeypatch, arm):
     monkeypatch.setenv(dream_levers.NO_PROGRESS_STOP_MODE_ENV, arm)
     monkeypatch.setenv('DREAM_NO_PROGRESS_BATCHES', '3')
-    monkeypatch.setenv('DREAM_NO_PROGRESS_MIN_BUDGET_SHARE', '0.1')
+    monkeypatch.setenv('DREAM_NO_PROGRESS_MIN_TOKEN_SHARE', '0.1')
     limits = SessionLimits(bucket='light', turns=32, tools=32, read_bytes=640000, read_call_bytes=64000, tokens=400000)
     owner_records = EvidenceRecords(records(runtime))
     _scripted(owner_records, limits, monkeypatch)

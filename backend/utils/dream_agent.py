@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 # Lever B3 (no-progress stop): this many consecutive tool batches without a new
 # staged proposal, after the pass spent this share of its token budget.
 NO_PROGRESS_BATCHES_DEFAULT = 8
-NO_PROGRESS_MIN_BUDGET_SHARE_DEFAULT = 0.25
+NO_PROGRESS_MIN_TOKEN_SHARE_DEFAULT = 0.25
 # Lever B4 (history compaction): once the main prompt reaches this size, older
 # large tool results are replaced by a stub. Only tool results are elided; the
 # system prompt, seed, assistant tool calls and the latest results stay intact.
@@ -328,7 +328,7 @@ async def run_session(
 
     stop_arm = arms.get('no_progress_stop', 'off')
     stop_batches = int(_tunable('DREAM_NO_PROGRESS_BATCHES', NO_PROGRESS_BATCHES_DEFAULT))
-    stop_share = _tunable('DREAM_NO_PROGRESS_MIN_BUDGET_SHARE', NO_PROGRESS_MIN_BUDGET_SHARE_DEFAULT)
+    stop_share = _tunable('DREAM_NO_PROGRESS_MIN_TOKEN_SHARE', NO_PROGRESS_MIN_TOKEN_SHARE_DEFAULT)
     progress: dict[str, Any] = {'batches': 0, 'idle': 0, 'staged': 0, 'fired': None}
 
     async def after_execute(current):
