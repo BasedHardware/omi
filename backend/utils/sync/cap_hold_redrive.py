@@ -124,7 +124,7 @@ async def _run_fleet_snapshot() -> None:
         _snapshot_gate['inflight'] = False
 
 
-def _schedule_fleet_snapshot():
+def _schedule_fleet_snapshot() -> asyncio.Task[Any] | None:
     """Start the gauge aggregation beside the sweep, never ahead of its work."""
     if not fleet_snapshot_enabled():
         return None
@@ -135,7 +135,7 @@ def _schedule_fleet_snapshot():
     return start_background_task(_run_fleet_snapshot(), name='cap_hold_fleet_snapshot')
 
 
-async def _settle_fleet_snapshot(task) -> None:
+async def _settle_fleet_snapshot(task: asyncio.Task[Any] | None) -> None:
     """Publish before the sweep returns when the aggregation fits its wait."""
     if task is None:
         return
