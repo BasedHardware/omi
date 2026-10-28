@@ -4470,5 +4470,15 @@
     "onTheWayDetailsForSupport": "Dettagli per l'assistenza",
     "homeNoiseFoldHidden": "{count, plural, =1{1 clip breve nascosto} other{{count} clip brevi nascosti}}",
     "homeNoiseFoldShow": "Mostra",
-    "homeNoiseFoldHide": "{count, plural, =1{Nascondi 1 clip breve} other{Nascondi {count} clip brevi}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Nascondi 1 clip breve} other{Nascondi {count} clip brevi}}",
+    "singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized.",
+    "triplePressDevKitOnly": "DevKit Only",
+    "triplePressDevKitWarning": "Triple press requires compatible DevKit firmware."
 }

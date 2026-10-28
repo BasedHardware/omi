@@ -4505,5 +4505,15 @@
     "onTheWayDetailsForSupport": "Подробности для поддержки",
     "homeNoiseFoldHidden": "{count, plural, =1{Скрыта 1 короткая запись} other{Скрыто {count} коротких записей}}",
     "homeNoiseFoldShow": "Показать",
-    "homeNoiseFoldHide": "{count, plural, =1{Скрыть 1 короткую запись} other{Скрыть {count} коротких записей}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Скрыть 1 короткую запись} other{Скрыть {count} коротких записей}}",
+    "singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized.",
+    "triplePressDevKitOnly": "DevKit Only",
+    "triplePressDevKitWarning": "Triple press requires compatible DevKit firmware."
 }

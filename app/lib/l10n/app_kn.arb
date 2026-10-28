@@ -11896,5 +11896,15 @@
     "onTheWayDetailsForSupport": "ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳು",
     "homeNoiseFoldHidden": "{count, plural, =1{1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಲಾಗಿದೆ} other{{count} ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಲಾಗಿದೆ}}",
     "homeNoiseFoldShow": "ತೋರಿಸಿ",
-    "homeNoiseFoldHide": "{count, plural, =1{1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ} other{{count} ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಿ}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ} other{{count} ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಿ}}",
+    "singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized.",
+    "triplePressDevKitOnly": "DevKit Only",
+    "triplePressDevKitWarning": "Triple press requires compatible DevKit firmware."
 }

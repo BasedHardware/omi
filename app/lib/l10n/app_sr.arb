@@ -11896,5 +11896,15 @@
     "onTheWayDetailsForSupport": "Детаљи за подршку",
     "homeNoiseFoldHidden": "{count, plural, =1{Скривен је 1 кратак снимак} other{{count} кратких снимака је скривено}}",
     "homeNoiseFoldShow": "Прикажи",
-    "homeNoiseFoldHide": "{count, plural, =1{Сакриј 1 кратак снимак} other{Сакриј {count} кратких снимака}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Сакриј 1 кратак снимак} other{Сакриј {count} кратких снимака}}",
+    "singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized.",
+    "triplePressDevKitOnly": "DevKit Only",
+    "triplePressDevKitWarning": "Triple press requires compatible DevKit firmware."
 }

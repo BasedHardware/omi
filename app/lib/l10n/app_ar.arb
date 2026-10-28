@@ -4470,5 +4470,15 @@
     "onTheWayDetailsForSupport": "تفاصيل لفريق الدعم",
     "homeNoiseFoldHidden": "{count, plural, =1{تم إخفاء مقطع صوتي قصير واحد} other{تم إخفاء {count} من المقاطع الصوتية القصيرة}}",
     "homeNoiseFoldShow": "إظهار",
-    "homeNoiseFoldHide": "{count, plural, =1{إخفاء مقطع صوتي قصير واحد} other{إخفاء {count} من المقاطع الصوتية القصيرة}}"
+    "homeNoiseFoldHide": "{count, plural, =1{إخفاء مقطع صوتي قصير واحد} other{إخفاء {count} من المقاطع الصوتية القصيرة}}",
+    "singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized.",
+    "triplePressDevKitOnly": "DevKit Only",
+    "triplePressDevKitWarning": "Triple press requires compatible DevKit firmware."
 }

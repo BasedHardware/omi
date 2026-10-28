@@ -11896,5 +11896,15 @@
     "onTheWayDetailsForSupport": "సపోర్ట్ కోసం వివరాలు",
     "homeNoiseFoldHidden": "{count, plural, =1{1 చిన్న క్లిప్ దాచబడింది} other{{count} చిన్న క్లిప్‌లు దాచబడ్డాయి}}",
     "homeNoiseFoldShow": "చూపండి",
-    "homeNoiseFoldHide": "{count, plural, =1{1 చిన్న క్లిప్‌ను దాచండి} other{{count} చిన్న క్లిప్‌లను దాచండి}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 చిన్న క్లిప్‌ను దాచండి} other{{count} చిన్న క్లిప్‌లను దాచండి}}",
+    "singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized.",
+    "triplePressDevKitOnly": "DevKit Only",
+    "triplePressDevKitWarning": "Triple press requires compatible DevKit firmware."
 }
