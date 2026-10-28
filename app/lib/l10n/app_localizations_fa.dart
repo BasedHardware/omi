@@ -428,6 +428,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get autoSync => 'همگام‌سازی خودکار';
 
   @override
+  String get syncHealthAlerts => 'هشدارهای سلامت همگام‌سازی';
+
+  @override
+  String get syncHealthAlertsDescription => 'اگر Omi بیش از یک روز ضبط‌ها را همگام‌سازی نکرده باشد هشدار بده';
+
+  @override
   String get autoSyncDescription => 'هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند';
 
   @override
@@ -9044,6 +9050,14 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncCardWaitingInternet => 'در انتظار اتصال به اینترنت';
 
   @override
+  String get syncStallAlertTitle => 'Omi همگام‌سازی نمی‌شود';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'بیش از $hours ساعت هیچ ضبطی از Omi شما همگام‌سازی نشده است. برای بررسی اتصال دستگاهتان Omi را باز کنید.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13670,6 +13684,14 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'ضبط‌ها متوقف شده‌اند';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi همگام‌سازی نمی‌شود';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'بیش از $hours ساعت هیچ ضبطی همگام‌سازی نشده است';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'بارگذاری متوقف شده';

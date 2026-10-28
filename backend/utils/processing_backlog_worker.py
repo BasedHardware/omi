@@ -5,6 +5,7 @@ from functools import partial
 from datetime import datetime, timezone
 from enum import Enum
 import logging
+import math
 import time
 from typing import Any
 
@@ -30,7 +31,44 @@ class AttemptOutcome(Enum):
     RETRY = 'retry'
 
 
+def _cursor_problem(cursor) -> str | None:
+    """Why a stored cursor cannot seed ``start_after``; None when absent or usable.
+
+    Firestore rejects some cursor shapes with ``InvalidArgument`` on every visit
+    (an empty ``id`` builds a document name with a trailing slash), and a null
+    ``at`` compares below every number, permanently hiding the whole queue.
+    """
+    if cursor is None:
+        return None
+    if not isinstance(cursor, dict):
+        return 'not_a_map'
+    at = cursor.get('at')
+    numeric = not isinstance(at, bool) and isinstance(at, (int, float)) and math.isfinite(at)
+    if not numeric and not isinstance(at, datetime):
+        return 'at_type'
+    identity = cursor.get('id')
+    if not isinstance(identity, str) or not identity or '/' in identity:
+        return 'id_shape'
+    return None
+
+
 def _page(uid, kind, cursor):
+    problem = _cursor_problem(cursor)
+    if problem:
+        stored_at = cursor.get('at') if isinstance(cursor, dict) else None
+        stored_id = cursor.get('id') if isinstance(cursor, dict) else None
+        logger.warning(
+            'event=processing_backlog outcome=cursor_invalid uid=%s kind=%s reason=%s at_type=%s id_type=%s id_len=%s',
+            uid,
+            kind,
+            problem,
+            type(stored_at).__name__,
+            type(stored_id).__name__,
+            len(stored_id) if isinstance(stored_id, str) else -1,
+        )
+        # Rewind to newest like the scope-skip rewind in finish(): rebuilding the
+        # same rejected query every visit strands the owner's whole choice.
+        cursor = None
     if kind == 'audio':
         collection = cap_hold.holds(uid)
         query = collection.where('state', 'in', ['held', 'staging', 'sealing']).order_by(
@@ -298,7 +336,15 @@ async def run(
                 if not continuation or cap_work_budget.exhausted():
                     break
     except Exception as exc:
-        logger.warning('event=processing_backlog outcome=deferred exception_type=%s', type(exc).__name__)
+        # The traceback names the failing call and, for a rejected query, the
+        # server's reason; the type alone could not type the InvalidArgument
+        # deferrals that parked paid owners (#23827).
+        logger.warning(
+            'event=processing_backlog outcome=deferred uid=%s exception_type=%s',
+            uid,
+            type(exc).__name__,
+            exc_info=True,
+        )
         continuation = await finish()
     finally:
         heartbeat.cancel()

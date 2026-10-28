@@ -705,13 +705,18 @@ def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch)
     # a projection is display, so it must not reach a stored conversation payload.
     # A null modeled processing_state is omitted too (flip-review F-1): persist is
     # merge=True, so a dumped None is a real Firestore key.
+    # The server-only member context is explicitly null on create so reprocessing
+    # can clear it after a later group separation.
+    expected_payload = completed_conversation.dict()
+    expected_payload['capture_group_member_context'] = None
     created.assert_called_once_with(
         'uid',
-        omit_null_processing_state(strip_client_processing(completed_conversation.dict())),
+        omit_null_processing_state(strip_client_processing(expected_payload)),
         idempotent=True,
     )
     assert 'client_processing' not in created.call_args.args[1]
     assert 'processing_state' not in created.call_args.args[1]
+    assert created.call_args.args[1]['capture_group_member_context'] is None
     persisted.assert_not_called()
 
 

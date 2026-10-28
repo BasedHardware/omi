@@ -4,8 +4,10 @@ from utils.generated_compute import generated_compute_allowed, generated_compute
 from config.vertex_reservations import PROBE_SECONDS, PROBE_TIMEOUT_SECONDS
 
 import asyncio
+import json
 import time
 import logging
+import uuid
 from datetime import datetime, timezone
 from collections import Counter
 from dataclasses import replace
@@ -20,11 +22,15 @@ from config.dream_agent import (
     concurrency,
     enabled,
     may_be_eligible,
+    number,
     on_demand_enabled,
     PASS_TIMEOUT_SECONDS,
     DRAIN_TIMEOUT_SECONDS,
     FINISH_MARGIN_SECONDS,
 )
+from config import dream_levers
+from config.dream_session import HEAVY_TOKENS, LIGHT_TOKENS, MEDIUM_TOKENS
+from database import dream_feedback
 from database import dream_scheduler, dream_store, dream_turns, legal_holds, review_store
 from config.rollout_cohorts import warm_rollout_cohorts, RolloutCohortUnavailable
 from database.dream_dirty import dream_writing
@@ -45,6 +51,8 @@ from utils.agent_capabilities.search import OwnerSearch
 from utils.agent_capabilities.session import Session
 from utils.dream_instructions import INSTRUCTIONS
 from utils.dream_metrics import record_pass, error_code, record_reclaimed
+from utils import dream_telemetry
+from utils.agent_capabilities.guards import FEEDBACK_PER_PASS
 from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
 from utils.model_text import ContextWindow
@@ -53,6 +61,55 @@ from utils.memory.canonical_consolidation import complete_receipted_required_int
 
 TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
 logger = logging.getLogger(__name__)
+
+# Lever B3 (no-progress stop): this many consecutive tool batches without a new
+# staged proposal, after the pass spent this share of its token budget.
+NO_PROGRESS_BATCHES_DEFAULT = 8
+NO_PROGRESS_MIN_TOKEN_SHARE_DEFAULT = 0.25
+# Lever B4 (history compaction): once the main prompt reaches this size, older
+# large tool results are replaced by a stub. Only tool results are elided; the
+# system prompt, seed, assistant tool calls and the latest results stay intact.
+COMPACT_TRIGGER_PROMPT_TOKENS_DEFAULT = 64000
+COMPACT_KEEP_RECENT_TOOL_RESULTS_DEFAULT = 6
+COMPACT_MIN_CHARS = 2000
+ELIDED_TOOL_RESULT = 'UNTRUSTED TOOL DATA\n' + json.dumps(
+    {
+        'status': 'elided',
+        'note': 'Older tool result removed to save budget. Records already read stay available to '
+        'propose_edit and the verifiers; read a ref again if you need its details.',
+    }
+)
+# Lever B5 (material budget): new-material thresholds for the medium and heavy token ceilings.
+MATERIAL_MEDIUM = 5
+MATERIAL_HEAVY = 16
+
+
+def _tunable(key, default):
+    # A malformed tuning value keeps the default; tuning never fails a pass.
+    try:
+        return number(key, default)
+    except (TypeError, ValueError):
+        return default
+
+
+def material_tokens(material, current):
+    """Token ceiling by new material, never above today's size ceiling nor below the light budget."""
+    tier = (
+        HEAVY_TOKENS if material >= MATERIAL_HEAVY else MEDIUM_TOKENS if material >= MATERIAL_MEDIUM else LIGHT_TOKENS
+    )
+    return min(current, max(tier, min(current, LIGHT_TOKENS)))
+
+
+def _backlog_owed(uid):
+    # Required-intake backlog rides Dream passes without a dirty mark. Unknown means owed.
+    try:
+        from config import required_memory_intake
+
+        return required_memory_intake.backlog_enabled(uid)
+    except Exception:
+        return True
+
+
 _FAILURE_STAGES = {
     ('dream_seed.py', 'load'): 'seed',
     ('dream_store.py', 'acquire'): 'acquire',
@@ -166,8 +223,10 @@ async def run_session(
     dry_run=False,
     timeout_seconds=PASS_TIMEOUT_SECONDS,
     bootstrap_tools=None,
+    arms=None,
 ):
     caps = caps or Caps.from_env()
+    arms = arms or {}
     started = asyncio.get_running_loop().time()
     deadline = started + timeout_seconds
     report: dict[str, Any] = {
@@ -188,7 +247,11 @@ async def run_session(
         'outcomes': [],
         'model_lanes': [],
         'dry_run': dry_run,
+        'completion_tokens': 0,
+        'token_limit': limits.tokens,
     }
+    timing = {'wait_ms': 0, 'waits': 0, 'model_ms': 0, 'verify_ms': 0}
+    levers: dict[str, dict[str, Any]] = {}
     session = Session(
         uid,
         OwnerSearch(
@@ -224,6 +287,77 @@ async def run_session(
 
     session.check_active = active
 
+    defects: Counter = Counter()
+
+    async def defect_sink(item):
+        # The model always hears 'recorded': a rejection or storage failure never steers or fails the pass.
+        defects['attempt'] += 1
+        if defects['attempt'] > FEEDBACK_PER_PASS:
+            defects['capped'] += 1
+            return {'status': 'recorded'}
+        try:
+            await run_blocking(
+                db_executor,
+                dream_feedback.store,
+                uid,
+                item,
+                {'seed': seed, 'records': dict(session.records)},
+                seed.get('vocabulary') or [],
+            )
+            defects['stored'] += 1
+            logger.info('event=dream_defect_report outcome=stored')
+        except ValueError as exc:
+            reason = (
+                str(exc)
+                if str(exc).startswith('feedback_') or str(exc) in {'not_a_failure', 'language_not_defect', 'ref_leak'}
+                else 'invalid'
+            )
+            reason = reason if reason.isidentifier() else 'invalid'
+            defects['rejected_' + reason] += 1
+            logger.info('event=dream_defect_report outcome=rejected reason=%s', reason)
+        except Exception as exc:
+            defects['error'] += 1
+            logger.warning('event=dream_defect_report outcome=error exc=%s', type(exc).__name__)
+        return {'status': 'recorded'}
+
+    try:
+        if dream_levers.defect_reports_enabled() and not dry_run:
+            session.defect_sink = defect_sink
+    except Exception:
+        pass
+
+    stop_arm = arms.get('no_progress_stop', 'off')
+    stop_batches = int(_tunable('DREAM_NO_PROGRESS_BATCHES', NO_PROGRESS_BATCHES_DEFAULT))
+    stop_share = _tunable('DREAM_NO_PROGRESS_MIN_TOKEN_SHARE', NO_PROGRESS_MIN_TOKEN_SHARE_DEFAULT)
+    progress: dict[str, Any] = {'batches': 0, 'idle': 0, 'staged': 0, 'fired': None}
+
+    async def after_execute(current):
+        try:
+            progress['batches'] += 1
+            staged_now = len(current.staged)
+            if staged_now > progress['staged']:
+                progress['staged'] = staged_now
+                progress['idle'] = 0
+            else:
+                progress['idle'] += 1
+            if (
+                progress['fired'] is None
+                and progress['idle'] >= stop_batches
+                and report['price_weighted_tokens'] >= limits.tokens * stop_share
+            ):
+                progress['fired'] = {
+                    'batch': progress['batches'],
+                    'keys': set(current.staged),
+                    'tokens': report['price_weighted_tokens'],
+                }
+                return stop_arm == 'serve'
+        except Exception as error:
+            logger.warning('event=dream_lever_error lever=no_progress_stop exc=%s', type(error).__name__)
+        return False
+
+    if stop_arm != 'off':
+        session.after_execute = after_execute
+
     async def usage(result):
         nonlocal stage
         previous, stage = stage, 'usage'
@@ -252,6 +386,7 @@ async def run_session(
             raise ValueError('dream_invalid_usage')
         result.price_weighted_tokens = weighted
         report['price_weighted_tokens'] += weighted
+        report['completion_tokens'] += max(0, int(getattr(result, 'completion_tokens', 0) or 0))
         session.accounted_model_tokens = report['price_weighted_tokens']
         if result.cached_tokens is None:
             report['cache_unreported_tokens'] += result.prompt_tokens
@@ -277,6 +412,53 @@ async def run_session(
     main_history = {'prompt_tokens': None, 'messages': 0, 'cached_tokens': None}
     budget_notice_sent = False
 
+    def remember_main(result, messages):
+        main_history['prompt_tokens'] = result.prompt_tokens
+        main_history['messages'] = len(messages)
+        report.setdefault('first_prompt_tokens', result.prompt_tokens)
+        report['last_prompt_tokens'] = result.prompt_tokens
+
+    compact_arm = arms.get('history_compact', 'off')
+    compact_trigger = _tunable('DREAM_HISTORY_COMPACT_TRIGGER_TOKENS', COMPACT_TRIGGER_PROMPT_TOKENS_DEFAULT)
+    compact_keep = int(_tunable('DREAM_HISTORY_COMPACT_KEEP_RESULTS', COMPACT_KEEP_RECENT_TOOL_RESULTS_DEFAULT))
+    compaction = {'arm': compact_arm, 'fired': False, 'compactions': 0, 'elided_chars': 0, 'would_elide_chars': 0}
+
+    def compact(messages):
+        # Fail open: compaction trouble leaves the conversation exactly as it was.
+        try:
+            prior = main_history['prompt_tokens']
+            if not prior or prior < compact_trigger:
+                return
+            tools = [
+                index
+                for index, message in enumerate(messages)
+                if isinstance(message, dict) and message.get('role') == 'tool'
+            ]
+            older = tools[: max(0, len(tools) - max(1, compact_keep))]
+            elide = [
+                index
+                for index in older
+                if isinstance(messages[index].get('content'), str)
+                and len(messages[index]['content']) >= COMPACT_MIN_CHARS
+                and messages[index]['content'] != ELIDED_TOOL_RESULT
+            ]
+            chars = sum(len(messages[index]['content']) for index in elide)
+            if not elide:
+                return
+            compaction['fired'] = True
+            compaction['would_elide_chars'] = max(compaction['would_elide_chars'], chars)
+            if compact_arm != 'serve':
+                return
+            for index in elide:
+                messages[index] = {**messages[index], 'content': ELIDED_TOOL_RESULT}
+            compaction['compactions'] += 1
+            compaction['elided_chars'] += chars
+            # The next size estimate must be recomputed from the shortened history.
+            main_history.update(prompt_tokens=None, messages=0, cached_tokens=None)
+        except Exception as error:
+            compaction['errors'] = compaction.get('errors', 0) + 1
+            logger.warning('event=dream_lever_error lever=history_compact exc=%s', type(error).__name__)
+
     async def invoke(lane, mount, messages):
         for attempt in range(CAPACITY_CALL_RETRIES + 1):
             try:
@@ -286,12 +468,18 @@ async def run_session(
                     raise
                 await active()
                 mode, allowlisted = admission_for(uid)
-                if not await dream_capacity.wait_for_capacity(
-                    deadline,
-                    CAPACITY_RETRY_HEADROOM_SECONDS,
-                    mode=mode,
-                    owner_allowlisted=allowlisted,
-                ):
+                waited_from = asyncio.get_running_loop().time()
+                try:
+                    admitted = await dream_capacity.wait_for_capacity(
+                        deadline,
+                        CAPACITY_RETRY_HEADROOM_SECONDS,
+                        mode=mode,
+                        owner_allowlisted=allowlisted,
+                    )
+                finally:
+                    timing['waits'] += 1
+                    timing['wait_ms'] += int(1000 * (asyncio.get_running_loop().time() - waited_from))
+                if not admitted:
                     raise
                 logger.info('Dream capacity retry lane=%s attempt=%d', lane, attempt + 1)
                 # invoke_once rechecks the kill switch/lease and reserves this attempt.
@@ -300,6 +488,8 @@ async def run_session(
     async def invoke_once(lane, mount, messages):
         nonlocal budget_notice_sent, stage
         await active()
+        if lane == dream_harness_transport.MAIN_LANE and compact_arm != 'off':
+            compact(messages)
         stage = 'request_sizing'
         remaining = (
             limits.tokens - report['price_weighted_tokens'] - session.counters['search_embedding_token_upper_bound']
@@ -383,19 +573,21 @@ async def run_session(
                         or asyncio.get_running_loop().time() + pause + 60 > deadline
                     ):
                         raise
+                    timing['waits'] += 1
+                    timing['wait_ms'] += 1000 * pause
                     await asyncio.sleep(pause)
                     await active()
         stage = 'model_turn'
         sink = {}
         counted = False
+        turn_started = asyncio.get_running_loop().time()
         try:
             if turn is not None:
                 result = await turn(uid, lane, mount, messages)
                 report['model_lanes'].append(lane)
                 await usage(result)
                 if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
-                    main_history['prompt_tokens'] = result.prompt_tokens
-                    main_history['messages'] = len(messages)
+                    remember_main(result, messages)
                     main_history['cached_tokens'] = (
                         result.cached_tokens
                         if result.cached_tokens is not None and getattr(result, 'cache_unreported_tokens', 0) == 0
@@ -422,8 +614,7 @@ async def run_session(
             report['model_lanes'].append(lane)
             counted = True
             if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
-                main_history['prompt_tokens'] = result.prompt_tokens
-                main_history['messages'] = len(messages)
+                remember_main(result, messages)
                 main_history['cached_tokens'] = (
                     result.cached_tokens
                     if result.cached_tokens is not None and result.cache_unreported_tokens == 0
@@ -439,6 +630,7 @@ async def run_session(
             if lane == dream_harness_transport.VERIFY_LANE and sink.get('transport_complete'):
                 report['verifier_transport_responses'] = report.get('verifier_transport_responses', 0) + 1
             report['usage_unknown'] |= sink.get('usage_unknown', False)
+            timing['model_ms'] += int(1000 * (asyncio.get_running_loop().time() - turn_started))
 
     async def effect(fn, *args, **kwargs):
         await active()
@@ -512,6 +704,8 @@ async def run_session(
                         deadline_seconds=max(1, timeout_seconds - 300),
                     )
                     report['stop_reason'] = result.reason
+                    if result.reason == 'finished' and session.finish is None and progress['fired'] is not None:
+                        report['stop_reason'] = 'no_progress'
             except Exception as exc:
                 stop_code = error_code(exc)
                 provider_stop = bool(session.staged) and (
@@ -549,6 +743,7 @@ async def run_session(
                 support, calls = {}, 0
             else:
                 stage = 'verify'
+                verify_started = asyncio.get_running_loop().time()
                 support, calls = await dream_verify.verify(
                     staged,
                     partial(invoke, dream_harness_transport.VERIFY_LANE),
@@ -561,6 +756,7 @@ async def run_session(
                     telemetry=verification_telemetry,
                     cheap_turn=_cheap_turn(staged, invoke),
                 )
+                timing['verify_ms'] += int(1000 * (asyncio.get_running_loop().time() - verify_started))
             report['verifier_calls'] = calls
             report['verifier_transport_responses'] = max(
                 report.get('verifier_transport_responses', 0), verification_telemetry.get('transport_responses', 0)
@@ -690,6 +886,25 @@ async def run_session(
             _log_pass_failure(exc, stage=stage)
     report['accounted_tokens'] += session.counters['search_embedding_token_upper_bound']
     report['price_weighted_tokens'] += session.counters['search_embedding_token_upper_bound']
+    try:
+        if stop_arm != 'off':
+            fired = progress['fired']
+            levers['no_progress_stop'] = {'arm': stop_arm, 'fired': fired is not None}
+            if fired is not None:
+                late = {key for key in session.staged if key not in fired['keys']}
+                levers['no_progress_stop'].update(
+                    batch=fired['batch'],
+                    staged_after=len(late),
+                    applied_after=sum(
+                        1 for row in report['outcomes'] if row.get('key') in late and row.get('status') == 'applied'
+                    ),
+                    tokens_after=max(0, report['price_weighted_tokens'] - fired['tokens']),
+                )
+        if compact_arm != 'off':
+            levers['history_compact'] = dict(compaction)
+    except Exception as error:
+        logger.warning('event=dream_lever_error lever=report exc=%s', type(error).__name__)
+    report.update(timing=timing, levers=levers, defect_reports=dict(defects))
     report.update(
         tool_counts={key[5:]: count for key, count in session.counters.items() if key.startswith('tool:')},
         turns=len([lane for lane in report['model_lanes'] if lane == dream_harness_transport.MAIN_LANE]),
@@ -755,6 +970,28 @@ async def run_pass(
         if not dry_run:
             await run_blocking(db_executor, dream_scheduler.remove_due, uid)
         return report
+    pass_started = asyncio.get_running_loop().time()
+    arms = {} if canary else dream_levers.arms(uid)
+    backlog = _backlog_owed(uid)
+    idle_arm = arms.get('idle_skip', 'off')
+    skip_idle = idle_arm == 'serve' and trigger == 'schedule' and not canary and not dry_run and not backlog
+    if skip_idle:
+        # Before any capacity slot or seed read: an owner with nothing new is parked
+        # until mark_dirty re-enqueues it. Any error falls through to today's pass.
+        try:
+            parked = await run_blocking(db_executor, dream_store.park_if_idle, uid)
+        except Exception as error:
+            logger.warning('event=dream_lever_error lever=idle_skip exc=%s', type(error).__name__)
+            parked = False
+        if parked:
+            report = {
+                'status': 'not_admitted',
+                'reason': 'idle_no_material',
+                'trigger': trigger,
+                'levers': {'idle_skip': {'arm': idle_arm, 'skipped': True}},
+            }
+            record_pass(report)
+            return report
     mode, allowlisted = admission_for(uid)
     slot = (
         await dream_capacity.claim(
@@ -769,8 +1006,11 @@ async def run_pass(
         return report
     lease = None
     release_slot = False
+    pass_levers: dict[str, dict[str, Any]] = {}
     try:
+        seed_started = asyncio.get_running_loop().time()
         seed, records, dirty, limits = await run_blocking(db_executor, dream_seed.load, uid, caps)
+        seed_ms = int(1000 * (asyncio.get_running_loop().time() - seed_started))
         limits = replace(
             limits,
             completion_tokens=caps.completion_tokens,
@@ -779,18 +1019,32 @@ async def run_pass(
         caps = replace(caps, tokens=limits.tokens)
         if not dry_run:
             reclaimed = {}
+            denied: dict[str, Any] = {}
             try:
                 lease = await run_blocking(
-                    db_executor, dream_store.acquire, uid, caps, trigger=trigger, canary=canary, reclaim_sink=reclaimed
+                    db_executor,
+                    dream_store.acquire,
+                    uid,
+                    caps,
+                    trigger=trigger,
+                    canary=canary,
+                    reclaim_sink=reclaimed,
+                    denial_sink=denied,
+                    skip_idle=skip_idle,
                 )
             finally:
                 if reclaimed:
                     record_reclaimed(**reclaimed)
             if lease is None:
                 release_slot = True
-                report = {'status': 'not_admitted'}
+                report = {'status': 'not_admitted', 'reason': denied.get('reason', 'unknown')}
                 record_pass(report)
                 return report
+            if idle_arm != 'off':
+                pass_levers['idle_skip'] = {
+                    'arm': idle_arm,
+                    'would_skip': bool(lease.get('hunt')) and trigger == 'schedule' and not backlog,
+                }
         if not dry_run and not canary:
             assert lease is not None
             intake_scope = ACTIVE_RUN.set((uid, lease['run_id']))
@@ -798,6 +1052,21 @@ async def run_pass(
                 seed, records = await dream_required_intake.prepare(uid, seed, records, limits, OwnerSearch(uid))
             finally:
                 ACTIVE_RUN.reset(intake_scope)
+        material = len(dirty) + len(seed.get('required_intake_candidates') or [])
+        budget_arm = arms.get('material_budget', 'off')
+        if budget_arm != 'off':
+            try:
+                sized = material_tokens(material, limits.tokens)
+                pass_levers['material_budget'] = {
+                    'arm': budget_arm,
+                    'tokens_before': limits.tokens,
+                    'tokens_after': sized,
+                }
+                if budget_arm == 'serve' and sized < limits.tokens:
+                    limits = replace(limits, tokens=sized)
+                    caps = replace(caps, tokens=limits.tokens)
+            except Exception as error:
+                logger.warning('event=dream_lever_error lever=material_budget exc=%s', type(error).__name__)
         if limits.bucket == 'empty' and not seed.get('targets'):
             report: dict[str, Any] = {
                 'status': 'not_admitted',
@@ -833,7 +1102,11 @@ async def run_pass(
                 dry_run=dry_run or canary,
                 timeout_seconds=timeout_seconds,
                 bootstrap_tools=bootstrap_tools,
+                arms=arms,
             )
+        report['levers'] = {**pass_levers, **(report.get('levers') or {})}
+        report['material'] = material
+        report.setdefault('timing', {})['seed_ms'] = seed_ms
         if progress is not None:
             progress['report'] = report
         if lease is not None:
@@ -858,9 +1131,11 @@ async def run_pass(
                 reviewed=set(session.records),
                 refund=report['tokens'] == 0 and not report['usage_unknown'],
                 release=report.get('error_type') != 'TimeoutError',
+                park_when_idle=skip_idle,
             )
         if report.get('reason') == 'idle':
             report.pop('run_id', None)
+        report['timing']['total_ms'] = int(1000 * (asyncio.get_running_loop().time() - pass_started))
         if not dry_run:
             record_pass(report)
         release_slot = report.get('error_type') != 'TimeoutError'
@@ -885,10 +1160,21 @@ RESERVED_RECHECKS = (PROBE_SECONDS + PROBE_TIMEOUT_SECONDS) // RESERVED_RECHECK_
 MIN_PASS_SECONDS = 300
 
 
-async def drain(*, limit=5000):
+async def drain(*, limit=5000, sweep=None):
+    """Run due owners until the drain budget ends; ``sweep`` (optional) receives sweep telemetry.
+
+    A capacity wait retries the same owner, so ``results`` holds attempts;
+    ``sweep['finals']`` holds each reached owner's last attempt for owner-level counts.
+    """
+    sweep = {} if sweep is None else sweep
     if limit <= 0:
         return []
+    sweep.setdefault('sweep_id', str(uuid.uuid4()))
+    sweep_token = dream_telemetry.SWEEP_ID.set(sweep['sweep_id'])
+    sweep_started = time.monotonic()
     results = []
+    finals = sweep.setdefault('finals', [])
+    reached = {'owners': 0}
     drain_deadline = time.monotonic() + DRAIN_TIMEOUT_SECONDS
     try:
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
@@ -909,20 +1195,30 @@ async def drain(*, limit=5000):
                         reserved_open = True
                         break
             if not reserved_open and not on_demand_enabled():
+                sweep['capacity_closed'] = True
                 report = {'status': 'waiting', 'reason': 'reserved_capacity'}
                 record_pass(report)
                 return [report]
-            page = await run_blocking(db_executor, dream_scheduler.candidates, limit=min(limit, 5000))
+            rows = await run_blocking(db_executor, dream_scheduler.candidates, limit=min(limit, 5000), with_due=True)
+            rows = [row if isinstance(row, tuple) else (row, None) for row in rows]
+            page = [uid for uid, _ in rows]
+            sweep['due_owners'] = len(page)
+            page = await _payoff_order(rows, page, sweep)
             owners = iter(page)
 
             async def worker():
                 for uid in owners:
+                    last = None
                     while enabled():
                         remaining = drain_deadline - time.monotonic() - FINISH_MARGIN_SECONDS
                         if remaining < MIN_PASS_SECONDS:
                             # Too little drain budget left for a useful pass; the owner stays
                             # due and runs with a full window next sweep.
+                            if last is not None:
+                                finals.append(last)
                             return
+                        if last is None:
+                            reached['owners'] += 1
                         try:
                             report = await run_pass(uid, timeout_seconds=int(min(PASS_TIMEOUT_SECONDS, remaining)))
                         except Exception as exc:
@@ -934,13 +1230,39 @@ async def drain(*, limit=5000):
                             }
                             record_pass(report)
                         results.append(report)
+                        last = report
                         if report['status'] != 'waiting':
                             break
                         await asyncio.sleep(dream_capacity.COOLDOWN_SECONDS)
+                    if last is not None:
+                        finals.append(last)
 
             async with asyncio.TaskGroup() as group:
                 for _ in range(concurrency()):
                     group.create_task(worker())
     except TimeoutError:
+        sweep['deadline'] = True
         results.append({'status': 'deadline'})
+    finally:
+        dream_telemetry.SWEEP_ID.reset(sweep_token)
+        sweep['owners_started'] = reached['owners']
+        sweep['owners_unreached'] = max(0, int(sweep.get('due_owners', 0)) - reached['owners'])
+        # Owners whose pass the drain deadline cancelled have no final report.
+        sweep['owners_inflight'] = max(0, reached['owners'] - len(finals))
+        sweep['duration_ms'] = int(1000 * (time.monotonic() - sweep_started))
     return results
+
+
+async def _payoff_order(rows, page, sweep):
+    """Lever B2: shadow logs how far payoff ranking would move owners; serve uses it. Fails open."""
+    arm = dream_levers.arm(dream_levers.PAYOFF_ORDER_MODE_ENV, None)
+    sweep['payoff_order'] = arm
+    if arm == 'off' or len(page) < 2:
+        return page
+    try:
+        ranked = await run_blocking(db_executor, dream_scheduler.payoff_order, rows, datetime.now(timezone.utc))
+        sweep['reordered'] = sum(1 for before, after in zip(page, ranked) if before != after)
+        return ranked if arm == 'serve' and sorted(ranked) == sorted(page) else page
+    except Exception as error:
+        logger.warning('event=dream_lever_error lever=payoff_order exc=%s', type(error).__name__)
+        return page

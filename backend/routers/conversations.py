@@ -102,6 +102,7 @@ from utils.metrics import record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
+from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
     clamp_conversation_search_pagination,
@@ -505,6 +506,12 @@ def process_in_progress_conversation(
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
 
+    if is_listen_finalization_dispatch_enabled() and not byok.has_byok_keys():
+        # Resolve Redis exactly once, then use the same transactional outbox as
+        # exact-ID finalization. A disconnected HTTP caller must not own the
+        # only processing attempt. BYOK retains its request-scoped credentials.
+        return finalize_conversation(conversation['id'], request=request, uid=uid)
+
     conversation = deserialize_conversation(conversation)
 
     # Inject calendar context if provided
@@ -538,15 +545,8 @@ def process_in_progress_conversation(
             else:
                 logger.warning('Skipping malformed cached user geolocation for uid=%s', uid)
 
-    # Winner owns ingress. The accepted projection rides the admission CAS:
-    # status→processing and client_processing are one write. A later request
-    # (including a loser that late-binds) can only land after this commit, so
-    # a stalled second write cannot last-writer-wins an older projection over
-    # a newer one (section 1.7 (c)). A mutation failure is an admission
-    # failure — the row stays in_progress instead of stranding on processing
-    # with no durable job. Ingress-owned mutation only; the coordinator's
-    # existing-row persist still strips the field. Omit extra_updates when
-    # there is no projection so positional admit stubs keep working.
+    # Bind projection plus status in the admission CAS; failures retain in_progress.
+    # Losing requests only late-bind to the latest digest, never structured output.
     extra_updates = client_processing_mutation(client_projection) if client_projection is not None else None
     bind_report = _projection_bind_report()
     if extra_updates is None:
@@ -2096,6 +2096,7 @@ class ConversationTopicRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
     transcript: str = Field(..., min_length=1, max_length=100_000)
+    conversation_language: Optional[str] = Field(default=None, max_length=32)
 
 
 class ConversationTopicResponse(BaseModel):
@@ -2126,7 +2127,9 @@ async def generate_conversation_topic_endpoint(
         raise HTTPException(status_code=402, detail='trial_expired')
     topic = await run_blocking(
         llm_executor,
-        lambda: conversation_topic_llm.generate_conversation_topic(uid, body.transcript),
+        lambda: conversation_topic_llm.generate_conversation_topic(
+            uid, body.transcript, conversation_language=body.conversation_language
+        ),
     )
     if topic is None:
         raise HTTPException(status_code=502, detail="conversation_topic_failed")
