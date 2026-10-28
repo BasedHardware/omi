@@ -26,8 +26,10 @@ def test_render_moment_joins_voices_and_bounds_long_text():
     )
     assert rendered.text == 'You: hello there still me\nUnknown speaker: hi\nMinh: named'
     assert rendered.words == 6
+    assert not rendered.truncated
     long = incremental.render_moment([{'text': 'word ' * 4000, 'is_user': True}])
     assert len(long.text) <= config.MOMENT_TEXT_MAX_CHARS and '[…]' in long.text
+    assert long.truncated
 
 
 def test_prompt_keeps_the_fixed_prefix_first_and_volatile_parts_last():

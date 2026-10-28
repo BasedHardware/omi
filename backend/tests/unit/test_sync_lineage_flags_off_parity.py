@@ -79,7 +79,7 @@ def _rows(store):
 
 
 def _intake(module, store, incoming, *, candidate_id=None, target_id=None):
-    return module.assign_in_transaction(
+    result = module.assign_in_transaction(
         store.transaction(),
         store.collection('users').document('u'),
         incoming,
@@ -89,6 +89,10 @@ def _intake(module, store, incoming, *, candidate_id=None, target_id=None):
         encode=deepcopy,
         invalidate=lambda payload: None,
     )
+    # Match lifecycle intake: consume the transient observation before the
+    # returned conversation reaches enrichment or behavioral parity checks.
+    result[0].pop('_sync_projected_size_bucket', None)
+    return result
 
 
 def _drive(module, patch, store, texts, assignment_module, capture_enabled):

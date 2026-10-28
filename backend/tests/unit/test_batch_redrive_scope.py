@@ -86,7 +86,9 @@ def cli(monkeypatch, tmp_path):
     monkeypatch.setattr(module, 'create_artifact_store', lambda *a: Mock())
     monkeypatch.setattr(module, 'configure_rollout_runtime', lambda: None)
     monkeypatch.setattr(scope, 'owner_jobs', lambda *a: (document(sid) for sid in rows))
-    monkeypatch.setattr(module, 'checked_job', lambda store, sid, uid, key, independent=False: deepcopy(rows[sid]))
+    monkeypatch.setattr(
+        module, 'checked_job', lambda store, sid, uid, key, independent=False, repair=False: deepcopy(rows[sid])
+    )
     monkeypatch.setattr(module, 'inspect_unit', lambda *a: 'speech')
     calls = []
 

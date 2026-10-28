@@ -75,7 +75,13 @@ one capture window's evidence.
    - A sync-finalized conversation that never attached (no realtime stream
      carried it, and intake did not or could not join it) joins the episode
      covering its span first, as a parallel capture: a member whose
-     text the live stream already fed, so no moment and no reconcile. It never
+     recovered speech merges into the existing compact notes through a
+     `sync_recovery` moment. A transactional content receipt per segment
+     snapshot makes repeated intake/finalization idempotent, including text
+     inserted behind an earlier placed offset. Overlap alone never proves
+     that the live stream heard the recovered words. Stable segment slices and
+     bounded batches keep every word inside the prompt budget before recording
+     consumption. It never
      closes the live episode and never opens one; a discarded conversation
      never joins. Its speech extends the
      episode's `last_activity_at`, so an idle close cannot fire while sync
@@ -100,6 +106,23 @@ one capture window's evidence.
      or `dropped`. A discarded conversation's items are dropped.
    - It closes the episode if the close at finalize start never ran.
 
+Live and recovery updates share content-revision receipts in a separate
+`content-v1:{conversation_id}` key of the existing receipt store. Complete
+live prompt input is recorded alongside its state, so attaching WAL to that
+same canonical row feeds only unconsumed content, including gaps behind the
+cursor. Existing unplaced-ID receipts remain consumption proof. Older placed
+cursor-only state has no exact content proof; its first recovery conservatively
+merges the retained snapshot once instead of dropping a potentially new gap.
+Sync donor repointing transfers both receipt namespaces in the membership CAS,
+and that repoint runs inside the three-attempt retry owner at intake/finalize.
+
+Sync attachment retries lost compare-and-swap commits up to three times with
+jitter and fresh membership/boundary reads. Saturated synchronous intake and
+finalize hooks enter a bounded deferred queue on the same executor; a released
+slot retries admission without a later append or a retry thread. At 64 deferred
+calls synchronous producers backpressure. This queue, like the executor's
+ordinary queue, is process-local and cancels on process shutdown.
+
 ## Provisional items (INV-TASK-2)
 
 The cheap model's tasks and reminders are shown live (inline in the transcript
@@ -113,6 +136,11 @@ per-moment extraction. Undo marks an item `dismissed`.
 
 The close reasons are `user`, `gap`, `idle`, `hard_cap`, `source_change`,
 `calendar_boundary` and `moved_on`.
+- Before close, recovered members' stored transcripts are checked for unapplied
+  content. Their recovery moments merge into the existing notes; receipts and
+  state commit together. Failed model calls consume no receipt, so close or a
+  later finalize can retry. A late recovery targets its exact member episode,
+  including a closed episode, and cannot open or move to a newer one.
 - Ending a conversation ends its live episode at once, and the next words open
   a new one (`attach_conversation`); the server never creates an empty episode.
   - A client finalize (`client_finalize`: the app's Wrap up, a pendant double-tap,

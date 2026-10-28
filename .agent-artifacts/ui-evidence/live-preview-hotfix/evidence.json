@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-title-preview.png",
+      "platform": "mobile-ios",
+      "description": "Home live row: length alone in the tile, newest preview words on line two",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-largest-type.png",
+      "platform": "mobile-ios",
+      "description": "Home live row at the largest text size",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

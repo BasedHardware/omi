@@ -4,7 +4,7 @@ Live and sync transcribe the same audio with different wording, so the existing
 exact-text/exact-range merge dedupe cannot drop a reworded repeat. There is no
 reliable constant offset between WAL and live clocks, so this helper never
 rewrites timestamps and never drops on time coverage alone: an incoming segment
-is dropped only when its capture is independently proven (``verified_capture_indices``)
+is dropped by default only when its capture is independently proven (``verified_capture_indices``)
 AND a contiguous window of canonical live segments in its time neighborhood
 lexically covers every substantive incoming token.
 
@@ -118,7 +118,8 @@ def _duration(seconds_pair: tuple[float, float]) -> float:
     return max(0.0, end - start)
 
 
-def _incoming_span(segment: dict) -> Optional[tuple[float, float]]:
+def incoming_speech_span(segment: dict) -> Optional[tuple[float, float]]:
+    """Finite absolute incoming speech bounds, shared with bridge observation."""
     start = _finite(segment.get('timestamp'))
     offset_start, offset_end = _finite(segment.get('start')), _finite(segment.get('end'))
     if start is None or offset_start is None or offset_end is None or offset_end <= offset_start:
@@ -129,7 +130,8 @@ def _incoming_span(segment: dict) -> Optional[tuple[float, float]]:
     return start, abs_end
 
 
-def _live_segment_bounds(segment: dict, origin: float, pinned: bool) -> Optional[tuple[float, float, str]]:
+def live_speech_bounds(segment: dict, origin: float, pinned: bool) -> Optional[tuple[float, float, str]]:
+    """Resolve capture bounds before falling back to stored content offsets."""
     capture_start = _finite(segment.get('audio_capture_start'))
     capture_end = _finite(segment.get('audio_capture_end'))
     if capture_start is not None and capture_end is not None and capture_end > capture_start:
@@ -150,9 +152,59 @@ def pinned_audio_timeline(marker: object) -> bool:
     return isinstance(marker, dict) and marker.get('version') == 2
 
 
-def _eligible_live(segment: dict) -> bool:
+def eligible_live_segment(segment: dict) -> bool:
+    """Stored sync contributions cannot serve as original live speech proof."""
     scope = segment.get('speaker_id_scope') or ''
     return not any(scope.startswith(prefix) for prefix in EXCLUDED_SCOPES)
+
+
+def live_speech_union(
+    live: list[dict], *, live_origin: float, live_pinned: bool
+) -> tuple[list[tuple[float, float]], bool]:
+    """Eligible original-live timing union and whether every range was measured."""
+    ranges = []
+    complete = True
+    for segment in live:
+        if not eligible_live_segment(segment):
+            continue
+        bounds = live_speech_bounds(segment, live_origin, live_pinned)
+        if bounds is None:
+            complete = False
+        else:
+            ranges.append(bounds[:2])
+    union = []
+    for low, high in sorted(ranges):
+        if union and low <= union[-1][1]:
+            union[-1] = (union[-1][0], max(high, union[-1][1]))
+        else:
+            union.append((low, high))
+    return union, complete
+
+
+def speech_overlap_seconds(
+    incoming: list[dict], live: list[dict], *, live_origin: float, live_pinned: bool
+) -> Optional[float]:
+    """Sum source speech intersecting the live timing union, or unknown.
+
+    Each source segment contributes once even when several live windows cover
+    it. Invalid timing cannot certify zero overlap. This never authorizes drops.
+    """
+    try:
+        union, complete = live_speech_union(live, live_origin=live_origin, live_pinned=live_pinned)
+        if not complete:
+            return None
+        seconds = total = 0.0
+        for segment in incoming:
+            span = incoming_speech_span(segment)
+            if span is None:
+                return None
+            total += span[1] - span[0]
+            seconds += sum(max(0.0, min(span[1], high) - max(span[0], low)) for low, high in union)
+        # The existing append denominator saturates here; never certify a ratio
+        # against an incomplete denominator.
+        return seconds if total <= MAX_TOTAL_SPAN_SECONDS and math.isfinite(seconds) else None
+    except Exception:
+        return None  # Observation failure must never abort content persistence.
 
 
 def _aggregate_method(methods: list[str]) -> str:
@@ -310,6 +362,7 @@ def drop_covered_repeats(
     live_origin: float,
     live_pinned: bool,
     verified_capture_indices: frozenset[int] = frozenset(),
+    require_capture_proof: bool = True,
 ) -> tuple[list[dict], dict]:
     """Return (kept incoming segments, drop report) for one bound intake.
 
@@ -318,15 +371,17 @@ def drop_covered_repeats(
     every other incoming segment is kept before any candidate work. The report
     carries ``dropped_seconds``, the per-drop ``methods`` and ``repeat_only``
     (every evaluated incoming segment was covered). Callers own telemetry
-    aggregation; nothing here mutates the inputs.
+    aggregation; nothing here mutates the inputs. Stored donor consolidation may
+    explicitly set ``require_capture_proof=False`` to use the same lexical rule
+    when WAL context is unavailable. The incoming default remains proof-gated.
     """
-    if not verified_capture_indices or len(live_segments) > MAX_LIVE_SEGMENTS:
+    if (require_capture_proof and not verified_capture_indices) or len(live_segments) > MAX_LIVE_SEGMENTS:
         return list(incoming_segments), _zero_report()
     live_index = []
     for segment in live_segments:
-        if not _eligible_live(segment):
+        if not eligible_live_segment(segment):
             continue
-        bounds = _live_segment_bounds(segment, live_origin, live_pinned)
+        bounds = live_speech_bounds(segment, live_origin, live_pinned)
         text = segment.get('text') or ''
         if bounds is None or len(text) > MAX_CHARS:
             continue
@@ -346,11 +401,11 @@ def drop_covered_repeats(
         if index >= MAX_INCOMING_SEGMENTS:
             kept.append(segment)
             continue
-        if index not in verified_capture_indices:
+        if require_capture_proof and index not in verified_capture_indices:
             kept.append(segment)
             continue
         evaluated += 1
-        span = _incoming_span(segment)
+        span = incoming_speech_span(segment)
         text = segment.get('text') or ''
         if span is None or len(text) > MAX_CHARS:
             kept.append(segment)
@@ -435,7 +490,7 @@ def drop_covered_repeats(
             continue
         dropped_count += 1
         dropped_seconds += incoming_duration
-        methods.append('source_frame_lexical')
+        methods.append('source_frame_lexical' if index in verified_capture_indices else 'lexical')
     report = {
         'dropped_seconds': dropped_seconds,
         'dropped_segments': dropped_count,

@@ -142,6 +142,8 @@ def test_gauntlet_worker_uses_real_frozen_language_adapter(monkeypatch, proof):
     [(None, False, False), ('und', True, False), ('vi', True, True), ('en', False, False), ('en', True, False)],
 )
 async def test_new_batch_intake_routes_by_effective_sync_language(monkeypatch, language, single, escapes):
+    # Per-unit guard behavior on the pre-exclusion admission path.
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
     from utils.batch_pipeline import intake
     from utils.batch_pipeline.artifacts import ProtectionContext
 

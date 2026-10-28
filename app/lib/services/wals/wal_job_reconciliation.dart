@@ -117,6 +117,15 @@ extension _WalJobCompletion on LocalWalSyncImpl {
             final s = fetch.status!;
             final terminalPolicy = syncJobTerminalPolicy(status: s.status, isTerminal: s.isTerminal);
             if (terminalPolicy == SyncJobTerminalPolicy.wait) {
+              // Only an authoritative pending reply renews the card's span.
+              // Transient/missing replies retain custody without claiming active work.
+              for (final w in members) {
+                if (!_stillUploadedUnder(w, jobId)) continue;
+                if (nowSecs - w.jobPendingConfirmedAt >= 60) {
+                  w.jobPendingConfirmedAt = nowSecs;
+                  changed = true;
+                }
+              }
               DebugLogManager.logEvent('reconcile_poll', {
                 'jobId': jobId,
                 'memberWalIds': memberWalIds,

@@ -13689,32 +13689,6 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals на пат';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Се прикачуваат: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Речиси готови: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count бараат внимание',
-      one: '1 бара внимание',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Сè уште нема активност';
 
   @override
@@ -14496,13 +14470,7 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Отвори ја претходната епизода';
-
-  @override
   String get episodeNotesSoon => 'Белешките се појавуваат по првите минути разговор.';
-
-  @override
-  String get episodeOpenAll => 'Отвори сè';
 
   @override
   String get episodeWrapUpNow => 'Заврши сега';
@@ -14640,22 +14608,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get othersSpeakerLabel => 'Други';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Завршено';
@@ -14685,6 +14641,89 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Качувањата се привремено паузирани — ќе продолжат автоматски';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Продолжува „$title“';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· од $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Белешките започнуваат кога ќе пристигне конечната транскрипција.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Се создаваат на твојот телефон додека зборуваш. Целосните белешки доаѓаат со конечната транскрипција.';
+
+  @override
+  String get episodeOnThisPhone => 'На овој телефон';
+
+  @override
+  String get episodeOpenTranscript => 'Отвори транскрипција';
+
+  @override
+  String get liveCardTitle => 'Во живо';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Конечната транскрипција доцни околу $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Конечната транскрипција стигнува';
+
+  @override
+  String get livePreviewNoEngineBody => 'Твоите зборови се појавуваат тука минута-две откако ќе ги изговориш.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Безбедно снима';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Во живо на овој телефон';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Вклучи текст во живо';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'на пат';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'кога ќе сте онлайн';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration во обработка';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Се прикачува автоматски. Разговорите се пополнуваат штом ќе стигнат записите.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Се прикачува автоматски штом ќе се поврзете повторно. Разговорите се пополнуваат штом ќе стигнат записите.';
+
+  @override
+  String get onTheWayDayUploading => 'Се прикачува';
+
+  @override
+  String get onTheWayDayNext => 'Следно на ред';
+
+  @override
+  String get onTheWayDayQueued => 'На чекање';
+
+  @override
+  String get onTheWayNoDate => 'Без датум';
+
+  @override
+  String get onTheWayFootnote =>
+      'Записите што не успеат продолжуваат да се обидуваат во позадина. Сè што не можеме да го транскрибираме, автоматски ни се пријавува.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Детали за поддршка';
 
   @override
   String get consentShortMessage =>

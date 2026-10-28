@@ -24,6 +24,8 @@ from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.transcript_hash import (
@@ -675,3 +677,37 @@ def test_phone_engine_provenance_survives_from_segments_storage():
             }
         ]
     )
+
+
+@pytest.mark.parametrize('as_model', [False, True])
+def test_binding_refuses_scope_only_attribution_changes_without_changing_v5(as_model):
+    from utils.speakers.display import display_participants
+
+    rows = [
+        {'text': 'approved', 'speaker': 'SPEAKER_00', 'speaker_id': 0, 'speaker_id_scope': 'first'},
+        {'text': 'declined', 'speaker': 'SPEAKER_00', 'speaker_id': 0, 'speaker_id_scope': 'first'},
+    ]
+    original = [TranscriptSegment(**row, is_user=False, start=0, end=1) for row in rows] if as_model else rows
+    changed_rows = [dict(rows[0]), {**rows[1], 'speaker_id_scope': 'second'}]
+    changed = (
+        [TranscriptSegment(**row, is_user=False, start=0, end=1) for row in changed_rows] if as_model else changed_rows
+    )
+    assert display_participants(original).label(original[1]) == 'Speaker A'
+    assert display_participants(changed).label(changed[1]) == 'Speaker B'
+    assert transcript_sha256(original) == transcript_sha256(changed)
+    assert transcript_sha256_for_binding(original) == transcript_sha256(original)
+    assert transcript_sha256_for_binding(changed) is None
+    assert TRANSCRIPT_HASH_ENCODING_VERSION == 5
+
+
+def test_binding_treats_missing_scope_as_a_scope_but_ignores_bound_people_and_owner():
+    rows = [
+        {'text': 'first', 'speaker_id_scope': None},
+        {'text': 'second', 'speaker_id_scope': 'capture'},
+    ]
+    assert transcript_sha256_for_binding(rows) is None
+    rows[1]['is_user'] = True
+    assert transcript_sha256_for_binding(rows) == transcript_sha256(rows)
+    rows[1]['is_user'] = False
+    rows[1]['person_id'] = 'known-person'
+    assert transcript_sha256_for_binding(rows) == transcript_sha256(rows)
